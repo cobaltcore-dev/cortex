@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 -->
 
+[![REUSE status](https://api.reuse.software/badge/github.com/cobaltcore-dev/cortex)](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex)
+
 # Cortex
 
 POC for advanced initial placement of VMs.
