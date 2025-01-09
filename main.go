@@ -11,6 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/datasources/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/extraction"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 
 	_ "github.com/lib/pq"
@@ -70,14 +71,23 @@ func main() {
 	}
 	go openstack.SyncPeriodic(openStackConf)
 
-	conf := prometheus.PrometheusSyncConfig{
+	prometheusConf := prometheus.PrometheusSyncConfig{
 		PrometheusUrl: prometheusUrl,
 		DbHost:        dbHost,
 		DbPort:        dbPort,
 		DbUser:        dbUser,
 		DbPass:        dbPass,
 	}
-	go prometheus.SyncPeriodic(conf)
+	go prometheus.SyncPeriodic(prometheusConf)
+
+	extractionConf := extraction.ExtractionConfig{
+		DbHost: dbHost,
+		DbPort: dbPort,
+		DbUser: dbUser,
+		DbPass: dbPass,
+	}
+	// TODO: Update features each time we get new openstack data?
+	go extraction.ExtractFeaturesPeriodic(extractionConf)
 
 	http.HandleFunc(
 		scheduler.APINovaExternalSchedulerURL,

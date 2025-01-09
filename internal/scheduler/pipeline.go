@@ -44,6 +44,9 @@ func evaluatePipeline(ctx pipelineContext) ([]string, error) {
 }
 
 func antiAffinityNoisyProjects(ctx pipelineContext) (pipelineContext, error) {
-	// This is a dummy implementation that just returns the input context
+	// TODO:
+	// - Get pairs of (noisy project, host) from the database.
+	// - Check if we're spawning a VM for a noisy project.
+	// - Downvote the hosts this project is currently running on.
 	return ctx, nil
 }
