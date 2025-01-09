@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/cobaltcore-dev/cortex/internal/env"
 )
 
 type OpenStackAuthRequest struct {
@@ -71,15 +73,17 @@ type OpenStackKeystoneAuth struct {
 	token string // From the response header X-Subject-Token
 }
 
+var (
+	authURL           = env.ForceGetenv("OS_AUTH_URL")
+	username          = env.ForceGetenv("OS_USERNAME")
+	password          = env.ForceGetenv("OS_PASSWORD")
+	projectName       = env.ForceGetenv("OS_PROJECT_NAME")
+	userDomainName    = env.ForceGetenv("OS_USER_DOMAIN_NAME")
+	projectDomainName = env.ForceGetenv("OS_PROJECT_DOMAIN_NAME")
+)
+
 // Authenticate authenticates against the OpenStack Identity service and returns the Nova endpoint.
 func GetKeystoneAuth() (OpenStackKeystoneAuth, error) {
-	authURL := mustGetEnv("OS_AUTH_URL")
-	username := mustGetEnv("OS_USERNAME")
-	password := mustGetEnv("OS_PASSWORD")
-	projectName := mustGetEnv("OS_PROJECT_NAME")
-	userDomainName := mustGetEnv("OS_USER_DOMAIN_NAME")
-	projectDomainName := mustGetEnv("OS_PROJECT_DOMAIN_NAME")
-
 	authRequest := OpenStackAuthRequest{
 		Auth: OpenStackAuth{
 			Identity: OpenStackIdentity{

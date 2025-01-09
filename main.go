@@ -1,51 +1,28 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"os"
 
-	"github.com/cobaltcore-dev/cortex/internal/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
 )
 
 func main() {
-	auth, err := openstack.GetKeystoneAuth()
+	data, err := prometheus.FetchMetrics(
+		os.Getenv("PROMETHEUS_URL"),
+		"vrops_virtualmachine_cpu_demand_ratio",
+		1*24*60*60,
+		1*60*60,
+	)
 	if err != nil {
-		log.Fatalf("Failed to authenticate: %v", err)
+		panic(err)
 	}
-
-	hypervisorlist, err := openstack.GetHypervisors(auth)
-	if err != nil {
-		log.Fatalf("Failed to get hypervisor data: %v", err)
-	}
-	hypervisorsByHostname := make(map[string]openstack.OpenStackHypervisor)
-	for _, hypervisor := range hypervisorlist.Hypervisors {
-		hypervisorsByHostname[hypervisor.Service.Host] = hypervisor
-	}
-
-	serverlist, err := openstack.GetServers(auth)
-	if err != nil {
-		log.Fatalf("Failed to get nova data: %v", err)
-	}
-	serversByHostname := make(map[string][]openstack.OpenStackServer)
-	for _, server := range serverlist.Servers {
-		serversByHostname[server.OSEXTSRVATTRHost] = append(serversByHostname[server.OSEXTSRVATTRHost], server)
-	}
-
-	// Print a nice tree with statistics
-	for hostname := range hypervisorsByHostname {
-		hypervisor := hypervisorsByHostname[hostname]
-		log.Printf(
-			"Hypervisor: %s [%s, %d/%d vCPUs, %d/%d MB RAM, %d/%d GB disk]",
-			hostname,
-			hypervisor.State,
-			hypervisor.VCPUsUsed,
-			hypervisor.VCPUs,
-			hypervisor.MemoryMBUsed,
-			hypervisor.MemoryMB,
-			hypervisor.LocalGBUsed,
-			hypervisor.LocalGB,
-		)
-		for _, server := range serversByHostname[hostname] {
-			log.Printf("  Server: %s [%s]", server.Name, server.Status)
-		}
+	for _, metric := range data.Metrics {
+		// Print out some nice stats
+		fmt.Printf("Metric: %s\n", metric.Meta.VirtualMachine)
+		fmt.Printf("Duration: %s\n", data.Duration)
+		fmt.Printf("Start: %s\n", data.Start)
+		fmt.Printf("End: %s\n", data.End)
+		fmt.Printf("Values: %v\n", metric.Values)
 	}
 }
