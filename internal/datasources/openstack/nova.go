@@ -9,11 +9,11 @@ import (
 	"net/http"
 )
 
-type OpenStackServerList struct {
-	Servers []OpenStackServer `json:"servers"`
+type openStackServerList struct {
+	Servers []openStackServer `json:"servers"`
 }
 
-type OpenStackServer struct {
+type openStackServer struct {
 	ID                               string            `json:"id"`
 	Name                             string            `json:"name"`
 	Status                           string            `json:"status"`
@@ -46,11 +46,11 @@ type OpenStackServer struct {
 	SecurityGroups                   []interface{}     `json:"security_groups"`
 }
 
-type OpenStackHypervisorList struct {
-	Hypervisors []OpenStackHypervisor `json:"hypervisors"`
+type openStackHypervisorList struct {
+	Hypervisors []openStackHypervisor `json:"hypervisors"`
 }
 
-type OpenStackHypervisor struct {
+type openStackHypervisor struct {
 	ID                int    `json:"id"`
 	Hostname          string `json:"hypervisor_hostname"`
 	State             string `json:"state"`
@@ -77,7 +77,7 @@ type OpenStackHypervisor struct {
 	CPUInfo            string `json:"cpu_info"`
 }
 
-func GetServers(auth OpenStackKeystoneAuth) (OpenStackServerList, error) {
+func getServers(auth openStackKeystoneAuth) (openStackServerList, error) {
 	req, err := http.NewRequest("GET", auth.nova.URL+"/servers/detail?all_tenants=1", nil)
 	if err != nil {
 		log.Fatalf("Failed to create server list request: %v", err)
@@ -92,7 +92,7 @@ func GetServers(auth OpenStackKeystoneAuth) (OpenStackServerList, error) {
 	if resp.StatusCode != http.StatusOK {
 		log.Fatalf("Failed to get server list, status code: %d", resp.StatusCode)
 	}
-	var serverList OpenStackServerList
+	var serverList openStackServerList
 	err = json.NewDecoder(resp.Body).Decode(&serverList)
 	if err != nil {
 		log.Fatalf("Failed to decode server list: %v", err)
@@ -100,7 +100,7 @@ func GetServers(auth OpenStackKeystoneAuth) (OpenStackServerList, error) {
 	return serverList, nil
 }
 
-func GetHypervisors(auth OpenStackKeystoneAuth) (OpenStackHypervisorList, error) {
+func getHypervisors(auth openStackKeystoneAuth) (openStackHypervisorList, error) {
 	req, err := http.NewRequest("GET", auth.nova.URL+"/os-hypervisors/detail", nil)
 	if err != nil {
 		log.Fatalf("Failed to create hypervisor list request: %v", err)
@@ -115,7 +115,7 @@ func GetHypervisors(auth OpenStackKeystoneAuth) (OpenStackHypervisorList, error)
 	if resp.StatusCode != http.StatusOK {
 		log.Fatalf("Failed to get hypervisor list, status code: %d", resp.StatusCode)
 	}
-	var hypervisorList OpenStackHypervisorList
+	var hypervisorList openStackHypervisorList
 	err = json.NewDecoder(resp.Body).Decode(&hypervisorList)
 	if err != nil {
 		log.Fatalf("Failed to decode hypervisor list: %v", err)

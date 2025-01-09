@@ -9,97 +9,86 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/cobaltcore-dev/cortex/internal/env"
 )
 
-type OpenStackAuthRequest struct {
-	Auth OpenStackAuth `json:"auth"`
+type openStackAuthRequest struct {
+	Auth openStackAuth `json:"auth"`
 }
 
-type OpenStackAuth struct {
-	Identity OpenStackIdentity `json:"identity"`
-	Scope    OpenStackScope    `json:"scope"`
+type openStackAuth struct {
+	Identity openStackIdentity `json:"identity"`
+	Scope    openStackScope    `json:"scope"`
 }
 
-type OpenStackIdentity struct {
+type openStackIdentity struct {
 	Methods  []string          `json:"methods"`
-	Password OpenStackPassword `json:"password"`
+	Password openStackPassword `json:"password"`
 }
 
-type OpenStackPassword struct {
-	User OpenStackUser `json:"user"`
+type openStackPassword struct {
+	User openStackUser `json:"user"`
 }
 
-type OpenStackUser struct {
+type openStackUser struct {
 	Name     string          `json:"name"`
-	Domain   OpenStackDomain `json:"domain"`
+	Domain   openStackDomain `json:"domain"`
 	Password string          `json:"password"`
 }
 
-type OpenStackDomain struct {
+type openStackDomain struct {
 	Name string `json:"name"`
 }
 
-type OpenStackScope struct {
-	Project OpenStackProject `json:"project"`
+type openStackScope struct {
+	Project openStackProject `json:"project"`
 }
 
-type OpenStackProject struct {
+type openStackProject struct {
 	Name   string          `json:"name"`
-	Domain OpenStackDomain `json:"domain"`
+	Domain openStackDomain `json:"domain"`
 }
 
-type OpenStackAuthResponse struct {
-	TokenMetadata OpenStackAuthTokenMetadata `json:"token"`
+type openStackAuthResponse struct {
+	TokenMetadata openStackAuthTokenMetadata `json:"token"`
 }
 
-type OpenStackAuthTokenMetadata struct {
-	Catalog []OpenStackService `json:"catalog"`
+type openStackAuthTokenMetadata struct {
+	Catalog []openStackService `json:"catalog"`
 }
 
-type OpenStackService struct {
+type openStackService struct {
 	Name      string              `json:"name"`
 	Type      string              `json:"type"`
-	Endpoints []OpenStackEndpoint `json:"endpoints"`
+	Endpoints []openStackEndpoint `json:"endpoints"`
 }
 
-type OpenStackEndpoint struct {
+type openStackEndpoint struct {
 	URL string `json:"url"`
 }
 
-type OpenStackKeystoneAuth struct {
-	nova  OpenStackEndpoint
+type openStackKeystoneAuth struct {
+	nova  openStackEndpoint
 	token string // From the response header X-Subject-Token
 }
 
-var (
-	authURL           = env.ForceGetenv("OS_AUTH_URL")
-	username          = env.ForceGetenv("OS_USERNAME")
-	password          = env.ForceGetenv("OS_PASSWORD")
-	projectName       = env.ForceGetenv("OS_PROJECT_NAME")
-	userDomainName    = env.ForceGetenv("OS_USER_DOMAIN_NAME")
-	projectDomainName = env.ForceGetenv("OS_PROJECT_DOMAIN_NAME")
-)
-
 // Authenticate authenticates against the OpenStack Identity service and returns the Nova endpoint.
-func GetKeystoneAuth() (OpenStackKeystoneAuth, error) {
-	authRequest := OpenStackAuthRequest{
-		Auth: OpenStackAuth{
-			Identity: OpenStackIdentity{
+func getKeystoneAuth(conf OpenStackSyncConfig) (openStackKeystoneAuth, error) {
+	authRequest := openStackAuthRequest{
+		Auth: openStackAuth{
+			Identity: openStackIdentity{
 				Methods: []string{"password"},
-				Password: OpenStackPassword{
-					User: OpenStackUser{
-						Name:     username,
-						Domain:   OpenStackDomain{Name: userDomainName},
-						Password: password,
+				Password: openStackPassword{
+					User: openStackUser{
+						Name:     conf.OSUsername,
+						Domain:   openStackDomain{Name: conf.OSUserDomainName},
+						Password: conf.OSPassword,
 					},
 				},
 			},
-			Scope: OpenStackScope{
-				Project: OpenStackProject{
-					Name:   projectName,
-					Domain: OpenStackDomain{Name: projectDomainName},
+			Scope: openStackScope{
+				Project: openStackProject{
+					Name:   conf.OSProjectName,
+					Domain: openStackDomain{Name: conf.OSProjectDomainName},
 				},
 			},
 		},
@@ -107,30 +96,30 @@ func GetKeystoneAuth() (OpenStackKeystoneAuth, error) {
 
 	authRequestBody, err := json.Marshal(authRequest)
 	if err != nil {
-		return OpenStackKeystoneAuth{}, fmt.Errorf("failed to marshal auth request: %w", err)
+		return openStackKeystoneAuth{}, fmt.Errorf("failed to marshal auth request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", authURL+"/auth/tokens", bytes.NewBuffer(authRequestBody))
+	req, err := http.NewRequest("POST", conf.OSAuthUrl+"/auth/tokens", bytes.NewBuffer(authRequestBody))
 	if err != nil {
-		return OpenStackKeystoneAuth{}, fmt.Errorf("failed to create auth request: %w", err)
+		return openStackKeystoneAuth{}, fmt.Errorf("failed to create auth request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return OpenStackKeystoneAuth{}, fmt.Errorf("failed to authenticate: %w", err)
+		return openStackKeystoneAuth{}, fmt.Errorf("failed to authenticate: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		return OpenStackKeystoneAuth{}, fmt.Errorf("failed to authenticate, status code: %d", resp.StatusCode)
+		return openStackKeystoneAuth{}, fmt.Errorf("failed to authenticate, status code: %d", resp.StatusCode)
 	}
 
-	var authResponse OpenStackAuthResponse
+	var authResponse openStackAuthResponse
 	err = json.NewDecoder(resp.Body).Decode(&authResponse)
 	if err != nil {
-		return OpenStackKeystoneAuth{}, fmt.Errorf("failed to decode auth response: %w", err)
+		return openStackKeystoneAuth{}, fmt.Errorf("failed to decode auth response: %w", err)
 	}
 
 	// Find the Nova endpoint
@@ -148,11 +137,11 @@ func GetKeystoneAuth() (OpenStackKeystoneAuth, error) {
 		}
 	}
 	if novaEndpoint == "" {
-		return OpenStackKeystoneAuth{}, fmt.Errorf("nova endpoint not found")
+		return openStackKeystoneAuth{}, fmt.Errorf("nova endpoint not found")
 	}
 
-	return OpenStackKeystoneAuth{
-		nova:  OpenStackEndpoint{URL: novaEndpoint},
+	return openStackKeystoneAuth{
+		nova:  openStackEndpoint{URL: novaEndpoint},
 		token: resp.Header.Get("X-Subject-Token"),
 	}, nil
 }

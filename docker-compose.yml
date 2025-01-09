@@ -9,7 +9,12 @@ services:
   cortex:
     build: .
     environment:
-      # Pass this by setting the environment variable PROMETHEUS_URL
+      OS_AUTH_URL: ${OS_AUTH_URL}
+      OS_USERNAME: ${OS_USERNAME}
+      OS_PASSWORD: ${OS_PASSWORD}
+      OS_PROJECT_NAME: ${OS_PROJECT_NAME}
+      OS_USER_DOMAIN_NAME: ${OS_USER_DOMAIN_NAME}
+      OS_PROJECT_DOMAIN_NAME: ${OS_PROJECT_DOMAIN_NAME}
       PROMETHEUS_URL: ${PROMETHEUS_URL}
 
       POSTGRES_HOST: postgres
