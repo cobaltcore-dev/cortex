@@ -6,13 +6,14 @@ package prometheus
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
 
 // See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
 type PrometheusMetric struct {
-	Meta struct {
+	Metric struct {
 		Name           string `json:"__name__"`
 		Cluster        string `json:"cluster"`
 		ClusterType    string `json:"cluster_type"`
@@ -28,7 +29,7 @@ type PrometheusMetric struct {
 		VCCluster      string `json:"vccluster"`
 		VCenter        string `json:"vcenter"`
 		VirtualMachine string `json:"virtualmachine"`
-	} `json:"meta"`
+	} `json:"metric"`
 	Values [][]interface{} `json:"values"`
 }
 
@@ -39,21 +40,19 @@ type PrometheusTimelineData struct {
 	End      time.Time          `json:"end"`
 }
 
-func FetchMetrics(
+func fetchMetrics(
 	prometheusURL string,
 	query string,
-	durationSeconds int,
+	start time.Time,
+	end time.Time,
 	resolutionSeconds int,
 ) (*PrometheusTimelineData, error) {
 	url := fmt.Sprintf("%s/api/v1/query_range", prometheusURL)
 	url = fmt.Sprintf("%s?query=%s", url, query)
-	// Calculate the time window based on the number of seconds.
-	end := time.Now()
-	start := end.Add(-time.Duration(durationSeconds) * time.Second)
 	url = fmt.Sprintf("%s&start=%d", url, start.Unix())
 	url = fmt.Sprintf("%s&end=%d", url, end.Unix())
 	url = fmt.Sprintf("%s&step=%d", url, resolutionSeconds)
-	fmt.Printf("GET %s\n", url)
+	log.Printf("Fetching metrics from %s", url)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

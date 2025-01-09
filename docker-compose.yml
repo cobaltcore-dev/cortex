@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  cortex:
+    build: .
+    environment:
+      # Pass this by setting the environment variable PROMETHEUS_URL
+      PROMETHEUS_URL: ${PROMETHEUS_URL}
+
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    restart: on-failure
+    volumes:
+      - .:/home/appuser
+
+volumes:
+  postgres_data:

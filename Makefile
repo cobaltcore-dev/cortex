@@ -40,6 +40,17 @@ build-all: build/cortex
 build/cortex: FORCE
 	@env $(GO_BUILDENV) go build $(GO_BUILDFLAGS) -ldflags '-s -w $(GO_LDFLAGS)' -o build/cortex .
 
+DESTDIR =
+ifeq ($(shell uname -s),Darwin)
+	PREFIX = /usr/local
+else
+	PREFIX = /usr
+endif
+
+install: FORCE build/cortex
+	install -d -m 0755 "$(DESTDIR)$(PREFIX)/bin"
+	install -m 0755 build/cortex "$(DESTDIR)$(PREFIX)/bin/cortex"
+
 # which packages to test with test runner
 GO_TESTPKGS := $(shell go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
 ifeq ($(GO_TESTPKGS),)
@@ -96,12 +107,14 @@ clean: FORCE
 	git clean -dxf build
 
 vars: FORCE
+	@printf "DESTDIR=$(DESTDIR)\n"
 	@printf "GO_BUILDENV=$(GO_BUILDENV)\n"
 	@printf "GO_BUILDFLAGS=$(GO_BUILDFLAGS)\n"
 	@printf "GO_COVERPKGS=$(GO_COVERPKGS)\n"
 	@printf "GO_LDFLAGS=$(GO_LDFLAGS)\n"
 	@printf "GO_TESTENV=$(GO_TESTENV)\n"
 	@printf "GO_TESTPKGS=$(GO_TESTPKGS)\n"
+	@printf "PREFIX=$(PREFIX)\n"
 help: FORCE
 	@printf "\n"
 	@printf "\e[1mUsage:\e[0m\n"
@@ -120,6 +133,7 @@ help: FORCE
 	@printf "\e[1mBuild\e[0m\n"
 	@printf "  \e[36mbuild-all\e[0m                    Build all binaries.\n"
 	@printf "  \e[36mbuild/cortex\e[0m                 Build cortex.\n"
+	@printf "  \e[36minstall\e[0m                      Install all binaries. This option understands the conventional 'DESTDIR' and 'PREFIX' environment variables for choosing install locations.\n"
 	@printf "\n"
 	@printf "\e[1mTest\e[0m\n"
 	@printf "  \e[36mcheck\e[0m                        Run the test suite (unit tests and golangci-lint).\n"
