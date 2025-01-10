@@ -1,26 +1,19 @@
 package extraction
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
-	"log"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/go-pg/pg/v10"
 )
 
-type ExtractionConfig struct {
-	DbHost string
-	DbPort string
-	DbUser string
-	DbPass string
-}
-
-var steps = []func(db *sql.DB){
+var steps = []func(db *pg.DB){
 	extractNoisyProjects,
 }
 
-func extractNoisyProjects(db *sql.DB) {
+func extractNoisyProjects(db *pg.DB) {
 	// TODO:
 	// - Get vrops_virtualmachine_cpu_demand_ratio metrics from the db.
 	// - Get projects that show high spikes / high permanent CPU usage.
@@ -28,18 +21,24 @@ func extractNoisyProjects(db *sql.DB) {
 	// - Save pairs of (noisy project, host) to the database.
 }
 
-func ExtractFeaturesPeriodic(conf ExtractionConfig) {
-	db, err := sql.Open("postgres", fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable",
-		conf.DbHost,
-		conf.DbPort,
-		conf.DbUser,
-		conf.DbPass,
-	))
-	if err != nil {
-		log.Fatal(err)
-	}
+func ExtractFeaturesPeriodic() {
+	c := conf.Get()
+	db := pg.Connect(&pg.Options{
+		Addr:     fmt.Sprintf("%s:%s", c.DBHost, c.DBPort),
+		User:     c.DBUser,
+		Password: c.DBPass,
+		Database: "postgres",
+	})
 	defer db.Close()
+
+	// Poll until the database is alive
+	ctx := context.Background()
+	for {
+		if err := db.Ping(ctx); err == nil {
+			break
+		}
+		time.Sleep(time.Second * 1)
+	}
 
 	for _, step := range steps {
 		step(db)

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
 type openStackAuthRequest struct {
@@ -72,23 +74,24 @@ type openStackKeystoneAuth struct {
 }
 
 // Authenticate authenticates against the OpenStack Identity service and returns the Nova endpoint.
-func getKeystoneAuth(conf OpenStackSyncConfig) (openStackKeystoneAuth, error) {
+func getKeystoneAuth() (openStackKeystoneAuth, error) {
+	c := conf.Get()
 	authRequest := openStackAuthRequest{
 		Auth: openStackAuth{
 			Identity: openStackIdentity{
 				Methods: []string{"password"},
 				Password: openStackPassword{
 					User: openStackUser{
-						Name:     conf.OSUsername,
-						Domain:   openStackDomain{Name: conf.OSUserDomainName},
-						Password: conf.OSPassword,
+						Name:     c.OSUsername,
+						Domain:   openStackDomain{Name: c.OSUserDomainName},
+						Password: c.OSPassword,
 					},
 				},
 			},
 			Scope: openStackScope{
 				Project: openStackProject{
-					Name:   conf.OSProjectName,
-					Domain: openStackDomain{Name: conf.OSProjectDomainName},
+					Name:   c.OSProjectName,
+					Domain: openStackDomain{Name: c.OSProjectDomainName},
 				},
 			},
 		},
@@ -99,7 +102,7 @@ func getKeystoneAuth(conf OpenStackSyncConfig) (openStackKeystoneAuth, error) {
 		return openStackKeystoneAuth{}, fmt.Errorf("failed to marshal auth request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", conf.OSAuthUrl+"/auth/tokens", bytes.NewBuffer(authRequestBody))
+	req, err := http.NewRequest("POST", c.OSAuthUrl+"/auth/tokens", bytes.NewBuffer(authRequestBody))
 	if err != nil {
 		return openStackKeystoneAuth{}, fmt.Errorf("failed to create auth request: %w", err)
 	}
