@@ -29,8 +29,12 @@ func sync(db *pg.DB) {
 		log.Printf("Failed to get hypervisors: %v\n", err)
 		return
 	}
-	db.Model(&serverlist.Servers).Insert()
-	db.Model(&hypervisorlist.Hypervisors).Insert()
+	db.Model(&serverlist.Servers).
+		OnConflict("(id) DO UPDATE").
+		Insert()
+	db.Model(&hypervisorlist.Hypervisors).
+		OnConflict("(id) DO UPDATE").
+		Insert()
 	log.Printf("Synced %d servers and %d hypervisors\n", len(serverlist.Servers), len(hypervisorlist.Hypervisors))
 }
 
