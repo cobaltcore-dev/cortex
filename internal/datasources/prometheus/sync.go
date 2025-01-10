@@ -1,7 +1,6 @@
 package prometheus
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"time"
@@ -84,70 +83,38 @@ func sync(
 	log.Printf("Fetched and inserted %d metrics for %s\n", len(prometheusData.Metrics), metricName)
 
 	// Don't overload the Prometheus server.
-	time.Sleep(1 * time.Second)
+	time.Sleep(60 * time.Second)
 	// Continue syncing.
 	sync(db, end, interval, resolutionSeconds, metricName)
 }
 
-func createSchema(db *pg.DB) error {
-	models := []interface{}{
-		(*PrometheusMetric)(nil),
-	}
-	for _, model := range models {
-		if err := db.Model(model).CreateTable(&orm.CreateTableOptions{
-			IfNotExists: true,
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func SyncPeriodic() {
-	c := conf.Get()
-	db := pg.Connect(&pg.Options{
-		Addr:     fmt.Sprintf("%s:%s", c.DBHost, c.DBPort),
-		User:     c.DBUser,
-		Password: c.DBPass,
-		Database: "postgres",
-	})
-	defer db.Close()
-
-	// Poll until the database is alive
-	ctx := context.Background()
-	for {
-		if err := db.Ping(ctx); err == nil {
-			break
-		}
-		time.Sleep(time.Second * 1)
-	}
-
-	if err := createSchema(db); err != nil {
+func Init(db *pg.DB) {
+	if err := db.Model((*PrometheusMetric)(nil)).CreateTable(&orm.CreateTableOptions{
+		IfNotExists: true,
+	}); err != nil {
 		log.Fatal(err)
 	}
+}
 
+func Sync(db *pg.DB) {
 	metrics := []string{
 		"vrops_virtualmachine_cpu_demand_ratio",
 	}
 
-	for {
-		for _, metricName := range metrics {
-			// Sync this metric until we are caught up.
-			start, err := getSyncWindowStart(db, metricName)
-			if err != nil {
-				log.Printf("Failed to get %s sync window start: %v\n", metricName, err)
-				continue
-			}
-			sync(
-				db,
-				start,
-				24*time.Hour,
-				// Needs to be larger than the sampling rate of the metric.
-				12*60*60, // 12 hours (2 datapoints per day per metric)
-				metricName,
-			)
+	for _, metricName := range metrics {
+		// Sync this metric until we are caught up.
+		start, err := getSyncWindowStart(db, metricName)
+		if err != nil {
+			log.Printf("Failed to get %s sync window start: %v\n", metricName, err)
+			continue
 		}
-		// Check hourly if we need to catch up again.
-		time.Sleep(1 * time.Hour)
+		sync(
+			db,
+			start,
+			24*time.Hour,
+			// Needs to be larger than the sampling rate of the metric.
+			12*60*60, // 12 hours (2 datapoints per day per metric)
+			metricName,
+		)
 	}
 }

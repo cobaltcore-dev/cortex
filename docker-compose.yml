@@ -1,4 +1,6 @@
 services:
+  # Use the following command to debug this database:
+  # docker-compose exec postgres psql -U postgres
   postgres:
     image: postgres
     environment:
