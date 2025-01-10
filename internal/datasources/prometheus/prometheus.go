@@ -102,7 +102,7 @@ func fetchMetrics(
 			VCenter        string `json:"vcenter"`
 			VirtualMachine string `json:"virtualmachine"`
 		} `json:"metric"`
-		Values [][]interface{} `json:"values"`
+		Values [][]any `json:"values"`
 	}
 	metrics := make([]rangeMetric, 0, len(prometheusData.Data.Result))
 	for _, raw := range prometheusData.Data.Result {

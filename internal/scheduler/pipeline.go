@@ -18,7 +18,7 @@ type pipelineContext struct {
 	Weights map[string]float64
 }
 
-var steps = []func(pipelineContext) (pipelineContext, error){
+var steps = []func(ctx pipelineContext) (pipelineContext, error){
 	antiAffinityNoisyProjects,
 }
 

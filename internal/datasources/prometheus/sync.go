@@ -6,15 +6,16 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
 )
 
-func getSyncWindowStart(db *pg.DB, metricName string) (time.Time, error) {
+func getSyncWindowStart(metricName string) (time.Time, error) {
 	// Check if there are any metrics in the database.
 	var nRows int
-	if _, err := db.QueryOne(
+	if _, err := db.DB.QueryOne(
 		pg.Scan(&nRows),
 		"SELECT COUNT(*) FROM metrics WHERE name = ?",
 		metricName,
@@ -28,7 +29,7 @@ func getSyncWindowStart(db *pg.DB, metricName string) (time.Time, error) {
 		return start, nil
 	}
 	var latestTimestamp time.Time
-	if _, err := db.QueryOne(
+	if _, err := db.DB.QueryOne(
 		pg.Scan(&latestTimestamp),
 		"SELECT MAX(timestamp) FROM metrics WHERE name = ?",
 		metricName,
@@ -43,7 +44,6 @@ func getSyncWindowStart(db *pg.DB, metricName string) (time.Time, error) {
 }
 
 func sync(
-	db *pg.DB,
 	start time.Time,
 	interval time.Duration,
 	resolutionSeconds int,
@@ -57,7 +57,7 @@ func sync(
 
 	log.Printf("Syncing %s from %s to %s\n", metricName, start, end)
 	// Drop all metrics that are older than 4 weeks.
-	result, err := db.Exec(
+	result, err := db.DB.Exec(
 		"DELETE FROM metrics WHERE name = ? AND timestamp < ?",
 		metricName,
 		time.Now().Add(-4*7*24*time.Hour),
@@ -79,37 +79,36 @@ func sync(
 		fmt.Printf("Failed to fetch metrics: %v\n", err)
 		return
 	}
-	db.Model(&prometheusData.Metrics).Insert()
+	db.DB.Model(&prometheusData.Metrics).Insert()
 	log.Printf("Fetched and inserted %d metrics for %s\n", len(prometheusData.Metrics), metricName)
 
 	// Don't overload the Prometheus server.
 	time.Sleep(60 * time.Second)
 	// Continue syncing.
-	sync(db, end, interval, resolutionSeconds, metricName)
+	sync(end, interval, resolutionSeconds, metricName)
 }
 
-func Init(db *pg.DB) {
-	if err := db.Model((*PrometheusMetric)(nil)).CreateTable(&orm.CreateTableOptions{
+func Init() {
+	if err := db.DB.Model((*PrometheusMetric)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func Sync(db *pg.DB) {
+func Sync() {
 	metrics := []string{
 		"vrops_virtualmachine_cpu_demand_ratio",
 	}
 
 	for _, metricName := range metrics {
 		// Sync this metric until we are caught up.
-		start, err := getSyncWindowStart(db, metricName)
+		start, err := getSyncWindowStart(metricName)
 		if err != nil {
 			log.Printf("Failed to get %s sync window start: %v\n", metricName, err)
 			continue
 		}
 		sync(
-			db,
 			start,
 			24*time.Hour,
 			// Needs to be larger than the sampling rate of the metric.

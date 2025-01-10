@@ -3,7 +3,7 @@ package features
 import (
 	"log"
 
-	"github.com/go-pg/pg/v10"
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/go-pg/pg/v10/orm"
 )
 
@@ -14,8 +14,8 @@ type NoisyProject struct {
 	Host      string   `pg:"hostsystem,notnull"`
 }
 
-func noisyProjectsSchema(db *pg.DB) error {
-	if err := db.Model((*NoisyProject)(nil)).CreateTable(&orm.CreateTableOptions{
+func noisyProjectsSchema() error {
+	if err := db.DB.Model((*NoisyProject)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
 		return err
@@ -23,10 +23,10 @@ func noisyProjectsSchema(db *pg.DB) error {
 	return nil
 }
 
-func noisyProjectsExtractor(db *pg.DB) error {
+func noisyProjectsExtractor() error {
 	log.Println("Extracting noisy projects")
 
-	tx, err := db.Begin()
+	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func noisyProjectsExtractor(db *pg.DB) error {
 
 	// Fetch and display the list of noisy projects.
 	var noisyProjects []NoisyProject
-	if err := db.Model(&noisyProjects).Select(); err != nil {
+	if err := db.DB.Model(&noisyProjects).Select(); err != nil {
 		return err
 	}
 	var hostsByProject = make(map[string][]string)

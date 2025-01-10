@@ -4,18 +4,18 @@ import (
 	"log"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
 
-	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
 )
 
-func Init(db *pg.DB) {
-	models := []interface{}{
+func Init() {
+	models := []any{
 		(*OpenStackServer)(nil),
 		(*OpenStackHypervisor)(nil),
 	}
 	for _, model := range models {
-		if err := db.Model(model).CreateTable(&orm.CreateTableOptions{
+		if err := db.DB.Model(model).CreateTable(&orm.CreateTableOptions{
 			IfNotExists: true,
 		}); err != nil {
 			log.Fatal(err)
@@ -23,7 +23,7 @@ func Init(db *pg.DB) {
 	}
 }
 
-func Sync(db *pg.DB) {
+func Sync() {
 	log.Printf("Syncing OpenStack data with %s\n", conf.Get().OSAuthUrl)
 	auth, err := getKeystoneAuth()
 	if err != nil {
@@ -40,10 +40,10 @@ func Sync(db *pg.DB) {
 		log.Printf("Failed to get hypervisors: %v\n", err)
 		return
 	}
-	db.Model(&serverlist.Servers).
+	db.DB.Model(&serverlist.Servers).
 		OnConflict("(id) DO UPDATE").
 		Insert()
-	db.Model(&hypervisorlist.Hypervisors).
+	db.DB.Model(&hypervisorlist.Hypervisors).
 		OnConflict("(id) DO UPDATE").
 		Insert()
 	log.Printf("Synced %d servers and %d hypervisors\n", len(serverlist.Servers), len(hypervisorlist.Hypervisors))

@@ -2,29 +2,27 @@ package features
 
 import (
 	"log"
-
-	"github.com/go-pg/pg/v10"
 )
 
-var schemaCreators = []func(db *pg.DB) error{
+var schemaCreators = []func() error{
 	noisyProjectsSchema,
 }
 
-var featureExtractors = []func(db *pg.DB) error{
+var featureExtractors = []func() error{
 	noisyProjectsExtractor,
 }
 
-func Init(db *pg.DB) {
+func Init() {
 	for _, schemaCreator := range schemaCreators {
-		if err := schemaCreator(db); err != nil {
+		if err := schemaCreator(); err != nil {
 			log.Fatal(err)
 		}
 	}
 }
 
-func Extract(db *pg.DB) {
+func Extract() {
 	for _, featureExtractor := range featureExtractors {
-		if err := featureExtractor(db); err != nil {
+		if err := featureExtractor(); err != nil {
 			log.Printf("Failed to extract features: %v\n", err)
 		}
 	}
