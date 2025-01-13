@@ -1,4 +1,12 @@
 services:
+  # Plutono is a fork of Grafana 7.5.17 under the Apache 2.0 License.
+  plutono:
+    image: ghcr.io/credativ/plutono:v7.5.35
+    ports:
+      - 3000:3000
+    volumes:
+      - ./plutono/provisioning:/etc/plutono/provisioning
+
   # Use the following command to debug this database:
   # docker-compose exec postgres psql -U postgres
   postgres:
