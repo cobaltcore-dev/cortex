@@ -16,7 +16,7 @@ func antiAffinityNoisyProjects(state pipelineState) (pipelineState, error) {
 	const avgCpuThreshold float64 = 20.0
 	var noisyProjects []features.ProjectNoisiness
 	if err := db.DB.Model(&noisyProjects).
-		Where("avg_cpu_on_host > ?", avgCpuThreshold).
+		Where("avg_cpu_of_project > ?", avgCpuThreshold).
 		Select(); err != nil {
 		return state, err
 	}

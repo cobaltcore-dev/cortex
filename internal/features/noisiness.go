@@ -11,10 +11,10 @@ import (
 
 type ProjectNoisiness struct {
 	//lint:ignore U1000 Ignore unused field warning
-	tableName    struct{} `pg:"feature_project_noisiness"`
-	Project      string   `pg:"project,notnull"`
-	Host         string   `pg:"host,notnull"`
-	AvgCPUOnHost float64  `pg:"avg_cpu_on_host,notnull"`
+	tableName       struct{} `pg:"feature_project_noisiness"`
+	Project         string   `pg:"project,notnull"`
+	Host            string   `pg:"host,notnull"`
+	AvgCPUOfProject float64  `pg:"avg_cpu_of_project,notnull"`
 }
 
 func projectNoisinessSchema() error {
@@ -38,34 +38,32 @@ func projectNoisinessExtractor() error {
 		return err
 	}
 	if _, err := tx.Exec(`
-        WITH cpu_usage AS (
+        WITH projects_avg_cpu AS (
             SELECT
                 m.project AS tenant_id,
-                m.instance_uuid AS instance_uuid,
                 AVG(m.value) AS avg_cpu
             FROM metrics m
             WHERE m.name = 'vrops_virtualmachine_cpu_demand_ratio'
-            GROUP BY m.project, m.instance_uuid
+            GROUP BY m.project
             ORDER BY avg_cpu DESC
         ),
         host_cpu_usage AS (
             SELECT
                 s.tenant_id,
                 h.service_host,
-                AVG(cpu_usage.avg_cpu) AS avg_cpu_on_host
+                AVG(p.avg_cpu) AS avg_cpu_of_project
             FROM openstack_servers s
             JOIN metrics m ON s.id = m.instance_uuid
-            JOIN cpu_usage ON m.instance_uuid = cpu_usage.instance_uuid
+            JOIN projects_avg_cpu p ON s.tenant_id = p.tenant_id
             JOIN openstack_hypervisors h ON s.os_ext_srv_attr_hypervisor_hostname = h.hostname
-            WHERE s.tenant_id IN (SELECT tenant_id FROM cpu_usage)
-            AND m.name = 'vrops_virtualmachine_cpu_demand_ratio'
             GROUP BY s.tenant_id, h.service_host
+			ORDER BY avg_cpu_of_project DESC
         )
-		INSERT INTO feature_project_noisiness (project, host, avg_cpu_on_host)
+		INSERT INTO feature_project_noisiness
         SELECT
             tenant_id,
             service_host,
-            avg_cpu_on_host
+            avg_cpu_of_project
         FROM host_cpu_usage;
     `); err != nil {
 		tx.Rollback()
