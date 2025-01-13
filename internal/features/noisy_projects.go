@@ -4,9 +4,8 @@
 package features
 
 import (
-	"log"
-
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
 )
 
@@ -27,8 +26,7 @@ func noisyProjectsSchema() error {
 }
 
 func noisyProjectsExtractor() error {
-	log.Println("Extracting noisy projects")
-
+	logging.Log.Info("extracting noisy projects")
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -76,7 +74,7 @@ func noisyProjectsExtractor() error {
 		hostsByProject[p.Project] = append(hostsByProject[p.Project], p.Host)
 	}
 	for project, hosts := range hostsByProject {
-		log.Printf("Noisy project %s: running on %v\n", project, hosts)
+		logging.Log.Info("noisy project", "project", project, "hosts", hosts)
 	}
 	return nil
 }

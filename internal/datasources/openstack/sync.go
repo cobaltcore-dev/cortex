@@ -4,10 +4,9 @@
 package openstack
 
 import (
-	"log"
-
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 
 	"github.com/go-pg/pg/v10/orm"
 )
@@ -21,26 +20,26 @@ func Init() {
 		if err := db.DB.Model(model).CreateTable(&orm.CreateTableOptions{
 			IfNotExists: true,
 		}); err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 	}
 }
 
 func Sync() {
-	log.Printf("Syncing OpenStack data with %s\n", conf.Get().OSAuthUrl)
+	logging.Log.Info("syncing OpenStack data with", "authUrl", conf.Get().OSAuthUrl)
 	auth, err := getKeystoneAuth()
 	if err != nil {
-		log.Printf("Failed to authenticate: %v\n", err)
+		logging.Log.Error("failed to get keystone auth", "error", err)
 		return
 	}
 	serverlist, err := getServers(auth)
 	if err != nil {
-		log.Printf("Failed to get servers: %v\n", err)
+		logging.Log.Error("failed to get servers", "error", err)
 		return
 	}
 	hypervisorlist, err := getHypervisors(auth)
 	if err != nil {
-		log.Printf("Failed to get hypervisors: %v\n", err)
+		logging.Log.Error("failed to get hypervisors", "error", err)
 		return
 	}
 	db.DB.Model(&serverlist.Servers).
@@ -49,5 +48,5 @@ func Sync() {
 	db.DB.Model(&hypervisorlist.Hypervisors).
 		OnConflict("(id) DO UPDATE").
 		Insert()
-	log.Printf("Synced %d servers and %d hypervisors\n", len(serverlist.Servers), len(hypervisorlist.Hypervisors))
+	logging.Log.Info("synced OpenStack data", "servers", len(serverlist.Servers), "hypervisors", len(hypervisorlist.Hypervisors))
 }

@@ -4,14 +4,13 @@
 package scheduler
 
 import (
-	"log"
-
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 func antiAffinityNoisyProjects(state pipelineState) (pipelineState, error) {
-	log.Println("Scheduler: running anti-affinity for noisy projects")
+	logging.Log.Info("scheduler: anti-affinity - noisy projects")
 	// Get pairs of (noisy project, host) from the database.
 	var noisyProjects []features.NoisyProject
 	if err := db.DB.Model(&noisyProjects).Select(); err != nil {
@@ -32,7 +31,7 @@ func antiAffinityNoisyProjects(state pipelineState) (pipelineState, error) {
 		for _, host := range val {
 			if state.Hosts[i].Name == host {
 				state.Weights[state.Hosts[i].Name] = 0.0
-				log.Printf("Scheduler: downvoting host %s for project %s\n", host, state.Spec.ProjectId)
+				logging.Log.Info("scheduler: downvoting host", "host", host, "project", state.Spec.ProjectId)
 			}
 		}
 	}

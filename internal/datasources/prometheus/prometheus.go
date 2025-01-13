@@ -6,10 +6,11 @@ package prometheus
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 type PrometheusMetric struct {
@@ -54,7 +55,7 @@ func fetchMetrics(
 	url = fmt.Sprintf("%s&start=%d", url, start.Unix())
 	url = fmt.Sprintf("%s&end=%d", url, end.Unix())
 	url = fmt.Sprintf("%s&step=%d", url, resolutionSeconds)
-	log.Printf("Fetching metrics from %s", url)
+	logging.Log.Info("fetching metrics from", "url", url)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

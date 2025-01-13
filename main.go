@@ -5,7 +5,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -14,8 +13,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 )
+
+var log = logging.Default()
 
 func main() {
 	args := os.Args[1:]
@@ -27,6 +29,8 @@ func main() {
 	}
 
 	db.Init()
+	defer db.DB.Close()
+
 	openstack.Init()
 	prometheus.Init()
 	features.Init()
@@ -44,6 +48,6 @@ func main() {
 		scheduler.APINovaExternalSchedulerURL,
 		scheduler.APINovaExternalSchedulerHandler,
 	)
-	log.Println("Starting server on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Info("Listening on :8080")
+	http.ListenAndServe(":8080", nil)
 }

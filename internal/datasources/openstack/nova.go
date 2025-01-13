@@ -5,8 +5,9 @@ package openstack
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 type openStackServerList struct {
@@ -124,48 +125,56 @@ func (h *OpenStackHypervisor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
-func getServers(auth openStackKeystoneAuth) (openStackServerList, error) {
+func getServers(auth openStackKeystoneAuth) (*openStackServerList, error) {
 	req, err := http.NewRequest("GET", auth.nova.URL+"/servers/detail?all_tenants=1", nil)
 	if err != nil {
-		log.Fatalf("Failed to create server list request: %v", err)
+		logging.Log.Error("failed to create request", "error", err)
+		return nil, err
 	}
 	req.Header.Set("X-Auth-Token", auth.token)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Failed to get server list: %v", err)
+		logging.Log.Error("failed to send request", "error", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("Failed to get server list, status code: %d", resp.StatusCode)
+		logging.Log.Error("unexpected status code", "status", resp.StatusCode)
+		return nil, err
 	}
 	var serverList openStackServerList
 	err = json.NewDecoder(resp.Body).Decode(&serverList)
 	if err != nil {
-		log.Fatalf("Failed to decode server list: %v", err)
+		logging.Log.Error("failed to decode response", "error", err)
+		return nil, err
 	}
-	return serverList, nil
+	return &serverList, nil
 }
 
-func getHypervisors(auth openStackKeystoneAuth) (openStackHypervisorList, error) {
+func getHypervisors(auth openStackKeystoneAuth) (*openStackHypervisorList, error) {
 	req, err := http.NewRequest("GET", auth.nova.URL+"/os-hypervisors/detail", nil)
 	if err != nil {
-		log.Fatalf("Failed to create hypervisor list request: %v", err)
+		logging.Log.Error("failed to create request", "error", err)
+		return nil, err
 	}
 	req.Header.Set("X-Auth-Token", auth.token)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Failed to get hypervisor list: %v", err)
+		logging.Log.Error("failed to send request", "error", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("Failed to get hypervisor list, status code: %d", resp.StatusCode)
+		logging.Log.Error("unexpected status code", "status", resp.StatusCode)
+		return nil, err
 	}
 	var hypervisorList openStackHypervisorList
 	err = json.NewDecoder(resp.Body).Decode(&hypervisorList)
 	if err != nil {
-		log.Fatalf("Failed to decode hypervisor list: %v", err)
+		logging.Log.Error("failed to decode response", "error", err)
+		return nil, err
 	}
-	return hypervisorList, nil
+	return &hypervisorList, nil
 }

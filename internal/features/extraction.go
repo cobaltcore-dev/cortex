@@ -4,7 +4,7 @@
 package features
 
 import (
-	"log"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 var schemaCreators = []func() error{
@@ -18,7 +18,7 @@ var featureExtractors = []func() error{
 func Init() {
 	for _, schemaCreator := range schemaCreators {
 		if err := schemaCreator(); err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 	}
 }
@@ -26,7 +26,7 @@ func Init() {
 func Extract() {
 	for _, featureExtractor := range featureExtractors {
 		if err := featureExtractor(); err != nil {
-			log.Printf("Failed to extract features: %v\n", err)
+			logging.Log.Error("failed to extract features", "error", err)
 		}
 	}
 }
