@@ -58,7 +58,7 @@ func simulateNoisyVMScheduling() {
 	}
 
 	url := fmt.Sprintf("http://localhost:8080%s", scheduler.APINovaExternalSchedulerURL)
-	logging.Log.Info("sending POST request", "url", url, "request", request)
+	logging.Log.Info("sending POST request", "url", url)
 
 	// Send the POST request
 	requestBody, err := json.Marshal(request)
@@ -85,7 +85,7 @@ func simulateNoisyVMScheduling() {
 		return
 	}
 
-	logging.Log.Info("received response", "response", response)
+	logging.Log.Info("received response", "hosts", len(response.Hosts))
 }
 
 func main() {
