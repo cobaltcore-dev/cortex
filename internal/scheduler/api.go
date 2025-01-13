@@ -16,24 +16,28 @@ var (
 	APINovaExternalSchedulerURL = "/scheduler/nova/external"
 )
 
-type apiNovaExternalSchedulerRequest struct {
-	Spec struct { // Note: Not all fields are modeled here.
-		ProjectId  string `json:"project_id"`
-		NInstances int    `json:"num_instances"`
-	}
-	Rebuild bool `json:"rebuild"`
-	Hosts   []struct {
-		Name   string `json:"name"`
-		Status string `json:"status"`
-	} `json:"hosts"`
-	Weights map[string]float64 `json:"weights"`
+type APINovaExternalSchedulerRequestSpec struct {
+	ProjectId  string `json:"project_id"`
+	NInstances int    `json:"num_instances"`
 }
 
-type apiNovaExternalSchedulerResponse struct {
+type APINovaExternalSchedulerRequestHost struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+type APINovaExternalSchedulerRequest struct {
+	Spec    APINovaExternalSchedulerRequestSpec   `json:"spec"`
+	Rebuild bool                                  `json:"rebuild"`
+	Hosts   []APINovaExternalSchedulerRequestHost `json:"hosts"`
+	Weights map[string]float64                    `json:"weights"`
+}
+
+type APINovaExternalSchedulerResponse struct {
 	Hosts []string `json:"hosts"`
 }
 
-func canRunScheduler(requestData apiNovaExternalSchedulerRequest) (bool, string) {
+func canRunScheduler(requestData APINovaExternalSchedulerRequest) (bool, string) {
 	if requestData.Rebuild {
 		return false, "rebuild is not supported"
 	}
@@ -48,7 +52,7 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	var requestData apiNovaExternalSchedulerRequest
+	var requestData APINovaExternalSchedulerRequest
 	err := json.NewDecoder(r.Body).Decode(&requestData)
 	if err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -82,7 +86,7 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := apiNovaExternalSchedulerResponse{
+	response := APINovaExternalSchedulerResponse{
 		Hosts: hosts,
 	}
 	w.Header().Set("Content-Type", "application/json")

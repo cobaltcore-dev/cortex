@@ -37,13 +37,19 @@ func main() {
 
 	go func() {
 		for {
-			prometheus.Sync()  // Catch up until now, may take a while.
 			openstack.Sync()   // Get the current servers, hypervisors, etc.
+			prometheus.Sync()  // Catch up until now, may take a while.
 			features.Extract() // Extract features from the data.
 			time.Sleep(time.Minute * 1)
 		}
 	}()
 
+	http.HandleFunc(
+		"/up",
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	)
 	http.HandleFunc(
 		scheduler.APINovaExternalSchedulerURL,
 		scheduler.APINovaExternalSchedulerHandler,

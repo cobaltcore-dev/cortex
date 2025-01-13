@@ -4,8 +4,9 @@
 package conf
 
 import (
-	"log"
 	"os"
+
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 type Config struct {
@@ -25,7 +26,16 @@ type Config struct {
 func forceGetenv(key string) string {
 	value := os.Getenv(key)
 	if value == "" {
-		log.Fatalf("environment variable %s is not set", key)
+		logging.Log.Error("missing environment variable", "key", key)
+		os.Exit(1)
+	}
+	return value
+}
+
+func getenv(key string, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
 	}
 	return value
 }
@@ -42,10 +52,10 @@ func load() Config {
 		OSUserDomainName:    forceGetenv("OS_USER_DOMAIN_NAME"),
 		OSProjectDomainName: forceGetenv("OS_PROJECT_DOMAIN_NAME"),
 		PrometheusUrl:       forceGetenv("PROMETHEUS_URL"),
-		DBHost:              forceGetenv("POSTGRES_HOST"),
-		DBPort:              forceGetenv("POSTGRES_PORT"),
-		DBUser:              forceGetenv("POSTGRES_USER"),
-		DBPass:              forceGetenv("POSTGRES_PASSWORD"),
+		DBHost:              getenv("POSTGRES_HOST", "postgres"),
+		DBPort:              getenv("POSTGRES_PORT", "5432"),
+		DBUser:              getenv("POSTGRES_USER", "postgres"),
+		DBPass:              getenv("POSTGRES_PASSWORD", "secret"),
 	}
 }
 

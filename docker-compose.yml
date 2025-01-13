@@ -13,11 +13,16 @@ services:
     image: postgres
     environment:
       POSTGRES_PASSWORD: secret
+    ports:
+      # To access the DB when executing cmds via `go run cmd/<cmd>.go`.
+      - 5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
   cortex:
     build: .
+    ports:
+      - 8080:8080
     environment:
       OS_AUTH_URL: ${OS_AUTH_URL}
       OS_USERNAME: ${OS_USERNAME}
@@ -26,12 +31,12 @@ services:
       OS_USER_DOMAIN_NAME: ${OS_USER_DOMAIN_NAME}
       OS_PROJECT_DOMAIN_NAME: ${OS_PROJECT_DOMAIN_NAME}
       PROMETHEUS_URL: ${PROMETHEUS_URL}
-
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
     restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/up"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     volumes:
       - .:/home/appuser
 
