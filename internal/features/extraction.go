@@ -8,11 +8,11 @@ import (
 )
 
 var schemaCreators = []func() error{
-	noisyProjectsSchema,
+	projectNoisinessSchema,
 }
 
 var featureExtractors = []func() error{
-	noisyProjectsExtractor,
+	projectNoisinessExtractor,
 }
 
 func Init() {

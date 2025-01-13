@@ -5,7 +5,6 @@ package scheduler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/logging"
@@ -49,13 +48,15 @@ func canRunScheduler(requestData APINovaExternalSchedulerRequest) (bool, string)
 
 func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		logging.Log.Error("invalid request method", "method", r.Method)
+		http.Error(w, "invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 	var requestData APINovaExternalSchedulerRequest
 	err := json.NewDecoder(r.Body).Decode(&requestData)
 	if err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		logging.Log.Error("failed to decode request", "error", err)
+		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	logging.Log.Info(
@@ -67,7 +68,7 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if ok, reason := canRunScheduler(requestData); !ok {
-		fmt.Printf("Cannot run scheduler: %s\n", reason)
+		logging.Log.Error("cannot run scheduler", "reason", reason)
 		http.Error(w, reason, http.StatusBadRequest)
 		return
 	}
@@ -88,7 +89,8 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 
 	hosts, err := evaluatePipeline(state)
 	if err != nil {
-		http.Error(w, "Failed to evaluate pipeline", http.StatusInternalServerError)
+		logging.Log.Error("failed to evaluate pipeline", "error", err)
+		http.Error(w, "failed to evaluate pipeline", http.StatusInternalServerError)
 		return
 	}
 

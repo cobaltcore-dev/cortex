@@ -11,11 +11,16 @@ import (
 
 func antiAffinityNoisyProjects(state pipelineState) (pipelineState, error) {
 	logging.Log.Info("scheduler: anti-affinity - noisy projects")
-	// Get pairs of (noisy project, host) from the database.
-	var noisyProjects []features.NoisyProject
-	if err := db.DB.Model(&noisyProjects).Select(); err != nil {
+
+	// If the average CPU usage is above this threshold, the project is considered noisy.
+	const avgCpuThreshold float64 = 20.0
+	var noisyProjects []features.ProjectNoisiness
+	if err := db.DB.Model(&noisyProjects).
+		Where("avg_cpu_on_host > ?", avgCpuThreshold).
+		Select(); err != nil {
 		return state, err
 	}
+
 	// Get the hosts we need to push the VM away from.
 	var hostsByProject = make(map[string][]string)
 	for _, p := range noisyProjects {

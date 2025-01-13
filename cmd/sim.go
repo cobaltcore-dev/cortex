@@ -19,12 +19,10 @@ func simulateNoisyVMScheduling() {
 	defer db.DB.Close()
 
 	// Get noisy projects from the DB.
-	var noisyProjects []features.NoisyProject
-	if err := db.DB.Model(&noisyProjects).Select(); err != nil {
+	var noisyProjects []features.ProjectNoisiness
+	err := db.DB.Model(&noisyProjects).Order("avg_cpu_on_host DESC").Select()
+	if err != nil {
 		logging.Log.Error("failed to get noisy projects", "error", err)
-	}
-	if len(noisyProjects) == 0 {
-		logging.Log.Info("no noisy projects found")
 		return
 	}
 
@@ -32,6 +30,7 @@ func simulateNoisyVMScheduling() {
 	var hypervisors []openstack.OpenStackHypervisor
 	if err := db.DB.Model(&hypervisors).Select(); err != nil {
 		logging.Log.Error("failed to get hosts", "error", err)
+		return
 	}
 
 	// Make a scheduling request for a random noisy project.
