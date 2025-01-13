@@ -20,7 +20,7 @@ func simulateNoisyVMScheduling() {
 
 	// Get noisy projects from the DB.
 	var noisyProjects []features.ProjectNoisiness
-	err := db.DB.Model(&noisyProjects).Order("avg_cpu_on_host DESC").Select()
+	err := db.DB.Model(&noisyProjects).Order("avg_cpu_of_project DESC").Select()
 	if err != nil {
 		logging.Log.Error("failed to get noisy projects", "error", err)
 		return
