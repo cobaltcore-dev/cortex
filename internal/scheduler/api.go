@@ -58,7 +58,13 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
-	logging.Log.Info("handling POST request", "url", APINovaExternalSchedulerURL, "requestData", requestData)
+	logging.Log.Info(
+		"handling POST request",
+		"url", APINovaExternalSchedulerURL,
+		"rebuild", requestData.Rebuild,
+		"hosts", len(requestData.Hosts),
+		"spec", requestData.Spec,
+	)
 
 	if ok, reason := canRunScheduler(requestData); !ok {
 		fmt.Printf("Cannot run scheduler: %s\n", reason)

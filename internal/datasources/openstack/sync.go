@@ -32,12 +32,12 @@ func Sync() {
 		logging.Log.Error("failed to get keystone auth", "error", err)
 		return
 	}
-	serverlist, err := getServers(auth)
+	serverlist, err := getServers(auth, nil)
 	if err != nil {
 		logging.Log.Error("failed to get servers", "error", err)
 		return
 	}
-	hypervisorlist, err := getHypervisors(auth)
+	hypervisorlist, err := getHypervisors(auth, nil)
 	if err != nil {
 		logging.Log.Error("failed to get hypervisors", "error", err)
 		return

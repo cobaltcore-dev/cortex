@@ -11,7 +11,11 @@ import (
 )
 
 type openStackServerList struct {
-	Servers []OpenStackServer `json:"servers"`
+	Servers      []OpenStackServer `json:"servers"`
+	ServersLinks *[]struct {
+		Href string `json:"href"`
+		Rel  string `json:"rel"`
+	} `json:"servers_links"`
 }
 
 type OpenStackServer struct {
@@ -49,7 +53,11 @@ type OpenStackServer struct {
 }
 
 type openStackHypervisorList struct {
-	Hypervisors []OpenStackHypervisor `json:"hypervisors"`
+	Hypervisors      []OpenStackHypervisor `json:"hypervisors"`
+	HypervisorsLinks *[]struct {
+		Href string `json:"href"`
+		Rel  string `json:"rel"`
+	} `json:"hypervisors_links"`
 }
 
 type OpenStackHypervisor struct {
@@ -125,8 +133,13 @@ func (h *OpenStackHypervisor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
-func getServers(auth openStackKeystoneAuth) (*openStackServerList, error) {
-	req, err := http.NewRequest("GET", auth.nova.URL+"/servers/detail?all_tenants=1", nil)
+func getServers(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
+	var pageUrl string = auth.nova.URL + "servers/detail?all_tenants=1"
+	if url != nil {
+		pageUrl = *url
+	}
+	logging.Log.Info("getting servers", "pageUrl", pageUrl)
+	req, err := http.NewRequest("GET", pageUrl, nil)
 	if err != nil {
 		logging.Log.Error("failed to create request", "error", err)
 		return nil, err
@@ -149,11 +162,28 @@ func getServers(auth openStackKeystoneAuth) (*openStackServerList, error) {
 		logging.Log.Error("failed to decode response", "error", err)
 		return nil, err
 	}
+	// If we got a paginated response, follow the next link.
+	if serverList.ServersLinks != nil {
+		for _, link := range *serverList.ServersLinks {
+			if link.Rel == "next" {
+				servers, err := getServers(auth, &link.Href)
+				if err != nil {
+					return nil, err
+				}
+				serverList.Servers = append(serverList.Servers, servers.Servers...)
+			}
+		}
+	}
 	return &serverList, nil
 }
 
-func getHypervisors(auth openStackKeystoneAuth) (*openStackHypervisorList, error) {
-	req, err := http.NewRequest("GET", auth.nova.URL+"/os-hypervisors/detail", nil)
+func getHypervisors(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
+	var pageUrl string = auth.nova.URL + "os-hypervisors/detail"
+	if url != nil {
+		pageUrl = *url
+	}
+	logging.Log.Info("getting hypervisors", "pageUrl", pageUrl)
+	req, err := http.NewRequest("GET", pageUrl, nil)
 	if err != nil {
 		logging.Log.Error("failed to create request", "error", err)
 		return nil, err
@@ -175,6 +205,18 @@ func getHypervisors(auth openStackKeystoneAuth) (*openStackHypervisorList, error
 	if err != nil {
 		logging.Log.Error("failed to decode response", "error", err)
 		return nil, err
+	}
+	// If we got a paginated response, follow the next link.
+	if hypervisorList.HypervisorsLinks != nil {
+		for _, link := range *hypervisorList.HypervisorsLinks {
+			if link.Rel == "next" {
+				hypervisors, err := getHypervisors(auth, &link.Href)
+				if err != nil {
+					return nil, err
+				}
+				hypervisorList.Hypervisors = append(hypervisorList.Hypervisors, hypervisors.Hypervisors...)
+			}
+		}
 	}
 	return &hypervisorList, nil
 }
