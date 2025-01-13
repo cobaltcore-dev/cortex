@@ -61,10 +61,10 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create the pipeline context from the request data.
-	ctx := pipelineContext{}
-	ctx.Spec.ProjectId = requestData.Spec.ProjectId
+	state := pipelineState{}
+	state.Spec.ProjectId = requestData.Spec.ProjectId
 	for _, host := range requestData.Hosts {
-		ctx.Hosts = append(ctx.Hosts, struct {
+		state.Hosts = append(state.Hosts, struct {
 			Name   string
 			Status string
 		}{
@@ -72,9 +72,9 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 			Status: host.Status,
 		})
 	}
-	ctx.Weights = requestData.Weights
+	state.Weights = requestData.Weights
 
-	hosts, err := evaluatePipeline(ctx)
+	hosts, err := evaluatePipeline(state)
 	if err != nil {
 		http.Error(w, "Failed to evaluate pipeline", http.StatusInternalServerError)
 		return

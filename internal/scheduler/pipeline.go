@@ -7,7 +7,7 @@ import (
 	"sort"
 )
 
-type pipelineContext struct {
+type pipelineState struct {
 	Spec struct {
 		ProjectId string
 	}
@@ -18,26 +18,26 @@ type pipelineContext struct {
 	Weights map[string]float64
 }
 
-var steps = []func(ctx pipelineContext) (pipelineContext, error){
+var steps = []func(pipelineState) (pipelineState, error){
 	antiAffinityNoisyProjects,
 }
 
-func evaluatePipeline(ctx pipelineContext) ([]string, error) {
+func evaluatePipeline(state pipelineState) ([]string, error) {
 	for _, step := range steps {
 		var err error
-		ctx, err = step(ctx)
+		state, err = step(state)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Order the list of hosts by their weights
-	sort.Slice(ctx.Hosts, func(i, j int) bool {
-		return ctx.Weights[ctx.Hosts[i].Name] > ctx.Weights[ctx.Hosts[j].Name]
+	sort.Slice(state.Hosts, func(i, j int) bool {
+		return state.Weights[state.Hosts[i].Name] > state.Weights[state.Hosts[j].Name]
 	})
 
-	hostNames := make([]string, len(ctx.Hosts))
-	for i, host := range ctx.Hosts {
+	hostNames := make([]string, len(state.Hosts))
+	for i, host := range state.Hosts {
 		hostNames[i] = host.Name
 	}
 	return hostNames, nil
