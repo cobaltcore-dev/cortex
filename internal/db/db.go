@@ -27,10 +27,18 @@ func Init() {
 	// Poll until the database is alive
 	logging.Log.Info("waiting for database to be ready...")
 	ctx := context.Background()
+	var i int
 	for {
-		if err := DB.Ping(ctx); err == nil {
+		err := DB.Ping(ctx)
+		if err == nil {
 			break
 		}
+		i++
+		if i > 10 {
+			// Give up after 10 seconds
+			panic(err)
+		}
+		logging.Log.Info("database is not ready yet, retrying", "attempt", i)
 		time.Sleep(time.Second * 1)
 	}
 	logging.Log.Info("database is ready")
