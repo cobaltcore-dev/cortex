@@ -5,7 +5,7 @@ datasources:
     type: postgres
     access: proxy
     # Point at the postgres proxy that is running locally.
-    url: postgres:5432
+    url: cortex-postgresql:5432
     user: postgres
     uid: postgres
     secureJsonData:

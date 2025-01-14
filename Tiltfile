@@ -12,3 +12,8 @@ docker_build('cortex', '.')
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo('bitnami', 'https://charts.bitnami.com/bitnami')
 k8s_yaml(helm('./helm', name='cortex', set=values))
+k8s_resource('cortex', port_forwards=8080)
+
+docker_build('plutono', 'plutono')
+k8s_yaml('./plutono/app.yaml')
+k8s_resource('plutono', port_forwards=3000)

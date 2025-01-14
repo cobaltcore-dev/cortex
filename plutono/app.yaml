@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plutono
+  labels:
+    app: plutono
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plutono
+  template:
+    metadata:
+      labels:
+        app: plutono
+    spec:
+      containers:
+        - name: plutono # from local tilt build
+          image: plutono
+          ports:
+            - containerPort: 3000
