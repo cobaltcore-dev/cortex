@@ -4,6 +4,7 @@
 package prometheus
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -50,22 +51,23 @@ func fetchMetrics(
 	resolutionSeconds int,
 ) (*PrometheusTimelineData, error) {
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
-	url := fmt.Sprintf("%s/api/v1/query_range", prometheusURL)
-	url = fmt.Sprintf("%s?query=%s", url, query)
-	url = fmt.Sprintf("%s&start=%d", url, start.Unix())
-	url = fmt.Sprintf("%s&end=%d", url, end.Unix())
-	url = fmt.Sprintf("%s&step=%d", url, resolutionSeconds)
+	url := prometheusURL + "/api/v1/query_range"
+	url += "?query=" + query
+	url += "&start=" + strconv.FormatInt(start.Unix(), 10)
+	url += "&end=" + strconv.FormatInt(end.Unix(), 10)
+	url += "&step=" + strconv.Itoa(resolutionSeconds)
 	logging.Log.Info("fetching metrics from", "url", url)
 
-	req, err := http.NewRequest("GET", url, nil)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %v", err)
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -78,7 +80,7 @@ func fetchMetrics(
 	}
 	err = json.NewDecoder(resp.Body).Decode(&prometheusData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	if prometheusData.Status != "success" {
@@ -110,7 +112,7 @@ func fetchMetrics(
 		var metric rangeMetric
 		err = json.Unmarshal(raw, &metric)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode metric: %v", err)
+			return nil, fmt.Errorf("failed to decode metric: %w", err)
 		}
 		metrics = append(metrics, metric)
 	}

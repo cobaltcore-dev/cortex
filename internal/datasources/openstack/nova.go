@@ -4,6 +4,7 @@
 package openstack
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -129,17 +130,22 @@ func (h *OpenStackHypervisor) MarshalJSON() ([]byte, error) {
 	service.ID = h.ServiceID
 	service.Host = h.ServiceHost
 	service.DisabledReason = h.ServiceDisabledReason
-	aux.Service, _ = json.Marshal(service)
+	var err error
+	aux.Service, err = json.Marshal(service)
+	if err != nil {
+		return nil, err
+	}
 	return json.Marshal(aux)
 }
 
+//nolint:dupl
 func getServers(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
-	var pageUrl string = auth.nova.URL + "servers/detail?all_tenants=1"
+	var pageURL = auth.nova.URL + "servers/detail?all_tenants=1"
 	if url != nil {
-		pageUrl = *url
+		pageURL = *url
 	}
-	logging.Log.Info("getting servers", "pageUrl", pageUrl)
-	req, err := http.NewRequest("GET", pageUrl, nil)
+	logging.Log.Info("getting servers", "pageURL", pageURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
 		logging.Log.Error("failed to create request", "error", err)
 		return nil, err
@@ -177,13 +183,14 @@ func getServers(auth openStackKeystoneAuth, url *string) (*openStackServerList, 
 	return &serverList, nil
 }
 
+//nolint:dupl
 func getHypervisors(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
-	var pageUrl string = auth.nova.URL + "os-hypervisors/detail"
+	var pageURL = auth.nova.URL + "os-hypervisors/detail"
 	if url != nil {
-		pageUrl = *url
+		pageURL = *url
 	}
-	logging.Log.Info("getting hypervisors", "pageUrl", pageUrl)
-	req, err := http.NewRequest("GET", pageUrl, nil)
+	logging.Log.Info("getting hypervisors", "pageURL", pageURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
 		logging.Log.Error("failed to create request", "error", err)
 		return nil, err

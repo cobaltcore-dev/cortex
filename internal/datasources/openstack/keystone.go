@@ -5,7 +5,9 @@ package openstack
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -102,7 +104,10 @@ func getKeystoneAuth() (openStackKeystoneAuth, error) {
 		return openStackKeystoneAuth{}, fmt.Errorf("failed to marshal auth request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", c.OSAuthUrl+"/auth/tokens", bytes.NewBuffer(authRequestBody))
+	req, err := http.NewRequestWithContext(
+		context.Background(), http.MethodPost,
+		c.OSAuthURL+"/auth/tokens", bytes.NewBuffer(authRequestBody),
+	)
 	if err != nil {
 		return openStackKeystoneAuth{}, fmt.Errorf("failed to create auth request: %w", err)
 	}
@@ -140,7 +145,7 @@ func getKeystoneAuth() (openStackKeystoneAuth, error) {
 		}
 	}
 	if novaEndpoint == "" {
-		return openStackKeystoneAuth{}, fmt.Errorf("nova endpoint not found")
+		return openStackKeystoneAuth{}, errors.New("failed to find Nova endpoint")
 	}
 
 	return openStackKeystoneAuth{

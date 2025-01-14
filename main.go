@@ -44,16 +44,23 @@ func main() {
 		}
 	}()
 
-	http.HandleFunc(
-		"/up",
-		func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		},
-	)
-	http.HandleFunc(
+	mux := http.NewServeMux()
+	mux.HandleFunc("/up", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc(
 		scheduler.APINovaExternalSchedulerURL,
 		scheduler.APINovaExternalSchedulerHandler,
 	)
 	log.Info("Listening on :8080")
-	http.ListenAndServe(":8080", nil)
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  15 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
+		log.Error("failed to start server", "error", err)
+	}
 }

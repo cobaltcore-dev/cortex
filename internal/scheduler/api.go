@@ -16,7 +16,7 @@ var (
 )
 
 type APINovaExternalSchedulerRequestSpec struct {
-	ProjectId  string `json:"project_id"`
+	ProjectID  string `json:"project_id"`
 	NInstances int    `json:"num_instances"`
 }
 
@@ -36,7 +36,7 @@ type APINovaExternalSchedulerResponse struct {
 	Hosts []string `json:"hosts"`
 }
 
-func canRunScheduler(requestData APINovaExternalSchedulerRequest) (bool, string) {
+func canRunScheduler(requestData APINovaExternalSchedulerRequest) (ok bool, reason string) {
 	if requestData.Rebuild {
 		return false, "rebuild is not supported"
 	}
@@ -75,7 +75,7 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the pipeline context from the request data.
 	state := pipelineState{}
-	state.Spec.ProjectId = requestData.Spec.ProjectId
+	state.Spec.ProjectID = requestData.Spec.ProjectID
 	for _, host := range requestData.Hosts {
 		state.Hosts = append(state.Hosts, struct {
 			Name   string
@@ -98,5 +98,10 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 		Hosts: hosts,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		logging.Log.Error("failed to encode response", "error", err)
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }

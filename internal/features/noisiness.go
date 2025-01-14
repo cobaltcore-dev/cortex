@@ -3,6 +3,7 @@
 
 package features
 
+//nolint:goimports
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
@@ -34,8 +35,7 @@ func projectNoisinessExtractor() error {
 	}
 	defer tx.Close()
 	if _, err := tx.Exec("DELETE FROM feature_project_noisiness"); err != nil {
-		tx.Rollback()
-		return err
+		return tx.Rollback()
 	}
 	if _, err := tx.Exec(`
         WITH projects_avg_cpu AS (
@@ -66,8 +66,7 @@ func projectNoisinessExtractor() error {
             avg_cpu_of_project
         FROM host_cpu_usage;
     `); err != nil {
-		tx.Rollback()
-		return err
+		return tx.Rollback()
 	}
 	if err := tx.Commit(); err != nil {
 		return err

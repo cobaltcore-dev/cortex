@@ -3,6 +3,7 @@
 
 package db
 
+//nolint:goimports
 import (
 	"context"
 	"fmt"

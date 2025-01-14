@@ -4,6 +4,7 @@
 package prometheus
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -23,7 +24,7 @@ func getSyncWindowStart(metricName string) (time.Time, error) {
 		"SELECT COUNT(*) FROM metrics WHERE name = ?",
 		metricName,
 	); err != nil {
-		return time.Time{}, fmt.Errorf("failed to count rows: %v", err)
+		return time.Time{}, fmt.Errorf("failed to count rows: %w", err)
 	}
 	logging.Log.Debug("number of rows", "nRows", nRows)
 	if nRows == 0 {
@@ -37,10 +38,10 @@ func getSyncWindowStart(metricName string) (time.Time, error) {
 		"SELECT MAX(timestamp) FROM metrics WHERE name = ?",
 		metricName,
 	); err != nil {
-		return time.Time{}, fmt.Errorf("failed to get latest timestamp: %v", err)
+		return time.Time{}, fmt.Errorf("failed to get latest timestamp: %w", err)
 	}
 	if latestTimestamp.IsZero() {
-		return time.Time{}, fmt.Errorf("latestTimestamp is zero")
+		return time.Time{}, errors.New("latestTimestamp is zero")
 	}
 	logging.Log.Debug("latest timestamp", "latestTimestamp", latestTimestamp)
 	return latestTimestamp, nil
@@ -72,7 +73,7 @@ func sync(
 	logging.Log.Info("deleted old metrics", "rows", result.RowsAffected())
 	// Fetch the metrics from Prometheus.
 	prometheusData, err := fetchMetrics(
-		conf.Get().PrometheusUrl,
+		conf.Get().PrometheusURL,
 		metricName,
 		start,
 		end,
@@ -82,7 +83,9 @@ func sync(
 		fmt.Printf("Failed to fetch metrics: %v\n", err)
 		return
 	}
-	db.DB.Model(&prometheusData.Metrics).Insert()
+	if _, err = db.DB.Model(&prometheusData.Metrics).Insert(); err != nil {
+		fmt.Printf("Failed to insert metrics: %v\n", err)
+	}
 	logging.Log.Info("synced Prometheus data", "metrics", len(prometheusData.Metrics), "start", start, "end", end)
 
 	// Don't overload the Prometheus server.

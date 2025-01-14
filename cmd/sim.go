@@ -1,9 +1,12 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
 package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 
@@ -38,7 +41,7 @@ func simulateNoisyVMScheduling() {
 	logging.Log.Info("scheduling request", "project", project)
 
 	spec := scheduler.APINovaExternalSchedulerRequestSpec{
-		ProjectId:  project,
+		ProjectID:  project,
 		NInstances: 1,
 	}
 	hosts := make([]scheduler.APINovaExternalSchedulerRequestHost, len(hypervisors))
@@ -57,17 +60,22 @@ func simulateNoisyVMScheduling() {
 		Weights: weights,
 	}
 
-	url := fmt.Sprintf("http://localhost:8080%s", scheduler.APINovaExternalSchedulerURL)
+	url := "http://localhost:8080" + scheduler.APINovaExternalSchedulerURL
 	logging.Log.Info("sending POST request", "url", url)
-
-	// Send the POST request
 	requestBody, err := json.Marshal(request)
 	if err != nil {
 		logging.Log.Error("failed to marshal request", "error", err)
 		return
 	}
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		logging.Log.Error("failed to create request", "error", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(requestBody))
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		logging.Log.Error("failed to send POST request", "error", err)
 		return

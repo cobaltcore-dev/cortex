@@ -10,13 +10,13 @@ import (
 )
 
 type Config struct {
-	OSAuthUrl           string
+	OSAuthURL           string
 	OSUsername          string
 	OSPassword          string
 	OSProjectName       string
 	OSUserDomainName    string
 	OSProjectDomainName string
-	PrometheusUrl       string
+	PrometheusURL       string
 	DBHost              string
 	DBPort              string
 	DBUser              string
@@ -32,7 +32,7 @@ func forceGetenv(key string) string {
 	return value
 }
 
-func getenv(key string, defaultValue string) string {
+func getenv(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value == "" {
 		return defaultValue
@@ -45,13 +45,13 @@ var loaded bool
 
 func load() Config {
 	return Config{
-		OSAuthUrl:           forceGetenv("OS_AUTH_URL"),
+		OSAuthURL:           forceGetenv("OS_AUTH_URL"),
 		OSUsername:          forceGetenv("OS_USERNAME"),
 		OSPassword:          forceGetenv("OS_PASSWORD"),
 		OSProjectName:       forceGetenv("OS_PROJECT_NAME"),
 		OSUserDomainName:    forceGetenv("OS_USER_DOMAIN_NAME"),
 		OSProjectDomainName: forceGetenv("OS_PROJECT_DOMAIN_NAME"),
-		PrometheusUrl:       forceGetenv("PROMETHEUS_URL"),
+		PrometheusURL:       forceGetenv("PROMETHEUS_URL"),
 		DBHost:              getenv("POSTGRES_HOST", "postgres"),
 		DBPort:              getenv("POSTGRES_PORT", "5432"),
 		DBUser:              getenv("POSTGRES_USER", "postgres"),

@@ -9,7 +9,7 @@ import (
 
 type pipelineState struct {
 	Spec struct {
-		ProjectId string
+		ProjectID string
 	}
 	Hosts []struct {
 		Name   string

@@ -26,7 +26,7 @@ func Init() {
 }
 
 func Sync() {
-	logging.Log.Info("syncing OpenStack data with", "authUrl", conf.Get().OSAuthUrl)
+	logging.Log.Info("syncing OpenStack data with", "authUrl", conf.Get().OSAuthURL)
 	auth, err := getKeystoneAuth()
 	if err != nil {
 		logging.Log.Error("failed to get keystone auth", "error", err)
@@ -42,11 +42,17 @@ func Sync() {
 		logging.Log.Error("failed to get hypervisors", "error", err)
 		return
 	}
-	db.DB.Model(&serverlist.Servers).
+	if _, err = db.DB.Model(&serverlist.Servers).
 		OnConflict("(id) DO UPDATE").
-		Insert()
-	db.DB.Model(&hypervisorlist.Hypervisors).
+		Insert(); err != nil {
+		logging.Log.Error("failed to insert servers", "error", err)
+		return
+	}
+	if _, err = db.DB.Model(&hypervisorlist.Hypervisors).
 		OnConflict("(id) DO UPDATE").
-		Insert()
+		Insert(); err != nil {
+		logging.Log.Error("failed to insert hypervisors", "error", err)
+		return
+	}
 	logging.Log.Info("synced OpenStack data", "servers", len(serverlist.Servers), "hypervisors", len(hypervisorlist.Hypervisors))
 }
