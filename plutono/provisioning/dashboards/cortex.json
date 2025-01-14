@@ -1,573 +1,573 @@
 {
-    "annotations": {
-      "list": [
-        {
-          "builtIn": 1,
-          "datasource": "-- Plutono --",
-          "enable": true,
-          "hide": true,
-          "iconColor": "rgba(0, 211, 255, 1)",
-          "name": "Annotations & Alerts",
-          "type": "dashboard"
-        }
-      ]
-    },
-    "editable": true,
-    "gnetId": null,
-    "graphTooltip": 0,
-    "id": 1,
-    "iteration": 1736783218500,
-    "links": [],
-    "panels": [
+  "annotations": {
+    "list": [
       {
-        "cards": {
-          "cardPadding": null,
-          "cardRound": null
-        },
-        "color": {
-          "cardColor": "#b4ff00",
-          "colorScale": "sqrt",
-          "colorScheme": "interpolateSpectral",
-          "exponent": 0.5,
-          "mode": "spectrum"
-        },
-        "dataFormat": "timeseries",
-        "datasource": "Postgres",
-        "fieldConfig": {
-          "defaults": {},
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 11,
-          "w": 7,
-          "x": 0,
-          "y": 0
-        },
-        "heatmap": {},
-        "hideZeroBuckets": false,
-        "highlightCards": true,
-        "id": 7,
-        "legend": {
-          "show": true
-        },
-        "pluginVersion": "7.5.35",
-        "reverseYBuckets": false,
-        "targets": [
-          {
-            "format": "time_series",
-            "group": [],
-            "metricColumn": "none",
-            "queryType": "randomWalk",
-            "rawQuery": true,
-            "rawSql": "SELECT \n  \"timestamp\" as time, value\nFROM metrics;",
-            "refId": "A",
-            "select": [
-              [
-                {
-                  "params": [
-                    "value"
-                  ],
-                  "type": "column"
-                }
-              ]
-            ],
-            "table": "metrics",
-            "timeColumn": "\"timestamp\"",
-            "timeColumnType": "timestamp",
-            "where": [
-              {
-                "name": "$__timeFilter",
-                "params": [],
-                "type": "macro"
-              }
-            ]
-          }
-        ],
-        "title": "CPU Utilization per VM",
-        "tooltip": {
-          "show": true,
-          "showHistogram": false
-        },
-        "type": "heatmap",
-        "xAxis": {
-          "show": true
-        },
-        "xBucketNumber": null,
-        "xBucketSize": null,
-        "yAxis": {
-          "decimals": null,
-          "format": "short",
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true,
-          "splitFactor": null
-        },
-        "yBucketBound": "auto",
-        "yBucketNumber": null,
-        "yBucketSize": null
-      },
-      {
-        "datasource": "Postgres",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "mappings": [],
-            "max": 100,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                },
-                {
-                  "color": "red",
-                  "value": 80
-                }
-              ]
-            },
-            "unit": "percent"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 11,
-          "w": 14,
-          "x": 7,
-          "y": 0
-        },
-        "id": 9,
-        "options": {
-          "displayMode": "gradient",
-          "orientation": "auto",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": true
-          },
-          "showUnfilled": true,
-          "text": {
-            "titleSize": 0
-          }
-        },
-        "pluginVersion": "7.5.35",
-        "targets": [
-          {
-            "format": "table",
-            "group": [],
-            "metricColumn": "none",
-            "queryType": "randomWalk",
-            "rawQuery": true,
-            "rawSql": "SELECT \n  100 * vcpus_used / (CAST(vcpus AS FLOAT) * $vcpu_oc) AS utilization \nFROM openstack_hypervisors \nWHERE openstack_hypervisors.hypervisor_type != 'ironic'\nORDER BY vcpus_used DESC;",
-            "refId": "A",
-            "select": [
-              [
-                {
-                  "params": [
-                    "value"
-                  ],
-                  "type": "column"
-                }
-              ]
-            ],
-            "table": "metrics",
-            "timeColumn": "\"timestamp\"",
-            "timeColumnType": "timestamp",
-            "where": [
-              {
-                "name": "$__timeFilter",
-                "params": [],
-                "type": "macro"
-              }
-            ]
-          }
-        ],
-        "title": "Hypervisor CPU Utilization",
-        "transformations": [],
-        "type": "bargauge"
-      },
-      {
-        "datasource": "Postgres",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 6,
-          "w": 3,
-          "x": 21,
-          "y": 0
-        },
-        "id": 4,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "auto",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "text": {},
-          "textMode": "auto"
-        },
-        "pluginVersion": "7.5.35",
-        "targets": [
-          {
-            "format": "table",
-            "group": [],
-            "metricColumn": "none",
-            "queryType": "randomWalk",
-            "rawQuery": true,
-            "rawSql": "SELECT COUNT(id) FROM openstack_servers;",
-            "refId": "A",
-            "select": [
-              [
-                {
-                  "params": [
-                    "os_ext_sts_power_state"
-                  ],
-                  "type": "column"
-                }
-              ]
-            ],
-            "table": "openstack_servers",
-            "timeColumn": "os_ext_sts_power_state",
-            "timeColumnType": "int8",
-            "where": [
-              {
-                "name": "$__unixEpochFilter",
-                "params": [],
-                "type": "macro"
-              }
-            ]
-          }
-        ],
-        "timeFrom": null,
-        "timeShift": null,
-        "title": "OpenStack Servers",
-        "type": "stat"
-      },
-      {
-        "datasource": "Postgres",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 4,
-          "w": 3,
-          "x": 21,
-          "y": 6
-        },
-        "id": 5,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "auto",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "text": {},
-          "textMode": "auto"
-        },
-        "pluginVersion": "7.5.35",
-        "targets": [
-          {
-            "format": "table",
-            "group": [],
-            "metricColumn": "none",
-            "queryType": "randomWalk",
-            "rawQuery": true,
-            "rawSql": "SELECT COUNT(id) FROM openstack_hypervisors;",
-            "refId": "A",
-            "select": [
-              [
-                {
-                  "params": [
-                    "os_ext_sts_power_state"
-                  ],
-                  "type": "column"
-                }
-              ]
-            ],
-            "table": "openstack_servers",
-            "timeColumn": "os_ext_sts_power_state",
-            "timeColumnType": "int8",
-            "where": [
-              {
-                "name": "$__unixEpochFilter",
-                "params": [],
-                "type": "macro"
-              }
-            ]
-          }
-        ],
-        "timeFrom": null,
-        "timeShift": null,
-        "title": "OpenStack Hypervisors",
-        "type": "stat"
-      },
-      {
-        "datasource": "Postgres",
-        "description": "",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "custom": {
-              "align": null,
-              "filterable": false
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                },
-                {
-                  "color": "red",
-                  "value": 80
-                }
-              ]
-            }
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 12,
-          "w": 7,
-          "x": 0,
-          "y": 11
-        },
-        "id": 2,
-        "options": {
-          "showHeader": true
-        },
-        "pluginVersion": "7.5.35",
-        "targets": [
-          {
-            "format": "table",
-            "group": [],
-            "metricColumn": "none",
-            "queryType": "randomWalk",
-            "rawQuery": true,
-            "rawSql": "SELECT\n  project, host, avg_cpu_on_host\nFROM feature_project_noisiness\nORDER BY avg_cpu_on_host DESC LIMIT 10;",
-            "refId": "A",
-            "select": [
-              [
-                {
-                  "params": [
-                    "value"
-                  ],
-                  "type": "column"
-                }
-              ]
-            ],
-            "table": "metrics",
-            "timeColumn": "\"timestamp\"",
-            "timeColumnType": "timestamp",
-            "where": [
-              {
-                "name": "$__timeFilter",
-                "params": [],
-                "type": "macro"
-              }
-            ]
-          }
-        ],
-        "title": "Top 10 Noisy Projects",
-        "type": "table"
-      },
-      {
-        "datasource": "Postgres",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "mappings": [],
-            "max": 100,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                },
-                {
-                  "color": "red",
-                  "value": 80
-                }
-              ]
-            },
-            "unit": "percent"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 12,
-          "w": 14,
-          "x": 7,
-          "y": 11
-        },
-        "id": 10,
-        "options": {
-          "displayMode": "gradient",
-          "orientation": "auto",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": true
-          },
-          "showUnfilled": true,
-          "text": {
-            "titleSize": 0
-          }
-        },
-        "pluginVersion": "7.5.35",
-        "targets": [
-          {
-            "format": "table",
-            "group": [],
-            "metricColumn": "none",
-            "queryType": "randomWalk",
-            "rawQuery": true,
-            "rawSql": "SELECT \n  100 * memory_mb_used / (CAST(memory_mb AS FLOAT) * $ram_oc) AS utilization \nFROM openstack_hypervisors \nWHERE openstack_hypervisors.hypervisor_type != 'ironic'\nORDER BY vcpus_used DESC;",
-            "refId": "A",
-            "select": [
-              [
-                {
-                  "params": [
-                    "value"
-                  ],
-                  "type": "column"
-                }
-              ]
-            ],
-            "table": "metrics",
-            "timeColumn": "\"timestamp\"",
-            "timeColumnType": "timestamp",
-            "where": [
-              {
-                "name": "$__timeFilter",
-                "params": [],
-                "type": "macro"
-              }
-            ]
-          }
-        ],
-        "title": "Hypervisor RAM Utilization",
-        "transformations": [],
-        "type": "bargauge"
+        "builtIn": 1,
+        "datasource": "-- Plutono --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
       }
-    ],
-    "schemaVersion": 27,
-    "style": "dark",
-    "tags": [],
-    "templating": {
-      "list": [
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 1,
+  "iteration": 1736870107826,
+  "links": [],
+  "panels": [
+    {
+      "cards": {
+        "cardPadding": null,
+        "cardRound": null
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateSpectral",
+        "exponent": 0.5,
+        "mode": "spectrum"
+      },
+      "dataFormat": "timeseries",
+      "datasource": "Postgres",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 7,
+        "x": 0,
+        "y": 0
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 7,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
         {
-          "current": {
-            "selected": false,
-            "text": "1",
-            "value": "1"
-          },
-          "description": "VCPU Overcommit Factor",
-          "error": null,
-          "hide": 0,
-          "label": null,
-          "name": "vcpu_oc",
-          "options": [
-            {
-              "selected": true,
-              "text": "1",
-              "value": "1"
-            }
+          "format": "time_series",
+          "group": [],
+          "metricColumn": "none",
+          "queryType": "randomWalk",
+          "rawQuery": true,
+          "rawSql": "SELECT \n  \"timestamp\" as time, value\nFROM metrics;",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "column"
+              }
+            ]
           ],
-          "query": "1",
-          "skipUrlSync": false,
-          "type": "textbox"
-        },
-        {
-          "current": {
-            "selected": false,
-            "text": "1",
-            "value": "1"
-          },
-          "description": "RAM Overcommit Factor",
-          "error": null,
-          "hide": 0,
-          "label": null,
-          "name": "ram_oc",
-          "options": [
+          "table": "metrics",
+          "timeColumn": "\"timestamp\"",
+          "timeColumnType": "timestamp",
+          "where": [
             {
-              "selected": true,
-              "text": "1",
-              "value": "1"
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
             }
-          ],
-          "query": "1",
-          "skipUrlSync": false,
-          "type": "textbox"
+          ]
         }
-      ]
+      ],
+      "title": "CPU Utilization per VM",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": null,
+        "format": "short",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
     },
-    "time": {
-      "from": "now-30d",
-      "to": "now"
+    {
+      "datasource": "Postgres",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 14,
+        "x": 7,
+        "y": 0
+      },
+      "id": 9,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "showUnfilled": true,
+        "text": {
+          "titleSize": 0
+        }
+      },
+      "pluginVersion": "7.5.35",
+      "targets": [
+        {
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "queryType": "randomWalk",
+          "rawQuery": true,
+          "rawSql": "SELECT \n  100 * vcpus_used / (CAST(vcpus AS FLOAT) * $vcpu_oc) AS utilization \nFROM openstack_hypervisors \nWHERE openstack_hypervisors.hypervisor_type != 'ironic'\nORDER BY vcpus_used DESC;",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "column"
+              }
+            ]
+          ],
+          "table": "metrics",
+          "timeColumn": "\"timestamp\"",
+          "timeColumnType": "timestamp",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "title": "Hypervisor CPU Utilization",
+      "transformations": [],
+      "type": "bargauge"
     },
-    "timepicker": {},
-    "timezone": "",
-    "title": "Cortex",
-    "uid": "7MZnLxDHz",
-    "version": 13
-  }
+    {
+      "datasource": "Postgres",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 21,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.35",
+      "targets": [
+        {
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "queryType": "randomWalk",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(id) FROM openstack_servers;",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "os_ext_sts_power_state"
+                ],
+                "type": "column"
+              }
+            ]
+          ],
+          "table": "openstack_servers",
+          "timeColumn": "os_ext_sts_power_state",
+          "timeColumnType": "int8",
+          "where": [
+            {
+              "name": "$__unixEpochFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "OpenStack Servers",
+      "type": "stat"
+    },
+    {
+      "datasource": "Postgres",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 6
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.35",
+      "targets": [
+        {
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "queryType": "randomWalk",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(id) FROM openstack_hypervisors;",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "os_ext_sts_power_state"
+                ],
+                "type": "column"
+              }
+            ]
+          ],
+          "table": "openstack_servers",
+          "timeColumn": "os_ext_sts_power_state",
+          "timeColumnType": "int8",
+          "where": [
+            {
+              "name": "$__unixEpochFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "OpenStack Hypervisors",
+      "type": "stat"
+    },
+    {
+      "datasource": "Postgres",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": null,
+            "filterable": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 7,
+        "x": 0,
+        "y": 11
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "7.5.35",
+      "targets": [
+        {
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "queryType": "randomWalk",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  project, host, avg_cpu_of_project\nFROM feature_project_noisiness\nORDER BY avg_cpu_of_project DESC LIMIT 10;",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "column"
+              }
+            ]
+          ],
+          "table": "metrics",
+          "timeColumn": "\"timestamp\"",
+          "timeColumnType": "timestamp",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "title": "Top 10 Noisy Projects",
+      "type": "table"
+    },
+    {
+      "datasource": "Postgres",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 14,
+        "x": 7,
+        "y": 11
+      },
+      "id": 10,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "showUnfilled": true,
+        "text": {
+          "titleSize": 0
+        }
+      },
+      "pluginVersion": "7.5.35",
+      "targets": [
+        {
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "queryType": "randomWalk",
+          "rawQuery": true,
+          "rawSql": "SELECT \n  100 * memory_mb_used / (CAST(memory_mb AS FLOAT) * $ram_oc) AS utilization \nFROM openstack_hypervisors \nWHERE openstack_hypervisors.hypervisor_type != 'ironic'\nORDER BY vcpus_used DESC;",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "column"
+              }
+            ]
+          ],
+          "table": "metrics",
+          "timeColumn": "\"timestamp\"",
+          "timeColumnType": "timestamp",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "title": "Hypervisor RAM Utilization",
+      "transformations": [],
+      "type": "bargauge"
+    }
+  ],
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "1",
+          "value": "1"
+        },
+        "description": "VCPU Overcommit Factor",
+        "error": null,
+        "hide": 0,
+        "label": null,
+        "name": "vcpu_oc",
+        "options": [
+          {
+            "selected": true,
+            "text": "1",
+            "value": "1"
+          }
+        ],
+        "query": "1",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "1",
+          "value": "1"
+        },
+        "description": "RAM Overcommit Factor",
+        "error": null,
+        "hide": 0,
+        "label": null,
+        "name": "ram_oc",
+        "options": [
+          {
+            "selected": true,
+            "text": "1",
+            "value": "1"
+          }
+        ],
+        "query": "1",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Cortex",
+  "uid": "7MZnLxDHz",
+  "version": 2
+}
