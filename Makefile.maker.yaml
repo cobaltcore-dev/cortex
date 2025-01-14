@@ -17,7 +17,7 @@ golangciLint:
 githubWorkflow:
   ci:
     enabled: true
-    coveralls: true
+    coveralls: false
 
 renovate:
   enabled: true
