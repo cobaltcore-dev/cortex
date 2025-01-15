@@ -6,39 +6,49 @@ package db
 //nolint:goimports
 import (
 	"context"
-	"fmt"
-	"sync"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10"
 )
 
-// Global database connection.
-var db *pg.DB
+type DB interface {
+	Init()
+	Get() *pg.DB
+	Close()
+}
 
-var connectLock = &sync.Mutex{}
+type db struct {
+	DBBackend *pg.DB
+	DBConfig  DBConfig
+}
+
+func NewDB() DB {
+	return &db{
+		DBConfig: NewDBConfig(),
+	}
+}
 
 // Initializes the database connection.
-func connect() {
-	if db != nil {
+func (d *db) Init() {
+	if d.DBBackend != nil {
 		return
 	}
-	c := conf.Get()
-	db = pg.Connect(&pg.Options{
-		Addr:     fmt.Sprintf("%s:%s", c.DBHost, c.DBPort),
-		User:     c.DBUser,
-		Password: c.DBPass,
-		Database: "postgres",
-	})
+	c := d.DBConfig
+	opts := &pg.Options{
+		Addr:     c.GetDBHost() + ":" + c.GetDBPort(),
+		User:     c.GetDBUser(),
+		Password: c.GetDBPassword(),
+		Database: c.GetDBName(),
+	}
+	d.DBBackend = pg.Connect(opts)
 
 	// Poll until the database is alive
 	logging.Log.Info("waiting for database to be ready...")
 	ctx := context.Background()
 	var i int
 	for {
-		err := db.Ping(ctx)
+		err := d.DBBackend.Ping(ctx)
 		if err == nil {
 			break
 		}
@@ -55,12 +65,18 @@ func connect() {
 
 // Returns the global database connection.
 // If the connection is not initialized, it will be initialized.
-func Get() *pg.DB {
-	if db == nil {
-		// Don't init the db twice.
-		connectLock.Lock()
-		defer connectLock.Unlock()
-		connect()
+func (d *db) Get() *pg.DB {
+	if d.DBBackend == nil {
+		d.Init()
 	}
-	return db
+	return d.DBBackend
+}
+
+func (d *db) Close() {
+	if d.DBBackend != nil {
+		err := d.DBBackend.Close()
+		if err != nil {
+			logging.Log.Error("failed to close database connection", "error", err)
+		}
+	}
 }

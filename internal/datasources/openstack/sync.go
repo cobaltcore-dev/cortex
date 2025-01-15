@@ -4,7 +4,6 @@
 package openstack
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 
@@ -19,12 +18,14 @@ type Syncer interface {
 type syncer struct {
 	ServerAPI     ServerAPI
 	HypervisorAPI HypervisorAPI
+	DB            db.DB
 }
 
-func NewSyncer() Syncer {
+func NewSyncer(db db.DB) Syncer {
 	return &syncer{
-		ServerAPI:     &serverAPI{},
-		HypervisorAPI: &hypervisorAPI{},
+		ServerAPI:     NewServerAPI(),
+		HypervisorAPI: NewHypervisorAPI(),
+		DB:            db,
 	}
 }
 
@@ -35,7 +36,7 @@ func (s *syncer) Init() {
 		(*OpenStackHypervisor)(nil),
 	}
 	for _, model := range models {
-		if err := db.Get().Model(model).CreateTable(&orm.CreateTableOptions{
+		if err := s.DB.Get().Model(model).CreateTable(&orm.CreateTableOptions{
 			IfNotExists: true,
 		}); err != nil {
 			panic(err)
@@ -45,7 +46,7 @@ func (s *syncer) Init() {
 
 // Sync OpenStack data with the database.
 func (s *syncer) Sync() {
-	logging.Log.Info("syncing OpenStack data with", "authUrl", conf.Get().OSAuthURL)
+	logging.Log.Info("syncing OpenStack data")
 	api := NewKeystoneAPI()
 	auth, err := api.Authenticate()
 	if err != nil {
@@ -66,7 +67,7 @@ func (s *syncer) Sync() {
 	batchSize := 100
 	for i := 0; i < len(serverlist.Servers); i += batchSize {
 		servers := serverlist.Servers[i:min(i+batchSize, len(serverlist.Servers))]
-		if _, err = db.Get().Model(&servers).
+		if _, err = s.DB.Get().Model(&servers).
 			OnConflict("(id) DO UPDATE").
 			Insert(); err != nil {
 			logging.Log.Error("failed to insert servers", "error", err)
@@ -75,7 +76,7 @@ func (s *syncer) Sync() {
 	}
 	for i := 0; i < len(hypervisorlist.Hypervisors); i += batchSize {
 		hypervisors := hypervisorlist.Hypervisors[i:min(i+batchSize, len(hypervisorlist.Hypervisors))]
-		if _, err = db.Get().Model(&hypervisors).
+		if _, err = s.DB.Get().Model(&hypervisors).
 			OnConflict("(id) DO UPDATE").
 			Insert(); err != nil {
 			logging.Log.Error("failed to insert hypervisors", "error", err)

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package conf
+package env
 
 import (
 	"os"
@@ -14,7 +14,7 @@ func TestForceGetenv(t *testing.T) {
 	t.Setenv(key, value)
 	defer os.Unsetenv(key)
 
-	result := forceGetenv(key)
+	result := ForceGetenv(key)
 	if result != value {
 		t.Errorf("Expected value to be %s, got %s", value, result)
 	}
@@ -29,7 +29,7 @@ func TestForceGetenvEmpty(t *testing.T) {
 			t.Errorf("The code did not panic")
 		}
 	}()
-	forceGetenv(key)
+	ForceGetenv(key)
 }
 
 func TestGetenv(t *testing.T) {
@@ -39,7 +39,7 @@ func TestGetenv(t *testing.T) {
 	t.Setenv(key, value)
 	defer os.Unsetenv(key)
 
-	result := getenv(key, defaultValue)
+	result := Getenv(key, defaultValue)
 	if result != value {
 		t.Errorf("Expected value to be %s, got %s", value, result)
 	}
@@ -50,7 +50,7 @@ func TestGetenvDefault(t *testing.T) {
 	defaultValue := "default_value"
 	os.Unsetenv(key)
 
-	result := getenv(key, defaultValue)
+	result := Getenv(key, defaultValue)
 	if result != defaultValue {
 		t.Errorf("Expected value to be %s, got %s", defaultValue, result)
 	}

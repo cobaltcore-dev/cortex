@@ -18,15 +18,17 @@ type ProjectNoisiness struct {
 	AvgCPUOfProject float64  `pg:"avg_cpu_of_project,notnull"`
 }
 
-type projectNoisinessExtractor struct{}
+type projectNoisinessExtractor struct {
+	DB db.DB
+}
 
-func NewProjectNoisinessExtractor() FeatureExtractor {
-	return &projectNoisinessExtractor{}
+func NewProjectNoisinessExtractor(db db.DB) FeatureExtractor {
+	return &projectNoisinessExtractor{DB: db}
 }
 
 // Create the schema for the project noisiness feature.
 func (e *projectNoisinessExtractor) Init() error {
-	if err := db.Get().Model((*ProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
+	if err := e.DB.Get().Model((*ProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
 		return err
@@ -44,7 +46,7 @@ func (e *projectNoisinessExtractor) Init() error {
 func (e *projectNoisinessExtractor) Extract() error {
 	logging.Log.Info("extracting noisy projects")
 	// Delete the old data in the same transaction.
-	tx, err := db.Get().Begin()
+	tx, err := e.DB.Get().Begin()
 	if err != nil {
 		return err
 	}

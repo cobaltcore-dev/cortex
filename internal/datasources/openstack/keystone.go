@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
 type openStackAuthRequest struct {
@@ -79,33 +77,36 @@ type KeystoneAPI interface {
 	Authenticate() (*openStackKeystoneAuth, error)
 }
 
-type keystoneAPI struct{}
+type keystoneAPI struct {
+	Conf OpenStackConfig
+}
 
 func NewKeystoneAPI() KeystoneAPI {
-	return &keystoneAPI{}
+	return &keystoneAPI{
+		Conf: NewOpenStackConfig(),
+	}
 }
 
 // Authenticate authenticates against the OpenStack Identity service (Keystone).
 // This uses the configured OpenStack credentials to obtain an authentication token.
 // We also extract URLs to the required services (e.g. Nova) from the response.
 func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
-	c := conf.Get()
 	authRequest := openStackAuthRequest{
 		Auth: openStackAuth{
 			Identity: openStackIdentity{
 				Methods: []string{"password"},
 				Password: openStackPassword{
 					User: openStackUser{
-						Name:     c.OSUsername,
-						Domain:   openStackDomain{Name: c.OSUserDomainName},
-						Password: c.OSPassword,
+						Name:     k.Conf.GetOSUsername(),
+						Domain:   openStackDomain{Name: k.Conf.GetOSUserDomainName()},
+						Password: k.Conf.GetOSPassword(),
 					},
 				},
 			},
 			Scope: openStackScope{
 				Project: openStackProject{
-					Name:   c.OSProjectName,
-					Domain: openStackDomain{Name: c.OSProjectDomainName},
+					Name:   k.Conf.GetOSProjectName(),
+					Domain: openStackDomain{Name: k.Conf.GetOSProjectDomainName()},
 				},
 			},
 		},
@@ -118,7 +119,7 @@ func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 
 	req, err := http.NewRequestWithContext(
 		context.Background(), http.MethodPost,
-		c.OSAuthURL+"/auth/tokens", bytes.NewBuffer(authRequestBody),
+		k.Conf.GetOSAuthURL()+"/auth/tokens", bytes.NewBuffer(authRequestBody),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create auth request: %w", err)

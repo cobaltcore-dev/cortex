@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 
@@ -42,17 +41,19 @@ type Syncer interface {
 
 type syncer struct {
 	PrometheusAPI PrometheusAPI
+	DB            db.DB
 }
 
-func NewSyncer() Syncer {
+func NewSyncer(db db.DB) Syncer {
 	return &syncer{
-		PrometheusAPI: &prometheusAPI{},
+		PrometheusAPI: NewPrometheusAPI(),
+		DB:            db,
 	}
 }
 
 // Create the necessary database tables if they do not exist.
 func (s *syncer) Init() {
-	if err := db.Get().Model((*PrometheusMetric)(nil)).CreateTable(&orm.CreateTableOptions{
+	if err := s.DB.Get().Model((*PrometheusMetric)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
 		panic(err)
@@ -65,7 +66,7 @@ func (s *syncer) Init() {
 func (s *syncer) getSyncWindowStart(metricName string) (time.Time, error) {
 	// Check if there are any metrics in the database.
 	var nRows int
-	if _, err := db.Get().QueryOne(
+	if _, err := s.DB.Get().QueryOne(
 		pg.Scan(&nRows),
 		"SELECT COUNT(*) FROM metrics WHERE name = ?",
 		metricName,
@@ -79,7 +80,7 @@ func (s *syncer) getSyncWindowStart(metricName string) (time.Time, error) {
 		return start, nil
 	}
 	var latestTimestamp time.Time
-	if _, err := db.Get().QueryOne(
+	if _, err := s.DB.Get().QueryOne(
 		pg.Scan(&latestTimestamp),
 		"SELECT MAX(timestamp) FROM metrics WHERE name = ?",
 		metricName,
@@ -106,7 +107,7 @@ func (s *syncer) sync(start time.Time, metricName string) {
 
 	logging.Log.Info("syncing Prometheus data", "metricName", metricName, "start", start, "end", end)
 	// Drop all metrics that are older than 4 weeks.
-	result, err := db.Get().Exec(
+	result, err := s.DB.Get().Exec(
 		"DELETE FROM metrics WHERE name = ? AND timestamp < ?",
 		metricName,
 		time.Now().Add(-syncTimeRange),
@@ -118,8 +119,7 @@ func (s *syncer) sync(start time.Time, metricName string) {
 	logging.Log.Info("deleted old metrics", "rows", result.RowsAffected())
 	// Fetch the metrics from Prometheus.
 	prometheusData, err := s.PrometheusAPI.fetchMetrics(
-		conf.Get().PrometheusURL, metricName,
-		start, end, syncResolutionSeconds,
+		metricName, start, end, syncResolutionSeconds,
 	)
 	if err != nil {
 		fmt.Printf("Failed to fetch metrics: %v\n", err)
@@ -129,7 +129,7 @@ func (s *syncer) sync(start time.Time, metricName string) {
 	batchSize := 100
 	for i := 0; i < len(prometheusData.Metrics); i += batchSize {
 		metrics := prometheusData.Metrics[i:min(i+batchSize, len(prometheusData.Metrics))]
-		if _, err = db.Get().Model(&metrics).Insert(); err != nil {
+		if _, err = s.DB.Get().Model(&metrics).Insert(); err != nil {
 			fmt.Printf("Failed to insert metrics: %v\n", err)
 		}
 	}

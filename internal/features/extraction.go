@@ -4,6 +4,7 @@
 package features
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
@@ -21,10 +22,10 @@ type featureExtractorPipeline struct {
 	FeatureExtractors []FeatureExtractor
 }
 
-func NewFeatureExtractorPipeline() FeatureExtractorPipeline {
+func NewFeatureExtractorPipeline(db db.DB) FeatureExtractorPipeline {
 	return &featureExtractorPipeline{
 		FeatureExtractors: []FeatureExtractor{
-			NewProjectNoisinessExtractor(),
+			NewProjectNoisinessExtractor(db),
 		},
 	}
 }

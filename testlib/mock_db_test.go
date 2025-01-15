@@ -5,22 +5,21 @@ package testlib
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/go-pg/pg/v10"
 )
 
-func TestMain(m *testing.M) {
-	WithMockDB(m, 5)
-}
-
 func TestMockDB(t *testing.T) {
+	mockDB := NewMockDB()
+	mockDB.Init()
+	defer mockDB.Close()
+
 	db := pg.Connect(&pg.Options{
-		Addr:     fmt.Sprintf("%s:%s", "localhost", "5432"),
-		User:     "postgres",
-		Password: "secret",
-		Database: "postgres",
+		Addr:     mockDB.GetDBHost() + ":" + mockDB.GetDBPort(),
+		User:     mockDB.GetDBUser(),
+		Password: mockDB.GetDBPassword(),
+		Database: mockDB.GetDBName(),
 	})
 	if db == nil {
 		t.Errorf("expected db to be initialized")

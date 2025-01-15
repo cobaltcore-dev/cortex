@@ -11,6 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/datasources/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
@@ -25,11 +26,15 @@ func main() {
 		}
 	}
 
-	openstackSyncer := openstack.NewSyncer()
+	db := db.NewDB()
+	db.Init()
+	defer db.Close()
+
+	openstackSyncer := openstack.NewSyncer(db)
 	openstackSyncer.Init()
-	prometheusSyncer := prometheus.NewSyncer()
+	prometheusSyncer := prometheus.NewSyncer(db)
 	prometheusSyncer.Init()
-	pipeline := features.NewFeatureExtractorPipeline()
+	pipeline := features.NewFeatureExtractorPipeline(db)
 	pipeline.Init()
 
 	go func() {
@@ -47,7 +52,7 @@ func main() {
 	})
 	mux.HandleFunc(
 		scheduler.APINovaExternalSchedulerURL,
-		scheduler.NewExternalSchedulingAPI().Handler,
+		scheduler.NewExternalSchedulingAPI(db).Handler,
 	)
 	logging.Log.Info("Listening on :8080")
 	server := &http.Server{

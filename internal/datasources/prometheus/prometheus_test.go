@@ -60,8 +60,12 @@ func TestFetchMetrics(t *testing.T) {
 	resolutionSeconds := 60
 
 	// Call the function to test
-	api := NewPrometheusAPI()
-	data, err := api.fetchMetrics(server.URL, "test_query", start, end, resolutionSeconds)
+	api := &prometheusAPI{
+		Conf: &prometheusConfig{
+			PrometheusURL: server.URL,
+		},
+	}
+	data, err := api.fetchMetrics("test_query", start, end, resolutionSeconds)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -94,7 +98,7 @@ func TestFetchMetricsFailure(t *testing.T) {
 
 	// Call the function to test
 	api := NewPrometheusAPI()
-	_, err := api.fetchMetrics(server.URL, "test_query", start, end, resolutionSeconds)
+	_, err := api.fetchMetrics("test_query", start, end, resolutionSeconds)
 	if err == nil {
 		t.Fatalf("Expected error, got none")
 	}

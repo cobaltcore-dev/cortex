@@ -5,6 +5,8 @@ package scheduler
 
 import (
 	"sort"
+
+	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 // State passed through the pipeline.
@@ -32,10 +34,10 @@ type pipeline struct {
 	Steps []PipelineStep
 }
 
-func NewPipeline() Pipeline {
+func NewPipeline(db db.DB) Pipeline {
 	return &pipeline{
 		Steps: []PipelineStep{
-			NewAntiAffinityNoisyProjectsStep(),
+			NewAntiAffinityNoisyProjectsStep(db),
 		},
 	}
 }

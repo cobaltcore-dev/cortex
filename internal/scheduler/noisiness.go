@@ -9,10 +9,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
-type antiAffinityNoisyProjectsStep struct{}
+type antiAffinityNoisyProjectsStep struct {
+	DB db.DB
+}
 
-func NewAntiAffinityNoisyProjectsStep() PipelineStep {
-	return &antiAffinityNoisyProjectsStep{}
+func NewAntiAffinityNoisyProjectsStep(db db.DB) PipelineStep {
+	return &antiAffinityNoisyProjectsStep{DB: db}
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
@@ -22,7 +24,7 @@ func (s *antiAffinityNoisyProjectsStep) Run(state *pipelineState) error {
 	// If the average CPU usage is above this threshold, the project is considered noisy.
 	const avgCPUThreshold float64 = 20.0
 	var noisyProjects []features.ProjectNoisiness
-	if err := db.Get().Model(&noisyProjects).
+	if err := s.DB.Get().Model(&noisyProjects).
 		Where("avg_cpu_of_project > ?", avgCPUThreshold).
 		Select(); err != nil {
 		return err

@@ -9,13 +9,18 @@ import (
 	"github.com/cobaltcore-dev/cortex/testlib"
 )
 
-func TestMain(m *testing.M) {
-	testlib.WithMockDB(m, 5)
-}
-
 func TestGet(t *testing.T) {
-	db := Get()
-	if db == nil {
+	mockDB := testlib.NewMockDB()
+	mockDB.Init()
+	defer mockDB.Close()
+
+	db := &db{
+		DBBackend: mockDB.Get(),
+		DBConfig:  &mockDB,
+	}
+	db.Init()
+	defer db.Close()
+	if db.Get() == nil {
 		t.Errorf("expected db to be initialized")
 	}
 }

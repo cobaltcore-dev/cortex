@@ -21,6 +21,10 @@ import (
 // This function fetches the noisy projects from the DB and sends a
 // scheduling request for the most noisy project.
 func simulateNoisyVMScheduling() {
+	db := db.NewDB()
+	db.Init()
+	defer db.Close()
+
 	// Get noisy projects from the DB.
 	var noisyProjects []features.ProjectNoisiness
 	err := db.Get().Model(&noisyProjects).Order("avg_cpu_of_project DESC").Select()

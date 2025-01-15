@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
@@ -55,9 +56,9 @@ type externalSchedulingAPI struct {
 	Pipeline Pipeline
 }
 
-func NewExternalSchedulingAPI() ExternalSchedulingAPI {
+func NewExternalSchedulingAPI(db db.DB) ExternalSchedulingAPI {
 	return &externalSchedulingAPI{
-		Pipeline: NewPipeline(),
+		Pipeline: NewPipeline(db),
 	}
 }
 

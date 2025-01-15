@@ -70,7 +70,6 @@ type prometheusTimelineData struct {
 
 type PrometheusAPI interface {
 	fetchMetrics(
-		prometheusURL string,
 		query string,
 		start time.Time,
 		end time.Time,
@@ -78,24 +77,27 @@ type PrometheusAPI interface {
 	) (*prometheusTimelineData, error)
 }
 
-type prometheusAPI struct{}
+type prometheusAPI struct {
+	Conf PrometheusConfig
+}
 
 func NewPrometheusAPI() PrometheusAPI {
-	return &prometheusAPI{}
+	return &prometheusAPI{
+		Conf: NewPrometheusConfig(),
+	}
 }
 
 // Fetch VMware vROps metrics from Prometheus.
 // The query is executed in the time window [start, end] with the
 // specified resolution. Note: the query is not URLencoded atm. (TODO)
 func (api *prometheusAPI) fetchMetrics(
-	prometheusURL string,
 	query string,
 	start time.Time,
 	end time.Time,
 	resolutionSeconds int,
 ) (*prometheusTimelineData, error) {
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
-	url := prometheusURL + "/api/v1/query_range"
+	url := api.Conf.GetPrometheusURL() + "/api/v1/query_range"
 	url += "?query=" + query
 	url += "&start=" + strconv.FormatInt(start.Unix(), 10)
 	url += "&end=" + strconv.FormatInt(end.Unix(), 10)
