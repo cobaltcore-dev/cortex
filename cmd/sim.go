@@ -104,7 +104,7 @@ func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
 		logging.Log.Error("usage: sim [--noisy]")
-		os.Exit(1)
+		panic("invalid usage")
 	}
 	if args[0] == "--noisy" {
 		simulateNoisyVMScheduling()

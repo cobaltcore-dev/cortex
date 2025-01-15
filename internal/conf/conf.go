@@ -31,7 +31,7 @@ func forceGetenv(key string) string {
 	value := os.Getenv(key)
 	if value == "" {
 		logging.Log.Error("missing environment variable", "key", key)
-		os.Exit(1)
+		panic("missing environment variable")
 	}
 	return value
 }
