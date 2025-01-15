@@ -9,16 +9,17 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
-func antiAffinityNoisyProjects(state pipelineState) (pipelineState, error) {
+// Downvote the hosts a project is currently running on if it's noisy.
+func antiAffinityNoisyProjects(state *pipelineState) error {
 	logging.Log.Info("scheduler: anti-affinity - noisy projects")
 
 	// If the average CPU usage is above this threshold, the project is considered noisy.
 	const avgCPUThreshold float64 = 20.0
 	var noisyProjects []features.ProjectNoisiness
-	if err := db.DB.Model(&noisyProjects).
+	if err := db.Get().Model(&noisyProjects).
 		Where("avg_cpu_of_project > ?", avgCPUThreshold).
 		Select(); err != nil {
-		return state, err
+		return err
 	}
 
 	// Get the hosts we need to push the VM away from.
@@ -29,7 +30,7 @@ func antiAffinityNoisyProjects(state pipelineState) (pipelineState, error) {
 	val, ok := hostsByProject[state.Spec.ProjectID]
 	if !ok {
 		// No noisy project, nothing to do.
-		return state, nil
+		return nil
 	}
 	// Downvote the hosts this project is currently running on.
 	for i := range state.Hosts {
@@ -40,5 +41,5 @@ func antiAffinityNoisyProjects(state pipelineState) (pipelineState, error) {
 			}
 		}
 	}
-	return state, nil
+	return nil
 }

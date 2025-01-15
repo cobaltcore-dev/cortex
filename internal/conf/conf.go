@@ -5,12 +5,14 @@ package conf
 
 import (
 	"os"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+// Configuration values for the application.
 type Config struct {
-	OSAuthURL           string
+	OSAuthURL           string // URL to the OpenStack Keystone authentication endpoint.
 	OSUsername          string
 	OSPassword          string
 	OSProjectName       string
@@ -23,6 +25,8 @@ type Config struct {
 	DBPass              string
 }
 
+// Retrieve the value of the environment variable named by the key.
+// If the variable is empty, it logs an error and exits the application.
 func forceGetenv(key string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -32,6 +36,8 @@ func forceGetenv(key string) string {
 	return value
 }
 
+// Retrieve the value of the environment variable named by the key.
+// If the variable is empty, it returns the provided default value.
 func getenv(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -40,11 +46,18 @@ func getenv(key, defaultValue string) string {
 	return value
 }
 
-var config Config
-var loaded bool
+// The current configuration values for the application.
+// Use Get() to retrieve the values.
+var config *Config
 
-func load() Config {
-	return Config{
+var loadLock = &sync.Mutex{}
+
+// Load the configuration values from environment variables.
+func loadFromEnv() {
+	if config != nil {
+		return
+	}
+	config = &Config{
 		OSAuthURL:           forceGetenv("OS_AUTH_URL"),
 		OSUsername:          forceGetenv("OS_USERNAME"),
 		OSPassword:          forceGetenv("OS_PASSWORD"),
@@ -52,17 +65,21 @@ func load() Config {
 		OSUserDomainName:    forceGetenv("OS_USER_DOMAIN_NAME"),
 		OSProjectDomainName: forceGetenv("OS_PROJECT_DOMAIN_NAME"),
 		PrometheusURL:       forceGetenv("PROMETHEUS_URL"),
-		DBHost:              getenv("POSTGRES_HOST", "postgres"),
+		DBHost:              getenv("POSTGRES_HOST", "localhost"),
 		DBPort:              getenv("POSTGRES_PORT", "5432"),
 		DBUser:              getenv("POSTGRES_USER", "postgres"),
 		DBPass:              getenv("POSTGRES_PASSWORD", "secret"),
 	}
 }
 
-func Get() Config {
-	if !loaded {
-		config = load()
-		loaded = true
+// Return the configuration values. If the configuration is not already loaded,
+// it loads the values from environment variables.
+func Get() *Config {
+	if config == nil {
+		// Don't load from env twice.
+		loadLock.Lock()
+		defer loadLock.Unlock()
+		loadFromEnv()
 	}
 	return config
 }

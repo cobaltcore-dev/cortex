@@ -7,6 +7,8 @@ import (
 	"sort"
 )
 
+// State passed through the pipeline.
+// Each step in the pipeline can modify the hosts or their weights.
 type pipelineState struct {
 	Spec struct {
 		ProjectID string
@@ -18,24 +20,24 @@ type pipelineState struct {
 	Weights map[string]float64
 }
 
-var steps = []func(pipelineState) (pipelineState, error){
+// Pipeline steps that are executed in order.
+var pipeline = []func(*pipelineState) error{
 	antiAffinityNoisyProjects,
 }
 
+// Evaluate the pipeline and return a list of hosts in order of preference.
 func evaluatePipeline(state pipelineState) ([]string, error) {
-	for _, step := range steps {
-		var err error
-		state, err = step(state)
-		if err != nil {
+	stateRef := &state // Pass a reference for in-place modification.
+	for _, step := range pipeline {
+		if err := step(stateRef); err != nil {
 			return nil, err
 		}
 	}
-
-	// Order the list of hosts by their weights
+	// Order the list of hosts by their weights.
 	sort.Slice(state.Hosts, func(i, j int) bool {
 		return state.Weights[state.Hosts[i].Name] > state.Weights[state.Hosts[j].Name]
 	})
-
+	// Flatten to a list of host names.
 	hostNames := make([]string, len(state.Hosts))
 	for i, host := range state.Hosts {
 		hostNames[i] = host.Name

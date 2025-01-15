@@ -18,8 +18,9 @@ type ProjectNoisiness struct {
 	AvgCPUOfProject float64  `pg:"avg_cpu_of_project,notnull"`
 }
 
+// Create the schema for the project noisiness feature.
 func projectNoisinessSchema() error {
-	if err := db.DB.Model((*ProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
+	if err := db.Get().Model((*ProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
 		return err
@@ -27,9 +28,17 @@ func projectNoisinessSchema() error {
 	return nil
 }
 
+// Extract the noisiness for each project in OpenStack with the following steps:
+// 1. Get the average cpu usage of each project through the vROps metrics.
+// 2. Find on which hosts the projects are currently running through the
+// OpenStack servers and hypervisors.
+// 3. Store the avg cpu usage together with the current hosts in the database.
+// This feature can then be used to draw new VMs away from VMs of the same
+// project in case this project is known to cause high cpu usage.
 func projectNoisinessExtractor() error {
 	logging.Log.Info("extracting noisy projects")
-	tx, err := db.DB.Begin()
+	// Delete the old data in the same transaction.
+	tx, err := db.Get().Begin()
 	if err != nil {
 		return err
 	}
@@ -37,6 +46,7 @@ func projectNoisinessExtractor() error {
 	if _, err := tx.Exec("DELETE FROM feature_project_noisiness"); err != nil {
 		return tx.Rollback()
 	}
+	// Extract the new data.
 	if _, err := tx.Exec(`
         WITH projects_avg_cpu AS (
             SELECT

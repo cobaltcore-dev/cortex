@@ -7,6 +7,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -14,11 +15,18 @@ import (
 	"github.com/go-pg/pg/v10"
 )
 
-var DB *pg.DB
+// Global database connection.
+var db *pg.DB
 
-func Init() {
+var connectLock = &sync.Mutex{}
+
+// Initializes the database connection.
+func connect() {
+	if db != nil {
+		return
+	}
 	c := conf.Get()
-	DB = pg.Connect(&pg.Options{
+	db = pg.Connect(&pg.Options{
 		Addr:     fmt.Sprintf("%s:%s", c.DBHost, c.DBPort),
 		User:     c.DBUser,
 		Password: c.DBPass,
@@ -30,7 +38,7 @@ func Init() {
 	ctx := context.Background()
 	var i int
 	for {
-		err := DB.Ping(ctx)
+		err := db.Ping(ctx)
 		if err == nil {
 			break
 		}
@@ -43,4 +51,16 @@ func Init() {
 		time.Sleep(time.Second * 1)
 	}
 	logging.Log.Info("database is ready")
+}
+
+// Returns the global database connection.
+// If the connection is not initialized, it will be initialized.
+func Get() *pg.DB {
+	if db == nil {
+		// Don't init the db twice.
+		connectLock.Lock()
+		defer connectLock.Unlock()
+		connect()
+	}
+	return db
 }

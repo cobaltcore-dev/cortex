@@ -11,13 +11,10 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/datasources/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
-	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 )
-
-var log = logging.Default()
 
 func main() {
 	args := os.Args[1:]
@@ -28,17 +25,14 @@ func main() {
 		}
 	}
 
-	db.Init()
-	defer db.DB.Close()
-
 	openstack.Init()
 	prometheus.Init()
 	features.Init()
 
 	go func() {
 		for {
-			openstack.Sync()   // Get the current servers, hypervisors, etc.
 			prometheus.Sync()  // Catch up until now, may take a while.
+			openstack.Sync()   // Get the current servers, hypervisors, etc.
 			features.Extract() // Extract features from the data.
 			time.Sleep(time.Minute * 1)
 		}
@@ -52,7 +46,7 @@ func main() {
 		scheduler.APINovaExternalSchedulerURL,
 		scheduler.APINovaExternalSchedulerHandler,
 	)
-	log.Info("Listening on :8080")
+	logging.Log.Info("Listening on :8080")
 	server := &http.Server{
 		Addr:         ":8080",
 		Handler:      mux,
@@ -61,6 +55,6 @@ func main() {
 		IdleTimeout:  15 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != nil {
-		log.Error("failed to start server", "error", err)
+		logging.Log.Error("failed to start server", "error", err)
 	}
 }

@@ -75,8 +75,10 @@ type openStackKeystoneAuth struct {
 	token string // From the response header X-Subject-Token
 }
 
-// Authenticate authenticates against the OpenStack Identity service and returns the Nova endpoint.
-func getKeystoneAuth() (openStackKeystoneAuth, error) {
+// Authenticate authenticates against the OpenStack Identity service (Keystone).
+// This uses the configured OpenStack credentials to obtain an authentication token.
+// We also extract URLs to the required services (e.g. Nova) from the response.
+func getKeystoneAuth() (*openStackKeystoneAuth, error) {
 	c := conf.Get()
 	authRequest := openStackAuthRequest{
 		Auth: openStackAuth{
@@ -101,7 +103,7 @@ func getKeystoneAuth() (openStackKeystoneAuth, error) {
 
 	authRequestBody, err := json.Marshal(authRequest)
 	if err != nil {
-		return openStackKeystoneAuth{}, fmt.Errorf("failed to marshal auth request: %w", err)
+		return nil, fmt.Errorf("failed to marshal auth request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -109,25 +111,25 @@ func getKeystoneAuth() (openStackKeystoneAuth, error) {
 		c.OSAuthURL+"/auth/tokens", bytes.NewBuffer(authRequestBody),
 	)
 	if err != nil {
-		return openStackKeystoneAuth{}, fmt.Errorf("failed to create auth request: %w", err)
+		return nil, fmt.Errorf("failed to create auth request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return openStackKeystoneAuth{}, fmt.Errorf("failed to authenticate: %w", err)
+		return nil, fmt.Errorf("failed to authenticate: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		return openStackKeystoneAuth{}, fmt.Errorf("failed to authenticate, status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to authenticate, status code: %d", resp.StatusCode)
 	}
 
 	var authResponse openStackAuthResponse
 	err = json.NewDecoder(resp.Body).Decode(&authResponse)
 	if err != nil {
-		return openStackKeystoneAuth{}, fmt.Errorf("failed to decode auth response: %w", err)
+		return nil, fmt.Errorf("failed to decode auth response: %w", err)
 	}
 
 	// Find the Nova endpoint
@@ -135,7 +137,8 @@ func getKeystoneAuth() (openStackKeystoneAuth, error) {
 	for _, service := range authResponse.TokenMetadata.Catalog {
 		if service.Type == "compute" {
 			for _, endpoint := range service.Endpoints {
-				// Skip endpoints that contain svc.kubernetes - those are not reachable from outside the cluster.
+				// Skip endpoints that contain svc.kubernetes - those are
+				// not reachable from outside the cluster.
 				if strings.Contains(endpoint.URL, "svc.kubernetes") {
 					continue
 				}
@@ -145,10 +148,10 @@ func getKeystoneAuth() (openStackKeystoneAuth, error) {
 		}
 	}
 	if novaEndpoint == "" {
-		return openStackKeystoneAuth{}, errors.New("failed to find Nova endpoint")
+		return nil, errors.New("failed to find Nova endpoint")
 	}
 
-	return openStackKeystoneAuth{
+	return &openStackKeystoneAuth{
 		nova:  openStackEndpoint{URL: novaEndpoint},
 		token: resp.Header.Get("X-Subject-Token"),
 	}, nil

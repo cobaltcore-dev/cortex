@@ -11,16 +11,21 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+// Paginated list response from the Nova API under /servers/detail.
+// See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
 type openStackServerList struct {
-	Servers      []OpenStackServer `json:"servers"`
+	Servers []OpenStackServer `json:"servers"`
+	// Pagination links.
 	ServersLinks *[]struct {
 		Href string `json:"href"`
 		Rel  string `json:"rel"`
 	} `json:"servers_links"`
 }
 
+// OpenStack server model as returned by the Nova API under /servers/detail.
+// See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
 type OpenStackServer struct {
-	//lint:ignore U1000 Ignore unused field warning
+	//lint:ignore U1000 tableName is used by go-pg.
 	tableName                        struct{}        `pg:"openstack_servers"`
 	ID                               string          `json:"id" pg:"id,notnull,pk"`
 	Name                             string          `json:"name" pg:"name"`
@@ -53,16 +58,21 @@ type OpenStackServer struct {
 	SecurityGroups                   json.RawMessage `json:"security_groups" pg:"security_groups"`
 }
 
+// Paginated list response from the Nova API under /os-hypervisors/detail.
+// See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
 type openStackHypervisorList struct {
-	Hypervisors      []OpenStackHypervisor `json:"hypervisors"`
+	Hypervisors []OpenStackHypervisor `json:"hypervisors"`
+	// Pagination links.
 	HypervisorsLinks *[]struct {
 		Href string `json:"href"`
 		Rel  string `json:"rel"`
 	} `json:"hypervisors_links"`
 }
 
+// OpenStack hypervisor model as returned by the Nova API under /os-hypervisors/detail.
+// See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
 type OpenStackHypervisor struct {
-	//lint:ignore U1000 Ignore unused field warning
+	//lint:ignore U1000 tableName is used by go-pg.
 	tableName         struct{} `pg:"openstack_hypervisors"`
 	ID                int      `json:"id" pg:"id,notnull,pk"`
 	Hostname          string   `json:"hypervisor_hostname" pg:"hostname"`
@@ -73,7 +83,7 @@ type OpenStackHypervisor struct {
 	HostIP            string   `json:"host_ip" pg:"host_ip"`
 	// From nested JSON
 	ServiceID             int     `json:"service_id" pg:"service_id"`
-	ServiceHost           string  `json:"service_host" pg:"service_host"`
+	ServiceHost           string  `json:"service_host" pg:"service_host"` // Used by the scheduler.
 	ServiceDisabledReason *string `json:"service_disabled_reason" pg:"service_disabled_reason"`
 	VCPUs                 int     `json:"vcpus" pg:"vcpus"`
 	MemoryMB              int     `json:"memory_mb" pg:"memory_mb"`
@@ -89,6 +99,9 @@ type OpenStackHypervisor struct {
 	CPUInfo               string  `json:"cpu_info" pg:"cpu_info"`
 }
 
+// Custom unmarshaler for OpenStackHypervisor to handle nested JSON.
+// Specifically, we unwrap the "service" field into separate fields.
+// Flattening these fields makes querying the data easier.
 func (h *OpenStackHypervisor) UnmarshalJSON(data []byte) error {
 	type Alias OpenStackHypervisor
 	aux := &struct {
@@ -114,6 +127,9 @@ func (h *OpenStackHypervisor) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Custom marshaler for OpenStackHypervisor to handle nested JSON.
+// Specifically, we wrap the "service" field into a separate JSON object.
+// This is the reverse operation of the UnmarshalJSON method.
 func (h *OpenStackHypervisor) MarshalJSON() ([]byte, error) {
 	type Alias OpenStackHypervisor
 	aux := &struct {
@@ -138,8 +154,13 @@ func (h *OpenStackHypervisor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
+// GetServers returns a list of servers from the OpenStack Nova API.
+// Note that this function may make multiple requests in case the returned
+// data has multiple pages.
+//
 //nolint:dupl
 func getServers(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
+	// Use all_tenants=1 to get servers from all projects.
 	var pageURL = auth.nova.URL + "servers/detail?all_tenants=1"
 	if url != nil {
 		pageURL = *url
@@ -183,6 +204,10 @@ func getServers(auth openStackKeystoneAuth, url *string) (*openStackServerList, 
 	return &serverList, nil
 }
 
+// GetHypervisors returns a list of hypervisors from the OpenStack Nova API.
+// Note that this function may make multiple requests in case the returned
+// data has multiple pages.
+//
 //nolint:dupl
 func getHypervisors(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
 	var pageURL = auth.nova.URL + "os-hypervisors/detail"

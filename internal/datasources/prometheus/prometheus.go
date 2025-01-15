@@ -14,42 +14,70 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+// PrometheusMetric represents a single metric value from Prometheus
+// that was generated the VMware vROps exporter.
+// See: https://github.com/sapcc/vrops-exporter
 type PrometheusMetric struct {
-	//lint:ignore U1000 Ignore unused field warning
-	tableName      struct{}  `pg:"metrics"`
-	Name           string    `json:"__name__" pg:"name"`
-	Cluster        string    `json:"cluster" pg:"cluster"`
-	ClusterType    string    `json:"cluster_type" pg:"cluster_type"`
-	Collector      string    `json:"collector" pg:"collector"`
-	Datacenter     string    `json:"datacenter" pg:"datacenter"`
-	HostSystem     string    `json:"hostsystem" pg:"hostsystem"`
-	InstanceUUID   string    `json:"instance_uuid" pg:"instance_uuid"`
-	InternalName   string    `json:"internal_name" pg:"internal_name"`
-	Job            string    `json:"job" pg:"job"`
-	Project        string    `json:"project" pg:"project"`
-	Prometheus     string    `json:"prometheus" pg:"prometheus"`
-	Region         string    `json:"region" pg:"region"`
-	VCCluster      string    `json:"vccluster" pg:"vccluster"`
-	VCenter        string    `json:"vcenter" pg:"vcenter"`
-	VirtualMachine string    `json:"virtualmachine" pg:"virtualmachine"`
-	Timestamp      time.Time `json:"timestamp" pg:"timestamp"`
-	Value          float64   `json:"value" pg:"value"`
+	//lint:ignore U1000 Field is used by the ORM.
+	tableName struct{} `pg:"metrics"`
+	// The name of the metric.
+	Name string `json:"__name__" pg:"name"`
+	// Kubernetes cluster name in which the metrics exporter is running.
+	Cluster string `json:"cluster" pg:"cluster"`
+	// Kubernetes cluster type in which the metrics exporter is running.
+	ClusterType string `json:"cluster_type" pg:"cluster_type"`
+	// The name of the metrics collector.
+	Collector string `json:"collector" pg:"collector"`
+	// Datacenter / availability zone of the virtual machine.
+	Datacenter string `json:"datacenter" pg:"datacenter"`
+	// Host system of the virtual machine.
+	// Note: this value does not necessarily correspond to the
+	// hypervisor service host contained in OpenStack.
+	HostSystem string `json:"hostsystem" pg:"hostsystem"`
+	// OpenStack UUID of the virtual machine instance.
+	// Note: not all instances may be seen in the current OpenStack environment.
+	InstanceUUID string `json:"instance_uuid" pg:"instance_uuid"`
+	// Internal name of the virtual machine.
+	InternalName string `json:"internal_name" pg:"internal_name"`
+	// Exporter job name (usually "vrops-exporter").
+	Job string `json:"job" pg:"job"`
+	// OpenStack project ID of the virtual machine.
+	Project string `json:"project" pg:"project"`
+	// Prometheus instance from which the metric was fetched.
+	Prometheus string `json:"prometheus" pg:"prometheus"`
+	// Datacenter region (one level above availability zone).
+	Region string `json:"region" pg:"region"`
+	// VMware vCenter cluster name in which the virtual machine is running.
+	VCCluster string `json:"vccluster" pg:"vccluster"`
+	// VMware vCenter name in which the virtual machine is running.
+	VCenter string `json:"vcenter" pg:"vcenter"`
+	// Name of the virtual machine specified by the OpenStack user.
+	VirtualMachine string `json:"virtualmachine" pg:"virtualmachine"`
+	// Timestamp of the metric value.
+	Timestamp time.Time `json:"timestamp" pg:"timestamp"`
+	// The value of the metric.
+	Value float64 `json:"value" pg:"value"`
 }
 
-type PrometheusTimelineData struct {
+// Metrics fetched from Prometheus with the time window
+// and resolution specified in the query.
+type prometheusTimelineData struct {
 	Metrics  []PrometheusMetric `json:"metrics"`
 	Duration time.Duration      `json:"duration"`
 	Start    time.Time          `json:"start"`
 	End      time.Time          `json:"end"`
 }
 
+// Fetch VMware vROps metrics from Prometheus.
+// The query is executed in the time window [start, end] with the
+// specified resolution. Note: the query is not URLencoded atm. (TODO)
 func fetchMetrics(
 	prometheusURL string,
 	query string,
 	start time.Time,
 	end time.Time,
 	resolutionSeconds int,
-) (*PrometheusTimelineData, error) {
+) (*prometheusTimelineData, error) {
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
 	url := prometheusURL + "/api/v1/query_range"
 	url += "?query=" + query
@@ -155,7 +183,7 @@ func fetchMetrics(
 		}
 	}
 
-	return &PrometheusTimelineData{
+	return &prometheusTimelineData{
 		Metrics:  flatMetrics,
 		Duration: end.Sub(start),
 		Start:    start,

@@ -7,14 +7,17 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+// Functions that create database schemas for features.
 var schemaCreators = []func() error{
 	projectNoisinessSchema,
 }
 
+// Functions that extract features from the data sources.
 var featureExtractors = []func() error{
 	projectNoisinessExtractor,
 }
 
+// Creates the necessary database tables if they do not exist.
 func Init() {
 	for _, schemaCreator := range schemaCreators {
 		if err := schemaCreator(); err != nil {
@@ -23,6 +26,7 @@ func Init() {
 	}
 }
 
+// Extract features from the data sources.
 func Extract() {
 	for _, featureExtractor := range featureExtractors {
 		if err := featureExtractor(); err != nil {

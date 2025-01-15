@@ -17,21 +17,25 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 )
 
+// Simulate the scheduling of a VM that belongs to a noisy project.
+// This function fetches the noisy projects from the DB and sends a
+// scheduling request for the most noisy project.
 func simulateNoisyVMScheduling() {
-	db.Init()
-	defer db.DB.Close()
-
 	// Get noisy projects from the DB.
 	var noisyProjects []features.ProjectNoisiness
-	err := db.DB.Model(&noisyProjects).Order("avg_cpu_of_project DESC").Select()
+	err := db.Get().Model(&noisyProjects).Order("avg_cpu_of_project DESC").Select()
 	if err != nil {
 		logging.Log.Error("failed to get noisy projects", "error", err)
+		return
+	}
+	if len(noisyProjects) == 0 {
+		logging.Log.Info("no noisy projects found")
 		return
 	}
 
 	// Get all hosts from the DB.
 	var hypervisors []openstack.OpenStackHypervisor
-	if err := db.DB.Model(&hypervisors).Select(); err != nil {
+	if err := db.Get().Model(&hypervisors).Select(); err != nil {
 		logging.Log.Error("failed to get hosts", "error", err)
 		return
 	}
