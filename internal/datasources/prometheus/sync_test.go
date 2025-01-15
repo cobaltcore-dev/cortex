@@ -44,7 +44,10 @@ func TestGetSyncWindowStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !start.Equal(latestTimestamp) {
+	// Equal to the second to avoid floating point errors
+	startSecondsUnix := start.Unix()
+	latestTimestampSecondsUnix := latestTimestamp.Unix()
+	if startSecondsUnix != latestTimestampSecondsUnix {
 		t.Errorf("expected start to be %v, got %v", latestTimestamp, start)
 	}
 }
