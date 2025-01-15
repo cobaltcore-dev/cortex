@@ -25,15 +25,18 @@ func main() {
 		}
 	}
 
-	openstack.Init()
-	prometheus.Init()
-	features.Init()
+	openstackSyncer := openstack.NewSyncer()
+	openstackSyncer.Init()
+	prometheusSyncer := prometheus.NewSyncer()
+	prometheusSyncer.Init()
+	pipeline := features.NewFeatureExtractorPipeline()
+	pipeline.Init()
 
 	go func() {
 		for {
-			prometheus.Sync()  // Catch up until now, may take a while.
-			openstack.Sync()   // Get the current servers, hypervisors, etc.
-			features.Extract() // Extract features from the data.
+			prometheusSyncer.Sync() // Catch up until now, may take a while.
+			openstackSyncer.Sync()  // Get the current servers, hypervisors, etc.
+			pipeline.Extract()      // Extract features from the data.
 			time.Sleep(time.Minute * 1)
 		}
 	}()
@@ -44,7 +47,7 @@ func main() {
 	})
 	mux.HandleFunc(
 		scheduler.APINovaExternalSchedulerURL,
-		scheduler.APINovaExternalSchedulerHandler,
+		scheduler.NewExternalSchedulingAPI().Handler,
 	)
 	logging.Log.Info("Listening on :8080")
 	server := &http.Server{

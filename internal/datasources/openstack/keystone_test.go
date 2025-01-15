@@ -50,7 +50,8 @@ func TestGetKeystoneAuth(t *testing.T) {
 	t.Setenv("OS_AUTH_URL", server.URL)
 
 	// Call the function to test
-	auth, err := getKeystoneAuth()
+	keystoneAPI := NewKeystoneAPI()
+	auth, err := keystoneAPI.Authenticate()
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -85,7 +86,8 @@ func TestGetKeystoneAuthFailure(t *testing.T) {
 	t.Setenv("OS_AUTH_URL", server.URL)
 
 	// Call the function to test
-	_, err := getKeystoneAuth()
+	keystoneAPI := NewKeystoneAPI()
+	_, err := keystoneAPI.Authenticate()
 	if err == nil {
 		t.Fatalf("Expected error, got none")
 	}

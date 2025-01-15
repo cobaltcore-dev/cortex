@@ -7,29 +7,41 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
-// Functions that create database schemas for features.
-var schemaCreators = []func() error{
-	projectNoisinessSchema,
+type FeatureExtractor interface {
+	Init() error
+	Extract() error
 }
 
-// Functions that extract features from the data sources.
-var featureExtractors = []func() error{
-	projectNoisinessExtractor,
+type FeatureExtractorPipeline interface {
+	Init()
+	Extract()
+}
+
+type featureExtractorPipeline struct {
+	FeatureExtractors []FeatureExtractor
+}
+
+func NewFeatureExtractorPipeline() FeatureExtractorPipeline {
+	return &featureExtractorPipeline{
+		FeatureExtractors: []FeatureExtractor{
+			NewProjectNoisinessExtractor(),
+		},
+	}
 }
 
 // Creates the necessary database tables if they do not exist.
-func Init() {
-	for _, schemaCreator := range schemaCreators {
-		if err := schemaCreator(); err != nil {
+func (p *featureExtractorPipeline) Init() {
+	for _, extractor := range p.FeatureExtractors {
+		if err := extractor.Init(); err != nil {
 			panic(err)
 		}
 	}
 }
 
 // Extract features from the data sources.
-func Extract() {
-	for _, featureExtractor := range featureExtractors {
-		if err := featureExtractor(); err != nil {
+func (p *featureExtractorPipeline) Extract() {
+	for _, extractor := range p.FeatureExtractors {
+		if err := extractor.Extract(); err != nil {
 			logging.Log.Error("failed to extract features", "error", err)
 		}
 	}

@@ -11,8 +11,25 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
+type Syncer interface {
+	Init()
+	Sync()
+}
+
+type syncer struct {
+	ServerAPI     ServerAPI
+	HypervisorAPI HypervisorAPI
+}
+
+func NewSyncer() Syncer {
+	return &syncer{
+		ServerAPI:     &serverAPI{},
+		HypervisorAPI: &hypervisorAPI{},
+	}
+}
+
 // Create the necessary database tables if they do not exist.
-func Init() {
+func (s *syncer) Init() {
 	models := []any{
 		(*OpenStackServer)(nil),
 		(*OpenStackHypervisor)(nil),
@@ -27,19 +44,20 @@ func Init() {
 }
 
 // Sync OpenStack data with the database.
-func Sync() {
+func (s *syncer) Sync() {
 	logging.Log.Info("syncing OpenStack data with", "authUrl", conf.Get().OSAuthURL)
-	auth, err := getKeystoneAuth()
+	api := NewKeystoneAPI()
+	auth, err := api.Authenticate()
 	if err != nil {
 		logging.Log.Error("failed to get keystone auth", "error", err)
 		return
 	}
-	serverlist, err := getServers(*auth, nil)
+	serverlist, err := s.ServerAPI.Get(*auth, nil)
 	if err != nil {
 		logging.Log.Error("failed to get servers", "error", err)
 		return
 	}
-	hypervisorlist, err := getHypervisors(*auth, nil)
+	hypervisorlist, err := s.HypervisorAPI.Get(*auth, nil)
 	if err != nil {
 		logging.Log.Error("failed to get hypervisors", "error", err)
 		return

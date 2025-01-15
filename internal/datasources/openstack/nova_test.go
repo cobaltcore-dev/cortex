@@ -40,8 +40,8 @@ func TestGetServers(t *testing.T) {
 		token: "test-token",
 	}
 
-	// Call the function to test
-	servers, err := getServers(auth, nil)
+	api := NewServerAPI()
+	servers, err := api.Get(auth, nil)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -87,8 +87,8 @@ func TestGetHypervisors(t *testing.T) {
 		token: "test-token",
 	}
 
-	// Call the function to test
-	hypervisors, err := getHypervisors(auth, nil)
+	api := NewHypervisorAPI()
+	hypervisors, err := api.Get(auth, nil)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

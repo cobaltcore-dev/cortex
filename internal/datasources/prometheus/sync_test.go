@@ -17,7 +17,10 @@ func TestMain(m *testing.M) {
 
 func TestGetSyncWindowStart(t *testing.T) {
 	// Test case: No metrics in the database
-	start, err := getSyncWindowStart("test_metric")
+	syncer := &syncer{
+		PrometheusAPI: &prometheusAPI{},
+	}
+	start, err := syncer.getSyncWindowStart("test_metric")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -33,7 +36,7 @@ func TestGetSyncWindowStart(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	start, err = getSyncWindowStart("test_metric")
+	start, err = syncer.getSyncWindowStart("test_metric")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -44,7 +47,8 @@ func TestGetSyncWindowStart(t *testing.T) {
 
 func TestInit(t *testing.T) {
 	// Call the function to test
-	Init()
+	syncer := NewSyncer()
+	syncer.Init()
 
 	// Verify the table was created
 	exists, err := db.Get().Model((*PrometheusMetric)(nil)).Exists()

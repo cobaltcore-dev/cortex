@@ -75,10 +75,20 @@ type openStackKeystoneAuth struct {
 	token string // From the response header X-Subject-Token
 }
 
+type KeystoneAPI interface {
+	Authenticate() (*openStackKeystoneAuth, error)
+}
+
+type keystoneAPI struct{}
+
+func NewKeystoneAPI() KeystoneAPI {
+	return &keystoneAPI{}
+}
+
 // Authenticate authenticates against the OpenStack Identity service (Keystone).
 // This uses the configured OpenStack credentials to obtain an authentication token.
 // We also extract URLs to the required services (e.g. Nova) from the response.
-func getKeystoneAuth() (*openStackKeystoneAuth, error) {
+func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 	c := conf.Get()
 	authRequest := openStackAuthRequest{
 		Auth: openStackAuth{

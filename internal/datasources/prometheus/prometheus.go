@@ -68,10 +68,26 @@ type prometheusTimelineData struct {
 	End      time.Time          `json:"end"`
 }
 
+type PrometheusAPI interface {
+	fetchMetrics(
+		prometheusURL string,
+		query string,
+		start time.Time,
+		end time.Time,
+		resolutionSeconds int,
+	) (*prometheusTimelineData, error)
+}
+
+type prometheusAPI struct{}
+
+func NewPrometheusAPI() PrometheusAPI {
+	return &prometheusAPI{}
+}
+
 // Fetch VMware vROps metrics from Prometheus.
 // The query is executed in the time window [start, end] with the
 // specified resolution. Note: the query is not URLencoded atm. (TODO)
-func fetchMetrics(
+func (api *prometheusAPI) fetchMetrics(
 	prometheusURL string,
 	query string,
 	start time.Time,

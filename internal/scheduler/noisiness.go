@@ -9,8 +9,14 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+type antiAffinityNoisyProjectsStep struct{}
+
+func NewAntiAffinityNoisyProjectsStep() PipelineStep {
+	return &antiAffinityNoisyProjectsStep{}
+}
+
 // Downvote the hosts a project is currently running on if it's noisy.
-func antiAffinityNoisyProjects(state *pipelineState) error {
+func (s *antiAffinityNoisyProjectsStep) Run(state *pipelineState) error {
 	logging.Log.Info("scheduler: anti-affinity - noisy projects")
 
 	// If the average CPU usage is above this threshold, the project is considered noisy.

@@ -20,16 +20,30 @@ type pipelineState struct {
 	Weights map[string]float64
 }
 
-// Pipeline steps that are executed in order.
-var pipeline = []func(*pipelineState) error{
-	antiAffinityNoisyProjects,
+type PipelineStep interface {
+	Run(state *pipelineState) error
+}
+
+type Pipeline interface {
+	Run(state *pipelineState) ([]string, error)
+}
+
+type pipeline struct {
+	Steps []PipelineStep
+}
+
+func NewPipeline() Pipeline {
+	return &pipeline{
+		Steps: []PipelineStep{
+			NewAntiAffinityNoisyProjectsStep(),
+		},
+	}
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
-func evaluatePipeline(state pipelineState) ([]string, error) {
-	stateRef := &state // Pass a reference for in-place modification.
-	for _, step := range pipeline {
-		if err := step(stateRef); err != nil {
+func (p *pipeline) Run(state *pipelineState) ([]string, error) {
+	for _, step := range p.Steps {
+		if err := step.Run(state); err != nil {
 			return nil, err
 		}
 	}

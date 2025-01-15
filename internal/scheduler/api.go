@@ -10,7 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
-var (
+const (
 	// NovaExternalSchedulerURL is the URL of the Nova external scheduler
 	APINovaExternalSchedulerURL = "/scheduler/nova/external"
 )
@@ -47,8 +47,22 @@ type APINovaExternalSchedulerResponse struct {
 	Hosts []string `json:"hosts"`
 }
 
+type ExternalSchedulingAPI interface {
+	Handler(w http.ResponseWriter, r *http.Request)
+}
+
+type externalSchedulingAPI struct {
+	Pipeline Pipeline
+}
+
+func NewExternalSchedulingAPI() ExternalSchedulingAPI {
+	return &externalSchedulingAPI{
+		Pipeline: NewPipeline(),
+	}
+}
+
 // Check if the scheduler can run based on the request data.
-func canRunScheduler(requestData APINovaExternalSchedulerRequest) (ok bool, reason string) {
+func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSchedulerRequest) (ok bool, reason string) {
 	if requestData.Rebuild {
 		return false, "rebuild is not supported"
 	}
@@ -79,7 +93,7 @@ func canRunScheduler(requestData APINovaExternalSchedulerRequest) (ok bool, reas
 // their status, and a map of weights that were calculated by the Nova weigher
 // pipeline. Some additional flags are also included.
 // The response contains an ordered list of hosts that the VM should be scheduled on.
-func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
+func (api *externalSchedulingAPI) Handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		logging.Log.Error("invalid request method", "method", r.Method)
 		http.Error(w, "invalid request method", http.StatusMethodNotAllowed)
@@ -97,14 +111,14 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 		"hosts", len(requestData.Hosts), "spec", requestData.Spec,
 	)
 
-	if ok, reason := canRunScheduler(requestData); !ok {
+	if ok, reason := api.canRunScheduler(requestData); !ok {
 		logging.Log.Error("cannot run scheduler", "reason", reason)
 		http.Error(w, reason, http.StatusBadRequest)
 		return
 	}
 
 	// Create the pipeline context from the request data.
-	state := pipelineState{}
+	state := &pipelineState{}
 	state.Spec.ProjectID = requestData.Spec.ProjectID
 	for _, host := range requestData.Hosts {
 		state.Hosts = append(state.Hosts, struct {
@@ -118,7 +132,7 @@ func APINovaExternalSchedulerHandler(w http.ResponseWriter, r *http.Request) {
 	state.Weights = requestData.Weights
 
 	// Evaluate the pipeline and return the ordered list of hosts.
-	hosts, err := evaluatePipeline(state)
+	hosts, err := api.Pipeline.Run(state)
 	if err != nil {
 		logging.Log.Error("failed to evaluate pipeline", "error", err)
 		http.Error(w, "failed to evaluate pipeline", http.StatusInternalServerError)

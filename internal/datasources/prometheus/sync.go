@@ -16,7 +16,7 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-var (
+const (
 	// The time range to sync the metrics in.
 	syncTimeRange = 4 * 7 * 24 * time.Hour // 4 weeks
 	// The sync interval for the metrics.
@@ -26,16 +26,43 @@ var (
 	syncResolutionSeconds = 12 * 60 * 60 // 12 hours (2 datapoints per day per metric)
 	// Wait time between syncs to not overload the Prometheus server.
 	syncTimeout = 10 * time.Second
+)
+
+var (
 	// VMware vROps metrics to sync from the Prometheus server.
 	metrics = []string{
 		"vrops_virtualmachine_cpu_demand_ratio",
 	}
 )
 
+type Syncer interface {
+	Init()
+	Sync()
+}
+
+type syncer struct {
+	PrometheusAPI PrometheusAPI
+}
+
+func NewSyncer() Syncer {
+	return &syncer{
+		PrometheusAPI: &prometheusAPI{},
+	}
+}
+
+// Create the necessary database tables if they do not exist.
+func (s *syncer) Init() {
+	if err := db.Get().Model((*PrometheusMetric)(nil)).CreateTable(&orm.CreateTableOptions{
+		IfNotExists: true,
+	}); err != nil {
+		panic(err)
+	}
+}
+
 // Get the start of the sync window for the given metric.
 // The start window is either 4 weeks in the past or the
 // latest metrics timestamp in the database.
-func getSyncWindowStart(metricName string) (time.Time, error) {
+func (s *syncer) getSyncWindowStart(metricName string) (time.Time, error) {
 	// Check if there are any metrics in the database.
 	var nRows int
 	if _, err := db.Get().QueryOne(
@@ -66,20 +93,11 @@ func getSyncWindowStart(metricName string) (time.Time, error) {
 	return latestTimestamp, nil
 }
 
-// Create the necessary database tables if they do not exist.
-func Init() {
-	if err := db.Get().Model((*PrometheusMetric)(nil)).CreateTable(&orm.CreateTableOptions{
-		IfNotExists: true,
-	}); err != nil {
-		panic(err)
-	}
-}
-
 // Sync the given metric from Prometheus.
 // The sync is done in intervals of 24 hours. We start from the given start time
 // and sync recursively until we are caught up with the current time. Metrics
 // outside of the window are deleted.
-func sync(start time.Time, metricName string) {
+func (s *syncer) sync(start time.Time, metricName string) {
 	// Sync full days only.
 	end := start.Add(syncInterval)
 	if start.After(time.Now()) || end.After(time.Now()) {
@@ -99,7 +117,7 @@ func sync(start time.Time, metricName string) {
 	}
 	logging.Log.Info("deleted old metrics", "rows", result.RowsAffected())
 	// Fetch the metrics from Prometheus.
-	prometheusData, err := fetchMetrics(
+	prometheusData, err := s.PrometheusAPI.fetchMetrics(
 		conf.Get().PrometheusURL, metricName,
 		start, end, syncResolutionSeconds,
 	)
@@ -120,19 +138,19 @@ func sync(start time.Time, metricName string) {
 	// Don't overload the Prometheus server.
 	time.Sleep(syncTimeout)
 	// Continue syncing.
-	sync(end, metricName)
+	s.sync(end, metricName)
 }
 
 // Sync the Prometheus metrics with the database.
-func Sync() {
+func (s *syncer) Sync() {
 	for _, metricName := range metrics {
 		// Sync this metric until we are caught up.
-		start, err := getSyncWindowStart(metricName)
+		start, err := s.getSyncWindowStart(metricName)
 		if err != nil {
 			logging.Log.Error("failed to get sync window start", "error", err)
 			continue
 		}
-		sync(start, metricName)
+		s.sync(start, metricName)
 		time.Sleep(syncTimeout)
 	}
 }

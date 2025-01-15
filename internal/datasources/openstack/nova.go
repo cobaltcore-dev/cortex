@@ -154,12 +154,22 @@ func (h *OpenStackHypervisor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
+type ServerAPI interface {
+	Get(auth openStackKeystoneAuth, url *string) (*openStackServerList, error)
+}
+
+type serverAPI struct{}
+
+func NewServerAPI() ServerAPI {
+	return &serverAPI{}
+}
+
 // GetServers returns a list of servers from the OpenStack Nova API.
 // Note that this function may make multiple requests in case the returned
 // data has multiple pages.
 //
 //nolint:dupl
-func getServers(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
+func (api *serverAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
 	// Use all_tenants=1 to get servers from all projects.
 	var pageURL = auth.nova.URL + "servers/detail?all_tenants=1"
 	if url != nil {
@@ -193,7 +203,7 @@ func getServers(auth openStackKeystoneAuth, url *string) (*openStackServerList, 
 	if serverList.ServersLinks != nil {
 		for _, link := range *serverList.ServersLinks {
 			if link.Rel == "next" {
-				servers, err := getServers(auth, &link.Href)
+				servers, err := api.Get(auth, &link.Href)
 				if err != nil {
 					return nil, err
 				}
@@ -204,12 +214,22 @@ func getServers(auth openStackKeystoneAuth, url *string) (*openStackServerList, 
 	return &serverList, nil
 }
 
+type HypervisorAPI interface {
+	Get(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error)
+}
+
+type hypervisorAPI struct{}
+
+func NewHypervisorAPI() HypervisorAPI {
+	return &hypervisorAPI{}
+}
+
 // GetHypervisors returns a list of hypervisors from the OpenStack Nova API.
 // Note that this function may make multiple requests in case the returned
 // data has multiple pages.
 //
 //nolint:dupl
-func getHypervisors(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
+func (api *hypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
 	var pageURL = auth.nova.URL + "os-hypervisors/detail"
 	if url != nil {
 		pageURL = *url
@@ -242,7 +262,7 @@ func getHypervisors(auth openStackKeystoneAuth, url *string) (*openStackHypervis
 	if hypervisorList.HypervisorsLinks != nil {
 		for _, link := range *hypervisorList.HypervisorsLinks {
 			if link.Rel == "next" {
-				hypervisors, err := getHypervisors(auth, &link.Href)
+				hypervisors, err := api.Get(auth, &link.Href)
 				if err != nil {
 					return nil, err
 				}

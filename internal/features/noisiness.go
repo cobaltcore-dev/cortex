@@ -18,8 +18,14 @@ type ProjectNoisiness struct {
 	AvgCPUOfProject float64  `pg:"avg_cpu_of_project,notnull"`
 }
 
+type projectNoisinessExtractor struct{}
+
+func NewProjectNoisinessExtractor() FeatureExtractor {
+	return &projectNoisinessExtractor{}
+}
+
 // Create the schema for the project noisiness feature.
-func projectNoisinessSchema() error {
+func (e *projectNoisinessExtractor) Init() error {
 	if err := db.Get().Model((*ProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
@@ -35,7 +41,7 @@ func projectNoisinessSchema() error {
 // 3. Store the avg cpu usage together with the current hosts in the database.
 // This feature can then be used to draw new VMs away from VMs of the same
 // project in case this project is known to cause high cpu usage.
-func projectNoisinessExtractor() error {
+func (e *projectNoisinessExtractor) Extract() error {
 	logging.Log.Info("extracting noisy projects")
 	// Delete the old data in the same transaction.
 	tx, err := db.Get().Begin()
