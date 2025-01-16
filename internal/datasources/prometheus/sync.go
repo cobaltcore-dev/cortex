@@ -15,18 +15,6 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-const (
-	// The time range to sync the metrics in.
-	syncTimeRange = 4 * 7 * 24 * time.Hour // 4 weeks
-	// The sync interval for the metrics.
-	syncInterval = 24 * time.Hour
-	// The resolution of the metrics to sync.
-	// Note: this needs to be larger than the sampling rate of the metric.
-	syncResolutionSeconds = 12 * 60 * 60 // 12 hours (2 datapoints per day per metric)
-	// Wait time between syncs to not overload the Prometheus server.
-	syncTimeout = 10 * time.Second
-)
-
 var (
 	// VMware vROps metrics to sync from the Prometheus server.
 	metrics = []string{
@@ -40,12 +28,27 @@ type Syncer interface {
 }
 
 type syncer struct {
+	// The time range to sync the metrics in.
+	SyncTimeRange time.Duration
+	// The sync interval for the metrics.
+	SyncInterval time.Duration
+	// The resolution of the metrics to sync.
+	// Note: this needs to be larger than the sampling rate of the metric.
+	SyncResolutionSeconds int
+	// Wait time between syncs to not overload the Prometheus server.
+	SyncTimeout time.Duration
+
 	PrometheusAPI PrometheusAPI
 	DB            db.DB
 }
 
 func NewSyncer(db db.DB) Syncer {
 	return &syncer{
+		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
+		SyncInterval:          24 * time.Hour,
+		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
+		SyncTimeout:           10 * time.Second,
+
 		PrometheusAPI: NewPrometheusAPI(),
 		DB:            db,
 	}
@@ -76,7 +79,7 @@ func (s *syncer) getSyncWindowStart(metricName string) (time.Time, error) {
 	logging.Log.Debug("number of rows", "nRows", nRows)
 	if nRows == 0 {
 		// No metrics in the database yet. Start <timeRange> in the past.
-		start := time.Now().Add(-syncTimeRange)
+		start := time.Now().Add(-s.SyncTimeRange)
 		return start, nil
 	}
 	var latestTimestamp time.Time
@@ -100,7 +103,7 @@ func (s *syncer) getSyncWindowStart(metricName string) (time.Time, error) {
 // outside of the window are deleted.
 func (s *syncer) sync(start time.Time, metricName string) {
 	// Sync full days only.
-	end := start.Add(syncInterval)
+	end := start.Add(s.SyncInterval)
 	if start.After(time.Now()) || end.After(time.Now()) {
 		return // Finished syncing.
 	}
@@ -110,7 +113,7 @@ func (s *syncer) sync(start time.Time, metricName string) {
 	result, err := s.DB.Get().Exec(
 		"DELETE FROM metrics WHERE name = ? AND timestamp < ?",
 		metricName,
-		time.Now().Add(-syncTimeRange),
+		time.Now().Add(-s.SyncTimeRange),
 	)
 	if err != nil {
 		fmt.Printf("Failed to delete old metrics: %v\n", err)
@@ -119,7 +122,7 @@ func (s *syncer) sync(start time.Time, metricName string) {
 	logging.Log.Info("deleted old metrics", "rows", result.RowsAffected())
 	// Fetch the metrics from Prometheus.
 	prometheusData, err := s.PrometheusAPI.fetchMetrics(
-		metricName, start, end, syncResolutionSeconds,
+		metricName, start, end, s.SyncResolutionSeconds,
 	)
 	if err != nil {
 		fmt.Printf("Failed to fetch metrics: %v\n", err)
@@ -136,7 +139,7 @@ func (s *syncer) sync(start time.Time, metricName string) {
 	logging.Log.Info("synced Prometheus data", "metrics", len(prometheusData.Metrics), "start", start, "end", end)
 
 	// Don't overload the Prometheus server.
-	time.Sleep(syncTimeout)
+	time.Sleep(s.SyncTimeout)
 	// Continue syncing.
 	s.sync(end, metricName)
 }
@@ -151,6 +154,6 @@ func (s *syncer) Sync() {
 			continue
 		}
 		s.sync(start, metricName)
-		time.Sleep(syncTimeout)
+		time.Sleep(s.SyncTimeout)
 	}
 }

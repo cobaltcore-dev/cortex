@@ -80,7 +80,6 @@ func TestProjectNoisinessExtractor_Extract(t *testing.T) {
 	extractor := NewProjectNoisinessExtractor(&mockDB)
 	extractor.Init()
 
-	// Call the function to test
 	if err := extractor.Extract(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

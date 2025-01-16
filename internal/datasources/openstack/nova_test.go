@@ -43,7 +43,7 @@ func TestGetServers(t *testing.T) {
 	api := NewServerAPI()
 	servers, err := api.Get(auth, nil)
 	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the results
@@ -90,7 +90,7 @@ func TestGetHypervisors(t *testing.T) {
 	api := NewHypervisorAPI()
 	hypervisors, err := api.Get(auth, nil)
 	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the results
@@ -124,7 +124,7 @@ func TestUnmarshalOpenStackHypervisor(t *testing.T) {
 	var hypervisor OpenStackHypervisor
 	err := json.Unmarshal(data, &hypervisor)
 	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	if hypervisor.ID != 1 {
@@ -161,7 +161,7 @@ func TestMarshalOpenStackHypervisor(t *testing.T) {
 
 	data, err := json.Marshal(hypervisor)
 	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Check if the data contains "service":

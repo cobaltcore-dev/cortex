@@ -30,7 +30,6 @@ func TestFeatureExtractorPipeline_Init(t *testing.T) {
 		},
 	}
 
-	// Call the function to test
 	pipeline.Init()
 
 	// No panic means the test passed
@@ -51,7 +50,6 @@ func TestFeatureExtractorPipeline_Init_Failure(t *testing.T) {
 		}
 	}()
 
-	// Call the function to test
 	pipeline.Init()
 }
 
@@ -64,7 +62,6 @@ func TestFeatureExtractorPipeline_Extract(t *testing.T) {
 		},
 	}
 
-	// Call the function to test
 	pipeline.Extract()
 
 	// No errors means the test passed
@@ -78,7 +75,7 @@ func TestFeatureExtractorPipeline_Extract_Failure(t *testing.T) {
 			&mockFeatureExtractor{extractErr: errors.New("extract error")},
 		},
 	}
-	// Call the function to test
+
 	pipeline.Extract()
 
 	// No panic means the test passed

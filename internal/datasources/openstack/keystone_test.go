@@ -49,11 +49,10 @@ func TestGetKeystoneAuth(t *testing.T) {
 	// Override the OS_AUTH_URL to point to the mock server
 	t.Setenv("OS_AUTH_URL", server.URL)
 
-	// Call the function to test
 	keystoneAPI := NewKeystoneAPI()
 	auth, err := keystoneAPI.Authenticate()
 	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the results
@@ -85,10 +84,9 @@ func TestGetKeystoneAuthFailure(t *testing.T) {
 	// Override the OS_AUTH_URL to point to the mock server
 	t.Setenv("OS_AUTH_URL", server.URL)
 
-	// Call the function to test
 	keystoneAPI := NewKeystoneAPI()
 	_, err := keystoneAPI.Authenticate()
 	if err == nil {
-		t.Fatalf("Expected error, got none")
+		t.Fatalf("expected error, got none")
 	}
 }

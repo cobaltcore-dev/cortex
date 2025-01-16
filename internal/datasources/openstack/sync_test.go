@@ -58,7 +58,7 @@ func TestSyncer_Init(t *testing.T) {
 	// Verify the tables were created
 	for _, model := range []any{(*OpenStackServer)(nil), (*OpenStackHypervisor)(nil)} {
 		if _, err := mockDB.Get().Model(model).Exists(); err != nil {
-			t.Fatalf("Expected no error, got %v", err)
+			t.Fatalf("expected no error, got %v", err)
 		}
 	}
 }
@@ -93,7 +93,7 @@ func TestSyncer_Sync(t *testing.T) {
 	// Verify the servers were inserted
 	var servers []OpenStackServer
 	if err := mockDB.Get().Model(&servers).Select(); err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(servers) != 1 {
 		t.Errorf("Expected 1 server, got %d", len(servers))
@@ -108,7 +108,7 @@ func TestSyncer_Sync(t *testing.T) {
 	// Verify the hypervisors were inserted
 	var hypervisors []OpenStackHypervisor
 	if err := mockDB.Get().Model(&hypervisors).Select(); err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(hypervisors) != 1 {
 		t.Errorf("Expected 1 hypervisor, got %d", len(hypervisors))
@@ -148,7 +148,7 @@ func TestSyncer_Sync_Failure(t *testing.T) {
 	// Verify no servers were inserted
 	var servers []OpenStackServer
 	if err := mockDB.Get().Model(&servers).Select(); err != nil && err != pg.ErrNoRows {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(servers) != 0 {
 		t.Errorf("Expected 0 servers, got %d", len(servers))
@@ -157,7 +157,7 @@ func TestSyncer_Sync_Failure(t *testing.T) {
 	// Verify no hypervisors were inserted
 	var hypervisors []OpenStackHypervisor
 	if err := mockDB.Get().Model(&hypervisors).Select(); err != nil && err != pg.ErrNoRows {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(hypervisors) != 0 {
 		t.Errorf("Expected 0 hypervisors, got %d", len(hypervisors))
