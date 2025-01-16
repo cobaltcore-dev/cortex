@@ -19,13 +19,13 @@ type VROpsHostMetric struct {
 	ClusterType string `json:"cluster_type" pg:"cluster_type"`
 	// The name of the metrics collector.
 	Collector string `json:"collector" pg:"collector"`
-	// Datacenter / availability zone of the virtual machine.
+	// Datacenter / availability zone of the hostsystem.
 	Datacenter string `json:"datacenter" pg:"datacenter"`
-	// Host system of the virtual machine.
+	// Host system name.
 	// Note: this value does not necessarily correspond to the
 	// hypervisor service host contained in OpenStack.
 	HostSystem string `json:"hostsystem" pg:"hostsystem"`
-	// Internal name of the virtual machine.
+	// Internal name of the hostsystem.
 	InternalName string `json:"internal_name" pg:"internal_name"`
 	// Exporter job name (usually "vrops-exporter").
 	Job string `json:"job" pg:"job"`
