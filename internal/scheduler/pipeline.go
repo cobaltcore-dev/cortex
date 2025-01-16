@@ -9,16 +9,20 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
+type pipelineStateSpec struct {
+	ProjectID string
+}
+
+type pipelineStateHost struct {
+	Name   string
+	Status string
+}
+
 // State passed through the pipeline.
 // Each step in the pipeline can modify the hosts or their weights.
 type pipelineState struct {
-	Spec struct {
-		ProjectID string
-	}
-	Hosts []struct {
-		Name   string
-		Status string
-	}
+	Spec    pipelineStateSpec
+	Hosts   []pipelineStateHost
 	Weights map[string]float64
 }
 
