@@ -18,6 +18,7 @@ type Syncer interface {
 type syncer struct {
 	ServerAPI     ServerAPI
 	HypervisorAPI HypervisorAPI
+	KeystoneAPI   KeystoneAPI
 	DB            db.DB
 }
 
@@ -25,6 +26,7 @@ func NewSyncer(db db.DB) Syncer {
 	return &syncer{
 		ServerAPI:     NewServerAPI(),
 		HypervisorAPI: NewHypervisorAPI(),
+		KeystoneAPI:   NewKeystoneAPI(),
 		DB:            db,
 	}
 }
@@ -47,8 +49,7 @@ func (s *syncer) Init() {
 // Sync OpenStack data with the database.
 func (s *syncer) Sync() {
 	logging.Log.Info("syncing OpenStack data")
-	api := NewKeystoneAPI()
-	auth, err := api.Authenticate()
+	auth, err := s.KeystoneAPI.Authenticate()
 	if err != nil {
 		logging.Log.Error("failed to get keystone auth", "error", err)
 		return
