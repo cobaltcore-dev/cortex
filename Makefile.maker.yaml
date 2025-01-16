@@ -1,0 +1,34 @@
+# Configuration file for <https://github.com/cobaltcore-dev/cortex>
+
+metadata:
+  url: https://github.com/cobaltcore-dev/cortex
+
+binaries:
+  - name:        cortex
+    fromPackage: .
+    installTo: bin/
+
+golang:
+  setGoModVersion: true
+
+golangciLint:
+  # We customized the config, so we don't want to overwrite it.
+  createConfig: false
+
+githubWorkflow:
+  ci:
+    enabled: true
+    coveralls: false
+
+renovate:
+  enabled: true
+  assignees:
+    - auhlig
+    - PhilippMatthes
+
+dockerfile:
+  enabled: true
+
+verbatim: |
+  run: build/cortex
+    ./build/cortex

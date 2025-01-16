@@ -1,0 +1,110 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package features
+
+import (
+	"testing"
+
+	"github.com/cobaltcore-dev/cortex/internal/datasources/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/testlib"
+	"github.com/go-pg/pg/v10/orm"
+)
+
+func TestProjectNoisinessExtractor_Init(t *testing.T) {
+	mockDB := testlib.NewMockDB()
+	mockDB.Init()
+	defer mockDB.Close()
+
+	extractor := NewProjectNoisinessExtractor(&mockDB)
+	if err := extractor.Init(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	// Will fail when the table does not exist
+	if _, err := mockDB.Get().Model((*ProjectNoisiness)(nil)).Exists(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestProjectNoisinessExtractor_Extract(t *testing.T) {
+	mockDB := testlib.NewMockDB()
+	mockDB.Init()
+	defer mockDB.Close()
+
+	// Create dependency tables
+	deps := []interface{}{
+		(*prometheus.PrometheusMetric)(nil),
+		(*openstack.OpenStackServer)(nil),
+		(*openstack.OpenStackHypervisor)(nil),
+	}
+	for _, dep := range deps {
+		if err := mockDB.
+			Get().
+			Model(dep).
+			CreateTable(&orm.CreateTableOptions{IfNotExists: true}); err != nil {
+			panic(err)
+		}
+	}
+
+	// Insert mock data into the metrics table
+	if _, err := mockDB.Get().Exec(`
+	INSERT INTO metrics (name, project, value, instance_uuid)
+	VALUES
+		('vrops_virtualmachine_cpu_demand_ratio', 'project1', 50, 'uuid1'),
+		('vrops_virtualmachine_cpu_demand_ratio', 'project1', 60, 'uuid2'),
+		('vrops_virtualmachine_cpu_demand_ratio', 'project2', 70, 'uuid3')
+	`); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert mock data into the openstack_servers table
+	if _, err := mockDB.Get().Exec(`
+	INSERT INTO openstack_servers (id, tenant_id, os_ext_srv_attr_hypervisor_hostname)
+	VALUES
+		('uuid1', 'project1', 'host1'),
+		('uuid2', 'project1', 'host2'),
+		('uuid3', 'project2', 'host1')
+	`); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert mock data into the openstack_hypervisors table
+	if _, err := mockDB.Get().Exec(`
+	INSERT INTO openstack_hypervisors (hostname, service_host)
+	VALUES
+		('host1', 'service_host1'),
+		('host2', 'service_host2')
+	`); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Create an instance of the extractor
+	extractor := NewProjectNoisinessExtractor(&mockDB)
+	if err := extractor.Init(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if err := extractor.Extract(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify the data was inserted into the feature_project_noisiness table
+	var noisiness []ProjectNoisiness
+	q := `SELECT * FROM feature_project_noisiness ORDER BY project, host`
+	if _, err := mockDB.Get().Query(&noisiness, q); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	expected := []ProjectNoisiness{
+		{Project: "project1", Host: "service_host1", AvgCPUOfProject: 55},
+		{Project: "project1", Host: "service_host2", AvgCPUOfProject: 55},
+		{Project: "project2", Host: "service_host1", AvgCPUOfProject: 70},
+	}
+	if len(noisiness) != len(expected) {
+		t.Fatalf("expected %d rows, got %d", len(expected), len(noisiness))
+	}
+	for i, n := range noisiness {
+		if n != expected[i] {
+			t.Fatalf("expected %v, got %v", expected[i], n)
+		}
+	}
+}

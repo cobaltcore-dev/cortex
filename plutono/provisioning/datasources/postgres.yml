@@ -1,0 +1,22 @@
+apiVersion: 1
+
+datasources:
+  - name: Postgres
+    type: postgres
+    access: proxy
+    # Point at the postgres proxy that is running locally.
+    url: cortex-postgresql:5432
+    user: postgres
+    uid: postgres
+    secureJsonData:
+      password: 'secret'
+    jsonData:
+      database: postgres
+      sslmode: 'disable' # disable/require/verify-ca/verify-full
+      maxOpenConns: 100 # Grafana v5.4+
+      maxIdleConns: 100 # Grafana v5.4+
+      maxIdleConnsAuto: true # Grafana v9.5.1+
+      connMaxLifetime: 14400 # Grafana v5.4+
+      postgresVersion: 1700 # 903=9.3, 904=9.4, 905=9.5, 906=9.6, 1000=10
+      timescaledb: false
+    editable: true

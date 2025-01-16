@@ -12,13 +12,38 @@ POC for advanced initial placement of VMs.
 
 ## About this project
 
-Efficient placement and scheduling of virtual machines (VMs) are critical to optimizing resource utilization and reducing energy consumption, ensuring a high-performance cloud computing system.  
+Efficient placement and scheduling of virtual machines (VMs) are critical to optimizing resource utilization and reducing energy consumption, ensuring a high-performance cloud computing system.
 Cortex provides advanced capabilities for initial placement of VMs.
 
+## Quickstart
 
-## Requirements and Setup
+Set OpenStack cli environment variables:
+```bash
+export OS_AUTH_URL=""
+export OS_USERNAME=""
+export OS_PASSWORD=""
+export OS_PROJECT_NAME=""
+export OS_USER_DOMAIN_NAME=""
+export OS_PROJECT_DOMAIN_NAME=""
+```
 
-To be documented.
+Set URL to Prometheus which contains VMware vROps metrics:
+```bash
+export PROMETHEUS_URL=""
+```
+See: https://github.com/sapcc/vrops-exporter
+
+Run your minikube:
+```bash
+minikube start
+```
+
+Start the tilt setup:
+```bash
+tilt up
+```
+
+Point your browser to http://localhost:10350/
 
 ## Support, Feedback, Contributing
 
