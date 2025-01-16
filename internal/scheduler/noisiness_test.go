@@ -126,7 +126,10 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 			}
 			for host, expectedWeight := range tt.expectedHosts {
 				if tt.state.Weights[host] != expectedWeight {
-					t.Errorf("expected weight for host %s to be %f, got %f", host, expectedWeight, tt.state.Weights[host])
+					t.Errorf(
+						"expected weight for host %s to be %f, got %f",
+						host, expectedWeight, tt.state.Weights[host],
+					)
 				}
 			}
 		})

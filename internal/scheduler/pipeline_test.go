@@ -90,11 +90,17 @@ func TestPipeline_Run(t *testing.T) {
 				t.Fatalf("expected no error, got %v", err)
 			}
 			if len(gotHosts) != len(tt.expectedHosts) {
-				t.Fatalf("expected %d hosts, got %d", len(tt.expectedHosts), len(gotHosts))
+				t.Fatalf(
+					"expected %d hosts, got %d",
+					len(tt.expectedHosts), len(gotHosts),
+				)
 			}
 			for i := range gotHosts {
 				if gotHosts[i] != tt.expectedHosts[i] {
-					t.Errorf("expected host at position %d to be %s, got %s", i, tt.expectedHosts[i], gotHosts[i])
+					t.Errorf(
+						"expected host at position %d to be %s, got %s",
+						i, tt.expectedHosts[i], gotHosts[i],
+					)
 				}
 			}
 		})

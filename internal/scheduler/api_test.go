@@ -175,7 +175,10 @@ func TestHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to marshal request body: %v", err)
 			}
-			req, err := http.NewRequestWithContext(context.Background(), tt.method, APINovaExternalSchedulerURL, bytes.NewBuffer(requestBody))
+			req, err := http.NewRequestWithContext(
+				context.Background(), tt.method,
+				APINovaExternalSchedulerURL, bytes.NewBuffer(requestBody),
+			)
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
 			}
@@ -193,11 +196,17 @@ func TestHandler(t *testing.T) {
 					t.Fatalf("failed to decode response: %v", err)
 				}
 				if len(gotResponse.Hosts) != len(tt.wantResponse.Hosts) {
-					t.Fatalf("Handler() response length = %v, want %v", len(gotResponse.Hosts), len(tt.wantResponse.Hosts))
+					t.Fatalf(
+						"Handler() response length = %v, want %v",
+						len(gotResponse.Hosts), len(tt.wantResponse.Hosts),
+					)
 				}
 				for i := range gotResponse.Hosts {
 					if gotResponse.Hosts[i] != tt.wantResponse.Hosts[i] {
-						t.Fatalf("Handler() response[%d] = %v, want %v", i, gotResponse.Hosts[i], tt.wantResponse.Hosts[i])
+						t.Fatalf(
+							"Handler() response[%d] = %v, want %v",
+							i, gotResponse.Hosts[i], tt.wantResponse.Hosts[i],
+						)
 					}
 				}
 			}
