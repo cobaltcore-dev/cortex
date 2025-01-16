@@ -13,7 +13,7 @@ type ProjectNoisiness struct {
 	//lint:ignore U1000 Ignore unused field warning
 	tableName       struct{} `pg:"feature_project_noisiness"`
 	Project         string   `pg:"project,notnull"`
-	Host            string   `pg:"host,notnull"`
+	ComputeHost     string   `pg:"compute_host,notnull"`
 	AvgCPUOfProject float64  `pg:"avg_cpu_of_project,notnull"`
 }
 

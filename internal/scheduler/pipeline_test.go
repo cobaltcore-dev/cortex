@@ -19,8 +19,8 @@ func (m *mockPipelineStep) Run(state *pipelineState) error {
 	}
 	// Example modification: downvote host1
 	for i := range state.Hosts {
-		if state.Hosts[i].Name == "host1" {
-			state.Weights[state.Hosts[i].Name] = 0.0
+		if state.Hosts[i].ComputeHost == "host1" {
+			state.Weights[state.Hosts[i].ComputeHost] = 0.0
 		}
 	}
 	return nil
@@ -50,9 +50,9 @@ func TestPipeline_Run(t *testing.T) {
 					ProjectID: "project1",
 				},
 				Hosts: []pipelineStateHost{
-					{Name: "host1"},
-					{Name: "host2"},
-					{Name: "host3"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
+					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
+					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
 				},
 				Weights: map[string]float64{
 					"host1": 1.0,
@@ -69,9 +69,9 @@ func TestPipeline_Run(t *testing.T) {
 					ProjectID: "project1",
 				},
 				Hosts: []pipelineStateHost{
-					{Name: "host1"},
-					{Name: "host2"},
-					{Name: "host3"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
+					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
+					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
 				},
 				Weights: map[string]float64{
 					"host1": 1.0,

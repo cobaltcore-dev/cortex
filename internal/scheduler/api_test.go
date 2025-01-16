@@ -53,7 +53,7 @@ func TestCanRunScheduler(t *testing.T) {
 			name: "Missing weight for host",
 			request: APINovaExternalSchedulerRequest{
 				Hosts: []APINovaExternalSchedulerRequestHost{
-					{Name: "host1"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{},
 			},
@@ -63,7 +63,7 @@ func TestCanRunScheduler(t *testing.T) {
 			name: "Weight assigned to unknown host",
 			request: APINovaExternalSchedulerRequest{
 				Hosts: []APINovaExternalSchedulerRequestHost{
-					{Name: "host1"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
 					"unknown_host": 1.0,
@@ -75,7 +75,7 @@ func TestCanRunScheduler(t *testing.T) {
 			name: "Valid request",
 			request: APINovaExternalSchedulerRequest{
 				Hosts: []APINovaExternalSchedulerRequestHost{
-					{Name: "host1"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
 					"host1": 1.0,
@@ -122,7 +122,7 @@ func TestHandler(t *testing.T) {
 					NInstances: 1,
 				},
 				Hosts: []APINovaExternalSchedulerRequestHost{
-					{Name: "host1"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
 					"host1": 1.0,
@@ -139,7 +139,7 @@ func TestHandler(t *testing.T) {
 					NInstances: 1,
 				},
 				Hosts: []APINovaExternalSchedulerRequestHost{
-					{Name: "host1"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
 					"unknown_host": 1.0,
@@ -156,7 +156,7 @@ func TestHandler(t *testing.T) {
 					NInstances: 1,
 				},
 				Hosts: []APINovaExternalSchedulerRequestHost{
-					{Name: "host1"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
 					"host1": 1.0,

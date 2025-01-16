@@ -26,7 +26,11 @@ type APINovaExternalSchedulerRequestSpec struct {
 // Host object from the Nova scheduler pipeline.
 // See: https://github.com/sapcc/nova/blob/stable/xena-m3/nova/scheduler/host_manager.py class HostState
 type APINovaExternalSchedulerRequestHost struct {
-	Name   string `json:"name"`
+	// Name of the Nova compute host, e.g. nova-compute-bb123.
+	ComputeHost string `json:"host"`
+	// Name of the hypervisor hostname, e.g. domain-c123.<uuid>
+	HypervisorHostname string `json:"hypervisor_hostname"`
+	// Status of the host, e.g. "enabled".
 	Status string `json:"status"`
 }
 
@@ -72,17 +76,17 @@ func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSch
 	}
 	// Check that all hosts have a weight.
 	for _, host := range requestData.Hosts {
-		if _, ok := requestData.Weights[host.Name]; !ok {
+		if _, ok := requestData.Weights[host.ComputeHost]; !ok {
 			return false, "missing weight for host"
 		}
 	}
 	// Check that all weights are assigned to a host in the request.
-	hostNames := make(map[string]bool)
+	computeHostNames := make(map[string]bool)
 	for _, host := range requestData.Hosts {
-		hostNames[host.Name] = true
+		computeHostNames[host.ComputeHost] = true
 	}
-	for host := range requestData.Weights {
-		if _, ok := hostNames[host]; !ok {
+	for computeHost := range requestData.Weights {
+		if _, ok := computeHostNames[computeHost]; !ok {
 			return false, "weight assigned to unknown host"
 		}
 	}
@@ -122,13 +126,7 @@ func (api *externalSchedulingAPI) Handler(w http.ResponseWriter, r *http.Request
 	state := &pipelineState{}
 	state.Spec.ProjectID = requestData.Spec.ProjectID
 	for _, host := range requestData.Hosts {
-		state.Hosts = append(state.Hosts, struct {
-			Name   string
-			Status string
-		}{
-			Name:   host.Name,
-			Status: host.Status,
-		})
+		state.Hosts = append(state.Hosts, pipelineStateHost(host))
 	}
 	state.Weights = requestData.Weights
 

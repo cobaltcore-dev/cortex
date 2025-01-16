@@ -25,7 +25,12 @@ type featureExtractorPipeline struct {
 func NewFeatureExtractorPipeline(db db.DB) FeatureExtractorPipeline {
 	return &featureExtractorPipeline{
 		FeatureExtractors: []FeatureExtractor{
+			// Resolve "hostsystem" label to Nova compute hosts.
+			NewVROpsHostsystemResolver(db),
+			// Extract how much resources projects consume on average.
 			NewProjectNoisinessExtractor(db),
+			// Extract how much CPU contention is seen on each compute host.
+			NewHostsystemContentionExtractor(db),
 		},
 	}
 }

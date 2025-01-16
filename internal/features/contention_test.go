@@ -1,0 +1,112 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package features
+
+import (
+	"testing"
+
+	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/testlib"
+	"github.com/go-pg/pg/v10/orm"
+)
+
+func TestHostsystemContentionExtractor_Init(t *testing.T) {
+	mockDB := testlib.NewMockDB()
+	mockDB.Init()
+	defer mockDB.Close()
+
+	extractor := NewHostsystemContentionExtractor(&mockDB)
+
+	if err := extractor.Init(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify the table was created
+	if _, err := mockDB.Get().Model((*HostsystemContention)(nil)).Exists(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestHostsystemContentionExtractor_Extract(t *testing.T) {
+	mockDB := testlib.NewMockDB()
+	mockDB.Init()
+	defer mockDB.Close()
+
+	// Create dependency tables
+	deps := []interface{}{
+		(*ResolvedVROpsHostsystem)(nil),
+		(*prometheus.VROpsHostMetric)(nil),
+	}
+	for _, dep := range deps {
+		if err := mockDB.
+			Get().
+			Model(dep).
+			CreateTable(&orm.CreateTableOptions{IfNotExists: true}); err != nil {
+			panic(err)
+		}
+	}
+
+	// Insert mock data into the vrops_host_metrics table
+	_, err := mockDB.Get().Exec(`
+        INSERT INTO vrops_host_metrics (hostsystem, name, value)
+        VALUES
+            ('hostsystem1', 'vrops_hostsystem_cpu_contention_percentage', 30.0),
+            ('hostsystem2', 'vrops_hostsystem_cpu_contention_percentage', 40.0),
+            ('hostsystem1', 'vrops_hostsystem_cpu_contention_percentage', 50.0)
+    `)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert mock data into the feature_resolved_vrops_hostsystem table
+	_, err = mockDB.Get().Exec(`
+        INSERT INTO feature_resolved_vrops_hostsystem (vrops_hostsystem, nova_compute_host)
+        VALUES
+            ('hostsystem1', 'compute_host1'),
+            ('hostsystem2', 'compute_host2')
+    `)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	extractor := NewHostsystemContentionExtractor(&mockDB)
+	if err := extractor.Init(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if err = extractor.Extract(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify the data was inserted into the feature_hostsystem_contention table
+	var contentions []HostsystemContention
+	err = mockDB.Get().Model(&contentions).Select()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(contentions) != 2 {
+		t.Errorf("expected 2 rows, got %d", len(contentions))
+	}
+	expected := map[string]struct {
+		AvgCPUContention float64
+		MaxCPUContention float64
+	}{
+		"compute_host1": {AvgCPUContention: 40.0, MaxCPUContention: 50.0}, // Average of 30.0 and 50.0, Max of 50.0
+		"compute_host2": {AvgCPUContention: 40.0, MaxCPUContention: 40.0}, // Single value of 40.0
+	}
+	for _, c := range contentions {
+		if expected[c.ComputeHost].AvgCPUContention != c.AvgCPUContention {
+			t.Errorf(
+				"expected avg_cpu_contention for compute_host %s to be %f, got %f",
+				c.ComputeHost, expected[c.ComputeHost].AvgCPUContention, c.AvgCPUContention,
+			)
+		}
+		if expected[c.ComputeHost].MaxCPUContention != c.MaxCPUContention {
+			t.Errorf(
+				"expected max_cpu_contention for compute_host %s to be %f, got %f",
+				c.ComputeHost, expected[c.ComputeHost].MaxCPUContention, c.MaxCPUContention,
+			)
+		}
+	}
+}

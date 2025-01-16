@@ -128,7 +128,8 @@ linters:
     - bodyclose
     - containedctx
     - copyloopvar
-    - dupl
+    # Produces false positives with strings such as SQL queries.
+    # - dupl
     - dupword
     - durationcheck
     - errcheck
