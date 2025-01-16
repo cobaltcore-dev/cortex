@@ -59,7 +59,7 @@ func (e *projectNoisinessExtractor) Extract() error {
             SELECT
                 m.project AS tenant_id,
                 AVG(m.value) AS avg_cpu
-            FROM metrics m
+            FROM vrops_vm_metrics m
             WHERE m.name = 'vrops_virtualmachine_cpu_demand_ratio'
             GROUP BY m.project
             ORDER BY avg_cpu DESC
@@ -70,7 +70,7 @@ func (e *projectNoisinessExtractor) Extract() error {
                 h.service_host,
                 AVG(p.avg_cpu) AS avg_cpu_of_project
             FROM openstack_servers s
-            JOIN metrics m ON s.id = m.instance_uuid
+            JOIN vrops_vm_metrics m ON s.id = m.instance_uuid
             JOIN projects_avg_cpu p ON s.tenant_id = p.tenant_id
             JOIN openstack_hypervisors h ON s.os_ext_srv_attr_hypervisor_hostname = h.hostname
             GROUP BY s.tenant_id, h.service_host

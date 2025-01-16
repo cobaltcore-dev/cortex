@@ -3,7 +3,9 @@
 
 package prometheus
 
-import "github.com/cobaltcore-dev/cortex/internal/env"
+import (
+	"github.com/cobaltcore-dev/cortex/internal/env"
+)
 
 type PrometheusConfig interface {
 	GetPrometheusURL() string
