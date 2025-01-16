@@ -29,7 +29,10 @@ func TestSyncer_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	syncer := NewSyncer(&mockDB)
+	syncer := &syncer{
+		PrometheusAPI: &prometheusAPI{},
+		DB:            &mockDB,
+	}
 	syncer.Init()
 
 	// Verify the table was created
@@ -112,13 +115,13 @@ func TestSyncer_sync(t *testing.T) {
 	}
 	if len(metrics) != 4*7 {
 		// Mock returns 1 datapoint each time called
-		t.Errorf("Expected 4 weeks of datapoints, got %d", len(metrics))
+		t.Errorf("expected 4 weeks of datapoints, got %d", len(metrics))
 	}
 	if metrics[0].Name != "test_metric" {
-		t.Errorf("Expected metric name to be %s, got %s", "test_metric", metrics[0].Name)
+		t.Errorf("expected metric name to be %s, got %s", "test_metric", metrics[0].Name)
 	}
 	if metrics[0].Value != 123.45 {
-		t.Errorf("Expected metric value to be %f, got %f", 123.45, metrics[0].Value)
+		t.Errorf("expected metric value to be %f, got %f", 123.45, metrics[0].Value)
 	}
 }
 
@@ -146,10 +149,10 @@ func TestSyncer_sync_Failure(t *testing.T) {
 
 	// Verify no metrics were inserted
 	var metrics []PrometheusMetric
-	if err := mockDB.Get().Model(&metrics).Select(); err != nil && err != pg.ErrNoRows {
+	if err := mockDB.Get().Model(&metrics).Select(); err != nil && errors.Is(err, pg.ErrNoRows) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(metrics) != 0 {
-		t.Errorf("Expected 0 metrics, got %d", len(metrics))
+		t.Errorf("expected 0 metrics, got %d", len(metrics))
 	}
 }

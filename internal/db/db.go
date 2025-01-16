@@ -3,7 +3,6 @@
 
 package db
 
-//nolint:goimports
 import (
 	"context"
 	"time"

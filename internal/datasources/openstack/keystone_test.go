@@ -57,10 +57,10 @@ func TestGetKeystoneAuth(t *testing.T) {
 
 	// Verify the results
 	if auth.token != "test_token" {
-		t.Errorf("Expected token to be %s, got %s", "test_token", auth.token)
+		t.Errorf("expected token to be %s, got %s", "test_token", auth.token)
 	}
 	if auth.nova.URL != "http://nova.url" {
-		t.Errorf("Expected Nova URL to be %s, got %s", "http://nova.url", auth.nova.URL)
+		t.Errorf("expected Nova URL to be %s, got %s", "http://nova.url", auth.nova.URL)
 	}
 }
 

@@ -11,6 +11,7 @@ mkShell {
     go_1_23
     golangci-lint
     gotools # goimports
+    postgresql_17
 
     # keep this line if you use bash
     bashInteractive

@@ -3,7 +3,6 @@
 
 package features
 
-//nolint:goimports
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"

@@ -48,13 +48,13 @@ func TestGetServers(t *testing.T) {
 
 	// Verify the results
 	if len(servers.Servers) != 1 {
-		t.Errorf("Expected 1 server, got %d", len(servers.Servers))
+		t.Errorf("expected 1 server, got %d", len(servers.Servers))
 	}
 	if servers.Servers[0].ID != "server1" {
-		t.Errorf("Expected server ID to be %s, got %s", "server1", servers.Servers[0].ID)
+		t.Errorf("expected server ID to be %s, got %s", "server1", servers.Servers[0].ID)
 	}
 	if servers.Servers[0].Name != "test-server" {
-		t.Errorf("Expected server name to be %s, got %s", "test-server", servers.Servers[0].Name)
+		t.Errorf("expected server name to be %s, got %s", "test-server", servers.Servers[0].Name)
 	}
 }
 
@@ -95,13 +95,13 @@ func TestGetHypervisors(t *testing.T) {
 
 	// Verify the results
 	if len(hypervisors.Hypervisors) != 1 {
-		t.Errorf("Expected 1 hypervisor, got %d", len(hypervisors.Hypervisors))
+		t.Errorf("expected 1 hypervisor, got %d", len(hypervisors.Hypervisors))
 	}
 	if hypervisors.Hypervisors[0].ID != 1 {
-		t.Errorf("Expected hypervisor ID to be %d, got %d", 1, hypervisors.Hypervisors[0].ID)
+		t.Errorf("expected hypervisor ID to be %d, got %d", 1, hypervisors.Hypervisors[0].ID)
 	}
 	if hypervisors.Hypervisors[0].Hostname != "test-hypervisor" {
-		t.Errorf("Expected hypervisor hostname to be %s, got %s", "test-hypervisor", hypervisors.Hypervisors[0].Hostname)
+		t.Errorf("expected hypervisor hostname to be %s, got %s", "test-hypervisor", hypervisors.Hypervisors[0].Hostname)
 	}
 }
 
@@ -128,19 +128,19 @@ func TestUnmarshalOpenStackHypervisor(t *testing.T) {
 	}
 
 	if hypervisor.ID != 1 {
-		t.Errorf("Expected ID to be %d, got %d", 1, hypervisor.ID)
+		t.Errorf("expected ID to be %d, got %d", 1, hypervisor.ID)
 	}
 	if hypervisor.Hostname != "test-hypervisor" {
-		t.Errorf("Expected hostname to be %s, got %s", "test-hypervisor", hypervisor.Hostname)
+		t.Errorf("expected hostname to be %s, got %s", "test-hypervisor", hypervisor.Hostname)
 	}
 	if hypervisor.ServiceID != 2 {
-		t.Errorf("Expected ServiceID to be %d, got %d", 2, hypervisor.ServiceID)
+		t.Errorf("expected ServiceID to be %d, got %d", 2, hypervisor.ServiceID)
 	}
 	if hypervisor.ServiceHost != "test-host" {
-		t.Errorf("Expected ServiceHost to be %s, got %s", "test-host", hypervisor.ServiceHost)
+		t.Errorf("expected ServiceHost to be %s, got %s", "test-host", hypervisor.ServiceHost)
 	}
 	if *hypervisor.ServiceDisabledReason != "maintenance" {
-		t.Errorf("Expected ServiceDisabledReason to be %s, got %s", "maintenance", *hypervisor.ServiceDisabledReason)
+		t.Errorf("expected ServiceDisabledReason to be %s, got %s", "maintenance", *hypervisor.ServiceDisabledReason)
 	}
 }
 

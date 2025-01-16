@@ -46,7 +46,7 @@ func TestFeatureExtractorPipeline_Init_Failure(t *testing.T) {
 
 	defer func() {
 		if r := recover(); r == nil {
-			t.Errorf("Expected panic, got none")
+			t.Errorf("expected panic, got none")
 		}
 	}()
 

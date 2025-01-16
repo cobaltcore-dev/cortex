@@ -71,14 +71,14 @@ func TestFetchMetrics(t *testing.T) {
 
 	// Verify the results
 	if len(data.Metrics) != 1 {
-		t.Errorf("Expected 1 metric, got %d", len(data.Metrics))
+		t.Errorf("expected 1 metric, got %d", len(data.Metrics))
 	}
 	metric := data.Metrics[0]
 	if metric.Name != "test_metric" {
-		t.Errorf("Expected metric name to be %s, got %s", "test_metric", metric.Name)
+		t.Errorf("expected metric name to be %s, got %s", "test_metric", metric.Name)
 	}
 	if metric.Value != 123.45 {
-		t.Errorf("Expected value to be %f, got %f", 123.45, metric.Value)
+		t.Errorf("expected value to be %f, got %f", 123.45, metric.Value)
 	}
 }
 

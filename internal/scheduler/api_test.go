@@ -5,6 +5,7 @@ package scheduler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -170,10 +171,13 @@ func TestHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			requestBody, _ := json.Marshal(tt.requestBody)
-			req, err := http.NewRequest(tt.method, APINovaExternalSchedulerURL, bytes.NewBuffer(requestBody))
+			requestBody, err := json.Marshal(tt.requestBody)
 			if err != nil {
-				t.Fatalf("Failed to create request: %v", err)
+				t.Fatalf("failed to marshal request body: %v", err)
+			}
+			req, err := http.NewRequestWithContext(context.Background(), tt.method, APINovaExternalSchedulerURL, bytes.NewBuffer(requestBody))
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
 			}
 			rr := httptest.NewRecorder()
 			handler := http.HandlerFunc(api.Handler)
@@ -186,7 +190,7 @@ func TestHandler(t *testing.T) {
 			if tt.wantStatusCode == http.StatusOK {
 				var gotResponse APINovaExternalSchedulerResponse
 				if err := json.NewDecoder(rr.Body).Decode(&gotResponse); err != nil {
-					t.Fatalf("Failed to decode response: %v", err)
+					t.Fatalf("failed to decode response: %v", err)
 				}
 				if len(gotResponse.Hosts) != len(tt.wantResponse.Hosts) {
 					t.Fatalf("Handler() response length = %v, want %v", len(gotResponse.Hosts), len(tt.wantResponse.Hosts))

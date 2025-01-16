@@ -16,7 +16,7 @@ func TestForceGetenv(t *testing.T) {
 
 	result := ForceGetenv(key)
 	if result != value {
-		t.Errorf("Expected value to be %s, got %s", value, result)
+		t.Errorf("expected value to be %s, got %s", value, result)
 	}
 }
 
@@ -41,7 +41,7 @@ func TestGetenv(t *testing.T) {
 
 	result := Getenv(key, defaultValue)
 	if result != value {
-		t.Errorf("Expected value to be %s, got %s", value, result)
+		t.Errorf("expected value to be %s, got %s", value, result)
 	}
 }
 
@@ -52,6 +52,6 @@ func TestGetenvDefault(t *testing.T) {
 
 	result := Getenv(key, defaultValue)
 	if result != defaultValue {
-		t.Errorf("Expected value to be %s, got %s", defaultValue, result)
+		t.Errorf("expected value to be %s, got %s", defaultValue, result)
 	}
 }

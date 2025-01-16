@@ -39,6 +39,8 @@ linters-settings:
     # This is not as dangerous as skipping error values because an unchecked type assertion just immediately panics.
     # We disable this because it makes a ton of useless noise esp. in test code.
     check-type-assertions: false
+    exclude-functions:
+      - goimports
   forbidigo:
     analyze-types: true # required for pkg:
     forbid:
@@ -138,7 +140,8 @@ linters:
     - goconst
     - gocritic
     - gofmt
-    - goimports
+    # Disabled for now - produces too many false positives
+    # - goimports
     - gosec
     - gosimple
     - govet

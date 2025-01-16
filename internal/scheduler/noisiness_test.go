@@ -38,7 +38,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
             ('project2', 'host3', 15.0)
     `)
 	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 	step := NewAntiAffinityNoisyProjectsStep(&mockDB)
 
@@ -122,11 +122,11 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := step.Run(tt.state)
 			if err != nil {
-				t.Fatalf("Expected no error, got %v", err)
+				t.Fatalf("expected no error, got %v", err)
 			}
 			for host, expectedWeight := range tt.expectedHosts {
 				if tt.state.Weights[host] != expectedWeight {
-					t.Errorf("Expected weight for host %s to be %f, got %f", host, expectedWeight, tt.state.Weights[host])
+					t.Errorf("expected weight for host %s to be %f, got %f", host, expectedWeight, tt.state.Weights[host])
 				}
 			}
 		})
