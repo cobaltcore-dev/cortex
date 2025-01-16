@@ -34,7 +34,7 @@ func TestProjectNoisinessExtractor_Extract(t *testing.T) {
 
 	// Create dependency tables
 	deps := []interface{}{
-		(*prometheus.PrometheusMetric)(nil),
+		(*prometheus.VROpsVMMetric)(nil),
 		(*openstack.OpenStackServer)(nil),
 		(*openstack.OpenStackHypervisor)(nil),
 	}
@@ -49,7 +49,7 @@ func TestProjectNoisinessExtractor_Extract(t *testing.T) {
 
 	// Insert mock data into the metrics table
 	if _, err := mockDB.Get().Exec(`
-	INSERT INTO metrics (name, project, value, instance_uuid)
+	INSERT INTO vrops_vm_metrics (name, project, value, instance_uuid)
 	VALUES
 		('vrops_virtualmachine_cpu_demand_ratio', 'project1', 50, 'uuid1'),
 		('vrops_virtualmachine_cpu_demand_ratio', 'project1', 60, 'uuid2'),

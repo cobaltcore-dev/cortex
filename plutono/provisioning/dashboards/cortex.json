@@ -59,7 +59,7 @@
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "SELECT \n  \"timestamp\" as time, value\nFROM metrics;",
+          "rawSql": "SELECT \n  \"timestamp\" as time, value\nFROM vrops_vm_metrics;",
           "refId": "A",
           "select": [
             [
@@ -71,7 +71,7 @@
               }
             ]
           ],
-          "table": "metrics",
+          "table": "vrops_vm_metrics",
           "timeColumn": "\"timestamp\"",
           "timeColumnType": "timestamp",
           "where": [
@@ -175,7 +175,7 @@
               }
             ]
           ],
-          "table": "metrics",
+          "table": "vrops_vm_metrics",
           "timeColumn": "\"timestamp\"",
           "timeColumnType": "timestamp",
           "where": [
@@ -410,7 +410,7 @@
               }
             ]
           ],
-          "table": "metrics",
+          "table": "vrops_vm_metrics",
           "timeColumn": "\"timestamp\"",
           "timeColumnType": "timestamp",
           "where": [
@@ -493,7 +493,7 @@
               }
             ]
           ],
-          "table": "metrics",
+          "table": "vrops_vm_metrics",
           "timeColumn": "\"timestamp\"",
           "timeColumnType": "timestamp",
           "where": [

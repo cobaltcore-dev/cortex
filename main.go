@@ -30,18 +30,27 @@ func main() {
 	db.Init()
 	defer db.Close()
 
+	prometheusSyncers := prometheus.NewSyncers(db)
+	for _, syncer := range prometheusSyncers {
+		syncer.Init()
+	}
+
 	openstackSyncer := openstack.NewSyncer(db)
 	openstackSyncer.Init()
-	prometheusSyncer := prometheus.NewSyncer(db)
-	prometheusSyncer.Init()
+
 	pipeline := features.NewFeatureExtractorPipeline(db)
 	pipeline.Init()
 
 	go func() {
 		for {
-			prometheusSyncer.Sync() // Catch up until now, may take a while.
-			openstackSyncer.Sync()  // Get the current servers, hypervisors, etc.
-			pipeline.Extract()      // Extract features from the data.
+			// Catch up prometheus metrics until now, may take a while.
+			for _, syncer := range prometheusSyncers {
+				syncer.Sync()
+			}
+			// Get the current servers, hypervisors, etc.
+			openstackSyncer.Sync()
+			// Extract features from the data.
+			pipeline.Extract()
 			time.Sleep(time.Minute * 1)
 		}
 	}()
