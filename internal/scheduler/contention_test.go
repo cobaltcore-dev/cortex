@@ -11,14 +11,14 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
+func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	mockDB := testlib.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
 	// Create dependency tables
 	deps := []interface{}{
-		(*features.ProjectNoisiness)(nil),
+		(*features.HostsystemContention)(nil),
 	}
 	for _, dep := range deps {
 		if err := mockDB.
@@ -29,18 +29,20 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		}
 	}
 
-	// Insert mock data into the feature_project_noisiness table
+	// Insert mock data into the feature_hostsystem_contention table
 	_, err := mockDB.Get().Exec(`
-        INSERT INTO feature_project_noisiness (project, compute_host, avg_cpu_of_project)
+        INSERT INTO feature_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
         VALUES
-            ('project1', 'host1', 25.0),
-            ('project1', 'host2', 30.0),
-            ('project2', 'host3', 15.0)
+            ('host1', 15.0, 25.0),
+            ('host2', 5.0, 10.0),
+            ('host3', 20.0, 30.0)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	step := NewAntiAffinityNoisyProjectsStep(&mockDB)
+
+	// Create an instance of the step
+	step := NewAvoidContendedHostsStep(&mockDB)
 
 	tests := []struct {
 		name          string
@@ -48,11 +50,8 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		expectedHosts map[string]float64
 	}{
 		{
-			name: "Noisy project",
+			name: "Avoid contended hosts",
 			state: &pipelineState{
-				Spec: pipelineStateSpec{
-					ProjectID: "project1",
-				},
 				Hosts: []pipelineStateHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
@@ -66,54 +65,25 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 			},
 			expectedHosts: map[string]float64{
 				"host1": 0.0,
-				"host2": 0.0,
-				"host3": 1.0,
+				"host2": 1.0,
+				"host3": 0.0,
 			},
 		},
 		{
-			name: "Non-noisy project",
+			name: "No contended hosts",
 			state: &pipelineState{
-				Spec: pipelineStateSpec{
-					ProjectID: "project2",
-				},
 				Hosts: []pipelineStateHost{
-					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
-					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
-					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
+					{ComputeHost: "host4", HypervisorHostname: "hypervisor4"},
+					{ComputeHost: "host5", HypervisorHostname: "hypervisor5"},
 				},
 				Weights: map[string]float64{
-					"host1": 1.0,
-					"host2": 1.0,
-					"host3": 1.0,
+					"host4": 1.0,
+					"host5": 1.0,
 				},
 			},
 			expectedHosts: map[string]float64{
-				"host1": 1.0,
-				"host2": 1.0,
-				"host3": 1.0,
-			},
-		},
-		{
-			name: "No noisy project data",
-			state: &pipelineState{
-				Spec: pipelineStateSpec{
-					ProjectID: "project3",
-				},
-				Hosts: []pipelineStateHost{
-					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
-					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
-					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
-				Weights: map[string]float64{
-					"host1": 1.0,
-					"host2": 1.0,
-					"host3": 1.0,
-				},
-			},
-			expectedHosts: map[string]float64{
-				"host1": 1.0,
-				"host2": 1.0,
-				"host3": 1.0,
+				"host4": 1.0,
+				"host5": 1.0,
 			},
 		},
 	}
@@ -126,10 +96,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 			}
 			for host, expectedWeight := range tt.expectedHosts {
 				if tt.state.Weights[host] != expectedWeight {
-					t.Errorf(
-						"expected weight for host %s to be %f, got %f",
-						host, expectedWeight, tt.state.Weights[host],
-					)
+					t.Errorf("expected weight for host %s to be %f, got %f", host, expectedWeight, tt.state.Weights[host])
 				}
 			}
 		})

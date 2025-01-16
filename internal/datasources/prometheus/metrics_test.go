@@ -27,25 +27,25 @@ func TestVROpsHostMetric(t *testing.T) {
 	}
 
 	if metric.GetName() != "cpu_usage" {
-		t.Errorf("Expected name to be 'cpu_usage', got %s", metric.GetName())
+		t.Errorf("expected name to be 'cpu_usage', got %s", metric.GetName())
 	}
 
 	if metric.GetTimestamp().IsZero() {
-		t.Error("Expected timestamp to be set")
+		t.Error("expected timestamp to be set")
 	}
 
 	metric.SetTimestamp(time.Unix(0, 0))
 	if !metric.GetTimestamp().Equal(time.Unix(0, 0)) {
-		t.Errorf("Expected timestamp to be '1970-01-01 00:00:00 +0000 UTC', got %s", metric.GetTimestamp())
+		t.Errorf("expected timestamp to be '1970-01-01 00:00:00 +0000 UTC', got %s", metric.GetTimestamp())
 	}
 
 	if metric.GetValue() != 0.5 {
-		t.Errorf("Expected value to be 0.5, got %f", metric.GetValue())
+		t.Errorf("expected value to be 0.5, got %f", metric.GetValue())
 	}
 
 	metric.SetValue(1.0)
 	if metric.GetValue() != 1.0 {
-		t.Errorf("Expected value to be 1.0, got %f", metric.GetValue())
+		t.Errorf("expected value to be 1.0, got %f", metric.GetValue())
 	}
 }
 
@@ -71,24 +71,24 @@ func TestVROpsVMMetric(t *testing.T) {
 	}
 
 	if metric.GetName() != "cpu_usage" {
-		t.Errorf("Expected name to be 'cpu_usage', got %s", metric.GetName())
+		t.Errorf("expected name to be 'cpu_usage', got %s", metric.GetName())
 	}
 
 	if metric.GetTimestamp().IsZero() {
-		t.Error("Expected timestamp to be set")
+		t.Error("expected timestamp to be set")
 	}
 
 	metric.SetTimestamp(time.Unix(0, 0))
 	if !metric.GetTimestamp().Equal(time.Unix(0, 0)) {
-		t.Errorf("Expected timestamp to be '1970-01-01 00:00:00 +0000 UTC', got %s", metric.GetTimestamp())
+		t.Errorf("expected timestamp to be '1970-01-01 00:00:00 +0000 UTC', got %s", metric.GetTimestamp())
 	}
 
 	if metric.GetValue() != 0.5 {
-		t.Errorf("Expected value to be 0.5, got %f", metric.GetValue())
+		t.Errorf("expected value to be 0.5, got %f", metric.GetValue())
 	}
 
 	metric.SetValue(1.0)
 	if metric.GetValue() != 1.0 {
-		t.Errorf("Expected value to be 1.0, got %f", metric.GetValue())
+		t.Errorf("expected value to be 1.0, got %f", metric.GetValue())
 	}
 }

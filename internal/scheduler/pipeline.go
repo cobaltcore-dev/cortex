@@ -14,7 +14,11 @@ type pipelineStateSpec struct {
 }
 
 type pipelineStateHost struct {
-	Name   string
+	// Name of the Nova compute host, e.g. nova-compute-bb123.
+	ComputeHost string
+	// Name of the hypervisor hostname, e.g. domain-c123.<uuid>
+	HypervisorHostname string
+	// Status of the host, e.g. "enabled".
 	Status string
 }
 
@@ -41,7 +45,12 @@ type pipeline struct {
 func NewPipeline(db db.DB) Pipeline {
 	return &pipeline{
 		Steps: []PipelineStep{
+			// Avoid placing vms of a project on the same host where
+			// other vms of the same project are running, if the vms of
+			// this project are known to be noisy.
 			NewAntiAffinityNoisyProjectsStep(db),
+			// Avoid placing vms on hosts that are highly contended.
+			NewAvoidContendedHostsStep(db),
 		},
 	}
 }
@@ -55,12 +64,14 @@ func (p *pipeline) Run(state *pipelineState) ([]string, error) {
 	}
 	// Order the list of hosts by their weights.
 	sort.Slice(state.Hosts, func(i, j int) bool {
-		return state.Weights[state.Hosts[i].Name] > state.Weights[state.Hosts[j].Name]
+		hI := state.Hosts[i].ComputeHost
+		hJ := state.Hosts[j].ComputeHost
+		return state.Weights[hI] > state.Weights[hJ]
 	})
 	// Flatten to a list of host names.
 	hostNames := make([]string, len(state.Hosts))
 	for i, host := range state.Hosts {
-		hostNames[i] = host.Name
+		hostNames[i] = host.ComputeHost
 	}
 	return hostNames, nil
 }

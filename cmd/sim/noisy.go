@@ -1,14 +1,13 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package main
+package sim
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 
 	"github.com/cobaltcore-dev/cortex/internal/datasources/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -20,7 +19,7 @@ import (
 // Simulate the scheduling of a VM that belongs to a noisy project.
 // This function fetches the noisy projects from the DB and sends a
 // scheduling request for the most noisy project.
-func simulateNoisyVMScheduling() {
+func SimulateNoisyVMScheduling() {
 	db := db.NewDB()
 	db.Init()
 	defer db.Close()
@@ -56,8 +55,9 @@ func simulateNoisyVMScheduling() {
 	weights := make(map[string]float64)
 	for i, hypervisor := range hypervisors {
 		hosts[i] = scheduler.APINovaExternalSchedulerRequestHost{
-			Name:   hypervisor.ServiceHost,
-			Status: hypervisor.Status,
+			ComputeHost:        hypervisor.ServiceHost,
+			HypervisorHostname: hypervisor.Hostname,
+			Status:             hypervisor.Status,
 		}
 		weights[hypervisor.ServiceHost] = 1.0
 	}
@@ -95,23 +95,11 @@ func simulateNoisyVMScheduling() {
 		return
 	}
 
-	var response scheduler.APINovaExternalSchedulerResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		logging.Log.Error("failed to decode response", "error", err)
+	// Print out response json (without unmarshalling it)
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
+		logging.Log.Error("failed to read response", "error", err)
 		return
 	}
-
-	logging.Log.Info("received response", "hosts", len(response.Hosts))
-}
-
-func main() {
-	args := os.Args[1:]
-	if len(args) == 0 {
-		logging.Log.Error("usage: sim [--noisy]")
-		panic("invalid usage")
-	}
-	if args[0] == "--noisy" {
-		simulateNoisyVMScheduling()
-		os.Exit(0)
-	}
+	logging.Log.Info("received response", "body", buf.String())
 }

@@ -166,9 +166,9 @@ func TestMarshalOpenStackHypervisor(t *testing.T) {
 
 	// Check if the data contains "service":
 	if !json.Valid(data) {
-		t.Error("Expected valid JSON, got invalid")
+		t.Error("expected valid JSON, got invalid")
 	}
 	if !strings.Contains(string(data), "service") {
-		t.Error("Expected JSON to contain 'service'")
+		t.Error("expected JSON to contain 'service'")
 	}
 }

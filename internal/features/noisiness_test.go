@@ -90,14 +90,14 @@ func TestProjectNoisinessExtractor_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_project_noisiness table
 	var noisiness []ProjectNoisiness
-	q := `SELECT * FROM feature_project_noisiness ORDER BY project, host`
+	q := `SELECT * FROM feature_project_noisiness ORDER BY project, compute_host`
 	if _, err := mockDB.Get().Query(&noisiness, q); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	expected := []ProjectNoisiness{
-		{Project: "project1", Host: "service_host1", AvgCPUOfProject: 55},
-		{Project: "project1", Host: "service_host2", AvgCPUOfProject: 55},
-		{Project: "project2", Host: "service_host1", AvgCPUOfProject: 70},
+		{Project: "project1", ComputeHost: "service_host1", AvgCPUOfProject: 55},
+		{Project: "project1", ComputeHost: "service_host2", AvgCPUOfProject: 55},
+		{Project: "project2", ComputeHost: "service_host1", AvgCPUOfProject: 70},
 	}
 	if len(noisiness) != len(expected) {
 		t.Fatalf("expected %d rows, got %d", len(expected), len(noisiness))
