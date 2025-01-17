@@ -1,0 +1,143 @@
+# All secrets should be put under this key.
+# These values will not be included in the config.json file.
+secrets:
+  postgres:
+    port: "5432"
+    database: postgres
+    username: postgres
+    password: secret
+    host: cortex-postgresql
+
+  openstack:
+    authUrl:
+    username:
+    password:
+    projectName:
+    userDomainName:
+    projectDomainName:
+
+  prometheus:
+    url:
+
+replicaCount: 1
+
+image:
+  repository: cortex
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "main"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /up
+    port: http
+readinessProbe:
+  httpGet:
+    path: /up
+    port: http
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+postgresql:
+  volumePermissions:
+    enabled: true
+  auth:
+    postgresPassword: secret
+  service:
+    ports:
+      postgresql: 5432
+
+# ######### Values passed to the service by conf.yaml ###########
+conf:
+  sync:
+    metrics:
+      - name: vrops_virtualmachine_cpu_demand_ratio
+        type: vrops_vm_metric
+        timeRangeSeconds: 2419200 # 4 weeks
+        intervalSeconds: 86400 # 1 day
+        resolutionSeconds: 43200 # 12 hours
+      - name: vrops_hostsystem_cpu_contention_percentage
+        type: vrops_host_metric
+        timeRangeSeconds: 2419200 # 4 weeks
+        intervalSeconds: 86400 # 1 day
+        resolutionSeconds: 43200 # 12 hours
+    openstack:
+      hypervisors: true
+      servers: true
+  features:
+    extractors:
+      # Depends on:
+      #   metrics.vrops_virtualmachine_cpu_demand_ratio
+      #   metrics.vrops_hostsystem_cpu_contention_percentage
+      #   openstack.hypervisors
+      #   openstack.servers
+      - name: vrops_hostsystem_resolver
+      # Depends on:
+      #   metrics.vrops_virtualmachine_cpu_demand_ratio
+      #   openstack.hypervisors
+      #   openstack.servers
+      - name: vrops_project_noisiness_extractor
+      # Depends on:
+      #   extractors.vrops_hostsystem_resolver
+      #   metrics.vrops_hostsystem_cpu_contention_percentage
+      - name: vrops_hostsystem_contention_extractor
+  scheduler:
+    steps:
+      # Depends on:
+      #   extractors.vrops_project_noisiness_extractor
+      - name: vrops_anti_affinity_noisy_projects
+        options:
+          avgCPUThreshold: 20
+      # Depends on:
+      #   extractors.vrops_hostsystem_contention_extractor
+      - name: vrops_avoid_contended_hosts
+        options:
+          avgCPUContentionThreshold: 10
+          maxCPUContentionThreshold: 20

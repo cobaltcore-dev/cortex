@@ -22,16 +22,24 @@ type featureExtractorPipeline struct {
 	FeatureExtractors []FeatureExtractor
 }
 
-func NewFeatureExtractorPipeline(db db.DB) FeatureExtractorPipeline {
+func NewPipeline(database db.DB) FeatureExtractorPipeline {
+	conf := NewFeaturesConfig()
+	extractorsByNames := map[string]func(db.DB) FeatureExtractor{
+		"vrops_hostsystem_resolver":             NewVROpsHostsystemResolver,
+		"vrops_project_noisiness_extractor":     NewVROpsProjectNoisinessExtractor,
+		"vrops_hostsystem_contention_extractor": NewVROpsHostsystemContentionExtractor,
+	}
+	extractors := []FeatureExtractor{}
+	for _, extractorConfig := range conf.GetExtractors() {
+		if extractorFunc, ok := extractorsByNames[extractorConfig.Name]; ok {
+			extractor := extractorFunc(database)
+			extractors = append(extractors, extractor)
+		} else {
+			panic("unknown feature extractor: " + extractorConfig.Name)
+		}
+	}
 	return &featureExtractorPipeline{
-		FeatureExtractors: []FeatureExtractor{
-			// Resolve "hostsystem" label to Nova compute hosts.
-			NewVROpsHostsystemResolver(db),
-			// Extract how much resources projects consume on average.
-			NewProjectNoisinessExtractor(db),
-			// Extract how much CPU contention is seen on each compute host.
-			NewHostsystemContentionExtractor(db),
-		},
+		FeatureExtractors: extractors,
 	}
 }
 

@@ -46,12 +46,12 @@ type PrometheusAPI[M PrometheusMetric] interface {
 }
 
 type prometheusAPI[M PrometheusMetric] struct {
-	Conf PrometheusConfig
+	Secrets PrometheusSecrets
 }
 
 func NewPrometheusAPI[M PrometheusMetric]() PrometheusAPI[M] {
 	return &prometheusAPI[M]{
-		Conf: NewPrometheusConfig(),
+		Secrets: NewPrometheusSecrets(),
 	}
 }
 
@@ -65,7 +65,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	resolutionSeconds int,
 ) (*prometheusTimelineData[M], error) {
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
-	url := api.Conf.GetPrometheusURL() + "/api/v1/query_range"
+	url := api.Secrets.GetPrometheusURL() + "/api/v1/query_range"
 	url += "?query=" + query
 	url += "&start=" + strconv.FormatInt(start.Unix(), 10)
 	url += "&end=" + strconv.FormatInt(end.Unix(), 10)

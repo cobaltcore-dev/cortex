@@ -11,24 +11,24 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-func TestHostsystemContentionExtractor_Init(t *testing.T) {
+func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
 	mockDB := testlib.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
-	extractor := NewHostsystemContentionExtractor(&mockDB)
+	extractor := NewVROpsHostsystemContentionExtractor(&mockDB)
 
 	if err := extractor.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the table was created
-	if _, err := mockDB.Get().Model((*HostsystemContention)(nil)).Exists(); err != nil {
+	if _, err := mockDB.Get().Model((*VROpsHostsystemContention)(nil)).Exists(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestHostsystemContentionExtractor_Extract(t *testing.T) {
+func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	mockDB := testlib.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
@@ -59,9 +59,9 @@ func TestHostsystemContentionExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_resolved_vrops_hostsystem table
+	// Insert mock data into the feature_vrops_resolved_hostsystem table
 	_, err = mockDB.Get().Exec(`
-        INSERT INTO feature_resolved_vrops_hostsystem (vrops_hostsystem, nova_compute_host)
+        INSERT INTO feature_vrops_resolved_hostsystem (vrops_hostsystem, nova_compute_host)
         VALUES
             ('hostsystem1', 'compute_host1'),
             ('hostsystem2', 'compute_host2')
@@ -70,7 +70,7 @@ func TestHostsystemContentionExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	extractor := NewHostsystemContentionExtractor(&mockDB)
+	extractor := NewVROpsHostsystemContentionExtractor(&mockDB)
 	if err := extractor.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -78,8 +78,8 @@ func TestHostsystemContentionExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Verify the data was inserted into the feature_hostsystem_contention table
-	var contentions []HostsystemContention
+	// Verify the data was inserted into the feature_vrops_hostsystem_contention table
+	var contentions []VROpsHostsystemContention
 	err = mockDB.Get().Model(&contentions).Select()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

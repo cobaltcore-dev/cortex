@@ -10,29 +10,32 @@ import (
 )
 
 type avoidContendedHostsStep struct {
-	DB db.DB
+	DB                        db.DB
+	AvgCPUContentionThreshold any
+	MaxCPUContentionThreshold any
 }
 
-func NewAvoidContendedHostsStep(db db.DB) PipelineStep {
-	return &avoidContendedHostsStep{DB: db}
+func NewAvoidContendedHostsStep(opts map[string]any, db db.DB) PipelineStep {
+	return &avoidContendedHostsStep{
+		DB:                        db,
+		AvgCPUContentionThreshold: opts["avgCPUContentionThreshold"],
+		MaxCPUContentionThreshold: opts["maxCPUContentionThreshold"],
+	}
 }
 
 // Downvote hosts that are highly contended.
 func (s *avoidContendedHostsStep) Run(state *pipelineState) error {
 	logging.Log.Info("scheduler: contention - avoid contended hosts")
 
-	// If the CPU usage is above these threshold, the host is considered contended.
-	const avgCPUContentionThreshold float64 = 10.0
-	const maxCPUContentionThreshold float64 = 20.0
-	var highlyContendedHosts []features.HostsystemContention
+	var highlyContendedHosts []features.VROpsHostsystemContention
 	if err := s.DB.Get().
 		Model(&highlyContendedHosts).
-		Where("avg_cpu_contention > ?", avgCPUContentionThreshold).
-		WhereOr("max_cpu_contention > ?", maxCPUContentionThreshold).
+		Where("avg_cpu_contention > ?", s.AvgCPUContentionThreshold).
+		WhereOr("max_cpu_contention > ?", s.MaxCPUContentionThreshold).
 		Select(); err != nil {
 		return err
 	}
-	var hostsByName = make(map[string]features.HostsystemContention)
+	var hostsByName = make(map[string]features.VROpsHostsystemContention)
 	for _, h := range highlyContendedHosts {
 		hostsByName[h.ComputeHost] = h
 	}

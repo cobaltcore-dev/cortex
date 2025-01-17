@@ -78,7 +78,7 @@
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "SELECT\n  project, compute_host, avg_cpu_of_project\nFROM feature_project_noisiness\nORDER BY avg_cpu_of_project DESC LIMIT 10;",
+          "rawSql": "SELECT\n  project, compute_host, avg_cpu_of_project\nFROM feature_vrops_project_noisiness\nORDER BY avg_cpu_of_project DESC LIMIT 10;",
           "refId": "A",
           "select": [
             [
@@ -152,7 +152,7 @@
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "SELECT\n  *\nFROM feature_hostsystem_contention\nORDER BY avg_cpu_contention DESC LIMIT 10;",
+          "rawSql": "SELECT\n  *\nFROM feature_vrops_hostsystem_contention\nORDER BY avg_cpu_contention DESC LIMIT 10;",
           "refId": "A",
           "select": [
             [

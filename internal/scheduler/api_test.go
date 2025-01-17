@@ -26,7 +26,9 @@ func TestCanRunScheduler(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	api := NewExternalSchedulingAPI(&mockDB).(*externalSchedulingAPI)
+	api := &externalSchedulingAPI{
+		Pipeline: &mockPipeline{},
+	}
 
 	tests := []struct {
 		name    string

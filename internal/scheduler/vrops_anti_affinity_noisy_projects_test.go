@@ -18,7 +18,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	// Create dependency tables
 	deps := []interface{}{
-		(*features.ProjectNoisiness)(nil),
+		(*features.VROpsProjectNoisiness)(nil),
 	}
 	for _, dep := range deps {
 		if err := mockDB.
@@ -29,9 +29,9 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		}
 	}
 
-	// Insert mock data into the feature_project_noisiness table
+	// Insert mock data into the feature_vrops_project_noisiness table
 	_, err := mockDB.Get().Exec(`
-        INSERT INTO feature_project_noisiness (project, compute_host, avg_cpu_of_project)
+        INSERT INTO feature_vrops_project_noisiness (project, compute_host, avg_cpu_of_project)
         VALUES
             ('project1', 'host1', 25.0),
             ('project1', 'host2', 30.0),
@@ -40,7 +40,10 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	step := NewAntiAffinityNoisyProjectsStep(&mockDB)
+	opts := map[string]any{
+		"avgCPUThreshold": 20.0,
+	}
+	step := NewVROpsAntiAffinityNoisyProjectsStep(opts, &mockDB)
 
 	tests := []struct {
 		name          string

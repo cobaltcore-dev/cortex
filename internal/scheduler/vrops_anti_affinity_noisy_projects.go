@@ -9,23 +9,26 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
-type antiAffinityNoisyProjectsStep struct {
-	DB db.DB
+type vROpsAntiAffinityNoisyProjectsStep struct {
+	DB              db.DB
+	AvgCPUThreshold any
 }
 
-func NewAntiAffinityNoisyProjectsStep(db db.DB) PipelineStep {
-	return &antiAffinityNoisyProjectsStep{DB: db}
+func NewVROpsAntiAffinityNoisyProjectsStep(opts map[string]any, db db.DB) PipelineStep {
+	return &vROpsAntiAffinityNoisyProjectsStep{
+		DB:              db,
+		AvgCPUThreshold: opts["avgCPUThreshold"],
+	}
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *antiAffinityNoisyProjectsStep) Run(state *pipelineState) error {
+func (s *vROpsAntiAffinityNoisyProjectsStep) Run(state *pipelineState) error {
 	logging.Log.Info("scheduler: anti-affinity - noisy projects")
 
-	// If the average CPU usage is above this threshold, the project is considered noisy.
-	const avgCPUThreshold float64 = 20.0
-	var noisyProjects []features.ProjectNoisiness
+	// If the average CPU usage is above the threshold, the project is considered noisy.
+	var noisyProjects []features.VROpsProjectNoisiness
 	if err := s.DB.Get().Model(&noisyProjects).
-		Where("avg_cpu_of_project > ?", avgCPUThreshold).
+		Where("avg_cpu_of_project > ?", s.AvgCPUThreshold).
 		Where("project = ?", state.Spec.ProjectID).
 		Select(); err != nil {
 		return err

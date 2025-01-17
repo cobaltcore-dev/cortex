@@ -78,12 +78,12 @@ type KeystoneAPI interface {
 }
 
 type keystoneAPI struct {
-	Conf OpenStackConfig
+	Conf OpenStackSecrets
 }
 
 func NewKeystoneAPI() KeystoneAPI {
 	return &keystoneAPI{
-		Conf: NewOpenStackConfig(),
+		Conf: NewOpenStackSecrets(),
 	}
 }
 

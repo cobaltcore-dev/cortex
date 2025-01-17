@@ -60,7 +60,7 @@ func TestFetchMetrics(t *testing.T) {
 	resolutionSeconds := 60
 
 	api := &prometheusAPI[*VROpsVMMetric]{
-		Conf: &prometheusConfig{
+		Secrets: &prometheusSecrets{
 			PrometheusURL: server.URL,
 		},
 	}
@@ -96,7 +96,7 @@ func TestFetchMetricsFailure(t *testing.T) {
 	resolutionSeconds := 60
 
 	api := &prometheusAPI[*VROpsVMMetric]{
-		Conf: &prometheusConfig{
+		Secrets: &prometheusSecrets{
 			PrometheusURL: server.URL,
 		},
 	}

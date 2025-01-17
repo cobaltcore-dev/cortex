@@ -93,7 +93,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Verify the data was inserted into the feature_resolved_vrops_hostsystem table
+	// Verify the data was inserted into the feature_vrops_resolved_hostsystem table
 	var resolvedHostsystems []ResolvedVROpsHostsystem
 	err = mockDB.Get().Model(&resolvedHostsystems).Select()
 	if err != nil {

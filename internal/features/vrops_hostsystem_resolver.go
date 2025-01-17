@@ -11,7 +11,7 @@ import (
 
 type ResolvedVROpsHostsystem struct {
 	//lint:ignore U1000 Ignore unused field warning
-	tableName       struct{} `pg:"feature_resolved_vrops_hostsystem"`
+	tableName       struct{} `pg:"feature_vrops_resolved_hostsystem"`
 	VROpsHostsystem string   `pg:"vrops_hostsystem,notnull"`
 	NovaComputeHost string   `pg:"nova_compute_host,notnull"`
 }
@@ -43,11 +43,11 @@ func (e *vropsHostsystemResolver) Extract() error {
 		return err
 	}
 	defer tx.Close()
-	if _, err := tx.Exec("DELETE FROM feature_resolved_vrops_hostsystem"); err != nil {
+	if _, err := tx.Exec("DELETE FROM feature_vrops_resolved_hostsystem"); err != nil {
 		return tx.Rollback()
 	}
 	if _, err := tx.Exec(`
-		INSERT INTO feature_resolved_vrops_hostsystem (vrops_hostsystem, nova_compute_host)
+		INSERT INTO feature_vrops_resolved_hostsystem (vrops_hostsystem, nova_compute_host)
 		SELECT
 			m.hostsystem AS hostsystem,
 			h.service_host AS service_host

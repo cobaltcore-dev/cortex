@@ -2,13 +2,12 @@ module github.com/cobaltcore-dev/cortex
 
 go 1.23
 
-replace (
-	github.com/cobaltcore-dev/cortex/testlib => ./testlib
-)
+replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
 
 require (
 	github.com/go-pg/pg/v10 v10.14.0
 	github.com/ory/dockertest v3.3.5+incompatible
+	gopkg.in/yaml.v2 v2.3.0
 )
 
 require (

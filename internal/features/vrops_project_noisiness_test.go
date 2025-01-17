@@ -12,22 +12,22 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-func TestProjectNoisinessExtractor_Init(t *testing.T) {
+func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 	mockDB := testlib.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
-	extractor := NewProjectNoisinessExtractor(&mockDB)
+	extractor := NewVROpsProjectNoisinessExtractor(&mockDB)
 	if err := extractor.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	// Will fail when the table does not exist
-	if _, err := mockDB.Get().Model((*ProjectNoisiness)(nil)).Exists(); err != nil {
+	if _, err := mockDB.Get().Model((*VROpsProjectNoisiness)(nil)).Exists(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestProjectNoisinessExtractor_Extract(t *testing.T) {
+func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	mockDB := testlib.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
@@ -80,7 +80,7 @@ func TestProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	// Create an instance of the extractor
-	extractor := NewProjectNoisinessExtractor(&mockDB)
+	extractor := NewVROpsProjectNoisinessExtractor(&mockDB)
 	if err := extractor.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -88,13 +88,13 @@ func TestProjectNoisinessExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Verify the data was inserted into the feature_project_noisiness table
-	var noisiness []ProjectNoisiness
-	q := `SELECT * FROM feature_project_noisiness ORDER BY project, compute_host`
+	// Verify the data was inserted into the feature_vrops_project_noisiness table
+	var noisiness []VROpsProjectNoisiness
+	q := `SELECT * FROM feature_vrops_project_noisiness ORDER BY project, compute_host`
 	if _, err := mockDB.Get().Query(&noisiness, q); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	expected := []ProjectNoisiness{
+	expected := []VROpsProjectNoisiness{
 		{Project: "project1", ComputeHost: "service_host1", AvgCPUOfProject: 55},
 		{Project: "project1", ComputeHost: "service_host2", AvgCPUOfProject: 55},
 		{Project: "project2", ComputeHost: "service_host1", AvgCPUOfProject: 70},

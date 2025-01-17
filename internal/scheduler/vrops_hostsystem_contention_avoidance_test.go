@@ -18,7 +18,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 
 	// Create dependency tables
 	deps := []interface{}{
-		(*features.HostsystemContention)(nil),
+		(*features.VROpsHostsystemContention)(nil),
 	}
 	for _, dep := range deps {
 		if err := mockDB.
@@ -29,9 +29,9 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		}
 	}
 
-	// Insert mock data into the feature_hostsystem_contention table
+	// Insert mock data into the feature_vrops_hostsystem_contention table
 	_, err := mockDB.Get().Exec(`
-        INSERT INTO feature_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
+        INSERT INTO feature_vrops_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
         VALUES
             ('host1', 15.0, 25.0),
             ('host2', 5.0, 10.0),
@@ -42,7 +42,11 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	step := NewAvoidContendedHostsStep(&mockDB)
+	opts := map[string]any{
+		"avgCPUContentionThreshold": 10.0,
+		"maxCPUContentionThreshold": 20.0,
+	}
+	step := NewAvoidContendedHostsStep(opts, &mockDB)
 
 	tests := []struct {
 		name          string

@@ -43,8 +43,10 @@ spec:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- with .Values.volumeMounts }}
           volumeMounts:
+            - name: {{ include "cortex.fullname" . }}-config-volume
+              mountPath: /etc/config
+          {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
           envFrom:
@@ -54,8 +56,11 @@ spec:
                 name: prometheus-secrets
             - secretRef:
                 name: postgres-secrets
-      {{- with .Values.volumes }}
       volumes:
+        - name: {{ include "cortex.fullname" . }}-config-volume
+          configMap:
+            name: {{ include "cortex.fullname" . }}-config
+      {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.nodeSelector }}

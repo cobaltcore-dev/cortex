@@ -9,25 +9,25 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-type HostsystemContention struct {
+type VROpsHostsystemContention struct {
 	//lint:ignore U1000 Ignore unused field warning
-	tableName        struct{} `pg:"feature_hostsystem_contention"`
+	tableName        struct{} `pg:"feature_vrops_hostsystem_contention"`
 	ComputeHost      string   `pg:"compute_host,notnull"`
 	AvgCPUContention float64  `pg:"avg_cpu_contention,notnull"`
 	MaxCPUContention float64  `pg:"max_cpu_contention,notnull"`
 }
 
-type hostsystemContentionExtractor struct {
+type vROpsHostsystemContentionExtractor struct {
 	DB db.DB
 }
 
-func NewHostsystemContentionExtractor(db db.DB) FeatureExtractor {
-	return &hostsystemContentionExtractor{DB: db}
+func NewVROpsHostsystemContentionExtractor(db db.DB) FeatureExtractor {
+	return &vROpsHostsystemContentionExtractor{DB: db}
 }
 
 // Create the feature schema.
-func (e *hostsystemContentionExtractor) Init() error {
-	if err := e.DB.Get().Model((*HostsystemContention)(nil)).CreateTable(&orm.CreateTableOptions{
+func (e *vROpsHostsystemContentionExtractor) Init() error {
+	if err := e.DB.Get().Model((*VROpsHostsystemContention)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
 		return err
@@ -36,8 +36,8 @@ func (e *hostsystemContentionExtractor) Init() error {
 }
 
 // Extract CPU contention of hostsystems.
-// Depends on resolved vROps hostsystems (feature_resolved_vrops_hostsystem).
-func (e *hostsystemContentionExtractor) Extract() error {
+// Depends on resolved vROps hostsystems (feature_vrops_resolved_hostsystem).
+func (e *vROpsHostsystemContentionExtractor) Extract() error {
 	logging.Log.Info("calculating hostsystem contention")
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Get().Begin()
@@ -45,17 +45,17 @@ func (e *hostsystemContentionExtractor) Extract() error {
 		return err
 	}
 	defer tx.Close()
-	if _, err := tx.Exec("DELETE FROM feature_hostsystem_contention"); err != nil {
+	if _, err := tx.Exec("DELETE FROM feature_vrops_hostsystem_contention"); err != nil {
 		return tx.Rollback()
 	}
 	if _, err := tx.Exec(`
-		INSERT INTO feature_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
+		INSERT INTO feature_vrops_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
 		SELECT
 			h.nova_compute_host AS compute_host,
 			AVG(m.value) AS avg_cpu_contention,
 			MAX(m.value) AS max_cpu_contention
 		FROM vrops_host_metrics m
-		JOIN feature_resolved_vrops_hostsystem h ON m.hostsystem = h.vrops_hostsystem
+		JOIN feature_vrops_resolved_hostsystem h ON m.hostsystem = h.vrops_hostsystem
 		WHERE m.name = 'vrops_hostsystem_cpu_contention_percentage'
 		GROUP BY h.nova_compute_host;
     `); err != nil {

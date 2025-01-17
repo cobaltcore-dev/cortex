@@ -3,40 +3,48 @@
 
 package openstack
 
-import "github.com/cobaltcore-dev/cortex/internal/env"
+import (
+	"io"
+	"os"
+
+	"gopkg.in/yaml.v2"
+)
 
 type OpenStackConfig interface {
-	GetOSAuthURL() string
-	GetOSUsername() string
-	GetOSPassword() string
-	GetOSProjectName() string
-	GetOSUserDomainName() string
-	GetOSProjectDomainName() string
+	GetHypervisorsEnabled() bool
+	GetServersEnabled() bool
 }
 
 type openStackConfig struct {
-	OSAuthURL           string // URL to the OpenStack Keystone authentication endpoint.
-	OSUsername          string
-	OSPassword          string
-	OSProjectName       string
-	OSUserDomainName    string
-	OSProjectDomainName string
+	Sync struct {
+		OpenStack struct {
+			GetHypervisorsEnabled bool `yaml:"hypervisors"`
+			GetServersEnabled     bool `yaml:"servers"`
+		} `yaml:"openstack"`
+	} `yaml:"sync"`
 }
 
 func NewOpenStackConfig() OpenStackConfig {
-	return &openStackConfig{
-		OSAuthURL:           env.ForceGetenv("OS_AUTH_URL"),
-		OSUsername:          env.ForceGetenv("OS_USERNAME"),
-		OSPassword:          env.ForceGetenv("OS_PASSWORD"),
-		OSProjectName:       env.ForceGetenv("OS_PROJECT_NAME"),
-		OSUserDomainName:    env.ForceGetenv("OS_USER_DOMAIN_NAME"),
-		OSProjectDomainName: env.ForceGetenv("OS_PROJECT_DOMAIN_NAME"),
+	file, err := os.Open("/etc/config/conf.yaml")
+	if err != nil {
+		panic(err)
 	}
+	defer file.Close()
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		panic(err)
+	}
+	var config openStackConfig
+	if err := yaml.Unmarshal(bytes, &config); err != nil {
+		panic(err)
+	}
+	return &config
 }
 
-func (c *openStackConfig) GetOSAuthURL() string           { return c.OSAuthURL }
-func (c *openStackConfig) GetOSUsername() string          { return c.OSUsername }
-func (c *openStackConfig) GetOSPassword() string          { return c.OSPassword }
-func (c *openStackConfig) GetOSProjectName() string       { return c.OSProjectName }
-func (c *openStackConfig) GetOSUserDomainName() string    { return c.OSUserDomainName }
-func (c *openStackConfig) GetOSProjectDomainName() string { return c.OSProjectDomainName }
+func (c *openStackConfig) GetHypervisorsEnabled() bool {
+	return c.Sync.OpenStack.GetHypervisorsEnabled
+}
+
+func (c *openStackConfig) GetServersEnabled() bool {
+	return c.Sync.OpenStack.GetServersEnabled
+}

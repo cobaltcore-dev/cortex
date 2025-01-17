@@ -9,25 +9,25 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-type ProjectNoisiness struct {
+type VROpsProjectNoisiness struct {
 	//lint:ignore U1000 Ignore unused field warning
-	tableName       struct{} `pg:"feature_project_noisiness"`
+	tableName       struct{} `pg:"feature_vrops_project_noisiness"`
 	Project         string   `pg:"project,notnull"`
 	ComputeHost     string   `pg:"compute_host,notnull"`
 	AvgCPUOfProject float64  `pg:"avg_cpu_of_project,notnull"`
 }
 
-type projectNoisinessExtractor struct {
+type vROpsProjectNoisinessExtractor struct {
 	DB db.DB
 }
 
-func NewProjectNoisinessExtractor(db db.DB) FeatureExtractor {
-	return &projectNoisinessExtractor{DB: db}
+func NewVROpsProjectNoisinessExtractor(db db.DB) FeatureExtractor {
+	return &vROpsProjectNoisinessExtractor{DB: db}
 }
 
 // Create the schema for the project noisiness feature.
-func (e *projectNoisinessExtractor) Init() error {
-	if err := e.DB.Get().Model((*ProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
+func (e *vROpsProjectNoisinessExtractor) Init() error {
+	if err := e.DB.Get().Model((*VROpsProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
 		return err
@@ -42,7 +42,7 @@ func (e *projectNoisinessExtractor) Init() error {
 // 3. Store the avg cpu usage together with the current hosts in the database.
 // This feature can then be used to draw new VMs away from VMs of the same
 // project in case this project is known to cause high cpu usage.
-func (e *projectNoisinessExtractor) Extract() error {
+func (e *vROpsProjectNoisinessExtractor) Extract() error {
 	logging.Log.Info("extracting noisy projects")
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Get().Begin()
@@ -50,7 +50,7 @@ func (e *projectNoisinessExtractor) Extract() error {
 		return err
 	}
 	defer tx.Close()
-	if _, err := tx.Exec("DELETE FROM feature_project_noisiness"); err != nil {
+	if _, err := tx.Exec("DELETE FROM feature_vrops_project_noisiness"); err != nil {
 		return tx.Rollback()
 	}
 	// Extract the new data.
@@ -76,7 +76,7 @@ func (e *projectNoisinessExtractor) Extract() error {
             GROUP BY s.tenant_id, h.service_host
 			ORDER BY avg_cpu_of_project DESC
         )
-		INSERT INTO feature_project_noisiness
+		INSERT INTO feature_vrops_project_noisiness
         SELECT
             tenant_id,
             service_host,

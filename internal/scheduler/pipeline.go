@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 type pipelineStateSpec struct {
@@ -42,16 +43,28 @@ type pipeline struct {
 	Steps []PipelineStep
 }
 
-func NewPipeline(db db.DB) Pipeline {
+func NewPipeline(database db.DB) Pipeline {
+	conf := NewSchedulerConfig()
+	stepsByNames := map[string]func(opts map[string]any, db db.DB) PipelineStep{
+		"vrops_anti_affinity_noisy_projects": NewVROpsAntiAffinityNoisyProjectsStep,
+		"vrops_avoid_contended_hosts":        NewAvoidContendedHostsStep,
+	}
+	steps := []PipelineStep{}
+	for _, stepConfig := range conf.GetSteps() {
+		if stepFunc, ok := stepsByNames[stepConfig.Name]; ok {
+			step := stepFunc(stepConfig.Options, database)
+			steps = append(steps, step)
+			logging.Log.Info(
+				"scheduler: added step",
+				"name", stepConfig.Name,
+				"options", stepConfig.Options,
+			)
+		} else {
+			panic("unknown pipeline step: " + stepConfig.Name)
+		}
+	}
 	return &pipeline{
-		Steps: []PipelineStep{
-			// Avoid placing vms of a project on the same host where
-			// other vms of the same project are running, if the vms of
-			// this project are known to be noisy.
-			NewAntiAffinityNoisyProjectsStep(db),
-			// Avoid placing vms on hosts that are highly contended.
-			NewAvoidContendedHostsStep(db),
-		},
+		Steps: steps,
 	}
 }
 

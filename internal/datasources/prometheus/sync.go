@@ -8,17 +8,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
 )
-
-type Syncer interface {
-	Init()
-	Sync()
-}
 
 type syncer[M PrometheusMetric] struct {
 	// The time range to sync the metrics in.
@@ -36,34 +32,49 @@ type syncer[M PrometheusMetric] struct {
 	DB            db.DB
 }
 
-func NewSyncers(db db.DB) []Syncer {
-	return []Syncer{
-		NewSyncer[*VROpsVMMetric](db, "vrops_virtualmachine_cpu_demand_ratio"),
-		NewSyncer[*VROpsHostMetric](db, "vrops_hostsystem_cpu_contention_percentage"),
+// Load syncers configured by the config map.
+func NewSyncers(db db.DB) []datasources.Datasource {
+	conf := NewPrometheusConfig()
+	logging.Log.Info("loading syncers", "metrics", conf.GetMetricsToSync())
+	syncers := []datasources.Datasource{}
+	for _, metricConfig := range conf.GetMetricsToSync() {
+		syncers = append(syncers, newSyncer(db, metricConfig))
+	}
+	return syncers
+}
+
+func newSyncer(db db.DB, c MetricConfig) datasources.Datasource {
+	switch c.Type {
+	case "vrops_vm_metric":
+		return newSyncerOfType[*VROpsVMMetric](db, c)
+	case "vrops_host_metric":
+		return newSyncerOfType[*VROpsHostMetric](db, c)
+	default:
+		panic("unknown metric type: " + c.Type)
 	}
 }
 
-func NewSyncer[M PrometheusMetric](db db.DB, metricName string) Syncer {
+func newSyncerOfType[M PrometheusMetric](db db.DB, c MetricConfig) datasources.Datasource {
 	return &syncer[M]{
-		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
-		SyncInterval:          24 * time.Hour,
-		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
-		SyncTimeout:           10 * time.Second,
-
-		MetricName:    metricName,
-		PrometheusAPI: NewPrometheusAPI[M](),
-		DB:            db,
+		SyncTimeRange:         time.Duration(c.TimeRangeSeconds) * time.Second,
+		SyncInterval:          time.Duration(c.IntervalSeconds) * time.Second,
+		SyncResolutionSeconds: c.ResolutionSeconds,
+		MetricName:            c.Name,
+		PrometheusAPI:         NewPrometheusAPI[M](),
+		DB:                    db,
 	}
 }
 
 // Create the necessary database tables if they do not exist.
 func (s *syncer[M]) Init() {
+	logging.Log.Info("initializing syncer", "metricName", s.MetricName)
 	var model M
 	if err := s.DB.Get().Model(model).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
 		panic(err)
 	}
+	logging.Log.Info("created table", "tableName", model.GetTableName())
 }
 
 // Get the start of the sync window for the given metric.
@@ -103,11 +114,11 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 }
 
 // Sync the given metric from Prometheus.
-// The sync is done in intervals of 24 hours. We start from the given start time
-// and sync recursively until we are caught up with the current time. Metrics
-// outside of the window are deleted.
+// The sync is done in intervals. We start from the given start time
+// and sync recursively until we are caught up with the current time.
+// Metrics outside of the window are deleted.
 func (s *syncer[M]) sync(start time.Time) {
-	// Sync full days only.
+	// Sync full intervals only.
 	end := start.Add(s.SyncInterval)
 	if start.After(time.Now()) || end.After(time.Now()) {
 		return // Finished syncing.
@@ -148,13 +159,14 @@ func (s *syncer[M]) sync(start time.Time) {
 	logging.Log.Info("synced Prometheus data", "metrics", len(prometheusData.Metrics), "start", start, "end", end)
 
 	// Don't overload the Prometheus server.
-	time.Sleep(s.SyncTimeout)
+	time.Sleep(1 * time.Second)
 	// Continue syncing.
 	s.sync(end)
 }
 
 // Sync the Prometheus metrics with the database.
 func (s *syncer[M]) Sync() {
+	logging.Log.Info("syncing metrics", "metricName", s.MetricName)
 	// Sync this metric until we are caught up.
 	start, err := s.getSyncWindowStart()
 	if err != nil {
