@@ -4,6 +4,7 @@
 package features
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
@@ -23,14 +24,14 @@ type featureExtractorPipeline struct {
 }
 
 func NewPipeline(database db.DB) FeatureExtractorPipeline {
-	conf := NewFeaturesConfig()
+	config := conf.NewConfig().GetFeaturesConfig()
 	extractorsByNames := map[string]func(db.DB) FeatureExtractor{
 		"vrops_hostsystem_resolver":             NewVROpsHostsystemResolver,
 		"vrops_project_noisiness_extractor":     NewVROpsProjectNoisinessExtractor,
 		"vrops_hostsystem_contention_extractor": NewVROpsHostsystemContentionExtractor,
 	}
 	extractors := []FeatureExtractor{}
-	for _, extractorConfig := range conf.GetExtractors() {
+	for _, extractorConfig := range config.Extractors {
 		if extractorFunc, ok := extractorsByNames[extractorConfig.Name]; ok {
 			extractor := extractorFunc(database)
 			extractors = append(extractors, extractor)

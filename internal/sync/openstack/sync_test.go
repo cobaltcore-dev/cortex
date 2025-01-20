@@ -7,14 +7,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	"github.com/go-pg/pg/v10"
 )
-
-type mockOpenStackConfig struct{}
-
-func (m *mockOpenStackConfig) GetServersEnabled() bool     { return true }
-func (m *mockOpenStackConfig) GetHypervisorsEnabled() bool { return true }
 
 type mockServerAPI struct {
 	servers []OpenStackServer
@@ -71,7 +67,10 @@ func TestSyncer_Init(t *testing.T) {
 		auth: openStackKeystoneAuth{},
 	}
 	syncer := &syncer{
-		Config:        &mockOpenStackConfig{},
+		Config: conf.SyncOpenStackConfig{
+			ServersEnabled:     true,
+			HypervisorsEnabled: true,
+		},
 		ServerAPI:     mockServerAPI,
 		HypervisorAPI: mockHypervisorAPI,
 		KeystoneAPI:   mockKeyStoneAPI,
@@ -106,7 +105,10 @@ func TestSyncer_Sync(t *testing.T) {
 		auth: openStackKeystoneAuth{},
 	}
 	syncer := &syncer{
-		Config:        &mockOpenStackConfig{},
+		Config: conf.SyncOpenStackConfig{
+			ServersEnabled:     true,
+			HypervisorsEnabled: true,
+		},
 		ServerAPI:     mockServerAPI,
 		HypervisorAPI: mockHypervisorAPI,
 		KeystoneAPI:   mockKeyStoneAPI,
@@ -162,7 +164,10 @@ func TestSyncer_Sync_Failure(t *testing.T) {
 		auth: openStackKeystoneAuth{},
 	}
 	syncer := &syncer{
-		Config:        &mockOpenStackConfig{},
+		Config: conf.SyncOpenStackConfig{
+			ServersEnabled:     true,
+			HypervisorsEnabled: true,
+		},
 		ServerAPI:     mockServerAPI,
 		HypervisorAPI: mockHypervisorAPI,
 		KeystoneAPI:   mockKeyStoneAPI,

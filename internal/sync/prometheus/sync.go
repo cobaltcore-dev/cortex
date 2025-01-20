@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/datasources"
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
@@ -33,17 +34,17 @@ type syncer[M PrometheusMetric] struct {
 }
 
 // Load syncers configured by the config map.
-func NewSyncers(db db.DB) []datasources.Datasource {
-	conf := NewPrometheusConfig()
-	logging.Log.Info("loading syncers", "metrics", conf.GetMetricsToSync())
-	syncers := []datasources.Datasource{}
-	for _, metricConfig := range conf.GetMetricsToSync() {
+func NewSyncers(db db.DB) []sync.Datasource {
+	config := conf.NewConfig().GetSyncConfig().Prometheus
+	logging.Log.Info("loading syncers", "metrics", config.Metrics)
+	syncers := []sync.Datasource{}
+	for _, metricConfig := range config.Metrics {
 		syncers = append(syncers, newSyncer(db, metricConfig))
 	}
 	return syncers
 }
 
-func newSyncer(db db.DB, c MetricConfig) datasources.Datasource {
+func newSyncer(db db.DB, c conf.SyncPrometheusMetricConfig) sync.Datasource {
 	switch c.Type {
 	case "vrops_vm_metric":
 		return newSyncerOfType[*VROpsVMMetric](db, c)
@@ -54,7 +55,7 @@ func newSyncer(db db.DB, c MetricConfig) datasources.Datasource {
 	}
 }
 
-func newSyncerOfType[M PrometheusMetric](db db.DB, c MetricConfig) datasources.Datasource {
+func newSyncerOfType[M PrometheusMetric](db db.DB, c conf.SyncPrometheusMetricConfig) sync.Datasource {
 	return &syncer[M]{
 		SyncTimeRange:         time.Duration(c.TimeRangeSeconds) * time.Second,
 		SyncInterval:          time.Duration(c.IntervalSeconds) * time.Second,

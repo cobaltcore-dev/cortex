@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10"
 )
@@ -19,12 +20,12 @@ type DB interface {
 
 type db struct {
 	DBBackend *pg.DB
-	DBConfig  DBConfig
+	DBConfig  conf.SecretDBConfig
 }
 
 func NewDB() DB {
 	return &db{
-		DBConfig: NewDBConfig(),
+		DBConfig: conf.NewSecretConfig().SecretDBConfig,
 	}
 }
 
@@ -35,10 +36,10 @@ func (d *db) Init() {
 	}
 	c := d.DBConfig
 	opts := &pg.Options{
-		Addr:     c.GetDBHost() + ":" + c.GetDBPort(),
-		User:     c.GetDBUser(),
-		Password: c.GetDBPassword(),
-		Database: c.GetDBName(),
+		Addr:     c.DBHost + ":" + c.DBPort,
+		User:     c.DBUser,
+		Password: c.DBPassword,
+		Database: c.DBName,
 	}
 	d.DBBackend = pg.Connect(opts)
 

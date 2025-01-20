@@ -6,6 +6,7 @@ package scheduler
 import (
 	"sort"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
@@ -44,13 +45,13 @@ type pipeline struct {
 }
 
 func NewPipeline(database db.DB) Pipeline {
-	conf := NewSchedulerConfig()
+	config := conf.NewConfig()
 	stepsByNames := map[string]func(opts map[string]any, db db.DB) PipelineStep{
 		"vrops_anti_affinity_noisy_projects": NewVROpsAntiAffinityNoisyProjectsStep,
 		"vrops_avoid_contended_hosts":        NewAvoidContendedHostsStep,
 	}
 	steps := []PipelineStep{}
-	for _, stepConfig := range conf.GetSteps() {
+	for _, stepConfig := range config.GetSchedulerConfig().Steps {
 		if stepFunc, ok := stepsByNames[stepConfig.Name]; ok {
 			step := stepFunc(stepConfig.Options, database)
 			steps = append(steps, step)

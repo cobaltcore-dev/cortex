@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
 func TestFetchMetrics(t *testing.T) {
@@ -60,7 +62,7 @@ func TestFetchMetrics(t *testing.T) {
 	resolutionSeconds := 60
 
 	api := &prometheusAPI[*VROpsVMMetric]{
-		Secrets: &prometheusSecrets{
+		Secrets: conf.SecretPrometheusConfig{
 			PrometheusURL: server.URL,
 		},
 	}
@@ -96,7 +98,7 @@ func TestFetchMetricsFailure(t *testing.T) {
 	resolutionSeconds := 60
 
 	api := &prometheusAPI[*VROpsVMMetric]{
-		Secrets: &prometheusSecrets{
+		Secrets: conf.SecretPrometheusConfig{
 			PrometheusURL: server.URL,
 		},
 	}

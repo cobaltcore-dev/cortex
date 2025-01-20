@@ -9,11 +9,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/internal/datasources/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 )
 
 // Simulate the scheduling of a VM that belongs to a noisy project.

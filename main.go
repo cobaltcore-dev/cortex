@@ -9,12 +9,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/datasources/openstack"
-	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
 
 func main() {

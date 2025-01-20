@@ -6,8 +6,8 @@ package features
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/datasources/openstack"
-	"github.com/cobaltcore-dev/cortex/internal/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	"github.com/go-pg/pg/v10/orm"
 )

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
@@ -46,12 +47,12 @@ type PrometheusAPI[M PrometheusMetric] interface {
 }
 
 type prometheusAPI[M PrometheusMetric] struct {
-	Secrets PrometheusSecrets
+	Secrets conf.SecretPrometheusConfig
 }
 
 func NewPrometheusAPI[M PrometheusMetric]() PrometheusAPI[M] {
 	return &prometheusAPI[M]{
-		Secrets: NewPrometheusSecrets(),
+		Secrets: conf.NewSecretConfig().SecretPrometheusConfig,
 	}
 }
 
@@ -65,7 +66,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	resolutionSeconds int,
 ) (*prometheusTimelineData[M], error) {
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
-	url := api.Secrets.GetPrometheusURL() + "/api/v1/query_range"
+	url := api.Secrets.PrometheusURL + "/api/v1/query_range"
 	url += "?query=" + query
 	url += "&start=" + strconv.FormatInt(start.Unix(), 10)
 	url += "&end=" + strconv.FormatInt(end.Unix(), 10)

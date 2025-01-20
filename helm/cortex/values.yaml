@@ -97,17 +97,18 @@ postgresql:
 # ######### Values passed to the service by conf.yaml ###########
 conf:
   sync:
-    metrics:
-      - name: vrops_virtualmachine_cpu_demand_ratio
-        type: vrops_vm_metric
-        timeRangeSeconds: 2419200 # 4 weeks
-        intervalSeconds: 86400 # 1 day
-        resolutionSeconds: 43200 # 12 hours
-      - name: vrops_hostsystem_cpu_contention_percentage
-        type: vrops_host_metric
-        timeRangeSeconds: 2419200 # 4 weeks
-        intervalSeconds: 86400 # 1 day
-        resolutionSeconds: 43200 # 12 hours
+    prometheus:
+      metrics:
+        - name: vrops_virtualmachine_cpu_demand_ratio
+          type: vrops_vm_metric
+          timeRangeSeconds: 2419200 # 4 weeks
+          intervalSeconds: 86400 # 1 day
+          resolutionSeconds: 43200 # 12 hours
+        - name: vrops_hostsystem_cpu_contention_percentage
+          type: vrops_host_metric
+          timeRangeSeconds: 2419200 # 4 weeks
+          intervalSeconds: 86400 # 1 day
+          resolutionSeconds: 43200 # 12 hours
     openstack:
       hypervisors: true
       servers: true

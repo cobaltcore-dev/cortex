@@ -6,6 +6,7 @@ package db
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/testlib"
 )
 
@@ -16,7 +17,13 @@ func TestGet(t *testing.T) {
 
 	db := &db{
 		DBBackend: mockDB.Get(),
-		DBConfig:  &mockDB,
+		DBConfig: conf.SecretDBConfig{
+			DBHost:     mockDB.GetDBHost(),
+			DBPort:     mockDB.GetDBPort(),
+			DBUser:     mockDB.GetDBUser(),
+			DBPassword: mockDB.GetDBPassword(),
+			DBName:     mockDB.GetDBName(),
+		},
 	}
 	db.Init()
 	defer db.Close()
