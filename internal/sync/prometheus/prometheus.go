@@ -15,11 +15,17 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+// One metric datapoint in the Prometheus timeline.
 type PrometheusMetric interface {
+	// Table name into which the metric should be stored.
 	GetTableName() string
+	// Name under which the metric is stored in Prometheus.
 	GetName() string
+	// Value of this metric datapoint.
 	GetValue() float64
+	// Set the time of this metric datapoint.
 	SetTimestamp(time time.Time)
+	// Set the value of this metric datapoint.
 	SetValue(value float64)
 }
 
@@ -32,11 +38,13 @@ type prometheusTimelineData[M PrometheusMetric] struct {
 	End      time.Time
 }
 
+// Prometheus range metric returned by the query_range API.
 type prometheusRangeMetric[M PrometheusMetric] struct {
 	Metric M       `json:"metric"`
 	Values [][]any `json:"values"`
 }
 
+// Prometheus API to fetch metrics from Prometheus.
 type PrometheusAPI[M PrometheusMetric] interface {
 	FetchMetrics(
 		query string,
@@ -50,6 +58,7 @@ type prometheusAPI[M PrometheusMetric] struct {
 	Secrets conf.SecretPrometheusConfig
 }
 
+// Create a new Prometheus API with the given Prometheus metric type.
 func NewPrometheusAPI[M PrometheusMetric]() PrometheusAPI[M] {
 	return &prometheusAPI[M]{
 		Secrets: conf.NewSecretConfig().SecretPrometheusConfig,

@@ -72,11 +72,12 @@ func (d *db) Get() *pg.DB {
 	return d.DBBackend
 }
 
+// Closes the database connection.
 func (d *db) Close() {
-	if d.DBBackend != nil {
-		err := d.DBBackend.Close()
-		if err != nil {
-			logging.Log.Error("failed to close database connection", "error", err)
-		}
+	if d.DBBackend == nil {
+		return
+	}
+	if err := d.DBBackend.Close(); err != nil {
+		logging.Log.Error("failed to close database connection", "error", err)
 	}
 }

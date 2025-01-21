@@ -9,6 +9,14 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+// Configuration of feature extractors supported by the scheduler.
+// The features to extract are defined in the configuration file.
+var supportedExtractors = map[string]func(db.DB) FeatureExtractor{
+	"vrops_hostsystem_resolver":             NewVROpsHostsystemResolver,
+	"vrops_project_noisiness_extractor":     NewVROpsProjectNoisinessExtractor,
+	"vrops_hostsystem_contention_extractor": NewVROpsHostsystemContentionExtractor,
+}
+
 type FeatureExtractor interface {
 	Init() error
 	Extract() error
@@ -23,16 +31,13 @@ type featureExtractorPipeline struct {
 	FeatureExtractors []FeatureExtractor
 }
 
-func NewPipeline(database db.DB) FeatureExtractorPipeline {
-	config := conf.NewConfig().GetFeaturesConfig()
-	extractorsByNames := map[string]func(db.DB) FeatureExtractor{
-		"vrops_hostsystem_resolver":             NewVROpsHostsystemResolver,
-		"vrops_project_noisiness_extractor":     NewVROpsProjectNoisinessExtractor,
-		"vrops_hostsystem_contention_extractor": NewVROpsHostsystemContentionExtractor,
-	}
+// Create a new feature extractor pipeline with extractors contained in
+// the configuration.
+func NewPipeline(config conf.Config, database db.DB) FeatureExtractorPipeline {
+	moduleConfig := config.GetFeaturesConfig()
 	extractors := []FeatureExtractor{}
-	for _, extractorConfig := range config.Extractors {
-		if extractorFunc, ok := extractorsByNames[extractorConfig.Name]; ok {
+	for _, extractorConfig := range moduleConfig.Extractors {
+		if extractorFunc, ok := supportedExtractors[extractorConfig.Name]; ok {
 			extractor := extractorFunc(database)
 			extractors = append(extractors, extractor)
 		} else {

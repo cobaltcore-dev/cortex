@@ -101,44 +101,55 @@ conf:
       metrics:
         - name: vrops_virtualmachine_cpu_demand_ratio
           type: vrops_vm_metric
-          timeRangeSeconds: 2419200 # 4 weeks
-          intervalSeconds: 86400 # 1 day
-          resolutionSeconds: 43200 # 12 hours
         - name: vrops_hostsystem_cpu_contention_percentage
           type: vrops_host_metric
-          timeRangeSeconds: 2419200 # 4 weeks
-          intervalSeconds: 86400 # 1 day
-          resolutionSeconds: 43200 # 12 hours
     openstack:
       hypervisors: true
       servers: true
   features:
     extractors:
-      # Depends on:
-      #   metrics.vrops_virtualmachine_cpu_demand_ratio
-      #   metrics.vrops_hostsystem_cpu_contention_percentage
-      #   openstack.hypervisors
-      #   openstack.servers
       - name: vrops_hostsystem_resolver
-      # Depends on:
-      #   metrics.vrops_virtualmachine_cpu_demand_ratio
-      #   openstack.hypervisors
-      #   openstack.servers
+        dependencies:
+          sync:
+            prometheus:
+              metrics:
+                - vrops_virtualmachine_cpu_demand_ratio
+                - vrops_hostsystem_cpu_contention_percentage
+            openstack:
+              hypervisors: true
+              servers: true
       - name: vrops_project_noisiness_extractor
-      # Depends on:
-      #   extractors.vrops_hostsystem_resolver
-      #   metrics.vrops_hostsystem_cpu_contention_percentage
+        dependencies:
+          sync:
+            prometheus:
+              metrics:
+                - vrops_virtualmachine_cpu_demand_ratio
+            openstack:
+              hypervisors: true
+              servers: true
       - name: vrops_hostsystem_contention_extractor
+        dependencies:
+          features:
+            extractors:
+              - vrops_hostsystem_resolver
+          sync:
+            prometheus:
+              metrics:
+                - vrops_hostsystem_cpu_contention_percentage
   scheduler:
     steps:
-      # Depends on:
-      #   extractors.vrops_project_noisiness_extractor
       - name: vrops_anti_affinity_noisy_projects
         options:
           avgCPUThreshold: 20
-      # Depends on:
-      #   extractors.vrops_hostsystem_contention_extractor
+        dependencies:
+          features:
+            extractors:
+              - vrops_project_noisiness_extractor
       - name: vrops_avoid_contended_hosts
         options:
           avgCPUContentionThreshold: 10
           maxCPUContentionThreshold: 20
+        dependencies:
+          features:
+            extractors:
+              - vrops_hostsystem_contention_extractor

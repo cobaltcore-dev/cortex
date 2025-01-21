@@ -11,6 +11,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+// Configuration of steps supported by the scheduler.
+// The steps used by the scheduler are defined through the configuration file.
+var supportedSteps = map[string]func(opts map[string]any, db db.DB) PipelineStep{
+	"vrops_anti_affinity_noisy_projects": NewVROpsAntiAffinityNoisyProjectsStep,
+	"vrops_avoid_contended_hosts":        NewAvoidContendedHostsStep,
+}
+
 type pipelineStateSpec struct {
 	ProjectID string
 }
@@ -44,15 +51,11 @@ type pipeline struct {
 	Steps []PipelineStep
 }
 
-func NewPipeline(database db.DB) Pipeline {
-	config := conf.NewConfig()
-	stepsByNames := map[string]func(opts map[string]any, db db.DB) PipelineStep{
-		"vrops_anti_affinity_noisy_projects": NewVROpsAntiAffinityNoisyProjectsStep,
-		"vrops_avoid_contended_hosts":        NewAvoidContendedHostsStep,
-	}
+// Create a new pipeline with steps contained in the configuration.
+func NewPipeline(config conf.Config, database db.DB) Pipeline {
 	steps := []PipelineStep{}
 	for _, stepConfig := range config.GetSchedulerConfig().Steps {
-		if stepFunc, ok := stepsByNames[stepConfig.Name]; ok {
+		if stepFunc, ok := supportedSteps[stepConfig.Name]; ok {
 			step := stepFunc(stepConfig.Options, database)
 			steps = append(steps, step)
 			logging.Log.Info(

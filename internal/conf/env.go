@@ -9,6 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
+// Database configuration with the necessary connection parameters.
 type SecretDBConfig struct {
 	DBHost     string
 	DBPort     string
@@ -17,6 +18,7 @@ type SecretDBConfig struct {
 	DBName     string
 }
 
+// OpenStack configuration with the necessary connection parameters.
 type SecretOpenStackConfig struct {
 	OSAuthURL           string // URL to the OpenStack Keystone authentication endpoint.
 	OSUsername          string
@@ -26,6 +28,7 @@ type SecretOpenStackConfig struct {
 	OSProjectDomainName string
 }
 
+// Prometheus configuration with the necessary connection parameters.
 type SecretPrometheusConfig struct {
 	PrometheusURL string
 }
@@ -36,6 +39,7 @@ type SecretConfig struct {
 	SecretPrometheusConfig
 }
 
+// Get a secrets configuration from the environment.
 func NewSecretConfig() SecretConfig {
 	return SecretConfig{
 		SecretDBConfig: SecretDBConfig{

@@ -179,13 +179,13 @@ func TestHandler(t *testing.T) {
 			}
 			req, err := http.NewRequestWithContext(
 				context.Background(), tt.method,
-				APINovaExternalSchedulerURL, bytes.NewBuffer(requestBody),
+				api.GetNovaExternalSchedulerURL(), bytes.NewBuffer(requestBody),
 			)
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
 			}
 			rr := httptest.NewRecorder()
-			handler := http.HandlerFunc(api.Handler)
+			handler := http.HandlerFunc(api.NovaExternalScheduler)
 			handler.ServeHTTP(rr, req)
 
 			if status := rr.Code; status != tt.wantStatusCode {

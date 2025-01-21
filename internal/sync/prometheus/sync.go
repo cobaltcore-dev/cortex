@@ -17,6 +17,7 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
+// Prometheus syncer for an arbitrary prometheus metric model.
 type syncer[M PrometheusMetric] struct {
 	// The time range to sync the metrics in.
 	SyncTimeRange time.Duration
@@ -27,23 +28,27 @@ type syncer[M PrometheusMetric] struct {
 	SyncResolutionSeconds int
 	// Wait time between syncs to not overload the Prometheus server.
 	SyncTimeout time.Duration
-
-	MetricName    string
+	// The name of the metric to sync.
+	MetricName string
+	// The Prometheus API endpoint to fetch the metrics.
 	PrometheusAPI PrometheusAPI[M]
-	DB            db.DB
+	// The database to store the metrics in.
+	DB db.DB
 }
 
-// Load syncers configured by the config map.
-func NewSyncers(db db.DB) []sync.Datasource {
-	config := conf.NewConfig().GetSyncConfig().Prometheus
-	logging.Log.Info("loading syncers", "metrics", config.Metrics)
+// Create multiple syncers configured by the external service configuration.
+func NewSyncers(config conf.Config, db db.DB) []sync.Datasource {
+	moduleConfig := config.GetSyncConfig().Prometheus
+	logging.Log.Info("loading syncers", "metrics", moduleConfig.Metrics)
 	syncers := []sync.Datasource{}
-	for _, metricConfig := range config.Metrics {
+	for _, metricConfig := range moduleConfig.Metrics {
 		syncers = append(syncers, newSyncer(db, metricConfig))
 	}
 	return syncers
 }
 
+// Create a new syncer for the given metric configuration.
+// This function maps the given metric type to the implemented golang type.
 func newSyncer(db db.DB, c conf.SyncPrometheusMetricConfig) sync.Datasource {
 	switch c.Type {
 	case "vrops_vm_metric":
@@ -55,11 +60,28 @@ func newSyncer(db db.DB, c conf.SyncPrometheusMetricConfig) sync.Datasource {
 	}
 }
 
-func newSyncerOfType[M PrometheusMetric](db db.DB, c conf.SyncPrometheusMetricConfig) sync.Datasource {
+// Create a new syncer for the given metric type.
+// If no custom metrics granularity is set, the default values are used.
+func newSyncerOfType[M PrometheusMetric](
+	db db.DB, c conf.SyncPrometheusMetricConfig,
+) sync.Datasource {
+	// Set default values if none are provided.
+	var timeRangeSeconds = 2419200 // 4 weeks
+	if c.TimeRangeSeconds != nil {
+		timeRangeSeconds = *c.TimeRangeSeconds
+	}
+	var intervalSeconds = 86400 // 1 day
+	if c.IntervalSeconds != nil {
+		intervalSeconds = *c.IntervalSeconds
+	}
+	var resolutionSeconds = 43200 // 12 hours
+	if c.ResolutionSeconds != nil {
+		resolutionSeconds = *c.ResolutionSeconds
+	}
 	return &syncer[M]{
-		SyncTimeRange:         time.Duration(c.TimeRangeSeconds) * time.Second,
-		SyncInterval:          time.Duration(c.IntervalSeconds) * time.Second,
-		SyncResolutionSeconds: c.ResolutionSeconds,
+		SyncTimeRange:         time.Duration(timeRangeSeconds) * time.Second,
+		SyncInterval:          time.Duration(intervalSeconds) * time.Second,
+		SyncResolutionSeconds: resolutionSeconds,
 		MetricName:            c.Name,
 		PrometheusAPI:         NewPrometheusAPI[M](),
 		DB:                    db,

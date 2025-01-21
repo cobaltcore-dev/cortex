@@ -66,10 +66,12 @@ func TestSyncer_Init(t *testing.T) {
 	mockKeyStoneAPI := &mockKeyStoneAPI{
 		auth: openStackKeystoneAuth{},
 	}
+	serversEnabled := true
+	hypervisorsEnabled := true
 	syncer := &syncer{
 		Config: conf.SyncOpenStackConfig{
-			ServersEnabled:     true,
-			HypervisorsEnabled: true,
+			ServersEnabled:     &serversEnabled,
+			HypervisorsEnabled: &hypervisorsEnabled,
 		},
 		ServerAPI:     mockServerAPI,
 		HypervisorAPI: mockHypervisorAPI,
@@ -104,10 +106,12 @@ func TestSyncer_Sync(t *testing.T) {
 	mockKeyStoneAPI := &mockKeyStoneAPI{
 		auth: openStackKeystoneAuth{},
 	}
+	serversEnabled := true
+	hypervisorsEnabled := true
 	syncer := &syncer{
 		Config: conf.SyncOpenStackConfig{
-			ServersEnabled:     true,
-			HypervisorsEnabled: true,
+			ServersEnabled:     &serversEnabled,
+			HypervisorsEnabled: &hypervisorsEnabled,
 		},
 		ServerAPI:     mockServerAPI,
 		HypervisorAPI: mockHypervisorAPI,
@@ -163,10 +167,12 @@ func TestSyncer_Sync_Failure(t *testing.T) {
 	mockKeyStoneAPI := &mockKeyStoneAPI{
 		auth: openStackKeystoneAuth{},
 	}
+	serversEnabled := true
+	hypervisorsEnabled := true
 	syncer := &syncer{
 		Config: conf.SyncOpenStackConfig{
-			ServersEnabled:     true,
-			HypervisorsEnabled: true,
+			ServersEnabled:     &serversEnabled,
+			HypervisorsEnabled: &hypervisorsEnabled,
 		},
 		ServerAPI:     mockServerAPI,
 		HypervisorAPI: mockHypervisorAPI,

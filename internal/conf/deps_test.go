@@ -1,0 +1,64 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package conf
+
+import "testing"
+
+func TestValidConf(t *testing.T) {
+	content := `
+sync:
+  prometheus:
+    metrics:
+      - name: metric_1
+        type: metric_type_1
+  openstack:
+    servers: true
+features:
+  extractors:
+    - name: extractor_1
+      dependencies:
+        sync:
+          prometheus:
+            metrics:
+              - metric_1
+          openstack:
+            servers: true
+scheduler:
+  steps:
+    - name: scheduler_1
+      dependencies:
+        features:
+          extractors:
+            - extractor_1
+    - name: scheduler_2
+`
+	conf := newConfigFromBytes([]byte(content))
+	if err := conf.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestInvalidConf(t *testing.T) {
+	content := `
+sync:
+  prometheus:
+    metrics:
+      - name: metric_1
+        type: metric_type_1
+features:
+  extractors:
+    - name: extractor_1
+      dependencies:
+        sync:
+          prometheus:
+            metrics:
+              - metric_1
+          openstack:
+            hypervisors: true # missing dependency
+`
+	conf := newConfigFromBytes([]byte(content))
+	if err := conf.Validate(); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}

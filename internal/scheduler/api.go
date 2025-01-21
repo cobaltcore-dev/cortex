@@ -7,13 +7,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
-)
-
-const (
-	// NovaExternalSchedulerURL is the URL of the Nova external scheduler
-	APINovaExternalSchedulerURL = "/scheduler/nova/external"
 )
 
 // Spec object from the Nova scheduler pipeline.
@@ -53,17 +49,22 @@ type APINovaExternalSchedulerResponse struct {
 }
 
 type ExternalSchedulingAPI interface {
-	Handler(w http.ResponseWriter, r *http.Request)
+	NovaExternalScheduler(w http.ResponseWriter, r *http.Request)
+	GetNovaExternalSchedulerURL() string
 }
 
 type externalSchedulingAPI struct {
 	Pipeline Pipeline
 }
 
-func NewExternalSchedulingAPI(db db.DB) ExternalSchedulingAPI {
+func NewExternalSchedulingAPI(config conf.Config, db db.DB) ExternalSchedulingAPI {
 	return &externalSchedulingAPI{
-		Pipeline: NewPipeline(db),
+		Pipeline: NewPipeline(config, db),
 	}
+}
+
+func (api *externalSchedulingAPI) GetNovaExternalSchedulerURL() string {
+	return "/scheduler/nova/external"
 }
 
 // Check if the scheduler can run based on the request data.
@@ -98,7 +99,7 @@ func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSch
 // their status, and a map of weights that were calculated by the Nova weigher
 // pipeline. Some additional flags are also included.
 // The response contains an ordered list of hosts that the VM should be scheduled on.
-func (api *externalSchedulingAPI) Handler(w http.ResponseWriter, r *http.Request) {
+func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		logging.Log.Error("invalid request method", "method", r.Method)
 		http.Error(w, "invalid request method", http.StatusMethodNotAllowed)
@@ -112,7 +113,7 @@ func (api *externalSchedulingAPI) Handler(w http.ResponseWriter, r *http.Request
 	}
 	logging.Log.Info(
 		"handling POST request",
-		"url", APINovaExternalSchedulerURL, "rebuild", requestData.Rebuild,
+		"url", api.GetNovaExternalSchedulerURL(), "rebuild", requestData.Rebuild,
 		"hosts", len(requestData.Hosts), "spec", requestData.Spec,
 	)
 

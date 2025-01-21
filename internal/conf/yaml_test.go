@@ -37,9 +37,6 @@ sync:
         resolutionSeconds: 43200
       - name: vrops_hostsystem_cpu_contention_percentage
         type: vrops_host_metric
-        timeRangeSeconds: 2419200
-        intervalSeconds: 86400
-        resolutionSeconds: 43200
   openstack:
     hypervisors: true
     servers: true
@@ -66,10 +63,10 @@ scheduler:
 	if len(syncConfig.Prometheus.Metrics) != 2 {
 		t.Errorf("Expected 2 Prometheus metrics, got %d", len(syncConfig.Prometheus.Metrics))
 	}
-	if !syncConfig.OpenStack.HypervisorsEnabled {
+	if !*syncConfig.OpenStack.HypervisorsEnabled {
 		t.Errorf("Expected OpenStack hypervisors to be enabled")
 	}
-	if !syncConfig.OpenStack.ServersEnabled {
+	if !*syncConfig.OpenStack.ServersEnabled {
 		t.Errorf("Expected OpenStack servers to be enabled")
 	}
 

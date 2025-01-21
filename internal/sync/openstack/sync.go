@@ -20,9 +20,10 @@ type syncer struct {
 	DB            db.DB
 }
 
-func NewSyncer(db db.DB) sync.Datasource {
+// Create a new OpenStack syncer with the given configuration and database.
+func NewSyncer(config conf.Config, db db.DB) sync.Datasource {
 	return &syncer{
-		Config:        conf.NewConfig().GetSyncConfig().OpenStack,
+		Config:        config.GetSyncConfig().OpenStack,
 		ServerAPI:     NewServerAPI(),
 		HypervisorAPI: NewHypervisorAPI(),
 		KeystoneAPI:   NewKeystoneAPI(),
@@ -33,10 +34,10 @@ func NewSyncer(db db.DB) sync.Datasource {
 // Create the necessary database tables if they do not exist.
 func (s *syncer) Init() {
 	models := []any{}
-	if s.Config.ServersEnabled {
+	if s.Config.ServersEnabled != nil && *s.Config.ServersEnabled {
 		models = append(models, (*OpenStackServer)(nil))
 	}
-	if s.Config.HypervisorsEnabled {
+	if s.Config.HypervisorsEnabled != nil && *s.Config.HypervisorsEnabled {
 		models = append(models, (*OpenStackHypervisor)(nil))
 	}
 	for _, model := range models {
@@ -61,7 +62,7 @@ func (s *syncer) Sync() {
 		return
 	}
 
-	if s.Config.ServersEnabled {
+	if s.Config.ServersEnabled != nil && *s.Config.ServersEnabled {
 		serverlist, err := s.ServerAPI.Get(*auth, nil)
 		if err != nil {
 			logging.Log.Error("failed to get servers", "error", err)
@@ -79,7 +80,7 @@ func (s *syncer) Sync() {
 		logging.Log.Info("synced OpenStack", "servers", len(serverlist.Servers))
 	}
 
-	if s.Config.HypervisorsEnabled {
+	if s.Config.HypervisorsEnabled != nil && *s.Config.HypervisorsEnabled {
 		hypervisorlist, err := s.HypervisorAPI.Get(*auth, nil)
 		if err != nil {
 			logging.Log.Error("failed to get hypervisors", "error", err)

@@ -68,7 +68,7 @@ func SimulateNoisyVMScheduling() {
 		Weights: weights,
 	}
 
-	url := "http://localhost:8080" + scheduler.APINovaExternalSchedulerURL
+	url := "http://localhost:8080/scheduler/nova/external"
 	logging.Log.Info("sending POST request", "url", url)
 	requestBody, err := json.Marshal(request)
 	if err != nil {
