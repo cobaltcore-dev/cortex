@@ -12,7 +12,8 @@ docker_build('cortex', '.')
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo('bitnami', 'https://charts.bitnami.com/bitnami')
 k8s_yaml(helm('./helm/cortex', name='cortex', set=values))
-k8s_resource('cortex', port_forwards=8080)
+k8s_resource('cortex', port_forwards='8080:8080') # api endpoint
+k8s_resource('cortex', port_forwards='2112:2112') # metrics endpoint
 k8s_resource('cortex-postgresql', port_forwards=5432)
 
 docker_build('plutono', 'plutono')

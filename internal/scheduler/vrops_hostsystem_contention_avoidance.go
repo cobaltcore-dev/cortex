@@ -7,24 +7,47 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type avoidContendedHostsStep struct {
 	DB                        db.DB
 	AvgCPUContentionThreshold any
 	MaxCPUContentionThreshold any
+	runCounter                prometheus.Counter
+	runTimer                  prometheus.Histogram
 }
 
 func NewAvoidContendedHostsStep(opts map[string]any, db db.DB) PipelineStep {
+	runCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "cortex_scheduler_avoid_contended_hosts_runs",
+		Help: "Total number of avoid contended hosts runs",
+	})
+	runTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_scheduler_avoid_contended_hosts_duration_seconds",
+		Help:    "Duration of avoid contended hosts run",
+		Buckets: prometheus.DefBuckets,
+	})
+	prometheus.MustRegister(runCounter, runTimer)
 	return &avoidContendedHostsStep{
 		DB:                        db,
 		AvgCPUContentionThreshold: opts["avgCPUContentionThreshold"],
 		MaxCPUContentionThreshold: opts["maxCPUContentionThreshold"],
+		runCounter:                runCounter,
+		runTimer:                  runTimer,
 	}
 }
 
 // Downvote hosts that are highly contended.
 func (s *avoidContendedHostsStep) Run(state *pipelineState) error {
+	if s.runCounter != nil {
+		s.runCounter.Inc()
+	}
+	if s.runTimer != nil {
+		timer := prometheus.NewTimer(s.runTimer)
+		defer timer.ObserveDuration()
+	}
+
 	logging.Log.Info("scheduler: contention - avoid contended hosts")
 
 	var highlyContendedHosts []features.VROpsHostsystemContention

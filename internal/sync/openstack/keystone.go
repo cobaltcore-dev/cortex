@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type openStackAuthRequest struct {
@@ -80,12 +81,26 @@ type KeystoneAPI interface {
 }
 
 type keystoneAPI struct {
-	Conf conf.SecretOpenStackConfig
+	Conf        conf.SecretOpenStackConfig
+	authCounter prometheus.Counter
+	authTimer   prometheus.Histogram
 }
 
 func NewKeystoneAPI() KeystoneAPI {
+	authCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "cortex_openstack_keystone_auth_total",
+		Help: "Total number of OpenStack Keystone authentications",
+	})
+	authTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_openstack_keystone_auth_duration_seconds",
+		Help:    "Duration of OpenStack Keystone authentication",
+		Buckets: prometheus.DefBuckets,
+	})
+	prometheus.MustRegister(authCounter, authTimer)
 	return &keystoneAPI{
-		Conf: conf.NewSecretConfig().SecretOpenStackConfig,
+		Conf:        conf.NewSecretConfig().SecretOpenStackConfig,
+		authCounter: authCounter,
+		authTimer:   authTimer,
 	}
 }
 
@@ -93,6 +108,14 @@ func NewKeystoneAPI() KeystoneAPI {
 // This uses the configured OpenStack credentials to obtain an authentication token.
 // We also extract URLs to the required services (e.g. Nova) from the response.
 func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
+	if k.authCounter != nil {
+		k.authCounter.Inc()
+	}
+	if k.authTimer != nil {
+		timer := prometheus.NewTimer(k.authTimer)
+		defer timer.ObserveDuration()
+	}
+
 	authRequest := openStackAuthRequest{
 		Auth: openStackAuth{
 			Identity: openStackIdentity{

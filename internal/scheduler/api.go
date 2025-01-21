@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Spec object from the Nova scheduler pipeline.
@@ -54,12 +55,36 @@ type ExternalSchedulingAPI interface {
 }
 
 type externalSchedulingAPI struct {
-	Pipeline Pipeline
+	Pipeline                 Pipeline
+	receivedRequestsCounter  prometheus.Counter
+	processedRequestsCounter prometheus.Counter
+	requestTimer             prometheus.Histogram
 }
 
 func NewExternalSchedulingAPI(config conf.Config, db db.DB) ExternalSchedulingAPI {
+	receivedRequestsCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "cortex_scheduler_api_received_requests_total",
+		Help: "Total number of received requests from the Nova scheduler",
+	})
+	processedRequestsCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "cortex_scheduler_api_processed_requests_total",
+		Help: "Total number of processed requests from the Nova scheduler",
+	})
+	requestTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_scheduler_api_request_duration_seconds",
+		Help:    "Duration of requests from the Nova scheduler",
+		Buckets: prometheus.DefBuckets,
+	})
+	prometheus.MustRegister(
+		receivedRequestsCounter,
+		processedRequestsCounter,
+		requestTimer,
+	)
 	return &externalSchedulingAPI{
-		Pipeline: NewPipeline(config, db),
+		Pipeline:                 NewPipeline(config, db),
+		receivedRequestsCounter:  receivedRequestsCounter,
+		processedRequestsCounter: processedRequestsCounter,
+		requestTimer:             requestTimer,
 	}
 }
 
@@ -100,6 +125,15 @@ func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSch
 // pipeline. Some additional flags are also included.
 // The response contains an ordered list of hosts that the VM should be scheduled on.
 func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
+	if api.receivedRequestsCounter != nil {
+		api.receivedRequestsCounter.Inc()
+	}
+	if api.requestTimer != nil {
+		// Profile all responses, including errors.
+		timer := prometheus.NewTimer(api.requestTimer)
+		defer timer.ObserveDuration()
+	}
+
 	if r.Method != http.MethodPost {
 		logging.Log.Error("invalid request method", "method", r.Method)
 		http.Error(w, "invalid request method", http.StatusMethodNotAllowed)
@@ -144,5 +178,9 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 		logging.Log.Error("failed to encode response", "error", err)
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
+	}
+
+	if api.processedRequestsCounter != nil {
+		api.processedRequestsCounter.Inc()
 	}
 }

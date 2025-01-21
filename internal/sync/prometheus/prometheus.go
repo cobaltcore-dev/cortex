@@ -13,6 +13,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // One metric datapoint in the Prometheus timeline.
@@ -54,14 +55,57 @@ type PrometheusAPI[M PrometheusMetric] interface {
 	) (*prometheusTimelineData[M], error)
 }
 
+type PrometheusAPIMonitor struct {
+	getReceivedCounterVec  *prometheus.CounterVec
+	getProcessedCounterVec *prometheus.CounterVec
+	getTimerVec            *prometheus.HistogramVec
+}
+
+func NewPrometheusAPIMonitor() *PrometheusAPIMonitor {
+	getReceivedCounterVec := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "cortex_prometheus_api_get_received",
+		Help: "Total number of Prometheus API requests",
+	}, []string{"metric"})
+	getProcessedCounterVec := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "cortex_prometheus_api_get_processed",
+		Help: "Total number of processed Prometheus API requests",
+	}, []string{"metric"})
+	getTimerVec := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "cortex_prometheus_api_get_duration_seconds",
+		Help:    "Duration of Prometheus API requests",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"metric"})
+	prometheus.MustRegister(getReceivedCounterVec, getProcessedCounterVec, getTimerVec)
+	return &PrometheusAPIMonitor{
+		getReceivedCounterVec:  getReceivedCounterVec,
+		getProcessedCounterVec: getProcessedCounterVec,
+		getTimerVec:            getTimerVec,
+	}
+}
+
 type prometheusAPI[M PrometheusMetric] struct {
-	Secrets conf.SecretPrometheusConfig
+	Secrets             conf.SecretPrometheusConfig
+	getReceivedCounter  prometheus.Counter
+	getProcessedCounter prometheus.Counter
+	getTimer            prometheus.Observer
 }
 
 // Create a new Prometheus API with the given Prometheus metric type.
-func NewPrometheusAPI[M PrometheusMetric]() PrometheusAPI[M] {
+func NewPrometheusAPI[M PrometheusMetric](
+	metricName string, monitor *PrometheusAPIMonitor,
+) PrometheusAPI[M] {
+	var getReceivedCounter, getProcessedCounter prometheus.Counter
+	var getTimer prometheus.Observer
+	if monitor != nil {
+		getReceivedCounter = monitor.getReceivedCounterVec.WithLabelValues(metricName)
+		getProcessedCounter = monitor.getProcessedCounterVec.WithLabelValues(metricName)
+		getTimer = monitor.getTimerVec.WithLabelValues(metricName)
+	}
 	return &prometheusAPI[M]{
-		Secrets: conf.NewSecretConfig().SecretPrometheusConfig,
+		Secrets:             conf.NewSecretConfig().SecretPrometheusConfig,
+		getReceivedCounter:  getReceivedCounter,
+		getProcessedCounter: getProcessedCounter,
+		getTimer:            getTimer,
 	}
 }
 
@@ -74,6 +118,14 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	end time.Time,
 	resolutionSeconds int,
 ) (*prometheusTimelineData[M], error) {
+	if api.getReceivedCounter != nil {
+		api.getReceivedCounter.Inc()
+	}
+	if api.getTimer != nil {
+		timer := prometheus.NewTimer(api.getTimer)
+		defer timer.ObserveDuration()
+	}
+
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
 	url := api.Secrets.PrometheusURL + "/api/v1/query_range"
 	url += "?query=" + query
@@ -141,6 +193,9 @@ func (api *prometheusAPI[M]) FetchMetrics(
 		}
 	}
 
+	if api.getProcessedCounter != nil {
+		api.getProcessedCounter.Inc()
+	}
 	return &prometheusTimelineData[M]{
 		Metrics:  flatMetrics,
 		Duration: end.Sub(start),

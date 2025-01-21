@@ -8,26 +8,53 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-pg/pg/v10/orm"
 )
 
 type syncer struct {
-	Config        conf.SyncOpenStackConfig
-	ServerAPI     ServerAPI
-	HypervisorAPI HypervisorAPI
-	KeystoneAPI   KeystoneAPI
-	DB            db.DB
+	Config           conf.SyncOpenStackConfig
+	ServerAPI        ServerAPI
+	HypervisorAPI    HypervisorAPI
+	KeystoneAPI      KeystoneAPI
+	DB               db.DB
+	syncCounter      prometheus.Counter
+	syncTimer        prometheus.Histogram
+	serversGauge     prometheus.Gauge
+	hypervisorsGauge prometheus.Gauge
 }
 
 // Create a new OpenStack syncer with the given configuration and database.
 func NewSyncer(config conf.Config, db db.DB) sync.Datasource {
+	syncCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "cortex_openstack_sync_runs",
+		Help: "Total number of OpenStack sync runs",
+	})
+	syncTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_openstack_sync_duration_seconds",
+		Help:    "Duration of OpenStack sync run",
+		Buckets: prometheus.DefBuckets,
+	})
+	serversGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "cortex_openstack_servers",
+		Help: "Retrieved number of OpenStack servers",
+	})
+	hypervisorsGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "cortex_openstack_hypervisors",
+		Help: "Retrieved number of OpenStack hypervisors",
+	})
+	prometheus.MustRegister(syncCounter, syncTimer, serversGauge, hypervisorsGauge)
 	return &syncer{
-		Config:        config.GetSyncConfig().OpenStack,
-		ServerAPI:     NewServerAPI(),
-		HypervisorAPI: NewHypervisorAPI(),
-		KeystoneAPI:   NewKeystoneAPI(),
-		DB:            db,
+		Config:           config.GetSyncConfig().OpenStack,
+		ServerAPI:        NewServerAPI(),
+		HypervisorAPI:    NewHypervisorAPI(),
+		KeystoneAPI:      NewKeystoneAPI(),
+		DB:               db,
+		syncCounter:      syncCounter,
+		syncTimer:        syncTimer,
+		serversGauge:     serversGauge,
+		hypervisorsGauge: hypervisorsGauge,
 	}
 }
 
@@ -51,6 +78,14 @@ func (s *syncer) Init() {
 
 // Sync OpenStack data with the database.
 func (s *syncer) Sync() {
+	if s.syncCounter != nil {
+		s.syncCounter.Inc()
+	}
+	if s.syncTimer != nil {
+		timer := prometheus.NewTimer(s.syncTimer)
+		defer timer.ObserveDuration()
+	}
+
 	logging.Log.Info("syncing OpenStack data")
 
 	// Insert in small batches to avoid OOM issues.
@@ -62,6 +97,7 @@ func (s *syncer) Sync() {
 		return
 	}
 
+	// TODO: Delete old data in the same transaction.
 	if s.Config.ServersEnabled != nil && *s.Config.ServersEnabled {
 		serverlist, err := s.ServerAPI.Get(*auth, nil)
 		if err != nil {
@@ -76,6 +112,9 @@ func (s *syncer) Sync() {
 				logging.Log.Error("failed to insert servers", "error", err)
 				return
 			}
+		}
+		if s.serversGauge != nil {
+			s.serversGauge.Set(float64(len(serverlist.Servers)))
 		}
 		logging.Log.Info("synced OpenStack", "servers", len(serverlist.Servers))
 	}
@@ -94,6 +133,9 @@ func (s *syncer) Sync() {
 				logging.Log.Error("failed to insert hypervisors", "error", err)
 				return
 			}
+		}
+		if s.hypervisorsGauge != nil {
+			s.hypervisorsGauge.Set(float64(len(hypervisorlist.Hypervisors)))
 		}
 		logging.Log.Info("synced OpenStack", "hypervisors", len(hypervisorlist.Hypervisors))
 	}

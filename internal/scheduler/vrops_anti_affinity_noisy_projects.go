@@ -7,22 +7,45 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type vROpsAntiAffinityNoisyProjectsStep struct {
 	DB              db.DB
 	AvgCPUThreshold any
+	runCounter      prometheus.Counter
+	runTimer        prometheus.Histogram
 }
 
 func NewVROpsAntiAffinityNoisyProjectsStep(opts map[string]any, db db.DB) PipelineStep {
+	runCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "cortex_scheduler_vrops_anti_affinity_noisy_projects_runs",
+		Help: "Total number of vROps anti-affinity noisy projects runs",
+	})
+	runTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_scheduler_vrops_anti_affinity_noisy_projects_duration_seconds",
+		Help:    "Duration of vROps anti-affinity noisy projects run",
+		Buckets: prometheus.DefBuckets,
+	})
+	prometheus.MustRegister(runCounter, runTimer)
 	return &vROpsAntiAffinityNoisyProjectsStep{
 		DB:              db,
 		AvgCPUThreshold: opts["avgCPUThreshold"],
+		runCounter:      runCounter,
+		runTimer:        runTimer,
 	}
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *vROpsAntiAffinityNoisyProjectsStep) Run(state *pipelineState) error {
+	if s.runCounter != nil {
+		s.runCounter.Inc()
+	}
+	if s.runTimer != nil {
+		timer := prometheus.NewTimer(s.runTimer)
+		defer timer.ObserveDuration()
+	}
+
 	logging.Log.Info("scheduler: anti-affinity - noisy projects")
 
 	// If the average CPU usage is above the threshold, the project is considered noisy.

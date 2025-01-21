@@ -9,6 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Configuration of steps supported by the scheduler.
@@ -48,7 +49,10 @@ type Pipeline interface {
 }
 
 type pipeline struct {
-	Steps []PipelineStep
+	Steps                 []PipelineStep
+	runTimer              prometheus.Histogram
+	hostNumberInObserver  prometheus.Histogram
+	hostNumberOutObserver prometheus.Histogram
 }
 
 // Create a new pipeline with steps contained in the configuration.
@@ -67,17 +71,46 @@ func NewPipeline(config conf.Config, database db.DB) Pipeline {
 			panic("unknown pipeline step: " + stepConfig.Name)
 		}
 	}
+	runTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
+		Help:    "Duration of scheduler pipeline run",
+		Buckets: prometheus.DefBuckets,
+	})
+	hostNumberInObserver := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_scheduler_pipeline_host_number_in",
+		Help:    "Number of hosts going into the scheduler pipeline",
+		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
+	})
+	hostNumberOutObserver := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_scheduler_pipeline_host_number_out",
+		Help:    "Number of hosts coming out of the scheduler pipeline",
+		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
+	})
+	prometheus.MustRegister(runTimer, hostNumberInObserver, hostNumberOutObserver)
 	return &pipeline{
-		Steps: steps,
+		Steps:                 steps,
+		runTimer:              runTimer,
+		hostNumberInObserver:  hostNumberInObserver,
+		hostNumberOutObserver: hostNumberOutObserver,
 	}
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
 func (p *pipeline) Run(state *pipelineState) ([]string, error) {
+	if p.runTimer != nil {
+		timer := prometheus.NewTimer(p.runTimer)
+		defer timer.ObserveDuration()
+	}
+	if p.hostNumberInObserver != nil {
+		p.hostNumberInObserver.Observe(float64(len(state.Hosts)))
+	}
 	for _, step := range p.Steps {
 		if err := step.Run(state); err != nil {
 			return nil, err
 		}
+	}
+	if p.hostNumberOutObserver != nil {
+		p.hostNumberOutObserver.Observe(float64(len(state.Hosts)))
 	}
 	// Order the list of hosts by their weights.
 	sort.Slice(state.Hosts, func(i, j int) bool {

@@ -7,6 +7,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Configuration of feature extractors supported by the scheduler.
@@ -29,6 +30,8 @@ type FeatureExtractorPipeline interface {
 
 type featureExtractorPipeline struct {
 	FeatureExtractors []FeatureExtractor
+	extractionCounter prometheus.Counter
+	extractionTimer   prometheus.Histogram
 }
 
 // Create a new feature extractor pipeline with extractors contained in
@@ -44,8 +47,20 @@ func NewPipeline(config conf.Config, database db.DB) FeatureExtractorPipeline {
 			panic("unknown feature extractor: " + extractorConfig.Name)
 		}
 	}
+	extractionCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "cortex_features_pipeline_extract_runs",
+		Help: "Total number of feature extractions",
+	})
+	extractionTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cortex_features_pipeline_extract_duration_seconds",
+		Help:    "Duration of feature extraction",
+		Buckets: prometheus.DefBuckets,
+	})
+	prometheus.MustRegister(extractionCounter, extractionTimer)
 	return &featureExtractorPipeline{
 		FeatureExtractors: extractors,
+		extractionCounter: extractionCounter,
+		extractionTimer:   extractionTimer,
 	}
 }
 
@@ -60,6 +75,14 @@ func (p *featureExtractorPipeline) Init() {
 
 // Extract features from the data sources.
 func (p *featureExtractorPipeline) Extract() {
+	if p.extractionCounter != nil {
+		p.extractionCounter.Inc()
+	}
+	if p.extractionTimer != nil {
+		timer := prometheus.NewTimer(p.extractionTimer)
+		defer timer.ObserveDuration()
+	}
+
 	for _, extractor := range p.FeatureExtractors {
 		if err := extractor.Extract(); err != nil {
 			logging.Log.Error("failed to extract features", "error", err)
