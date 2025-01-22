@@ -8,6 +8,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-pg/pg/v10/orm"
 )
@@ -18,16 +19,18 @@ type syncer struct {
 	HypervisorAPI HypervisorAPI
 	KeystoneAPI   KeystoneAPI
 	DB            db.DB
+	monitor       sync.Monitor
 }
 
 // Create a new OpenStack syncer with the given configuration and database.
-func NewSyncer(config conf.Config, db db.DB) sync.Datasource {
+func NewSyncer(config conf.Config, db db.DB, monitor sync.Monitor) sync.Datasource {
 	return &syncer{
 		Config:        config.GetSyncConfig().OpenStack,
-		ServerAPI:     NewServerAPI(),
-		HypervisorAPI: NewHypervisorAPI(),
-		KeystoneAPI:   NewKeystoneAPI(),
+		ServerAPI:     NewServerAPI(monitor),
+		HypervisorAPI: NewHypervisorAPI(monitor),
+		KeystoneAPI:   NewKeystoneAPI(monitor),
 		DB:            db,
+		monitor:       monitor,
 	}
 }
 
@@ -51,6 +54,12 @@ func (s *syncer) Init() {
 
 // Sync OpenStack data with the database.
 func (s *syncer) Sync() {
+	if s.monitor.PipelineRunTimer != nil {
+		hist := s.monitor.PipelineRunTimer.WithLabelValues("openstack")
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
 	logging.Log.Info("syncing OpenStack data")
 
 	// Insert in small batches to avoid OOM issues.
@@ -62,6 +71,7 @@ func (s *syncer) Sync() {
 		return
 	}
 
+	// TODO: Delete old data in the same transaction.
 	if s.Config.ServersEnabled != nil && *s.Config.ServersEnabled {
 		serverlist, err := s.ServerAPI.Get(*auth, nil)
 		if err != nil {
@@ -76,6 +86,11 @@ func (s *syncer) Sync() {
 				logging.Log.Error("failed to insert servers", "error", err)
 				return
 			}
+		}
+		if s.monitor.PipelineObjectsGauge != nil {
+			s.monitor.PipelineObjectsGauge.
+				WithLabelValues("openstack_nova_servers").
+				Set(float64(len(serverlist.Servers)))
 		}
 		logging.Log.Info("synced OpenStack", "servers", len(serverlist.Servers))
 	}
@@ -94,6 +109,11 @@ func (s *syncer) Sync() {
 				logging.Log.Error("failed to insert hypervisors", "error", err)
 				return
 			}
+		}
+		if s.monitor.PipelineObjectsGauge != nil {
+			s.monitor.PipelineObjectsGauge.
+				WithLabelValues("openstack_nova_hypervisors").
+				Set(float64(len(hypervisorlist.Hypervisors)))
 		}
 		logging.Log.Info("synced OpenStack", "hypervisors", len(hypervisorlist.Hypervisors))
 	}

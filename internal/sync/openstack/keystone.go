@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type openStackAuthRequest struct {
@@ -80,12 +82,14 @@ type KeystoneAPI interface {
 }
 
 type keystoneAPI struct {
-	Conf conf.SecretOpenStackConfig
+	Conf    conf.SecretOpenStackConfig
+	monitor sync.Monitor
 }
 
-func NewKeystoneAPI() KeystoneAPI {
+func NewKeystoneAPI(monitor sync.Monitor) KeystoneAPI {
 	return &keystoneAPI{
-		Conf: conf.NewSecretConfig().SecretOpenStackConfig,
+		Conf:    conf.NewSecretConfig().SecretOpenStackConfig,
+		monitor: monitor,
 	}
 }
 
@@ -93,6 +97,12 @@ func NewKeystoneAPI() KeystoneAPI {
 // This uses the configured OpenStack credentials to obtain an authentication token.
 // We also extract URLs to the required services (e.g. Nova) from the response.
 func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
+	if k.monitor.PipelineRequestTimer != nil {
+		hist := k.monitor.PipelineRequestTimer.WithLabelValues("openstack_keystone")
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
 	authRequest := openStackAuthRequest{
 		Auth: openStackAuth{
 			Identity: openStackIdentity{
@@ -164,6 +174,9 @@ func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 		return nil, errors.New("failed to find Nova endpoint")
 	}
 
+	if k.monitor.PipelineRequestProcessedCounter != nil {
+		k.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_keystone").Inc()
+	}
 	return &openStackKeystoneAuth{
 		nova:  openStackEndpoint{URL: novaEndpoint},
 		token: resp.Header.Get("X-Subject-Token"),

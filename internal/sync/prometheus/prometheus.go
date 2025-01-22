@@ -13,6 +13,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // One metric datapoint in the Prometheus timeline.
@@ -55,13 +57,17 @@ type PrometheusAPI[M PrometheusMetric] interface {
 }
 
 type prometheusAPI[M PrometheusMetric] struct {
-	Secrets conf.SecretPrometheusConfig
+	Secrets    conf.SecretPrometheusConfig
+	metricName string
+	monitor    sync.Monitor
 }
 
 // Create a new Prometheus API with the given Prometheus metric type.
-func NewPrometheusAPI[M PrometheusMetric]() PrometheusAPI[M] {
+func NewPrometheusAPI[M PrometheusMetric](metricName string, monitor sync.Monitor) PrometheusAPI[M] {
 	return &prometheusAPI[M]{
-		Secrets: conf.NewSecretConfig().SecretPrometheusConfig,
+		Secrets:    conf.NewSecretConfig().SecretPrometheusConfig,
+		metricName: metricName,
+		monitor:    monitor,
 	}
 }
 
@@ -74,6 +80,13 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	end time.Time,
 	resolutionSeconds int,
 ) (*prometheusTimelineData[M], error) {
+
+	if api.monitor.PipelineRequestTimer != nil {
+		hist := api.monitor.PipelineRequestTimer.WithLabelValues("prometheus_" + api.metricName)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
 	url := api.Secrets.PrometheusURL + "/api/v1/query_range"
 	url += "?query=" + query
@@ -141,6 +154,9 @@ func (api *prometheusAPI[M]) FetchMetrics(
 		}
 	}
 
+	if api.monitor.PipelineRequestProcessedCounter != nil {
+		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("prometheus_" + api.metricName).Inc()
+	}
 	return &prometheusTimelineData[M]{
 		Metrics:  flatMetrics,
 		Duration: end.Sub(start),

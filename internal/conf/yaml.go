@@ -21,7 +21,7 @@ type SyncPrometheusMetricConfig struct {
 
 // Configuration for the sync/prometheus module containing a list of metrics.
 type SyncPrometheusConfig struct {
-	Metrics []SyncPrometheusMetricConfig `yaml:"metrics"`
+	Metrics []SyncPrometheusMetricConfig `yaml:"metrics,omitempty"`
 }
 
 // Configuration for the sync/openstack module.

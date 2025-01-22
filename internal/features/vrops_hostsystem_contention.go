@@ -7,6 +7,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type VROpsHostsystemContention struct {
@@ -18,11 +19,20 @@ type VROpsHostsystemContention struct {
 }
 
 type vROpsHostsystemContentionExtractor struct {
-	DB db.DB
+	DB       db.DB
+	runTimer prometheus.Observer
 }
 
-func NewVROpsHostsystemContentionExtractor(db db.DB) FeatureExtractor {
-	return &vROpsHostsystemContentionExtractor{DB: db}
+func NewVROpsHostsystemContentionExtractor(db db.DB, m monitor) FeatureExtractor {
+	stepName := "vrops_hostsystem_contention"
+	var runTimer prometheus.Observer
+	if m.stepRunTimer != nil {
+		runTimer = m.stepRunTimer.WithLabelValues(stepName)
+	}
+	return &vROpsHostsystemContentionExtractor{
+		DB:       db,
+		runTimer: runTimer,
+	}
 }
 
 // Create the feature schema.
@@ -38,6 +48,11 @@ func (e *vROpsHostsystemContentionExtractor) Init() error {
 // Extract CPU contention of hostsystems.
 // Depends on resolved vROps hostsystems (feature_vrops_resolved_hostsystem).
 func (e *vROpsHostsystemContentionExtractor) Extract() error {
+	if e.runTimer != nil {
+		timer := prometheus.NewTimer(e.runTimer)
+		defer timer.ObserveDuration()
+	}
+
 	logging.Log.Info("calculating hostsystem contention")
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Get().Begin()

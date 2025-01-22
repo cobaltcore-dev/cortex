@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: plutono
+  name: cortex-plutono
   labels:
-    app: plutono
+    app: cortex-plutono
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: plutono
+      app: cortex-plutono
   template:
     metadata:
       labels:
-        app: plutono
+        app: cortex-plutono
     spec:
       containers:
-        - name: plutono # from local tilt build
-          image: plutono
+        - name: cortex-plutono # from local tilt build
+          image: cortex-plutono
           ports:
             - containerPort: 3000

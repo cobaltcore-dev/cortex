@@ -13,7 +13,7 @@ import (
 
 // Configuration of steps supported by the scheduler.
 // The steps used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]func(opts map[string]any, db db.DB) PipelineStep{
+var supportedSteps = map[string]func(map[string]any, db.DB, monitor) PipelineStep{
 	"vrops_anti_affinity_noisy_projects": NewVROpsAntiAffinityNoisyProjectsStep,
 	"vrops_avoid_contended_hosts":        NewAvoidContendedHostsStep,
 }
@@ -48,15 +48,16 @@ type Pipeline interface {
 }
 
 type pipeline struct {
-	Steps []PipelineStep
+	Steps   []PipelineStep
+	monitor monitor
 }
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline(config conf.Config, database db.DB) Pipeline {
+func NewPipeline(config conf.Config, database db.DB, monitor monitor) Pipeline {
 	steps := []PipelineStep{}
 	for _, stepConfig := range config.GetSchedulerConfig().Steps {
 		if stepFunc, ok := supportedSteps[stepConfig.Name]; ok {
-			step := stepFunc(stepConfig.Options, database)
+			step := stepFunc(stepConfig.Options, database, monitor)
 			steps = append(steps, step)
 			logging.Log.Info(
 				"scheduler: added step",
@@ -67,17 +68,21 @@ func NewPipeline(config conf.Config, database db.DB) Pipeline {
 			panic("unknown pipeline step: " + stepConfig.Name)
 		}
 	}
-	return &pipeline{
-		Steps: steps,
-	}
+	return &pipeline{Steps: steps, monitor: monitor}
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
 func (p *pipeline) Run(state *pipelineState) ([]string, error) {
+	if p.monitor.hostNumberInObserver != nil {
+		p.monitor.hostNumberInObserver.Observe(float64(len(state.Hosts)))
+	}
 	for _, step := range p.Steps {
 		if err := step.Run(state); err != nil {
 			return nil, err
 		}
+	}
+	if p.monitor.hostNumberOutObserver != nil {
+		p.monitor.hostNumberOutObserver.Observe(float64(len(state.Hosts)))
 	}
 	// Order the list of hosts by their weights.
 	sort.Slice(state.Hosts, func(i, j int) bool {

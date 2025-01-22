@@ -14,20 +14,26 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Periodically fetch data from the datasources and insert it into the database.
 func runSyncer(config conf.Config, db db.DB) {
-	datasources := prometheus.NewSyncers(config, db)
-	datasources = append(datasources, openstack.NewSyncer(config, db))
-	for _, ds := range datasources {
-		ds.Init()
+	monitor := sync.NewSyncMonitor()
+	syncers := []sync.Datasource{
+		prometheus.NewCombinedSyncer(config, db, monitor),
+		openstack.NewSyncer(config, db, monitor),
+	}
+	for _, syncer := range syncers {
+		syncer.Init()
 	}
 	for {
-		for _, ds := range datasources {
-			ds.Sync()
+		for _, syncer := range syncers {
+			syncer.Sync()
 		}
 		time.Sleep(time.Minute * 1)
 	}
@@ -54,7 +60,7 @@ func runScheduler(config conf.Config, db db.DB) {
 		api.GetNovaExternalSchedulerURL(),
 		api.NovaExternalScheduler,
 	)
-	logging.Log.Info("Listening on :8080")
+	logging.Log.Info("api listening on :8080")
 	server := &http.Server{
 		Addr:         ":8080",
 		Handler:      mux,
@@ -63,7 +69,24 @@ func runScheduler(config conf.Config, db db.DB) {
 		IdleTimeout:  15 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != nil {
-		logging.Log.Error("failed to start server", "error", err)
+		panic(err)
+	}
+}
+
+// Run the prometheus metrics server.
+func runMetricsServer() {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	logging.Log.Info("metrics listening on :2112")
+	server := &http.Server{
+		Addr:         ":2112",
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  15 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
+		panic(err)
 	}
 }
 
@@ -92,5 +115,6 @@ func main() {
 	go runSyncer(config, db)
 	go runExtractor(config, db)
 	go runScheduler(config, db)
+	go runMetricsServer()
 	select {}
 }

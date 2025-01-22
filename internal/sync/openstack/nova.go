@@ -9,6 +9,8 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Paginated list response from the Nova API under /servers/detail.
@@ -158,10 +160,12 @@ type ServerAPI interface {
 	Get(auth openStackKeystoneAuth, url *string) (*openStackServerList, error)
 }
 
-type serverAPI struct{}
+type serverAPI struct {
+	monitor sync.Monitor
+}
 
-func NewServerAPI() ServerAPI {
-	return &serverAPI{}
+func NewServerAPI(monitor sync.Monitor) ServerAPI {
+	return &serverAPI{monitor: monitor}
 }
 
 // GetServers returns a list of servers from the OpenStack Nova API.
@@ -170,6 +174,12 @@ func NewServerAPI() ServerAPI {
 //
 //nolint:dupl
 func (api *serverAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
+	if api.monitor.PipelineRequestTimer != nil {
+		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_nova_servers")
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
 	// Use all_tenants=1 to get servers from all projects.
 	var pageURL = auth.nova.URL + "servers/detail?all_tenants=1"
 	if url != nil {
@@ -211,6 +221,10 @@ func (api *serverAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackSe
 			}
 		}
 	}
+
+	if api.monitor.PipelineRequestProcessedCounter != nil {
+		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_nova_servers").Inc()
+	}
 	return &serverList, nil
 }
 
@@ -218,10 +232,12 @@ type HypervisorAPI interface {
 	Get(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error)
 }
 
-type hypervisorAPI struct{}
+type hypervisorAPI struct {
+	monitor sync.Monitor
+}
 
-func NewHypervisorAPI() HypervisorAPI {
-	return &hypervisorAPI{}
+func NewHypervisorAPI(monitor sync.Monitor) HypervisorAPI {
+	return &hypervisorAPI{monitor: monitor}
 }
 
 // GetHypervisors returns a list of hypervisors from the OpenStack Nova API.
@@ -230,6 +246,12 @@ func NewHypervisorAPI() HypervisorAPI {
 //
 //nolint:dupl
 func (api *hypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
+	if api.monitor.PipelineRequestTimer != nil {
+		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_nova_hypervisors")
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
 	var pageURL = auth.nova.URL + "os-hypervisors/detail"
 	if url != nil {
 		pageURL = *url
@@ -269,6 +291,10 @@ func (api *hypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openSta
 				hypervisorList.Hypervisors = append(hypervisorList.Hypervisors, hypervisors.Hypervisors...)
 			}
 		}
+	}
+
+	if api.monitor.PipelineRequestProcessedCounter != nil {
+		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_nova_hypervisors").Inc()
 	}
 	return &hypervisorList, nil
 }

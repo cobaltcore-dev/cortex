@@ -7,6 +7,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type VROpsProjectNoisiness struct {
@@ -18,11 +19,20 @@ type VROpsProjectNoisiness struct {
 }
 
 type vROpsProjectNoisinessExtractor struct {
-	DB db.DB
+	DB       db.DB
+	runTimer prometheus.Observer
 }
 
-func NewVROpsProjectNoisinessExtractor(db db.DB) FeatureExtractor {
-	return &vROpsProjectNoisinessExtractor{DB: db}
+func NewVROpsProjectNoisinessExtractor(db db.DB, m monitor) FeatureExtractor {
+	stepName := "vrops_project_noisiness"
+	var runTimer prometheus.Observer
+	if m.stepRunTimer != nil {
+		runTimer = m.stepRunTimer.WithLabelValues(stepName)
+	}
+	return &vROpsProjectNoisinessExtractor{
+		DB:       db,
+		runTimer: runTimer,
+	}
 }
 
 // Create the schema for the project noisiness feature.
@@ -43,6 +53,11 @@ func (e *vROpsProjectNoisinessExtractor) Init() error {
 // This feature can then be used to draw new VMs away from VMs of the same
 // project in case this project is known to cause high cpu usage.
 func (e *vROpsProjectNoisinessExtractor) Extract() error {
+	if e.runTimer != nil {
+		timer := prometheus.NewTimer(e.runTimer)
+		defer timer.ObserveDuration()
+	}
+
 	logging.Log.Info("extracting noisy projects")
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Get().Begin()

@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
@@ -26,35 +27,62 @@ type syncer[M PrometheusMetric] struct {
 	// The resolution of the metrics to sync.
 	// Note: this needs to be larger than the sampling rate of the metric.
 	SyncResolutionSeconds int
-	// Wait time between syncs to not overload the Prometheus server.
-	SyncTimeout time.Duration
 	// The name of the metric to sync.
 	MetricName string
 	// The Prometheus API endpoint to fetch the metrics.
 	PrometheusAPI PrometheusAPI[M]
 	// The database to store the metrics in.
 	DB db.DB
+
+	monitor sync.Monitor
+}
+
+// Syncer that syncs all configured metrics.
+type CombinedSyncer struct {
+	Syncers []sync.Datasource
+	monitor sync.Monitor
 }
 
 // Create multiple syncers configured by the external service configuration.
-func NewSyncers(config conf.Config, db db.DB) []sync.Datasource {
+func NewCombinedSyncer(config conf.Config, db db.DB, monitor sync.Monitor) sync.Datasource {
 	moduleConfig := config.GetSyncConfig().Prometheus
 	logging.Log.Info("loading syncers", "metrics", moduleConfig.Metrics)
 	syncers := []sync.Datasource{}
 	for _, metricConfig := range moduleConfig.Metrics {
-		syncers = append(syncers, newSyncer(db, metricConfig))
+		syncers = append(syncers, newSyncer(db, metricConfig, monitor))
 	}
-	return syncers
+	return CombinedSyncer{
+		Syncers: syncers,
+		monitor: monitor,
+	}
+}
+
+func (s CombinedSyncer) Init() {
+	for _, syncer := range s.Syncers {
+		syncer.Init()
+	}
+}
+
+func (s CombinedSyncer) Sync() {
+	if s.monitor.PipelineRunTimer != nil {
+		hist := s.monitor.PipelineRunTimer.WithLabelValues("prometheus")
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
+	for _, syncer := range s.Syncers {
+		syncer.Sync()
+	}
 }
 
 // Create a new syncer for the given metric configuration.
 // This function maps the given metric type to the implemented golang type.
-func newSyncer(db db.DB, c conf.SyncPrometheusMetricConfig) sync.Datasource {
+func newSyncer(db db.DB, c conf.SyncPrometheusMetricConfig, monitor sync.Monitor) sync.Datasource {
 	switch c.Type {
 	case "vrops_vm_metric":
-		return newSyncerOfType[*VROpsVMMetric](db, c)
+		return newSyncerOfType[*VROpsVMMetric](db, c, monitor)
 	case "vrops_host_metric":
-		return newSyncerOfType[*VROpsHostMetric](db, c)
+		return newSyncerOfType[*VROpsHostMetric](db, c, monitor)
 	default:
 		panic("unknown metric type: " + c.Type)
 	}
@@ -63,7 +91,9 @@ func newSyncer(db db.DB, c conf.SyncPrometheusMetricConfig) sync.Datasource {
 // Create a new syncer for the given metric type.
 // If no custom metrics granularity is set, the default values are used.
 func newSyncerOfType[M PrometheusMetric](
-	db db.DB, c conf.SyncPrometheusMetricConfig,
+	db db.DB,
+	c conf.SyncPrometheusMetricConfig,
+	monitor sync.Monitor,
 ) sync.Datasource {
 	// Set default values if none are provided.
 	var timeRangeSeconds = 2419200 // 4 weeks
@@ -78,13 +108,15 @@ func newSyncerOfType[M PrometheusMetric](
 	if c.ResolutionSeconds != nil {
 		resolutionSeconds = *c.ResolutionSeconds
 	}
+
 	return &syncer[M]{
 		SyncTimeRange:         time.Duration(timeRangeSeconds) * time.Second,
 		SyncInterval:          time.Duration(intervalSeconds) * time.Second,
 		SyncResolutionSeconds: resolutionSeconds,
 		MetricName:            c.Name,
-		PrometheusAPI:         NewPrometheusAPI[M](),
+		PrometheusAPI:         NewPrometheusAPI[M](c.Name, monitor),
 		DB:                    db,
+		monitor:               monitor,
 	}
 }
 
@@ -179,7 +211,24 @@ func (s *syncer[M]) sync(start time.Time) {
 			fmt.Printf("Failed to insert metrics: %v\n", err)
 		}
 	}
-	logging.Log.Info("synced Prometheus data", "metrics", len(prometheusData.Metrics), "start", start, "end", end)
+	logging.Log.Info("synced Prometheus data", "newMetrics", len(prometheusData.Metrics), "start", start, "end", end)
+
+	// Count rows for the gauge.
+	var nRows int
+	if _, err := s.DB.Get().QueryOne(
+		pg.Scan(&nRows),
+		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = ?", tableName),
+		s.MetricName,
+	); err == nil {
+		logging.Log.Info("counted metrics", "nRows", nRows, "metricName", s.MetricName)
+		if s.monitor.PipelineObjectsGauge != nil {
+			s.monitor.PipelineObjectsGauge.
+				WithLabelValues("prometheus_" + s.MetricName).
+				Set(float64(nRows))
+		}
+	} else {
+		logging.Log.Error("failed to count metrics rows", "error", err)
+	}
 
 	// Don't overload the Prometheus server.
 	time.Sleep(1 * time.Second)
@@ -197,5 +246,5 @@ func (s *syncer[M]) Sync() {
 		return
 	}
 	s.sync(start)
-	time.Sleep(s.SyncTimeout)
+	logging.Log.Info("synced metrics", "metricName", s.MetricName)
 }

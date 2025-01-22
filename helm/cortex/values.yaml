@@ -47,7 +47,8 @@ securityContext: {}
 
 service:
   type: ClusterIP
-  port: 8080
+  apiPort: 8080
+  metricsPort: 2112
 
 resources: {}
   # limits:
@@ -60,11 +61,11 @@ resources: {}
 livenessProbe:
   httpGet:
     path: /up
-    port: http
+    port: api
 readinessProbe:
   httpGet:
     path: /up
-    port: http
+    port: api
 
 # Additional volumes on the output Deployment definition.
 volumes: []

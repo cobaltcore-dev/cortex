@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Spec object from the Nova scheduler pipeline.
@@ -37,7 +38,8 @@ type APINovaExternalSchedulerRequestHost struct {
 type APINovaExternalSchedulerRequest struct {
 	Spec APINovaExternalSchedulerRequestSpec `json:"spec"`
 	// Whether the Nova scheduling request is a rebuild request.
-	Rebuild bool                                  `json:"rebuild"`
+	Rebuild bool `json:"rebuild"`
+	// TODO: There are more fields
 	Hosts   []APINovaExternalSchedulerRequestHost `json:"hosts"`
 	Weights map[string]float64                    `json:"weights"`
 }
@@ -55,11 +57,14 @@ type ExternalSchedulingAPI interface {
 
 type externalSchedulingAPI struct {
 	Pipeline Pipeline
+	monitor  monitor
 }
 
 func NewExternalSchedulingAPI(config conf.Config, db db.DB) ExternalSchedulingAPI {
+	m := newSchedulerMonitor()
 	return &externalSchedulingAPI{
-		Pipeline: NewPipeline(config, db),
+		Pipeline: NewPipeline(config, db, m),
+		monitor:  m,
 	}
 }
 
@@ -100,6 +105,15 @@ func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSch
 // pipeline. Some additional flags are also included.
 // The response contains an ordered list of hosts that the VM should be scheduled on.
 func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
+	if api.monitor.apiRequestsTimer != nil {
+		// Profile all responses, including errors.
+		timer := prometheus.NewTimer(api.monitor.apiRequestsTimer.WithLabelValues(
+			r.Method,
+			api.GetNovaExternalSchedulerURL(),
+		))
+		defer timer.ObserveDuration()
+	}
+
 	if r.Method != http.MethodPost {
 		logging.Log.Error("invalid request method", "method", r.Method)
 		http.Error(w, "invalid request method", http.StatusMethodNotAllowed)
@@ -144,5 +158,12 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 		logging.Log.Error("failed to encode response", "error", err)
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
+	}
+
+	if api.monitor.apiProcessedCounter != nil {
+		api.monitor.apiProcessedCounter.WithLabelValues(
+			r.Method,
+			api.GetNovaExternalSchedulerURL(),
+		).Inc()
 	}
 }
