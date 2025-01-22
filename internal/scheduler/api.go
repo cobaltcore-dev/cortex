@@ -37,9 +37,16 @@ type APINovaExternalSchedulerRequestHost struct {
 // pipeline. Some additional flags are also included.
 type APINovaExternalSchedulerRequest struct {
 	Spec APINovaExternalSchedulerRequestSpec `json:"spec"`
+
 	// Whether the Nova scheduling request is a rebuild request.
 	Rebuild bool `json:"rebuild"`
-	// TODO: There are more fields
+	// Whether the Nova scheduling request is a resize request.
+	Resize bool `json:"resize"`
+	// Whether the Nova scheduling request is a live migration.
+	Live bool `json:"live"`
+	// Whether the affected VM is a VMware VM.
+	VMware bool `json:"vmware"`
+
 	Hosts   []APINovaExternalSchedulerRequestHost `json:"hosts"`
 	Weights map[string]float64                    `json:"weights"`
 }
@@ -75,10 +82,16 @@ func (api *externalSchedulingAPI) GetNovaExternalSchedulerURL() string {
 // Check if the scheduler can run based on the request data.
 func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSchedulerRequest) (ok bool, reason string) {
 	if requestData.Rebuild {
-		return false, "rebuild is not supported"
+		return false, "rebuild is not supported yet"
 	}
 	if requestData.Spec.NInstances > 1 {
-		return false, "only one instance is supported"
+		return false, "only one instance is supported so far"
+	}
+	if requestData.Live {
+		return false, "live migration is not supported yet"
+	}
+	if !requestData.VMware {
+		return false, "non-vmware VMs are not supported yet"
 	}
 	// Check that all hosts have a weight.
 	for _, host := range requestData.Hosts {

@@ -52,6 +52,20 @@ func TestCanRunScheduler(t *testing.T) {
 			wantOk: false,
 		},
 		{
+			name: "Live migration not supported",
+			request: APINovaExternalSchedulerRequest{
+				Live: true,
+			},
+			wantOk: false,
+		},
+		{
+			name: "Non-VMware VMs not supported",
+			request: APINovaExternalSchedulerRequest{
+				VMware: false,
+			},
+			wantOk: false,
+		},
+		{
 			name: "Missing weight for host",
 			request: APINovaExternalSchedulerRequest{
 				Hosts: []APINovaExternalSchedulerRequestHost{
@@ -79,6 +93,7 @@ func TestCanRunScheduler(t *testing.T) {
 				Hosts: []APINovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
+				VMware: true,
 				Weights: map[string]float64{
 					"host1": 1.0,
 				},
@@ -157,6 +172,7 @@ func TestHandler(t *testing.T) {
 					ProjectID:  "project1",
 					NInstances: 1,
 				},
+				VMware: true,
 				Hosts: []APINovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
