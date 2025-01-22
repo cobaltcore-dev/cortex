@@ -4,7 +4,9 @@
 package scheduler
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -64,6 +66,7 @@ type ExternalSchedulingAPI interface {
 
 type externalSchedulingAPI struct {
 	Pipeline Pipeline
+	config   conf.Config
 	monitor  monitor
 }
 
@@ -71,6 +74,7 @@ func NewExternalSchedulingAPI(config conf.Config, db db.DB) ExternalSchedulingAP
 	m := newSchedulerMonitor()
 	return &externalSchedulingAPI{
 		Pipeline: NewPipeline(config, db, m),
+		config:   config,
 		monitor:  m,
 	}
 }
@@ -125,6 +129,18 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 			api.GetNovaExternalSchedulerURL(),
 		))
 		defer timer.ObserveDuration()
+	}
+
+	// If configured, log out the complete request body.
+	if api.config != nil && api.config.GetSchedulerConfig().LogRequestBodies {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			logging.Log.Error("failed to read request body", "error", err)
+			http.Error(w, "failed to read request body", http.StatusInternalServerError)
+			return
+		}
+		logging.Log.Info("request body", "body", string(body))
+		r.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
 	}
 
 	if r.Method != http.MethodPost {

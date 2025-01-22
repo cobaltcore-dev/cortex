@@ -64,6 +64,7 @@ func SimulateNoisyVMScheduling() {
 	request := scheduler.APINovaExternalSchedulerRequest{
 		Spec:    spec,
 		Rebuild: false,
+		VMware:  true,
 		Hosts:   hosts,
 		Weights: weights,
 	}

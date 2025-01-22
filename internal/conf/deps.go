@@ -6,6 +6,8 @@ package conf
 import (
 	"errors"
 	"fmt"
+
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 // Configuration that is passed in the config file to specify dependencies.
@@ -69,6 +71,9 @@ func (c *config) Validate() error {
 		if err := step.DependencyConfig.validate(*c); err != nil {
 			return err
 		}
+	}
+	if c.SchedulerConfig.LogRequestBodies {
+		logging.Log.Warn("logging request bodies is enabled (debug feature)")
 	}
 	return nil
 }

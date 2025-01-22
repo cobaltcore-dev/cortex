@@ -138,6 +138,7 @@ conf:
               metrics:
                 - vrops_hostsystem_cpu_contention_percentage
   scheduler:
+    logRequestBodies: true # debugging feature
     steps:
       - name: vrops_anti_affinity_noisy_projects
         options:

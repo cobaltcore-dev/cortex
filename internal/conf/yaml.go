@@ -47,6 +47,9 @@ type FeaturesConfig struct {
 
 // Configuration for the scheduler module.
 type SchedulerConfig struct {
+	// For debugging purposes only.
+	LogRequestBodies bool `yaml:"logRequestBodies"`
+
 	Steps []struct {
 		Name    string         `yaml:"name"`
 		Options map[string]any `yaml:"options"`
