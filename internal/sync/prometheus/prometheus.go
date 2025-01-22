@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -72,8 +73,7 @@ func NewPrometheusAPI[M PrometheusMetric](metricName string, monitor sync.Monito
 }
 
 // Fetch VMware vROps metrics from Prometheus.
-// The query is executed in the time window [start, end] with the
-// specified resolution. Note: the query is not URLencoded atm. (TODO)
+// The query is executed in the time window [start, end] with the specified resolution.
 func (api *prometheusAPI[M]) FetchMetrics(
 	query string,
 	start time.Time,
@@ -88,15 +88,15 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	}
 
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
-	url := api.Secrets.PrometheusURL + "/api/v1/query_range"
-	url += "?query=" + query
-	url += "&start=" + strconv.FormatInt(start.Unix(), 10)
-	url += "&end=" + strconv.FormatInt(end.Unix(), 10)
-	url += "&step=" + strconv.Itoa(resolutionSeconds)
-	logging.Log.Info("fetching metrics from", "url", url)
+	urlStr := api.Secrets.PrometheusURL + "/api/v1/query_range"
+	urlStr += "?query=" + url.QueryEscape(query)
+	urlStr += "&start=" + strconv.FormatInt(start.Unix(), 10)
+	urlStr += "&end=" + strconv.FormatInt(end.Unix(), 10)
+	urlStr += "&step=" + strconv.Itoa(resolutionSeconds)
+	logging.Log.Info("fetching metrics from", "url", urlStr)
 
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
