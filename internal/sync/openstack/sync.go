@@ -1,6 +1,3 @@
-// Copyright 2025 SAP SE
-// SPDX-License-Identifier: Apache-2.0
-
 package openstack
 
 import (
@@ -71,8 +68,24 @@ func (s *syncer) Sync() {
 		return
 	}
 
-	// TODO: Delete old data in the same transaction.
+	// Start a transaction
+	tx, err := s.DB.Get().Begin()
+	if err != nil {
+		logging.Log.Error("failed to begin transaction", "error", err)
+		return
+	}
+	defer func() {
+		// Ensure rollback if anything fails
+		if err := tx.Rollback(); err != nil {
+			logging.Log.Error("failed to rollback transaction", "error", err)
+		}
+	}()
+
 	if s.Config.ServersEnabled != nil && *s.Config.ServersEnabled {
+		if _, err := tx.Model((*OpenStackServer)(nil)).Where("TRUE").Delete(); err != nil {
+			logging.Log.Error("failed to delete old servers", "error", err)
+			return
+		}
 		serverlist, err := s.ServerAPI.Get(*auth, nil)
 		if err != nil {
 			logging.Log.Error("failed to get servers", "error", err)
@@ -80,7 +93,7 @@ func (s *syncer) Sync() {
 		}
 		for i := 0; i < len(serverlist.Servers); i += batchSize {
 			servers := serverlist.Servers[i:min(i+batchSize, len(serverlist.Servers))]
-			if _, err = s.DB.Get().Model(&servers).
+			if _, err = tx.Model(&servers).
 				OnConflict("(id) DO UPDATE").
 				Insert(); err != nil {
 				logging.Log.Error("failed to insert servers", "error", err)
@@ -96,6 +109,10 @@ func (s *syncer) Sync() {
 	}
 
 	if s.Config.HypervisorsEnabled != nil && *s.Config.HypervisorsEnabled {
+		if _, err := tx.Model((*OpenStackHypervisor)(nil)).Where("TRUE").Delete(); err != nil {
+			logging.Log.Error("failed to delete old hypervisors", "error", err)
+			return
+		}
 		hypervisorlist, err := s.HypervisorAPI.Get(*auth, nil)
 		if err != nil {
 			logging.Log.Error("failed to get hypervisors", "error", err)
@@ -103,7 +120,7 @@ func (s *syncer) Sync() {
 		}
 		for i := 0; i < len(hypervisorlist.Hypervisors); i += batchSize {
 			hypervisors := hypervisorlist.Hypervisors[i:min(i+batchSize, len(hypervisorlist.Hypervisors))]
-			if _, err = s.DB.Get().Model(&hypervisors).
+			if _, err = tx.Model(&hypervisors).
 				OnConflict("(id) DO UPDATE").
 				Insert(); err != nil {
 				logging.Log.Error("failed to insert hypervisors", "error", err)
@@ -116,5 +133,11 @@ func (s *syncer) Sync() {
 				Set(float64(len(hypervisorlist.Hypervisors)))
 		}
 		logging.Log.Info("synced OpenStack", "hypervisors", len(hypervisorlist.Hypervisors))
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		logging.Log.Error("failed to commit transaction", "error", err)
+		return
 	}
 }
