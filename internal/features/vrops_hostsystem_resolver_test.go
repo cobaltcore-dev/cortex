@@ -17,7 +17,7 @@ func TestVROpsHostsystemResolver_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	resolver := NewVROpsHostsystemResolver(&mockDB)
+	resolver := NewVROpsHostsystemResolver(&mockDB, monitor{})
 
 	if err := resolver.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -83,7 +83,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	// Create an instance of the resolver
-	resolver := NewVROpsHostsystemResolver(&mockDB)
+	resolver := NewVROpsHostsystemResolver(&mockDB, monitor{})
 	if err = resolver.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

@@ -38,7 +38,8 @@ type APINovaExternalSchedulerRequestHost struct {
 type APINovaExternalSchedulerRequest struct {
 	Spec APINovaExternalSchedulerRequestSpec `json:"spec"`
 	// Whether the Nova scheduling request is a rebuild request.
-	Rebuild bool                                  `json:"rebuild"`
+	Rebuild bool `json:"rebuild"`
+	// TODO: There are more fields
 	Hosts   []APINovaExternalSchedulerRequestHost `json:"hosts"`
 	Weights map[string]float64                    `json:"weights"`
 }
@@ -55,36 +56,15 @@ type ExternalSchedulingAPI interface {
 }
 
 type externalSchedulingAPI struct {
-	Pipeline                 Pipeline
-	receivedRequestsCounter  prometheus.Counter
-	processedRequestsCounter prometheus.Counter
-	requestTimer             prometheus.Histogram
+	Pipeline Pipeline
+	monitor  monitor
 }
 
 func NewExternalSchedulingAPI(config conf.Config, db db.DB) ExternalSchedulingAPI {
-	receivedRequestsCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_scheduler_api_received_requests_total",
-		Help: "Total number of received requests from the Nova scheduler",
-	})
-	processedRequestsCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_scheduler_api_processed_requests_total",
-		Help: "Total number of processed requests from the Nova scheduler",
-	})
-	requestTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_api_request_duration_seconds",
-		Help:    "Duration of requests from the Nova scheduler",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(
-		receivedRequestsCounter,
-		processedRequestsCounter,
-		requestTimer,
-	)
+	m := newSchedulerMonitor()
 	return &externalSchedulingAPI{
-		Pipeline:                 NewPipeline(config, db),
-		receivedRequestsCounter:  receivedRequestsCounter,
-		processedRequestsCounter: processedRequestsCounter,
-		requestTimer:             requestTimer,
+		Pipeline: NewPipeline(config, db, m),
+		monitor:  m,
 	}
 }
 
@@ -125,12 +105,12 @@ func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSch
 // pipeline. Some additional flags are also included.
 // The response contains an ordered list of hosts that the VM should be scheduled on.
 func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
-	if api.receivedRequestsCounter != nil {
-		api.receivedRequestsCounter.Inc()
-	}
-	if api.requestTimer != nil {
+	if api.monitor.apiRequestsTimer != nil {
 		// Profile all responses, including errors.
-		timer := prometheus.NewTimer(api.requestTimer)
+		timer := prometheus.NewTimer(api.monitor.apiRequestsTimer.WithLabelValues(
+			r.Method,
+			api.GetNovaExternalSchedulerURL(),
+		))
 		defer timer.ObserveDuration()
 	}
 
@@ -180,7 +160,10 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 		return
 	}
 
-	if api.processedRequestsCounter != nil {
-		api.processedRequestsCounter.Inc()
+	if api.monitor.apiProcessedCounter != nil {
+		api.monitor.apiProcessedCounter.WithLabelValues(
+			r.Method,
+			api.GetNovaExternalSchedulerURL(),
+		).Inc()
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 
@@ -22,14 +23,17 @@ import (
 
 // Periodically fetch data from the datasources and insert it into the database.
 func runSyncer(config conf.Config, db db.DB) {
-	datasources := prometheus.NewSyncers(config, db)
-	datasources = append(datasources, openstack.NewSyncer(config, db))
-	for _, ds := range datasources {
-		ds.Init()
+	monitor := sync.NewSyncMonitor()
+	syncers := []sync.Datasource{
+		prometheus.NewCombinedSyncer(config, db, monitor),
+		openstack.NewSyncer(config, db, monitor),
+	}
+	for _, syncer := range syncers {
+		syncer.Init()
 	}
 	for {
-		for _, ds := range datasources {
-			ds.Sync()
+		for _, syncer := range syncers {
+			syncer.Sync()
 		}
 		time.Sleep(time.Minute * 1)
 	}

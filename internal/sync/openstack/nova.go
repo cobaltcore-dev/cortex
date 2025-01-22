@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -160,35 +161,11 @@ type ServerAPI interface {
 }
 
 type serverAPI struct {
-	getReceivedCounter  prometheus.Counter
-	getProcessedCounter prometheus.Counter
-	getTimer            prometheus.Histogram
+	monitor sync.Monitor
 }
 
-func NewServerAPI() ServerAPI {
-	getReceivedCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_openstack_server_get_total",
-		Help: "Total number of OpenStack server get requests (paginated)",
-	})
-	getProcessedCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_openstack_server_get_processed_total",
-		Help: "Total number of processed OpenStack server get requests (paginated)",
-	})
-	getTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_openstack_server_get_duration_seconds",
-		Help:    "Duration of OpenStack server get requests (paginated)",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(
-		getReceivedCounter,
-		getProcessedCounter,
-		getTimer,
-	)
-	return &serverAPI{
-		getReceivedCounter:  getReceivedCounter,
-		getProcessedCounter: getProcessedCounter,
-		getTimer:            getTimer,
-	}
+func NewServerAPI(monitor sync.Monitor) ServerAPI {
+	return &serverAPI{monitor: monitor}
 }
 
 // GetServers returns a list of servers from the OpenStack Nova API.
@@ -197,11 +174,9 @@ func NewServerAPI() ServerAPI {
 //
 //nolint:dupl
 func (api *serverAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
-	if api.getReceivedCounter != nil {
-		api.getReceivedCounter.Inc()
-	}
-	if api.getTimer != nil {
-		timer := prometheus.NewTimer(api.getTimer)
+	if api.monitor.PipelineRequestTimer != nil {
+		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_nova_servers")
+		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 
@@ -247,8 +222,8 @@ func (api *serverAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackSe
 		}
 	}
 
-	if api.getProcessedCounter != nil {
-		api.getProcessedCounter.Inc()
+	if api.monitor.PipelineRequestProcessedCounter != nil {
+		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_nova_servers").Inc()
 	}
 	return &serverList, nil
 }
@@ -258,35 +233,11 @@ type HypervisorAPI interface {
 }
 
 type hypervisorAPI struct {
-	getReceivedCounter  prometheus.Counter
-	getProcessedCounter prometheus.Counter
-	getTimer            prometheus.Histogram
+	monitor sync.Monitor
 }
 
-func NewHypervisorAPI() HypervisorAPI {
-	getReceivedCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_openstack_hypervisor_get_total",
-		Help: "Total number of OpenStack hypervisor get requests (paginated)",
-	})
-	getProcessedCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_openstack_hypervisor_get_processed_total",
-		Help: "Total number of processed OpenStack hypervisor get requests (paginated)",
-	})
-	getTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_openstack_hypervisor_get_duration_seconds",
-		Help:    "Duration of OpenStack hypervisor get requests (paginated)",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(
-		getReceivedCounter,
-		getProcessedCounter,
-		getTimer,
-	)
-	return &hypervisorAPI{
-		getReceivedCounter:  getReceivedCounter,
-		getProcessedCounter: getProcessedCounter,
-		getTimer:            getTimer,
-	}
+func NewHypervisorAPI(monitor sync.Monitor) HypervisorAPI {
+	return &hypervisorAPI{monitor: monitor}
 }
 
 // GetHypervisors returns a list of hypervisors from the OpenStack Nova API.
@@ -295,11 +246,9 @@ func NewHypervisorAPI() HypervisorAPI {
 //
 //nolint:dupl
 func (api *hypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
-	if api.getReceivedCounter != nil {
-		api.getReceivedCounter.Inc()
-	}
-	if api.getTimer != nil {
-		timer := prometheus.NewTimer(api.getTimer)
+	if api.monitor.PipelineRequestTimer != nil {
+		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_nova_hypervisors")
+		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 
@@ -344,8 +293,8 @@ func (api *hypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openSta
 		}
 	}
 
-	if api.getProcessedCounter != nil {
-		api.getProcessedCounter.Inc()
+	if api.monitor.PipelineRequestProcessedCounter != nil {
+		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_nova_hypervisors").Inc()
 	}
 	return &hypervisorList, nil
 }

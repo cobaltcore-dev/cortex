@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -81,26 +82,14 @@ type KeystoneAPI interface {
 }
 
 type keystoneAPI struct {
-	Conf        conf.SecretOpenStackConfig
-	authCounter prometheus.Counter
-	authTimer   prometheus.Histogram
+	Conf    conf.SecretOpenStackConfig
+	monitor sync.Monitor
 }
 
-func NewKeystoneAPI() KeystoneAPI {
-	authCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_openstack_keystone_auth_total",
-		Help: "Total number of OpenStack Keystone authentications",
-	})
-	authTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_openstack_keystone_auth_duration_seconds",
-		Help:    "Duration of OpenStack Keystone authentication",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(authCounter, authTimer)
+func NewKeystoneAPI(monitor sync.Monitor) KeystoneAPI {
 	return &keystoneAPI{
-		Conf:        conf.NewSecretConfig().SecretOpenStackConfig,
-		authCounter: authCounter,
-		authTimer:   authTimer,
+		Conf:    conf.NewSecretConfig().SecretOpenStackConfig,
+		monitor: monitor,
 	}
 }
 
@@ -108,11 +97,9 @@ func NewKeystoneAPI() KeystoneAPI {
 // This uses the configured OpenStack credentials to obtain an authentication token.
 // We also extract URLs to the required services (e.g. Nova) from the response.
 func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
-	if k.authCounter != nil {
-		k.authCounter.Inc()
-	}
-	if k.authTimer != nil {
-		timer := prometheus.NewTimer(k.authTimer)
+	if k.monitor.PipelineRequestTimer != nil {
+		hist := k.monitor.PipelineRequestTimer.WithLabelValues("openstack_keystone")
+		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 
@@ -187,6 +174,9 @@ func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 		return nil, errors.New("failed to find Nova endpoint")
 	}
 
+	if k.monitor.PipelineRequestProcessedCounter != nil {
+		k.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_keystone").Inc()
+	}
 	return &openStackKeystoneAuth{
 		nova:  openStackEndpoint{URL: novaEndpoint},
 		token: resp.Header.Get("X-Subject-Token"),

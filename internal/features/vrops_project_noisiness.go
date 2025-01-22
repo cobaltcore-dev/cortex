@@ -19,26 +19,19 @@ type VROpsProjectNoisiness struct {
 }
 
 type vROpsProjectNoisinessExtractor struct {
-	DB                db.DB
-	extractionCounter prometheus.Counter
-	extractionTimer   prometheus.Histogram
+	DB       db.DB
+	runTimer prometheus.Observer
 }
 
-func NewVROpsProjectNoisinessExtractor(db db.DB) FeatureExtractor {
-	extractionCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_feature_vrops_project_noisiness_extract_runs",
-		Help: "Total number of vROps project noisiness extractions",
-	})
-	extractionTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_feature_vrops_project_noisiness_extract_duration_seconds",
-		Help:    "Duration of vROps project noisiness extraction",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(extractionCounter, extractionTimer)
+func NewVROpsProjectNoisinessExtractor(db db.DB, m monitor) FeatureExtractor {
+	stepName := "vrops_project_noisiness"
+	var runTimer prometheus.Observer
+	if m.stepRunTimer != nil {
+		runTimer = m.stepRunTimer.WithLabelValues(stepName)
+	}
 	return &vROpsProjectNoisinessExtractor{
-		DB:                db,
-		extractionCounter: extractionCounter,
-		extractionTimer:   extractionTimer,
+		DB:       db,
+		runTimer: runTimer,
 	}
 }
 
@@ -60,11 +53,8 @@ func (e *vROpsProjectNoisinessExtractor) Init() error {
 // This feature can then be used to draw new VMs away from VMs of the same
 // project in case this project is known to cause high cpu usage.
 func (e *vROpsProjectNoisinessExtractor) Extract() error {
-	if e.extractionCounter != nil {
-		e.extractionCounter.Inc()
-	}
-	if e.extractionTimer != nil {
-		timer := prometheus.NewTimer(e.extractionTimer)
+	if e.runTimer != nil {
+		timer := prometheus.NewTimer(e.runTimer)
 		defer timer.ObserveDuration()
 	}
 

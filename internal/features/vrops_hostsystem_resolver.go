@@ -18,26 +18,19 @@ type ResolvedVROpsHostsystem struct {
 }
 
 type vropsHostsystemResolver struct {
-	DB                db.DB
-	extractionCounter prometheus.Counter
-	extractionTimer   prometheus.Histogram
+	DB       db.DB
+	runTimer prometheus.Observer
 }
 
-func NewVROpsHostsystemResolver(db db.DB) FeatureExtractor {
-	extractionCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_feature_vrops_resolved_hostsystem_extract_runs",
-		Help: "Total number of vROps hostsystem resolutions",
-	})
-	extractionTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_feature_vrops_resolved_hostsystem_extract_duration_seconds",
-		Help:    "Duration of vROps hostsystem resolution",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(extractionCounter, extractionTimer)
+func NewVROpsHostsystemResolver(db db.DB, m monitor) FeatureExtractor {
+	stepName := "vrops_hostsystem_resolver"
+	var runTimer prometheus.Observer
+	if m.stepRunTimer != nil {
+		runTimer = m.stepRunTimer.WithLabelValues(stepName)
+	}
 	return &vropsHostsystemResolver{
-		DB:                db,
-		extractionCounter: extractionCounter,
-		extractionTimer:   extractionTimer,
+		DB:       db,
+		runTimer: runTimer,
 	}
 }
 
@@ -53,11 +46,8 @@ func (e *vropsHostsystemResolver) Init() error {
 
 // Resolve vROps hostsystems to Nova compute hosts.
 func (e *vropsHostsystemResolver) Extract() error {
-	if e.extractionCounter != nil {
-		e.extractionCounter.Inc()
-	}
-	if e.extractionTimer != nil {
-		timer := prometheus.NewTimer(e.extractionTimer)
+	if e.runTimer != nil {
+		timer := prometheus.NewTimer(e.runTimer)
 		defer timer.ObserveDuration()
 	}
 

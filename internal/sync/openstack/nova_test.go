@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/cobaltcore-dev/cortex/internal/sync"
 )
 
 func TestGetServers(t *testing.T) {
@@ -40,7 +42,7 @@ func TestGetServers(t *testing.T) {
 		token: "test-token",
 	}
 
-	api := NewServerAPI()
+	api := NewServerAPI(sync.Monitor{})
 	servers, err := api.Get(auth, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -87,7 +89,7 @@ func TestGetHypervisors(t *testing.T) {
 		token: "test-token",
 	}
 
-	api := NewHypervisorAPI()
+	api := NewHypervisorAPI(sync.Monitor{})
 	hypervisors, err := api.Get(auth, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

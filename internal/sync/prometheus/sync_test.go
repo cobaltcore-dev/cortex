@@ -107,7 +107,6 @@ func TestSyncer_sync(t *testing.T) {
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
-		SyncTimeout:           0,
 		MetricName:            "test_metric",
 		PrometheusAPI:         mockPrometheusAPI,
 		DB:                    &mockDB,
@@ -147,7 +146,6 @@ func TestSyncer_sync_Failure(t *testing.T) {
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
-		SyncTimeout:           0,
 		MetricName:            "test_metric",
 		PrometheusAPI:         mockPrometheusAPI,
 		DB:                    &mockDB,

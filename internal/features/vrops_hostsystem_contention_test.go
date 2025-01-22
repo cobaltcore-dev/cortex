@@ -16,7 +16,7 @@ func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	extractor := NewVROpsHostsystemContentionExtractor(&mockDB)
+	extractor := NewVROpsHostsystemContentionExtractor(&mockDB, monitor{})
 
 	if err := extractor.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -70,7 +70,7 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	extractor := NewVROpsHostsystemContentionExtractor(&mockDB)
+	extractor := NewVROpsHostsystemContentionExtractor(&mockDB, monitor{})
 	if err := extractor.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

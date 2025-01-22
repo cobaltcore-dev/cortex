@@ -12,7 +12,7 @@ import (
 
 // Configuration of feature extractors supported by the scheduler.
 // The features to extract are defined in the configuration file.
-var supportedExtractors = map[string]func(db.DB) FeatureExtractor{
+var supportedExtractors = map[string]func(db.DB, monitor) FeatureExtractor{
 	"vrops_hostsystem_resolver":             NewVROpsHostsystemResolver,
 	"vrops_project_noisiness_extractor":     NewVROpsProjectNoisinessExtractor,
 	"vrops_hostsystem_contention_extractor": NewVROpsHostsystemContentionExtractor,
@@ -30,37 +30,26 @@ type FeatureExtractorPipeline interface {
 
 type featureExtractorPipeline struct {
 	FeatureExtractors []FeatureExtractor
-	extractionCounter prometheus.Counter
-	extractionTimer   prometheus.Histogram
+	monitor           monitor
 }
 
 // Create a new feature extractor pipeline with extractors contained in
 // the configuration.
 func NewPipeline(config conf.Config, database db.DB) FeatureExtractorPipeline {
 	moduleConfig := config.GetFeaturesConfig()
+	m := newPipelineMonitor()
 	extractors := []FeatureExtractor{}
 	for _, extractorConfig := range moduleConfig.Extractors {
 		if extractorFunc, ok := supportedExtractors[extractorConfig.Name]; ok {
-			extractor := extractorFunc(database)
+			extractor := extractorFunc(database, m)
 			extractors = append(extractors, extractor)
 		} else {
 			panic("unknown feature extractor: " + extractorConfig.Name)
 		}
 	}
-	extractionCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_features_pipeline_extract_runs",
-		Help: "Total number of feature extractions",
-	})
-	extractionTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_features_pipeline_extract_duration_seconds",
-		Help:    "Duration of feature extraction",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(extractionCounter, extractionTimer)
 	return &featureExtractorPipeline{
 		FeatureExtractors: extractors,
-		extractionCounter: extractionCounter,
-		extractionTimer:   extractionTimer,
+		monitor:           m,
 	}
 }
 
@@ -75,11 +64,8 @@ func (p *featureExtractorPipeline) Init() {
 
 // Extract features from the data sources.
 func (p *featureExtractorPipeline) Extract() {
-	if p.extractionCounter != nil {
-		p.extractionCounter.Inc()
-	}
-	if p.extractionTimer != nil {
-		timer := prometheus.NewTimer(p.extractionTimer)
+	if p.monitor.pipelineRunTimer != nil {
+		timer := prometheus.NewTimer(p.monitor.pipelineRunTimer)
 		defer timer.ObserveDuration()
 	}
 

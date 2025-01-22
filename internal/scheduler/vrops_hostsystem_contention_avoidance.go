@@ -14,41 +14,37 @@ type avoidContendedHostsStep struct {
 	DB                        db.DB
 	AvgCPUContentionThreshold any
 	MaxCPUContentionThreshold any
-	runCounter                prometheus.Counter
-	runTimer                  prometheus.Histogram
+	runTimer                  prometheus.Observer
+	weightModObserver         prometheus.Observer
 }
 
-func NewAvoidContendedHostsStep(opts map[string]any, db db.DB) PipelineStep {
-	runCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_scheduler_avoid_contended_hosts_runs",
-		Help: "Total number of avoid contended hosts runs",
-	})
-	runTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_avoid_contended_hosts_duration_seconds",
-		Help:    "Duration of avoid contended hosts run",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(runCounter, runTimer)
+func NewAvoidContendedHostsStep(opts map[string]any, db db.DB, m monitor) PipelineStep {
+	stepName := "vrops_avoid_contended_hosts"
+	var runTimer prometheus.Observer
+	if m.stepRunTimer != nil {
+		runTimer = m.stepRunTimer.WithLabelValues(stepName)
+	}
+	var weightModObserver prometheus.Observer
+	if m.stepWeightModObserver != nil {
+		weightModObserver = m.stepWeightModObserver.WithLabelValues(stepName)
+	}
 	return &avoidContendedHostsStep{
 		DB:                        db,
 		AvgCPUContentionThreshold: opts["avgCPUContentionThreshold"],
 		MaxCPUContentionThreshold: opts["maxCPUContentionThreshold"],
-		runCounter:                runCounter,
 		runTimer:                  runTimer,
+		weightModObserver:         weightModObserver,
 	}
 }
 
 // Downvote hosts that are highly contended.
 func (s *avoidContendedHostsStep) Run(state *pipelineState) error {
-	if s.runCounter != nil {
-		s.runCounter.Inc()
-	}
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)
 		defer timer.ObserveDuration()
 	}
 
-	logging.Log.Info("scheduler: contention - avoid contended hosts")
+	logging.Log.Debug("scheduler: contention - avoid contended hosts")
 
 	var highlyContendedHosts []features.VROpsHostsystemContention
 	if err := s.DB.Get().
@@ -62,16 +58,21 @@ func (s *avoidContendedHostsStep) Run(state *pipelineState) error {
 	for _, h := range highlyContendedHosts {
 		hostsByName[h.ComputeHost] = h
 	}
+	var modifiedWeights = 0
 	for i := range state.Hosts {
 		if h, ok := hostsByName[state.Hosts[i].ComputeHost]; ok {
 			state.Weights[state.Hosts[i].ComputeHost] = 0.0
-			logging.Log.Info(
+			modifiedWeights++
+			logging.Log.Debug(
 				"scheduler: downvoting host",
 				"host", h.ComputeHost,
 				"avgContention", h.AvgCPUContention,
 				"maxContention", h.MaxCPUContention,
 			)
 		}
+	}
+	if s.weightModObserver != nil {
+		s.weightModObserver.Observe(float64(modifiedWeights))
 	}
 	return nil
 }

@@ -14,47 +14,23 @@ import (
 )
 
 type syncer struct {
-	Config           conf.SyncOpenStackConfig
-	ServerAPI        ServerAPI
-	HypervisorAPI    HypervisorAPI
-	KeystoneAPI      KeystoneAPI
-	DB               db.DB
-	syncCounter      prometheus.Counter
-	syncTimer        prometheus.Histogram
-	serversGauge     prometheus.Gauge
-	hypervisorsGauge prometheus.Gauge
+	Config        conf.SyncOpenStackConfig
+	ServerAPI     ServerAPI
+	HypervisorAPI HypervisorAPI
+	KeystoneAPI   KeystoneAPI
+	DB            db.DB
+	monitor       sync.Monitor
 }
 
 // Create a new OpenStack syncer with the given configuration and database.
-func NewSyncer(config conf.Config, db db.DB) sync.Datasource {
-	syncCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_openstack_sync_runs",
-		Help: "Total number of OpenStack sync runs",
-	})
-	syncTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_openstack_sync_duration_seconds",
-		Help:    "Duration of OpenStack sync run",
-		Buckets: prometheus.DefBuckets,
-	})
-	serversGauge := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "cortex_openstack_servers",
-		Help: "Retrieved number of OpenStack servers",
-	})
-	hypervisorsGauge := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "cortex_openstack_hypervisors",
-		Help: "Retrieved number of OpenStack hypervisors",
-	})
-	prometheus.MustRegister(syncCounter, syncTimer, serversGauge, hypervisorsGauge)
+func NewSyncer(config conf.Config, db db.DB, monitor sync.Monitor) sync.Datasource {
 	return &syncer{
-		Config:           config.GetSyncConfig().OpenStack,
-		ServerAPI:        NewServerAPI(),
-		HypervisorAPI:    NewHypervisorAPI(),
-		KeystoneAPI:      NewKeystoneAPI(),
-		DB:               db,
-		syncCounter:      syncCounter,
-		syncTimer:        syncTimer,
-		serversGauge:     serversGauge,
-		hypervisorsGauge: hypervisorsGauge,
+		Config:        config.GetSyncConfig().OpenStack,
+		ServerAPI:     NewServerAPI(monitor),
+		HypervisorAPI: NewHypervisorAPI(monitor),
+		KeystoneAPI:   NewKeystoneAPI(monitor),
+		DB:            db,
+		monitor:       monitor,
 	}
 }
 
@@ -78,11 +54,9 @@ func (s *syncer) Init() {
 
 // Sync OpenStack data with the database.
 func (s *syncer) Sync() {
-	if s.syncCounter != nil {
-		s.syncCounter.Inc()
-	}
-	if s.syncTimer != nil {
-		timer := prometheus.NewTimer(s.syncTimer)
+	if s.monitor.PipelineRunTimer != nil {
+		hist := s.monitor.PipelineRunTimer.WithLabelValues("openstack")
+		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 
@@ -113,8 +87,10 @@ func (s *syncer) Sync() {
 				return
 			}
 		}
-		if s.serversGauge != nil {
-			s.serversGauge.Set(float64(len(serverlist.Servers)))
+		if s.monitor.PipelineObjectsGauge != nil {
+			s.monitor.PipelineObjectsGauge.
+				WithLabelValues("openstack_nova_servers").
+				Set(float64(len(serverlist.Servers)))
 		}
 		logging.Log.Info("synced OpenStack", "servers", len(serverlist.Servers))
 	}
@@ -134,8 +110,10 @@ func (s *syncer) Sync() {
 				return
 			}
 		}
-		if s.hypervisorsGauge != nil {
-			s.hypervisorsGauge.Set(float64(len(hypervisorlist.Hypervisors)))
+		if s.monitor.PipelineObjectsGauge != nil {
+			s.monitor.PipelineObjectsGauge.
+				WithLabelValues("openstack_nova_hypervisors").
+				Set(float64(len(hypervisorlist.Hypervisors)))
 		}
 		logging.Log.Info("synced OpenStack", "hypervisors", len(hypervisorlist.Hypervisors))
 	}

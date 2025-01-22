@@ -11,42 +11,38 @@ import (
 )
 
 type vROpsAntiAffinityNoisyProjectsStep struct {
-	DB              db.DB
-	AvgCPUThreshold any
-	runCounter      prometheus.Counter
-	runTimer        prometheus.Histogram
+	DB                db.DB
+	AvgCPUThreshold   any
+	runTimer          prometheus.Observer
+	weightModObserver prometheus.Observer
 }
 
-func NewVROpsAntiAffinityNoisyProjectsStep(opts map[string]any, db db.DB) PipelineStep {
-	runCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cortex_scheduler_vrops_anti_affinity_noisy_projects_runs",
-		Help: "Total number of vROps anti-affinity noisy projects runs",
-	})
-	runTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_vrops_anti_affinity_noisy_projects_duration_seconds",
-		Help:    "Duration of vROps anti-affinity noisy projects run",
-		Buckets: prometheus.DefBuckets,
-	})
-	prometheus.MustRegister(runCounter, runTimer)
+func NewVROpsAntiAffinityNoisyProjectsStep(opts map[string]any, db db.DB, m monitor) PipelineStep {
+	stepName := "vrops_anti_affinity_noisy_projects"
+	var runTimer prometheus.Observer
+	if m.stepRunTimer != nil {
+		runTimer = m.stepRunTimer.WithLabelValues(stepName)
+	}
+	var weightModObserver prometheus.Observer
+	if m.stepWeightModObserver != nil {
+		weightModObserver = m.stepWeightModObserver.WithLabelValues(stepName)
+	}
 	return &vROpsAntiAffinityNoisyProjectsStep{
-		DB:              db,
-		AvgCPUThreshold: opts["avgCPUThreshold"],
-		runCounter:      runCounter,
-		runTimer:        runTimer,
+		DB:                db,
+		AvgCPUThreshold:   opts["avgCPUThreshold"],
+		runTimer:          runTimer,
+		weightModObserver: weightModObserver,
 	}
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *vROpsAntiAffinityNoisyProjectsStep) Run(state *pipelineState) error {
-	if s.runCounter != nil {
-		s.runCounter.Inc()
-	}
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)
 		defer timer.ObserveDuration()
 	}
 
-	logging.Log.Info("scheduler: anti-affinity - noisy projects")
+	logging.Log.Debug("scheduler: anti-affinity - noisy projects")
 
 	// If the average CPU usage is above the threshold, the project is considered noisy.
 	var noisyProjects []features.VROpsProjectNoisiness
@@ -68,13 +64,22 @@ func (s *vROpsAntiAffinityNoisyProjectsStep) Run(state *pipelineState) error {
 		return nil
 	}
 	// Downvote the hosts this project is currently running on.
+	var modifiedWeights = 0
 	for i := range state.Hosts {
 		for _, host := range val {
 			if state.Hosts[i].ComputeHost == host {
 				state.Weights[state.Hosts[i].ComputeHost] = 0.0
-				logging.Log.Info("scheduler: downvoting host", "host", host, "project", state.Spec.ProjectID)
+				modifiedWeights++
+				logging.Log.Debug(
+					"scheduler: downvoting host",
+					"host", host,
+					"project", state.Spec.ProjectID,
+				)
 			}
 		}
+	}
+	if s.weightModObserver != nil {
+		s.weightModObserver.Observe(float64(modifiedWeights))
 	}
 	return nil
 }
