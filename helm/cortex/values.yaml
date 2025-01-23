@@ -86,15 +86,6 @@ tolerations: []
 
 affinity: {}
 
-postgresql:
-  volumePermissions:
-    enabled: true
-  auth:
-    postgresPassword: secret
-  service:
-    ports:
-      postgresql: 5432
-
 # ######### Values passed to the service by conf.yaml ###########
 conf:
   sync:

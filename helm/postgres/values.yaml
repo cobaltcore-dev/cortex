@@ -1,0 +1,9 @@
+postgresql:
+  fullnameOverride: cortex-postgresql
+  volumePermissions:
+    enabled: true
+  auth:
+    postgresPassword: secret
+  service:
+    ports:
+      postgresql: 5432
