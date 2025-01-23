@@ -27,9 +27,11 @@ export OS_USER_DOMAIN_NAME=""
 export OS_PROJECT_DOMAIN_NAME=""
 ```
 
-Set URL to Prometheus which contains VMware vROps metrics:
+Set Prometheus URL and SSO certificates:
 ```bash
 export PROMETHEUS_URL=""
+export PROMETHEUS_SSO_PUBLIC_KEY=""
+export PROMETHEUS_SSO_PRIVATE_KEY=""
 ```
 See: https://github.com/sapcc/vrops-exporter
 

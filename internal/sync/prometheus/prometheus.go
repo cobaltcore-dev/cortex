@@ -6,6 +6,8 @@ package prometheus
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -97,13 +99,26 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	urlStr += "&step=" + strconv.Itoa(resolutionSeconds)
 	logging.Log.Info("fetching metrics from", "url", urlStr)
 
+	// Add the SSO certificate stored under Secrets.
+	cert, err := tls.X509KeyPair([]byte(api.Secrets.PrometheusSSOPublicKey), []byte(api.Secrets.PrometheusSSOPrivateKey))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AddCert(cert.Leaf)
+	client := &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      caCertPool,
+		},
+	}}
+
 	ctx := context.Background()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)

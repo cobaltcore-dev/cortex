@@ -30,7 +30,9 @@ type SecretOpenStackConfig struct {
 
 // Prometheus configuration with the necessary connection parameters.
 type SecretPrometheusConfig struct {
-	PrometheusURL string
+	PrometheusURL           string
+	PrometheusSSOPublicKey  string
+	PrometheusSSOPrivateKey string
 }
 
 type SecretConfig struct {
@@ -58,7 +60,9 @@ func NewSecretConfig() SecretConfig {
 			OSProjectDomainName: ForceGetenv("OS_PROJECT_DOMAIN_NAME"),
 		},
 		SecretPrometheusConfig: SecretPrometheusConfig{
-			PrometheusURL: ForceGetenv("PROMETHEUS_URL"),
+			PrometheusURL:           ForceGetenv("PROMETHEUS_URL"),
+			PrometheusSSOPublicKey:  ForceGetenv("PROMETHEUS_SSO_PUBLIC_KEY"),
+			PrometheusSSOPrivateKey: ForceGetenv("PROMETHEUS_SSO_PRIVATE_KEY"),
 		},
 	}
 }
