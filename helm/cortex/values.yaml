@@ -18,6 +18,8 @@ secrets:
 
   prometheus:
     url:
+    ssoPublicKey:
+    ssoPrivateKey:
 
 replicaCount: 1
 
