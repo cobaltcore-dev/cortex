@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -76,6 +77,35 @@ func NewPrometheusAPI[M PrometheusMetric](metricName string, monitor sync.Monito
 	}
 }
 
+func (api *prometheusAPI[M]) getHTTPClient() (*http.Client, error) {
+	if api.Secrets.PrometheusSSOPublicKey == "" {
+		return &http.Client{}, nil
+	}
+	// If we have a public key, we also need a private key.
+	if api.Secrets.PrometheusSSOPrivateKey == "" {
+		return nil, errors.New("missing private key for SSO")
+	}
+	cert, err := tls.X509KeyPair(
+		[]byte(api.Secrets.PrometheusSSOPublicKey),
+		[]byte(api.Secrets.PrometheusSSOPrivateKey),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AddCert(cert.Leaf)
+	return &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      caCertPool,
+			// Skip verification of the server certificate.
+			// This is necessary because the SSO certificate is self-signed.
+			//nolint:gosec
+			InsecureSkipVerify: true,
+		},
+	}}, nil
+}
+
 // Fetch VMware vROps metrics from Prometheus.
 // The query is executed in the time window [start, end] with the specified resolution.
 func (api *prometheusAPI[M]) FetchMetrics(
@@ -99,26 +129,16 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	urlStr += "&step=" + strconv.Itoa(resolutionSeconds)
 	logging.Log.Info("fetching metrics from", "url", urlStr)
 
-	// Add the SSO certificate stored under Secrets.
-	cert, err := tls.X509KeyPair([]byte(api.Secrets.PrometheusSSOPublicKey), []byte(api.Secrets.PrometheusSSOPrivateKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load client certificate: %w", err)
-	}
-	caCertPool := x509.NewCertPool()
-	caCertPool.AddCert(cert.Leaf)
-	client := &http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			RootCAs:      caCertPool,
-		},
-	}}
-
 	ctx := context.Background()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	client, err := api.getHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
