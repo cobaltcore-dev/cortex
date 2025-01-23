@@ -191,7 +191,7 @@ func (s *syncer[M]) sync(start time.Time) {
 		s.MetricName, time.Now().Add(-s.SyncTimeRange),
 	)
 	if err != nil {
-		fmt.Printf("Failed to delete old metrics: %v\n", err)
+		logging.Log.Error("failed to delete old metrics", "error", err)
 		return
 	}
 	logging.Log.Info("deleted old metrics", "rows", result.RowsAffected())
@@ -200,7 +200,7 @@ func (s *syncer[M]) sync(start time.Time) {
 		s.MetricName, start, end, s.SyncResolutionSeconds,
 	)
 	if err != nil {
-		fmt.Printf("Failed to fetch metrics: %v\n", err)
+		logging.Log.Error("failed to fetch metrics", "error", err)
 		return
 	}
 	// Insert in smaller batches to avoid OOM issues.

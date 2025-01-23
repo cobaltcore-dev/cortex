@@ -4,9 +4,11 @@
 package prometheus
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -115,8 +117,20 @@ func (api *prometheusAPI[M]) FetchMetrics(
 			Result     []json.RawMessage `json:"result"`
 		} `json:"data"`
 	}
+	// Copy the body to print it out in case of an error.
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // Restore the body for further processing
+
 	err = json.NewDecoder(resp.Body).Decode(&prometheusData)
 	if err != nil {
+		logging.Log.Error(
+			"failed to decode response",
+			"body", string(bodyBytes),
+			"error", err,
+		)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
