@@ -20,7 +20,7 @@
   "panels": [
     {
       "collapsed": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -33,7 +33,7 @@
       "type": "row"
     },
     {
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -95,7 +95,7 @@
       "type": "stat"
     },
     {
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -158,7 +158,7 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -175,7 +175,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -267,7 +267,7 @@
       }
     },
     {
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -330,7 +330,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {
           "unit": "s"
@@ -432,7 +432,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -524,7 +524,7 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -541,7 +541,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -635,7 +635,7 @@
       }
     },
     {
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -708,7 +708,7 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -725,7 +725,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "prometheus-kubernetes",
       "fieldConfig": {
         "defaults": {
           "unit": "s"
