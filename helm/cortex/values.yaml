@@ -52,13 +52,10 @@ service:
   apiPort: 8080
   metricsPort: 2112
 
-resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+resources:
+  limits:
+    cpu: 250m
+    memory: 1024Mi
 
 livenessProbe:
   httpGet:
