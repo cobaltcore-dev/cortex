@@ -12,7 +12,6 @@ type Monitor struct {
 	stepRunTimer          *prometheus.HistogramVec
 	stepWeightModObserver *prometheus.HistogramVec
 	apiRequestsTimer      *prometheus.HistogramVec
-	apiProcessedCounter   *prometheus.CounterVec
 	pipelineRunTimer      prometheus.Histogram
 	hostNumberInObserver  prometheus.Histogram
 	hostNumberOutObserver prometheus.Histogram
@@ -33,11 +32,7 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		Name:    "cortex_scheduler_api_request_duration_seconds",
 		Help:    "Duration of API requests",
 		Buckets: prometheus.DefBuckets,
-	}, []string{"method", "path"})
-	apiProcessedCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cortex_scheduler_api_request_processed_total",
-		Help: "Number of processed API requests",
-	}, []string{"method", "path"})
+	}, []string{"method", "path", "status", "error"})
 	pipelineRunTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline run",
@@ -57,7 +52,6 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		stepRunTimer,
 		stepWeightModObserver,
 		apiRequestsTimer,
-		apiProcessedCounter,
 		pipelineRunTimer,
 		hostNumberInObserver,
 		hostNumberOutObserver,
@@ -66,7 +60,6 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		stepRunTimer:          stepRunTimer,
 		stepWeightModObserver: stepWeightModObserver,
 		apiRequestsTimer:      apiRequestsTimer,
-		apiProcessedCounter:   apiProcessedCounter,
 		pipelineRunTimer:      pipelineRunTimer,
 		hostNumberInObserver:  hostNumberInObserver,
 		hostNumberOutObserver: hostNumberOutObserver,

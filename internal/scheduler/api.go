@@ -6,13 +6,15 @@ package scheduler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Spec object from the Nova scheduler pipeline.
@@ -83,6 +85,7 @@ func (api *externalSchedulingAPI) GetNovaExternalSchedulerURL() string {
 }
 
 // Check if the scheduler can run based on the request data.
+// Note: messages returned here are user-facing and should not contain internal details.
 func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSchedulerRequest) (ok bool, reason string) {
 	if requestData.Rebuild {
 		return false, "rebuild is not supported yet"
@@ -121,21 +124,36 @@ func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSch
 // pipeline. Some additional flags are also included.
 // The response contains an ordered list of hosts that the VM should be scheduled on.
 func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
-	if api.monitor.apiRequestsTimer != nil {
-		// Profile all responses, including errors.
-		timer := prometheus.NewTimer(api.monitor.apiRequestsTimer.WithLabelValues(
-			r.Method,
-			api.GetNovaExternalSchedulerURL(),
-		))
-		defer timer.ObserveDuration()
+	// Monitor the time it takes to handle the request.
+	// Also add the response code and potential error.
+	startTime := time.Now()
+	var respondWith = func(code int, err error, text string) {
+		if api.monitor.apiRequestsTimer != nil {
+			observer := api.monitor.apiRequestsTimer.WithLabelValues(
+				r.Method,
+				api.GetNovaExternalSchedulerURL(),
+				strconv.Itoa(code),
+				text, // Internal error messages should not face the monitor.
+			)
+			observer.Observe(time.Since(startTime).Seconds())
+		}
+		if err != nil {
+			logging.Log.Error("failed to handle request", "error", err)
+			http.Error(w, text, code)
+			return
+		}
+		// If there was no error, nothing else to do.
 	}
 
 	// If configured, log out the complete request body.
 	if api.config != nil && api.config.GetSchedulerConfig().LogRequestBodies {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			logging.Log.Error("failed to read request body", "error", err)
-			http.Error(w, "failed to read request body", http.StatusInternalServerError)
+			respondWith(
+				http.StatusInternalServerError,
+				fmt.Errorf("failed to read request body: %w", err),
+				"failed to read request body",
+			)
 			return
 		}
 		logging.Log.Info("request body", "body", string(body))
@@ -143,14 +161,20 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 	}
 
 	if r.Method != http.MethodPost {
-		logging.Log.Error("invalid request method", "method", r.Method)
-		http.Error(w, "invalid request method", http.StatusMethodNotAllowed)
+		respondWith(
+			http.StatusMethodNotAllowed,
+			fmt.Errorf("invalid request method: %s", r.Method),
+			"invalid request method",
+		)
 		return
 	}
 	var requestData APINovaExternalSchedulerRequest
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		logging.Log.Error("failed to decode request", "error", err)
-		http.Error(w, "bad request", http.StatusBadRequest)
+		respondWith(
+			http.StatusBadRequest,
+			fmt.Errorf("failed to decode request: %w", err),
+			"failed to decode request",
+		)
 		return
 	}
 	logging.Log.Info(
@@ -160,8 +184,11 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 	)
 
 	if ok, reason := api.canRunScheduler(requestData); !ok {
-		logging.Log.Error("cannot run scheduler", "reason", reason)
-		http.Error(w, reason, http.StatusBadRequest)
+		respondWith(
+			http.StatusBadRequest,
+			fmt.Errorf("cannot run scheduler: %s", reason),
+			reason,
+		)
 		return
 	}
 
@@ -176,22 +203,22 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 	// Evaluate the pipeline and return the ordered list of hosts.
 	hosts, err := api.Pipeline.Run(state)
 	if err != nil {
-		logging.Log.Error("failed to evaluate pipeline", "error", err)
-		http.Error(w, "failed to evaluate pipeline", http.StatusInternalServerError)
+		respondWith(
+			http.StatusInternalServerError,
+			fmt.Errorf("failed to evaluate pipeline: %w", err),
+			"failed to evaluate pipeline",
+		)
 		return
 	}
 	response := APINovaExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
-		logging.Log.Error("failed to encode response", "error", err)
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		respondWith(
+			http.StatusInternalServerError,
+			fmt.Errorf("failed to encode response: %w", err),
+			"failed to encode response",
+		)
 		return
 	}
-
-	if api.monitor.apiProcessedCounter != nil {
-		api.monitor.apiProcessedCounter.WithLabelValues(
-			r.Method,
-			api.GetNovaExternalSchedulerURL(),
-		).Inc()
-	}
+	respondWith(http.StatusOK, nil, "Success")
 }

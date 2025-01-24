@@ -380,7 +380,7 @@
           "exemplar": true,
           "expr": "cortex_scheduler_api_request_duration_seconds_sum / cortex_scheduler_api_request_duration_seconds_count",
           "interval": "",
-          "legendFormat": "{{method}} {{path}}",
+          "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
           "refId": "A"
         }
       ],
@@ -475,9 +475,9 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(cortex_scheduler_api_request_duration_seconds_count[1m]) * 3600",
+          "expr": "increase(cortex_scheduler_api_request_duration_seconds_count[24h])",
           "interval": "",
-          "legendFormat": "{{method}} {{path}}",
+          "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
           "refId": "A"
         }
       ],
@@ -485,7 +485,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Requests per hour",
+      "title": "Requests over last 24h",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -501,6 +501,7 @@
       },
       "yaxes": [
         {
+          "$$hashKey": "object:181",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -509,6 +510,7 @@
           "show": true
         },
         {
+          "$$hashKey": "object:182",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -886,7 +888,7 @@
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-24h",
     "to": "now"
   },
   "timepicker": {},

@@ -20,4 +20,8 @@ func main() {
 		sim.SimulateNoisyVMScheduling()
 		os.Exit(0)
 	}
+	if args[0] == "--error" {
+		sim.SimulateRequestError()
+		os.Exit(0)
+	}
 }
