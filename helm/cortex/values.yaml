@@ -85,6 +85,13 @@ tolerations: []
 
 affinity: {}
 
+owner-info:
+  helm-chart-url: "https://github.tools.sap/cobaltcore-dev/cortex/helm/cortex"
+  maintainers:
+    - "p.matthes@sap.com"
+  support-group: "cobaltcore-dev"
+  enabled: true
+
 # ######### Values passed to the service by conf.yaml ###########
 conf:
   monitoring:
