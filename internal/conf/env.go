@@ -61,8 +61,8 @@ func NewSecretConfig() SecretConfig {
 		},
 		SecretPrometheusConfig: SecretPrometheusConfig{
 			PrometheusURL:           ForceGetenv("PROMETHEUS_URL"),
-			PrometheusSSOPublicKey:  ForceGetenv("PROMETHEUS_SSO_PUBLIC_KEY"),
-			PrometheusSSOPrivateKey: ForceGetenv("PROMETHEUS_SSO_PRIVATE_KEY"),
+			PrometheusSSOPublicKey:  Getenv("PROMETHEUS_SSO_PUBLIC_KEY", ""),
+			PrometheusSSOPrivateKey: Getenv("PROMETHEUS_SSO_PRIVATE_KEY", ""),
 		},
 	}
 }
