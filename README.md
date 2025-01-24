@@ -30,6 +30,9 @@ export OS_PROJECT_DOMAIN_NAME=""
 Set Prometheus URL and SSO certificates:
 ```bash
 export PROMETHEUS_URL=""
+```
+(Optional) Set the SSO certificate:
+```bash
 export PROMETHEUS_SSO_PUBLIC_KEY=""
 export PROMETHEUS_SSO_PRIVATE_KEY=""
 ```
