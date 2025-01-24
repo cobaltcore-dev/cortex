@@ -646,6 +646,66 @@
             "mode": "absolute",
             "steps": [
               {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "id": 21,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.35",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Objects synced in database",
+      "type": "stat"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
                 "color": "green",
                 "value": null
               },
@@ -671,9 +731,9 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 29
+        "y": 40
       },
-      "id": 21,
+      "id": 38,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
@@ -713,7 +773,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 51
       },
       "id": 31,
       "panels": [],
@@ -738,7 +798,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 41
+        "y": 52
       },
       "hiddenSeries": false,
       "id": 35,
@@ -826,7 +886,7 @@
     "list": []
   },
   "time": {
-    "from": "now-7d",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},

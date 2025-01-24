@@ -213,11 +213,20 @@ func (s *syncer[M]) sync(start time.Time) {
 	}
 	logging.Log.Info("synced Prometheus data", "newMetrics", len(prometheusData.Metrics), "start", start, "end", end)
 
+	// Don't overload the Prometheus server.
+	time.Sleep(1 * time.Second)
+	// Continue syncing.
+	s.sync(end)
+}
+
+// Count metrics in the database and update the gauge.
+func (s *syncer[M]) countMetrics() {
 	// Count rows for the gauge.
+	var model M
 	var nRows int
 	if _, err := s.DB.Get().QueryOne(
 		pg.Scan(&nRows),
-		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = ?", tableName),
+		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = ?", model.GetTableName()),
 		s.MetricName,
 	); err == nil {
 		logging.Log.Info("counted metrics", "nRows", nRows, "metricName", s.MetricName)
@@ -229,15 +238,14 @@ func (s *syncer[M]) sync(start time.Time) {
 	} else {
 		logging.Log.Error("failed to count metrics rows", "error", err)
 	}
-
-	// Don't overload the Prometheus server.
-	time.Sleep(1 * time.Second)
-	// Continue syncing.
-	s.sync(end)
 }
 
 // Sync the Prometheus metrics with the database.
 func (s *syncer[M]) Sync() {
+	// Make sure to count the metrics after everything is done,
+	// even when no new metrics were consumed.
+	defer s.countMetrics()
+
 	logging.Log.Info("syncing metrics", "metricName", s.MetricName)
 	// Sync this metric until we are caught up.
 	start, err := s.getSyncWindowStart()
