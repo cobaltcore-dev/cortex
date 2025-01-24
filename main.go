@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
@@ -22,8 +23,8 @@ import (
 )
 
 // Periodically fetch data from the datasources and insert it into the database.
-func runSyncer(config conf.Config, db db.DB) {
-	monitor := sync.NewSyncMonitor()
+func runSyncer(registry *monitoring.Registry, config conf.Config, db db.DB) {
+	monitor := sync.NewSyncMonitor(registry)
 	syncers := []sync.Datasource{
 		prometheus.NewCombinedSyncer(config, db, monitor),
 		openstack.NewSyncer(config, db, monitor),
@@ -40,8 +41,9 @@ func runSyncer(config conf.Config, db db.DB) {
 }
 
 // Periodically extract features from the database.
-func runExtractor(config conf.Config, db db.DB) {
-	pipeline := features.NewPipeline(config, db)
+func runExtractor(registry *monitoring.Registry, config conf.Config, db db.DB) {
+	monitor := features.NewPipelineMonitor(registry)
+	pipeline := features.NewPipeline(config, db, monitor)
 	pipeline.Init()
 	for {
 		pipeline.Extract()
@@ -50,8 +52,9 @@ func runExtractor(config conf.Config, db db.DB) {
 }
 
 // Run a webserver that listens for external scheduling requests.
-func runScheduler(config conf.Config, db db.DB) {
-	api := scheduler.NewExternalSchedulingAPI(config, db)
+func runScheduler(registry *monitoring.Registry, config conf.Config, db db.DB) {
+	monitor := scheduler.NewSchedulerMonitor(registry)
+	api := scheduler.NewExternalSchedulingAPI(config, db, monitor)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/up", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -73,10 +76,10 @@ func runScheduler(config conf.Config, db db.DB) {
 	}
 }
 
-// Run the prometheus metrics server.
-func runMetricsServer() {
+// Run the prometheus metrics server for monitoring.
+func runMonitoringServer(registry *monitoring.Registry) {
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	logging.Log.Info("metrics listening on :2112")
 	server := &http.Server{
 		Addr:         ":2112",
@@ -112,9 +115,10 @@ func main() {
 	db.Init()
 	defer db.Close()
 
-	go runSyncer(config, db)
-	go runExtractor(config, db)
-	go runScheduler(config, db)
-	go runMetricsServer()
+	registry := monitoring.NewRegistry(config)
+	go runMonitoringServer(registry)
+	go runSyncer(registry, config, db)
+	go runExtractor(registry, config, db)
+	go runScheduler(registry, config, db)
 	select {}
 }

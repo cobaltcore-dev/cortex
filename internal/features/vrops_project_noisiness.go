@@ -23,7 +23,7 @@ type vROpsProjectNoisinessExtractor struct {
 	runTimer prometheus.Observer
 }
 
-func NewVROpsProjectNoisinessExtractor(db db.DB, m monitor) FeatureExtractor {
+func NewVROpsProjectNoisinessExtractor(db db.DB, m Monitor) FeatureExtractor {
 	stepName := "vrops_project_noisiness"
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {

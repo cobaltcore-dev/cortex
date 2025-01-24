@@ -46,7 +46,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		"avgCPUContentionThreshold": 10.0,
 		"maxCPUContentionThreshold": 20.0,
 	}
-	step := NewAvoidContendedHostsStep(opts, &mockDB, monitor{})
+	step := NewAvoidContendedHostsStep(opts, &mockDB, Monitor{})
 
 	tests := []struct {
 		name          string

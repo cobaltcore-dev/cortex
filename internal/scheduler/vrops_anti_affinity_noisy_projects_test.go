@@ -43,7 +43,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	opts := map[string]any{
 		"avgCPUThreshold": 20.0,
 	}
-	step := NewVROpsAntiAffinityNoisyProjectsStep(opts, &mockDB, monitor{})
+	step := NewVROpsAntiAffinityNoisyProjectsStep(opts, &mockDB, Monitor{})
 
 	tests := []struct {
 		name          string

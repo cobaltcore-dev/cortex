@@ -18,7 +18,7 @@ type avoidContendedHostsStep struct {
 	weightModObserver         prometheus.Observer
 }
 
-func NewAvoidContendedHostsStep(opts map[string]any, db db.DB, m monitor) PipelineStep {
+func NewAvoidContendedHostsStep(opts map[string]any, db db.DB, m Monitor) PipelineStep {
 	stepName := "vrops_avoid_contended_hosts"
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {

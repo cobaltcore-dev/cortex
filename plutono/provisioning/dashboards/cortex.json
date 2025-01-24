@@ -20,7 +20,7 @@
   "panels": [
     {
       "collapsed": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -33,7 +33,7 @@
       "type": "row"
     },
     {
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -83,7 +83,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "go_memstats_alloc_bytes / 1_000_000",
+          "expr": "go_memstats_alloc_bytes{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"} / 1_000_000",
           "format": "table",
           "instant": false,
           "interval": "",
@@ -95,7 +95,7 @@
       "type": "stat"
     },
     {
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -145,7 +145,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(process_cpu_seconds_total[1m]) ",
+          "expr": "rate(process_cpu_seconds_total{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[1m]) ",
           "format": "table",
           "instant": false,
           "interval": "",
@@ -158,7 +158,7 @@
     },
     {
       "collapsed": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -175,7 +175,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -267,7 +267,7 @@
       }
     },
     {
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -330,7 +330,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
           "unit": "s"
@@ -432,7 +432,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -524,7 +524,7 @@
     },
     {
       "collapsed": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -541,7 +541,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -635,7 +635,7 @@
       }
     },
     {
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -708,7 +708,7 @@
     },
     {
       "collapsed": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -725,7 +725,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "prometheus-kubernetes",
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
           "unit": "s"
@@ -826,12 +826,12 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-7d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Cortex",
   "uid": "7MZnLxDHz",
-  "version": 2
+  "version": 1
 }

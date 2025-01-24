@@ -12,7 +12,7 @@ import (
 
 // Configuration of feature extractors supported by the scheduler.
 // The features to extract are defined in the configuration file.
-var supportedExtractors = map[string]func(db.DB, monitor) FeatureExtractor{
+var supportedExtractors = map[string]func(db.DB, Monitor) FeatureExtractor{
 	"vrops_hostsystem_resolver":             NewVROpsHostsystemResolver,
 	"vrops_project_noisiness_extractor":     NewVROpsProjectNoisinessExtractor,
 	"vrops_hostsystem_contention_extractor": NewVROpsHostsystemContentionExtractor,
@@ -30,14 +30,13 @@ type FeatureExtractorPipeline interface {
 
 type featureExtractorPipeline struct {
 	FeatureExtractors []FeatureExtractor
-	monitor           monitor
+	monitor           Monitor
 }
 
 // Create a new feature extractor pipeline with extractors contained in
 // the configuration.
-func NewPipeline(config conf.Config, database db.DB) FeatureExtractorPipeline {
+func NewPipeline(config conf.Config, database db.DB, m Monitor) FeatureExtractorPipeline {
 	moduleConfig := config.GetFeaturesConfig()
-	m := newPipelineMonitor()
 	extractors := []FeatureExtractor{}
 	for _, extractorConfig := range moduleConfig.Extractors {
 		if extractorFunc, ok := supportedExtractors[extractorConfig.Name]; ok {

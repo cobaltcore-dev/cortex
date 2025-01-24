@@ -3,9 +3,12 @@
 
 package scheduler
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
-type monitor struct {
+type Monitor struct {
 	stepRunTimer          *prometheus.HistogramVec
 	stepWeightModObserver *prometheus.HistogramVec
 	apiRequestsTimer      *prometheus.HistogramVec
@@ -15,7 +18,7 @@ type monitor struct {
 	hostNumberOutObserver prometheus.Histogram
 }
 
-func newSchedulerMonitor() monitor {
+func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline step run",
@@ -50,7 +53,7 @@ func newSchedulerMonitor() monitor {
 		Help:    "Number of hosts coming out of the scheduler pipeline",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	})
-	prometheus.MustRegister(
+	registry.MustRegister(
 		stepRunTimer,
 		stepWeightModObserver,
 		apiRequestsTimer,
@@ -59,7 +62,7 @@ func newSchedulerMonitor() monitor {
 		hostNumberInObserver,
 		hostNumberOutObserver,
 	)
-	return monitor{
+	return Monitor{
 		stepRunTimer:          stepRunTimer,
 		stepWeightModObserver: stepWeightModObserver,
 		apiRequestsTimer:      apiRequestsTimer,

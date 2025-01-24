@@ -22,7 +22,7 @@ type vropsHostsystemResolver struct {
 	runTimer prometheus.Observer
 }
 
-func NewVROpsHostsystemResolver(db db.DB, m monitor) FeatureExtractor {
+func NewVROpsHostsystemResolver(db db.DB, m Monitor) FeatureExtractor {
 	stepName := "vrops_hostsystem_resolver"
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {

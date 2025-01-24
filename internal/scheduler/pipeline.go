@@ -13,7 +13,7 @@ import (
 
 // Configuration of steps supported by the scheduler.
 // The steps used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]func(map[string]any, db.DB, monitor) PipelineStep{
+var supportedSteps = map[string]func(map[string]any, db.DB, Monitor) PipelineStep{
 	"vrops_anti_affinity_noisy_projects": NewVROpsAntiAffinityNoisyProjectsStep,
 	"vrops_avoid_contended_hosts":        NewAvoidContendedHostsStep,
 }
@@ -49,11 +49,11 @@ type Pipeline interface {
 
 type pipeline struct {
 	Steps   []PipelineStep
-	monitor monitor
+	monitor Monitor
 }
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline(config conf.Config, database db.DB, monitor monitor) Pipeline {
+func NewPipeline(config conf.Config, database db.DB, monitor Monitor) Pipeline {
 	steps := []PipelineStep{}
 	for _, stepConfig := range config.GetSchedulerConfig().Steps {
 		if stepFunc, ok := supportedSteps[stepConfig.Name]; ok {

@@ -67,11 +67,10 @@ type ExternalSchedulingAPI interface {
 type externalSchedulingAPI struct {
 	Pipeline Pipeline
 	config   conf.Config
-	monitor  monitor
+	monitor  Monitor
 }
 
-func NewExternalSchedulingAPI(config conf.Config, db db.DB) ExternalSchedulingAPI {
-	m := newSchedulerMonitor()
+func NewExternalSchedulingAPI(config conf.Config, db db.DB, m Monitor) ExternalSchedulingAPI {
 	return &externalSchedulingAPI{
 		Pipeline: NewPipeline(config, db, m),
 		config:   config,

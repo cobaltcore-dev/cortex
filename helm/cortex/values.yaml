@@ -87,6 +87,11 @@ affinity: {}
 
 # ######### Values passed to the service by conf.yaml ###########
 conf:
+  monitoring:
+    # Custom labels added to the exported metrics.
+    labels:
+      github_org: cobaltcore-dev
+      github_repo: cortex
   sync:
     prometheus:
       metrics:

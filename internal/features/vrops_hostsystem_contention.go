@@ -23,7 +23,7 @@ type vROpsHostsystemContentionExtractor struct {
 	runTimer prometheus.Observer
 }
 
-func NewVROpsHostsystemContentionExtractor(db db.DB, m monitor) FeatureExtractor {
+func NewVROpsHostsystemContentionExtractor(db db.DB, m Monitor) FeatureExtractor {
 	stepName := "vrops_hostsystem_contention"
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {

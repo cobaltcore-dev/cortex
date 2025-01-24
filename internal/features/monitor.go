@@ -3,14 +3,17 @@
 
 package features
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
-type monitor struct {
+type Monitor struct {
 	stepRunTimer     *prometheus.HistogramVec
 	pipelineRunTimer prometheus.Histogram
 }
 
-func newPipelineMonitor() monitor {
+func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_feature_pipeline_step_run_duration_seconds",
 		Help:    "Duration of feature pipeline step run",
@@ -21,11 +24,11 @@ func newPipelineMonitor() monitor {
 		Help:    "Duration of feature pipeline run",
 		Buckets: prometheus.DefBuckets,
 	})
-	prometheus.MustRegister(
+	registry.MustRegister(
 		stepRunTimer,
 		pipelineRunTimer,
 	)
-	return monitor{
+	return Monitor{
 		stepRunTimer:     stepRunTimer,
 		pipelineRunTimer: pipelineRunTimer,
 	}

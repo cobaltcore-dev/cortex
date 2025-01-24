@@ -17,7 +17,7 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	extractor := NewVROpsProjectNoisinessExtractor(&mockDB, monitor{})
+	extractor := NewVROpsProjectNoisinessExtractor(&mockDB, Monitor{})
 	if err := extractor.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -80,7 +80,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	// Create an instance of the extractor
-	extractor := NewVROpsProjectNoisinessExtractor(&mockDB, monitor{})
+	extractor := NewVROpsProjectNoisinessExtractor(&mockDB, Monitor{})
 	if err := extractor.Init(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

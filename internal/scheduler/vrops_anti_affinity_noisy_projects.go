@@ -17,7 +17,7 @@ type vROpsAntiAffinityNoisyProjectsStep struct {
 	weightModObserver prometheus.Observer
 }
 
-func NewVROpsAntiAffinityNoisyProjectsStep(opts map[string]any, db db.DB, m monitor) PipelineStep {
+func NewVROpsAntiAffinityNoisyProjectsStep(opts map[string]any, db db.DB, m Monitor) PipelineStep {
 	stepName := "vrops_anti_affinity_noisy_projects"
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {

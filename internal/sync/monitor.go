@@ -3,7 +3,10 @@
 
 package sync
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 type Monitor struct {
 	PipelineRunTimer                *prometheus.HistogramVec
@@ -12,7 +15,7 @@ type Monitor struct {
 	PipelineRequestProcessedCounter *prometheus.CounterVec
 }
 
-func NewSyncMonitor() Monitor {
+func NewSyncMonitor(registry *monitoring.Registry) Monitor {
 	pipelineRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_sync_run_duration_seconds",
 		Help:    "Duration of sync run",
@@ -31,7 +34,7 @@ func NewSyncMonitor() Monitor {
 		Name: "cortex_sync_request_processed_total",
 		Help: "Number of processed sync requests",
 	}, []string{"datasource"})
-	prometheus.MustRegister(
+	registry.MustRegister(
 		pipelineRunTimer,
 		pipelineObjectsGauge,
 		pipelineRequestTimer,

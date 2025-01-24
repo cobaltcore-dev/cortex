@@ -58,19 +58,27 @@ type SchedulerConfig struct {
 	} `yaml:"steps"`
 }
 
+// Configuration for the monitoring module.
+type MonitoringConfig struct {
+	// The labels to add to all metrics.
+	Labels map[string]string `yaml:"labels"`
+}
+
 // Configuration for the cortex service.
 type Config interface {
 	GetSyncConfig() SyncConfig
 	GetFeaturesConfig() FeaturesConfig
 	GetSchedulerConfig() SchedulerConfig
+	GetMonitoringConfig() MonitoringConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
 
 type config struct {
-	SyncConfig      `yaml:"sync"`
-	FeaturesConfig  `yaml:"features"`
-	SchedulerConfig `yaml:"scheduler"`
+	SyncConfig       `yaml:"sync"`
+	FeaturesConfig   `yaml:"features"`
+	SchedulerConfig  `yaml:"scheduler"`
+	MonitoringConfig `yaml:"monitoring"`
 }
 
 // Create a new configuration from the default config yaml file.
@@ -101,6 +109,7 @@ func newConfigFromBytes(bytes []byte) Config {
 	return &c
 }
 
-func (c *config) GetSyncConfig() SyncConfig           { return c.SyncConfig }
-func (c *config) GetFeaturesConfig() FeaturesConfig   { return c.FeaturesConfig }
-func (c *config) GetSchedulerConfig() SchedulerConfig { return c.SchedulerConfig }
+func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
+func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
+func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
+func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
