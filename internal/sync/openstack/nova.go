@@ -6,6 +6,7 @@ package openstack
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/logging"
@@ -201,7 +202,7 @@ func (api *serverAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackSe
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		logging.Log.Error("unexpected status code", "status", resp.StatusCode)
-		return nil, err
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	var serverList openStackServerList
 	err = json.NewDecoder(resp.Body).Decode(&serverList)
@@ -272,7 +273,7 @@ func (api *hypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openSta
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		logging.Log.Error("unexpected status code", "status", resp.StatusCode)
-		return nil, err
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	var hypervisorList openStackHypervisorList
 	err = json.NewDecoder(resp.Body).Decode(&hypervisorList)
