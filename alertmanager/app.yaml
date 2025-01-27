@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cortex-alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cortex-alertmanager
+  template:
+    metadata:
+      labels:
+        app: cortex-alertmanager
+    spec:
+      containers:
+      - name: cortex-alertmanager
+        image: cortex-alertmanager
+        ports:
+          - containerPort: 9093
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cortex-alertmanager
+spec:
+  ports:
+    - port: 9093
+  selector:
+    app: cortex-alertmanager
