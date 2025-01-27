@@ -1,0 +1,56 @@
+groups:
+- name: cortex-alerts
+  rules:
+  - alert: ServiceDown
+    expr: up == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Service is down"
+      description: "The service is not responding."
+
+  - alert: HighMemoryUsage
+    expr: process_resident_memory_bytes > 100 * 1024 * 1024
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High memory usage"
+      description: "The service is using more than 100 MB of memory."
+
+  - alert: HighCPUUsage
+    expr: process_cpu_seconds_total > 0.5
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU usage"
+      description: "The service is using more than 50% CPU."
+
+  - alert: LongPipelineRun
+    expr: histogram_quantile(0.99, rate(cortex_pipeline_run_duration_seconds_bucket[5m])) > 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Pipeline run duration too long"
+      description: "The pipeline takes more than 1 second to run."
+
+  - alert: SyncNotSuccessful
+    expr: cortex_sync_request_processed_total - cortex_sync_request_duration_seconds_count > 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Sync not successful"
+      description: "There are sync requests that are not successful."
+
+  - alert: SyncObjectsDropToZero
+    expr: cortex_sync_objects_total == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Sync objects drop to zero"
+      description: "The number of sync objects has dropped to zero for some resource."
