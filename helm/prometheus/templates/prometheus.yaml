@@ -1,0 +1,25 @@
+{{- if index .Values "kube-prometheus-stack" "enabled" }}
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: cortex-prometheus
+spec:
+  serviceAccountName: cortex-prometheus
+  serviceMonitorNamespaceSelector: {}
+  serviceMonitorSelector:
+    matchLabels:
+      name: cortex-prometheus
+  podMonitorSelector: {}
+  enableAdminAPI: true
+  resources:
+    requests:
+      memory: 400Mi
+  alerting:
+    alertmanagers:
+    - namespace: default
+      name: alertmanager-operated
+      port: web
+  ruleSelector:
+    matchLabels:
+      type: alerting-rules
+{{- end }}

@@ -1,0 +1,16 @@
+{{- if index .Values "kube-prometheus-stack" "enabled" }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cortex-prometheus
+  labels:
+    name: cortex-prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cortex
+  namespaceSelector:
+    any: true
+  endpoints:
+    - port: metrics
+{{- end }}

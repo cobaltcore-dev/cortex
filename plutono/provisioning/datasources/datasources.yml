@@ -4,7 +4,8 @@ datasources:
   - name: prometheus-openstack
     type: prometheus
     access: proxy
-    url: cortex-prometheus:9090
+    # Created by the prometheus-operator.
+    url: prometheus-operated:9090
     jsonData:
       timeInterval: "5s"
     editable: true

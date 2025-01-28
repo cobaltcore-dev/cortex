@@ -1,0 +1,30 @@
+{{- if index .Values "kube-prometheus-stack" "enabled" }}
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: cortex-alertmanager
+  labels:
+    alertmanagerConfig: cortex-alertmanager
+spec:
+  route:
+    groupBy: ['job']
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 12h
+    receiver: 'log'
+  receivers:
+  - name: 'log'
+    webhookConfigs:
+    - url: 'http://cortex-alertmanager-logger:9094/'
+      sendResolved: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: cortex-alertmanager
+spec:
+  replicas: 1
+  alertmanagerConfigSelector:
+    matchLabels:
+      alertmanagerConfig: cortex-alertmanager
+{{- end }}
