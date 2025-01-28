@@ -116,8 +116,8 @@ conf:
           sync:
             prometheus:
               metrics:
+                # Any vrops vm metric suffices.
                 - vrops_virtualmachine_cpu_demand_ratio
-                - vrops_hostsystem_cpu_contention_percentage
             openstack:
               hypervisors: true
               servers: true
