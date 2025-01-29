@@ -5,6 +5,7 @@ metadata:
   labels:
     type: alerting-rules
     prometheus: {{ .Values.global.prometheus }}
+{{- with .Values.alerts.labels }}
 spec:
   groups:
   - name: cortex-alerts
@@ -15,15 +16,9 @@ spec:
       labels:
         severity: info
         context: liveness
-        {{- with .Values.alerts.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.cortexDown.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.info.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexDown }}{{ .cortexDown | toYaml | nindent 8 }}{{- end }}
       annotations:
         summary: "Cortex service is down"
         description: >
@@ -37,15 +32,9 @@ spec:
       labels:
         severity: info
         context: api
-        {{- with .Values.alerts.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.cortexHttpRequest400sTooHigh.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.info.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexHttpRequest400sTooHigh }}{{ .cortexHttpRequest400sTooHigh | toYaml | nindent 8 }}{{- end }}
       annotations:
         summary: "HTTP request 400 errors too high"
         description: >
@@ -60,15 +49,9 @@ spec:
       labels:
         severity: info
         context: api
-        {{- with .Values.alerts.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.cortexHttpRequest500sTooHigh.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.info.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexHttpRequest500sTooHigh }}{{ .cortexHttpRequest500sTooHigh | toYaml | nindent 8 }}{{- end }}
       annotations:
         summary: "HTTP request 500 errors too high"
         description: >
@@ -83,15 +66,9 @@ spec:
       labels:
         severity: info
         context: memory
-        {{- with .Values.alerts.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.cortexHighMemoryUsage.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.info.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexHighMemoryUsage }}{{ .cortexHighMemoryUsage | toYaml | nindent 8 }}{{- end }}
       annotations:
         summary: "High memory usage"
         description: >
@@ -105,15 +82,9 @@ spec:
       labels:
         severity: info
         context: cpu
-        {{- with .Values.alerts.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.cortexHighCPUUsage.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.info.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexHighCPUUsage }}{{ .cortexHighCPUUsage | toYaml | nindent 8 }}{{- end }}
       annotations:
         summary: "High CPU usage"
         description: >
@@ -127,15 +98,9 @@ spec:
       labels:
         severity: info
         context: pipeline
-        {{- with .Values.alerts.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.cortexLongPipelineRun.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.info.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexLongPipelineRun }}{{ .cortexLongPipelineRun | toYaml | nindent 8 }}{{- end }}
       annotations:
         summary: "Pipeline run duration too long"
         description: >
@@ -151,15 +116,9 @@ spec:
       labels:
         severity: info
         context: syncstatus
-        {{- with .Values.alerts.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.cortexSyncNotSuccessful.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.info.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexSyncNotSuccessful }}{{ .cortexSyncNotSuccessful | toYaml | nindent 8 }}{{- end }}
       annotations:
         summary: "Sync not successful"
         description: >
@@ -176,15 +135,9 @@ spec:
       labels:
         severity: info
         context: syncobjects
-        {{- with .Values.alerts.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.cortexSyncObjectsDroppedToZero.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.alerts.info.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexSyncObjectsDroppedToZero }}{{ .cortexSyncObjectsDroppedToZero | toYaml | nindent 8 }}{{- end }}
       annotations:
         summary: "Sync objects dropped to zero"
         description: >
@@ -194,3 +147,4 @@ spec:
           module will retry the sync operation and the currently synced data will
           be kept. However, when this problem persists for a longer time the
           service will have a less recent view of the datacenter.
+{{- end }}
