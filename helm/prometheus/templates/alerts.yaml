@@ -14,9 +14,7 @@ spec:
       expr: up{github_org="cobaltcore-dev",github_repo="cortex"} == 0
       for: 1m
       labels:
-        severity: info
         context: liveness
-        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexDown }}{{ .cortexDown | toYaml | nindent 8 }}{{- end }}
       annotations:
@@ -30,9 +28,7 @@ spec:
       expr: rate(cortex_scheduler_api_request_duration_seconds_count{status=~"4.+"}[5m]) > 0
       for: 5m
       labels:
-        severity: info
         context: api
-        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexHttpRequest400sTooHigh }}{{ .cortexHttpRequest400sTooHigh | toYaml | nindent 8 }}{{- end }}
       annotations:
@@ -47,9 +43,7 @@ spec:
       expr: rate(cortex_scheduler_api_request_duration_seconds_count{status=~"5.+"}[5m]) > 0
       for: 5m
       labels:
-        severity: info
         context: api
-        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexHttpRequest500sTooHigh }}{{ .cortexHttpRequest500sTooHigh | toYaml | nindent 8 }}{{- end }}
       annotations:
@@ -64,9 +58,7 @@ spec:
       expr: process_resident_memory_bytes{github_org="cobaltcore-dev",github_repo="cortex"} > 100 * 1024 * 1024
       for: 5m
       labels:
-        severity: info
         context: memory
-        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexHighMemoryUsage }}{{ .cortexHighMemoryUsage | toYaml | nindent 8 }}{{- end }}
       annotations:
@@ -80,9 +72,7 @@ spec:
       expr: rate(process_cpu_seconds_total{github_org="cobaltcore-dev",github_repo="cortex"}[1m]) > 0.5
       for: 5m
       labels:
-        severity: info
         context: cpu
-        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexHighCPUUsage }}{{ .cortexHighCPUUsage | toYaml | nindent 8 }}{{- end }}
       annotations:
@@ -96,9 +86,7 @@ spec:
       expr: histogram_quantile(0.99, rate(cortex_scheduler_pipeline_run_duration_seconds_bucket[5m])) > 1
       for: 5m
       labels:
-        severity: info
         context: pipeline
-        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexLongPipelineRun }}{{ .cortexLongPipelineRun | toYaml | nindent 8 }}{{- end }}
       annotations:
@@ -114,9 +102,7 @@ spec:
       expr: cortex_sync_request_processed_total - cortex_sync_request_duration_seconds_count > 0
       for: 5m
       labels:
-        severity: info
         context: syncstatus
-        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexSyncNotSuccessful }}{{ .cortexSyncNotSuccessful | toYaml | nindent 8 }}{{- end }}
       annotations:
@@ -133,9 +119,7 @@ spec:
       expr: cortex_sync_objects == 0
       for: 5m
       labels:
-        severity: info
         context: syncobjects
-        {{- if .info }}{{ .info | toYaml | nindent 8 }}{{- end }}
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexSyncObjectsDroppedToZero }}{{ .cortexSyncObjectsDroppedToZero | toYaml | nindent 8 }}{{- end }}
       annotations:

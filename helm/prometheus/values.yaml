@@ -7,20 +7,23 @@ alerts:
     # Labels applied to all alert levels.
     global:
       service: cortex
-    # Labels applied to specific alert levels.
-    # Can be used, e.g., to push to different alerting channels.
-    info: {}
-    warning: {}
-    critical: {}
     # Labels applied to specific alerts.
-    cortexDown: {}
-    cortexHttpRequest400sTooHigh: {}
-    cortexHttpRequest500sTooHigh: {}
-    cortexHighMemoryUsage: {}
-    cortexHighCPUUsage: {}
-    cortexLongPipelineRun: {}
-    cortexSyncNotSuccessful: {}
-    cortexSyncObjectsDroppedToZero: {}
+    cortexDown:
+      severity: info
+    cortexHttpRequest400sTooHigh:
+      severity: info
+    cortexHttpRequest500sTooHigh:
+      severity: info
+    cortexHighMemoryUsage:
+      severity: info
+    cortexHighCPUUsage:
+      severity: info
+    cortexLongPipelineRun:
+      severity: info
+    cortexSyncNotSuccessful:
+      severity: info
+    cortexSyncObjectsDroppedToZero:
+      severity: info
 
 kube-prometheus-stack:
   # Whether the CRDs of the prometheus-operator should be deployed
