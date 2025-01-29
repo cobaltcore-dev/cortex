@@ -14,7 +14,7 @@ spec:
       expr: up{github_org="cobaltcore-dev",github_repo="cortex"} == 0
       for: 1m
       labels:
-        severity: warning
+        severity: info
         context: liveness
         {{- with .Values.alerts.labels }}
         {{- toYaml . | nindent 8 }}
@@ -22,7 +22,7 @@ spec:
         {{- with .Values.alerts.cortexDown.labels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.alerts.warning.labels }}
+        {{- with .Values.alerts.info.labels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
@@ -59,7 +59,7 @@ spec:
       expr: rate(cortex_scheduler_api_request_duration_seconds_count{status=~"5.+"}[5m]) > 0
       for: 5m
       labels:
-        severity: warning
+        severity: info
         context: api
         {{- with .Values.alerts.labels }}
         {{- toYaml . | nindent 8 }}
@@ -67,7 +67,7 @@ spec:
         {{- with .Values.alerts.cortexHttpRequest500sTooHigh.labels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.alerts.warning.labels }}
+        {{- with .Values.alerts.info.labels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
