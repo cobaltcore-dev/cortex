@@ -3,7 +3,6 @@ kind: PrometheusRule
 metadata:
   name: cortex-alerts
   labels:
-    tier: os
     type: alerting-rules
     prometheus: {{ .Values.global.prometheus }}
 spec:
