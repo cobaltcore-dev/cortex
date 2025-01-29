@@ -130,7 +130,7 @@ spec:
           time the service will have a less recent view of the datacenter.
 
     - alert: CortexSyncObjectsDroppedToZero
-      expr: cortex_sync_objects_total == 0
+      expr: cortex_sync_objects == 0
       for: 5m
       labels:
         severity: info
