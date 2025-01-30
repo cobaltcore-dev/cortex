@@ -45,8 +45,8 @@ func TestCanRunScheduler(t *testing.T) {
 		{
 			name: "Multiple instances not supported",
 			request: APINovaExternalSchedulerRequest{
-				Spec: APINovaExternalSchedulerRequestSpec{
-					NInstances: 2,
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{NInstances: 2},
 				},
 			},
 			wantOk: false,
@@ -134,9 +134,11 @@ func TestHandler(t *testing.T) {
 			name:   "Invalid request method",
 			method: http.MethodGet,
 			requestBody: APINovaExternalSchedulerRequest{
-				Spec: APINovaExternalSchedulerRequestSpec{
-					ProjectID:  "project1",
-					NInstances: 1,
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						ProjectID:  "project1",
+						NInstances: 1,
+					},
 				},
 				Hosts: []APINovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
@@ -151,9 +153,11 @@ func TestHandler(t *testing.T) {
 			name:   "Invalid request body",
 			method: http.MethodPost,
 			requestBody: APINovaExternalSchedulerRequest{
-				Spec: APINovaExternalSchedulerRequestSpec{
-					ProjectID:  "project1",
-					NInstances: 1,
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						ProjectID:  "project1",
+						NInstances: 1,
+					},
 				},
 				Hosts: []APINovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
@@ -168,9 +172,11 @@ func TestHandler(t *testing.T) {
 			name:   "Valid request",
 			method: http.MethodPost,
 			requestBody: APINovaExternalSchedulerRequest{
-				Spec: APINovaExternalSchedulerRequestSpec{
-					ProjectID:  "project1",
-					NInstances: 1,
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						ProjectID:  "project1",
+						NInstances: 1,
+					},
 				},
 				VMware: true,
 				Hosts: []APINovaExternalSchedulerRequestHost{

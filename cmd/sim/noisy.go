@@ -47,9 +47,11 @@ func SimulateNoisyVMScheduling() {
 	project := noisyProjects[0].Project
 	logging.Log.Info("scheduling request", "project", project)
 
-	spec := scheduler.APINovaExternalSchedulerRequestSpec{
-		ProjectID:  project,
-		NInstances: 1,
+	spec := scheduler.NovaObject[scheduler.NovaSpec]{
+		Data: scheduler.NovaSpec{
+			ProjectID:  project,
+			NInstances: 1,
+		},
 	}
 	hosts := make([]scheduler.APINovaExternalSchedulerRequestHost, len(hypervisors))
 	weights := make(map[string]float64)
@@ -57,7 +59,6 @@ func SimulateNoisyVMScheduling() {
 		hosts[i] = scheduler.APINovaExternalSchedulerRequestHost{
 			ComputeHost:        hypervisor.ServiceHost,
 			HypervisorHostname: hypervisor.Hostname,
-			Status:             hypervisor.Status,
 		}
 		weights[hypervisor.ServiceHost] = 1.0
 	}

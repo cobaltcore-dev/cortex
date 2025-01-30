@@ -27,8 +27,6 @@ type pipelineStateHost struct {
 	ComputeHost string
 	// Name of the hypervisor hostname, e.g. domain-c123.<uuid>
 	HypervisorHostname string
-	// Status of the host, e.g. "enabled".
-	Status string
 }
 
 // State passed through the pipeline.
