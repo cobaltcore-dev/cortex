@@ -25,7 +25,7 @@ spec:
           placing new VMs. However, the placement will be less desirable.
 
     - alert: CortexHttpRequest400sTooHigh
-      expr: rate(cortex_scheduler_api_request_duration_seconds_count{status=~"4.+"}[5m]) > 0
+      expr: rate(cortex_scheduler_api_request_duration_seconds_count{status=~"4.+"}[5m]) > 0.1
       for: 5m
       labels:
         context: api
@@ -40,7 +40,7 @@ spec:
           format has changed and Cortex is unable to parse it.
 
     - alert: CortexHttpRequest500sTooHigh
-      expr: rate(cortex_scheduler_api_request_duration_seconds_count{status=~"5.+"}[5m]) > 0
+      expr: rate(cortex_scheduler_api_request_duration_seconds_count{status=~"5.+"}[5m]) > 0.1
       for: 5m
       labels:
         context: api

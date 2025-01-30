@@ -15,7 +15,6 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
   "links": [],
   "panels": [
     {
@@ -33,53 +32,52 @@
       "type": "row"
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
       "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 512
-              }
-            ]
-          },
           "unit": "decmbytes"
         },
         "overrides": []
       },
+      "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
-        "h": 4,
-        "w": 5,
+        "h": 11,
+        "w": 12,
         "x": 0,
         "y": 1
       },
-      "id": 17,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
+      "hiddenSeries": false,
+      "id": 39,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": false,
+        "max": true,
+        "min": true,
+        "show": true,
+        "total": false,
+        "values": true
       },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
       "pluginVersion": "7.5.35",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
       "targets": [
         {
           "exemplar": true,
@@ -91,61 +89,110 @@
           "refId": "A"
         }
       ],
-      "title": "Memory usage",
-      "type": "stat"
+      "thresholds": [
+        {
+          "$$hashKey": "object:833",
+          "colorMode": "critical",
+          "fill": true,
+          "line": false,
+          "op": "gt",
+          "value": 100,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Memory budget",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:950",
+          "format": "decmbytes",
+          "label": null,
+          "logBase": 1,
+          "max": "150",
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:951",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
       "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
           "unit": "percentunit"
         },
         "overrides": []
       },
+      "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 5,
+        "h": 11,
+        "w": 12,
+        "x": 12,
         "y": 1
       },
-      "id": 18,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
+      "hiddenSeries": false,
+      "id": 41,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": false,
+        "max": true,
+        "min": true,
+        "show": true,
+        "total": false,
+        "values": true
       },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
       "pluginVersion": "7.5.35",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(process_cpu_seconds_total{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[1m]) ",
+          "expr": "rate(process_cpu_seconds_total{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[1m])",
           "format": "table",
           "instant": false,
           "interval": "",
@@ -153,8 +200,58 @@
           "refId": "A"
         }
       ],
-      "title": "CPU Usage",
-      "type": "stat"
+      "thresholds": [
+        {
+          "$$hashKey": "object:833",
+          "colorMode": "critical",
+          "fill": true,
+          "line": false,
+          "op": "gt",
+          "value": 0.5,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "CPU budget",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:950",
+          "format": "percentunit",
+          "label": null,
+          "logBase": 1,
+          "max": "1",
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:951",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "collapsed": false,
@@ -163,7 +260,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 12
       },
       "id": 29,
       "panels": [],
@@ -186,18 +283,19 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 6
+        "y": 13
       },
       "hiddenSeries": false,
       "id": 26,
       "legend": {
-        "avg": false,
+        "alignAsTable": true,
+        "avg": true,
         "current": false,
-        "max": false,
-        "min": false,
+        "max": true,
+        "min": true,
         "show": true,
         "total": false,
-        "values": false
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
@@ -217,17 +315,27 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "cortex_scheduler_pipeline_step_run_duration_seconds_sum / cortex_scheduler_pipeline_step_run_duration_seconds_count",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_run_duration_seconds_bucket[5m])) by (le, step))",
           "interval": "",
           "legendFormat": "{{step}}",
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "$$hashKey": "object:1853",
+          "colorMode": "critical",
+          "fill": true,
+          "line": false,
+          "op": "gt",
+          "value": 1,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Time needed to run scheduler",
+      "title": "Time needed to run scheduler (stacked)",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -247,7 +355,7 @@
           "format": "s",
           "label": null,
           "logBase": 1,
-          "max": null,
+          "max": "1.5",
           "min": null,
           "show": true
         },
@@ -290,7 +398,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 6
+        "y": 13
       },
       "id": 27,
       "options": {
@@ -312,7 +420,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "cortex_scheduler_pipeline_step_weight_modification_sum / cortex_scheduler_pipeline_step_weight_modification_count",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_weight_modification_bucket[5m])) by (le, step))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -341,9 +449,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 11,
-        "w": 12,
+        "w": 6,
         "x": 0,
-        "y": 17
+        "y": 24
       },
       "hiddenSeries": false,
       "id": 33,
@@ -378,7 +486,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "cortex_scheduler_api_request_duration_seconds_sum / cortex_scheduler_api_request_duration_seconds_count",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_api_request_duration_seconds_bucket{status=~\"2.+\"}[5m])) by (le, method, path, status, error))",
           "interval": "",
           "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
           "refId": "A"
@@ -388,7 +496,109 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Average response time",
+      "title": "Average response time (success)",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:1136",
+          "format": "s",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:1137",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 6,
+        "y": 24
+      },
+      "hiddenSeries": false,
+      "id": 42,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": false,
+        "hideEmpty": false,
+        "hideZero": false,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.35",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_api_request_duration_seconds_bucket{status=~\"4.+|5.+\"}[5m])) by (le, method, path, status, error))",
+          "interval": "",
+          "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Average response time (error)",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -441,9 +651,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 11,
-        "w": 12,
+        "w": 6,
         "x": 12,
-        "y": 17
+        "y": 24
       },
       "hiddenSeries": false,
       "id": 37,
@@ -470,12 +680,12 @@
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(cortex_scheduler_api_request_duration_seconds_count[24h])",
+          "expr": "sum(rate(cortex_scheduler_api_request_duration_seconds_count{status=~\"2.+\"}[5m])) by (method, path, status, error)",
           "interval": "",
           "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
           "refId": "A"
@@ -485,7 +695,116 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Requests over last 24h",
+      "title": "Successful request rate",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:181",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:182",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 18,
+        "y": 24
+      },
+      "hiddenSeries": false,
+      "id": 40,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": false,
+        "max": true,
+        "min": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.35",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(rate(cortex_scheduler_api_request_duration_seconds_count{status=~\"4.+|5.+\"}[5m])) by (method, path, status, error)",
+          "interval": "",
+          "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "$$hashKey": "object:702",
+          "colorMode": "critical",
+          "fill": true,
+          "fillColor": "rgba(51, 162, 229, 0.2)",
+          "line": false,
+          "lineColor": "rgba(31, 96, 196, 0.6)",
+          "op": "gt",
+          "value": 0.1,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Error request rate",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -531,7 +850,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 35
       },
       "id": 23,
       "panels": [],
@@ -554,7 +873,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 29
+        "y": 36
       },
       "hiddenSeries": false,
       "id": 20,
@@ -582,12 +901,12 @@
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": true,
       "targets": [
         {
           "exemplar": true,
-          "expr": "cortex_sync_run_duration_seconds_sum / cortex_sync_run_duration_seconds_count",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_sync_run_duration_seconds_bucket[5m])) by (le, datasource))",
           "interval": "",
           "legendFormat": "{{datasource}}",
           "refId": "A"
@@ -648,8 +967,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           },
@@ -659,9 +982,9 @@
       },
       "gridPos": {
         "h": 11,
-        "w": 12,
+        "w": 6,
         "x": 12,
-        "y": 29
+        "y": 36
       },
       "id": 21,
       "options": {
@@ -731,9 +1054,9 @@
       },
       "gridPos": {
         "h": 11,
-        "w": 12,
-        "x": 12,
-        "y": 40
+        "w": 6,
+        "x": 18,
+        "y": 36
       },
       "id": 38,
       "options": {
@@ -775,7 +1098,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 47
       },
       "id": 31,
       "panels": [],
@@ -800,7 +1123,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 52
+        "y": 48
       },
       "hiddenSeries": false,
       "id": 35,
@@ -828,12 +1151,12 @@
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "cortex_feature_pipeline_step_run_duration_seconds_sum / cortex_feature_pipeline_step_run_duration_seconds_count",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_feature_pipeline_step_run_duration_seconds_bucket[5m])) by (le, step))",
           "interval": "",
           "legendFormat": "{{step}}",
           "refId": "A"
@@ -881,6 +1204,7 @@
       }
     }
   ],
+  "refresh": "10s",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -888,12 +1212,12 @@
     "list": []
   },
   "time": {
-    "from": "now-24h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Cortex",
-  "uid": "7MZnLxDHz",
+  "uid": "cortex",
   "version": 1
 }
