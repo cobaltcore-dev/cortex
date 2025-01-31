@@ -69,7 +69,7 @@ func runScheduler(registry *monitoring.Registry, config conf.Config, db db.DB) {
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  15 * time.Second,
+		IdleTimeout:  90 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != nil {
 		panic(err)
@@ -86,7 +86,7 @@ func runMonitoringServer(registry *monitoring.Registry) {
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  15 * time.Second,
+		IdleTimeout:  90 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != nil {
 		panic(err)
