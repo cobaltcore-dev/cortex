@@ -6,7 +6,7 @@ package vmware
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	"github.com/go-pg/pg/v10/orm"
@@ -19,7 +19,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 
 	// Create dependency tables
 	deps := []interface{}{
-		(*features.VROpsHostsystemContention)(nil),
+		(*vmware.VROpsHostsystemContention)(nil),
 	}
 	for _, dep := range deps {
 		if err := mockDB.
@@ -48,7 +48,9 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		"maxCPUContentionThreshold": 20.0,
 	}
 	step := &AvoidContendedHostsStep{}
-	step.Conf(&mockDB, opts)
+	if err := step.Init(&mockDB, opts); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 
 	tests := []struct {
 		name          string

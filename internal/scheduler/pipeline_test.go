@@ -15,7 +15,9 @@ type mockPipelineStep struct {
 	err error
 }
 
-func (m *mockPipelineStep) Conf(db db.DB, opts map[string]interface{}) {}
+func (m *mockPipelineStep) Init(db db.DB, opts map[string]interface{}) error {
+	return nil
+}
 
 func (m *mockPipelineStep) GetName() string {
 	return "mock_pipeline_step"
@@ -41,7 +43,7 @@ func TestPipeline_Run(t *testing.T) {
 
 	// Create an instance of the pipeline with a mock step
 	pipeline := &pipeline{
-		Steps: []plugins.Step{
+		steps: []plugins.Step{
 			&mockPipelineStep{},
 		},
 	}

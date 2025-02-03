@@ -1,13 +1,11 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package vmware
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type ResolvedVROpsHostsystem struct {
@@ -17,25 +15,16 @@ type ResolvedVROpsHostsystem struct {
 	NovaComputeHost string   `pg:"nova_compute_host,notnull"`
 }
 
-type vropsHostsystemResolver struct {
-	DB       db.DB
-	runTimer prometheus.Observer
+type VROpsHostsystemResolver struct {
+	DB db.DB
 }
 
-func NewVROpsHostsystemResolver(db db.DB, m Monitor) FeatureExtractor {
-	stepName := "vrops_hostsystem_resolver"
-	var runTimer prometheus.Observer
-	if m.stepRunTimer != nil {
-		runTimer = m.stepRunTimer.WithLabelValues(stepName)
-	}
-	return &vropsHostsystemResolver{
-		DB:       db,
-		runTimer: runTimer,
-	}
+func (e *VROpsHostsystemResolver) GetName() string {
+	return "vrops_hostsystem_resolver"
 }
 
-// Create the feature schema.
-func (e *vropsHostsystemResolver) Init() error {
+func (e *VROpsHostsystemResolver) Init(db db.DB, opts map[string]any) error {
+	e.DB = db
 	if err := e.DB.Get().Model((*ResolvedVROpsHostsystem)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
@@ -45,13 +34,7 @@ func (e *vropsHostsystemResolver) Init() error {
 }
 
 // Resolve vROps hostsystems to Nova compute hosts.
-func (e *vropsHostsystemResolver) Extract() error {
-	if e.runTimer != nil {
-		timer := prometheus.NewTimer(e.runTimer)
-		defer timer.ObserveDuration()
-	}
-
-	logging.Log.Info("resolving vROps hostsystems")
+func (e *VROpsHostsystemResolver) Extract() error {
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Get().Begin()
 	if err != nil {

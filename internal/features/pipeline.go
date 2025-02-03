@@ -6,69 +6,59 @@ package features
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Configuration of feature extractors supported by the scheduler.
 // The features to extract are defined in the configuration file.
-var supportedExtractors = map[string]func(db.DB, Monitor) FeatureExtractor{
-	"vrops_hostsystem_resolver":             NewVROpsHostsystemResolver,
-	"vrops_project_noisiness_extractor":     NewVROpsProjectNoisinessExtractor,
-	"vrops_hostsystem_contention_extractor": NewVROpsHostsystemContentionExtractor,
+var supportedExtractors = []plugins.FeatureExtractor{
+	&vmware.VROpsHostsystemResolver{},
+	&vmware.VROpsProjectNoisinessExtractor{},
+	&vmware.VROpsHostsystemContentionExtractor{},
 }
 
-type FeatureExtractor interface {
-	Init() error
-	Extract() error
-}
-
-type FeatureExtractorPipeline interface {
-	Init()
-	Extract()
-}
-
-type featureExtractorPipeline struct {
-	FeatureExtractors []FeatureExtractor
-	monitor           Monitor
+type FeatureExtractorPipeline struct {
+	extractors []plugins.FeatureExtractor
+	monitor    Monitor
 }
 
 // Create a new feature extractor pipeline with extractors contained in
 // the configuration.
 func NewPipeline(config conf.Config, database db.DB, m Monitor) FeatureExtractorPipeline {
-	moduleConfig := config.GetFeaturesConfig()
-	extractors := []FeatureExtractor{}
-	for _, extractorConfig := range moduleConfig.Extractors {
-		if extractorFunc, ok := supportedExtractors[extractorConfig.Name]; ok {
-			extractor := extractorFunc(database, m)
-			extractors = append(extractors, extractor)
+	supportedExtractorsByName := make(map[string]plugins.FeatureExtractor)
+	for _, extractor := range supportedExtractors {
+		supportedExtractorsByName[extractor.GetName()] = extractor
+	}
+	extractors := []plugins.FeatureExtractor{}
+	for _, extractorConfig := range config.GetFeaturesConfig().Extractors {
+		if extractorFunc, ok := supportedExtractorsByName[extractorConfig.Name]; ok {
+			wrappedExtractor := monitorFeatureExtractor(extractorFunc, m)
+			if err := wrappedExtractor.Init(database, extractorConfig.Options); err != nil {
+				panic("failed to initialize feature extractor: " + err.Error())
+			}
+			extractors = append(extractors, wrappedExtractor)
+			logging.Log.Info(
+				"feature extractor: added extractor",
+				"name", extractorConfig.Name,
+				"options", extractorConfig.Options,
+			)
 		} else {
 			panic("unknown feature extractor: " + extractorConfig.Name)
 		}
 	}
-	return &featureExtractorPipeline{
-		FeatureExtractors: extractors,
-		monitor:           m,
-	}
-}
-
-// Creates the necessary database tables if they do not exist.
-func (p *featureExtractorPipeline) Init() {
-	for _, extractor := range p.FeatureExtractors {
-		if err := extractor.Init(); err != nil {
-			panic(err)
-		}
-	}
+	return FeatureExtractorPipeline{extractors: extractors, monitor: m}
 }
 
 // Extract features from the data sources.
-func (p *featureExtractorPipeline) Extract() {
+func (p *FeatureExtractorPipeline) Extract() {
 	if p.monitor.pipelineRunTimer != nil {
 		timer := prometheus.NewTimer(p.monitor.pipelineRunTimer)
 		defer timer.ObserveDuration()
 	}
-
-	for _, extractor := range p.FeatureExtractors {
+	for _, extractor := range p.extractors {
 		if err := extractor.Extract(); err != nil {
 			logging.Log.Error("failed to extract features", "error", err)
 		}

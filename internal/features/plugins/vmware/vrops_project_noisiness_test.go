@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package vmware
 
 import (
 	"testing"
@@ -17,8 +17,8 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	extractor := NewVROpsProjectNoisinessExtractor(&mockDB, Monitor{})
-	if err := extractor.Init(); err != nil {
+	extractor := &VROpsProjectNoisinessExtractor{}
+	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	// Will fail when the table does not exist
@@ -79,9 +79,8 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Create an instance of the extractor
-	extractor := NewVROpsProjectNoisinessExtractor(&mockDB, Monitor{})
-	if err := extractor.Init(); err != nil {
+	extractor := &VROpsProjectNoisinessExtractor{}
+	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := extractor.Extract(); err != nil {

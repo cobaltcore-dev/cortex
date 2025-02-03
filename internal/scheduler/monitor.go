@@ -79,7 +79,7 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 
 // Wraps a scheduler step to monitor its execution.
 type StepMonitor[S plugins.Step] struct {
-	// The step to run.
+	// The wrapped scheduler step to monitor.
 	Step S
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
@@ -94,9 +94,9 @@ func (s *StepMonitor[S]) GetName() string {
 	return s.Step.GetName()
 }
 
-func (s *StepMonitor[S]) Conf(db db.DB, opts map[string]any) {
+func (s *StepMonitor[S]) Init(db db.DB, opts map[string]any) error {
 	// Configure the wrapped step.
-	s.Step.Conf(db, opts)
+	return s.Step.Init(db, opts)
 }
 
 func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {

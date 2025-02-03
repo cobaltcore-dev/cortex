@@ -7,6 +7,8 @@ import "github.com/cobaltcore-dev/cortex/internal/db"
 
 // Interface for a scheduler step.
 type Step interface {
+	// Configure the step with a database and options.
+	Init(db db.DB, opts map[string]any) error
 	// Run this step of the scheduling pipeline.
 	// The step receives a state object which contains hosts and weights
 	// and can modify these weights and hosts as needed. The state object
@@ -18,8 +20,6 @@ type Step interface {
 	// The name is used to identify the step in metrics, config, logs, and more.
 	// Should be something like: "my_cool_scheduler_step".
 	GetName() string
-	// Configure the step with a database and options.
-	Conf(db db.DB, opts map[string]any)
 }
 
 // State passed between scheduler steps.

@@ -25,7 +25,7 @@ type Pipeline interface {
 }
 
 type pipeline struct {
-	Steps   []plugins.Step
+	steps   []plugins.Step
 	monitor Monitor
 }
 
@@ -39,7 +39,9 @@ func NewPipeline(config conf.Config, database db.DB, monitor Monitor) Pipeline {
 	for _, stepConfig := range config.GetSchedulerConfig().Steps {
 		if step, ok := supportedStepsByName[stepConfig.Name]; ok {
 			wrappedStep := monitorStep(step, monitor)
-			wrappedStep.Conf(database, stepConfig.Options)
+			if err := wrappedStep.Init(database, stepConfig.Options); err != nil {
+				panic("failed to initialize pipeline step: " + err.Error())
+			}
 			steps = append(steps, wrappedStep)
 			logging.Log.Info(
 				"scheduler: added step",
@@ -50,7 +52,7 @@ func NewPipeline(config conf.Config, database db.DB, monitor Monitor) Pipeline {
 			panic("unknown pipeline step: " + stepConfig.Name)
 		}
 	}
-	return &pipeline{Steps: steps, monitor: monitor}
+	return &pipeline{steps: steps, monitor: monitor}
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
@@ -58,7 +60,7 @@ func (p *pipeline) Run(state *plugins.State) ([]string, error) {
 	if p.monitor.hostNumberInObserver != nil {
 		p.monitor.hostNumberInObserver.Observe(float64(len(state.Hosts)))
 	}
-	for _, step := range p.Steps {
+	for _, step := range p.steps {
 		if err := step.Run(state); err != nil {
 			return nil, err
 		}

@@ -4,8 +4,10 @@
 package vmware
 
 import (
+	"errors"
+
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
@@ -18,15 +20,20 @@ func (s *VROpsAntiAffinityNoisyProjectsStep) GetName() string {
 	return "vrops_anti_affinity_noisy_projects"
 }
 
-func (s *VROpsAntiAffinityNoisyProjectsStep) Conf(db db.DB, opts map[string]any) {
+func (s *VROpsAntiAffinityNoisyProjectsStep) Init(db db.DB, opts map[string]any) error {
 	s.DB = db
-	s.AvgCPUThreshold = opts["avgCPUThreshold"]
+	avgCPUThreshold, ok := opts["avgCPUThreshold"]
+	if !ok {
+		return errors.New("missing avgCPUThreshold")
+	}
+	s.AvgCPUThreshold = avgCPUThreshold
+	return nil
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *VROpsAntiAffinityNoisyProjectsStep) Run(state *plugins.State) error {
 	// If the average CPU usage is above the threshold, the project is considered noisy.
-	var noisyProjects []features.VROpsProjectNoisiness
+	var noisyProjects []vmware.VROpsProjectNoisiness
 	if err := s.DB.Get().Model(&noisyProjects).
 		Where("avg_cpu_of_project > ?", s.AvgCPUThreshold).
 		Where("project = ?", state.Spec.ProjectID).

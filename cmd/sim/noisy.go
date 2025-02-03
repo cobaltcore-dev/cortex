@@ -10,7 +10,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
@@ -25,7 +25,7 @@ func SimulateNoisyVMScheduling() {
 	defer db.Close()
 
 	// Get noisy projects from the DB.
-	var noisyProjects []features.VROpsProjectNoisiness
+	var noisyProjects []vmware.VROpsProjectNoisiness
 	err := db.Get().Model(&noisyProjects).Order("avg_cpu_of_project DESC").Select()
 	if err != nil {
 		logging.Log.Error("failed to get noisy projects", "error", err)

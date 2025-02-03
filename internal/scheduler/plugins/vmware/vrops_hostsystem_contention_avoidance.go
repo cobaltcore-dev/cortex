@@ -4,8 +4,10 @@
 package vmware
 
 import (
+	"errors"
+
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
@@ -19,15 +21,24 @@ func (s *AvoidContendedHostsStep) GetName() string {
 	return "vrops_avoid_contended_hosts"
 }
 
-func (s *AvoidContendedHostsStep) Conf(db db.DB, opts map[string]any) {
+func (s *AvoidContendedHostsStep) Init(db db.DB, opts map[string]any) error {
 	s.DB = db
-	s.AvgCPUContentionThreshold = opts["avgCPUContentionThreshold"]
-	s.MaxCPUContentionThreshold = opts["maxCPUContentionThreshold"]
+	avgCPUThreshold, ok := opts["avgCPUContentionThreshold"]
+	if !ok {
+		return errors.New("missing avgCPUContentionThreshold")
+	}
+	s.AvgCPUContentionThreshold = avgCPUThreshold
+	maxCPUThreshold, ok := opts["maxCPUContentionThreshold"]
+	if !ok {
+		return errors.New("missing maxCPUContentionThreshold")
+	}
+	s.MaxCPUContentionThreshold = maxCPUThreshold
+	return nil
 }
 
 // Downvote hosts that are highly contended.
 func (s *AvoidContendedHostsStep) Run(state *plugins.State) error {
-	var highlyContendedHosts []features.VROpsHostsystemContention
+	var highlyContendedHosts []vmware.VROpsHostsystemContention
 	if err := s.DB.Get().
 		Model(&highlyContendedHosts).
 		Where("avg_cpu_contention > ?", s.AvgCPUContentionThreshold).
@@ -35,7 +46,7 @@ func (s *AvoidContendedHostsStep) Run(state *plugins.State) error {
 		Select(); err != nil {
 		return err
 	}
-	var hostsByName = make(map[string]features.VROpsHostsystemContention)
+	var hostsByName = make(map[string]vmware.VROpsHostsystemContention)
 	for _, h := range highlyContendedHosts {
 		hostsByName[h.ComputeHost] = h
 	}

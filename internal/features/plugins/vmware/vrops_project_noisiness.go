@@ -1,13 +1,11 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package vmware
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type VROpsProjectNoisiness struct {
@@ -18,25 +16,16 @@ type VROpsProjectNoisiness struct {
 	AvgCPUOfProject float64  `pg:"avg_cpu_of_project,notnull"`
 }
 
-type vROpsProjectNoisinessExtractor struct {
-	DB       db.DB
-	runTimer prometheus.Observer
+type VROpsProjectNoisinessExtractor struct {
+	DB db.DB
 }
 
-func NewVROpsProjectNoisinessExtractor(db db.DB, m Monitor) FeatureExtractor {
-	stepName := "vrops_project_noisiness"
-	var runTimer prometheus.Observer
-	if m.stepRunTimer != nil {
-		runTimer = m.stepRunTimer.WithLabelValues(stepName)
-	}
-	return &vROpsProjectNoisinessExtractor{
-		DB:       db,
-		runTimer: runTimer,
-	}
+func (e *VROpsProjectNoisinessExtractor) GetName() string {
+	return "vrops_project_noisiness"
 }
 
-// Create the schema for the project noisiness feature.
-func (e *vROpsProjectNoisinessExtractor) Init() error {
+func (e *VROpsProjectNoisinessExtractor) Init(db db.DB, opts map[string]any) error {
+	e.DB = db
 	if err := e.DB.Get().Model((*VROpsProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
@@ -52,13 +41,7 @@ func (e *vROpsProjectNoisinessExtractor) Init() error {
 // 3. Store the avg cpu usage together with the current hosts in the database.
 // This feature can then be used to draw new VMs away from VMs of the same
 // project in case this project is known to cause high cpu usage.
-func (e *vROpsProjectNoisinessExtractor) Extract() error {
-	if e.runTimer != nil {
-		timer := prometheus.NewTimer(e.runTimer)
-		defer timer.ObserveDuration()
-	}
-
-	logging.Log.Info("extracting noisy projects")
+func (e *VROpsProjectNoisinessExtractor) Extract() error {
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Get().Begin()
 	if err != nil {

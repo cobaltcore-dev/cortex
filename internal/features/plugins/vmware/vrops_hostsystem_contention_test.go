@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package vmware
 
 import (
 	"testing"
@@ -16,9 +16,8 @@ func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	extractor := NewVROpsHostsystemContentionExtractor(&mockDB, Monitor{})
-
-	if err := extractor.Init(); err != nil {
+	extractor := &VROpsHostsystemContentionExtractor{}
+	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -70,8 +69,8 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	extractor := NewVROpsHostsystemContentionExtractor(&mockDB, Monitor{})
-	if err := extractor.Init(); err != nil {
+	extractor := &VROpsHostsystemContentionExtractor{}
+	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err = extractor.Extract(); err != nil {
