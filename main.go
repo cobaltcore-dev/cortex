@@ -44,7 +44,6 @@ func runSyncer(registry *monitoring.Registry, config conf.Config, db db.DB) {
 func runExtractor(registry *monitoring.Registry, config conf.Config, db db.DB) {
 	monitor := features.NewPipelineMonitor(registry)
 	pipeline := features.NewPipeline(config, db, monitor)
-	pipeline.Init()
 	for {
 		pipeline.Extract()
 		time.Sleep(time.Minute * 1)

@@ -1,12 +1,13 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package vmware
 
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	"github.com/go-pg/pg/v10/orm"
 )
@@ -18,7 +19,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 
 	// Create dependency tables
 	deps := []interface{}{
-		(*features.VROpsHostsystemContention)(nil),
+		(*vmware.VROpsHostsystemContention)(nil),
 	}
 	for _, dep := range deps {
 		if err := mockDB.
@@ -46,17 +47,20 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		"avgCPUContentionThreshold": 10.0,
 		"maxCPUContentionThreshold": 20.0,
 	}
-	step := NewAvoidContendedHostsStep(opts, &mockDB, Monitor{})
+	step := &AvoidContendedHostsStep{}
+	if err := step.Init(&mockDB, opts); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 
 	tests := []struct {
 		name          string
-		state         *pipelineState
+		state         *plugins.State
 		expectedHosts map[string]float64
 	}{
 		{
 			name: "Avoid contended hosts",
-			state: &pipelineState{
-				Hosts: []pipelineStateHost{
+			state: &plugins.State{
+				Hosts: []plugins.StateHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -75,8 +79,8 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		},
 		{
 			name: "No contended hosts",
-			state: &pipelineState{
-				Hosts: []pipelineStateHost{
+			state: &plugins.State{
+				Hosts: []plugins.StateHost{
 					{ComputeHost: "host4", HypervisorHostname: "hypervisor4"},
 					{ComputeHost: "host5", HypervisorHostname: "hypervisor5"},
 				},

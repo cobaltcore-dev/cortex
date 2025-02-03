@@ -1,12 +1,13 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package vmware
 
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	"github.com/go-pg/pg/v10/orm"
 )
@@ -18,7 +19,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	// Create dependency tables
 	deps := []interface{}{
-		(*features.VROpsProjectNoisiness)(nil),
+		(*vmware.VROpsProjectNoisiness)(nil),
 	}
 	for _, dep := range deps {
 		if err := mockDB.
@@ -43,20 +44,23 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	opts := map[string]any{
 		"avgCPUThreshold": 20.0,
 	}
-	step := NewVROpsAntiAffinityNoisyProjectsStep(opts, &mockDB, Monitor{})
+	step := &VROpsAntiAffinityNoisyProjectsStep{}
+	if err := step.Init(&mockDB, opts); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 
 	tests := []struct {
 		name          string
-		state         *pipelineState
+		state         *plugins.State
 		expectedHosts map[string]float64
 	}{
 		{
 			name: "Noisy project",
-			state: &pipelineState{
-				Spec: pipelineStateSpec{
+			state: &plugins.State{
+				Spec: plugins.StateSpec{
 					ProjectID: "project1",
 				},
-				Hosts: []pipelineStateHost{
+				Hosts: []plugins.StateHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -75,11 +79,11 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Non-noisy project",
-			state: &pipelineState{
-				Spec: pipelineStateSpec{
+			state: &plugins.State{
+				Spec: plugins.StateSpec{
 					ProjectID: "project2",
 				},
-				Hosts: []pipelineStateHost{
+				Hosts: []plugins.StateHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -98,11 +102,11 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "No noisy project data",
-			state: &pipelineState{
-				Spec: pipelineStateSpec{
+			state: &plugins.State{
+				Spec: plugins.StateSpec{
 					ProjectID: "project3",
 				},
-				Hosts: []pipelineStateHost{
+				Hosts: []plugins.StateHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},

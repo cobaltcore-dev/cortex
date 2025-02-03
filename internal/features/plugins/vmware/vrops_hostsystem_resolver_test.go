@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package vmware
 
 import (
 	"testing"
@@ -17,9 +17,8 @@ func TestVROpsHostsystemResolver_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	resolver := NewVROpsHostsystemResolver(&mockDB, Monitor{})
-
-	if err := resolver.Init(); err != nil {
+	extractor := &VROpsHostsystemResolver{}
+	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -82,14 +81,11 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Create an instance of the resolver
-	resolver := NewVROpsHostsystemResolver(&mockDB, Monitor{})
-	if err = resolver.Init(); err != nil {
+	extractor := &VROpsHostsystemResolver{}
+	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	// Call the function to test
-	err = resolver.Extract()
-	if err != nil {
+	if err := extractor.Extract(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

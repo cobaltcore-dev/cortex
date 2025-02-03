@@ -9,54 +9,40 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/vmware"
 )
 
 // Configuration of steps supported by the scheduler.
 // The steps used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]func(map[string]any, db.DB, Monitor) PipelineStep{
-	"vrops_anti_affinity_noisy_projects": NewVROpsAntiAffinityNoisyProjectsStep,
-	"vrops_avoid_contended_hosts":        NewAvoidContendedHostsStep,
-}
-
-type pipelineStateSpec struct {
-	ProjectID string
-}
-
-type pipelineStateHost struct {
-	// Name of the Nova compute host, e.g. nova-compute-bb123.
-	ComputeHost string
-	// Name of the hypervisor hostname, e.g. domain-c123.<uuid>
-	HypervisorHostname string
-}
-
-// State passed through the pipeline.
-// Each step in the pipeline can modify the hosts or their weights.
-type pipelineState struct {
-	Spec    pipelineStateSpec
-	Hosts   []pipelineStateHost
-	Weights map[string]float64
-}
-
-type PipelineStep interface {
-	Run(state *pipelineState) error
+var supportedSteps = []plugins.Step{
+	&vmware.VROpsAntiAffinityNoisyProjectsStep{},
+	&vmware.AvoidContendedHostsStep{},
 }
 
 type Pipeline interface {
-	Run(state *pipelineState) ([]string, error)
+	Run(state *plugins.State) ([]string, error)
 }
 
 type pipeline struct {
-	Steps   []PipelineStep
+	steps   []plugins.Step
 	monitor Monitor
 }
 
 // Create a new pipeline with steps contained in the configuration.
 func NewPipeline(config conf.Config, database db.DB, monitor Monitor) Pipeline {
-	steps := []PipelineStep{}
+	supportedStepsByName := make(map[string]plugins.Step)
+	for _, step := range supportedSteps {
+		supportedStepsByName[step.GetName()] = step
+	}
+	steps := []plugins.Step{}
 	for _, stepConfig := range config.GetSchedulerConfig().Steps {
-		if stepFunc, ok := supportedSteps[stepConfig.Name]; ok {
-			step := stepFunc(stepConfig.Options, database, monitor)
-			steps = append(steps, step)
+		if step, ok := supportedStepsByName[stepConfig.Name]; ok {
+			wrappedStep := monitorStep(step, monitor)
+			if err := wrappedStep.Init(database, stepConfig.Options); err != nil {
+				panic("failed to initialize pipeline step: " + err.Error())
+			}
+			steps = append(steps, wrappedStep)
 			logging.Log.Info(
 				"scheduler: added step",
 				"name", stepConfig.Name,
@@ -66,15 +52,15 @@ func NewPipeline(config conf.Config, database db.DB, monitor Monitor) Pipeline {
 			panic("unknown pipeline step: " + stepConfig.Name)
 		}
 	}
-	return &pipeline{Steps: steps, monitor: monitor}
+	return &pipeline{steps: steps, monitor: monitor}
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
-func (p *pipeline) Run(state *pipelineState) ([]string, error) {
+func (p *pipeline) Run(state *plugins.State) ([]string, error) {
 	if p.monitor.hostNumberInObserver != nil {
 		p.monitor.hostNumberInObserver.Observe(float64(len(state.Hosts)))
 	}
-	for _, step := range p.Steps {
+	for _, step := range p.steps {
 		if err := step.Run(state); err != nil {
 			return nil, err
 		}

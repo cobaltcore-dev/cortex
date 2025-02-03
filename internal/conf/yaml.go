@@ -39,7 +39,8 @@ type SyncConfig struct {
 // Configuration for the features module.
 type FeaturesConfig struct {
 	Extractors []struct {
-		Name string `yaml:"name"`
+		Name    string         `yaml:"name"`
+		Options map[string]any `yaml:"options"`
 		// The dependencies this extractor needs.
 		DependencyConfig `yaml:"dependencies,omitempty"`
 	} `yaml:"extractors"`

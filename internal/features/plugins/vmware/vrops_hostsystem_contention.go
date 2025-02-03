@@ -1,13 +1,11 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package vmware
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type VROpsHostsystemContention struct {
@@ -18,25 +16,16 @@ type VROpsHostsystemContention struct {
 	MaxCPUContention float64  `pg:"max_cpu_contention,notnull"`
 }
 
-type vROpsHostsystemContentionExtractor struct {
-	DB       db.DB
-	runTimer prometheus.Observer
+type VROpsHostsystemContentionExtractor struct {
+	DB db.DB
 }
 
-func NewVROpsHostsystemContentionExtractor(db db.DB, m Monitor) FeatureExtractor {
-	stepName := "vrops_hostsystem_contention"
-	var runTimer prometheus.Observer
-	if m.stepRunTimer != nil {
-		runTimer = m.stepRunTimer.WithLabelValues(stepName)
-	}
-	return &vROpsHostsystemContentionExtractor{
-		DB:       db,
-		runTimer: runTimer,
-	}
+func (e *VROpsHostsystemContentionExtractor) GetName() string {
+	return "vrops_hostsystem_contention"
 }
 
-// Create the feature schema.
-func (e *vROpsHostsystemContentionExtractor) Init() error {
+func (e *VROpsHostsystemContentionExtractor) Init(db db.DB, opts map[string]any) error {
+	e.DB = db
 	if err := e.DB.Get().Model((*VROpsHostsystemContention)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,
 	}); err != nil {
@@ -47,13 +36,7 @@ func (e *vROpsHostsystemContentionExtractor) Init() error {
 
 // Extract CPU contention of hostsystems.
 // Depends on resolved vROps hostsystems (feature_vrops_resolved_hostsystem).
-func (e *vROpsHostsystemContentionExtractor) Extract() error {
-	if e.runTimer != nil {
-		timer := prometheus.NewTimer(e.runTimer)
-		defer timer.ObserveDuration()
-	}
-
-	logging.Log.Info("calculating hostsystem contention")
+func (e *VROpsHostsystemContentionExtractor) Extract() error {
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Get().Begin()
 	if err != nil {
