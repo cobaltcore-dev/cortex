@@ -11,13 +11,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib"
 )
 
 // Mock implementation of Pipeline
 type mockPipeline struct{}
 
-func (m *mockPipeline) Run(state *pipelineState) ([]string, error) {
+func (m *mockPipeline) Run(state *plugins.State) ([]string, error) {
 	return []string{"host1"}, nil
 }
 

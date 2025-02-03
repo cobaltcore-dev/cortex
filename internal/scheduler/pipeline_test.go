@@ -6,6 +6,8 @@ package scheduler
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib"
 )
 
@@ -13,7 +15,13 @@ type mockPipelineStep struct {
 	err error
 }
 
-func (m *mockPipelineStep) Run(state *pipelineState) error {
+func (m *mockPipelineStep) Conf(db db.DB, opts map[string]interface{}) {}
+
+func (m *mockPipelineStep) GetName() string {
+	return "mock_pipeline_step"
+}
+
+func (m *mockPipelineStep) Run(state *plugins.State) error {
 	if m.err != nil {
 		return m.err
 	}
@@ -33,23 +41,23 @@ func TestPipeline_Run(t *testing.T) {
 
 	// Create an instance of the pipeline with a mock step
 	pipeline := &pipeline{
-		Steps: []PipelineStep{
+		Steps: []plugins.Step{
 			&mockPipelineStep{},
 		},
 	}
 
 	tests := []struct {
 		name          string
-		state         *pipelineState
+		state         *plugins.State
 		expectedHosts []string
 	}{
 		{
 			name: "Single step pipeline",
-			state: &pipelineState{
-				Spec: pipelineStateSpec{
+			state: &plugins.State{
+				Spec: plugins.StateSpec{
 					ProjectID: "project1",
 				},
-				Hosts: []pipelineStateHost{
+				Hosts: []plugins.StateHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -64,11 +72,11 @@ func TestPipeline_Run(t *testing.T) {
 		},
 		{
 			name: "Host1 downvoted by mock step",
-			state: &pipelineState{
-				Spec: pipelineStateSpec{
+			state: &plugins.State{
+				Spec: plugins.StateSpec{
 					ProjectID: "project1",
 				},
-				Hosts: []pipelineStateHost{
+				Hosts: []plugins.StateHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},

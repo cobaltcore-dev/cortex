@@ -15,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
 // Host object from the Nova scheduler pipeline.
@@ -184,10 +185,10 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 	}
 
 	// Create the pipeline context from the request data.
-	state := &pipelineState{}
+	state := &plugins.State{}
 	state.Spec.ProjectID = requestData.Spec.Data.ProjectID
 	for _, host := range requestData.Hosts {
-		state.Hosts = append(state.Hosts, pipelineStateHost(host))
+		state.Hosts = append(state.Hosts, plugins.StateHost(host))
 	}
 	state.Weights = requestData.Weights
 
