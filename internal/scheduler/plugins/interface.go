@@ -3,7 +3,12 @@
 
 package plugins
 
-import "github.com/cobaltcore-dev/cortex/internal/db"
+import (
+	"math"
+
+	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
+)
 
 // Interface for a scheduler step.
 type Step interface {
@@ -27,6 +32,41 @@ type State struct {
 	Spec    StateSpec
 	Hosts   []StateHost
 	Weights map[string]float64
+}
+
+// Apply a tanh activation function to all weights in the state.
+// See: https://en.wikipedia.org/wiki/Activation_function
+func (state *State) ScaleNovaValues() {
+	for hostname, weight := range state.Weights {
+		state.Weights[hostname] = math.Tanh(weight)
+	}
+}
+
+// Vote the a hostname in the state.
+//
+// The passed activation value can be everything between -float64_max and
+// float64_max. Activations are applied to previous weights using a tanh
+// activation function. See: https://en.wikipedia.org/wiki/Activation_function
+func (state *State) Vote(hostname string, activation float64) {
+	// Check if the hostname is in the state.
+	if _, ok := state.Weights[hostname]; !ok {
+		logging.Log.Warn(
+			"attempted to vote unknown host",
+			"hostname", hostname,
+		)
+		return
+	}
+	// Check if the weight is present.
+	prevWeight, ok := state.Weights[hostname]
+	if !ok {
+		logging.Log.Warn(
+			"attempted to vote host with missing weight",
+			"hostname", hostname,
+		)
+		return
+	}
+	// Apply the hyperbolic tangent activation function.
+	state.Weights[hostname] = prevWeight + math.Tanh(activation)
 }
 
 type StateSpec struct {

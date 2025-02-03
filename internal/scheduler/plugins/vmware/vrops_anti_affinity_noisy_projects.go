@@ -13,7 +13,8 @@ import (
 
 type VROpsAntiAffinityNoisyProjectsStep struct {
 	DB              db.DB
-	AvgCPUThreshold any // Can be float64 or int
+	AvgCPUThreshold float64
+	ActivationOnHit float64
 }
 
 func (s *VROpsAntiAffinityNoisyProjectsStep) GetName() string {
@@ -22,11 +23,25 @@ func (s *VROpsAntiAffinityNoisyProjectsStep) GetName() string {
 
 func (s *VROpsAntiAffinityNoisyProjectsStep) Init(db db.DB, opts map[string]any) error {
 	s.DB = db
+
 	avgCPUThreshold, ok := opts["avgCPUThreshold"]
 	if !ok {
 		return errors.New("missing avgCPUThreshold")
 	}
-	s.AvgCPUThreshold = avgCPUThreshold
+	if avgCPUThresholdInt, okInt := avgCPUThreshold.(int); okInt {
+		avgCPUThreshold = float64(avgCPUThresholdInt)
+	}
+	s.AvgCPUThreshold = avgCPUThreshold.(float64)
+
+	activationOnHit, ok := opts["activationOnHit"]
+	if !ok {
+		return errors.New("missing activationOnHit")
+	}
+	if activationOnHitInt, okInt := activationOnHit.(int); okInt {
+		activationOnHit = float64(activationOnHitInt)
+	}
+	s.ActivationOnHit = activationOnHit.(float64)
+
 	return nil
 }
 
@@ -46,18 +61,14 @@ func (s *VROpsAntiAffinityNoisyProjectsStep) Run(state *plugins.State) error {
 	for _, p := range noisyProjects {
 		hostsByProject[p.Project] = append(hostsByProject[p.Project], p.ComputeHost)
 	}
-	val, ok := hostsByProject[state.Spec.ProjectID]
+	hostnames, ok := hostsByProject[state.Spec.ProjectID]
 	if !ok {
 		// No noisy project, nothing to do.
 		return nil
 	}
 	// Downvote the hosts this project is currently running on.
-	for i := range state.Hosts {
-		for _, host := range val {
-			if state.Hosts[i].ComputeHost == host {
-				state.Weights[state.Hosts[i].ComputeHost] = 0.0
-			}
-		}
+	for _, hostname := range hostnames {
+		state.Vote(hostname, s.ActivationOnHit)
 	}
 	return nil
 }

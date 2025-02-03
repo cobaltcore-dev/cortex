@@ -192,6 +192,12 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 	}
 	state.Weights = requestData.Weights
 
+	// Nova may give us very large (positive/negative) weights such as
+	// -99,000 or 99,000. We want to respect these values, but still adjust them
+	// to a meaningful value. If Nova really doesn't want us to run on a host, it
+	// should run a filter instead of setting a weight.
+	state.ScaleNovaValues() // Uses an activation function to scale the weights.
+
 	// Evaluate the pipeline and return the ordered list of hosts.
 	hosts, err := api.Pipeline.Run(state)
 	if err != nil {

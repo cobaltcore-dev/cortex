@@ -46,6 +46,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	opts := map[string]any{
 		"avgCPUContentionThreshold": 10.0,
 		"maxCPUContentionThreshold": 20.0,
+		"activationOnHit":           -1.0,
 	}
 	step := &AvoidContendedHostsStep{}
 	if err := step.Init(&mockDB, opts); err != nil {
@@ -53,9 +54,9 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		state         *plugins.State
-		expectedHosts map[string]float64
+		name           string
+		state          *plugins.State
+		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Avoid contended hosts",
@@ -71,10 +72,9 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 					"host3": 1.0,
 				},
 			},
-			expectedHosts: map[string]float64{
-				"host1": 0.0,
-				"host2": 1.0,
-				"host3": 0.0,
+			downvotedHosts: map[string]struct{}{
+				"host1": {},
+				"host3": {},
 			},
 		},
 		{
@@ -89,22 +89,30 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 					"host5": 1.0,
 				},
 			},
-			expectedHosts: map[string]float64{
-				"host4": 1.0,
-				"host5": 1.0,
-			},
+			downvotedHosts: map[string]struct{}{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := step.Run(tt.state)
-			if err != nil {
+			weightsBefore := make(map[string]float64)
+			for host, weight := range tt.state.Weights {
+				weightsBefore[host] = weight
+			}
+			if err := step.Run(tt.state); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
-			for host, expectedWeight := range tt.expectedHosts {
-				if tt.state.Weights[host] != expectedWeight {
-					t.Errorf("expected weight for host %s to be %f, got %f", host, expectedWeight, tt.state.Weights[host])
+			// Check that the weights have decreased
+			for host, weight := range weightsBefore {
+				weightAfter := tt.state.Weights[host]
+				if _, ok := tt.downvotedHosts[host]; ok {
+					if weightAfter >= weight {
+						t.Errorf("expected weight for host %s to be less than %f, got %f", host, weight, weightAfter)
+					}
+				} else {
+					if weightAfter != weight {
+						t.Errorf("expected weight for host %s to be %f, got %f", host, weight, weightAfter)
+					}
 				}
 			}
 		})

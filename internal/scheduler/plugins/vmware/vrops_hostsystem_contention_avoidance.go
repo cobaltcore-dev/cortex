@@ -13,8 +13,9 @@ import (
 
 type AvoidContendedHostsStep struct {
 	DB                        db.DB
-	AvgCPUContentionThreshold any // Can be float64 or int
-	MaxCPUContentionThreshold any // Can be float64 or int
+	AvgCPUContentionThreshold float64
+	MaxCPUContentionThreshold float64
+	ActivationOnHit           float64
 }
 
 func (s *AvoidContendedHostsStep) GetName() string {
@@ -23,16 +24,33 @@ func (s *AvoidContendedHostsStep) GetName() string {
 
 func (s *AvoidContendedHostsStep) Init(db db.DB, opts map[string]any) error {
 	s.DB = db
-	avgCPUThreshold, ok := opts["avgCPUContentionThreshold"]
+	avgCPUContentionThreshold, ok := opts["avgCPUContentionThreshold"]
 	if !ok {
 		return errors.New("missing avgCPUContentionThreshold")
 	}
-	s.AvgCPUContentionThreshold = avgCPUThreshold
-	maxCPUThreshold, ok := opts["maxCPUContentionThreshold"]
+	if avgCPUContentionThresholdInt, okInt := avgCPUContentionThreshold.(int); okInt {
+		avgCPUContentionThreshold = float64(avgCPUContentionThresholdInt)
+	}
+	s.AvgCPUContentionThreshold = avgCPUContentionThreshold.(float64)
+
+	maxCPUContentionThreshold, ok := opts["maxCPUContentionThreshold"]
 	if !ok {
 		return errors.New("missing maxCPUContentionThreshold")
 	}
-	s.MaxCPUContentionThreshold = maxCPUThreshold
+	if maxCPUContentionThresholdInt, okInt := maxCPUContentionThreshold.(int); okInt {
+		maxCPUContentionThreshold = float64(maxCPUContentionThresholdInt)
+	}
+	s.MaxCPUContentionThreshold = maxCPUContentionThreshold.(float64)
+
+	activationOnHit, ok := opts["activationOnHit"]
+	if !ok {
+		return errors.New("missing activationOnHit")
+	}
+	if activationOnHitInt, okInt := activationOnHit.(int); okInt {
+		activationOnHit = float64(activationOnHitInt)
+	}
+	s.ActivationOnHit = activationOnHit.(float64)
+
 	return nil
 }
 
@@ -46,14 +64,8 @@ func (s *AvoidContendedHostsStep) Run(state *plugins.State) error {
 		Select(); err != nil {
 		return err
 	}
-	var hostsByName = make(map[string]vmware.VROpsHostsystemContention)
-	for _, h := range highlyContendedHosts {
-		hostsByName[h.ComputeHost] = h
-	}
-	for i := range state.Hosts {
-		if _, ok := hostsByName[state.Hosts[i].ComputeHost]; ok {
-			state.Weights[state.Hosts[i].ComputeHost] = 0.0
-		}
+	for _, obj := range highlyContendedHosts {
+		state.Vote(obj.ComputeHost, s.ActivationOnHit)
 	}
 	return nil
 }

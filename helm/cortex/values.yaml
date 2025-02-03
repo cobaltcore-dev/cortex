@@ -145,6 +145,7 @@ conf:
       - name: vrops_anti_affinity_noisy_projects
         options:
           avgCPUThreshold: 20
+          activationOnHit: -1.0
         dependencies:
           features:
             extractors:
@@ -153,6 +154,7 @@ conf:
         options:
           avgCPUContentionThreshold: 10
           maxCPUContentionThreshold: 20
+          activationOnHit: -1.0
         dependencies:
           features:
             extractors:
