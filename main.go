@@ -94,13 +94,15 @@ func runMonitoringServer(registry *monitoring.Registry) {
 
 func main() {
 	args := os.Args[1:]
-	if len(args) > 0 {
-		// Called by the Dockerfile build to make sure
-		// all binaries can be executed
-		if args[0] == "--version" {
-			fmt.Printf("%s version %s", "cortex", "0.0.1")
-			os.Exit(0)
-		}
+	if len(args) == 0 {
+		panic("no arguments provided")
+	}
+
+	// Called by the Dockerfile build to make sure
+	// all binaries can be executed
+	if args[0] == "--version" {
+		fmt.Printf("%s version %s", "cortex", "0.0.1")
+		os.Exit(0)
 	}
 
 	config := conf.NewConfig()
@@ -116,8 +118,15 @@ func main() {
 
 	registry := monitoring.NewRegistry(config)
 	go runMonitoringServer(registry)
-	go runSyncer(registry, config, db)
-	go runExtractor(registry, config, db)
-	go runScheduler(registry, config, db)
+
+	if args[0] == "--syncer" {
+		go runSyncer(registry, config, db)
+	}
+	if args[0] == "--extractor" {
+		go runExtractor(registry, config, db)
+	}
+	if args[0] == "--scheduler" {
+		go runScheduler(registry, config, db)
+	}
 	select {}
 }

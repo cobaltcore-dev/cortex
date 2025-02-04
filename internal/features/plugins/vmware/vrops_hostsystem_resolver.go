@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
 )
 
@@ -59,5 +60,10 @@ func (e *VROpsHostsystemResolver) Extract() error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	count, err := e.DB.Get().Model((*ResolvedVROpsHostsystem)(nil)).Count()
+	if err != nil {
+		return err
+	}
+	logging.Log.Info("features: extracted", "feature_vrops_resolved_hostsystem", count)
 	return nil
 }

@@ -13,7 +13,7 @@ helm_repo(
     labels=['Repositories'],
 )
 
-########### Cortex Core Service
+########### Cortex Core Services
 docker_build('cortex', '.', only=[
     'internal/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
 ])
@@ -28,13 +28,22 @@ k8s_yaml(helm('./helm/cortex', name='cortex', set=[
     'secrets.prometheus.ssoPublicKey=' + os.getenv('PROMETHEUS_SSO_PUBLIC_KEY', ''),
     'secrets.prometheus.ssoPrivateKey=' + os.getenv('PROMETHEUS_SSO_PRIVATE_KEY', ''),
 ]))
-k8s_resource('cortex', port_forwards=[
-    port_forward(8080, 8080),
-    port_forward(2112, 2112),
+k8s_resource('cortex-syncer', port_forwards=[
+    port_forward(8001, 2112),
 ], links=[
-    link('localhost:8080/up', '/up'),
-    link('localhost:2112/metrics', '/metrics'),
-], labels=['Core-Services']) # api endpoint
+    link('localhost:8001/metrics', '/metrics'),
+], labels=['Core-Services'])
+k8s_resource('cortex-extractor', port_forwards=[
+    port_forward(8002, 2112),
+], links=[
+    link('localhost:8002/metrics', '/metrics'),
+], labels=['Core-Services'])
+k8s_resource('cortex-scheduler', port_forwards=[
+    port_forward(8080, 8080),
+    port_forward(8003, 2112),
+], links=[
+    link('localhost:8003/metrics', '/metrics'),
+], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
 k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))
@@ -70,5 +79,5 @@ k8s_yaml('./plutono/app.yaml')
 k8s_resource('cortex-plutono', port_forwards=[
     port_forward(3000, 3000, name='plutono'),
 ], links=[
-    link('http://localhost:3000/d/7MZnLxDHz/cortex?orgId=1', 'cortex dashboard'),
+    link('http://localhost:3000/d/cortex/cortex?orgId=1', 'cortex dashboard'),
 ], labels=['Monitoring'])
