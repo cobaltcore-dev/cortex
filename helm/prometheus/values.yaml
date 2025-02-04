@@ -77,7 +77,7 @@ kube-prometheus-stack:
         - kube-system
 
 owner-info:
-  helm-chart-url: "https://github.tools.sap/cobaltcore-dev/cortex/helm/prometheus"
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/prometheus"
   maintainers:
     - "p.matthes@sap.com"
   support-group: "cobaltcore-dev"

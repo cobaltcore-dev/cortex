@@ -9,7 +9,7 @@ postgresql:
       postgresql: 5432
 
 owner-info:
-  helm-chart-url: "https://github.tools.sap/cobaltcore-dev/cortex/helm/postgres"
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/postgres"
   maintainers:
     - "p.matthes@sap.com"
   support-group: "cobaltcore-dev"
