@@ -21,7 +21,7 @@ type VROpsHostsystemContentionExtractor struct {
 }
 
 func (e *VROpsHostsystemContentionExtractor) GetName() string {
-	return "vrops_hostsystem_contention"
+	return "vrops_hostsystem_contention_extractor"
 }
 
 func (e *VROpsHostsystemContentionExtractor) Init(db db.DB, opts map[string]any) error {

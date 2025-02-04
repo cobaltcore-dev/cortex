@@ -21,7 +21,7 @@ type VROpsProjectNoisinessExtractor struct {
 }
 
 func (e *VROpsProjectNoisinessExtractor) GetName() string {
-	return "vrops_project_noisiness"
+	return "vrops_project_noisiness_extractor"
 }
 
 func (e *VROpsProjectNoisinessExtractor) Init(db db.DB, opts map[string]any) error {
