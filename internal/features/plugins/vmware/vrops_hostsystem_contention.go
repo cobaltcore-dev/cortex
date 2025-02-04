@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
 )
 
@@ -62,5 +63,10 @@ func (e *VROpsHostsystemContentionExtractor) Extract() error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	count, err := e.DB.Get().Model((*VROpsHostsystemContention)(nil)).Count()
+	if err != nil {
+		return err
+	}
+	logging.Log.Info("features: extracted", "feature_vrops_hostsystem_contention", count)
 	return nil
 }

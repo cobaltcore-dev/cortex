@@ -1,19 +1,24 @@
+{{- range .Values.modes }}
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cortex.fullname" . }}
+  name: {{ $.Chart.Name }}-{{ .name }}
   labels:
-    {{- include "cortex.labels" . | nindent 4 }}
+    {{- include "cortex.labels" $ | nindent 4 }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .service.type }}
   ports:
-    - port: {{ .Values.service.apiPort }}
+    {{- if .service.apiPort }}
+    - port: {{ .service.apiPort }}
       targetPort: api
       protocol: TCP
       name: api
-    - port: {{ .Values.service.metricsPort }}
+    {{- end }}
+    - port: {{ .service.metricsPort }}
       targetPort: metrics
       protocol: TCP
       name: metrics
   selector:
-    {{- include "cortex.selectorLabels" . | nindent 4 }}
+    {{- include "cortex.selectorLabels" $ | nindent 4 }}
+{{- end }}

@@ -67,7 +67,7 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) Feature
 }
 
 func (m FeatureExtractorMonitor[F]) Extract() error {
-	logging.Log.Debug("features: extracting", "extractor", m.GetName())
+	logging.Log.Info("features: extracting", "extractor", m.GetName())
 	if m.runTimer != nil {
 		timer := prometheus.NewTimer(m.runTimer)
 		defer timer.ObserveDuration()

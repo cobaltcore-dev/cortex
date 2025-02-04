@@ -1,5 +1,6 @@
 # All secrets should be put under this key.
 # These values will not be included in the config.json file.
+# TODO: Include these in the config.json file if that's not a security risk.
 secrets:
   postgres:
     port: "5432"
@@ -9,19 +10,19 @@ secrets:
     host: cortex-postgresql
 
   openstack:
-    authUrl:
-    username:
-    password:
-    projectName:
-    userDomainName:
-    projectDomainName:
+    # Replace with your OpenStack credentials, e.g. by secret injection.
+    authUrl: https://path-to-keystone/v3
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to
 
   prometheus:
-    url:
+    url: https://path-to-prometheus
+    # Optional, only required if Prometheus is configured with SSO.
     ssoPublicKey:
     ssoPrivateKey:
-
-replicaCount: 1
 
 image:
   repository: cortex
@@ -47,10 +48,26 @@ securityContext: {}
   # runAsNonRoot: true
   # runAsUser: 1000
 
-service:
-  type: ClusterIP
-  apiPort: 8080
-  metricsPort: 2112
+modes:
+  - name: syncer
+    service:
+      type: ClusterIP
+      metricsPort: 2112
+    args: ["--syncer"]
+    replicas: 1
+  - name: extractor
+    service:
+      type: ClusterIP
+      metricsPort: 2112
+    args: ["--extractor"]
+    replicas: 1
+  - name: scheduler
+    service:
+      type: ClusterIP
+      apiPort: 8080
+      metricsPort: 2112
+    args: ["--scheduler"]
+    replicas: 2
 
 resources:
   limits:
@@ -59,12 +76,12 @@ resources:
 
 livenessProbe:
   httpGet:
-    path: /up
-    port: api
+    path: /metrics
+    port: metrics
 readinessProbe:
   httpGet:
-    path: /up
-    port: api
+    path: /metrics
+    port: metrics
 
 # Additional volumes on the output Deployment definition.
 volumes: []

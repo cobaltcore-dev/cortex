@@ -1,55 +1,60 @@
+{{- range .Values.modes }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cortex.fullname" . }}
+  name: {{ $.Chart.Name }}-{{ .name }}
   labels:
-    {{- include "cortex.labels" . | nindent 4 }}
+    {{- include "cortex.labels" $ | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .replicas }}
   selector:
     matchLabels:
-      {{- include "cortex.selectorLabels" . | nindent 6 }}
+      {{- include "cortex.selectorLabels" $ | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      {{- with $.Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "cortex.labels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
+        {{- include "cortex.labels" $ | nindent 8 }}
+        {{- with $.Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- with .Values.imagePullSecrets }}
+      {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ $.Chart.Name }}-{{ .name }}
+          args: {{ .args | toJson }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
+            {{- if .service.apiPort }}
             - name: api
-              containerPort: {{ .Values.service.apiPort }}
+              containerPort: {{ .service.apiPort }}
               protocol: TCP
+            {{- end }}
             - name: metrics
-              containerPort: {{ .Values.service.metricsPort }}
+              containerPort: {{ .service.metricsPort }}
               protocol: TCP
           livenessProbe:
-            {{- toYaml .Values.livenessProbe | nindent 12 }}
+            {{- toYaml $.Values.livenessProbe | nindent 12 }}
           readinessProbe:
-            {{- toYaml .Values.readinessProbe | nindent 12 }}
+            {{- toYaml $.Values.readinessProbe | nindent 12 }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml $.Values.resources | nindent 12 }}
           volumeMounts:
-            - name: {{ include "cortex.fullname" . }}-config-volume
+            - name: {{ include "cortex.fullname" $ }}-config-volume
               mountPath: /etc/config
-          {{- with .Values.volumeMounts }}
+          {{- with $.Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
           envFrom:
@@ -60,21 +65,22 @@ spec:
             - secretRef:
                 name: postgres-secrets
       volumes:
-        - name: {{ include "cortex.fullname" . }}-config-volume
+        - name: {{ include "cortex.fullname" $ }}-config-volume
           configMap:
-            name: {{ include "cortex.fullname" . }}-config
-      {{- with .Values.volumes }}
+            name: {{ include "cortex.fullname" $ }}-config
+      {{- with $.Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.nodeSelector }}
+      {{- with $.Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with $.Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- with $.Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end }}
