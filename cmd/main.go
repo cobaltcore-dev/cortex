@@ -4,16 +4,16 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 
 	"github.com/cobaltcore-dev/cortex/cmd/sim"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
-		logging.Log.Error("usage: go run main.go [--noisy]")
+		slog.Error("usage: go run main.go [--noisy]")
 		panic("invalid usage")
 	}
 	if args[0] == "--noisy" {

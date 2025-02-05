@@ -5,10 +5,10 @@ package db
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10"
 )
 
@@ -44,7 +44,7 @@ func (d *db) Init() {
 	d.DBBackend = pg.Connect(opts)
 
 	// Poll until the database is alive
-	logging.Log.Info("waiting for database to be ready...")
+	slog.Info("waiting for database to be ready...")
 	ctx := context.Background()
 	var i int
 	for {
@@ -57,10 +57,10 @@ func (d *db) Init() {
 			// Give up after 10 seconds
 			panic(err)
 		}
-		logging.Log.Info("database is not ready yet, retrying", "attempt", i)
+		slog.Info("database is not ready yet, retrying", "attempt", i)
 		time.Sleep(time.Second * 1)
 	}
-	logging.Log.Info("database is ready")
+	slog.Info("database is ready")
 }
 
 // Returns the global database connection.
@@ -78,6 +78,6 @@ func (d *db) Close() {
 		return
 	}
 	if err := d.DBBackend.Close(); err != nil {
-		logging.Log.Error("failed to close database connection", "error", err)
+		slog.Error("failed to close database connection", "error", err)
 	}
 }

@@ -4,10 +4,10 @@
 package plugins
 
 import (
+	"log/slog"
 	"math"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 // Interface for a scheduler step.
@@ -50,7 +50,7 @@ func (state *State) ScaleNovaValues() {
 func (state *State) Vote(hostname string, activation float64) {
 	// Check if the hostname is in the state.
 	if _, ok := state.Weights[hostname]; !ok {
-		logging.Log.Warn(
+		slog.Warn(
 			"attempted to vote unknown host",
 			"hostname", hostname,
 		)
@@ -59,7 +59,7 @@ func (state *State) Vote(hostname string, activation float64) {
 	// Check if the weight is present.
 	prevWeight, ok := state.Weights[hostname]
 	if !ok {
-		logging.Log.Warn(
+		slog.Warn(
 			"attempted to vote host with missing weight",
 			"hostname", hostname,
 		)

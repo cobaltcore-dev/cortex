@@ -5,10 +5,10 @@ package openstack
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -63,12 +63,12 @@ func (s *syncer) syncServers(auth *openStackKeystoneAuth, tx *pg.Tx) error {
 		return errors.New("servers not enabled")
 	}
 	if _, err := tx.Model((*OpenStackServer)(nil)).Where("TRUE").Delete(); err != nil {
-		logging.Log.Error("failed to delete old servers", "error", err)
+		slog.Error("failed to delete old servers", "error", err)
 		return err
 	}
 	serverlist, err := s.ServerAPI.Get(*auth, nil)
 	if err != nil {
-		logging.Log.Error("failed to get servers", "error", err)
+		slog.Error("failed to get servers", "error", err)
 		return err
 	}
 	const batchSize = 100
@@ -77,7 +77,7 @@ func (s *syncer) syncServers(auth *openStackKeystoneAuth, tx *pg.Tx) error {
 		if _, err = tx.Model(&servers).
 			OnConflict("(id) DO UPDATE").
 			Insert(); err != nil {
-			logging.Log.Error("failed to insert servers", "error", err)
+			slog.Error("failed to insert servers", "error", err)
 			return err
 		}
 	}
@@ -86,7 +86,7 @@ func (s *syncer) syncServers(auth *openStackKeystoneAuth, tx *pg.Tx) error {
 			WithLabelValues("openstack_nova_servers").
 			Set(float64(len(serverlist.Servers)))
 	}
-	logging.Log.Info("synced OpenStack", "servers", len(serverlist.Servers))
+	slog.Info("synced OpenStack", "servers", len(serverlist.Servers))
 	return nil
 }
 
@@ -98,12 +98,12 @@ func (s *syncer) syncHypervisors(auth *openStackKeystoneAuth, tx *pg.Tx) error {
 		return errors.New("hypervisors not enabled")
 	}
 	if _, err := tx.Model((*OpenStackHypervisor)(nil)).Where("TRUE").Delete(); err != nil {
-		logging.Log.Error("failed to delete old hypervisors", "error", err)
+		slog.Error("failed to delete old hypervisors", "error", err)
 		return err
 	}
 	hypervisorlist, err := s.HypervisorAPI.Get(*auth, nil)
 	if err != nil {
-		logging.Log.Error("failed to get hypervisors", "error", err)
+		slog.Error("failed to get hypervisors", "error", err)
 		return err
 	}
 	const batchSize = 100
@@ -112,7 +112,7 @@ func (s *syncer) syncHypervisors(auth *openStackKeystoneAuth, tx *pg.Tx) error {
 		if _, err = tx.Model(&hypervisors).
 			OnConflict("(id) DO UPDATE").
 			Insert(); err != nil {
-			logging.Log.Error("failed to insert hypervisors", "error", err)
+			slog.Error("failed to insert hypervisors", "error", err)
 			return err
 		}
 	}
@@ -121,7 +121,7 @@ func (s *syncer) syncHypervisors(auth *openStackKeystoneAuth, tx *pg.Tx) error {
 			WithLabelValues("openstack_nova_hypervisors").
 			Set(float64(len(hypervisorlist.Hypervisors)))
 	}
-	logging.Log.Info("synced OpenStack", "hypervisors", len(hypervisorlist.Hypervisors))
+	slog.Info("synced OpenStack", "hypervisors", len(hypervisorlist.Hypervisors))
 	return nil
 }
 
@@ -133,11 +133,11 @@ func (s *syncer) Sync() {
 		defer timer.ObserveDuration()
 	}
 
-	logging.Log.Info("syncing OpenStack data")
+	slog.Info("syncing OpenStack data")
 
 	auth, err := s.KeystoneAPI.Authenticate()
 	if err != nil {
-		logging.Log.Error("failed to get keystone auth", "error", err)
+		slog.Error("failed to get keystone auth", "error", err)
 		return
 	}
 
@@ -148,18 +148,18 @@ func (s *syncer) Sync() {
 	for _, syncPartial := range syncPartials {
 		tx, err := s.DB.Get().Begin()
 		if err != nil {
-			logging.Log.Error("failed to begin transaction", "error", err)
+			slog.Error("failed to begin transaction", "error", err)
 			return
 		}
 		if err := syncPartial(auth, tx); err != nil {
 			if err := tx.Rollback(); err != nil {
 				// Don't log if the transaction has been committed
-				logging.Log.Error("failed to rollback transaction", "error", err)
+				slog.Error("failed to rollback transaction", "error", err)
 			}
 			return
 		}
 		if err := tx.Commit(); err != nil {
-			logging.Log.Error("failed to commit transaction", "error", err)
+			slog.Error("failed to commit transaction", "error", err)
 			return
 		}
 	}

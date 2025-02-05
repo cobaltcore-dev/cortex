@@ -4,9 +4,8 @@
 package conf
 
 import (
+	"log/slog"
 	"os"
-
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 )
 
 // Database configuration with the necessary connection parameters.
@@ -72,7 +71,7 @@ func NewSecretConfig() SecretConfig {
 func ForceGetenv(key string) string {
 	value := os.Getenv(key)
 	if value == "" {
-		logging.Log.Error("missing environment variable", "key", key)
+		slog.Error("missing environment variable", "key", key)
 		panic("missing environment variable")
 	}
 	return value

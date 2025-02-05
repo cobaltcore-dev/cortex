@@ -4,8 +4,9 @@
 package vmware
 
 import (
+	"log/slog"
+
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/go-pg/pg/v10/orm"
 )
 
@@ -91,6 +92,6 @@ func (e *VROpsProjectNoisinessExtractor) Extract() error {
 	if err != nil {
 		return err
 	}
-	logging.Log.Info("features: extracted", "feature_vrops_project_noisiness", count)
+	slog.Info("features: extracted", "feature_vrops_project_noisiness", count)
 	return nil
 }

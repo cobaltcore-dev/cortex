@@ -7,9 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -186,28 +186,28 @@ func (api *serverAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackSe
 	if url != nil {
 		pageURL = *url
 	}
-	logging.Log.Info("getting servers", "pageURL", pageURL)
+	slog.Info("getting servers", "pageURL", pageURL)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
-		logging.Log.Error("failed to create request", "error", err)
+		slog.Error("failed to create request", "error", err)
 		return nil, err
 	}
 	req.Header.Set("X-Auth-Token", auth.token)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logging.Log.Error("failed to send request", "error", err)
+		slog.Error("failed to send request", "error", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		logging.Log.Error("unexpected status code", "status", resp.StatusCode)
+		slog.Error("unexpected status code", "status", resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	var serverList openStackServerList
 	err = json.NewDecoder(resp.Body).Decode(&serverList)
 	if err != nil {
-		logging.Log.Error("failed to decode response", "error", err)
+		slog.Error("failed to decode response", "error", err)
 		return nil, err
 	}
 	// If we got a paginated response, follow the next link.
@@ -257,28 +257,28 @@ func (api *hypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openSta
 	if url != nil {
 		pageURL = *url
 	}
-	logging.Log.Info("getting hypervisors", "pageURL", pageURL)
+	slog.Info("getting hypervisors", "pageURL", pageURL)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
-		logging.Log.Error("failed to create request", "error", err)
+		slog.Error("failed to create request", "error", err)
 		return nil, err
 	}
 	req.Header.Set("X-Auth-Token", auth.token)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logging.Log.Error("failed to send request", "error", err)
+		slog.Error("failed to send request", "error", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		logging.Log.Error("unexpected status code", "status", resp.StatusCode)
+		slog.Error("unexpected status code", "status", resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	var hypervisorList openStackHypervisorList
 	err = json.NewDecoder(resp.Body).Decode(&hypervisorList)
 	if err != nil {
-		logging.Log.Error("failed to decode response", "error", err)
+		slog.Error("failed to decode response", "error", err)
 		return nil, err
 	}
 	// If we got a paginated response, follow the next link.

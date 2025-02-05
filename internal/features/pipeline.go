@@ -4,11 +4,12 @@
 package features
 
 import (
+	"log/slog"
+
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -40,7 +41,7 @@ func NewPipeline(config conf.Config, database db.DB, m Monitor) FeatureExtractor
 				panic("failed to initialize feature extractor: " + err.Error())
 			}
 			extractors = append(extractors, wrappedExtractor)
-			logging.Log.Info(
+			slog.Info(
 				"feature extractor: added extractor",
 				"name", extractorConfig.Name,
 				"options", extractorConfig.Options,
@@ -60,7 +61,7 @@ func (p *FeatureExtractorPipeline) Extract() {
 	}
 	for _, extractor := range p.extractors {
 		if err := extractor.Extract(); err != nil {
-			logging.Log.Error("failed to extract features", "error", err)
+			slog.Error("failed to extract features", "error", err)
 		}
 	}
 }

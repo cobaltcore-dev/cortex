@@ -4,8 +4,9 @@
 package scheduler
 
 import (
+	"log/slog"
+
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/prometheus/client_golang/prometheus"
@@ -124,7 +125,7 @@ func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 // Run the step and observe its execution.
 func (s *StepMonitor[S]) Run(state *plugins.State) error {
 	stepName := s.GetName()
-	logging.Log.Debug("scheduler: running step", "name", stepName)
+	slog.Debug("scheduler: running step", "name", stepName)
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)
 		defer timer.ObserveDuration()
@@ -143,7 +144,7 @@ func (s *StepMonitor[S]) Run(state *plugins.State) error {
 		var removedHosts = 0
 		for _, h := range state.Hosts {
 			if _, ok := hostsIn[h.ComputeHost]; !ok {
-				logging.Log.Debug(
+				slog.Debug(
 					"scheduler: removed host",
 					"step", stepName,
 					"host", h.ComputeHost,
@@ -159,7 +160,7 @@ func (s *StepMonitor[S]) Run(state *plugins.State) error {
 		var modifiedWeights = 0
 		for k, v := range state.Weights {
 			if weightsIn[k] != v {
-				logging.Log.Debug(
+				slog.Debug(
 					"scheduler: weight change",
 					"step", stepName,
 					"host", k,

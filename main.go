@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -62,7 +62,7 @@ func runScheduler(registry *monitoring.Registry, config conf.Config, db db.DB) {
 		api.GetNovaExternalSchedulerURL(),
 		api.NovaExternalScheduler,
 	)
-	logging.Log.Info("api listening on :8080")
+	slog.Info("api listening on :8080")
 	server := &http.Server{
 		Addr:         ":8080",
 		Handler:      mux,
@@ -79,7 +79,7 @@ func runScheduler(registry *monitoring.Registry, config conf.Config, db db.DB) {
 func runMonitoringServer(registry *monitoring.Registry) {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
-	logging.Log.Info("metrics listening on :2112")
+	slog.Info("metrics listening on :2112")
 	server := &http.Server{
 		Addr:         ":2112",
 		Handler:      mux,
@@ -107,10 +107,10 @@ func main() {
 
 	config := conf.NewConfig()
 	if err := config.Validate(); err != nil {
-		logging.Log.Error("failed to validate config", "error", err)
+		slog.Error("failed to validate config", "error", err)
 		os.Exit(1)
 	}
-	logging.Log.Info("config validated")
+	slog.Info("config validated")
 
 	db := db.NewDB()
 	db.Init()

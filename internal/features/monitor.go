@@ -4,9 +4,10 @@
 package features
 
 import (
+	"log/slog"
+
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -67,7 +68,7 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) Feature
 }
 
 func (m FeatureExtractorMonitor[F]) Extract() error {
-	logging.Log.Info("features: extracting", "extractor", m.GetName())
+	slog.Info("features: extracting", "extractor", m.GetName())
 	if m.runTimer != nil {
 		timer := prometheus.NewTimer(m.runTimer)
 		defer timer.ObserveDuration()

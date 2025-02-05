@@ -4,11 +4,11 @@
 package scheduler
 
 import (
+	"log/slog"
 	"sort"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/vmware"
 )
@@ -43,7 +43,7 @@ func NewPipeline(config conf.Config, database db.DB, monitor Monitor) Pipeline {
 				panic("failed to initialize pipeline step: " + err.Error())
 			}
 			steps = append(steps, wrappedStep)
-			logging.Log.Info(
+			slog.Info(
 				"scheduler: added step",
 				"name", stepConfig.Name,
 				"options", stepConfig.Options,

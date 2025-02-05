@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
@@ -130,7 +130,7 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 			observer.Observe(time.Since(startTime).Seconds())
 		}
 		if err != nil {
-			logging.Log.Error("failed to handle request", "error", err)
+			slog.Error("failed to handle request", "error", err)
 			http.Error(w, text, code)
 			return
 		}
@@ -161,7 +161,7 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 			)
 			return
 		}
-		logging.Log.Info("request body", "body", string(body))
+		slog.Info("request body", "body", string(body))
 		r.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
 	}
 
@@ -174,7 +174,7 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 		)
 		return
 	}
-	logging.Log.Info(
+	slog.Info(
 		"handling POST request",
 		"url", api.GetNovaExternalSchedulerURL(), "rebuild", requestData.Rebuild,
 		"hosts", len(requestData.Hosts), "spec", requestData.Spec,

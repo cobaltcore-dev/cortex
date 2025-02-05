@@ -12,13 +12,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/logging"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -127,7 +127,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	urlStr += "&start=" + strconv.FormatInt(start.Unix(), 10)
 	urlStr += "&end=" + strconv.FormatInt(end.Unix(), 10)
 	urlStr += "&step=" + strconv.Itoa(resolutionSeconds)
-	logging.Log.Info("fetching metrics from", "url", urlStr)
+	slog.Info("fetching metrics from", "url", urlStr)
 
 	ctx := context.Background()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, http.NoBody)
@@ -161,7 +161,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 
 	err = json.NewDecoder(resp.Body).Decode(&prometheusData)
 	if err != nil {
-		logging.Log.Error(
+		slog.Error(
 			"failed to decode response",
 			"body", string(bodyBytes),
 			"error", err,

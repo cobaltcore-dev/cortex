@@ -6,8 +6,7 @@ package conf
 import (
 	"errors"
 	"fmt"
-
-	"github.com/cobaltcore-dev/cortex/internal/logging"
+	"log/slog"
 )
 
 // Configuration that is passed in the config file to specify dependencies.
@@ -73,7 +72,7 @@ func (c *config) Validate() error {
 		}
 	}
 	if c.SchedulerConfig.LogRequestBodies {
-		logging.Log.Warn("logging request bodies is enabled (debug feature)")
+		slog.Warn("logging request bodies is enabled (debug feature)")
 	}
 	return nil
 }
