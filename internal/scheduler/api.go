@@ -137,6 +137,19 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 		// If there was no error, nothing else to do.
 	}
 
+	// Exit early if the request method is not POST.
+	if r.Method != http.MethodPost {
+		respondWith(
+			http.StatusMethodNotAllowed,
+			fmt.Errorf("invalid request method: %s", r.Method),
+			"invalid request method",
+		)
+		return
+	}
+
+	// Ensure body is closed after reading.
+	defer r.Body.Close()
+
 	// If configured, log out the complete request body.
 	if api.config != nil && api.config.GetSchedulerConfig().LogRequestBodies {
 		body, err := io.ReadAll(r.Body)
@@ -152,14 +165,6 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 		r.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
 	}
 
-	if r.Method != http.MethodPost {
-		respondWith(
-			http.StatusMethodNotAllowed,
-			fmt.Errorf("invalid request method: %s", r.Method),
-			"invalid request method",
-		)
-		return
-	}
 	var requestData APINovaExternalSchedulerRequest
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		respondWith(
