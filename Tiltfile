@@ -17,7 +17,7 @@ helm_repo(
 docker_build('cortex', '.', only=[
     'internal/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
 ])
-k8s_yaml(helm('./helm/cortex', name='cortex', values=["Tiltfile.values.yaml"]))
+k8s_yaml(helm('./helm/cortex', name='cortex', values=[os.getenv('TILT_VALUES_PATH')]))
 k8s_resource('cortex-syncer', port_forwards=[
     port_forward(8001, 2112),
 ], links=[

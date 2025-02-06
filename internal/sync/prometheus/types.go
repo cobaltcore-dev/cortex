@@ -32,8 +32,8 @@ var supportedTypes = map[string]func(
 	conf.SyncPrometheusMetricConfig,
 	sync.Monitor,
 ) sync.Datasource{
-	"vrops_host_metrics": newSyncerOfType[*VROpsHostMetric],
-	"vrops_vm_metrics":   newSyncerOfType[*VROpsVMMetric],
+	"vrops_host_metric": newSyncerOfType[*VROpsHostMetric],
+	"vrops_vm_metric":   newSyncerOfType[*VROpsVMMetric],
 }
 
 // VROpsHostMetric represents a single metric value from Prometheus

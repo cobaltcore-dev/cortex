@@ -17,13 +17,18 @@ Cortex provides advanced capabilities for initial placement of VMs.
 
 ## Quickstart
 
-Copy the example values file and insert your credentials.
+Copy the example secrets values file and insert your credentials.
 ```bash
-cp Tiltfile.values.example.yaml Tiltfile.values.yaml
+cp cortex.secrets.yaml.example "${HOME}/cortex.secrets.yaml"
 ```
 
 > [!WARNING]
-> Don't check in your credentials configured in `Tiltfile.values.yaml`!
+> It is recommended to put the secrets file somewhere outside of the project directory, as it contains sensitive information. In this way, it won't be accidentally committed to the repository.
+
+Tell tilt where to find your secrets file:
+```bash
+export TILT_VALUES_PATH="${HOME}/cortex.secrets.yaml"
+```
 
 Run the tilt setup:
 ```bash

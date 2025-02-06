@@ -22,5 +22,5 @@ go.work.sum
 # env file
 .env
 
-# Your custom configuration.
-Tiltfile.values.yaml
+# Just in case someone decides to put the secrets into the project dir.
+cortex.secrets.yaml
