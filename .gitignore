@@ -21,3 +21,6 @@ go.work.sum
 
 # env file
 .env
+
+# Your custom configuration.
+Tiltfile.values.yaml

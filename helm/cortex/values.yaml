@@ -1,29 +1,3 @@
-# All secrets should be put under this key.
-# These values will not be included in the config.json file.
-# TODO: Include these in the config.json file if that's not a security risk.
-secrets:
-  postgres:
-    port: "5432"
-    database: postgres
-    username: postgres
-    password: secret
-    host: cortex-postgresql
-
-  openstack:
-    # Replace with your OpenStack credentials, e.g. by secret injection.
-    authUrl: https://path-to-keystone/v3
-    username: openstack-user-with-all-project-read-access
-    password: openstack-user-password
-    projectName: openstack-project-of-user
-    userDomainName: openstack-domain-of-user
-    projectDomainName: openstack-domain-of-project-scoped-to
-
-  prometheus:
-    url: https://path-to-prometheus
-    # Optional, only required if Prometheus is configured with SSO.
-    ssoPublicKey:
-    ssoPrivateKey:
-
 image:
   repository: cortex
   pullPolicy: Always
@@ -47,27 +21,6 @@ securityContext: {}
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
   # runAsUser: 1000
-
-modes:
-  - name: syncer
-    service:
-      type: ClusterIP
-      metricsPort: 2112
-    args: ["--syncer"]
-    replicas: 1
-  - name: extractor
-    service:
-      type: ClusterIP
-      metricsPort: 2112
-    args: ["--extractor"]
-    replicas: 1
-  - name: scheduler
-    service:
-      type: ClusterIP
-      apiPort: 8080
-      metricsPort: 2112
-    args: ["--scheduler"]
-    replicas: 2
 
 resources:
   limits:
@@ -109,25 +62,113 @@ owner-info:
   support-group: "cobaltcore-dev"
   enabled: true
 
-# ######### Values passed to the service by conf.yaml ###########
+# Modes in which the service should be run.
+# Each mode is translated into a separate service and deployment.
+modes:
+  # Syncer syncs data from external sources into the database(s).
+  - name: syncer
+    service:
+      type: ClusterIP
+      metricsPort: 2112
+    args: ["--syncer"]
+    replicas: 1
+
+  # Extractor extracts features from the synced data.
+  - name: extractor
+    service:
+      type: ClusterIP
+      metricsPort: 2112
+    args: ["--extractor"]
+    replicas: 1
+
+  # Scheduler exposes the scheduler API and modifies the Nova scheduler weights.
+  - name: scheduler
+    service:
+      type: ClusterIP
+      apiPort: 8080
+      metricsPort: 2112
+    args: ["--scheduler"]
+    replicas: 2
+
+# Default sso certificate to use for all services.
+# The sso certificate values of individual services can be overridden.
+sharedSSOCert: &sharedSSOCert
+  # Certificate "public key".
+  cert: ""
+  # Certificate private key.
+  certKey: ""
+  # Whether the certificate is self-signed.
+  # If true, the certificate is not verified.
+  selfSigned: false
+
+# Values passed to the service by conf.yaml
 conf:
+  # Configuration of metrics exported to the /metrics endpoint.
   monitoring:
     # Custom labels added to the exported metrics.
     labels:
       github_org: cobaltcore-dev
       github_repo: cortex
+
+  # Connection parameters for the database where data is stored.
+  db:
+    host: cortex-postgresql
+    port: 5432
+    user: postgres
+    password: secret
+    database: postgres
+
+  # Sync plugins config.
   sync:
     prometheus:
+      # Prometheus hosts to consider when syncing the metrics.
+      hosts:
+        - name: vrops_prometheus
+          url: https://path-to-vrops-prometheus
+          # Optional, only required if Prometheus is configured with SSO.
+          sso: *sharedSSOCert
+      # Prometheus metrics to sync into the database.
+      # Each metric can be synced from a different Prometheus instance.
+      # The `type` parameter should map to a known metric model in the database.
       metrics:
+        # VMware-specific metrics.
         - name: vrops_virtualmachine_cpu_demand_ratio
           type: vrops_vm_metric
+          prometheusName: vrops_prometheus
         - name: vrops_hostsystem_cpu_contention_percentage
           type: vrops_host_metric
+          prometheusName: vrops_prometheus
+
     openstack:
+      # Whether openstack hypervisors should be synced into the database.
       hypervisors: true
+      # Whether openstack servers should be synced into the database.
       servers: true
+      # Authentication/identity service URL for openstack.
+      # This service will also be used to get the list of OpenStack endpoints
+      # from where we will then fetch hypervisors, servers, ... if enabled.
+      keystoneURL: https://path-to-keystone/v3
+      # Optional, only required if OpenStack is configured with SSO.
+      sso: *sharedSSOCert
+
+      # OpenStack login credentials also used by the OpenStack CLI.
+      username: openstack-user-with-all-project-read-access
+      password: openstack-user-password
+      projectName: openstack-project-of-user
+      userDomainName: openstack-domain-of-user
+      projectDomainName: openstack-domain-of-project-scoped-to
+
   features:
+    # Configuration of features that should be extracted from the synced data.
+    # Each extractor can specify its own dependencies on other extractors or
+    # synced data.
+    #
+    # The `name` should correspond to a known feature extractor plugin.
+    # Note that the order defined here will also be the order in which the
+    # extractors are executed. If possible, extractors whose dependencies have
+    # been executed will be executed in parallel to speed up the process.
     extractors:
+      # VMware-specific extractors.
       - name: vrops_hostsystem_resolver
         dependencies:
           sync:
@@ -156,9 +197,18 @@ conf:
             prometheus:
               metrics:
                 - vrops_hostsystem_cpu_contention_percentage
+
   scheduler:
-    logRequestBodies: true # debugging feature
+    # Configuration of scheduler steps that modify the Nova scheduler weights.
+    # Each scheduler step can specify its own dependencies on extractors and
+    # synced data.
+    #
+    # The `name` should correspond to a known scheduler plugin.
+    # Note that all scheduler steps will be executed in parallel. However,
+    # the order will be maintained when the weights are applied to the
+    # input Nova weights.
     steps:
+      # VMware specific scheduler steps.
       - name: vrops_anti_affinity_noisy_projects
         options:
           avgCPUThreshold: 20
@@ -176,3 +226,5 @@ conf:
           features:
             extractors:
               - vrops_hostsystem_contention_extractor
+
+    logRequestBodies: true # debugging feature

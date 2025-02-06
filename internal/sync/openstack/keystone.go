@@ -82,13 +82,13 @@ type KeystoneAPI interface {
 }
 
 type keystoneAPI struct {
-	Conf    conf.SecretOpenStackConfig
+	conf    conf.SyncOpenStackConfig
 	monitor sync.Monitor
 }
 
-func NewKeystoneAPI(monitor sync.Monitor) KeystoneAPI {
+func NewKeystoneAPI(conf conf.SyncOpenStackConfig, monitor sync.Monitor) KeystoneAPI {
 	return &keystoneAPI{
-		Conf:    conf.NewSecretConfig().SecretOpenStackConfig,
+		conf:    conf,
 		monitor: monitor,
 	}
 }
@@ -109,16 +109,16 @@ func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 				Methods: []string{"password"},
 				Password: openStackPassword{
 					User: openStackUser{
-						Name:     k.Conf.OSUsername,
-						Domain:   openStackDomain{Name: k.Conf.OSUserDomainName},
-						Password: k.Conf.OSPassword,
+						Name:     k.conf.OSUsername,
+						Domain:   openStackDomain{Name: k.conf.OSUserDomainName},
+						Password: k.conf.OSPassword,
 					},
 				},
 			},
 			Scope: openStackScope{
 				Project: openStackProject{
-					Name:   k.Conf.OSProjectName,
-					Domain: openStackDomain{Name: k.Conf.OSProjectDomainName},
+					Name:   k.conf.OSProjectName,
+					Domain: openStackDomain{Name: k.conf.OSProjectDomainName},
 				},
 			},
 		},
@@ -131,14 +131,14 @@ func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 
 	req, err := http.NewRequestWithContext(
 		context.Background(), http.MethodPost,
-		k.Conf.OSAuthURL+"/auth/tokens", bytes.NewBuffer(authRequestBody),
+		k.conf.KeystoneURL+"/auth/tokens", bytes.NewBuffer(authRequestBody),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create auth request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client, err := sync.NewHttpClient(k.conf.SSO)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to authenticate: %w", err)

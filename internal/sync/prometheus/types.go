@@ -3,7 +3,38 @@
 
 package prometheus
 
-import "time"
+import (
+	"time"
+
+	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
+)
+
+// One metric datapoint in the Prometheus timeline.
+type PrometheusMetric interface {
+	// Table name into which the metric should be stored.
+	GetTableName() string
+	// Name under which the metric is stored in Prometheus.
+	GetName() string
+	// Value of this metric datapoint.
+	GetValue() float64
+	// Set the time of this metric datapoint.
+	SetTimestamp(time time.Time)
+	// Set the value of this metric datapoint.
+	SetValue(value float64)
+}
+
+// List of supported metric types.
+var supportedTypes = map[string]func(
+	db.DB,
+	conf.SyncPrometheusHostConfig,
+	conf.SyncPrometheusMetricConfig,
+	sync.Monitor,
+) sync.Datasource{
+	"vrops_host_metrics": newSyncerOfType[*VROpsHostMetric],
+	"vrops_vm_metrics":   newSyncerOfType[*VROpsVMMetric],
+}
 
 // VROpsHostMetric represents a single metric value from Prometheus
 // that was generated the VMware vROps exporter for a specific hostsystem.

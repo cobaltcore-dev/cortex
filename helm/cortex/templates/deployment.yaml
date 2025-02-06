@@ -59,13 +59,6 @@ spec:
           {{- with $.Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          envFrom:
-            - secretRef:
-                name: openstack-secrets
-            - secretRef:
-                name: prometheus-secrets
-            - secretRef:
-                name: postgres-secrets
       volumes:
         - name: {{ include "cortex.fullname" $ }}-config-volume
           configMap:

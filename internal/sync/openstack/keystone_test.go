@@ -12,8 +12,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
-var exampleConfig = conf.SecretOpenStackConfig{
-	OSAuthURL:           "http://auth.url",
+var exampleConfig = conf.SyncOpenStackConfig{
+	KeystoneURL:         "http://auth.url",
 	OSUsername:          "username",
 	OSPassword:          "password",
 	OSProjectName:       "project_name",
@@ -50,9 +50,9 @@ func TestGetKeystoneAuth(t *testing.T) {
 	defer server.Close()
 
 	// Override the OS_AUTH_URL to point to the mock server
-	exampleConfig.OSAuthURL = server.URL
+	exampleConfig.KeystoneURL = server.URL
 	keystoneAPI := &keystoneAPI{
-		Conf: exampleConfig,
+		conf: exampleConfig,
 	}
 	auth, err := keystoneAPI.Authenticate()
 	if err != nil {
@@ -78,9 +78,9 @@ func TestGetKeystoneAuthFailure(t *testing.T) {
 	defer server.Close()
 
 	// Override the OS_AUTH_URL to point to the mock server
-	exampleConfig.OSAuthURL = server.URL
+	exampleConfig.KeystoneURL = server.URL
 	keystoneAPI := &keystoneAPI{
-		Conf: exampleConfig,
+		conf: exampleConfig,
 	}
 	_, err := keystoneAPI.Authenticate()
 	if err == nil {

@@ -15,10 +15,10 @@ type Registry struct {
 	config conf.MonitoringConfig
 }
 
-func NewRegistry(config conf.Config) *Registry {
+func NewRegistry(config conf.MonitoringConfig) *Registry {
 	registry := &Registry{
 		Registry: prometheus.NewRegistry(),
-		config:   config.GetMonitoringConfig(),
+		config:   config,
 	}
 	registry.MustRegister(collectors.NewGoCollector())
 	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
