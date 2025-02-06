@@ -9,7 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
-func TestNewHttpClient(t *testing.T) {
+func TestNewHTTPClient(t *testing.T) {
 	tests := []struct {
 		name       string
 		conf       conf.SSOConfig
@@ -47,8 +47,8 @@ func TestNewHttpClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := NewHttpClient(tt.conf); (err != nil) != tt.wantError {
-				t.Errorf("NewHttpClient() error = %v, wantError %v", err, tt.wantError)
+			if _, err := NewHTTPClient(tt.conf); (err != nil) != tt.wantError {
+				t.Errorf("NewHTTPClient() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
 		})

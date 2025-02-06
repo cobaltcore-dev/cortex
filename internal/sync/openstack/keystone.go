@@ -138,7 +138,10 @@ func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client, err := sync.NewHttpClient(k.conf.SSO)
+	client, err := sync.NewHTTPClient(k.conf.SSO)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to authenticate: %w", err)

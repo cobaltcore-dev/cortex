@@ -14,7 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
-func NewHttpClient(conf conf.SSOConfig) (*http.Client, error) {
+func NewHTTPClient(conf conf.SSOConfig) (*http.Client, error) {
 	if conf.Cert == "" {
 		// Disable SSO if no certificate is provided.
 		slog.Info("making http requests without SSO")

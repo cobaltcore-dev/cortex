@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
@@ -20,7 +21,13 @@ import (
 // This function fetches the noisy projects from the DB and sends a
 // scheduling request for the most noisy project.
 func SimulateNoisyVMScheduling() {
-	db := db.NewDB()
+	db := db.NewDB(conf.DBConfig{
+		Host:     "localhost",
+		Port:     "5432",
+		User:     "postgres",
+		Password: "secret",
+		Name:     "cortex",
+	})
 	db.Init()
 	defer db.Close()
 

@@ -57,6 +57,7 @@ func NewPrometheusAPI[M PrometheusMetric](
 	metricConf conf.SyncPrometheusMetricConfig,
 	monitor sync.Monitor,
 ) PrometheusAPI[M] {
+
 	return &prometheusAPI[M]{
 		hostConf:   hostConf,
 		metricConf: metricConf,
@@ -95,7 +96,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client, err := sync.NewHttpClient(api.hostConf.SSO)
+	client, err := sync.NewHTTPClient(api.hostConf.SSO)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
