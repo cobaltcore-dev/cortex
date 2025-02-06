@@ -17,12 +17,12 @@ func TestGet(t *testing.T) {
 
 	db := &db{
 		DBBackend: mockDB.Get(),
-		DBConfig: conf.SecretDBConfig{
-			DBHost:     mockDB.GetDBHost(),
-			DBPort:     mockDB.GetDBPort(),
-			DBUser:     mockDB.GetDBUser(),
-			DBPassword: mockDB.GetDBPassword(),
-			DBName:     mockDB.GetDBName(),
+		DBConfig: conf.DBConfig{
+			Host:     mockDB.GetDBHost(),
+			Port:     mockDB.GetDBPort(),
+			User:     mockDB.GetDBUser(),
+			Password: mockDB.GetDBPassword(),
+			Name:     mockDB.GetDBName(),
 		},
 	}
 	db.Init()

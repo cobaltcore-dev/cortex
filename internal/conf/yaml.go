@@ -10,17 +10,52 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Configuration for single-sign-on (SSO).
+type SSOConfig struct {
+	Cert    string `yaml:"cert,omitempty"`
+	CertKey string `yaml:"certKey,omitempty"`
+
+	// If the certificate is self-signed, we need to skip verification.
+	SelfSigned bool `yaml:"selfSigned,omitempty"`
+}
+
+// Database configuration.
+type DBConfig struct {
+	Host     string `yaml:"host"`
+	Port     string `yaml:"port"`
+	Name     string `yaml:"name"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+}
+
 // Metric configuration for the sync/prometheus module.
 type SyncPrometheusMetricConfig struct {
-	Name              string `yaml:"name"`
-	Type              string `yaml:"type"`
-	TimeRangeSeconds  *int   `yaml:"timeRangeSeconds,omitempty"`
-	IntervalSeconds   *int   `yaml:"intervalSeconds,omitempty"`
-	ResolutionSeconds *int   `yaml:"resolutionSeconds,omitempty"`
+	// The name of the metric in Prometheus.
+	Name string `yaml:"name"`
+	// The type of the metric, mapping directly to a metric model.
+	Type string `yaml:"type"`
+
+	TimeRangeSeconds  *int `yaml:"timeRangeSeconds,omitempty"`
+	IntervalSeconds   *int `yaml:"intervalSeconds,omitempty"`
+	ResolutionSeconds *int `yaml:"resolutionSeconds,omitempty"`
+
+	// The name of the prometheus to sync this metric from.
+	PrometheusName string `yaml:"prometheusName"`
+}
+
+// Configuration for a single prometheus host.
+type SyncPrometheusHostConfig struct {
+	// The name of the prometheus host.
+	Name string `yaml:"name"`
+	// The URL of the prometheus host.
+	URL string `yaml:"url"`
+	// The SSO configuration for this host.
+	SSO SSOConfig `yaml:"sso,omitempty"`
 }
 
 // Configuration for the sync/prometheus module containing a list of metrics.
 type SyncPrometheusConfig struct {
+	Hosts   []SyncPrometheusHostConfig   `yaml:"hosts,omitempty"`
 	Metrics []SyncPrometheusMetricConfig `yaml:"metrics,omitempty"`
 }
 
@@ -28,6 +63,22 @@ type SyncPrometheusConfig struct {
 type SyncOpenStackConfig struct {
 	HypervisorsEnabled *bool `yaml:"hypervisors"`
 	ServersEnabled     *bool `yaml:"servers"`
+
+	// URL to the OpenStack Keystone authentication endpoint.
+	KeystoneURL string `yaml:"keystoneURL"`
+	// The SSO certificate to use. If none is given, we won't
+	// use SSO to connect to the openstack services.
+	SSO SSOConfig `yaml:"sso,omitempty"`
+	// The OpenStack username (OS_USERNAME in openstack cli).
+	OSUsername string `yaml:"username"`
+	// The OpenStack password (OS_PASSWORD in openstack cli).
+	OSPassword string `yaml:"password"`
+	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
+	OSProjectName string `yaml:"projectName"`
+	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
+	OSUserDomainName string `yaml:"userDomainName"`
+	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
+	OSProjectDomainName string `yaml:"projectDomainName"`
 }
 
 // Configuration for the sync module.
@@ -36,27 +87,37 @@ type SyncConfig struct {
 	OpenStack  SyncOpenStackConfig  `yaml:"openstack"`
 }
 
+type FeatureExtractorConfig struct {
+	// The name of the extractor.
+	Name string `yaml:"name"`
+	// Custom options for the extractor.
+	Options map[string]any `yaml:"options,omitempty"`
+	// The dependencies this extractor needs.
+	DependencyConfig `yaml:"dependencies,omitempty"`
+}
+
 // Configuration for the features module.
 type FeaturesConfig struct {
-	Extractors []struct {
-		Name    string         `yaml:"name"`
-		Options map[string]any `yaml:"options"`
-		// The dependencies this extractor needs.
-		DependencyConfig `yaml:"dependencies,omitempty"`
-	} `yaml:"extractors"`
+	Extractors []FeatureExtractorConfig `yaml:"extractors"`
+}
+
+type SchedulerStepConfig struct {
+	// The name of the step.
+	Name string `yaml:"name"`
+	// Custom options for the step.
+	Options map[string]any `yaml:"options"`
+	// The dependencies this step needs.
+	DependencyConfig `yaml:"dependencies,omitempty"`
 }
 
 // Configuration for the scheduler module.
 type SchedulerConfig struct {
-	// For debugging purposes only.
-	LogRequestBodies bool `yaml:"logRequestBodies"`
+	// Scheduler steps by their name.
+	Steps []SchedulerStepConfig `yaml:"steps"`
 
-	Steps []struct {
-		Name    string         `yaml:"name"`
-		Options map[string]any `yaml:"options"`
-		// The dependencies this step needs.
-		DependencyConfig `yaml:"dependencies,omitempty"`
-	} `yaml:"steps"`
+	// If request bodies should be logged out.
+	// This feature is intended for debugging purposes only.
+	LogRequestBodies bool `yaml:"logRequestBodies"`
 }
 
 // Configuration for the monitoring module.
@@ -67,6 +128,7 @@ type MonitoringConfig struct {
 
 // Configuration for the cortex service.
 type Config interface {
+	GetDBConfig() DBConfig
 	GetSyncConfig() SyncConfig
 	GetFeaturesConfig() FeaturesConfig
 	GetSchedulerConfig() SchedulerConfig
@@ -76,6 +138,7 @@ type Config interface {
 }
 
 type config struct {
+	DBConfig         `yaml:"db"`
 	SyncConfig       `yaml:"sync"`
 	FeaturesConfig   `yaml:"features"`
 	SchedulerConfig  `yaml:"scheduler"`
@@ -110,6 +173,7 @@ func newConfigFromBytes(bytes []byte) Config {
 	return &c
 }
 
+func (c *config) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
 func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
 func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }

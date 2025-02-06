@@ -23,11 +23,11 @@ import (
 )
 
 // Periodically fetch data from the datasources and insert it into the database.
-func runSyncer(registry *monitoring.Registry, config conf.Config, db db.DB) {
+func runSyncer(registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
 	monitor := sync.NewSyncMonitor(registry)
 	syncers := []sync.Datasource{
-		prometheus.NewCombinedSyncer(config, db, monitor),
-		openstack.NewSyncer(config, db, monitor),
+		prometheus.NewCombinedSyncer(config.Prometheus, db, monitor),
+		openstack.NewSyncer(config.OpenStack, db, monitor),
 	}
 	for _, syncer := range syncers {
 		syncer.Init()
@@ -41,7 +41,7 @@ func runSyncer(registry *monitoring.Registry, config conf.Config, db db.DB) {
 }
 
 // Periodically extract features from the database.
-func runExtractor(registry *monitoring.Registry, config conf.Config, db db.DB) {
+func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
 	monitor := features.NewPipelineMonitor(registry)
 	pipeline := features.NewPipeline(config, db, monitor)
 	for {
@@ -51,7 +51,7 @@ func runExtractor(registry *monitoring.Registry, config conf.Config, db db.DB) {
 }
 
 // Run a webserver that listens for external scheduling requests.
-func runScheduler(registry *monitoring.Registry, config conf.Config, db db.DB) {
+func runScheduler(registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	monitor := scheduler.NewSchedulerMonitor(registry)
 	api := scheduler.NewExternalSchedulingAPI(config, db, monitor)
 	mux := http.NewServeMux()
@@ -112,21 +112,21 @@ func main() {
 	}
 	slog.Info("config validated")
 
-	db := db.NewDB()
+	db := db.NewDB(config.GetDBConfig())
 	db.Init()
 	defer db.Close()
 
-	registry := monitoring.NewRegistry(config)
+	registry := monitoring.NewRegistry(config.GetMonitoringConfig())
 	go runMonitoringServer(registry)
 
 	if args[0] == "--syncer" {
-		go runSyncer(registry, config, db)
+		go runSyncer(registry, config.GetSyncConfig(), db)
 	}
 	if args[0] == "--extractor" {
-		go runExtractor(registry, config, db)
+		go runExtractor(registry, config.GetFeaturesConfig(), db)
 	}
 	if args[0] == "--scheduler" {
-		go runScheduler(registry, config, db)
+		go runScheduler(registry, config.GetSchedulerConfig(), db)
 	}
 	select {}
 }

@@ -60,11 +60,11 @@ type ExternalSchedulingAPI interface {
 
 type externalSchedulingAPI struct {
 	Pipeline Pipeline
-	config   conf.Config
+	config   conf.SchedulerConfig
 	monitor  Monitor
 }
 
-func NewExternalSchedulingAPI(config conf.Config, db db.DB, m Monitor) ExternalSchedulingAPI {
+func NewExternalSchedulingAPI(config conf.SchedulerConfig, db db.DB, m Monitor) ExternalSchedulingAPI {
 	return &externalSchedulingAPI{
 		Pipeline: NewPipeline(config, db, m),
 		config:   config,
@@ -151,7 +151,7 @@ func (api *externalSchedulingAPI) NovaExternalScheduler(w http.ResponseWriter, r
 	defer r.Body.Close()
 
 	// If configured, log out the complete request body.
-	if api.config != nil && api.config.GetSchedulerConfig().LogRequestBodies {
+	if api.config.LogRequestBodies {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			respondWith(

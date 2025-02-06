@@ -44,12 +44,23 @@ type CombinedSyncer struct {
 }
 
 // Create multiple syncers configured by the external service configuration.
-func NewCombinedSyncer(config conf.Config, db db.DB, monitor sync.Monitor) sync.Datasource {
-	moduleConfig := config.GetSyncConfig().Prometheus
-	slog.Info("loading syncers", "metrics", moduleConfig.Metrics)
+func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.Monitor) sync.Datasource {
+	slog.Info("loading syncers", "metrics", config.Metrics)
 	syncers := []sync.Datasource{}
-	for _, metricConfig := range moduleConfig.Metrics {
-		syncers = append(syncers, newSyncer(db, metricConfig, monitor))
+	hostConfByName := make(map[string]conf.SyncPrometheusHostConfig)
+	for _, hostConf := range config.Hosts {
+		hostConfByName[hostConf.Name] = hostConf
+	}
+	for _, metricConfig := range config.Metrics {
+		syncerFunc, ok := supportedTypes[metricConfig.Type]
+		if !ok {
+			panic("unsupported metric type: " + metricConfig.Type)
+		}
+		hostConf, ok := hostConfByName[metricConfig.PrometheusName]
+		if !ok {
+			panic("unknown metric host: " + metricConfig.PrometheusName)
+		}
+		syncers = append(syncers, syncerFunc(db, hostConf, metricConfig, monitor))
 	}
 	return CombinedSyncer{
 		Syncers: syncers,
@@ -75,46 +86,34 @@ func (s CombinedSyncer) Sync() {
 	}
 }
 
-// Create a new syncer for the given metric configuration.
-// This function maps the given metric type to the implemented golang type.
-func newSyncer(db db.DB, c conf.SyncPrometheusMetricConfig, monitor sync.Monitor) sync.Datasource {
-	switch c.Type {
-	case "vrops_vm_metric":
-		return newSyncerOfType[*VROpsVMMetric](db, c, monitor)
-	case "vrops_host_metric":
-		return newSyncerOfType[*VROpsHostMetric](db, c, monitor)
-	default:
-		panic("unknown metric type: " + c.Type)
-	}
-}
-
 // Create a new syncer for the given metric type.
 // If no custom metrics granularity is set, the default values are used.
 func newSyncerOfType[M PrometheusMetric](
 	db db.DB,
-	c conf.SyncPrometheusMetricConfig,
+	hostConf conf.SyncPrometheusHostConfig,
+	metricConf conf.SyncPrometheusMetricConfig,
 	monitor sync.Monitor,
 ) sync.Datasource {
 	// Set default values if none are provided.
 	var timeRangeSeconds = 2419200 // 4 weeks
-	if c.TimeRangeSeconds != nil {
-		timeRangeSeconds = *c.TimeRangeSeconds
+	if metricConf.TimeRangeSeconds != nil {
+		timeRangeSeconds = *metricConf.TimeRangeSeconds
 	}
 	var intervalSeconds = 86400 // 1 day
-	if c.IntervalSeconds != nil {
-		intervalSeconds = *c.IntervalSeconds
+	if metricConf.IntervalSeconds != nil {
+		intervalSeconds = *metricConf.IntervalSeconds
 	}
 	var resolutionSeconds = 43200 // 12 hours
-	if c.ResolutionSeconds != nil {
-		resolutionSeconds = *c.ResolutionSeconds
+	if metricConf.ResolutionSeconds != nil {
+		resolutionSeconds = *metricConf.ResolutionSeconds
 	}
 
 	return &syncer[M]{
 		SyncTimeRange:         time.Duration(timeRangeSeconds) * time.Second,
 		SyncInterval:          time.Duration(intervalSeconds) * time.Second,
 		SyncResolutionSeconds: resolutionSeconds,
-		MetricName:            c.Name,
-		PrometheusAPI:         NewPrometheusAPI[M](c.Name, monitor),
+		MetricName:            metricConf.Name,
+		PrometheusAPI:         NewPrometheusAPI[M](hostConf, metricConf, monitor),
 		DB:                    db,
 		monitor:               monitor,
 	}

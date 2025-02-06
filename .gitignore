@@ -21,3 +21,6 @@ go.work.sum
 
 # env file
 .env
+
+# Just in case someone decides to put the secrets into the project dir.
+cortex.secrets.yaml

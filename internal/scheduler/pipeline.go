@@ -30,13 +30,13 @@ type pipeline struct {
 }
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline(config conf.Config, database db.DB, monitor Monitor) Pipeline {
+func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) Pipeline {
 	supportedStepsByName := make(map[string]plugins.Step)
 	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
 	}
 	steps := []plugins.Step{}
-	for _, stepConfig := range config.GetSchedulerConfig().Steps {
+	for _, stepConfig := range config.Steps {
 		if step, ok := supportedStepsByName[stepConfig.Name]; ok {
 			wrappedStep := monitorStep(step, monitor)
 			if err := wrappedStep.Init(database, stepConfig.Options); err != nil {

@@ -6,10 +6,7 @@ package prometheus
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,20 +19,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 )
-
-// One metric datapoint in the Prometheus timeline.
-type PrometheusMetric interface {
-	// Table name into which the metric should be stored.
-	GetTableName() string
-	// Name under which the metric is stored in Prometheus.
-	GetName() string
-	// Value of this metric datapoint.
-	GetValue() float64
-	// Set the time of this metric datapoint.
-	SetTimestamp(time time.Time)
-	// Set the value of this metric datapoint.
-	SetValue(value float64)
-}
 
 // Metrics fetched from Prometheus with the time window
 // and resolution specified in the query.
@@ -63,47 +46,23 @@ type PrometheusAPI[M PrometheusMetric] interface {
 }
 
 type prometheusAPI[M PrometheusMetric] struct {
-	Secrets    conf.SecretPrometheusConfig
-	metricName string
+	hostConf   conf.SyncPrometheusHostConfig
+	metricConf conf.SyncPrometheusMetricConfig
 	monitor    sync.Monitor
 }
 
 // Create a new Prometheus API with the given Prometheus metric type.
-func NewPrometheusAPI[M PrometheusMetric](metricName string, monitor sync.Monitor) PrometheusAPI[M] {
+func NewPrometheusAPI[M PrometheusMetric](
+	hostConf conf.SyncPrometheusHostConfig,
+	metricConf conf.SyncPrometheusMetricConfig,
+	monitor sync.Monitor,
+) PrometheusAPI[M] {
+
 	return &prometheusAPI[M]{
-		Secrets:    conf.NewSecretConfig().SecretPrometheusConfig,
-		metricName: metricName,
+		hostConf:   hostConf,
+		metricConf: metricConf,
 		monitor:    monitor,
 	}
-}
-
-func (api *prometheusAPI[M]) getHTTPClient() (*http.Client, error) {
-	if api.Secrets.PrometheusSSOPublicKey == "" {
-		return &http.Client{}, nil
-	}
-	// If we have a public key, we also need a private key.
-	if api.Secrets.PrometheusSSOPrivateKey == "" {
-		return nil, errors.New("missing private key for SSO")
-	}
-	cert, err := tls.X509KeyPair(
-		[]byte(api.Secrets.PrometheusSSOPublicKey),
-		[]byte(api.Secrets.PrometheusSSOPrivateKey),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load client certificate: %w", err)
-	}
-	caCertPool := x509.NewCertPool()
-	caCertPool.AddCert(cert.Leaf)
-	return &http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			RootCAs:      caCertPool,
-			// Skip verification of the server certificate.
-			// This is necessary because the SSO certificate is self-signed.
-			//nolint:gosec
-			InsecureSkipVerify: true,
-		},
-	}}, nil
 }
 
 // Fetch VMware vROps metrics from Prometheus.
@@ -116,13 +75,15 @@ func (api *prometheusAPI[M]) FetchMetrics(
 ) (*prometheusTimelineData[M], error) {
 
 	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.WithLabelValues("prometheus_" + api.metricName)
+		hist := api.monitor.PipelineRequestTimer.WithLabelValues(
+			"prometheus_" + api.metricConf.Name,
+		)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
-	urlStr := api.Secrets.PrometheusURL + "/api/v1/query_range"
+	urlStr := api.hostConf.URL + "/api/v1/query_range"
 	urlStr += "?query=" + url.QueryEscape(query)
 	urlStr += "&start=" + strconv.FormatInt(start.Unix(), 10)
 	urlStr += "&end=" + strconv.FormatInt(end.Unix(), 10)
@@ -135,7 +96,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client, err := api.getHTTPClient()
+	client, err := sync.NewHTTPClient(api.hostConf.SSO)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
@@ -204,7 +165,9 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	}
 
 	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("prometheus_" + api.metricName).Inc()
+		api.monitor.PipelineRequestProcessedCounter.WithLabelValues(
+			"prometheus_" + api.metricConf.Name,
+		).Inc()
 	}
 	return &prometheusTimelineData[M]{
 		Metrics:  flatMetrics,

@@ -14,20 +14,11 @@ helm_repo(
 )
 
 ########### Cortex Core Services
+tilt_values = os.getenv('TILT_VALUES_PATH')
 docker_build('cortex', '.', only=[
-    'internal/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
+    'internal/', 'main.go', 'go.mod', 'go.sum', 'Makefile', tilt_values,
 ])
-k8s_yaml(helm('./helm/cortex', name='cortex', set=[
-    'secrets.openstack.authUrl=' + os.getenv('OS_AUTH_URL'),
-    'secrets.openstack.username=' + os.getenv('OS_USERNAME'),
-    'secrets.openstack.password=' + os.getenv('OS_PASSWORD'),
-    'secrets.openstack.projectName=' + os.getenv('OS_PROJECT_NAME'),
-    'secrets.openstack.userDomainName=' + os.getenv('OS_USER_DOMAIN_NAME'),
-    'secrets.openstack.projectDomainName=' + os.getenv('OS_PROJECT_DOMAIN_NAME'),
-    'secrets.prometheus.url=' + os.getenv('PROMETHEUS_URL'),
-    'secrets.prometheus.ssoPublicKey=' + os.getenv('PROMETHEUS_SSO_PUBLIC_KEY', ''),
-    'secrets.prometheus.ssoPrivateKey=' + os.getenv('PROMETHEUS_SSO_PRIVATE_KEY', ''),
-]))
+k8s_yaml(helm('./helm/cortex', name='cortex', values=[tilt_values]))
 k8s_resource('cortex-syncer', port_forwards=[
     port_forward(8001, 2112),
 ], links=[

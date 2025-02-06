@@ -10,25 +10,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type mockConfig struct {
-	monitoringConfig conf.MonitoringConfig
-}
-
-func (c *mockConfig) GetSyncConfig() conf.SyncConfig             { return conf.SyncConfig{} }
-func (c *mockConfig) GetFeaturesConfig() conf.FeaturesConfig     { return conf.FeaturesConfig{} }
-func (c *mockConfig) GetSchedulerConfig() conf.SchedulerConfig   { return conf.SchedulerConfig{} }
-func (c *mockConfig) GetMonitoringConfig() conf.MonitoringConfig { return c.monitoringConfig }
-func (c *mockConfig) Validate() error                            { return nil }
-
 func TestNewRegistry(t *testing.T) {
-	config := mockConfig{
-		monitoringConfig: conf.MonitoringConfig{
-			Labels: map[string]string{
-				"env": "test",
-			},
+	config := conf.MonitoringConfig{
+		Labels: map[string]string{
+			"env": "test",
 		},
 	}
-	registry := NewRegistry(&config)
+	registry := NewRegistry(config)
 
 	if registry == nil {
 		t.Fatalf("expected registry to be non-nil")
@@ -39,14 +27,12 @@ func TestNewRegistry(t *testing.T) {
 }
 
 func TestRegistry_Gather(t *testing.T) {
-	config := mockConfig{
-		monitoringConfig: conf.MonitoringConfig{
-			Labels: map[string]string{
-				"env": "test",
-			},
+	config := conf.MonitoringConfig{
+		Labels: map[string]string{
+			"env": "test",
 		},
 	}
-	registry := NewRegistry(&config)
+	registry := NewRegistry(config)
 
 	// Register a custom metric
 	counter := prometheus.NewCounter(prometheus.CounterOpts{

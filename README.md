@@ -17,35 +17,22 @@ Cortex provides advanced capabilities for initial placement of VMs.
 
 ## Quickstart
 
-Set OpenStack cli environment variables:
+Copy the example secrets values file and insert your credentials.
 ```bash
-export OS_AUTH_URL=""
-export OS_USERNAME=""
-export OS_PASSWORD=""
-export OS_PROJECT_NAME=""
-export OS_USER_DOMAIN_NAME=""
-export OS_PROJECT_DOMAIN_NAME=""
+cp cortex.secrets.yaml.example "${HOME}/cortex.secrets.yaml"
 ```
 
-Set Prometheus URL and SSO certificates:
-```bash
-export PROMETHEUS_URL=""
-```
-(Optional) Set the SSO certificate:
-```bash
-export PROMETHEUS_SSO_PUBLIC_KEY=""
-export PROMETHEUS_SSO_PRIVATE_KEY=""
-```
-See: https://github.com/sapcc/vrops-exporter
+> [!WARNING]
+> It is recommended to put the secrets file somewhere outside of the project directory, as it contains sensitive information. In this way, it won't be accidentally committed to the repository.
 
-Run your minikube:
+Tell tilt where to find your secrets file:
 ```bash
-minikube start
+export TILT_VALUES_PATH="${HOME}/cortex.secrets.yaml"
 ```
 
-Start the tilt setup:
+Run the tilt setup:
 ```bash
-tilt up
+minikube start && tilt up
 ```
 
 Point your browser to http://localhost:10350/

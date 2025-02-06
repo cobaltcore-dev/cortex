@@ -10,7 +10,7 @@ import (
 
 func createTempConfigFile(t *testing.T, content string) string {
 	tmpDir := t.TempDir()
-	tmpfile, err := os.CreateTemp(tmpDir, "conf.yaml")
+	tmpfile, err := os.CreateTemp(tmpDir, "yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

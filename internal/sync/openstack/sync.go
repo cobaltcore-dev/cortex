@@ -26,12 +26,12 @@ type syncer struct {
 }
 
 // Create a new OpenStack syncer with the given configuration and database.
-func NewSyncer(config conf.Config, db db.DB, monitor sync.Monitor) sync.Datasource {
+func NewSyncer(config conf.SyncOpenStackConfig, db db.DB, monitor sync.Monitor) sync.Datasource {
 	return &syncer{
-		Config:        config.GetSyncConfig().OpenStack,
+		Config:        config,
 		ServerAPI:     NewServerAPI(monitor),
 		HypervisorAPI: NewHypervisorAPI(monitor),
-		KeystoneAPI:   NewKeystoneAPI(monitor),
+		KeystoneAPI:   NewKeystoneAPI(config, monitor),
 		DB:            db,
 		monitor:       monitor,
 	}

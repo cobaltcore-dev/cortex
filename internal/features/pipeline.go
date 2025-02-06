@@ -28,13 +28,13 @@ type FeatureExtractorPipeline struct {
 
 // Create a new feature extractor pipeline with extractors contained in
 // the configuration.
-func NewPipeline(config conf.Config, database db.DB, m Monitor) FeatureExtractorPipeline {
+func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureExtractorPipeline {
 	supportedExtractorsByName := make(map[string]plugins.FeatureExtractor)
 	for _, extractor := range supportedExtractors {
 		supportedExtractorsByName[extractor.GetName()] = extractor
 	}
 	extractors := []plugins.FeatureExtractor{}
-	for _, extractorConfig := range config.GetFeaturesConfig().Extractors {
+	for _, extractorConfig := range config.Extractors {
 		if extractorFunc, ok := supportedExtractorsByName[extractorConfig.Name]; ok {
 			wrappedExtractor := monitorFeatureExtractor(extractorFunc, m)
 			if err := wrappedExtractor.Init(database, extractorConfig.Options); err != nil {

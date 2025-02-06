@@ -20,13 +20,11 @@ type DB interface {
 
 type db struct {
 	DBBackend *pg.DB
-	DBConfig  conf.SecretDBConfig
+	DBConfig  conf.DBConfig
 }
 
-func NewDB() DB {
-	return &db{
-		DBConfig: conf.NewSecretConfig().SecretDBConfig,
-	}
+func NewDB(conf conf.DBConfig) DB {
+	return &db{DBConfig: conf}
 }
 
 // Initializes the database connection.
@@ -36,10 +34,10 @@ func (d *db) Init() {
 	}
 	c := d.DBConfig
 	opts := &pg.Options{
-		Addr:     c.DBHost + ":" + c.DBPort,
-		User:     c.DBUser,
-		Password: c.DBPassword,
-		Database: c.DBName,
+		Addr:     c.Host + ":" + c.Port,
+		User:     c.User,
+		Password: c.Password,
+		Database: c.Name,
 	}
 	d.DBBackend = pg.Connect(opts)
 
