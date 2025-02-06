@@ -10,13 +10,14 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
+	"gopkg.in/yaml.v2"
 )
 
 type mockPipelineStep struct {
 	err error
 }
 
-func (m *mockPipelineStep) Init(db db.DB, opts map[string]interface{}) error {
+func (m *mockPipelineStep) Init(db db.DB, opts yaml.MapSlice) error {
 	return nil
 }
 
@@ -41,7 +42,7 @@ func TestPipeline_Run(t *testing.T) {
 		executionOrder: [][]plugins.Step{
 			{&mockPipelineStep{}},
 		},
-		weightApplicationOrder: []string{
+		applicationOrder: []string{
 			"mock_pipeline_step",
 		},
 	}

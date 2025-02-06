@@ -8,6 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/go-pg/pg/v10/orm"
+	"gopkg.in/yaml.v2"
 )
 
 type VROpsProjectNoisiness struct {
@@ -26,7 +27,7 @@ func (e *VROpsProjectNoisinessExtractor) GetName() string {
 	return "vrops_project_noisiness_extractor"
 }
 
-func (e *VROpsProjectNoisinessExtractor) Init(db db.DB, opts map[string]any) error {
+func (e *VROpsProjectNoisinessExtractor) Init(db db.DB, opts yaml.MapSlice) error {
 	e.DB = db
 	if err := e.DB.Get().Model((*VROpsProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,

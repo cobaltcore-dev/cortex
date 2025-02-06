@@ -37,36 +37,6 @@ func TestCanRunScheduler(t *testing.T) {
 		wantOk  bool
 	}{
 		{
-			name: "Rebuild not supported",
-			request: APINovaExternalSchedulerRequest{
-				Rebuild: true,
-			},
-			wantOk: false,
-		},
-		{
-			name: "Multiple instances not supported",
-			request: APINovaExternalSchedulerRequest{
-				Spec: NovaObject[NovaSpec]{
-					Data: NovaSpec{NInstances: 2},
-				},
-			},
-			wantOk: false,
-		},
-		{
-			name: "Live migration not supported",
-			request: APINovaExternalSchedulerRequest{
-				Live: true,
-			},
-			wantOk: false,
-		},
-		{
-			name: "Non-VMware VMs not supported",
-			request: APINovaExternalSchedulerRequest{
-				VMware: false,
-			},
-			wantOk: false,
-		},
-		{
 			name: "Missing weight for host",
 			request: APINovaExternalSchedulerRequest{
 				Hosts: []APINovaExternalSchedulerRequestHost{

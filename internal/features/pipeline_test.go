@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
+	"gopkg.in/yaml.v2"
 )
 
 type mockFeatureExtractor struct {
@@ -16,7 +17,7 @@ type mockFeatureExtractor struct {
 	extractErr error
 }
 
-func (m *mockFeatureExtractor) Init(db db.DB, opts map[string]any) error {
+func (m *mockFeatureExtractor) Init(db db.DB, opts yaml.MapSlice) error {
 	return m.initErr
 }
 

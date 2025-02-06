@@ -8,6 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/go-pg/pg/v10/orm"
+	"gopkg.in/yaml.v2"
 )
 
 type ResolvedVROpsHostsystem struct {
@@ -25,7 +26,7 @@ func (e *VROpsHostsystemResolver) GetName() string {
 	return "vrops_hostsystem_resolver"
 }
 
-func (e *VROpsHostsystemResolver) Init(db db.DB, opts map[string]any) error {
+func (e *VROpsHostsystemResolver) Init(db db.DB, opts yaml.MapSlice) error {
 	e.DB = db
 	if err := e.DB.Get().Model((*ResolvedVROpsHostsystem)(nil)).CreateTable(&orm.CreateTableOptions{
 		IfNotExists: true,

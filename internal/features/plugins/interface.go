@@ -3,12 +3,15 @@
 
 package plugins
 
-import "github.com/cobaltcore-dev/cortex/internal/db"
+import (
+	"github.com/cobaltcore-dev/cortex/internal/db"
+	"gopkg.in/yaml.v2"
+)
 
 type FeatureExtractor interface {
 	// Configure the feature extractor with a database and options.
 	// This function should also create the needed database structures.
-	Init(db db.DB, opts map[string]any) error
+	Init(db db.DB, opts yaml.MapSlice) error
 	// Extract features from the given data.
 	Extract() error
 	// Get the name of this feature extractor.

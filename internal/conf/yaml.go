@@ -90,8 +90,8 @@ type SyncConfig struct {
 type FeatureExtractorConfig struct {
 	// The name of the extractor.
 	Name string `yaml:"name"`
-	// Custom options for the extractor.
-	Options map[string]any `yaml:"options,omitempty"`
+	// Custom options for the extractor, as a raw yaml map.
+	Options yaml.MapSlice `yaml:"options,omitempty"`
 	// The dependencies this extractor needs.
 	DependencyConfig `yaml:"dependencies,omitempty"`
 }
@@ -104,8 +104,8 @@ type FeaturesConfig struct {
 type SchedulerStepConfig struct {
 	// The name of the step.
 	Name string `yaml:"name"`
-	// Custom options for the step.
-	Options map[string]any `yaml:"options"`
+	// Custom options for the step, as a raw yaml map.
+	Options yaml.MapSlice `yaml:"options,omitempty"`
 	// The dependencies this step needs.
 	DependencyConfig `yaml:"dependencies,omitempty"`
 }

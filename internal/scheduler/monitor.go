@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/prometheus/client_golang/prometheus"
+	"gopkg.in/yaml.v2"
 )
 
 type Monitor struct {
@@ -95,7 +96,7 @@ func (s *StepMonitor[S]) GetName() string {
 	return s.Step.GetName()
 }
 
-func (s *StepMonitor[S]) Init(db db.DB, opts map[string]any) error {
+func (s *StepMonitor[S]) Init(db db.DB, opts yaml.MapSlice) error {
 	// Configure the wrapped step.
 	return s.Step.Init(db, opts)
 }
