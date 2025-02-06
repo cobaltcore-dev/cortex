@@ -227,4 +227,4 @@ conf:
             extractors:
               - vrops_hostsystem_contention_extractor
 
-    logRequestBodies: true # debugging feature
+    logRequestBodies: false # debugging feature
