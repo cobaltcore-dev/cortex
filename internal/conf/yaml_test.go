@@ -8,17 +8,6 @@ import (
 	"testing"
 )
 
-type MockConfig struct {
-	MonitoringConfig MonitoringConfig
-}
-
-func (c *MockConfig) GetDBConfig() DBConfig                 { return DBConfig{} }
-func (c *MockConfig) GetSyncConfig() SyncConfig             { return SyncConfig{} }
-func (c *MockConfig) GetFeaturesConfig() FeaturesConfig     { return FeaturesConfig{} }
-func (c *MockConfig) GetSchedulerConfig() SchedulerConfig   { return SchedulerConfig{} }
-func (c *MockConfig) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
-func (c *MockConfig) Validate() error                       { return nil }
-
 func createTempConfigFile(t *testing.T, content string) string {
 	tmpDir := t.TempDir()
 	tmpfile, err := os.CreateTemp(tmpDir, "yaml")
