@@ -5,6 +5,7 @@ package features
 
 import (
 	"log/slog"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -22,8 +23,8 @@ var supportedExtractors = []plugins.FeatureExtractor{
 }
 
 type FeatureExtractorPipeline struct {
-	extractors []plugins.FeatureExtractor
-	monitor    Monitor
+	executionOrder [][]plugins.FeatureExtractor
+	monitor        Monitor
 }
 
 // Create a new feature extractor pipeline with extractors contained in
@@ -33,24 +34,60 @@ func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureE
 	for _, extractor := range supportedExtractors {
 		supportedExtractorsByName[extractor.GetName()] = extractor
 	}
-	extractors := []plugins.FeatureExtractor{}
+
+	// Load all extractors from the configuration.
+	extractorsByName := make(map[string]plugins.FeatureExtractor)
 	for _, extractorConfig := range config.Extractors {
-		if extractorFunc, ok := supportedExtractorsByName[extractorConfig.Name]; ok {
-			wrappedExtractor := monitorFeatureExtractor(extractorFunc, m)
-			if err := wrappedExtractor.Init(database, extractorConfig.Options); err != nil {
-				panic("failed to initialize feature extractor: " + err.Error())
-			}
-			extractors = append(extractors, wrappedExtractor)
-			slog.Info(
-				"feature extractor: added extractor",
-				"name", extractorConfig.Name,
-				"options", extractorConfig.Options,
-			)
-		} else {
+		extractorFunc, ok := supportedExtractorsByName[extractorConfig.Name]
+		if !ok {
 			panic("unknown feature extractor: " + extractorConfig.Name)
 		}
+		wrappedExtractor := monitorFeatureExtractor(extractorFunc, m)
+		if err := wrappedExtractor.Init(database, extractorConfig.Options); err != nil {
+			panic("failed to initialize feature extractor: " + err.Error())
+		}
+		extractorsByName[extractorConfig.Name] = wrappedExtractor
+		slog.Info(
+			"feature extractor: added extractor",
+			"name", extractorConfig.Name,
+			"options", extractorConfig.Options,
+		)
 	}
-	return FeatureExtractorPipeline{extractors: extractors, monitor: m}
+
+	// Build the dependency graph and resolve the execution order.
+	extractors := []plugins.FeatureExtractor{}
+	extractorDependencies := make(map[plugins.FeatureExtractor][]plugins.FeatureExtractor)
+	for _, extractorConfig := range config.Extractors {
+		extractor := extractorsByName[extractorConfig.Name]
+		extractors = append(extractors, extractor)
+		dependencies := []plugins.FeatureExtractor{}
+		for _, name := range extractorConfig.DependencyConfig.Features.ExtractorNames {
+			dependency, ok := extractorsByName[name]
+			if !ok {
+				panic("unknown feature extractor: " + name)
+			}
+			dependencies = append(dependencies, dependency)
+		}
+		extractorDependencies[extractor] = dependencies
+	}
+	dependencyGraph := conf.DependencyGraph[plugins.FeatureExtractor]{
+		Dependencies: extractorDependencies,
+		Nodes:        extractors,
+	}
+	executionOrder := dependencyGraph.Resolve()
+
+	// Print out the execution order to the log.
+	slog.Info("feature extractor: dependency graph resolved")
+	for i, extractors := range executionOrder {
+		for _, extractor := range extractors {
+			slog.Info(
+				"feature extractor: execution order",
+				"group", i, "name", extractor.GetName(),
+			)
+		}
+	}
+
+	return FeatureExtractorPipeline{executionOrder: executionOrder, monitor: m}
 }
 
 // Extract features from the data sources.
@@ -59,9 +96,20 @@ func (p *FeatureExtractorPipeline) Extract() {
 		timer := prometheus.NewTimer(p.monitor.pipelineRunTimer)
 		defer timer.ObserveDuration()
 	}
-	for _, extractor := range p.extractors {
-		if err := extractor.Extract(); err != nil {
-			slog.Error("failed to extract features", "error", err)
+
+	// Execute the extractors in groups of the execution order.
+	for _, extractors := range p.executionOrder {
+		var wg sync.WaitGroup
+		for _, extractor := range extractors {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := extractor.Extract(); err != nil {
+					slog.Error("feature extractor: failed to extract features", "error", err)
+					return
+				}
+			}()
 		}
+		wg.Wait()
 	}
 }

@@ -8,12 +8,12 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
-	"github.com/cobaltcore-dev/cortex/testlib"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/go-pg/pg/v10/orm"
 )
 
 func TestVROpsHostsystemResolver_Init(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -29,7 +29,7 @@ func TestVROpsHostsystemResolver_Init(t *testing.T) {
 }
 
 func TestVROpsHostsystemResolver_Extract(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 

@@ -26,7 +26,7 @@ func SimulateNoisyVMScheduling() {
 		Port:     "5432",
 		User:     "postgres",
 		Password: "secret",
-		Name:     "cortex",
+		Name:     "postgres",
 	})
 	db.Init()
 	defer db.Close()

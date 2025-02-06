@@ -31,9 +31,9 @@ func (m *mockFeatureExtractor) GetName() string {
 func TestFeatureExtractorPipeline_Extract(t *testing.T) {
 	// Test case: All extractors extract successfully
 	pipeline := &FeatureExtractorPipeline{
-		extractors: []plugins.FeatureExtractor{
-			&mockFeatureExtractor{},
-			&mockFeatureExtractor{},
+		executionOrder: [][]plugins.FeatureExtractor{
+			{&mockFeatureExtractor{}},
+			{&mockFeatureExtractor{}},
 		},
 	}
 
@@ -45,9 +45,9 @@ func TestFeatureExtractorPipeline_Extract(t *testing.T) {
 func TestFeatureExtractorPipeline_Extract_Failure(t *testing.T) {
 	// Test case: One extractor fails to extract
 	pipeline := &FeatureExtractorPipeline{
-		extractors: []plugins.FeatureExtractor{
-			&mockFeatureExtractor{},
-			&mockFeatureExtractor{extractErr: errors.New("extract error")},
+		executionOrder: [][]plugins.FeatureExtractor{
+			{&mockFeatureExtractor{}},
+			{&mockFeatureExtractor{extractErr: errors.New("extract error")}},
 		},
 	}
 

@@ -12,18 +12,18 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
-	"github.com/cobaltcore-dev/cortex/testlib"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
 // Mock implementation of Pipeline
 type mockPipeline struct{}
 
-func (m *mockPipeline) Run(state *plugins.State) ([]string, error) {
+func (m *mockPipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64) ([]string, error) {
 	return []string{"host1"}, nil
 }
 
 func TestCanRunScheduler(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -113,7 +113,7 @@ func TestCanRunScheduler(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
