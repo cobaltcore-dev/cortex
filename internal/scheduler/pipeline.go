@@ -5,7 +5,11 @@ package scheduler
 
 import (
 	"log/slog"
+	"maps"
+	"math"
+	"slices"
 	"sort"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -21,11 +25,15 @@ var supportedSteps = []plugins.Step{
 }
 
 type Pipeline interface {
-	Run(state *plugins.State) ([]string, error)
+	Run(scenario plugins.Scenario, novaWeights map[string]float64) ([]string, error)
 }
 
 type pipeline struct {
-	steps   []plugins.Step
+	// The parallelizable order in which scheduler steps are executed.
+	executionOrder [][]plugins.Step
+	// The order in which scheduler steps are applied, by their step name.
+	weightApplicationOrder []string
+
 	monitor Monitor
 }
 
@@ -35,49 +43,97 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
 	}
+
+	// Load all steps from the configuration.
 	steps := []plugins.Step{}
+	weightApplicationOrder := []string{}
 	for _, stepConfig := range config.Steps {
-		if step, ok := supportedStepsByName[stepConfig.Name]; ok {
-			wrappedStep := monitorStep(step, monitor)
-			if err := wrappedStep.Init(database, stepConfig.Options); err != nil {
-				panic("failed to initialize pipeline step: " + err.Error())
-			}
-			steps = append(steps, wrappedStep)
-			slog.Info(
-				"scheduler: added step",
-				"name", stepConfig.Name,
-				"options", stepConfig.Options,
-			)
-		} else {
+		step, ok := supportedStepsByName[stepConfig.Name]
+		if !ok {
 			panic("unknown pipeline step: " + stepConfig.Name)
 		}
+		wrappedStep := monitorStep(step, monitor)
+		if err := wrappedStep.Init(database, stepConfig.Options); err != nil {
+			panic("failed to initialize pipeline step: " + err.Error())
+		}
+		steps = append(steps, wrappedStep)
+		weightApplicationOrder = append(weightApplicationOrder, stepConfig.Name)
+		slog.Info(
+			"scheduler: added step",
+			"name", stepConfig.Name,
+			"options", stepConfig.Options,
+		)
 	}
-	return &pipeline{steps: steps, monitor: monitor}
+
+	return &pipeline{
+		// All steps can be run in parallel.
+		executionOrder:         [][]plugins.Step{steps},
+		weightApplicationOrder: weightApplicationOrder,
+		monitor:                monitor,
+	}
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
-func (p *pipeline) Run(state *plugins.State) ([]string, error) {
+func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64) ([]string, error) {
 	if p.monitor.hostNumberInObserver != nil {
-		p.monitor.hostNumberInObserver.Observe(float64(len(state.Hosts)))
+		p.monitor.hostNumberInObserver.Observe(float64(len(scenario.GetHosts())))
 	}
-	for _, step := range p.steps {
-		if err := step.Run(state); err != nil {
-			return nil, err
+
+	// Execute the scheduler steps in groups of the execution order.
+	var weightsByStep sync.Map
+	for _, steps := range p.executionOrder {
+		var wg sync.WaitGroup
+		for _, step := range steps {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				weights, err := step.Run(scenario)
+				if err != nil {
+					slog.Error("scheduler: failed to run step", "error", err)
+					return
+				}
+				weightsByStep.Store(step.GetName(), weights)
+			}()
+		}
+		wg.Wait()
+	}
+
+	// Nova may give us very large (positive/negative) weights such as
+	// -99,000 or 99,000. We want to respect these values, but still adjust them
+	// to a meaningful value. If Nova really doesn't want us to run on a host, it
+	// should run a filter instead of setting a weight.
+	outWeights := make(map[string]float64)
+	for hostname, weight := range novaWeights {
+		outWeights[hostname] = math.Tanh(weight)
+	}
+
+	// Apply all weights in the strict order defined by the configuration.
+	for _, stepName := range p.weightApplicationOrder {
+		stepWeights, ok := weightsByStep.Load(stepName)
+		if !ok {
+			slog.Error("scheduler: missing weights for step", "name", stepName)
+			continue
+		}
+		stepWeightsMap := stepWeights.(map[string]float64)
+		for host, prevWeight := range outWeights {
+			// Remove hosts that are not in the weights map.
+			if _, ok := stepWeightsMap[host]; !ok {
+				delete(outWeights, host)
+			} else {
+				// Apply the weight from the step.
+				outWeights[host] = prevWeight + math.Tanh(stepWeightsMap[host])
+			}
 		}
 	}
+
 	if p.monitor.hostNumberOutObserver != nil {
-		p.monitor.hostNumberOutObserver.Observe(float64(len(state.Hosts)))
+		p.monitor.hostNumberOutObserver.Observe(float64(len(scenario.GetHosts())))
 	}
-	// Order the list of hosts by their weights.
-	sort.Slice(state.Hosts, func(i, j int) bool {
-		hI := state.Hosts[i].ComputeHost
-		hJ := state.Hosts[j].ComputeHost
-		return state.Weights[hI] > state.Weights[hJ]
+
+	// Sort the hosts (keys) by their weights.
+	hosts := slices.Collect(maps.Keys(outWeights))
+	sort.Slice(hosts, func(i, j int) bool {
+		return outWeights[hosts[i]] > outWeights[hosts[j]]
 	})
-	// Flatten to a list of host names.
-	hostNames := make([]string, len(state.Hosts))
-	for i, host := range state.Hosts {
-		hostNames[i] = host.ComputeHost
-	}
-	return hostNames, nil
+	return hosts, nil
 }

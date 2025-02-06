@@ -7,12 +7,12 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
-	"github.com/cobaltcore-dev/cortex/testlib"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/go-pg/pg/v10/orm"
 )
 
 func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -28,7 +28,7 @@ func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
 }
 
 func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 

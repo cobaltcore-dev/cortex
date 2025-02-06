@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	gosync "sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -81,9 +82,16 @@ func (s CombinedSyncer) Sync() {
 		defer timer.ObserveDuration()
 	}
 
+	// Sync all metrics in parallel.
+	var wg gosync.WaitGroup
 	for _, syncer := range s.Syncers {
-		syncer.Sync()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			syncer.Sync()
+		}()
 	}
+	wg.Wait()
 }
 
 // Create a new syncer for the given metric type.

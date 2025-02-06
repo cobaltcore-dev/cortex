@@ -55,17 +55,28 @@ func (s *AvoidContendedHostsStep) Init(db db.DB, opts map[string]any) error {
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidContendedHostsStep) Run(state *plugins.State) error {
+func (s *AvoidContendedHostsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
 	var highlyContendedHosts []vmware.VROpsHostsystemContention
 	if err := s.DB.Get().
 		Model(&highlyContendedHosts).
 		Where("avg_cpu_contention > ?", s.AvgCPUContentionThreshold).
 		WhereOr("max_cpu_contention > ?", s.MaxCPUContentionThreshold).
 		Select(); err != nil {
-		return err
+		return nil, err
 	}
-	for _, obj := range highlyContendedHosts {
-		state.Vote(obj.ComputeHost, s.ActivationOnHit)
+
+	weights := make(map[string]float64)
+	for _, host := range scenario.GetHosts() {
+		// No change in weight (tanh(0.0) = 0.0).
+		weights[host.GetComputeHost()] = 0.0
 	}
-	return nil
+
+	// Push the VM away from highly contended hosts.
+	for _, host := range highlyContendedHosts {
+		// Only modify the weight if the host is in the scenario.
+		if _, ok := weights[host.ComputeHost]; ok {
+			weights[host.ComputeHost] = s.ActivationOnHit
+		}
+	}
+	return weights, nil
 }

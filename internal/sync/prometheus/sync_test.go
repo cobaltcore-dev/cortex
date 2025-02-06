@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/testlib"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/go-pg/pg/v10"
 )
 
@@ -31,7 +31,7 @@ func (api *mockPrometheusAPI[M]) FetchMetrics(
 }
 
 func TestSyncer_Init(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -49,7 +49,7 @@ func TestSyncer_Init(t *testing.T) {
 }
 
 func TestSyncer_getSyncWindowStart(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -91,7 +91,7 @@ func TestSyncer_getSyncWindowStart(t *testing.T) {
 }
 
 func TestSyncer_sync(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -134,7 +134,7 @@ func TestSyncer_sync(t *testing.T) {
 }
 
 func TestSyncer_sync_Failure(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 

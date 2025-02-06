@@ -123,57 +123,44 @@ func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor[S]) Run(state *plugins.State) error {
+func (s *StepMonitor[S]) Run(scenario plugins.Scenario) (map[string]float64, error) {
 	stepName := s.GetName()
-	slog.Debug("scheduler: running step", "name", stepName)
+
+	slog.Info("scheduler: running step", "name", stepName)
+	defer slog.Info("scheduler: finished step", "name", stepName)
+
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)
 		defer timer.ObserveDuration()
 	}
 
-	hostsIn := make(map[string]struct{})
-	for _, h := range state.Hosts {
-		hostsIn[h.ComputeHost] = struct{}{}
+	weights, err := s.Step.Run(scenario)
+	if err != nil {
+		return nil, err
 	}
-	weightsIn := make(map[string]float64)
-	for k, v := range state.Weights {
-		weightsIn[k] = v
-	}
-	defer func() {
-		// Observe the removed hosts in the state.
-		var removedHosts = 0
-		for _, h := range state.Hosts {
-			if _, ok := hostsIn[h.ComputeHost]; !ok {
-				slog.Info(
-					"scheduler: removed host",
-					"step", stepName,
-					"host", h.ComputeHost,
-				)
-				removedHosts++
+
+	// Observe how much the step modifies the weights of the hosts.
+	if s.weightModObserver != nil {
+		for _, weight := range weights {
+			s.weightModObserver.Observe(weight)
+			if weight != 0.0 {
+				slog.Info("scheduler: modified host weight", "name", stepName, "weight", weight)
 			}
 		}
-		if s.removedHostsObserver != nil {
-			s.removedHostsObserver.Observe(float64(removedHosts))
-		}
+	}
 
-		// Observe the changes to the weights.
-		var modifiedWeights = 0
-		for k, v := range state.Weights {
-			if weightsIn[k] != v {
-				slog.Info(
-					"scheduler: weight change",
-					"step", stepName,
-					"host", k,
-					"before", weightsIn[k],
-					"after", v,
-				)
-				modifiedWeights++
-			}
-		}
-		if s.weightModObserver != nil {
-			s.weightModObserver.Observe(float64(modifiedWeights))
-		}
-	}()
+	// Observe how many hosts are removed from the state.
+	hostsInScenario := make(map[string]struct{})
+	for _, host := range scenario.GetHosts() {
+		hostsInScenario[host.GetComputeHost()] = struct{}{}
+	}
+	nHostsRemoved := len(hostsInScenario) - len(weights)
+	if nHostsRemoved < 0 {
+		slog.Info("scheduler: removed hosts", "name", stepName, "count", nHostsRemoved)
+	}
+	if s.removedHostsObserver != nil {
+		s.removedHostsObserver.Observe(float64(nHostsRemoved))
+	}
 
-	return s.Step.Run(state)
+	return weights, nil
 }

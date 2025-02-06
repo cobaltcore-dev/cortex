@@ -2,7 +2,7 @@ module github.com/cobaltcore-dev/cortex
 
 go 1.23
 
-replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
+replace github.com/cobaltcore-dev/cortex/testlibDB => ./testlibDB
 
 require (
 	github.com/go-pg/pg/v10 v10.14.0

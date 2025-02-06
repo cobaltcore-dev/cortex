@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/testlib"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/go-pg/pg/v10"
 )
 
@@ -49,7 +49,7 @@ func (m *mockKeyStoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 }
 
 func TestSyncer_Init(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -89,7 +89,7 @@ func TestSyncer_Init(t *testing.T) {
 }
 
 func TestSyncer_Sync(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -153,7 +153,7 @@ func TestSyncer_Sync(t *testing.T) {
 }
 
 func TestSyncer_Sync_Failure(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 

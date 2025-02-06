@@ -46,14 +46,22 @@ func (s *VROpsAntiAffinityNoisyProjectsStep) Init(db db.DB, opts map[string]any)
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *VROpsAntiAffinityNoisyProjectsStep) Run(state *plugins.State) error {
+func (s *VROpsAntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
+	projectID := scenario.GetProjectID()
+
 	// If the average CPU usage is above the threshold, the project is considered noisy.
 	var noisyProjects []vmware.VROpsProjectNoisiness
 	if err := s.DB.Get().Model(&noisyProjects).
 		Where("avg_cpu_of_project > ?", s.AvgCPUThreshold).
-		Where("project = ?", state.Spec.ProjectID).
+		Where("project = ?", projectID).
 		Select(); err != nil {
-		return err
+		return nil, err
+	}
+
+	weights := make(map[string]float64)
+	for _, host := range scenario.GetHosts() {
+		// No change in weight (tanh(0.0) = 0.0).
+		weights[host.GetComputeHost()] = 0.0
 	}
 
 	// Get the hosts we need to push the VM away from.
@@ -61,14 +69,17 @@ func (s *VROpsAntiAffinityNoisyProjectsStep) Run(state *plugins.State) error {
 	for _, p := range noisyProjects {
 		hostsByProject[p.Project] = append(hostsByProject[p.Project], p.ComputeHost)
 	}
-	hostnames, ok := hostsByProject[state.Spec.ProjectID]
+	hostnames, ok := hostsByProject[projectID]
 	if !ok {
 		// No noisy project, nothing to do.
-		return nil
+		return weights, nil
 	}
 	// Downvote the hosts this project is currently running on.
-	for _, hostname := range hostnames {
-		state.Vote(hostname, s.ActivationOnHit)
+	for _, host := range hostnames {
+		// Only modify the weight if the host is in the scenario.
+		if _, ok := weights[host]; ok {
+			weights[host] = s.ActivationOnHit
+		}
 	}
-	return nil
+	return weights, nil
 }

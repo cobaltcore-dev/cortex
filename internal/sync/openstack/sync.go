@@ -6,6 +6,7 @@ package openstack
 import (
 	"errors"
 	"log/slog"
+	gosync "sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -145,22 +146,29 @@ func (s *syncer) Sync() {
 		s.syncServers,
 		s.syncHypervisors,
 	}
+	// Sync the data in parallel.
+	var wg gosync.WaitGroup
 	for _, syncPartial := range syncPartials {
-		tx, err := s.DB.Get().Begin()
-		if err != nil {
-			slog.Error("failed to begin transaction", "error", err)
-			return
-		}
-		if err := syncPartial(auth, tx); err != nil {
-			if err := tx.Rollback(); err != nil {
-				// Don't log if the transaction has been committed
-				slog.Error("failed to rollback transaction", "error", err)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tx, err := s.DB.Get().Begin()
+			if err != nil {
+				slog.Error("failed to begin transaction", "error", err)
+				return
 			}
-			return
-		}
-		if err := tx.Commit(); err != nil {
-			slog.Error("failed to commit transaction", "error", err)
-			return
-		}
+			if err := syncPartial(auth, tx); err != nil {
+				if err := tx.Rollback(); err != nil {
+					// Don't log if the transaction has been committed
+					slog.Error("failed to rollback transaction", "error", err)
+				}
+				return
+			}
+			if err := tx.Commit(); err != nil {
+				slog.Error("failed to commit transaction", "error", err)
+				return
+			}
+		}()
 	}
+	wg.Wait()
 }

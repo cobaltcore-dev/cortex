@@ -8,12 +8,13 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
-	"github.com/cobaltcore-dev/cortex/testlib"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 	"github.com/go-pg/pg/v10/orm"
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
-	mockDB := testlib.NewMockDB()
+	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
@@ -52,24 +53,17 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		state          *plugins.State
+		scenario       plugins.Scenario
 		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Noisy project",
-			state: &plugins.State{
-				Spec: plugins.StateSpec{
-					ProjectID: "project1",
-				},
-				Hosts: []plugins.StateHost{
+			scenario: &testlibPlugins.MockScenario{
+				ProjectID: "project1",
+				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
-				Weights: map[string]float64{
-					"host1": 1.0,
-					"host2": 1.0,
-					"host3": 1.0,
 				},
 			},
 			downvotedHosts: map[string]struct{}{
@@ -79,38 +73,24 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Non-noisy project",
-			state: &plugins.State{
-				Spec: plugins.StateSpec{
-					ProjectID: "project2",
-				},
-				Hosts: []plugins.StateHost{
+			scenario: &testlibPlugins.MockScenario{
+				ProjectID: "project2",
+				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
-				Weights: map[string]float64{
-					"host1": 1.0,
-					"host2": 1.0,
-					"host3": 1.0,
 				},
 			},
 			downvotedHosts: map[string]struct{}{},
 		},
 		{
 			name: "No noisy project data",
-			state: &plugins.State{
-				Spec: plugins.StateSpec{
-					ProjectID: "project3",
-				},
-				Hosts: []plugins.StateHost{
+			scenario: &testlibPlugins.MockScenario{
+				ProjectID: "project3",
+				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
-				Weights: map[string]float64{
-					"host1": 1.0,
-					"host2": 1.0,
-					"host3": 1.0,
 				},
 			},
 			downvotedHosts: map[string]struct{}{},
@@ -119,23 +99,19 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weightsBefore := make(map[string]float64)
-			for host, weight := range tt.state.Weights {
-				weightsBefore[host] = weight
-			}
-			if err := step.Run(tt.state); err != nil {
+			weights, err := step.Run(tt.scenario)
+			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 			// Check that the weights have decreased
-			for host, weight := range weightsBefore {
-				weightAfter := tt.state.Weights[host]
+			for host, weight := range weights {
 				if _, ok := tt.downvotedHosts[host]; ok {
-					if weightAfter >= weight {
-						t.Errorf("expected weight for host %s to be less than %f, got %f", host, weight, weightAfter)
+					if weight >= 0 {
+						t.Errorf("expected weight for host %s to be less than 0, got %f", host, weight)
 					}
 				} else {
-					if weightAfter != weight {
-						t.Errorf("expected weight for host %s to be %f, got %f", host, weight, weightAfter)
+					if weight != 0 {
+						t.Errorf("expected weight for host %s to be 0, got %f", host, weight)
 					}
 				}
 			}

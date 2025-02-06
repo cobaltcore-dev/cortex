@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	gosync "sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -33,9 +34,15 @@ func runSyncer(registry *monitoring.Registry, config conf.SyncConfig, db db.DB) 
 		syncer.Init()
 	}
 	for {
+		var wg gosync.WaitGroup
 		for _, syncer := range syncers {
-			syncer.Sync()
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				syncer.Sync()
+			}()
 		}
+		wg.Wait()
 		time.Sleep(time.Minute * 1)
 	}
 }
