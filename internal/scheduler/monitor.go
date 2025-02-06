@@ -144,7 +144,7 @@ func (s *StepMonitor[S]) Run(state *plugins.State) error {
 		var removedHosts = 0
 		for _, h := range state.Hosts {
 			if _, ok := hostsIn[h.ComputeHost]; !ok {
-				slog.Debug(
+				slog.Info(
 					"scheduler: removed host",
 					"step", stepName,
 					"host", h.ComputeHost,
@@ -160,7 +160,7 @@ func (s *StepMonitor[S]) Run(state *plugins.State) error {
 		var modifiedWeights = 0
 		for k, v := range state.Weights {
 			if weightsIn[k] != v {
-				slog.Debug(
+				slog.Info(
 					"scheduler: weight change",
 					"step", stepName,
 					"host", k,
