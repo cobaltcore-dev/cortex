@@ -144,7 +144,7 @@ conf:
       types:
         - nova_hypervisor
         - nova_server
-        - placement
+        # - placement
 
       # Authentication/identity service URL for openstack.
       keystoneURL: https://path-to-keystone/v3

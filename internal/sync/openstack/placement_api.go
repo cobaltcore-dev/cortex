@@ -4,9 +4,10 @@
 package openstack
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -23,6 +24,7 @@ type PlacementAPI interface {
 
 type placementAPI struct {
 	conf    conf.SyncOpenStackConfig
+	client  *http.Client
 	monitor sync.Monitor
 }
 
@@ -41,22 +43,15 @@ func (api *placementAPI) fetch(auth KeystoneAuth, url string) (*http.Response, e
 		return nil, err
 	}
 	req.Header.Set("X-Auth-Token", auth.token)
-	client, err := sync.NewHTTPClient(api.conf.SSO)
-	if err != nil {
-		slog.Error("failed to create HTTP client", "error", err)
-		return nil, err
+	if api.client == nil {
+		client, err := sync.NewHTTPClient(api.conf.SSO)
+		if err != nil {
+			slog.Error("failed to create HTTP client", "error", err)
+			return nil, err
+		}
+		api.client = client
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("failed to send request", "error", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("unexpected status code", "status", resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-	return resp, nil
+	return api.client.Do(req)
 }
 
 // List returns a list of resource providers from the OpenStack Placement API.
@@ -72,6 +67,7 @@ func (api *placementAPI) ListResourceProviders(auth KeystoneAuth) ([]ResourcePro
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	var responseJson = struct {
 		ResourceProviders []ResourceProvider `json:"resource_providers"`
 	}{}
@@ -101,9 +97,19 @@ func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvi
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	var responseJson = struct {
 		Traits []string `json:"traits"`
 	}{}
+
+	// Copy the body and log it out
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("request body", "body", string(body))
+	resp.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
+
 	err = json.NewDecoder(resp.Body).Decode(&responseJson)
 	if err != nil {
 		slog.Error("failed to decode response", "error", err)
@@ -137,6 +143,7 @@ func (api *placementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceP
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	var responseJson = struct {
 		Aggregates []string `json:"aggregates"`
 	}{}
