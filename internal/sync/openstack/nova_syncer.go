@@ -25,6 +25,7 @@ func newNovaSyncer[M NovaModel, L NovaList](
 	config conf.SyncOpenStackConfig,
 	monitor sync.Monitor,
 ) Syncer {
+
 	return &novaSyncer[M, L]{
 		Config:  config,
 		API:     NewNovaAPI[M, L](config, monitor),

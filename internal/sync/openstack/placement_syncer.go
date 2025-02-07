@@ -4,6 +4,7 @@
 package openstack
 
 import (
+	"fmt"
 	"log/slog"
 	gosync "sync"
 	"time"
@@ -21,11 +22,7 @@ type placementSyncer struct {
 	monitor sync.Monitor
 }
 
-func newPlacementSyncer(
-	db db.DB,
-	config conf.SyncOpenStackConfig,
-	monitor sync.Monitor,
-) Syncer {
+func newPlacementSyncer(db db.DB, config conf.SyncOpenStackConfig, monitor sync.Monitor) Syncer {
 	return &placementSyncer{
 		Config:  config,
 		API:     NewPlacementAPI(config, monitor),
@@ -79,47 +76,51 @@ func (s *placementSyncer) syncProviders(auth KeystoneAuth) ([]ResourceProvider, 
 		g := s.monitor.PipelineObjectsGauge
 		g.WithLabelValues("openstack_resource_providers").Set(float64(len(providers)))
 	}
+	slog.Info("synced objects", "model", "openstack_resource_providers", "n", len(providers))
 	return providers, nil
 }
 
-func (s *placementSyncer) syncTraits(auth KeystoneAuth, providers []ResourceProvider) error {
-	traits := gosync.Map{}
+func (s *placementSyncer) syncProviderDetails(
+	auth KeystoneAuth,
+	providers []ResourceProvider,
+	fetchFunc func(KeystoneAuth, ResourceProvider) ([]ProviderDetail, error),
+	model ProviderDetail,
+) error {
+
+	resultMutex := gosync.Mutex{}
+	results := []ProviderDetail{}
 	var wg gosync.WaitGroup
 	for _, provider := range providers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			providerTraits, err := s.API.ResolveTraits(auth, provider)
+			newResults, err := fetchFunc(auth, provider)
 			if err != nil {
-				slog.Error("failed to get resource provider traits", "error", err)
+				slog.Error("failed to get placement data", "error", err)
 				return
 			}
-			for _, trait := range providerTraits {
-				traits.Store(trait.Name+trait.ResourceProviderUUID, trait)
-			}
+			resultMutex.Lock()
+			results = append(results, newResults...)
+			resultMutex.Unlock()
 		}()
 		time.Sleep(50 * time.Millisecond) // Don't overload the API.
 	}
 	wg.Wait()
-	traitsSlice := []ResourceProviderTrait{}
-	traits.Range(func(key, value any) bool {
-		traitsSlice = append(traitsSlice, value.(ResourceProviderTrait))
-		return true
-	})
 
 	tx, err := s.DB.Get().Begin()
 	if err != nil {
 		slog.Error("failed to begin transaction", "error", err)
 		return tx.Rollback()
 	}
-	if _, err = tx.Model((*ResourceProviderTrait)(nil)).Where("TRUE").Delete(); err != nil {
+	if _, err = tx.Model(model).Where("TRUE").Delete(); err != nil {
 		slog.Error("failed to delete old objects", "error", err)
 		return tx.Rollback()
 	}
-	if _, err = tx.Model(&traitsSlice).
-		OnConflict("(name) DO UPDATE").
+	modelName := model.GetName()
+	if _, err = tx.Model(&results).
+		OnConflict(fmt.Sprintf("(%s) DO UPDATE", model.GetPKField())).
 		Insert(); err != nil {
-		slog.Error("failed to insert objects", "model", "openstack_resource_provider_traits", "error", err)
+		slog.Error("failed to insert objects", "modelName", modelName, "error", err)
 		return tx.Rollback()
 	}
 	if err = tx.Commit(); err != nil {
@@ -128,9 +129,9 @@ func (s *placementSyncer) syncTraits(auth KeystoneAuth, providers []ResourceProv
 	}
 	if s.monitor.PipelineObjectsGauge != nil {
 		g := s.monitor.PipelineObjectsGauge
-		g.WithLabelValues("openstack_resource_provider_traits").Set(float64(len(traitsSlice)))
+		g.WithLabelValues(modelName).Set(float64(len(results)))
 	}
-	slog.Info("synced objects", "model", "openstack_resource_provider_traits", "n", len(traitsSlice))
+	slog.Info("synced objects", "model", modelName, "n", len(results))
 	return nil
 }
 
@@ -139,9 +140,13 @@ func (s *placementSyncer) Sync(auth KeystoneAuth) error {
 	if err != nil {
 		return err
 	}
-	if err := s.syncTraits(auth, providers); err != nil {
+	err = s.syncProviderDetails(auth, providers, s.API.ResolveTraits, &ResourceProviderTrait{})
+	if err != nil {
 		return err
 	}
-
+	err = s.syncProviderDetails(auth, providers, s.API.ResolveAggregates, &ResourceProviderAggregate{})
+	if err != nil {
+		return err
+	}
 	return nil
 }

@@ -4,10 +4,8 @@
 package openstack
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -18,8 +16,8 @@ import (
 
 type PlacementAPI interface {
 	ListResourceProviders(KeystoneAuth) ([]ResourceProvider, error)
-	ResolveTraits(KeystoneAuth, ResourceProvider) ([]ResourceProviderTrait, error)
-	ResolveAggregates(KeystoneAuth, ResourceProvider) ([]ResourceProviderAggregate, error)
+	ResolveTraits(KeystoneAuth, ResourceProvider) ([]ProviderDetail, error)
+	ResolveAggregates(KeystoneAuth, ResourceProvider) ([]ProviderDetail, error)
 }
 
 type placementAPI struct {
@@ -43,6 +41,8 @@ func (api *placementAPI) fetch(auth KeystoneAuth, url string) (*http.Response, e
 		return nil, err
 	}
 	req.Header.Set("X-Auth-Token", auth.token)
+	// Needed, otherwise openstack won't tell us traits and aggregates.
+	req.Header.Set("OpenStack-API-Version", "placement 1.29")
 	if api.client == nil {
 		client, err := sync.NewHTTPClient(api.conf.SSO)
 		if err != nil {
@@ -57,7 +57,8 @@ func (api *placementAPI) fetch(auth KeystoneAuth, url string) (*http.Response, e
 // List returns a list of resource providers from the OpenStack Placement API.
 func (api *placementAPI) ListResourceProviders(auth KeystoneAuth) ([]ResourceProvider, error) {
 	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_resource_provider")
+		hist := api.monitor.PipelineRequestTimer.
+			WithLabelValues("openstack_resource_provider")
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
@@ -68,26 +69,28 @@ func (api *placementAPI) ListResourceProviders(auth KeystoneAuth) ([]ResourcePro
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var responseJson = struct {
+	var responseJSON = struct {
 		ResourceProviders []ResourceProvider `json:"resource_providers"`
 	}{}
-	err = json.NewDecoder(resp.Body).Decode(&responseJson)
+	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
 	if err != nil {
 		slog.Error("failed to decode response", "error", err)
 		return nil, err
 	}
 
 	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_resource_provider").Inc()
+		api.monitor.PipelineRequestProcessedCounter.
+			WithLabelValues("openstack_resource_provider").Inc()
 	}
-	slog.Info("got openstack resource providers", "n", len(responseJson.ResourceProviders))
-	return responseJson.ResourceProviders, nil
+	slog.Info("got openstack resource providers", "n", len(responseJSON.ResourceProviders))
+	return responseJSON.ResourceProviders, nil
 }
 
 // Return a list of traits for a resource provider from the OpenStack Placement API.
-func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvider) ([]ResourceProviderTrait, error) {
+func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvider) ([]ProviderDetail, error) {
 	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_resource_provider_trait")
+		hist := api.monitor.PipelineRequestTimer.
+			WithLabelValues("openstack_resource_provider_trait")
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
@@ -98,42 +101,38 @@ func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvi
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var responseJson = struct {
-		Traits []string `json:"traits"`
+	var responseJSON = struct {
+		Traits                     []string `json:"traits"`
+		ResourceProviderGeneration int      `json:"resource_provider_generation"`
 	}{}
 
-	// Copy the body and log it out
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	slog.Info("request body", "body", string(body))
-	resp.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
-
-	err = json.NewDecoder(resp.Body).Decode(&responseJson)
+	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
 	if err != nil {
 		slog.Error("failed to decode response", "error", err)
 		return nil, err
 	}
 
 	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_resource_provider_trait").Inc()
+		api.monitor.PipelineRequestProcessedCounter.
+			WithLabelValues("openstack_resource_provider_trait").Inc()
 	}
-	slog.Info("got openstack resource provider traits", "n", len(responseJson.Traits))
-	traits := make([]ResourceProviderTrait, len(responseJson.Traits))
-	for i, trait := range responseJson.Traits {
+	slog.Info("got openstack resource provider traits", "n", len(responseJSON.Traits))
+	traits := make([]ProviderDetail, len(responseJSON.Traits))
+	for i, trait := range responseJSON.Traits {
 		traits[i] = ResourceProviderTrait{
-			ResourceProviderUUID: provider.UUID,
-			Name:                 trait,
+			ResourceProviderUUID:       provider.UUID,
+			Name:                       trait,
+			ResourceProviderGeneration: responseJSON.ResourceProviderGeneration,
 		}
 	}
 	return traits, nil
 }
 
 // Return a list of aggregates for a resource provider from the OpenStack Placement API.
-func (api *placementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceProvider) ([]ResourceProviderAggregate, error) {
+func (api *placementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceProvider) ([]ProviderDetail, error) {
 	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_resource_provider_aggregate")
+		hist := api.monitor.PipelineRequestTimer.
+			WithLabelValues("openstack_resource_provider_aggregate")
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
@@ -144,24 +143,27 @@ func (api *placementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceP
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var responseJson = struct {
-		Aggregates []string `json:"aggregates"`
+	var responseJSON = struct {
+		Aggregates                 []string `json:"aggregates"`
+		ResourceProviderGeneration int      `json:"resource_provider_generation"`
 	}{}
-	err = json.NewDecoder(resp.Body).Decode(&responseJson)
+	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
 	if err != nil {
 		slog.Error("failed to decode response", "error", err)
 		return nil, err
 	}
 
 	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_resource_provider_aggregate").Inc()
+		api.monitor.PipelineRequestProcessedCounter.
+			WithLabelValues("openstack_resource_provider_aggregate").Inc()
 	}
-	slog.Info("got openstack resource provider aggregates", "n", len(responseJson.Aggregates))
-	aggregates := make([]ResourceProviderAggregate, len(responseJson.Aggregates))
-	for i, uuid := range responseJson.Aggregates {
+	slog.Info("got openstack resource provider aggregates", "n", len(responseJSON.Aggregates))
+	aggregates := make([]ProviderDetail, len(responseJSON.Aggregates))
+	for i, uuid := range responseJSON.Aggregates {
 		aggregates[i] = ResourceProviderAggregate{
-			ResourceProviderUUID: provider.UUID,
-			UUID:                 uuid,
+			ResourceProviderUUID:       provider.UUID,
+			UUID:                       uuid,
+			ResourceProviderGeneration: responseJSON.ResourceProviderGeneration,
 		}
 	}
 	return aggregates, nil

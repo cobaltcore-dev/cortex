@@ -144,6 +144,8 @@ conf:
       types:
         - nova_hypervisor
         - nova_server
+        # Whether resource providers, traits, and aggregates should be synced.
+        # Currently we don't need this datasource, so it is disabled.
         # - placement
 
       # Authentication/identity service URL for openstack.
