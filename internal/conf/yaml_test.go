@@ -40,8 +40,9 @@ sync:
       - name: vrops_hostsystem_cpu_contention_percentage
         type: vrops_host_metric
   openstack:
-    hypervisors: true
-    servers: true
+    types:
+      - server
+      - hypervisor
 features:
   extractors:
     - name: vrops_hostsystem_resolver
@@ -65,11 +66,8 @@ scheduler:
 	if len(syncConfig.Prometheus.Metrics) != 2 {
 		t.Errorf("Expected 2 Prometheus metrics, got %d", len(syncConfig.Prometheus.Metrics))
 	}
-	if !*syncConfig.OpenStack.HypervisorsEnabled {
-		t.Errorf("Expected OpenStack hypervisors to be enabled")
-	}
-	if !*syncConfig.OpenStack.ServersEnabled {
-		t.Errorf("Expected OpenStack servers to be enabled")
+	if len(syncConfig.OpenStack.Types) != 2 {
+		t.Errorf("Expected 2 OpenStack types, got %d", len(syncConfig.OpenStack.Types))
 	}
 
 	// Test FeaturesConfig

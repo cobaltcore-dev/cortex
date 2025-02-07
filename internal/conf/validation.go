@@ -4,7 +4,6 @@
 package conf
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 )
@@ -13,8 +12,7 @@ import (
 type DependencyConfig struct {
 	Sync struct {
 		OpenStack struct {
-			HypervisorsEnabled *bool `yaml:"hypervisors,omitempty"`
-			ServersEnabled     *bool `yaml:"servers,omitempty"`
+			ObjectTypes []string `yaml:"types,omitempty"`
 		} `yaml:"openstack,omitempty"`
 		Prometheus struct {
 			MetricNames []string `yaml:"metrics,omitempty"`
@@ -27,16 +25,14 @@ type DependencyConfig struct {
 
 // Validate if the dependencies are satisfied in the given config.
 func (deps *DependencyConfig) validate(c config) error {
-	hyperNeeded := deps.Sync.OpenStack.HypervisorsEnabled
-	hyperProvided := c.OpenStack.HypervisorsEnabled
-	if hyperNeeded != nil && (hyperProvided == nil || *hyperNeeded != *hyperProvided) {
-		return errors.New("OpenStack hypervisorsEnabled dependency not satisfied")
+	confedObjects := make(map[string]bool)
+	for _, objectType := range c.SyncConfig.OpenStack.Types {
+		confedObjects[objectType] = true
 	}
-	serversNeeded := deps.Sync.OpenStack.ServersEnabled
-	serversProvided := c.OpenStack.ServersEnabled
-	if serversNeeded != nil && (serversProvided == nil || *serversNeeded != *serversProvided) {
-		fmt.Printf("serversNeeded: %v, serversProvided: %v\n", serversNeeded, serversProvided)
-		return errors.New("OpenStack serversEnabled dependency not satisfied")
+	for _, objectType := range deps.Sync.OpenStack.ObjectTypes {
+		if !confedObjects[objectType] {
+			return fmt.Errorf("openstack object type dependency %s not satisfied", objectType)
+		}
 	}
 	confedMetrics := make(map[string]bool)
 	for _, metric := range c.SyncConfig.Prometheus.Metrics {

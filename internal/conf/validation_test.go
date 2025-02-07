@@ -13,7 +13,8 @@ sync:
       - name: metric_1
         type: metric_type_1
   openstack:
-    servers: true
+    types:
+      - servers
 features:
   extractors:
     - name: extractor_1
@@ -23,7 +24,8 @@ features:
             metrics:
               - metric_1
           openstack:
-            servers: true
+            types:
+              - servers
 scheduler:
   steps:
     - name: scheduler_1
@@ -55,7 +57,9 @@ features:
             metrics:
               - metric_1
           openstack:
-            hypervisors: true # missing dependency
+            types:
+              # missing dependency
+              - hypervisors
 `
 	conf := newConfigFromBytes([]byte(content))
 	if err := conf.Validate(); err == nil {

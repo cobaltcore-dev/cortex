@@ -44,7 +44,7 @@ func SimulateNoisyVMScheduling() {
 	}
 
 	// Get all hosts from the DB.
-	var hypervisors []openstack.OpenStackHypervisor
+	var hypervisors []openstack.Hypervisor
 	if err := db.Get().Model(&hypervisors).Select(); err != nil {
 		slog.Error("failed to get hosts", "error", err)
 		return

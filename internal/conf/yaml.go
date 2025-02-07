@@ -61,8 +61,7 @@ type SyncPrometheusConfig struct {
 
 // Configuration for the sync/openstack module.
 type SyncOpenStackConfig struct {
-	HypervisorsEnabled *bool `yaml:"hypervisors"`
-	ServersEnabled     *bool `yaml:"servers"`
+	Types []string `yaml:"types"`
 
 	// URL to the OpenStack Keystone authentication endpoint.
 	KeystoneURL string `yaml:"keystoneURL"`

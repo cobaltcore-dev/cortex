@@ -4,7 +4,7 @@
 package openstack
 
 import (
-	"errors"
+	"fmt"
 	"log/slog"
 	gosync "sync"
 
@@ -13,162 +13,140 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
 )
 
-type syncer struct {
-	Config        conf.SyncOpenStackConfig
-	ServerAPI     ServerAPI
-	HypervisorAPI HypervisorAPI
-	KeystoneAPI   KeystoneAPI
-	DB            db.DB
-	monitor       sync.Monitor
+type CombinedSyncer struct {
+	Syncers  []Syncer
+	Keystone KeystoneAPI
+	monitor  sync.Monitor
 }
 
-// Create a new OpenStack syncer with the given configuration and database.
-func NewSyncer(config conf.SyncOpenStackConfig, db db.DB, monitor sync.Monitor) sync.Datasource {
-	return &syncer{
-		Config:        config,
-		ServerAPI:     NewServerAPI(monitor),
-		HypervisorAPI: NewHypervisorAPI(monitor),
-		KeystoneAPI:   NewKeystoneAPI(config, monitor),
-		DB:            db,
-		monitor:       monitor,
-	}
-}
-
-// Create the necessary database tables if they do not exist.
-func (s *syncer) Init() {
-	models := []any{}
-	if s.Config.ServersEnabled != nil && *s.Config.ServersEnabled {
-		models = append(models, (*OpenStackServer)(nil))
-	}
-	if s.Config.HypervisorsEnabled != nil && *s.Config.HypervisorsEnabled {
-		models = append(models, (*OpenStackHypervisor)(nil))
-	}
-	for _, model := range models {
-		if err := s.DB.Get().Model(model).CreateTable(&orm.CreateTableOptions{
-			IfNotExists: true,
-		}); err != nil {
-			panic(err)
+func NewCombinedSyncer(config conf.SyncOpenStackConfig, db db.DB, monitor sync.Monitor) sync.Datasource {
+	slog.Info("loading openstack syncers", "types", config.Types)
+	syncers := []Syncer{}
+	for _, typeName := range config.Types {
+		syncer, ok := supportedTypes[typeName]
+		if !ok {
+			panic("unknown openstack syncer type: " + typeName)
 		}
+		syncers = append(syncers, syncer(db, config, monitor))
+	}
+	return CombinedSyncer{
+		Syncers:  syncers,
+		Keystone: NewKeystoneAPI(config, monitor),
+		monitor:  monitor,
 	}
 }
 
-func (s *syncer) syncServers(auth *openStackKeystoneAuth, tx *pg.Tx) error {
-	if s.Config.ServersEnabled == nil {
-		return errors.New("servers not enabled")
+func (s CombinedSyncer) Init() {
+	for _, syncer := range s.Syncers {
+		syncer.Init()
 	}
-	if !*s.Config.ServersEnabled {
-		return errors.New("servers not enabled")
-	}
-	if _, err := tx.Model((*OpenStackServer)(nil)).Where("TRUE").Delete(); err != nil {
-		slog.Error("failed to delete old servers", "error", err)
-		return err
-	}
-	serverlist, err := s.ServerAPI.Get(*auth, nil)
-	if err != nil {
-		slog.Error("failed to get servers", "error", err)
-		return err
-	}
-	const batchSize = 100
-	for i := 0; i < len(serverlist.Servers); i += batchSize {
-		servers := serverlist.Servers[i:min(i+batchSize, len(serverlist.Servers))]
-		if _, err = tx.Model(&servers).
-			OnConflict("(id) DO UPDATE").
-			Insert(); err != nil {
-			slog.Error("failed to insert servers", "error", err)
-			return err
-		}
-	}
-	if s.monitor.PipelineObjectsGauge != nil {
-		s.monitor.PipelineObjectsGauge.
-			WithLabelValues("openstack_nova_servers").
-			Set(float64(len(serverlist.Servers)))
-	}
-	slog.Info("synced OpenStack", "servers", len(serverlist.Servers))
-	return nil
 }
 
-func (s *syncer) syncHypervisors(auth *openStackKeystoneAuth, tx *pg.Tx) error {
-	if s.Config.HypervisorsEnabled == nil {
-		return errors.New("hypervisors not enabled")
-	}
-	if !*s.Config.HypervisorsEnabled {
-		return errors.New("hypervisors not enabled")
-	}
-	if _, err := tx.Model((*OpenStackHypervisor)(nil)).Where("TRUE").Delete(); err != nil {
-		slog.Error("failed to delete old hypervisors", "error", err)
-		return err
-	}
-	hypervisorlist, err := s.HypervisorAPI.Get(*auth, nil)
-	if err != nil {
-		slog.Error("failed to get hypervisors", "error", err)
-		return err
-	}
-	const batchSize = 100
-	for i := 0; i < len(hypervisorlist.Hypervisors); i += batchSize {
-		hypervisors := hypervisorlist.Hypervisors[i:min(i+batchSize, len(hypervisorlist.Hypervisors))]
-		if _, err = tx.Model(&hypervisors).
-			OnConflict("(id) DO UPDATE").
-			Insert(); err != nil {
-			slog.Error("failed to insert hypervisors", "error", err)
-			return err
-		}
-	}
-	if s.monitor.PipelineObjectsGauge != nil {
-		s.monitor.PipelineObjectsGauge.
-			WithLabelValues("openstack_nova_hypervisors").
-			Set(float64(len(hypervisorlist.Hypervisors)))
-	}
-	slog.Info("synced OpenStack", "hypervisors", len(hypervisorlist.Hypervisors))
-	return nil
-}
-
-// Sync OpenStack data with the database.
-func (s *syncer) Sync() {
+func (s CombinedSyncer) Sync() {
 	if s.monitor.PipelineRunTimer != nil {
 		hist := s.monitor.PipelineRunTimer.WithLabelValues("openstack")
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 
-	slog.Info("syncing OpenStack data")
-
-	auth, err := s.KeystoneAPI.Authenticate()
+	// Authenticate with Keystone.
+	auth, err := s.Keystone.Authenticate()
 	if err != nil {
-		slog.Error("failed to get keystone auth", "error", err)
+		slog.Error("failed to authenticate with Keystone", "error", err)
 		return
 	}
 
-	var syncPartials = []func(*openStackKeystoneAuth, *pg.Tx) error{
-		s.syncServers,
-		s.syncHypervisors,
-	}
-	// Sync the data in parallel.
+	// Sync all objects in parallel.
 	var wg gosync.WaitGroup
-	for _, syncPartial := range syncPartials {
+	for _, syncer := range s.Syncers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tx, err := s.DB.Get().Begin()
-			if err != nil {
-				slog.Error("failed to begin transaction", "error", err)
-				return
-			}
-			if err := syncPartial(auth, tx); err != nil {
-				if err := tx.Rollback(); err != nil {
-					// Don't log if the transaction has been committed
-					slog.Error("failed to rollback transaction", "error", err)
-				}
-				return
-			}
-			if err := tx.Commit(); err != nil {
-				slog.Error("failed to commit transaction", "error", err)
-				return
+			if err := syncer.Sync(*auth); err != nil {
+				slog.Error("failed to sync objects", "error", err)
 			}
 		}()
 	}
 	wg.Wait()
+}
+
+type Syncer interface {
+	Init()
+	Sync(auth KeystoneAuth) error
+}
+
+type syncer[M OpenStackModel, L OpenStackList] struct {
+	Config  conf.SyncOpenStackConfig
+	API     ObjectAPI[M, L]
+	DB      db.DB
+	monitor sync.Monitor
+}
+
+func newSyncerOfType[M OpenStackModel, L OpenStackList](
+	db db.DB,
+	config conf.SyncOpenStackConfig,
+	monitor sync.Monitor,
+) Syncer {
+
+	return &syncer[M, L]{
+		Config:  config,
+		API:     NewObjectAPI[M, L](config, monitor),
+		DB:      db,
+		monitor: monitor,
+	}
+}
+
+// Create the necessary database tables if they do not exist.
+func (s *syncer[M, L]) Init() {
+	if err := s.DB.Get().Model((*M)(nil)).CreateTable(&orm.CreateTableOptions{
+		IfNotExists: true,
+	}); err != nil {
+		panic(err)
+	}
+}
+
+func (s *syncer[M, L]) Sync(auth KeystoneAuth) error {
+	var model M
+
+	tx, err := s.DB.Get().Begin()
+	if err != nil {
+		slog.Error("failed to begin transaction", "error", err)
+		return tx.Rollback()
+	}
+
+	if _, err = tx.Model(&model).Where("TRUE").Delete(); err != nil {
+		slog.Error("failed to delete old servers", "error", err)
+		return tx.Rollback()
+	}
+	modelName := model.GetName()
+	var list []M
+	list, err = s.API.List(auth)
+	if err != nil {
+		slog.Error("failed to get object list", "model", modelName, "error", err)
+		return tx.Rollback()
+	}
+	const batchSize = 100
+	for i := 0; i < len(list); i += batchSize {
+		objs := list[i:min(i+batchSize, len(list))]
+		if _, err = tx.Model(&objs).
+			OnConflict(fmt.Sprintf("(%s) DO UPDATE", model.GetPKField())).
+			Insert(); err != nil {
+			slog.Error("failed to insert objects", "model", modelName, "error", err)
+			return tx.Rollback()
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		slog.Error("failed to commit transaction", "error", err)
+		return err
+	}
+	if s.monitor.PipelineObjectsGauge != nil {
+		s.monitor.PipelineObjectsGauge.
+			WithLabelValues(modelName).
+			Set(float64(len(list)))
+	}
+	slog.Info("synced objects", "model", modelName, "n", len(list))
+	return nil
 }

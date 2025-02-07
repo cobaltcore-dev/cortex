@@ -28,7 +28,7 @@ func runSyncer(registry *monitoring.Registry, config conf.SyncConfig, db db.DB) 
 	monitor := sync.NewSyncMonitor(registry)
 	syncers := []sync.Datasource{
 		prometheus.NewCombinedSyncer(config.Prometheus, db, monitor),
-		openstack.NewSyncer(config.OpenStack, db, monitor),
+		openstack.NewCombinedSyncer(config.OpenStack, db, monitor),
 	}
 	for _, syncer := range syncers {
 		syncer.Init()

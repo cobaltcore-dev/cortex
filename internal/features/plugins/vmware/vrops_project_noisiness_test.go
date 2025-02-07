@@ -35,8 +35,8 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	// Create dependency tables
 	deps := []interface{}{
 		(*prometheus.VROpsVMMetric)(nil),
-		(*openstack.OpenStackServer)(nil),
-		(*openstack.OpenStackHypervisor)(nil),
+		(*openstack.Server)(nil),
+		(*openstack.Hypervisor)(nil),
 	}
 	for _, dep := range deps {
 		if err := mockDB.

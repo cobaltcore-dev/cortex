@@ -4,30 +4,66 @@
 package openstack
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
-	"log/slog"
-	"net/http"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
-	"github.com/prometheus/client_golang/prometheus"
 )
+
+// List of supported openstack object types.
+var supportedTypes = map[string]func(
+	db.DB,
+	conf.SyncOpenStackConfig,
+	sync.Monitor,
+) Syncer{
+	"server":     newSyncerOfType[Server, ServerList],
+	"hypervisor": newSyncerOfType[Hypervisor, HypervisorList],
+}
+
+type PageLink struct {
+	Href string `json:"href"`
+	Rel  string `json:"rel"`
+}
+
+type OpenStackList interface {
+	GetURL() string
+	GetLinks() *[]PageLink
+	GetModels() any
+}
 
 // Paginated list response from the Nova API under /servers/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
-type openStackServerList struct {
-	Servers []OpenStackServer `json:"servers"`
-	// Pagination links.
-	ServersLinks *[]struct {
-		Href string `json:"href"`
-		Rel  string `json:"rel"`
-	} `json:"servers_links"`
+type ServerList struct {
+	Servers      []Server    `json:"servers"`
+	ServersLinks *[]PageLink `json:"servers_links"`
+}
+
+func (s ServerList) GetURL() string        { return "servers/detail?all_tenants=1" }
+func (s ServerList) GetLinks() *[]PageLink { return s.ServersLinks }
+func (s ServerList) GetModels() any        { return s.Servers }
+
+// Paginated list response from the Nova API under /os-hypervisors/detail.
+// See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
+type HypervisorList struct {
+	Hypervisors      []Hypervisor `json:"hypervisors"`
+	HypervisorsLinks *[]PageLink  `json:"hypervisors_links"`
+}
+
+func (h HypervisorList) GetURL() string        { return "os-hypervisors/detail" }
+func (h HypervisorList) GetLinks() *[]PageLink { return h.HypervisorsLinks }
+func (h HypervisorList) GetModels() any        { return h.Hypervisors }
+
+type OpenStackModel interface {
+	// GetName returns the name of the OpenStack model.
+	GetName() string
+	// Get the primary key of the model.
+	GetPKField() string
 }
 
 // OpenStack server model as returned by the Nova API under /servers/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
-type OpenStackServer struct {
+type Server struct {
 	//lint:ignore U1000 tableName is used by go-pg.
 	tableName                        struct{}        `pg:"openstack_servers"`
 	ID                               string          `json:"id" pg:"id,notnull,pk"`
@@ -61,20 +97,12 @@ type OpenStackServer struct {
 	SecurityGroups                   json.RawMessage `json:"security_groups" pg:"security_groups"`
 }
 
-// Paginated list response from the Nova API under /os-hypervisors/detail.
-// See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
-type openStackHypervisorList struct {
-	Hypervisors []OpenStackHypervisor `json:"hypervisors"`
-	// Pagination links.
-	HypervisorsLinks *[]struct {
-		Href string `json:"href"`
-		Rel  string `json:"rel"`
-	} `json:"hypervisors_links"`
-}
+func (s Server) GetName() string    { return "openstack_server" }
+func (s Server) GetPKField() string { return "id" }
 
 // OpenStack hypervisor model as returned by the Nova API under /os-hypervisors/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
-type OpenStackHypervisor struct {
+type Hypervisor struct {
 	//lint:ignore U1000 tableName is used by go-pg.
 	tableName         struct{} `pg:"openstack_hypervisors"`
 	ID                int      `json:"id" pg:"id,notnull,pk"`
@@ -102,11 +130,14 @@ type OpenStackHypervisor struct {
 	CPUInfo               string  `json:"cpu_info" pg:"cpu_info"`
 }
 
+func (h Hypervisor) GetName() string    { return "openstack_hypervisor" }
+func (h Hypervisor) GetPKField() string { return "id" }
+
 // Custom unmarshaler for OpenStackHypervisor to handle nested JSON.
 // Specifically, we unwrap the "service" field into separate fields.
 // Flattening these fields makes querying the data easier.
-func (h *OpenStackHypervisor) UnmarshalJSON(data []byte) error {
-	type Alias OpenStackHypervisor
+func (h *Hypervisor) UnmarshalJSON(data []byte) error {
+	type Alias Hypervisor
 	aux := &struct {
 		Service json.RawMessage `json:"service"`
 		*Alias
@@ -133,8 +164,8 @@ func (h *OpenStackHypervisor) UnmarshalJSON(data []byte) error {
 // Custom marshaler for OpenStackHypervisor to handle nested JSON.
 // Specifically, we wrap the "service" field into a separate JSON object.
 // This is the reverse operation of the UnmarshalJSON method.
-func (h *OpenStackHypervisor) MarshalJSON() ([]byte, error) {
-	type Alias OpenStackHypervisor
+func (h *Hypervisor) MarshalJSON() ([]byte, error) {
+	type Alias Hypervisor
 	aux := &struct {
 		Service json.RawMessage `json:"service"`
 		*Alias
@@ -155,147 +186,4 @@ func (h *OpenStackHypervisor) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(aux)
-}
-
-type ServerAPI interface {
-	Get(auth openStackKeystoneAuth, url *string) (*openStackServerList, error)
-}
-
-type serverAPI struct {
-	monitor sync.Monitor
-}
-
-func NewServerAPI(monitor sync.Monitor) ServerAPI {
-	return &serverAPI{monitor: monitor}
-}
-
-// GetServers returns a list of servers from the OpenStack Nova API.
-// Note that this function may make multiple requests in case the returned
-// data has multiple pages.
-//
-//nolint:dupl
-func (api *serverAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
-	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_nova_servers")
-		timer := prometheus.NewTimer(hist)
-		defer timer.ObserveDuration()
-	}
-
-	// Use all_tenants=1 to get servers from all projects.
-	var pageURL = auth.nova.URL + "servers/detail?all_tenants=1"
-	if url != nil {
-		pageURL = *url
-	}
-	slog.Info("getting servers", "pageURL", pageURL)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pageURL, http.NoBody)
-	if err != nil {
-		slog.Error("failed to create request", "error", err)
-		return nil, err
-	}
-	req.Header.Set("X-Auth-Token", auth.token)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("failed to send request", "error", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("unexpected status code", "status", resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-	var serverList openStackServerList
-	err = json.NewDecoder(resp.Body).Decode(&serverList)
-	if err != nil {
-		slog.Error("failed to decode response", "error", err)
-		return nil, err
-	}
-	// If we got a paginated response, follow the next link.
-	if serverList.ServersLinks != nil {
-		for _, link := range *serverList.ServersLinks {
-			if link.Rel == "next" {
-				servers, err := api.Get(auth, &link.Href)
-				if err != nil {
-					return nil, err
-				}
-				serverList.Servers = append(serverList.Servers, servers.Servers...)
-			}
-		}
-	}
-
-	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_nova_servers").Inc()
-	}
-	return &serverList, nil
-}
-
-type HypervisorAPI interface {
-	Get(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error)
-}
-
-type hypervisorAPI struct {
-	monitor sync.Monitor
-}
-
-func NewHypervisorAPI(monitor sync.Monitor) HypervisorAPI {
-	return &hypervisorAPI{monitor: monitor}
-}
-
-// GetHypervisors returns a list of hypervisors from the OpenStack Nova API.
-// Note that this function may make multiple requests in case the returned
-// data has multiple pages.
-//
-//nolint:dupl
-func (api *hypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
-	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.WithLabelValues("openstack_nova_hypervisors")
-		timer := prometheus.NewTimer(hist)
-		defer timer.ObserveDuration()
-	}
-
-	var pageURL = auth.nova.URL + "os-hypervisors/detail"
-	if url != nil {
-		pageURL = *url
-	}
-	slog.Info("getting hypervisors", "pageURL", pageURL)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pageURL, http.NoBody)
-	if err != nil {
-		slog.Error("failed to create request", "error", err)
-		return nil, err
-	}
-	req.Header.Set("X-Auth-Token", auth.token)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("failed to send request", "error", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("unexpected status code", "status", resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-	var hypervisorList openStackHypervisorList
-	err = json.NewDecoder(resp.Body).Decode(&hypervisorList)
-	if err != nil {
-		slog.Error("failed to decode response", "error", err)
-		return nil, err
-	}
-	// If we got a paginated response, follow the next link.
-	if hypervisorList.HypervisorsLinks != nil {
-		for _, link := range *hypervisorList.HypervisorsLinks {
-			if link.Rel == "next" {
-				hypervisors, err := api.Get(auth, &link.Href)
-				if err != nil {
-					return nil, err
-				}
-				hypervisorList.Hypervisors = append(hypervisorList.Hypervisors, hypervisors.Hypervisors...)
-			}
-		}
-	}
-
-	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_nova_hypervisors").Inc()
-	}
-	return &hypervisorList, nil
 }

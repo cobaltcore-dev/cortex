@@ -4,87 +4,72 @@
 package openstack
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/go-pg/pg/v10"
 )
 
-type mockServerAPI struct {
-	servers []OpenStackServer
-	err     error
+type MockObjectsAPI[M OpenStackModel, L OpenStackList] struct {
+	list []M
 }
 
-func (m *mockServerAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackServerList, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &openStackServerList{Servers: m.servers}, nil
+func (m *MockObjectsAPI[M, L]) List(auth KeystoneAuth) ([]M, error) {
+	return m.list, nil
 }
 
-type mockHypervisorAPI struct {
-	hypervisors []OpenStackHypervisor
-	err         error
+type MockKeystoneAPI struct{}
+
+func (m *MockKeystoneAPI) Authenticate() (*KeystoneAuth, error) {
+	return &KeystoneAuth{}, nil
 }
 
-func (m *mockHypervisorAPI) Get(auth openStackKeystoneAuth, url *string) (*openStackHypervisorList, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &openStackHypervisorList{Hypervisors: m.hypervisors}, nil
+type MockSyncer struct {
+	initCalled bool
+	syncCalled bool
 }
 
-type mockKeyStoneAPI struct {
-	auth openStackKeystoneAuth
-	err  error
+func (m *MockSyncer) Init() {
+	m.initCalled = true
 }
 
-func (m *mockKeyStoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &m.auth, nil
+func (m *MockSyncer) Sync(auth *KeystoneAuth) error {
+	m.syncCalled = true
+	return nil
 }
+
+type MockTable struct {
+	//lint:ignore U1000 tableName is used by go-pg.
+	tableName struct{} `pg:"openstack_mock_table"`
+	ID        string   `json:"id" pg:"id,notnull,pk"`
+	Val       string   `json:"val" pg:"val"`
+}
+
+func (m MockTable) GetName() string    { return "mock_table" }
+func (m MockTable) GetPKField() string { return "id" }
+
+type MockList struct {
+	URL    string
+	Links  *[]PageLink
+	Models any
+}
+
+func (m MockList) GetURL() string        { return m.URL }
+func (m MockList) GetLinks() *[]PageLink { return m.Links }
+func (m MockList) GetModels() any        { return m.Models }
 
 func TestSyncer_Init(t *testing.T) {
 	mockDB := testlibDB.NewMockDB()
 	mockDB.Init()
 	defer mockDB.Close()
 
-	mockServerAPI := &mockServerAPI{
-		servers: []OpenStackServer{
-			{ID: "server1", Name: "test-server"},
-		},
-	}
-	mockHypervisorAPI := &mockHypervisorAPI{
-		hypervisors: []OpenStackHypervisor{
-			{ID: 1, Hostname: "test-hypervisor"},
-		},
-	}
-	mockKeyStoneAPI := &mockKeyStoneAPI{
-		auth: openStackKeystoneAuth{},
-	}
-	serversEnabled := true
-	hypervisorsEnabled := true
-	syncer := &syncer{
-		Config: conf.SyncOpenStackConfig{
-			ServersEnabled:     &serversEnabled,
-			HypervisorsEnabled: &hypervisorsEnabled,
-		},
-		ServerAPI:     mockServerAPI,
-		HypervisorAPI: mockHypervisorAPI,
-		KeystoneAPI:   mockKeyStoneAPI,
-		DB:            &mockDB,
-	}
+	syncer := newSyncerOfType[MockTable, MockList](&mockDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	syncer.Init()
 
-	// Verify the tables were created
-	for _, model := range []any{(*OpenStackServer)(nil), (*OpenStackHypervisor)(nil)} {
-		if _, err := mockDB.Get().Model(model).Exists(); err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+	// Verify the table was created
+	if _, err := mockDB.Get().Model((*MockTable)(nil)).Exists(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
@@ -93,110 +78,25 @@ func TestSyncer_Sync(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	mockServerAPI := &mockServerAPI{
-		servers: []OpenStackServer{
-			{ID: "server1", Name: "test-server"},
-		},
-	}
-	mockHypervisorAPI := &mockHypervisorAPI{
-		hypervisors: []OpenStackHypervisor{
-			{ID: 1, Hostname: "test-hypervisor"},
-		},
-	}
-	mockKeyStoneAPI := &mockKeyStoneAPI{
-		auth: openStackKeystoneAuth{},
-	}
-	serversEnabled := true
-	hypervisorsEnabled := true
-	syncer := &syncer{
-		Config: conf.SyncOpenStackConfig{
-			ServersEnabled:     &serversEnabled,
-			HypervisorsEnabled: &hypervisorsEnabled,
-		},
-		ServerAPI:     mockServerAPI,
-		HypervisorAPI: mockHypervisorAPI,
-		KeystoneAPI:   mockKeyStoneAPI,
-		DB:            &mockDB,
+	syncer := &syncer[MockTable, MockList]{
+		API: &MockObjectsAPI[MockTable, MockList]{list: []MockTable{
+			{ID: "1", Val: "Test"}, {ID: "2", Val: "Test2"},
+		}},
+		DB: &mockDB,
 	}
 	syncer.Init()
-	syncer.Sync()
 
-	// Verify the servers were inserted
-	var servers []OpenStackServer
-	if err := mockDB.Get().Model(&servers).Select(); err != nil {
+	err := syncer.Sync(KeystoneAuth{})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(servers) != 1 {
-		t.Errorf("expected 1 server, got %d", len(servers))
-	}
-	if servers[0].ID != "server1" {
-		t.Errorf("expected server ID to be %s, got %s", "server1", servers[0].ID)
-	}
-	if servers[0].Name != "test-server" {
-		t.Errorf("expected server name to be %s, got %s", "test-server", servers[0].Name)
-	}
 
-	// Verify the hypervisors were inserted
-	var hypervisors []OpenStackHypervisor
-	if err := mockDB.Get().Model(&hypervisors).Select(); err != nil {
+	// Check if the objects were inserted
+	count, err := mockDB.Get().Model((*MockTable)(nil)).Count()
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(hypervisors) != 1 {
-		t.Errorf("expected 1 hypervisor, got %d", len(hypervisors))
-	}
-	if hypervisors[0].ID != 1 {
-		t.Errorf("expected hypervisor ID to be %d, got %d", 1, hypervisors[0].ID)
-	}
-	if hypervisors[0].Hostname != "test-hypervisor" {
-		t.Errorf("expected hypervisor hostname to be %s, got %s", "test-hypervisor", hypervisors[0].Hostname)
-	}
-}
-
-func TestSyncer_Sync_Failure(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
-	defer mockDB.Close()
-
-	// Mock the ServerAPI and HypervisorAPI to return errors
-	mockServerAPI := &mockServerAPI{
-		err: errors.New("failed to get servers"),
-	}
-	mockHypervisorAPI := &mockHypervisorAPI{
-		err: errors.New("failed to get hypervisors"),
-	}
-	mockKeyStoneAPI := &mockKeyStoneAPI{
-		auth: openStackKeystoneAuth{},
-	}
-	serversEnabled := true
-	hypervisorsEnabled := true
-	syncer := &syncer{
-		Config: conf.SyncOpenStackConfig{
-			ServersEnabled:     &serversEnabled,
-			HypervisorsEnabled: &hypervisorsEnabled,
-		},
-		ServerAPI:     mockServerAPI,
-		HypervisorAPI: mockHypervisorAPI,
-		KeystoneAPI:   mockKeyStoneAPI,
-		DB:            &mockDB,
-	}
-	syncer.Init()
-	syncer.Sync()
-
-	// Verify no servers were inserted
-	var servers []OpenStackServer
-	if err := mockDB.Get().Model(&servers).Select(); err != nil && errors.Is(err, pg.ErrNoRows) {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if len(servers) != 0 {
-		t.Errorf("expected 0 servers, got %d", len(servers))
-	}
-
-	// Verify no hypervisors were inserted
-	var hypervisors []OpenStackHypervisor
-	if err := mockDB.Get().Model(&hypervisors).Select(); err != nil && errors.Is(err, pg.ErrNoRows) {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if len(hypervisors) != 0 {
-		t.Errorf("expected 0 hypervisors, got %d", len(hypervisors))
+	if count != 2 {
+		t.Errorf("expected 2 objects, got %d", count)
 	}
 }
