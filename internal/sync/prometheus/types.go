@@ -5,10 +5,6 @@ package prometheus
 
 import (
 	"time"
-
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync"
 )
 
 // One metric datapoint in the Prometheus timeline.
@@ -23,17 +19,6 @@ type PrometheusMetric interface {
 	SetTimestamp(time time.Time)
 	// Set the value of this metric datapoint.
 	SetValue(value float64)
-}
-
-// List of supported metric types.
-var supportedTypes = map[string]func(
-	db.DB,
-	conf.SyncPrometheusHostConfig,
-	conf.SyncPrometheusMetricConfig,
-	sync.Monitor,
-) sync.Datasource{
-	"vrops_host_metric": newSyncerOfType[*VROpsHostMetric],
-	"vrops_vm_metric":   newSyncerOfType[*VROpsVMMetric],
 }
 
 // VROpsHostMetric represents a single metric value from Prometheus

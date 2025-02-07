@@ -19,6 +19,17 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
+// List of supported metric types.
+var supportedSyncers = map[string]func(
+	db.DB,
+	conf.SyncPrometheusHostConfig,
+	conf.SyncPrometheusMetricConfig,
+	sync.Monitor,
+) sync.Datasource{
+	"vrops_host_metric": newSyncerOfType[*VROpsHostMetric],
+	"vrops_vm_metric":   newSyncerOfType[*VROpsVMMetric],
+}
+
 // Prometheus syncer for an arbitrary prometheus metric model.
 type syncer[M PrometheusMetric] struct {
 	// The time range to sync the metrics in.
@@ -53,7 +64,7 @@ func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.
 		hostConfByName[hostConf.Name] = hostConf
 	}
 	for _, metricConfig := range config.Metrics {
-		syncerFunc, ok := supportedTypes[metricConfig.Type]
+		syncerFunc, ok := supportedSyncers[metricConfig.Type]
 		if !ok {
 			panic("unsupported metric type: " + metricConfig.Type)
 		}
