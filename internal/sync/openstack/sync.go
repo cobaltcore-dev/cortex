@@ -16,16 +16,6 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-// List of supported openstack object types.
-var supportedTypes = map[string]func(
-	db.DB,
-	conf.SyncOpenStackConfig,
-	sync.Monitor,
-) Syncer{
-	"server":     newSyncerOfType[Server, ServerList],
-	"hypervisor": newSyncerOfType[Hypervisor, HypervisorList],
-}
-
 type CombinedSyncer struct {
 	Syncers  []Syncer
 	Keystone KeystoneAPI
