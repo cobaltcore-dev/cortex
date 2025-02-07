@@ -9,18 +9,20 @@ import (
 )
 
 // Mixin that can be embedded in a step to provide some common tooling.
-type StepMixin[O any] struct {
+type BaseStep[Options any] struct {
 	DB      db.DB
-	Options O
+	Options Options
 }
 
-func (s *StepMixin[O]) Init(db db.DB, opts yaml.MapSlice) error {
+func (s *BaseStep[Options]) Init(db db.DB, opts yaml.MapSlice) error {
 	s.DB = db
 	return s.LoadOpts(opts)
 }
 
-// Get the base activations for all hosts in the scenario.
-func (s *StepMixin[O]) GetBaseActivations(scenario Scenario) map[string]float64 {
+// Get activations that will have no effect on the scenario, for all hosts.
+// This function can be used to first fill up the activations map and then
+// only apply changes for the hosts that are relevant.
+func (s *BaseStep[Options]) GetNoEffectActivations(scenario Scenario) map[string]float64 {
 	weights := make(map[string]float64)
 	for _, host := range scenario.GetHosts() {
 		// No change in weight (tanh(0.0) = 0.0).
@@ -30,12 +32,12 @@ func (s *StepMixin[O]) GetBaseActivations(scenario Scenario) map[string]float64 
 }
 
 // Set the options contained in the opts yaml map.
-func (s *StepMixin[O]) LoadOpts(opts yaml.MapSlice) error {
+func (s *BaseStep[Options]) LoadOpts(opts yaml.MapSlice) error {
 	bytes, err := yaml.Marshal(opts)
 	if err != nil {
 		return err
 	}
-	var o O
+	var o Options
 	if err := yaml.UnmarshalStrict(bytes, &o); err != nil {
 		return err
 	}

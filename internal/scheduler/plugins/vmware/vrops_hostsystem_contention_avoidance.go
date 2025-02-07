@@ -8,20 +8,21 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
+type vROpsAvoidContendedHostsStepOpts struct {
+	AvgCPUContentionThreshold float64 `yaml:"avgCPUContentionThreshold"`
+	MaxCPUContentionThreshold float64 `yaml:"maxCPUContentionThreshold"`
+	ActivationOnHit           float64 `yaml:"activationOnHit"`
+}
+
 type VROpsAvoidContendedHostsStep struct {
-	*plugins.StepMixin[struct {
-		AvgCPUContentionThreshold float64 `yaml:"avgCPUContentionThreshold"`
-		MaxCPUContentionThreshold float64 `yaml:"maxCPUContentionThreshold"`
-		ActivationOnHit           float64 `yaml:"activationOnHit"`
-	}]
+	plugins.BaseStep[vROpsAvoidContendedHostsStepOpts]
 }
 
 func (s *VROpsAvoidContendedHostsStep) GetName() string { return "vrops_avoid_contended_hosts" }
 
 // Downvote hosts that are highly contended.
 func (s *VROpsAvoidContendedHostsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
-	activations := s.GetBaseActivations(scenario)
-
+	activations := s.GetNoEffectActivations(scenario)
 	if !scenario.GetVMware() {
 		// Only run this step for VMware VMs.
 		return activations, nil

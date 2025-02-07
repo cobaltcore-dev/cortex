@@ -16,10 +16,10 @@ type TestStepOpts struct {
 }
 
 type TestStep struct {
-	*StepMixin[TestStepOpts]
+	*BaseStep[TestStepOpts]
 }
 
-func TestStepMixin_LoadOpts(t *testing.T) {
+func TestBaseStep_LoadOpts(t *testing.T) {
 	tests := []struct {
 		name string
 		opts yaml.MapSlice
@@ -32,7 +32,7 @@ func TestStepMixin_LoadOpts(t *testing.T) {
 				yaml.MapItem{Key: "floatOpt", Value: 3.14},
 			},
 			want: TestStep{
-				&StepMixin[TestStepOpts]{Options: TestStepOpts{
+				&BaseStep[TestStepOpts]{Options: TestStepOpts{
 					IntOpt:   42,
 					FloatOpt: 3.14,
 				}},
@@ -45,7 +45,7 @@ func TestStepMixin_LoadOpts(t *testing.T) {
 				yaml.MapItem{Key: "floatOpt", Value: 42},
 			},
 			want: TestStep{
-				&StepMixin[TestStepOpts]{Options: TestStepOpts{
+				&BaseStep[TestStepOpts]{Options: TestStepOpts{
 					IntOpt:   42,
 					FloatOpt: 42.0,
 				}},
@@ -55,7 +55,7 @@ func TestStepMixin_LoadOpts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := TestStep{&StepMixin[TestStepOpts]{}}
+			step := TestStep{&BaseStep[TestStepOpts]{}}
 			if err := step.LoadOpts(tt.opts); err != nil {
 				t.Errorf("LoadOpts() error = %v", err)
 				return

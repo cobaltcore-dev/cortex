@@ -8,11 +8,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
+type vROpsAntiAffinityNoisyProjectsStepOpts struct {
+	AvgCPUThreshold float64 `yaml:"avgCPUThreshold"`
+	ActivationOnHit float64 `yaml:"activationOnHit"`
+}
+
 type VROpsAntiAffinityNoisyProjectsStep struct {
-	*plugins.StepMixin[struct {
-		AvgCPUThreshold float64 `yaml:"avgCPUThreshold"`
-		ActivationOnHit float64 `yaml:"activationOnHit"`
-	}]
+	plugins.BaseStep[vROpsAntiAffinityNoisyProjectsStepOpts]
 }
 
 func (s *VROpsAntiAffinityNoisyProjectsStep) GetName() string {
@@ -21,13 +23,13 @@ func (s *VROpsAntiAffinityNoisyProjectsStep) GetName() string {
 
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *VROpsAntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
-	activations := s.GetBaseActivations(scenario)
-	projectID := scenario.GetProjectID()
-
+	activations := s.GetNoEffectActivations(scenario)
 	if !scenario.GetVMware() {
 		// Only run this step for VMware VMs.
 		return activations, nil
 	}
+
+	projectID := scenario.GetProjectID()
 
 	// If the average CPU usage is above the threshold, the project is considered noisy.
 	var noisyProjects []vmware.VROpsProjectNoisiness
