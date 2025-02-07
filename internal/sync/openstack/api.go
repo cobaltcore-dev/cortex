@@ -20,15 +20,17 @@ type ObjectAPI[M OpenStackModel, L OpenStackList] interface {
 }
 
 type objectAPI[M OpenStackModel, L OpenStackList] struct {
+	baseURL string
 	conf    conf.SyncOpenStackConfig
 	monitor sync.Monitor
 }
 
 func NewObjectAPI[M OpenStackModel, L OpenStackList](
-	conf conf.SyncOpenStackConfig, monitor sync.Monitor,
+	baseURL string, conf conf.SyncOpenStackConfig, monitor sync.Monitor,
 ) ObjectAPI[M, L] {
 
 	return &objectAPI[M, L]{
+		baseURL: baseURL,
 		conf:    conf,
 		monitor: monitor,
 	}
@@ -52,7 +54,7 @@ func (api *objectAPI[M, L]) list(auth KeystoneAuth, url *string) ([]M, error) {
 		defer timer.ObserveDuration()
 	}
 
-	var pageURL = auth.nova.URL + list.GetURL()
+	var pageURL = api.baseURL + "/" + list.GetURL()
 	if url != nil {
 		pageURL = *url
 	}

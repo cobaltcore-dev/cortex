@@ -146,9 +146,11 @@ conf:
         - server
 
       # Authentication/identity service URL for openstack.
-      # This service will also be used to get the list of OpenStack endpoints
-      # from where we will then fetch hypervisors, servers, ... if enabled.
       keystoneURL: https://path-to-keystone/v3
+      # Compute service URL for openstack.
+      novaURL: https://path-to-nova/v2.1
+      # Placement service URL for openstack.
+      placementURL: https://path-to-placement
       # Optional, only required if OpenStack is configured with SSO.
       sso: *sharedSSOCert
 

@@ -64,7 +64,7 @@ func TestSyncer_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	syncer := newSyncerOfType[MockTable, MockList](&mockDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
+	syncer := newNovaSyncerOfType[MockTable, MockList](&mockDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	syncer.Init()
 
 	// Verify the table was created

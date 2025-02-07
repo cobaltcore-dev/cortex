@@ -65,6 +65,11 @@ type SyncOpenStackConfig struct {
 
 	// URL to the OpenStack Keystone authentication endpoint.
 	KeystoneURL string `yaml:"keystoneURL"`
+	// URL to the OpenStack Nova API.
+	NovaURL string `yaml:"novaURL"`
+	// URL to the OpenStack Placement API.
+	PlacementURL string `yaml:"placementURL"`
+
 	// The SSO certificate to use. If none is given, we won't
 	// use SSO to connect to the openstack services.
 	SSO SSOConfig `yaml:"sso,omitempty"`

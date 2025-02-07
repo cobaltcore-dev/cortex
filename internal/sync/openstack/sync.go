@@ -85,7 +85,27 @@ type syncer[M OpenStackModel, L OpenStackList] struct {
 	monitor sync.Monitor
 }
 
+func newNovaSyncerOfType[M OpenStackModel, L OpenStackList](
+	db db.DB,
+	config conf.SyncOpenStackConfig,
+	monitor sync.Monitor,
+) Syncer {
+
+	return newSyncerOfType[M, L](config.NovaURL, db, config, monitor)
+}
+
+//nolint:unused
+func newPlacementSyncerOfType[M OpenStackModel, L OpenStackList](
+	db db.DB,
+	config conf.SyncOpenStackConfig,
+	monitor sync.Monitor,
+) Syncer {
+
+	return newSyncerOfType[M, L](config.PlacementURL, db, config, monitor)
+}
+
 func newSyncerOfType[M OpenStackModel, L OpenStackList](
+	baseURL string,
 	db db.DB,
 	config conf.SyncOpenStackConfig,
 	monitor sync.Monitor,
@@ -93,7 +113,7 @@ func newSyncerOfType[M OpenStackModel, L OpenStackList](
 
 	return &syncer[M, L]{
 		Config:  config,
-		API:     NewObjectAPI[M, L](config, monitor),
+		API:     NewObjectAPI[M, L](baseURL, config, monitor),
 		DB:      db,
 		monitor: monitor,
 	}

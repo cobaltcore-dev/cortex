@@ -28,19 +28,7 @@ func TestGetKeystoneAuth(t *testing.T) {
 			w.Header().Set("X-Subject-Token", "test_token")
 			w.WriteHeader(http.StatusCreated)
 			//nolint:errcheck
-			json.NewEncoder(w).Encode(AuthResponse{
-				TokenMetadata: AuthTokenMetadata{
-					Catalog: []Service{
-						{
-							Name: "nova",
-							Type: "compute",
-							Endpoints: []Endpoint{
-								{URL: "http://nova.url"},
-							},
-						},
-					},
-				},
-			})
+			json.NewEncoder(w).Encode(struct{}{}) // Don't care about the content
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -62,9 +50,6 @@ func TestGetKeystoneAuth(t *testing.T) {
 	// Verify the results
 	if auth.token != "test_token" {
 		t.Errorf("expected token to be %s, got %s", "test_token", auth.token)
-	}
-	if auth.nova.URL != "http://nova.url" {
-		t.Errorf("expected Nova URL to be %s, got %s", "http://nova.url", auth.nova.URL)
 	}
 }
 

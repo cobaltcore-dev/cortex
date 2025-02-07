@@ -7,10 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -54,26 +52,7 @@ type Project struct {
 	Domain Domain `json:"domain"`
 }
 
-type AuthResponse struct {
-	TokenMetadata AuthTokenMetadata `json:"token"`
-}
-
-type AuthTokenMetadata struct {
-	Catalog []Service `json:"catalog"`
-}
-
-type Service struct {
-	Name      string     `json:"name"`
-	Type      string     `json:"type"`
-	Endpoints []Endpoint `json:"endpoints"`
-}
-
-type Endpoint struct {
-	URL string `json:"url"`
-}
-
 type KeystoneAuth struct {
-	nova  Endpoint
 	token string // From the response header X-Subject-Token
 }
 
@@ -151,37 +130,8 @@ func (k *keystoneAPI) Authenticate() (*KeystoneAuth, error) {
 	if resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("failed to authenticate, status code: %d", resp.StatusCode)
 	}
-
-	var authResponse AuthResponse
-	err = json.NewDecoder(resp.Body).Decode(&authResponse)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode auth response: %w", err)
-	}
-
-	// Find the Nova endpoint
-	var novaEndpoint string
-	for _, service := range authResponse.TokenMetadata.Catalog {
-		if service.Type == "compute" {
-			for _, endpoint := range service.Endpoints {
-				// Skip endpoints that contain svc.kubernetes - those are
-				// not reachable from outside the cluster.
-				if strings.Contains(endpoint.URL, "svc.kubernetes") {
-					continue
-				}
-				novaEndpoint = endpoint.URL
-				break
-			}
-		}
-	}
-	if novaEndpoint == "" {
-		return nil, errors.New("failed to find Nova endpoint")
-	}
-
 	if k.monitor.PipelineRequestProcessedCounter != nil {
 		k.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_keystone").Inc()
 	}
-	return &KeystoneAuth{
-		nova:  Endpoint{URL: novaEndpoint},
-		token: resp.Header.Get("X-Subject-Token"),
-	}, nil
+	return &KeystoneAuth{token: resp.Header.Get("X-Subject-Token")}, nil
 }

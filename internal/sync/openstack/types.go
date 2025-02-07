@@ -17,8 +17,8 @@ var supportedTypes = map[string]func(
 	conf.SyncOpenStackConfig,
 	sync.Monitor,
 ) Syncer{
-	"server":     newSyncerOfType[Server, ServerList],
-	"hypervisor": newSyncerOfType[Hypervisor, HypervisorList],
+	"server":     newNovaSyncerOfType[Server, ServerList],
+	"hypervisor": newNovaSyncerOfType[Hypervisor, HypervisorList],
 }
 
 type PageLink struct {

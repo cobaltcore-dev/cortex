@@ -36,13 +36,10 @@ func TestGetServers(t *testing.T) {
 	defer server.Close()
 
 	auth := KeystoneAuth{
-		nova: Endpoint{
-			URL: server.URL + "/",
-		},
 		token: "test-token",
 	}
 
-	api := NewObjectAPI[Server, ServerList](conf.SyncOpenStackConfig{}, sync.Monitor{})
+	api := NewObjectAPI[Server, ServerList](server.URL, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	servers, err := api.List(auth)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -83,13 +80,10 @@ func TestGetHypervisors(t *testing.T) {
 	defer server.Close()
 
 	auth := KeystoneAuth{
-		nova: Endpoint{
-			URL: server.URL + "/",
-		},
 		token: "test-token",
 	}
 
-	api := NewObjectAPI[Hypervisor, HypervisorList](conf.SyncOpenStackConfig{}, sync.Monitor{})
+	api := NewObjectAPI[Hypervisor, HypervisorList](server.URL, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	hypervisors, err := api.List(auth)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
