@@ -6,8 +6,7 @@ package vmware
 import (
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/go-pg/pg/v10/orm"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 )
 
 type ResolvedVROpsHostsystem struct {
@@ -18,21 +17,11 @@ type ResolvedVROpsHostsystem struct {
 }
 
 type VROpsHostsystemResolver struct {
-	DB db.DB
+	plugins.BaseExtractor[ResolvedVROpsHostsystem, struct{}]
 }
 
 func (e *VROpsHostsystemResolver) GetName() string {
 	return "vrops_hostsystem_resolver"
-}
-
-func (e *VROpsHostsystemResolver) Init(db db.DB, opts map[string]any) error {
-	e.DB = db
-	if err := e.DB.Get().Model((*ResolvedVROpsHostsystem)(nil)).CreateTable(&orm.CreateTableOptions{
-		IfNotExists: true,
-	}); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Resolve vROps hostsystems to Nova compute hosts.

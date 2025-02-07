@@ -6,8 +6,7 @@ package vmware
 import (
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/go-pg/pg/v10/orm"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 )
 
 type VROpsProjectNoisiness struct {
@@ -19,21 +18,11 @@ type VROpsProjectNoisiness struct {
 }
 
 type VROpsProjectNoisinessExtractor struct {
-	DB db.DB
+	plugins.BaseExtractor[VROpsProjectNoisiness, struct{}]
 }
 
 func (e *VROpsProjectNoisinessExtractor) GetName() string {
 	return "vrops_project_noisiness_extractor"
-}
-
-func (e *VROpsProjectNoisinessExtractor) Init(db db.DB, opts map[string]any) error {
-	e.DB = db
-	if err := e.DB.Get().Model((*VROpsProjectNoisiness)(nil)).CreateTable(&orm.CreateTableOptions{
-		IfNotExists: true,
-	}); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Extract the noisiness for each project in OpenStack with the following steps:

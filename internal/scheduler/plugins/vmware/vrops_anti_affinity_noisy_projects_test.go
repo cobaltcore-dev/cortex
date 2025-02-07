@@ -11,6 +11,7 @@ import (
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 	"github.com/go-pg/pg/v10/orm"
+	"gopkg.in/yaml.v2"
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
@@ -42,9 +43,9 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	opts := map[string]any{
-		"avgCPUThreshold": 20.0,
-		"activationOnHit": -1.0,
+	opts := yaml.MapSlice{
+		yaml.MapItem{Key: "avgCPUThreshold", Value: 20.0},
+		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
 	step := &VROpsAntiAffinityNoisyProjectsStep{}
 	if err := step.Init(&mockDB, opts); err != nil {
@@ -57,9 +58,24 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		downvotedHosts map[string]struct{}
 	}{
 		{
+			name: "Non-vmware vm",
+			scenario: &testlibPlugins.MockScenario{
+				ProjectID: "project1",
+				VMware:    false,
+				Hosts: []testlibPlugins.MockScenarioHost{
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
+					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
+					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
+				},
+			},
+			// Should not do anything
+			downvotedHosts: map[string]struct{}{},
+		},
+		{
 			name: "Noisy project",
 			scenario: &testlibPlugins.MockScenario{
 				ProjectID: "project1",
+				VMware:    true,
 				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
@@ -75,6 +91,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 			name: "Non-noisy project",
 			scenario: &testlibPlugins.MockScenario{
 				ProjectID: "project2",
+				VMware:    true,
 				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
@@ -87,6 +104,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 			name: "No noisy project data",
 			scenario: &testlibPlugins.MockScenario{
 				ProjectID: "project3",
+				VMware:    true,
 				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},

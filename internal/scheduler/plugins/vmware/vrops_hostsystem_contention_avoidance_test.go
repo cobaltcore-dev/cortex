@@ -11,6 +11,7 @@ import (
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 	"github.com/go-pg/pg/v10/orm"
+	"gopkg.in/yaml.v2"
 )
 
 func TestAvoidContendedHostsStep_Run(t *testing.T) {
@@ -44,12 +45,12 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := map[string]any{
-		"avgCPUContentionThreshold": 10.0,
-		"maxCPUContentionThreshold": 20.0,
-		"activationOnHit":           -1.0,
+	opts := yaml.MapSlice{
+		yaml.MapItem{Key: "avgCPUContentionThreshold", Value: 10.0},
+		yaml.MapItem{Key: "maxCPUContentionThreshold", Value: 20.0},
+		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
-	step := &AvoidContendedHostsStep{}
+	step := &VROpsAvoidContendedHostsStep{}
 	if err := step.Init(&mockDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -60,8 +61,22 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		downvotedHosts map[string]struct{}
 	}{
 		{
+			name: "Non-vmware vm",
+			scenario: &testlibPlugins.MockScenario{
+				VMware: false,
+				Hosts: []testlibPlugins.MockScenarioHost{
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
+					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
+					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
+				},
+			},
+			// Should not do anything
+			downvotedHosts: map[string]struct{}{},
+		},
+		{
 			name: "Avoid contended hosts",
 			scenario: &testlibPlugins.MockScenario{
+				VMware: true,
 				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
@@ -76,6 +91,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		{
 			name: "No contended hosts",
 			scenario: &testlibPlugins.MockScenario{
+				VMware: true,
 				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host4", HypervisorHostname: "hypervisor4"},
 					{ComputeHost: "host5", HypervisorHostname: "hypervisor5"},

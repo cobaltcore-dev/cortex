@@ -6,8 +6,7 @@ package vmware
 import (
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/go-pg/pg/v10/orm"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 )
 
 type VROpsHostsystemContention struct {
@@ -19,21 +18,11 @@ type VROpsHostsystemContention struct {
 }
 
 type VROpsHostsystemContentionExtractor struct {
-	DB db.DB
+	plugins.BaseExtractor[VROpsHostsystemContention, struct{}]
 }
 
 func (e *VROpsHostsystemContentionExtractor) GetName() string {
 	return "vrops_hostsystem_contention_extractor"
-}
-
-func (e *VROpsHostsystemContentionExtractor) Init(db db.DB, opts map[string]any) error {
-	e.DB = db
-	if err := e.DB.Get().Model((*VROpsHostsystemContention)(nil)).CreateTable(&orm.CreateTableOptions{
-		IfNotExists: true,
-	}); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Extract CPU contention of hostsystems.

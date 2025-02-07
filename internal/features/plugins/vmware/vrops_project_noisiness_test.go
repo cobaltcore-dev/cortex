@@ -18,7 +18,7 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 	defer mockDB.Close()
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
+	if err := extractor.Init(&mockDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	// Will fail when the table does not exist
@@ -80,7 +80,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
+	if err := extractor.Init(&mockDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := extractor.Extract(); err != nil {

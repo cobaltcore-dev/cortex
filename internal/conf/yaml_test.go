@@ -6,6 +6,8 @@ package conf
 import (
 	"os"
 	"testing"
+
+	"gopkg.in/yaml.v2"
 )
 
 func createTempConfigFile(t *testing.T, content string) string {
@@ -81,10 +83,19 @@ scheduler:
 	if len(schedulerConfig.Steps) != 2 {
 		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Steps))
 	}
-	if schedulerConfig.Steps[0].Options["avgCPUThreshold"] != 20 {
-		t.Errorf("Expected avgCPUThreshold to be 20, got %v", schedulerConfig.Steps[0].Options["avgCPUThreshold"])
+	var decodedContent map[string]any
+	if err := yaml.Unmarshal([]byte(content), &decodedContent); err != nil {
+		t.Fatalf("Failed to unmarshal YAML content: %v", err)
 	}
-	if schedulerConfig.Steps[1].Options["maxCPUContentionThreshold"] != 50 {
-		t.Errorf("Expected maxCPUContentionThreshold to be 50, got %v", schedulerConfig.Steps[1].Options["maxCPUContentionThreshold"])
+
+	schedulerSteps := decodedContent["scheduler"].(map[any]any)["steps"].([]any)
+	step1Options := schedulerSteps[0].(map[any]any)["options"].(map[any]any)
+	step2Options := schedulerSteps[1].(map[any]any)["options"].(map[any]any)
+
+	if step1Options["avgCPUThreshold"] != 20 {
+		t.Errorf("Expected avgCPUThreshold to be 20, got %v", step1Options["avgCPUThreshold"])
+	}
+	if step2Options["maxCPUContentionThreshold"] != 50 {
+		t.Errorf("Expected maxCPUContentionThreshold to be 50, got %v", step2Options["maxCPUContentionThreshold"])
 	}
 }

@@ -4,64 +4,40 @@
 package vmware
 
 import (
-	"errors"
-
-	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
+type vROpsAntiAffinityNoisyProjectsStepOpts struct {
+	AvgCPUThreshold float64 `yaml:"avgCPUThreshold"`
+	ActivationOnHit float64 `yaml:"activationOnHit"`
+}
+
 type VROpsAntiAffinityNoisyProjectsStep struct {
-	DB              db.DB
-	AvgCPUThreshold float64
-	ActivationOnHit float64
+	plugins.BaseStep[vROpsAntiAffinityNoisyProjectsStepOpts]
 }
 
 func (s *VROpsAntiAffinityNoisyProjectsStep) GetName() string {
 	return "vrops_anti_affinity_noisy_projects"
 }
 
-func (s *VROpsAntiAffinityNoisyProjectsStep) Init(db db.DB, opts map[string]any) error {
-	s.DB = db
-
-	avgCPUThreshold, ok := opts["avgCPUThreshold"]
-	if !ok {
-		return errors.New("missing avgCPUThreshold")
-	}
-	if avgCPUThresholdInt, okInt := avgCPUThreshold.(int); okInt {
-		avgCPUThreshold = float64(avgCPUThresholdInt)
-	}
-	s.AvgCPUThreshold = avgCPUThreshold.(float64)
-
-	activationOnHit, ok := opts["activationOnHit"]
-	if !ok {
-		return errors.New("missing activationOnHit")
-	}
-	if activationOnHitInt, okInt := activationOnHit.(int); okInt {
-		activationOnHit = float64(activationOnHitInt)
-	}
-	s.ActivationOnHit = activationOnHit.(float64)
-
-	return nil
-}
-
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *VROpsAntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
+	activations := s.GetNoEffectActivations(scenario)
+	if !scenario.GetVMware() {
+		// Only run this step for VMware VMs.
+		return activations, nil
+	}
+
 	projectID := scenario.GetProjectID()
 
 	// If the average CPU usage is above the threshold, the project is considered noisy.
 	var noisyProjects []vmware.VROpsProjectNoisiness
 	if err := s.DB.Get().Model(&noisyProjects).
-		Where("avg_cpu_of_project > ?", s.AvgCPUThreshold).
+		Where("avg_cpu_of_project > ?", s.Options.AvgCPUThreshold).
 		Where("project = ?", projectID).
 		Select(); err != nil {
 		return nil, err
-	}
-
-	weights := make(map[string]float64)
-	for _, host := range scenario.GetHosts() {
-		// No change in weight (tanh(0.0) = 0.0).
-		weights[host.GetComputeHost()] = 0.0
 	}
 
 	// Get the hosts we need to push the VM away from.
@@ -72,14 +48,14 @@ func (s *VROpsAntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map
 	hostnames, ok := hostsByProject[projectID]
 	if !ok {
 		// No noisy project, nothing to do.
-		return weights, nil
+		return activations, nil
 	}
 	// Downvote the hosts this project is currently running on.
 	for _, host := range hostnames {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := weights[host]; ok {
-			weights[host] = s.ActivationOnHit
+		if _, ok := activations[host]; ok {
+			activations[host] = s.Options.ActivationOnHit
 		}
 	}
-	return weights, nil
+	return activations, nil
 }

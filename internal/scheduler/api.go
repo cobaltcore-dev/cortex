@@ -109,18 +109,6 @@ func (api *externalSchedulingAPI) GetNovaExternalSchedulerURL() string {
 // Check if the scheduler can run based on the request data.
 // Note: messages returned here are user-facing and should not contain internal details.
 func (api *externalSchedulingAPI) canRunScheduler(requestData APINovaExternalSchedulerRequest) (ok bool, reason string) {
-	if requestData.Rebuild {
-		return false, "rebuild is not supported yet"
-	}
-	if requestData.Spec.Data.NInstances > 1 {
-		return false, "only one instance is supported so far"
-	}
-	if requestData.Live {
-		return false, "live migration is not supported yet"
-	}
-	if !requestData.VMware {
-		return false, "non-vmware VMs are not supported yet"
-	}
 	// Check that all hosts have a weight.
 	for _, host := range requestData.Hosts {
 		if _, ok := requestData.Weights[host.ComputeHost]; !ok {

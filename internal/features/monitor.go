@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
+	"gopkg.in/yaml.v2"
 )
 
 type Monitor struct {
@@ -50,7 +51,7 @@ func (m FeatureExtractorMonitor[F]) GetName() string {
 	return m.FeatureExtractor.GetName()
 }
 
-func (m FeatureExtractorMonitor[F]) Init(db db.DB, opts map[string]any) error {
+func (m FeatureExtractorMonitor[F]) Init(db db.DB, opts yaml.MapSlice) error {
 	// Configure the wrapped feature extractor.
 	return m.FeatureExtractor.Init(db, opts)
 }

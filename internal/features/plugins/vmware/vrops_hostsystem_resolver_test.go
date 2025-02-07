@@ -18,7 +18,7 @@ func TestVROpsHostsystemResolver_Init(t *testing.T) {
 	defer mockDB.Close()
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
+	if err := extractor.Init(&mockDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -82,7 +82,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(&mockDB, map[string]any{}); err != nil {
+	if err := extractor.Init(&mockDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := extractor.Extract(); err != nil {

@@ -21,7 +21,7 @@ import (
 // The steps used by the scheduler are defined through the configuration file.
 var supportedSteps = []plugins.Step{
 	&vmware.VROpsAntiAffinityNoisyProjectsStep{},
-	&vmware.AvoidContendedHostsStep{},
+	&vmware.VROpsAvoidContendedHostsStep{},
 }
 
 type Pipeline interface {
@@ -32,7 +32,7 @@ type pipeline struct {
 	// The parallelizable order in which scheduler steps are executed.
 	executionOrder [][]plugins.Step
 	// The order in which scheduler steps are applied, by their step name.
-	weightApplicationOrder []string
+	applicationOrder []string
 
 	monitor Monitor
 }
@@ -46,7 +46,7 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 
 	// Load all steps from the configuration.
 	steps := []plugins.Step{}
-	weightApplicationOrder := []string{}
+	applicationOrder := []string{}
 	for _, stepConfig := range config.Steps {
 		step, ok := supportedStepsByName[stepConfig.Name]
 		if !ok {
@@ -57,7 +57,7 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 			panic("failed to initialize pipeline step: " + err.Error())
 		}
 		steps = append(steps, wrappedStep)
-		weightApplicationOrder = append(weightApplicationOrder, stepConfig.Name)
+		applicationOrder = append(applicationOrder, stepConfig.Name)
 		slog.Info(
 			"scheduler: added step",
 			"name", stepConfig.Name,
@@ -67,9 +67,9 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 
 	return &pipeline{
 		// All steps can be run in parallel.
-		executionOrder:         [][]plugins.Step{steps},
-		weightApplicationOrder: weightApplicationOrder,
-		monitor:                monitor,
+		executionOrder:   [][]plugins.Step{steps},
+		applicationOrder: applicationOrder,
+		monitor:          monitor,
 	}
 }
 
@@ -80,19 +80,19 @@ func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64
 	}
 
 	// Execute the scheduler steps in groups of the execution order.
-	var weightsByStep sync.Map
+	var activationsByStep sync.Map
 	for _, steps := range p.executionOrder {
 		var wg sync.WaitGroup
 		for _, step := range steps {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				weights, err := step.Run(scenario)
+				activations, err := step.Run(scenario)
 				if err != nil {
 					slog.Error("scheduler: failed to run step", "error", err)
 					return
 				}
-				weightsByStep.Store(step.GetName(), weights)
+				activationsByStep.Store(step.GetName(), activations)
 			}()
 		}
 		wg.Wait()
@@ -107,21 +107,21 @@ func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64
 		outWeights[hostname] = math.Tanh(weight)
 	}
 
-	// Apply all weights in the strict order defined by the configuration.
-	for _, stepName := range p.weightApplicationOrder {
-		stepWeights, ok := weightsByStep.Load(stepName)
+	// Apply all activations in the strict order defined by the configuration.
+	for _, stepName := range p.applicationOrder {
+		stepActivations, ok := activationsByStep.Load(stepName)
 		if !ok {
-			slog.Error("scheduler: missing weights for step", "name", stepName)
+			slog.Error("scheduler: missing activations for step", "name", stepName)
 			continue
 		}
-		stepWeightsMap := stepWeights.(map[string]float64)
+		stepActivationsMap := stepActivations.(map[string]float64)
 		for host, prevWeight := range outWeights {
 			// Remove hosts that are not in the weights map.
-			if _, ok := stepWeightsMap[host]; !ok {
+			if _, ok := stepActivationsMap[host]; !ok {
 				delete(outWeights, host)
 			} else {
-				// Apply the weight from the step.
-				outWeights[host] = prevWeight + math.Tanh(stepWeightsMap[host])
+				// Apply the activation from the step.
+				outWeights[host] = prevWeight + math.Tanh(stepActivationsMap[host])
 			}
 		}
 	}
