@@ -142,8 +142,11 @@ conf:
     openstack:
       # OpenStack objects to sync into the database.
       types:
-        - hypervisor
-        - server
+        - nova_hypervisor
+        - nova_server
+        # Whether resource providers, traits, and aggregates should be synced.
+        # Currently we don't need this datasource, so it is disabled.
+        # - placement
 
       # Authentication/identity service URL for openstack.
       keystoneURL: https://path-to-keystone/v3
@@ -181,8 +184,8 @@ conf:
                 - vrops_virtualmachine_cpu_demand_ratio
             openstack:
               types:
-                - hypervisor
-                - server
+                - nova_hypervisor
+                - nova_server
       - name: vrops_project_noisiness_extractor
         dependencies:
           sync:
@@ -191,8 +194,8 @@ conf:
                 - vrops_virtualmachine_cpu_demand_ratio
             openstack:
               types:
-                - hypervisor
-                - server
+                - nova_hypervisor
+                - nova_server
       - name: vrops_hostsystem_contention_extractor
         dependencies:
           features:

@@ -11,11 +11,11 @@ import (
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
-type MockObjectsAPI[M OpenStackModel, L OpenStackList] struct {
+type MockNovaAPI[M NovaModel, L NovaList] struct {
 	list []M
 }
 
-func (m *MockObjectsAPI[M, L]) List(auth KeystoneAuth) ([]M, error) {
+func (m *MockNovaAPI[M, L]) List(auth KeystoneAuth) ([]M, error) {
 	return m.list, nil
 }
 
@@ -64,7 +64,7 @@ func TestSyncer_Init(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	syncer := newNovaSyncerOfType[MockTable, MockList](&mockDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
+	syncer := newNovaSyncer[MockTable, MockList](&mockDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	syncer.Init()
 
 	// Verify the table was created
@@ -78,8 +78,8 @@ func TestSyncer_Sync(t *testing.T) {
 	mockDB.Init()
 	defer mockDB.Close()
 
-	syncer := &syncer[MockTable, MockList]{
-		API: &MockObjectsAPI[MockTable, MockList]{list: []MockTable{
+	syncer := &novaSyncer[MockTable, MockList]{
+		API: &MockNovaAPI[MockTable, MockList]{list: []MockTable{
 			{ID: "1", Val: "Test"}, {ID: "2", Val: "Test2"},
 		}},
 		DB: &mockDB,

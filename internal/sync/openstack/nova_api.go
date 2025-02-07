@@ -15,22 +15,20 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type ObjectAPI[M OpenStackModel, L OpenStackList] interface {
+type NovaAPI[M NovaModel, L NovaList] interface {
 	List(auth KeystoneAuth) ([]M, error)
 }
 
-type objectAPI[M OpenStackModel, L OpenStackList] struct {
-	baseURL string
+type novaAPI[M NovaModel, L NovaList] struct {
 	conf    conf.SyncOpenStackConfig
 	monitor sync.Monitor
 }
 
-func NewObjectAPI[M OpenStackModel, L OpenStackList](
-	baseURL string, conf conf.SyncOpenStackConfig, monitor sync.Monitor,
-) ObjectAPI[M, L] {
+func NewNovaAPI[M NovaModel, L NovaList](
+	conf conf.SyncOpenStackConfig, monitor sync.Monitor,
+) NovaAPI[M, L] {
 
-	return &objectAPI[M, L]{
-		baseURL: baseURL,
+	return &novaAPI[M, L]{
 		conf:    conf,
 		monitor: monitor,
 	}
@@ -39,12 +37,12 @@ func NewObjectAPI[M OpenStackModel, L OpenStackList](
 // List returns a list of models from the OpenStack Nova API.
 // Note that this function may make multiple requests in case the returned
 // data has multiple pages.
-func (api *objectAPI[M, L]) List(auth KeystoneAuth) ([]M, error) {
+func (api *novaAPI[M, L]) List(auth KeystoneAuth) ([]M, error) {
 	return api.list(auth, nil)
 }
 
-// List a objectAPI page. If nil is given, the first page is returned.
-func (api *objectAPI[M, L]) list(auth KeystoneAuth, url *string) ([]M, error) {
+// List a novaAPI page. If nil is given, the first page is returned.
+func (api *novaAPI[M, L]) list(auth KeystoneAuth, url *string) ([]M, error) {
 	var model M
 	var list L
 
@@ -54,7 +52,7 @@ func (api *objectAPI[M, L]) list(auth KeystoneAuth, url *string) ([]M, error) {
 		defer timer.ObserveDuration()
 	}
 
-	var pageURL = api.baseURL + "/" + list.GetURL()
+	var pageURL = api.conf.NovaURL + "/" + list.GetURL()
 	if url != nil {
 		pageURL = *url
 	}

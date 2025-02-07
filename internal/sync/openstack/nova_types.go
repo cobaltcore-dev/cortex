@@ -5,28 +5,14 @@ package openstack
 
 import (
 	"encoding/json"
-
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync"
 )
-
-// List of supported openstack object types.
-var supportedTypes = map[string]func(
-	db.DB,
-	conf.SyncOpenStackConfig,
-	sync.Monitor,
-) Syncer{
-	"server":     newNovaSyncerOfType[Server, ServerList],
-	"hypervisor": newNovaSyncerOfType[Hypervisor, HypervisorList],
-}
 
 type PageLink struct {
 	Href string `json:"href"`
 	Rel  string `json:"rel"`
 }
 
-type OpenStackList interface {
+type NovaList interface {
 	GetURL() string
 	GetLinks() *[]PageLink
 	GetModels() any
@@ -54,7 +40,7 @@ func (h HypervisorList) GetURL() string        { return "os-hypervisors/detail" 
 func (h HypervisorList) GetLinks() *[]PageLink { return h.HypervisorsLinks }
 func (h HypervisorList) GetModels() any        { return h.Hypervisors }
 
-type OpenStackModel interface {
+type NovaModel interface {
 	// GetName returns the name of the OpenStack model.
 	GetName() string
 	// Get the primary key of the model.
