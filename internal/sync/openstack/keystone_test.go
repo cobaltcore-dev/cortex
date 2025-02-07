@@ -28,13 +28,13 @@ func TestGetKeystoneAuth(t *testing.T) {
 			w.Header().Set("X-Subject-Token", "test_token")
 			w.WriteHeader(http.StatusCreated)
 			//nolint:errcheck
-			json.NewEncoder(w).Encode(openStackAuthResponse{
-				TokenMetadata: openStackAuthTokenMetadata{
-					Catalog: []openStackService{
+			json.NewEncoder(w).Encode(AuthResponse{
+				TokenMetadata: AuthTokenMetadata{
+					Catalog: []Service{
 						{
 							Name: "nova",
 							Type: "compute",
-							Endpoints: []openStackEndpoint{
+							Endpoints: []Endpoint{
 								{URL: "http://nova.url"},
 							},
 						},

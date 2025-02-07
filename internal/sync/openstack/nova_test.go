@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 )
 
@@ -19,8 +20,8 @@ func TestGetServers(t *testing.T) {
 		if r.URL.Path == "/servers/detail" && r.Method == http.MethodGet {
 			w.WriteHeader(http.StatusOK)
 			//nolint:errcheck
-			json.NewEncoder(w).Encode(openStackServerList{
-				Servers: []OpenStackServer{
+			json.NewEncoder(w).Encode(ServerList{
+				Servers: []Server{
 					{
 						ID:   "server1",
 						Name: "test-server",
@@ -35,28 +36,28 @@ func TestGetServers(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	auth := openStackKeystoneAuth{
-		nova: openStackEndpoint{
+	auth := KeystoneAuth{
+		nova: Endpoint{
 			URL: server.URL + "/",
 		},
 		token: "test-token",
 	}
 
-	api := NewServerAPI(sync.Monitor{})
-	servers, err := api.Get(auth, nil)
+	api := NewObjectAPI[Server, ServerList](conf.SyncOpenStackConfig{}, sync.Monitor{})
+	servers, err := api.List(auth)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the results
-	if len(servers.Servers) != 1 {
-		t.Errorf("expected 1 server, got %d", len(servers.Servers))
+	if len(servers) != 1 {
+		t.Errorf("expected 1 server, got %d", len(servers))
 	}
-	if servers.Servers[0].ID != "server1" {
-		t.Errorf("expected server ID to be %s, got %s", "server1", servers.Servers[0].ID)
+	if servers[0].ID != "server1" {
+		t.Errorf("expected server ID to be %s, got %s", "server1", servers[0].ID)
 	}
-	if servers.Servers[0].Name != "test-server" {
-		t.Errorf("expected server name to be %s, got %s", "test-server", servers.Servers[0].Name)
+	if servers[0].Name != "test-server" {
+		t.Errorf("expected server name to be %s, got %s", "test-server", servers[0].Name)
 	}
 }
 
@@ -66,8 +67,8 @@ func TestGetHypervisors(t *testing.T) {
 		if r.URL.Path == "/os-hypervisors/detail" && r.Method == http.MethodGet {
 			w.WriteHeader(http.StatusOK)
 			//nolint:errcheck
-			json.NewEncoder(w).Encode(openStackHypervisorList{
-				Hypervisors: []OpenStackHypervisor{
+			json.NewEncoder(w).Encode(HypervisorList{
+				Hypervisors: []Hypervisor{
 					{
 						ID:       1,
 						Hostname: "test-hypervisor",
@@ -82,28 +83,28 @@ func TestGetHypervisors(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	auth := openStackKeystoneAuth{
-		nova: openStackEndpoint{
+	auth := KeystoneAuth{
+		nova: Endpoint{
 			URL: server.URL + "/",
 		},
 		token: "test-token",
 	}
 
-	api := NewHypervisorAPI(sync.Monitor{})
-	hypervisors, err := api.Get(auth, nil)
+	api := NewObjectAPI[Hypervisor, HypervisorList](conf.SyncOpenStackConfig{}, sync.Monitor{})
+	hypervisors, err := api.List(auth)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the results
-	if len(hypervisors.Hypervisors) != 1 {
-		t.Errorf("expected 1 hypervisor, got %d", len(hypervisors.Hypervisors))
+	if len(hypervisors) != 1 {
+		t.Errorf("expected 1 hypervisor, got %d", len(hypervisors))
 	}
-	if hypervisors.Hypervisors[0].ID != 1 {
-		t.Errorf("expected hypervisor ID to be %d, got %d", 1, hypervisors.Hypervisors[0].ID)
+	if hypervisors[0].ID != 1 {
+		t.Errorf("expected hypervisor ID to be %d, got %d", 1, hypervisors[0].ID)
 	}
-	if hypervisors.Hypervisors[0].Hostname != "test-hypervisor" {
-		t.Errorf("expected hypervisor hostname to be %s, got %s", "test-hypervisor", hypervisors.Hypervisors[0].Hostname)
+	if hypervisors[0].Hostname != "test-hypervisor" {
+		t.Errorf("expected hypervisor hostname to be %s, got %s", "test-hypervisor", hypervisors[0].Hostname)
 	}
 }
 
@@ -123,7 +124,7 @@ func TestUnmarshalOpenStackHypervisor(t *testing.T) {
         }
     }`)
 
-	var hypervisor OpenStackHypervisor
+	var hypervisor Hypervisor
 	err := json.Unmarshal(data, &hypervisor)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -148,7 +149,7 @@ func TestUnmarshalOpenStackHypervisor(t *testing.T) {
 
 func TestMarshalOpenStackHypervisor(t *testing.T) {
 	disabledReason := "maintenance"
-	hypervisor := OpenStackHypervisor{
+	hypervisor := Hypervisor{
 		ID:                    1,
 		Hostname:              "test-hypervisor",
 		State:                 "up",

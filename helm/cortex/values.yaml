@@ -140,10 +140,11 @@ conf:
           prometheusName: vrops_prometheus
 
     openstack:
-      # Whether openstack hypervisors should be synced into the database.
-      hypervisors: true
-      # Whether openstack servers should be synced into the database.
-      servers: true
+      # OpenStack objects to sync into the database.
+      types:
+        - hypervisor
+        - server
+
       # Authentication/identity service URL for openstack.
       # This service will also be used to get the list of OpenStack endpoints
       # from where we will then fetch hypervisors, servers, ... if enabled.
@@ -177,8 +178,9 @@ conf:
                 # Any vrops vm metric suffices.
                 - vrops_virtualmachine_cpu_demand_ratio
             openstack:
-              hypervisors: true
-              servers: true
+              types:
+                - hypervisor
+                - server
       - name: vrops_project_noisiness_extractor
         dependencies:
           sync:
@@ -186,8 +188,9 @@ conf:
               metrics:
                 - vrops_virtualmachine_cpu_demand_ratio
             openstack:
-              hypervisors: true
-              servers: true
+              types:
+                - hypervisor
+                - server
       - name: vrops_hostsystem_contention_extractor
         dependencies:
           features:

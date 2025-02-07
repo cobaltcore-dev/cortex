@@ -17,68 +17,68 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type openStackAuthRequest struct {
-	Auth openStackAuth `json:"auth"`
+type AuthRequest struct {
+	Auth Auth `json:"auth"`
 }
 
-type openStackAuth struct {
-	Identity openStackIdentity `json:"identity"`
-	Scope    openStackScope    `json:"scope"`
+type Auth struct {
+	Identity Identity `json:"identity"`
+	Scope    Scope    `json:"scope"`
 }
 
-type openStackIdentity struct {
-	Methods  []string          `json:"methods"`
-	Password openStackPassword `json:"password"`
+type Identity struct {
+	Methods  []string `json:"methods"`
+	Password Password `json:"password"`
 }
 
-type openStackPassword struct {
-	User openStackUser `json:"user"`
+type Password struct {
+	User User `json:"user"`
 }
 
-type openStackUser struct {
-	Name     string          `json:"name"`
-	Domain   openStackDomain `json:"domain"`
-	Password string          `json:"password"`
+type User struct {
+	Name     string `json:"name"`
+	Domain   Domain `json:"domain"`
+	Password string `json:"password"`
 }
 
-type openStackDomain struct {
+type Domain struct {
 	Name string `json:"name"`
 }
 
-type openStackScope struct {
-	Project openStackProject `json:"project"`
+type Scope struct {
+	Project Project `json:"project"`
 }
 
-type openStackProject struct {
-	Name   string          `json:"name"`
-	Domain openStackDomain `json:"domain"`
+type Project struct {
+	Name   string `json:"name"`
+	Domain Domain `json:"domain"`
 }
 
-type openStackAuthResponse struct {
-	TokenMetadata openStackAuthTokenMetadata `json:"token"`
+type AuthResponse struct {
+	TokenMetadata AuthTokenMetadata `json:"token"`
 }
 
-type openStackAuthTokenMetadata struct {
-	Catalog []openStackService `json:"catalog"`
+type AuthTokenMetadata struct {
+	Catalog []Service `json:"catalog"`
 }
 
-type openStackService struct {
-	Name      string              `json:"name"`
-	Type      string              `json:"type"`
-	Endpoints []openStackEndpoint `json:"endpoints"`
+type Service struct {
+	Name      string     `json:"name"`
+	Type      string     `json:"type"`
+	Endpoints []Endpoint `json:"endpoints"`
 }
 
-type openStackEndpoint struct {
+type Endpoint struct {
 	URL string `json:"url"`
 }
 
-type openStackKeystoneAuth struct {
-	nova  openStackEndpoint
+type KeystoneAuth struct {
+	nova  Endpoint
 	token string // From the response header X-Subject-Token
 }
 
 type KeystoneAPI interface {
-	Authenticate() (*openStackKeystoneAuth, error)
+	Authenticate() (*KeystoneAuth, error)
 }
 
 type keystoneAPI struct {
@@ -96,29 +96,29 @@ func NewKeystoneAPI(conf conf.SyncOpenStackConfig, monitor sync.Monitor) Keyston
 // Authenticate authenticates against the OpenStack Identity service (Keystone).
 // This uses the configured OpenStack credentials to obtain an authentication token.
 // We also extract URLs to the required services (e.g. Nova) from the response.
-func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
+func (k *keystoneAPI) Authenticate() (*KeystoneAuth, error) {
 	if k.monitor.PipelineRequestTimer != nil {
 		hist := k.monitor.PipelineRequestTimer.WithLabelValues("openstack_keystone")
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 
-	authRequest := openStackAuthRequest{
-		Auth: openStackAuth{
-			Identity: openStackIdentity{
+	authRequest := AuthRequest{
+		Auth: Auth{
+			Identity: Identity{
 				Methods: []string{"password"},
-				Password: openStackPassword{
-					User: openStackUser{
+				Password: Password{
+					User: User{
 						Name:     k.conf.OSUsername,
-						Domain:   openStackDomain{Name: k.conf.OSUserDomainName},
+						Domain:   Domain{Name: k.conf.OSUserDomainName},
 						Password: k.conf.OSPassword,
 					},
 				},
 			},
-			Scope: openStackScope{
-				Project: openStackProject{
+			Scope: Scope{
+				Project: Project{
 					Name:   k.conf.OSProjectName,
-					Domain: openStackDomain{Name: k.conf.OSProjectDomainName},
+					Domain: Domain{Name: k.conf.OSProjectDomainName},
 				},
 			},
 		},
@@ -152,7 +152,7 @@ func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 		return nil, fmt.Errorf("failed to authenticate, status code: %d", resp.StatusCode)
 	}
 
-	var authResponse openStackAuthResponse
+	var authResponse AuthResponse
 	err = json.NewDecoder(resp.Body).Decode(&authResponse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode auth response: %w", err)
@@ -180,8 +180,8 @@ func (k *keystoneAPI) Authenticate() (*openStackKeystoneAuth, error) {
 	if k.monitor.PipelineRequestProcessedCounter != nil {
 		k.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_keystone").Inc()
 	}
-	return &openStackKeystoneAuth{
-		nova:  openStackEndpoint{URL: novaEndpoint},
+	return &KeystoneAuth{
+		nova:  Endpoint{URL: novaEndpoint},
 		token: resp.Header.Get("X-Subject-Token"),
 	}, nil
 }
