@@ -114,28 +114,19 @@ func (s *syncer[M, L]) Sync(auth KeystoneAuth) error {
 	tx, err := s.DB.Get().Begin()
 	if err != nil {
 		slog.Error("failed to begin transaction", "error", err)
-		return err
+		return tx.Rollback()
 	}
-	defer func() {
-		if err == nil {
-			return
-		}
-		if err := tx.Rollback(); err != nil {
-			// Don't log if the transaction has been committed
-			slog.Error("failed to rollback transaction", "error", err)
-		}
-	}()
 
 	if _, err = tx.Model(&model).Where("TRUE").Delete(); err != nil {
 		slog.Error("failed to delete old servers", "error", err)
-		return err
+		return tx.Rollback()
 	}
 	modelName := model.GetName()
 	var list []M
 	list, err = s.API.List(auth)
 	if err != nil {
 		slog.Error("failed to get object list", "model", modelName, "error", err)
-		return err
+		return tx.Rollback()
 	}
 	const batchSize = 100
 	for i := 0; i < len(list); i += batchSize {
@@ -144,7 +135,7 @@ func (s *syncer[M, L]) Sync(auth KeystoneAuth) error {
 			OnConflict(fmt.Sprintf("(%s) DO UPDATE", model.GetPKField())).
 			Insert(); err != nil {
 			slog.Error("failed to insert objects", "model", modelName, "error", err)
-			return err
+			return tx.Rollback()
 		}
 	}
 	if err = tx.Commit(); err != nil {
