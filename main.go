@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	gosync "sync"
@@ -43,7 +44,9 @@ func runSyncer(registry *monitoring.Registry, config conf.SyncConfig, db db.DB) 
 			}()
 		}
 		wg.Wait()
-		time.Sleep(time.Minute * 1)
+		//nolint:gosec
+		r := rand.Float64() // Some randomization to avoid thundering herd.
+		time.Sleep(time.Duration(float64(time.Minute) * (0.9 + 0.2*r)))
 	}
 }
 
@@ -53,7 +56,9 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 	pipeline := features.NewPipeline(config, db, monitor)
 	for {
 		pipeline.Extract()
-		time.Sleep(time.Minute * 1)
+		//nolint:gosec
+		r := rand.Float64() // Some randomization to avoid thundering herd.
+		time.Sleep(time.Duration(float64(time.Minute) * (0.9 + 0.2*r)))
 	}
 }
 
