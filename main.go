@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	gosync "sync"
@@ -43,7 +44,9 @@ func runSyncer(registry *monitoring.Registry, config conf.SyncConfig, db db.DB) 
 			}()
 		}
 		wg.Wait()
-		time.Sleep(time.Minute * 1)
+		//nolint:gosec
+		r := rand.Float64() // Some randomization to avoid thundering herd.
+		time.Sleep(time.Duration(float64(time.Minute) * (0.9 + 0.2*r)))
 	}
 }
 
@@ -53,7 +56,9 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 	pipeline := features.NewPipeline(config, db, monitor)
 	for {
 		pipeline.Extract()
-		time.Sleep(time.Minute * 1)
+		//nolint:gosec
+		r := rand.Float64() // Some randomization to avoid thundering herd.
+		time.Sleep(time.Duration(float64(time.Minute) * (0.9 + 0.2*r)))
 	}
 }
 
@@ -69,9 +74,9 @@ func runScheduler(registry *monitoring.Registry, config conf.SchedulerConfig, db
 		api.GetNovaExternalSchedulerURL(),
 		api.NovaExternalScheduler,
 	)
-	slog.Info("api listening on :8080")
+	slog.Info("api listening on", "port", config.Port)
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         fmt.Sprintf(":%d", config.Port),
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -83,12 +88,12 @@ func runScheduler(registry *monitoring.Registry, config conf.SchedulerConfig, db
 }
 
 // Run the prometheus metrics server for monitoring.
-func runMonitoringServer(registry *monitoring.Registry) {
+func runMonitoringServer(registry *monitoring.Registry, config conf.MonitoringConfig) {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
-	slog.Info("metrics listening on :2112")
+	slog.Info("metrics listening", "port", config.Port)
 	server := &http.Server{
-		Addr:         ":2112",
+		Addr:         fmt.Sprintf(":%d", config.Port),
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -123,8 +128,9 @@ func main() {
 	db.Init()
 	defer db.Close()
 
-	registry := monitoring.NewRegistry(config.GetMonitoringConfig())
-	go runMonitoringServer(registry)
+	monitoringConfig := config.GetMonitoringConfig()
+	registry := monitoring.NewRegistry(monitoringConfig)
+	go runMonitoringServer(registry, monitoringConfig)
 
 	if args[0] == "--syncer" {
 		go runSyncer(registry, config.GetSyncConfig(), db)
