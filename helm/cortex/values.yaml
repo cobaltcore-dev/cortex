@@ -105,6 +105,9 @@ sharedSSOCert: &sharedSSOCert
 conf:
   # Configuration of metrics exported to the /metrics endpoint.
   monitoring:
+    #The port to expose the metrics on.
+    port: 2112
+
     # Custom labels added to the exported metrics.
     labels:
       github_org: cobaltcore-dev
@@ -207,6 +210,10 @@ conf:
                 - vrops_hostsystem_cpu_contention_percentage
 
   scheduler:
+     # The port to use for the scheduler API.
+    port: 8080
+    # Whether request bodies should be logged (debugging feature).
+    logRequestBodies: false
     # Configuration of scheduler steps that modify the Nova scheduler weights.
     # Each scheduler step can specify its own dependencies on extractors and
     # synced data.
@@ -234,5 +241,3 @@ conf:
           features:
             extractors:
               - vrops_hostsystem_contention_extractor
-
-    logRequestBodies: false # debugging feature

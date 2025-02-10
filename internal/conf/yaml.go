@@ -122,12 +122,18 @@ type SchedulerConfig struct {
 	// If request bodies should be logged out.
 	// This feature is intended for debugging purposes only.
 	LogRequestBodies bool `yaml:"logRequestBodies"`
+
+	// The port to use for the scheduler API.
+	Port int `yaml:"port"`
 }
 
 // Configuration for the monitoring module.
 type MonitoringConfig struct {
 	// The labels to add to all metrics.
 	Labels map[string]string `yaml:"labels"`
+
+	// The port to expose the metrics on.
+	Port int `yaml:"port"`
 }
 
 // Configuration for the cortex service.
