@@ -8,15 +8,13 @@
 
 # Cortex
 
-Cortex is a smart initial placement service for virtual machines (VMs) in an [OpenStack](https://www.openstack.org/) cloud environment.
+Cortex is a smart placement service for virtual machines (VMs) in an [OpenStack](https://www.openstack.org/) cloud environment. It is designed to improve resource usage in a data center by making smart(er) decisions about where to place VMs.
 
-## About this project
+## Features
 
-Cortex provides smart decisions for initial placement of VMs in a data center to improve resource usage.
-
-- Flexible framework to sync metrics and placement information of a data center.
-- A framework to extract information from the datacenter state and history to build up a knowledge base.
-- A scheduling engine to place VMs in the most suitable hosts based on the extracted knowledge.
+- **Data sync:** Flexible framework to sync metrics and placement information of a data center.
+- **Knowledge extraction**: Logic to extract simple or advanced knowledge ("features") from the synced data.
+- **Smart scheduling:** Scheduling pipeline for VMs based on the extracted knowledge.
 
 ## Quickstart
 
