@@ -8,12 +8,15 @@
 
 # Cortex
 
-POC for advanced initial placement of VMs.
+Cortex is a smart initial placement service for virtual machines (VMs) in an [OpenStack](https://www.openstack.org/) cloud environment.
 
 ## About this project
 
-Efficient placement and scheduling of virtual machines (VMs) are critical to optimizing resource utilization and reducing energy consumption, ensuring a high-performance cloud computing system.
-Cortex provides advanced capabilities for initial placement of VMs.
+Cortex provides smart decisions for initial placement of VMs in a data center to improve resource usage.
+
+- Flexible framework to sync metrics and placement information of a data center.
+- A framework to extract information from the datacenter state and history to build up a knowledge base.
+- A scheduling engine to place VMs in the most suitable hosts based on the extracted knowledge.
 
 ## Quickstart
 
@@ -50,4 +53,4 @@ We as members, contributors, and leaders pledge to make participation in our com
 
 ## Licensing
 
-Copyright (20xx-)20xx SAP SE or an SAP affiliate company and <your-project> contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex).
+Copyright 2024-2025 SAP SE. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex).
