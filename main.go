@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"os"
 	gosync "sync"
@@ -23,6 +22,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
+	"github.com/sapcc/go-bits/jobloop"
 	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -53,9 +53,7 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 				}(syncer)
 			}
 			wg.Wait()
-			//nolint:gosec
-			r := rand.Float64() // Some randomization to avoid thundering herd.
-			time.Sleep(time.Duration(float64(time.Minute) * (0.9 + 0.2*r)))
+			time.Sleep(jobloop.DefaultJitter(time.Minute))
 		}
 	}
 }
@@ -71,9 +69,7 @@ func runExtractor(ctx context.Context, registry *monitoring.Registry, config con
 			return
 		default:
 			pipeline.Extract()
-			//nolint:gosec
-			r := rand.Float64() // Some randomization to avoid thundering herd.
-			time.Sleep(time.Duration(float64(time.Minute) * (0.9 + 0.2*r)))
+			time.Sleep(jobloop.DefaultJitter(time.Minute))
 		}
 	}
 }
