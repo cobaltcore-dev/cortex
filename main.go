@@ -124,8 +124,7 @@ func main() {
 	}
 	slog.Info("config validated")
 
-	db := db.NewDB(config.GetDBConfig())
-	db.Init()
+	db := db.NewPostgresDB(config.GetDBConfig())
 	defer db.Close()
 
 	monitoringConfig := config.GetMonitoringConfig()

@@ -15,17 +15,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// Nova API interface to fetch objects from a paginated OpenStack API.
 type NovaAPI[M NovaModel, L NovaList] interface {
+	// Returns a list of models from the OpenStack Nova API.
 	List(auth KeystoneAuth) ([]M, error)
 }
 
+// Nova API implementation.
 type novaAPI[M NovaModel, L NovaList] struct {
-	conf    conf.SyncOpenStackConfig
+	// Configuration for the Nova API.
+	conf conf.SyncOpenStackConfig
+	// Monitor to observe the api.
 	monitor sync.Monitor
 }
 
 func NewNovaAPI[M NovaModel, L NovaList](
-	conf conf.SyncOpenStackConfig, monitor sync.Monitor,
+	conf conf.SyncOpenStackConfig,
+	monitor sync.Monitor,
 ) NovaAPI[M, L] {
 
 	return &novaAPI[M, L]{

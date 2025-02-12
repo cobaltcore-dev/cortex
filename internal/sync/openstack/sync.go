@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// List of supported syncers by the string that can be defined in the config yaml.
 var supportedSyncers = map[string]func(
 	db.DB,
 	conf.SyncOpenStackConfig,
@@ -23,12 +24,24 @@ var supportedSyncers = map[string]func(
 	"placement":       newPlacementSyncer,
 }
 
-type CombinedSyncer struct {
-	Syncers  []Syncer
-	Keystone KeystoneAPI
-	monitor  sync.Monitor
+type Syncer interface {
+	// Initialize the syncer.
+	Init()
+	// Sync from OpenStack using a Keystone authentication token.
+	Sync(auth KeystoneAuth) error
 }
 
+// Combined syncer that combines multiple syncers.
+type CombinedSyncer struct {
+	// Syncers to run in parallel.
+	Syncers []Syncer
+	// Keystone API to authenticate with OpenStack.
+	Keystone KeystoneAPI
+	// Monitor to observe the syncer.
+	monitor sync.Monitor
+}
+
+// Create a new combined syncer that runs multiple syncers in parallel.
 func NewCombinedSyncer(config conf.SyncOpenStackConfig, db db.DB, monitor sync.Monitor) sync.Datasource {
 	slog.Info("loading openstack syncers", "types", config.Types)
 	syncers := []Syncer{}
@@ -46,12 +59,14 @@ func NewCombinedSyncer(config conf.SyncOpenStackConfig, db db.DB, monitor sync.M
 	}
 }
 
+// Initialize all nested syncers.
 func (s CombinedSyncer) Init() {
 	for _, syncer := range s.Syncers {
 		syncer.Init()
 	}
 }
 
+// Sync all objects from OpenStack to the database.
 func (s CombinedSyncer) Sync() {
 	if s.monitor.PipelineRunTimer != nil {
 		hist := s.monitor.PipelineRunTimer.WithLabelValues("openstack")
@@ -78,9 +93,4 @@ func (s CombinedSyncer) Sync() {
 		}()
 	}
 	wg.Wait()
-}
-
-type Syncer interface {
-	Init()
-	Sync(auth KeystoneAuth) error
 }

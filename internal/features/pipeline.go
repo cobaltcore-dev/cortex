@@ -15,20 +15,26 @@ import (
 )
 
 // Configuration of feature extractors supported by the scheduler.
-// The features to extract are defined in the configuration file.
+// The actual features to extract are defined in the configuration file.
 var supportedExtractors = []plugins.FeatureExtractor{
 	&vmware.VROpsHostsystemResolver{},
 	&vmware.VROpsProjectNoisinessExtractor{},
 	&vmware.VROpsHostsystemContentionExtractor{},
 }
 
+// Pipeline that contains multiple feature extractors and executes them.
 type FeatureExtractorPipeline struct {
+	// The order in which feature extractors are executed.
+	// For example, [[f1], [f2, f3], [f4]] means that f1 is executed first
+	// followed by f2 and f3 in parallel, and finally f4.
 	executionOrder [][]plugins.FeatureExtractor
-	monitor        Monitor
+	// Monitor to use for tracking the pipeline.
+	monitor Monitor
 }
 
 // Create a new feature extractor pipeline with extractors contained in
-// the configuration.
+// the configuration. This function automatically resolves an execution
+// graph to automate parallel execution of the individual feature extractors.
 func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureExtractorPipeline {
 	supportedExtractorsByName := make(map[string]plugins.FeatureExtractor)
 	for _, extractor := range supportedExtractors {
@@ -90,7 +96,8 @@ func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureE
 	return FeatureExtractorPipeline{executionOrder: executionOrder, monitor: m}
 }
 
-// Extract features from the data sources.
+// Extract features from the data sources, in the sequence given by
+// the automatically calculated execution order.
 func (p *FeatureExtractorPipeline) Extract() {
 	if p.monitor.pipelineRunTimer != nil {
 		timer := prometheus.NewTimer(p.monitor.pipelineRunTimer)

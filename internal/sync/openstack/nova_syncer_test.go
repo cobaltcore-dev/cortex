@@ -40,14 +40,12 @@ func (m *MockSyncer) Sync(auth *KeystoneAuth) error {
 }
 
 type MockTable struct {
-	//lint:ignore U1000 tableName is used by go-pg.
-	tableName struct{} `pg:"openstack_mock_table"`
-	ID        string   `json:"id" pg:"id,notnull,pk"`
-	Val       string   `json:"val" pg:"val"`
+	ID  string `json:"id" db:"id,primarykey"`
+	Val string `json:"val" db:"val"`
 }
 
-func (m MockTable) GetName() string    { return "mock_table" }
-func (m MockTable) GetPKField() string { return "id" }
+func (m MockTable) GetName() string   { return "mock_table" }
+func (m MockTable) TableName() string { return "openstack_mock_table" }
 
 type MockList struct {
 	URL    string
@@ -60,29 +58,29 @@ func (m MockList) GetLinks() *[]PageLink { return m.Links }
 func (m MockList) GetModels() any        { return m.Models }
 
 func TestSyncer_Init(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
-	syncer := newNovaSyncer[MockTable, MockList](&mockDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
+	syncer := newNovaSyncer[MockTable, MockList](*mockDB.DB, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	syncer.Init()
 
 	// Verify the table was created
-	if _, err := mockDB.Get().Model((*MockTable)(nil)).Exists(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	if !mockDB.TableExists(MockTable{}) {
+		t.Error("expected table to be created")
 	}
 }
 
 func TestSyncer_Sync(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	syncer := &novaSyncer[MockTable, MockList]{
 		API: &MockNovaAPI[MockTable, MockList]{list: []MockTable{
 			{ID: "1", Val: "Test"}, {ID: "2", Val: "Test2"},
 		}},
-		DB: &mockDB,
+		DB: *mockDB.DB,
 	}
 	syncer.Init()
 
@@ -92,7 +90,7 @@ func TestSyncer_Sync(t *testing.T) {
 	}
 
 	// Check if the objects were inserted
-	count, err := mockDB.Get().Model((*MockTable)(nil)).Count()
+	count, err := mockDB.SelectInt("SELECT COUNT(*) FROM openstack_mock_table")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

@@ -45,10 +45,14 @@ type PrometheusAPI[M PrometheusMetric] interface {
 	) (*prometheusTimelineData[M], error)
 }
 
+// Prometheus API implementation.
 type prometheusAPI[M PrometheusMetric] struct {
-	hostConf   conf.SyncPrometheusHostConfig
+	// Prometheus host from which to fetch metrics.
+	hostConf conf.SyncPrometheusHostConfig
+	// Prometheus metric to fetch.
 	metricConf conf.SyncPrometheusMetricConfig
-	monitor    sync.Monitor
+	// Monitor to observe the API.
+	monitor sync.Monitor
 }
 
 // Create a new Prometheus API with the given Prometheus metric type.
@@ -157,10 +161,8 @@ func (api *prometheusAPI[M]) FetchMetrics(
 				return nil, fmt.Errorf("invalid value: %v", value[1])
 			}
 
-			metric := rangeMetric.Metric
-			metric.SetTimestamp(valTime)
-			metric.SetValue(valContent)
-			flatMetrics = append(flatMetrics, metric)
+			metric := rangeMetric.Metric.With(valTime, valContent)
+			flatMetrics = append(flatMetrics, metric.(M))
 		}
 	}
 

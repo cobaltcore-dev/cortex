@@ -14,20 +14,17 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/go-pg/pg/v10"
-	"github.com/go-pg/pg/v10/orm"
 )
 
-// List of supported metric types.
+// List of supported metric types that can be specified in the yaml config.
 var supportedSyncers = map[string]func(
 	db.DB,
 	conf.SyncPrometheusHostConfig,
 	conf.SyncPrometheusMetricConfig,
 	sync.Monitor,
 ) sync.Datasource{
-	"vrops_host_metric": newSyncerOfType[*VROpsHostMetric],
-	"vrops_vm_metric":   newSyncerOfType[*VROpsVMMetric],
+	"vrops_host_metric": newSyncerOfType[VROpsHostMetric],
+	"vrops_vm_metric":   newSyncerOfType[VROpsVMMetric],
 }
 
 // Prometheus syncer for an arbitrary prometheus metric model.
@@ -45,6 +42,8 @@ type syncer[M PrometheusMetric] struct {
 	PrometheusAPI PrometheusAPI[M]
 	// The database to store the metrics in.
 	DB db.DB
+	// The sleep interval between syncs.
+	sleepInterval time.Duration
 
 	monitor sync.Monitor
 }
@@ -80,20 +79,20 @@ func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.
 	}
 }
 
+// Initialize all nested syncers.
 func (s CombinedSyncer) Init() {
 	for _, syncer := range s.Syncers {
 		syncer.Init()
 	}
 }
 
+// Sync all metrics in parallel.
 func (s CombinedSyncer) Sync() {
 	if s.monitor.PipelineRunTimer != nil {
 		hist := s.monitor.PipelineRunTimer.WithLabelValues("prometheus")
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
-
-	// Sync all metrics in parallel.
 	var wg gosync.WaitGroup
 	for _, syncer := range s.Syncers {
 		wg.Add(1)
@@ -135,6 +134,7 @@ func newSyncerOfType[M PrometheusMetric](
 		PrometheusAPI:         NewPrometheusAPI[M](hostConf, metricConf, monitor),
 		DB:                    db,
 		monitor:               monitor,
+		sleepInterval:         time.Second,
 	}
 }
 
@@ -142,12 +142,9 @@ func newSyncerOfType[M PrometheusMetric](
 func (s *syncer[M]) Init() {
 	slog.Info("initializing syncer", "metricName", s.MetricName)
 	var model M
-	if err := s.DB.Get().Model(model).CreateTable(&orm.CreateTableOptions{
-		IfNotExists: true,
-	}); err != nil {
+	if err := s.DB.CreateTable(s.DB.AddTable(model)); err != nil {
 		panic(err)
 	}
-	slog.Info("created table", "tableName", model.GetTableName())
 }
 
 // Get the start of the sync window for the given metric.
@@ -156,13 +153,12 @@ func (s *syncer[M]) Init() {
 func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	// Check if there are any metrics in the database.
 	var model M
-	tableName := model.GetTableName()
-	var nRows int
-	if _, err := s.DB.Get().QueryOne(
-		pg.Scan(&nRows),
-		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = ?", tableName),
-		s.MetricName,
-	); err != nil {
+	tableName := model.TableName()
+	nRows, err := s.DB.SelectInt(
+		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = :name", tableName),
+		map[string]any{"name": s.MetricName},
+	)
+	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to count rows: %w", err)
 	}
 	slog.Debug("number of rows", "nRows", nRows)
@@ -171,14 +167,14 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 		start := time.Now().Add(-s.SyncTimeRange)
 		return start, nil
 	}
-	var latestTimestamp time.Time
-	if _, err := s.DB.Get().QueryOne(
-		pg.Scan(&latestTimestamp),
-		fmt.Sprintf("SELECT MAX(timestamp) FROM %s WHERE name = ?", tableName),
-		s.MetricName,
+	if err := s.DB.SelectOne(
+		&model,
+		fmt.Sprintf("SELECT name, timestamp FROM %s WHERE name = :name ORDER BY timestamp LIMIT 1", tableName),
+		map[string]any{"name": s.MetricName},
 	); err != nil {
 		return time.Time{}, fmt.Errorf("failed to get latest timestamp: %w", err)
 	}
+	latestTimestamp := model.GetTimestamp()
 	if latestTimestamp.IsZero() {
 		return time.Time{}, errors.New("latestTimestamp is zero")
 	}
@@ -198,13 +194,13 @@ func (s *syncer[M]) sync(start time.Time) {
 	}
 
 	var model M
-	tableName := model.GetTableName()
+	tableName := model.TableName()
 	slog.Info(
 		"syncing Prometheus data", "metricName", s.MetricName,
 		"start", start, "end", end, "tableName", tableName,
 	)
 	// Drop all metrics that are older than 4 weeks.
-	result, err := s.DB.Get().Exec(
+	result, err := s.DB.Exec(
 		fmt.Sprintf("DELETE FROM %s WHERE name = ? AND timestamp < ?", tableName),
 		s.MetricName, time.Now().Add(-s.SyncTimeRange),
 	)
@@ -212,7 +208,12 @@ func (s *syncer[M]) sync(start time.Time) {
 		slog.Error("failed to delete old metrics", "error", err)
 		return
 	}
-	slog.Info("deleted old metrics", "rows", result.RowsAffected())
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		slog.Error("failed to get rows affected", "error", err)
+		return
+	}
+	slog.Info("deleted old metrics", "rows", rowsAffected)
 	// Fetch the metrics from Prometheus.
 	prometheusData, err := s.PrometheusAPI.FetchMetrics(
 		s.MetricName, start, end, s.SyncResolutionSeconds,
@@ -225,14 +226,16 @@ func (s *syncer[M]) sync(start time.Time) {
 	batchSize := 100
 	for i := 0; i < len(prometheusData.Metrics); i += batchSize {
 		metrics := prometheusData.Metrics[i:min(i+batchSize, len(prometheusData.Metrics))]
-		if _, err = s.DB.Get().Model(&metrics).Insert(); err != nil {
-			fmt.Printf("Failed to insert metrics: %v\n", err)
+		for _, metric := range metrics {
+			if err = s.DB.Insert(&metric); err != nil {
+				slog.Error("failed to insert metrics", "error", err)
+			}
 		}
 	}
 	slog.Info("synced Prometheus data", "newMetrics", len(prometheusData.Metrics), "start", start, "end", end)
 
 	// Don't overload the Prometheus server.
-	time.Sleep(1 * time.Second)
+	time.Sleep(s.sleepInterval)
 	// Continue syncing.
 	s.sync(end)
 }
@@ -241,11 +244,9 @@ func (s *syncer[M]) sync(start time.Time) {
 func (s *syncer[M]) countMetrics() {
 	// Count rows for the gauge.
 	var model M
-	var nRows int
-	if _, err := s.DB.Get().QueryOne(
-		pg.Scan(&nRows),
-		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = ?", model.GetTableName()),
-		s.MetricName,
+	if nRows, err := s.DB.SelectInt(
+		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = :name", model.TableName()),
+		map[string]any{"name": s.MetricName},
 	); err == nil {
 		slog.Info("counted metrics", "nRows", nRows, "metricName", s.MetricName)
 		if s.monitor.PipelineObjectsGauge != nil {

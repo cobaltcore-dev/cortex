@@ -9,19 +9,30 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 )
 
+// Feature that maps CPU contention of vROps hostsystems.
 type VROpsHostsystemContention struct {
-	//lint:ignore U1000 Ignore unused field warning
-	tableName        struct{} `pg:"feature_vrops_hostsystem_contention"`
-	ComputeHost      string   `pg:"compute_host,notnull"`
-	AvgCPUContention float64  `pg:"avg_cpu_contention,notnull"`
-	MaxCPUContention float64  `pg:"max_cpu_contention,notnull"`
+	ComputeHost      string  `db:"compute_host"`
+	AvgCPUContention float64 `db:"avg_cpu_contention"`
+	MaxCPUContention float64 `db:"max_cpu_contention"`
 }
 
+// Table under which the feature is stored.
+func (VROpsHostsystemContention) TableName() string {
+	return "feature_vrops_hostsystem_contention"
+}
+
+// Extractor that extracts CPU contention of vROps hostsystems and stores
+// it as a feature into the database.
 type VROpsHostsystemContentionExtractor struct {
-	plugins.BaseExtractor[VROpsHostsystemContention, struct{}]
+	// Common base for all extractors that provides standard functionality.
+	plugins.BaseExtractor[
+		struct{},                  // No options passed through yaml config
+		VROpsHostsystemContention, // Feature model
+	]
 }
 
-func (e *VROpsHostsystemContentionExtractor) GetName() string {
+// Name of this feature extractor that is used in the yaml config, for logging etc.
+func (*VROpsHostsystemContentionExtractor) GetName() string {
 	return "vrops_hostsystem_contention_extractor"
 }
 
@@ -29,11 +40,10 @@ func (e *VROpsHostsystemContentionExtractor) GetName() string {
 // Depends on resolved vROps hostsystems (feature_vrops_resolved_hostsystem).
 func (e *VROpsHostsystemContentionExtractor) Extract() error {
 	// Delete the old data in the same transaction.
-	tx, err := e.DB.Get().Begin()
+	tx, err := e.DB.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Close()
 	if _, err := tx.Exec("DELETE FROM feature_vrops_hostsystem_contention"); err != nil {
 		return tx.Rollback()
 	}
@@ -53,7 +63,7 @@ func (e *VROpsHostsystemContentionExtractor) Extract() error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	count, err := e.DB.Get().Model((*VROpsHostsystemContention)(nil)).Count()
+	count, err := e.DB.SelectInt("SELECT COUNT(*) FROM feature_vrops_hostsystem_contention")
 	if err != nil {
 		return err
 	}

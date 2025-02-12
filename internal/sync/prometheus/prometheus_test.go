@@ -61,7 +61,7 @@ func TestFetchMetrics(t *testing.T) {
 	end := time.Now()
 	resolutionSeconds := 60
 
-	api := &prometheusAPI[*VROpsVMMetric]{
+	api := &prometheusAPI[VROpsVMMetric]{
 		hostConf: conf.SyncPrometheusHostConfig{
 			URL: server.URL,
 		},

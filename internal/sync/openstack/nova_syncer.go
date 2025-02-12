@@ -4,15 +4,14 @@
 package openstack
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
-	"github.com/go-pg/pg/v10/orm"
 )
 
+// Syncer interface to sync objects from OpenStack.
 type novaSyncer[M NovaModel, L NovaList] struct {
 	Config  conf.SyncOpenStackConfig
 	API     NovaAPI[M, L]
@@ -20,6 +19,7 @@ type novaSyncer[M NovaModel, L NovaList] struct {
 	monitor sync.Monitor
 }
 
+// Create a new OpenStack Nova syncer for a given model (and its paginated list).
 func newNovaSyncer[M NovaModel, L NovaList](
 	db db.DB,
 	config conf.SyncOpenStackConfig,
@@ -36,24 +36,25 @@ func newNovaSyncer[M NovaModel, L NovaList](
 
 // Create the necessary database tables if they do not exist.
 func (s *novaSyncer[M, L]) Init() {
-	if err := s.DB.Get().Model((*M)(nil)).CreateTable(&orm.CreateTableOptions{
-		IfNotExists: true,
-	}); err != nil {
+	var model M
+	t := s.DB.AddTable(model)
+	if err := s.DB.CreateTable(t); err != nil {
 		panic(err)
 	}
 }
 
+// Sync objects from OpenStack to the database.
 func (s *novaSyncer[M, L]) Sync(auth KeystoneAuth) error {
 	var model M
 
-	tx, err := s.DB.Get().Begin()
+	tx, err := s.DB.Begin()
 	if err != nil {
 		slog.Error("failed to begin transaction", "error", err)
 		return tx.Rollback()
 	}
 
 	modelName := model.GetName()
-	if _, err = tx.Model(&model).Where("TRUE").Delete(); err != nil {
+	if _, err = tx.Exec("DELETE FROM " + model.TableName()); err != nil {
 		slog.Error("failed to delete old objects", "model", modelName, "error", err)
 		return tx.Rollback()
 	}
@@ -66,11 +67,11 @@ func (s *novaSyncer[M, L]) Sync(auth KeystoneAuth) error {
 	const batchSize = 100
 	for i := 0; i < len(list); i += batchSize {
 		objs := list[i:min(i+batchSize, len(list))]
-		if _, err = tx.Model(&objs).
-			OnConflict(fmt.Sprintf("(%s) DO UPDATE", model.GetPKField())).
-			Insert(); err != nil {
-			slog.Error("failed to insert objects", "model", modelName, "error", err)
-			return tx.Rollback()
+		for _, obj := range objs {
+			if err = tx.Insert(&obj); err != nil {
+				slog.Error("failed to insert obj", "model", modelName, "error", err)
+				return tx.Rollback()
+			}
 		}
 	}
 	if err = tx.Commit(); err != nil {

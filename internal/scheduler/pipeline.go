@@ -18,22 +18,28 @@ import (
 )
 
 // Configuration of steps supported by the scheduler.
-// The steps used by the scheduler are defined through the configuration file.
+// The steps actually used by the scheduler are defined through the configuration file.
 var supportedSteps = []plugins.Step{
 	&vmware.VROpsAntiAffinityNoisyProjectsStep{},
 	&vmware.VROpsAvoidContendedHostsStep{},
 }
 
+// Sequence of scheduler steps that are executed in parallel.
 type Pipeline interface {
+	// Evaluate the pipeline and return a list of hosts in order of preference.
 	Run(scenario plugins.Scenario, novaWeights map[string]float64) ([]string, error)
 }
 
+// Pipeline of scheduler steps.
 type pipeline struct {
+	// The activation function to use when combining the
+	// results of the scheduler steps.
+	plugins.ActivationFunction
 	// The parallelizable order in which scheduler steps are executed.
 	executionOrder [][]plugins.Step
 	// The order in which scheduler steps are applied, by their step name.
 	applicationOrder []string
-
+	// Monitor to observe the pipeline.
 	monitor Monitor
 }
 
@@ -102,7 +108,7 @@ func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64
 	// -99,000 or 99,000. We want to respect these values, but still adjust them
 	// to a meaningful value. If Nova really doesn't want us to run on a host, it
 	// should run a filter instead of setting a weight.
-	outWeights := make(map[string]float64)
+	var outWeights = make(map[string]float64)
 	for hostname, weight := range novaWeights {
 		outWeights[hostname] = math.Tanh(weight)
 	}
@@ -114,16 +120,7 @@ func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64
 			slog.Error("scheduler: missing activations for step", "name", stepName)
 			continue
 		}
-		stepActivationsMap := stepActivations.(map[string]float64)
-		for host, prevWeight := range outWeights {
-			// Remove hosts that are not in the weights map.
-			if _, ok := stepActivationsMap[host]; !ok {
-				delete(outWeights, host)
-			} else {
-				// Apply the activation from the step.
-				outWeights[host] = prevWeight + math.Tanh(stepActivationsMap[host])
-			}
-		}
+		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations.(map[string]float64))
 	}
 
 	if p.monitor.hostNumberOutObserver != nil {

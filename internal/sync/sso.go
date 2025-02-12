@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
+// Create a new HTTP client with the given SSO configuration.
 func NewHTTPClient(conf conf.SSOConfig) (*http.Client, error) {
 	if conf.Cert == "" {
 		// Disable SSO if no certificate is provided.

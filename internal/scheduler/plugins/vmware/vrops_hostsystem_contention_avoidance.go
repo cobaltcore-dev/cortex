@@ -8,32 +8,42 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
+// Options for the scheduling step, given through the
+// step config in the service yaml file.
 type vROpsAvoidContendedHostsStepOpts struct {
 	AvgCPUContentionThreshold float64 `yaml:"avgCPUContentionThreshold"`
 	MaxCPUContentionThreshold float64 `yaml:"maxCPUContentionThreshold"`
 	ActivationOnHit           float64 `yaml:"activationOnHit"`
 }
 
+// Step to avoid contended hosts by downvoting them.
 type VROpsAvoidContendedHostsStep struct {
+	// BaseStep is a helper struct that provides common functionality for all steps.
 	plugins.BaseStep[vROpsAvoidContendedHostsStepOpts]
 }
 
-func (s *VROpsAvoidContendedHostsStep) GetName() string { return "vrops_avoid_contended_hosts" }
+// Get the name of this step, used for identification in config, logs, metrics, etc.
+func (s *VROpsAvoidContendedHostsStep) GetName() string {
+	return "vrops_avoid_contended_hosts"
+}
 
 // Downvote hosts that are highly contended.
 func (s *VROpsAvoidContendedHostsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
-	activations := s.GetNoEffectActivations(scenario)
+	activations := s.BaseStep.BaseActivations(scenario)
 	if !scenario.GetVMware() {
 		// Only run this step for VMware VMs.
 		return activations, nil
 	}
 
 	var highlyContendedHosts []vmware.VROpsHostsystemContention
-	if err := s.DB.Get().
-		Model(&highlyContendedHosts).
-		Where("avg_cpu_contention > ?", s.Options.AvgCPUContentionThreshold).
-		WhereOr("max_cpu_contention > ?", s.Options.MaxCPUContentionThreshold).
-		Select(); err != nil {
+	if _, err := s.DB.Select(&highlyContendedHosts, `
+		SELECT * FROM feature_vrops_hostsystem_contention
+		WHERE avg_cpu_contention > :avg_cpu_contention_threshold
+		OR max_cpu_contention > :max_cpu_contention_threshold
+	`, map[string]any{
+		"avg_cpu_contention_threshold": s.Options.AvgCPUContentionThreshold,
+		"max_cpu_contention_threshold": s.Options.MaxCPUContentionThreshold,
+	}); err != nil {
 		return nil, err
 	}
 

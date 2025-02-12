@@ -3,6 +3,7 @@
 
 package scheduler
 
+// Wrapped Nova object. Nova returns objects in this format.
 type NovaObject[V any] struct {
 	Name      string   `json:"nova_object.name"`
 	Namespace string   `json:"nova_object.namespace"`
@@ -22,6 +23,7 @@ type NovaSpec struct {
 	Flavor           NovaObject[NovaFlavor]    `json:"flavor"`
 }
 
+// Nova image metadata for the specified VM.
 type NovaImageMeta struct {
 	Name    string `json:"name"`
 	Size    int    `json:"size"`
@@ -29,6 +31,7 @@ type NovaImageMeta struct {
 	MinDisk int    `json:"min_disk"`
 }
 
+// Nova flavor metadata for the specified VM.
 type NovaFlavor struct {
 	Name            string            `json:"name"`
 	MemoryMB        int               `json:"memory_mb"`

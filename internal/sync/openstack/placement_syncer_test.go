@@ -8,28 +8,29 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
 type MockPlacementAPI struct {
 	providers  []ResourceProvider
-	traits     map[string][]ProviderDetail
-	aggregates map[string][]ProviderDetail
+	traits     map[string][]ResourceProviderTrait
+	aggregates map[string][]ResourceProviderAggregate
 }
 
 func (m *MockPlacementAPI) ListResourceProviders(auth KeystoneAuth) ([]ResourceProvider, error) {
 	return m.providers, nil
 }
 
-func (m *MockPlacementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvider) ([]ProviderDetail, error) {
+func (m *MockPlacementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvider) ([]ResourceProviderTrait, error) {
 	if traits, ok := m.traits[provider.UUID]; ok {
 		return traits, nil
 	}
 	return nil, errors.New("traits not found")
 }
 
-func (m *MockPlacementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceProvider) ([]ProviderDetail, error) {
+func (m *MockPlacementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceProvider) ([]ResourceProviderAggregate, error) {
 	if aggregates, ok := m.aggregates[provider.UUID]; ok {
 		return aggregates, nil
 	}
@@ -37,25 +38,36 @@ func (m *MockPlacementAPI) ResolveAggregates(auth KeystoneAuth, provider Resourc
 }
 
 func TestPlacementSyncer_Init(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
-	syncer := newPlacementSyncer(&mockDB, conf.SyncOpenStackConfig{}, sync.Monitor{}).(*placementSyncer)
+	mon := sync.Monitor{}
+	conf := conf.SyncOpenStackConfig{}
+	syncer := &placementSyncer{
+		Config:        conf,
+		API:           NewPlacementAPI(conf, mon),
+		DB:            *mockDB.DB,
+		monitor:       mon,
+		sleepInterval: 0,
+	}
 	syncer.Init()
 
 	// Check if the tables were created
-	for _, model := range []any{(*ResourceProvider)(nil), (*ResourceProviderTrait)(nil), (*ResourceProviderAggregate)(nil)} {
-		// Verify the table was created
-		if _, err := mockDB.Get().Model(model).Exists(); err != nil {
-			t.Fatalf("expected no error, got %v", err)
+	for _, model := range []db.Table{
+		ResourceProvider{},
+		ResourceProviderTrait{},
+		ResourceProviderAggregate{},
+	} {
+		if !mockDB.TableExists(model) {
+			t.Error("expected table to be created")
 		}
 	}
 }
 
 func TestPlacementSyncer_Sync(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	mockAPI := &MockPlacementAPI{
@@ -63,20 +75,20 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 			{UUID: "provider1", Name: "Provider 1"},
 			{UUID: "provider2", Name: "Provider 2"},
 		},
-		traits: map[string][]ProviderDetail{
-			"provider1": {ResourceProviderTrait{ResourceProviderUUID: "provider1", Name: "trait1", ResourceProviderGeneration: 1}},
-			"provider2": {ResourceProviderTrait{ResourceProviderUUID: "provider2", Name: "trait2", ResourceProviderGeneration: 1}},
+		traits: map[string][]ResourceProviderTrait{
+			"provider1": {{ResourceProviderUUID: "provider1", Name: "trait1", ResourceProviderGeneration: 1}},
+			"provider2": {{ResourceProviderUUID: "provider2", Name: "trait2", ResourceProviderGeneration: 1}},
 		},
-		aggregates: map[string][]ProviderDetail{
-			"provider1": {ResourceProviderAggregate{ResourceProviderUUID: "provider1", UUID: "aggregate1", ResourceProviderGeneration: 1}},
-			"provider2": {ResourceProviderAggregate{ResourceProviderUUID: "provider2", UUID: "aggregate2", ResourceProviderGeneration: 1}},
+		aggregates: map[string][]ResourceProviderAggregate{
+			"provider1": {{ResourceProviderUUID: "provider1", UUID: "aggregate1", ResourceProviderGeneration: 1}},
+			"provider2": {{ResourceProviderUUID: "provider2", UUID: "aggregate2", ResourceProviderGeneration: 1}},
 		},
 	}
 
 	syncer := &placementSyncer{
 		Config:  conf.SyncOpenStackConfig{},
 		API:     mockAPI,
-		DB:      &mockDB,
+		DB:      *mockDB.DB,
 		monitor: sync.Monitor{},
 	}
 	syncer.Init()
@@ -88,7 +100,8 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	}
 
 	// Check if the providers were inserted
-	count, err := mockDB.Get().Model((*ResourceProvider)(nil)).Count()
+	var count int
+	err = mockDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProvider{}.TableName())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -97,7 +110,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	}
 
 	// Check if the traits were inserted
-	count, err = mockDB.Get().Model((*ResourceProviderTrait)(nil)).Count()
+	err = mockDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProviderTrait{}.TableName())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -106,7 +119,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	}
 
 	// Check if the aggregates were inserted
-	count, err = mockDB.Get().Model((*ResourceProviderAggregate)(nil)).Count()
+	err = mockDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProviderAggregate{}.TableName())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

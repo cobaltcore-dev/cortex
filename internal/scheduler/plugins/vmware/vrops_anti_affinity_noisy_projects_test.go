@@ -10,30 +10,22 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
-	"github.com/go-pg/pg/v10/orm"
 	"gopkg.in/yaml.v2"
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	// Create dependency tables
-	deps := []interface{}{
-		(*vmware.VROpsProjectNoisiness)(nil),
-	}
-	for _, dep := range deps {
-		if err := mockDB.
-			Get().
-			Model(dep).
-			CreateTable(&orm.CreateTableOptions{IfNotExists: true}); err != nil {
-			panic(err)
-		}
+	err := mockDB.CreateTable(mockDB.AddTable(vmware.VROpsProjectNoisiness{}))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_vrops_project_noisiness table
-	_, err := mockDB.Get().Exec(`
+	_, err = mockDB.Exec(`
         INSERT INTO feature_vrops_project_noisiness (project, compute_host, avg_cpu_of_project)
         VALUES
             ('project1', 'host1', 25.0),
@@ -48,7 +40,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
 	step := &VROpsAntiAffinityNoisyProjectsStep{}
-	if err := step.Init(&mockDB, opts); err != nil {
+	if err := step.Init(*mockDB.DB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

@@ -9,47 +9,40 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/go-pg/pg/v10/orm"
 )
 
 func TestVROpsHostsystemResolver_Init(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(&mockDB, nil); err != nil {
+	if err := extractor.Init(*mockDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the table was created
-	if _, err := mockDB.Get().Model((*ResolvedVROpsHostsystem)(nil)).Exists(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	if !mockDB.TableExists(ResolvedVROpsHostsystem{}) {
+		t.Error("expected table to be created")
 	}
 }
 
 func TestVROpsHostsystemResolver_Extract(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	// Create dependency tables
-	deps := []interface{}{
-		(*prometheus.VROpsVMMetric)(nil),
-		(*openstack.Server)(nil),
-		(*openstack.Hypervisor)(nil),
-	}
-	for _, dep := range deps {
-		if err := mockDB.
-			Get().
-			Model(dep).
-			CreateTable(&orm.CreateTableOptions{IfNotExists: true}); err != nil {
-			panic(err)
-		}
+	if err := mockDB.CreateTable(
+		mockDB.AddTable(prometheus.VROpsVMMetric{}),
+		mockDB.AddTable(openstack.Server{}),
+		mockDB.AddTable(openstack.Hypervisor{}),
+	); err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the metrics table
-	_, err := mockDB.Get().Exec(`
+	_, err := mockDB.Exec(`
         INSERT INTO vrops_vm_metrics (hostsystem, instance_uuid)
         VALUES
             ('hostsystem1', 'uuid1'),
@@ -60,7 +53,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the openstack_servers table
-	_, err = mockDB.Get().Exec(`
+	_, err = mockDB.Exec(`
         INSERT INTO openstack_servers (id, os_ext_srv_attr_hypervisor_hostname)
         VALUES
             ('uuid1', 'hostname1'),
@@ -71,7 +64,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the openstack_hypervisors table
-	_, err = mockDB.Get().Exec(`
+	_, err = mockDB.Exec(`
         INSERT INTO openstack_hypervisors (hostname, service_host)
         VALUES
             ('hostname1', 'service_host1'),
@@ -82,7 +75,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(&mockDB, nil); err != nil {
+	if err := extractor.Init(*mockDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := extractor.Extract(); err != nil {
@@ -91,7 +84,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_vrops_resolved_hostsystem table
 	var resolvedHostsystems []ResolvedVROpsHostsystem
-	err = mockDB.Get().Model(&resolvedHostsystems).Select()
+	_, err = mockDB.Select(&resolvedHostsystems, "SELECT * FROM feature_vrops_resolved_hostsystem")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

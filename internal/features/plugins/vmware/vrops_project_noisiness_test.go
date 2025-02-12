@@ -9,46 +9,40 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/go-pg/pg/v10/orm"
 )
 
 func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(&mockDB, nil); err != nil {
+	if err := extractor.Init(*mockDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	// Will fail when the table does not exist
-	if _, err := mockDB.Get().Model((*VROpsProjectNoisiness)(nil)).Exists(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	err := mockDB.SelectOne(&VROpsProjectNoisiness{}, "SELECT * FROM feature_vrops_project_noisiness LIMIT 1")
+	if err == nil {
+		t.Fatalf("expected error, got nil")
 	}
 }
 
 func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	// Create dependency tables
-	deps := []interface{}{
-		(*prometheus.VROpsVMMetric)(nil),
-		(*openstack.Server)(nil),
-		(*openstack.Hypervisor)(nil),
-	}
-	for _, dep := range deps {
-		if err := mockDB.
-			Get().
-			Model(dep).
-			CreateTable(&orm.CreateTableOptions{IfNotExists: true}); err != nil {
-			panic(err)
-		}
+	if err := mockDB.CreateTable(
+		mockDB.AddTable(prometheus.VROpsVMMetric{}),
+		mockDB.AddTable(openstack.Server{}),
+		mockDB.AddTable(openstack.Hypervisor{}),
+	); err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the metrics table
-	if _, err := mockDB.Get().Exec(`
+	if _, err := mockDB.Exec(`
 	INSERT INTO vrops_vm_metrics (name, project, value, instance_uuid)
 	VALUES
 		('vrops_virtualmachine_cpu_demand_ratio', 'project1', 50, 'uuid1'),
@@ -59,7 +53,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the openstack_servers table
-	if _, err := mockDB.Get().Exec(`
+	if _, err := mockDB.Exec(`
 	INSERT INTO openstack_servers (id, tenant_id, os_ext_srv_attr_hypervisor_hostname)
 	VALUES
 		('uuid1', 'project1', 'host1'),
@@ -70,7 +64,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the openstack_hypervisors table
-	if _, err := mockDB.Get().Exec(`
+	if _, err := mockDB.Exec(`
 	INSERT INTO openstack_hypervisors (hostname, service_host)
 	VALUES
 		('host1', 'service_host1'),
@@ -80,7 +74,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(&mockDB, nil); err != nil {
+	if err := extractor.Init(*mockDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := extractor.Extract(); err != nil {
@@ -90,7 +84,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	// Verify the data was inserted into the feature_vrops_project_noisiness table
 	var noisiness []VROpsProjectNoisiness
 	q := `SELECT * FROM feature_vrops_project_noisiness ORDER BY project, compute_host`
-	if _, err := mockDB.Get().Query(&noisiness, q); err != nil {
+	if _, err := mockDB.Select(&noisiness, q); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	expected := []VROpsProjectNoisiness{

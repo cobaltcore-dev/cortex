@@ -8,13 +8,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// Monitor is a collection of Prometheus metrics for the sync package.
 type Monitor struct {
-	PipelineRunTimer                *prometheus.HistogramVec
-	PipelineObjectsGauge            *prometheus.GaugeVec
-	PipelineRequestTimer            *prometheus.HistogramVec
+	// A histogram to measure how long each sync run takes.
+	PipelineRunTimer *prometheus.HistogramVec
+	// A gauge to observe the number of objects synced.
+	PipelineObjectsGauge *prometheus.GaugeVec
+	// A histogram to measure how long each sync request takes.
+	PipelineRequestTimer *prometheus.HistogramVec
+	// A counter to observe the number of processed sync requests.
 	PipelineRequestProcessedCounter *prometheus.CounterVec
 }
 
+// NewSyncMonitor creates a new sync monitor and registers the necessary Prometheus metrics.
 func NewSyncMonitor(registry *monitoring.Registry) Monitor {
 	pipelineRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_sync_run_duration_seconds",

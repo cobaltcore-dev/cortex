@@ -9,17 +9,29 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 )
 
+// Feature that resolves the vROps metrics hostsystem label to the
+// corresponding Nova compute host.
 type ResolvedVROpsHostsystem struct {
-	//lint:ignore U1000 Ignore unused field warning
-	tableName       struct{} `pg:"feature_vrops_resolved_hostsystem"`
-	VROpsHostsystem string   `pg:"vrops_hostsystem,notnull"`
-	NovaComputeHost string   `pg:"nova_compute_host,notnull"`
+	VROpsHostsystem string `db:"vrops_hostsystem"`
+	NovaComputeHost string `db:"nova_compute_host"`
 }
 
+// Table under which the feature is stored.
+func (ResolvedVROpsHostsystem) TableName() string {
+	return "feature_vrops_resolved_hostsystem"
+}
+
+// Extractor that resolves the vROps metrics hostsystem label to the
+// corresponding Nova compute host and stores it as a feature into the database.
 type VROpsHostsystemResolver struct {
-	plugins.BaseExtractor[ResolvedVROpsHostsystem, struct{}]
+	// Common base for all extractors that provides standard functionality.
+	plugins.BaseExtractor[
+		struct{},                // No options passed through yaml config
+		ResolvedVROpsHostsystem, // Feature model
+	]
 }
 
+// Name of this feature extractor that is used in the yaml config, for logging etc.
 func (e *VROpsHostsystemResolver) GetName() string {
 	return "vrops_hostsystem_resolver"
 }
@@ -27,11 +39,10 @@ func (e *VROpsHostsystemResolver) GetName() string {
 // Resolve vROps hostsystems to Nova compute hosts.
 func (e *VROpsHostsystemResolver) Extract() error {
 	// Delete the old data in the same transaction.
-	tx, err := e.DB.Get().Begin()
+	tx, err := e.DB.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Close()
 	if _, err := tx.Exec("DELETE FROM feature_vrops_resolved_hostsystem"); err != nil {
 		return tx.Rollback()
 	}
@@ -50,7 +61,7 @@ func (e *VROpsHostsystemResolver) Extract() error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	count, err := e.DB.Get().Model((*ResolvedVROpsHostsystem)(nil)).Count()
+	count, err := e.DB.SelectInt("SELECT COUNT(*) FROM feature_vrops_resolved_hostsystem")
 	if err != nil {
 		return err
 	}
