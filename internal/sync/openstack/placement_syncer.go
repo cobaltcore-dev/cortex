@@ -72,8 +72,8 @@ func (s *placementSyncer) syncProviders(auth KeystoneAuth) ([]ResourceProvider, 
 		return nil, tx.Rollback()
 	}
 	for _, provider := range providers {
-		if err = tx.Insert(&provider); err != nil {
-			slog.Error("failed to insert obj", "model", "openstack_resource_providers", "error", err)
+		if err := db.Upsert(tx, &provider); err != nil {
+			slog.Error("failed to upsert obj", "model", "openstack_resource_providers", "error", err)
 			return nil, tx.Rollback()
 		}
 	}
@@ -131,8 +131,8 @@ func syncProviderDetails[M ProviderDetail](
 	}
 	modelName := model.GetName()
 	for _, result := range results {
-		if err = tx.Insert(&result); err != nil {
-			slog.Error("failed to insert obj", "modelName", modelName, "error", err)
+		if err := db.Upsert(tx, &result); err != nil {
+			slog.Error("failed to upsert obj", "model", modelName, "error", err)
 			return tx.Rollback()
 		}
 	}

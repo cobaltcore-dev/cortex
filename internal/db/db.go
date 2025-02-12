@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -101,4 +102,22 @@ func (d *DB) Close() {
 	if err := d.DbMap.Db.Close(); err != nil {
 		slog.Error("failed to close database connection", "error", err)
 	}
+}
+
+// Database or transaction that supports update and insert methods.
+type upsertable interface {
+	Update(list ...interface{}) (int64, error)
+	Insert(list ...interface{}) error
+}
+
+// Upsert a model into the database (Insert if possible, otherwise Update).
+func Upsert(u upsertable, model any) error {
+	if err := u.Insert(model); err != nil {
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+			if _, err := u.Update(model); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

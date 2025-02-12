@@ -68,8 +68,8 @@ func (s *novaSyncer[M, L]) Sync(auth KeystoneAuth) error {
 	for i := 0; i < len(list); i += batchSize {
 		objs := list[i:min(i+batchSize, len(list))]
 		for _, obj := range objs {
-			if err = tx.Insert(&obj); err != nil {
-				slog.Error("failed to insert obj", "model", modelName, "error", err)
+			if err := db.Upsert(tx, &obj); err != nil {
+				slog.Error("failed to upsert obj", "model", modelName, "error", err)
 				return tx.Rollback()
 			}
 		}
