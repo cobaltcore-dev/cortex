@@ -93,7 +93,7 @@ func TestNewDB(t *testing.T) {
 		Port:     container.GetPort(),
 		User:     "postgres",
 		Password: "secret",
-		Name:     "postgres",
+		Database: "postgres",
 	}
 
 	db := NewPostgresDB(config)
@@ -110,7 +110,7 @@ func TestDB_CreateTable(t *testing.T) {
 		Port:     container.GetPort(),
 		User:     "postgres",
 		Password: "secret",
-		Name:     "postgres",
+		Database: "postgres",
 	}
 
 	db := NewPostgresDB(config)
@@ -137,7 +137,7 @@ func TestDB_AddTable(t *testing.T) {
 		Port:     container.GetPort(),
 		User:     "postgres",
 		Password: "secret",
-		Name:     "postgres",
+		Database: "postgres",
 	}
 
 	db := NewPostgresDB(config)
@@ -159,7 +159,7 @@ func TestDB_TableExists(t *testing.T) {
 		Port:     container.GetPort(),
 		User:     "postgres",
 		Password: "secret",
-		Name:     "postgres",
+		Database: "postgres",
 	}
 
 	db := NewPostgresDB(config)
@@ -186,7 +186,7 @@ func TestDB_Close(t *testing.T) {
 		Port:     container.GetPort(),
 		User:     "postgres",
 		Password: "secret",
-		Name:     "postgres",
+		Database: "postgres",
 	}
 
 	db := NewPostgresDB(config)

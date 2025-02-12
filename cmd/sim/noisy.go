@@ -26,13 +26,13 @@ func SimulateNoisyVMScheduling() {
 		Port:     "5432",
 		User:     "postgres",
 		Password: "secret",
-		Name:     "postgres",
+		Database: "postgres",
 	})
 	defer db.Close()
 
 	// Get noisy projects from the DB.
 	var noisyProjects []vmware.VROpsProjectNoisiness
-	_, err := db.Select(&noisyProjects, `SELECT * FROM vrops_project_noisiness ORDER BY noisiness DESC`)
+	_, err := db.Select(&noisyProjects, `SELECT * FROM feature_vrops_project_noisiness ORDER BY avg_cpu_of_project DESC`)
 	if err != nil {
 		slog.Error("failed to get noisy projects", "error", err)
 		return
@@ -44,7 +44,7 @@ func SimulateNoisyVMScheduling() {
 
 	// Get all hosts from the DB.
 	var hypervisors []openstack.Hypervisor
-	if _, err := db.Select(&hypervisors, `SELECT * FROM hypervisors`); err != nil {
+	if _, err := db.Select(&hypervisors, `SELECT * FROM openstack_hypervisors`); err != nil {
 		slog.Error("failed to get hosts", "error", err)
 		return
 	}

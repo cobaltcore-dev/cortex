@@ -201,8 +201,8 @@ func (s *syncer[M]) sync(start time.Time) {
 	)
 	// Drop all metrics that are older than 4 weeks.
 	result, err := s.DB.Exec(
-		fmt.Sprintf("DELETE FROM %s WHERE name = ? AND timestamp < ?", tableName),
-		s.MetricName, time.Now().Add(-s.SyncTimeRange),
+		fmt.Sprintf("DELETE FROM %s WHERE name = :name AND timestamp < :timestamp", tableName),
+		map[string]any{"name": s.MetricName, "timestamp": time.Now().Add(-s.SyncTimeRange)},
 	)
 	if err != nil {
 		slog.Error("failed to delete old metrics", "error", err)

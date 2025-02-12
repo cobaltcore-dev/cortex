@@ -28,8 +28,9 @@ type Table interface {
 func NewPostgresDB(c conf.DBConfig) DB {
 	psqlInfo := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		c.Host, c.Port, c.User, c.Password, c.Name,
+		c.Host, c.Port, c.User, c.Password, c.Database,
 	)
+	slog.Info("connecting to database", "psqlInfo", psqlInfo)
 	db, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
 		panic(err)

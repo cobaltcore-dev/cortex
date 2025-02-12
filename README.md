@@ -20,7 +20,7 @@ Cortex is a smart placement service for virtual machines (VMs) in an [OpenStack]
 
 Copy the example secrets values file and insert your credentials.
 ```bash
-cp cortex.secrets.yaml.example "${HOME}/cortex.secrets.yaml"
+cp cortex.secrets.example.yaml "${HOME}/cortex.secrets.yaml"
 ```
 
 > [!WARNING]
