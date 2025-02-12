@@ -196,3 +196,60 @@ func TestDB_Close(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func TestUpsert(t *testing.T) {
+	container := PostgresContainer{}
+	container.Init(t)
+	defer container.Close()
+
+	config := conf.DBConfig{
+		Host:     "localhost",
+		Port:     container.GetPort(),
+		User:     "postgres",
+		Password: "secret",
+		Database: "postgres",
+	}
+
+	db := NewPostgresDB(config)
+	defer db.Close()
+
+	table := db.AddTable(MockTable{})
+	err := db.CreateTable(table)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert a new record
+	mockRecord := MockTable{ID: 1, Name: "test"}
+	err = Upsert(db, &mockRecord)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify the record was inserted
+	var insertedRecord MockTable
+	err = db.SelectOne(&insertedRecord, "SELECT * FROM mock_table WHERE id = $1", mockRecord.ID)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if insertedRecord.Name != "test" {
+		t.Errorf("expected name to be 'test', got %s", insertedRecord.Name)
+	}
+
+	// Update the existing record
+	mockRecord.Name = "updated"
+	err = Upsert(db, &mockRecord)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify the record was updated
+	var updatedRecord MockTable
+	err = db.SelectOne(&updatedRecord, "SELECT * FROM mock_table WHERE id = $1", mockRecord.ID)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if updatedRecord.Name != "updated" {
+		t.Errorf("expected name to be 'updated', got %s", updatedRecord.Name)
+	}
+}
