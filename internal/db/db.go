@@ -48,12 +48,13 @@ func NewPostgresDB(c conf.DBConfig) DB {
 	// If the wait time exceeds 10 seconds, we will panic.
 	maxRetries := 10
 	for i := range maxRetries {
-		if err := db.Ping(); err == nil {
+		err := db.Ping()
+		if err == nil {
 			sqlDB = db
 			break
 		}
 		if i == maxRetries-1 {
-			panic("failed to connect to database")
+			panic("giving up connecting to database")
 		}
 		slog.Error("failed to connect to database, retrying...", "error", err)
 		time.Sleep(1 * time.Second)
