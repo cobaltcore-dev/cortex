@@ -5,7 +5,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/go-gorp/gorp"
 	_ "github.com/lib/pq"
+	"github.com/sapcc/go-bits/easypg"
 )
 
 // Wrapper around gorp.DbMap that adds some convenience functions.
@@ -25,21 +25,21 @@ type Table interface {
 	TableName() string
 }
 
-// Parse the database configuration into a connection string.
-func parseConnOpts(c conf.DBConfig) string {
-	opts := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		c.Host, c.Port, c.User, c.Password, c.Database,
-	)
-	// Strip any newlines that may have been added by the yaml parser.
-	return strings.ReplaceAll(opts, "\n", "")
-}
-
 // Create a new postgres database and wait until it is connected.
 func NewPostgresDB(c conf.DBConfig) DB {
-	psqlInfo := parseConnOpts(c)
-	slog.Info("connecting to database", "psqlInfo", psqlInfo)
-	db, err := sql.Open("postgres", psqlInfo)
+	dbURL, err := easypg.URLFrom(easypg.URLParts{
+		HostName:          c.Host,
+		Port:              c.Port,
+		UserName:          c.User,
+		Password:          c.Password,
+		ConnectionOptions: "sslmode=disable",
+		DatabaseName:      c.Database,
+	})
+	if err != nil {
+		panic(err)
+	}
+	slog.Info("connecting to database", "dbURL", dbURL)
+	db, err := sql.Open("postgres", dbURL.String())
 	if err != nil {
 		panic(err)
 	}
