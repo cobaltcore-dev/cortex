@@ -14,25 +14,32 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// OpenStack Placement API interface to fetch objects from the OpenStack Placement API.
 type PlacementAPI interface {
+	// Return a list of resource providers from the OpenStack Placement API.
 	ListResourceProviders(KeystoneAuth) ([]ResourceProvider, error)
-	ResolveTraits(KeystoneAuth, ResourceProvider) ([]ProviderDetail, error)
-	ResolveAggregates(KeystoneAuth, ResourceProvider) ([]ProviderDetail, error)
+	// Return a list of traits for a resource provider from the OpenStack Placement API.
+	ResolveTraits(KeystoneAuth, ResourceProvider) ([]ResourceProviderTrait, error)
+	// Return a list of aggregates for a resource provider from the OpenStack Placement API.
+	ResolveAggregates(KeystoneAuth, ResourceProvider) ([]ResourceProviderAggregate, error)
 }
 
+// OpenStack Placement API implementation.
 type placementAPI struct {
-	conf    conf.SyncOpenStackConfig
-	client  *http.Client
+	// Configuration for the Placement API.
+	conf conf.SyncOpenStackConfig
+	// Shared HTTP client to use for requests.
+	client *http.Client
+	// Monitor to observe the api.
 	monitor sync.Monitor
 }
 
+// Create a new Placement API.
 func NewPlacementAPI(conf conf.SyncOpenStackConfig, monitor sync.Monitor) PlacementAPI {
-	return &placementAPI{
-		conf:    conf,
-		monitor: monitor,
-	}
+	return &placementAPI{conf: conf, monitor: monitor}
 }
 
+// Fetch data from the OpenStack Placement API.
 func (api *placementAPI) fetch(auth KeystoneAuth, url string) (*http.Response, error) {
 	slog.Info("getting openstack data", "url", url)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
@@ -87,7 +94,7 @@ func (api *placementAPI) ListResourceProviders(auth KeystoneAuth) ([]ResourcePro
 }
 
 // Return a list of traits for a resource provider from the OpenStack Placement API.
-func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvider) ([]ProviderDetail, error) {
+func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvider) ([]ResourceProviderTrait, error) {
 	if api.monitor.PipelineRequestTimer != nil {
 		hist := api.monitor.PipelineRequestTimer.
 			WithLabelValues("openstack_resource_provider_trait")
@@ -117,7 +124,7 @@ func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvi
 			WithLabelValues("openstack_resource_provider_trait").Inc()
 	}
 	slog.Info("got openstack resource provider traits", "n", len(responseJSON.Traits))
-	traits := make([]ProviderDetail, len(responseJSON.Traits))
+	traits := make([]ResourceProviderTrait, len(responseJSON.Traits))
 	for i, trait := range responseJSON.Traits {
 		traits[i] = ResourceProviderTrait{
 			ResourceProviderUUID:       provider.UUID,
@@ -129,7 +136,7 @@ func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvi
 }
 
 // Return a list of aggregates for a resource provider from the OpenStack Placement API.
-func (api *placementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceProvider) ([]ProviderDetail, error) {
+func (api *placementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceProvider) ([]ResourceProviderAggregate, error) {
 	if api.monitor.PipelineRequestTimer != nil {
 		hist := api.monitor.PipelineRequestTimer.
 			WithLabelValues("openstack_resource_provider_aggregate")
@@ -158,7 +165,7 @@ func (api *placementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceP
 			WithLabelValues("openstack_resource_provider_aggregate").Inc()
 	}
 	slog.Info("got openstack resource provider aggregates", "n", len(responseJSON.Aggregates))
-	aggregates := make([]ProviderDetail, len(responseJSON.Aggregates))
+	aggregates := make([]ResourceProviderAggregate, len(responseJSON.Aggregates))
 	for i, uuid := range responseJSON.Aggregates {
 		aggregates[i] = ResourceProviderAggregate{
 			ResourceProviderUUID:       provider.UUID,

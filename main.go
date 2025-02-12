@@ -4,9 +4,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"os"
 	gosync "sync"
@@ -20,12 +20,16 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
+	"github.com/sapcc/go-api-declarations/bininfo"
+	"github.com/sapcc/go-bits/httpext"
+	"github.com/sapcc/go-bits/jobloop"
+	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Periodically fetch data from the datasources and insert it into the database.
-func runSyncer(registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
+func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
 	monitor := sync.NewSyncMonitor(registry)
 	syncers := []sync.Datasource{
 		prometheus.NewCombinedSyncer(config.Prometheus, db, monitor),
@@ -35,35 +39,43 @@ func runSyncer(registry *monitoring.Registry, config conf.SyncConfig, db db.DB) 
 		syncer.Init()
 	}
 	for {
-		var wg gosync.WaitGroup
-		for _, syncer := range syncers {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				syncer.Sync()
-			}()
+		select {
+		case <-ctx.Done():
+			slog.Info("syncer shutting down")
+			return
+		default:
+			var wg gosync.WaitGroup
+			for _, syncer := range syncers {
+				wg.Add(1)
+				go func(syncer sync.Datasource) {
+					defer wg.Done()
+					syncer.Sync()
+				}(syncer)
+			}
+			wg.Wait()
+			time.Sleep(jobloop.DefaultJitter(time.Minute))
 		}
-		wg.Wait()
-		//nolint:gosec
-		r := rand.Float64() // Some randomization to avoid thundering herd.
-		time.Sleep(time.Duration(float64(time.Minute) * (0.9 + 0.2*r)))
 	}
 }
 
 // Periodically extract features from the database.
-func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
+func runExtractor(ctx context.Context, registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
 	monitor := features.NewPipelineMonitor(registry)
 	pipeline := features.NewPipeline(config, db, monitor)
 	for {
-		pipeline.Extract()
-		//nolint:gosec
-		r := rand.Float64() // Some randomization to avoid thundering herd.
-		time.Sleep(time.Duration(float64(time.Minute) * (0.9 + 0.2*r)))
+		select {
+		case <-ctx.Done():
+			slog.Info("extractor shutting down")
+			return
+		default:
+			pipeline.Extract()
+			time.Sleep(jobloop.DefaultJitter(time.Minute))
+		}
 	}
 }
 
 // Run a webserver that listens for external scheduling requests.
-func runScheduler(registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
+func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	monitor := scheduler.NewSchedulerMonitor(registry)
 	api := scheduler.NewExternalSchedulingAPI(config, db, monitor)
 	mux := http.NewServeMux()
@@ -75,31 +87,19 @@ func runScheduler(registry *monitoring.Registry, config conf.SchedulerConfig, db
 		api.NovaExternalScheduler,
 	)
 	slog.Info("api listening on", "port", config.Port)
-	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", config.Port),
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  90 * time.Second,
-	}
-	if err := server.ListenAndServe(); err != nil {
+	addr := fmt.Sprintf(":%d", config.Port)
+	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
 		panic(err)
 	}
 }
 
 // Run the prometheus metrics server for monitoring.
-func runMonitoringServer(registry *monitoring.Registry, config conf.MonitoringConfig) {
+func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, config conf.MonitoringConfig) {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	slog.Info("metrics listening", "port", config.Port)
-	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", config.Port),
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  90 * time.Second,
-	}
-	if err := server.ListenAndServe(); err != nil {
+	addr := fmt.Sprintf(":%d", config.Port)
+	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
 		panic(err)
 	}
 }
@@ -110,36 +110,60 @@ func main() {
 		panic("no arguments provided")
 	}
 
-	// Called by the Dockerfile build to make sure
-	// all binaries can be executed
-	if args[0] == "--version" {
-		fmt.Printf("%s version %s", "cortex", "0.0.1")
-		os.Exit(0)
+	// If called with `--version`, report version and exit (the Dockerfile
+	// uses this to check if the binary was built correctly)
+	bininfo.HandleVersionArgument()
+
+	// Set runtime concurrency to match CPU limit imposed by Kubernetes
+	undoMaxprocs, err := maxprocs.Set(maxprocs.Logger(slog.Debug))
+	if err != nil {
+		panic(err)
+	}
+	defer undoMaxprocs()
+
+	// Override User-Agent header for all requests made by this process
+	// (logs will show e.g. "blueprint-api/d0c9faa" instead of "Go-http-client/2.0")
+	wrap := httpext.WrapTransport(&http.DefaultTransport)
+	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
+
+	// This context will gracefully shutdown when the process receives the
+	// standard shutdown signal SIGINT, with a 10-second delay to allow
+	// Kubernetes to stop sending new requests well before the process starts
+	// to shut down.
+	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
+
+	// Parse command line arguments.
+	var taskName string
+	if len(os.Args) == 2 {
+		taskName = os.Args[1]
+		bininfo.SetTaskName(taskName)
+	} else {
+		panic(fmt.Sprintf("usage: %s [syncer | extractor | scheduler]", os.Args[0]))
 	}
 
 	config := conf.NewConfig()
 	if err := config.Validate(); err != nil {
 		slog.Error("failed to validate config", "error", err)
-		os.Exit(1)
+		panic(err)
 	}
 	slog.Info("config validated")
 
-	db := db.NewDB(config.GetDBConfig())
-	db.Init()
+	db := db.NewPostgresDB(config.GetDBConfig())
 	defer db.Close()
 
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
-	go runMonitoringServer(registry, monitoringConfig)
+	go runMonitoringServer(ctx, registry, monitoringConfig)
 
-	if args[0] == "--syncer" {
-		go runSyncer(registry, config.GetSyncConfig(), db)
-	}
-	if args[0] == "--extractor" {
-		go runExtractor(registry, config.GetFeaturesConfig(), db)
-	}
-	if args[0] == "--scheduler" {
-		go runScheduler(registry, config.GetSchedulerConfig(), db)
+	switch taskName {
+	case "syncer":
+		go runSyncer(ctx, registry, config.GetSyncConfig(), db)
+	case "extractor":
+		go runExtractor(ctx, registry, config.GetFeaturesConfig(), db)
+	case "scheduler":
+		go runScheduler(ctx, registry, config.GetSchedulerConfig(), db)
+	default:
+		panic("unknown task")
 	}
 	select {}
 }

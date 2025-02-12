@@ -5,115 +5,119 @@ package prometheus
 
 import (
 	"time"
+
+	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 // One metric datapoint in the Prometheus timeline.
 type PrometheusMetric interface {
-	// Table name into which the metric should be stored.
-	GetTableName() string
+	db.Table
 	// Name under which the metric is stored in Prometheus.
 	GetName() string
 	// Value of this metric datapoint.
 	GetValue() float64
-	// Set the time of this metric datapoint.
-	SetTimestamp(time time.Time)
-	// Set the value of this metric datapoint.
-	SetValue(value float64)
+	// Timestamp of this metric datapoint.
+	GetTimestamp() time.Time
+	// Create a new instance of this metric with time and value set
+	// from a prometheus range metric query.
+	With(time time.Time, value float64) PrometheusMetric
 }
 
 // VROpsHostMetric represents a single metric value from Prometheus
 // that was generated the VMware vROps exporter for a specific hostsystem.
 // See: https://github.com/sapcc/vrops-exporter
 type VROpsHostMetric struct {
-	//lint:ignore U1000 Field is used by the ORM.
-	tableName struct{} `pg:"vrops_host_metrics"`
 	// The name of the metric.
-	Name string `json:"__name__" pg:"name"`
+	Name string `json:"__name__" db:"name"`
 	// Kubernetes cluster name in which the metrics exporter is running.
-	Cluster string `json:"cluster" pg:"cluster"`
+	Cluster string `json:"cluster" db:"cluster"`
 	// Kubernetes cluster type in which the metrics exporter is running.
-	ClusterType string `json:"cluster_type" pg:"cluster_type"`
+	ClusterType string `json:"cluster_type" db:"cluster_type"`
 	// The name of the metrics collector.
-	Collector string `json:"collector" pg:"collector"`
+	Collector string `json:"collector" db:"collector"`
 	// Datacenter / availability zone of the hostsystem.
-	Datacenter string `json:"datacenter" pg:"datacenter"`
+	Datacenter string `json:"datacenter" db:"datacenter"`
 	// Host system name.
 	// Note: this value does not necessarily correspond to the
 	// hypervisor service host contained in OpenStack.
-	HostSystem string `json:"hostsystem" pg:"hostsystem"`
+	HostSystem string `json:"hostsystem" db:"hostsystem"`
 	// Internal name of the hostsystem.
-	InternalName string `json:"internal_name" pg:"internal_name"`
+	InternalName string `json:"internal_name" db:"internal_name"`
 	// Exporter job name (usually "vrops-exporter").
-	Job string `json:"job" pg:"job"`
+	Job string `json:"job" db:"job"`
 	// Prometheus instance from which the metric was fetched.
-	Prometheus string `json:"prometheus" pg:"prometheus"`
+	Prometheus string `json:"prometheus" db:"prometheus"`
 	// Datacenter region (one level above availability zone).
-	Region string `json:"region" pg:"region"`
+	Region string `json:"region" db:"region"`
 	// VMware vCenter cluster name in which the hostsystem is running.
-	VCCluster string `json:"vccluster" pg:"vccluster"`
+	VCCluster string `json:"vccluster" db:"vccluster"`
 	// VMware vCenter name in which the hostsystem is running.
-	VCenter string `json:"vcenter" pg:"vcenter"`
+	VCenter string `json:"vcenter" db:"vcenter"`
 	// Timestamp of the metric value.
-	Timestamp time.Time `json:"timestamp" pg:"timestamp"`
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
 	// The value of the metric.
-	Value float64 `json:"value" pg:"value"`
+	Value float64 `json:"value" db:"value"`
 }
 
-func (m *VROpsHostMetric) GetTableName() string     { return "vrops_host_metrics" }
-func (m *VROpsHostMetric) GetName() string          { return m.Name }
-func (m *VROpsHostMetric) GetTimestamp() time.Time  { return m.Timestamp }
-func (m *VROpsHostMetric) SetTimestamp(t time.Time) { m.Timestamp = t }
-func (m *VROpsHostMetric) GetValue() float64        { return m.Value }
-func (m *VROpsHostMetric) SetValue(v float64)       { m.Value = v }
+func (m VROpsHostMetric) TableName() string       { return "vrops_host_metrics" }
+func (m VROpsHostMetric) GetName() string         { return m.Name }
+func (m VROpsHostMetric) GetTimestamp() time.Time { return m.Timestamp }
+func (m VROpsHostMetric) GetValue() float64       { return m.Value }
+func (m VROpsHostMetric) With(t time.Time, v float64) PrometheusMetric {
+	m.Timestamp = t
+	m.Value = v
+	return m
+}
 
 // VROpsVMMetric represents a single metric value from Prometheus
 // that was generated the VMware vROps exporter for a specific virtual machine.
 // See: https://github.com/sapcc/vrops-exporter
 type VROpsVMMetric struct {
-	//lint:ignore U1000 Field is used by the ORM.
-	tableName struct{} `pg:"vrops_vm_metrics"`
 	// The name of the metric.
-	Name string `json:"__name__" pg:"name"`
+	Name string `json:"__name__" db:"name"`
 	// Kubernetes cluster name in which the metrics exporter is running.
-	Cluster string `json:"cluster" pg:"cluster"`
+	Cluster string `json:"cluster" db:"cluster"`
 	// Kubernetes cluster type in which the metrics exporter is running.
-	ClusterType string `json:"cluster_type" pg:"cluster_type"`
+	ClusterType string `json:"cluster_type" db:"cluster_type"`
 	// The name of the metrics collector.
-	Collector string `json:"collector" pg:"collector"`
+	Collector string `json:"collector" db:"collector"`
 	// Datacenter / availability zone of the virtual machine.
-	Datacenter string `json:"datacenter" pg:"datacenter"`
+	Datacenter string `json:"datacenter" db:"datacenter"`
 	// Host system of the virtual machine.
 	// Note: this value does not necessarily correspond to the
 	// hypervisor service host contained in OpenStack.
-	HostSystem string `json:"hostsystem" pg:"hostsystem"`
+	HostSystem string `json:"hostsystem" db:"hostsystem"`
 	// Internal name of the virtual machine.
-	InternalName string `json:"internal_name" pg:"internal_name"`
+	InternalName string `json:"internal_name" db:"internal_name"`
 	// Exporter job name (usually "vrops-exporter").
-	Job string `json:"job" pg:"job"`
+	Job string `json:"job" db:"job"`
 	// OpenStack project ID of the virtual machine.
-	Project string `json:"project" pg:"project"`
+	Project string `json:"project" db:"project"`
 	// Prometheus instance from which the metric was fetched.
-	Prometheus string `json:"prometheus" pg:"prometheus"`
+	Prometheus string `json:"prometheus" db:"prometheus"`
 	// Datacenter region (one level above availability zone).
-	Region string `json:"region" pg:"region"`
+	Region string `json:"region" db:"region"`
 	// VMware vCenter cluster name in which the virtual machine is running.
-	VCCluster string `json:"vccluster" pg:"vccluster"`
+	VCCluster string `json:"vccluster" db:"vccluster"`
 	// VMware vCenter name in which the virtual machine is running.
-	VCenter string `json:"vcenter" pg:"vcenter"`
+	VCenter string `json:"vcenter" db:"vcenter"`
 	// Name of the virtual machine specified by the OpenStack user.
-	VirtualMachine string `json:"virtualmachine" pg:"virtualmachine"`
+	VirtualMachine string `json:"virtualmachine" db:"virtualmachine"`
 	// OpenStack UUID of the virtual machine instance.
 	// Note: not all instances may be seen in the current OpenStack environment.
-	InstanceUUID string `json:"instance_uuid" pg:"instance_uuid"`
+	InstanceUUID string `json:"instance_uuid" db:"instance_uuid"`
 	// Timestamp of the metric value.
-	Timestamp time.Time `json:"timestamp" pg:"timestamp"`
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
 	// The value of the metric.
-	Value float64 `json:"value" pg:"value"`
+	Value float64 `json:"value" db:"value"`
 }
 
-func (m *VROpsVMMetric) GetTableName() string     { return "vrops_vm_metrics" }
-func (m *VROpsVMMetric) GetName() string          { return m.Name }
-func (m *VROpsVMMetric) GetTimestamp() time.Time  { return m.Timestamp }
-func (m *VROpsVMMetric) SetTimestamp(t time.Time) { m.Timestamp = t }
-func (m *VROpsVMMetric) GetValue() float64        { return m.Value }
-func (m *VROpsVMMetric) SetValue(v float64)       { m.Value = v }
+func (m VROpsVMMetric) TableName() string       { return "vrops_vm_metrics" }
+func (m VROpsVMMetric) GetName() string         { return m.Name }
+func (m VROpsVMMetric) GetTimestamp() time.Time { return m.Timestamp }
+func (m VROpsVMMetric) GetValue() float64       { return m.Value }
+func (m VROpsVMMetric) With(t time.Time, v float64) PrometheusMetric {
+	m.Timestamp = t
+	m.Value = v
+	return m
+}

@@ -9,18 +9,30 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 )
 
+// Feature that calculates the noisiness of projects and on which
+// compute hosts they are currently running.
 type VROpsProjectNoisiness struct {
-	//lint:ignore U1000 Ignore unused field warning
-	tableName       struct{} `pg:"feature_vrops_project_noisiness"`
-	Project         string   `pg:"project,notnull"`
-	ComputeHost     string   `pg:"compute_host,notnull"`
-	AvgCPUOfProject float64  `pg:"avg_cpu_of_project,notnull"`
+	Project         string  `db:"project"`
+	ComputeHost     string  `db:"compute_host"`
+	AvgCPUOfProject float64 `db:"avg_cpu_of_project"`
 }
 
+// Table under which the feature is stored.
+func (VROpsProjectNoisiness) TableName() string {
+	return "feature_vrops_project_noisiness"
+}
+
+// Extractor that extracts the noisiness of projects and on which compute
+// hosts they are currently running and stores it as a feature into the database.
 type VROpsProjectNoisinessExtractor struct {
-	plugins.BaseExtractor[VROpsProjectNoisiness, struct{}]
+	// Common base for all extractors that provides standard functionality.
+	plugins.BaseExtractor[
+		struct{},              // No options passed through yaml config
+		VROpsProjectNoisiness, // Feature model
+	]
 }
 
+// Name of this feature extractor that is used in the yaml config, for logging etc.
 func (e *VROpsProjectNoisinessExtractor) GetName() string {
 	return "vrops_project_noisiness_extractor"
 }
@@ -34,11 +46,10 @@ func (e *VROpsProjectNoisinessExtractor) GetName() string {
 // project in case this project is known to cause high cpu usage.
 func (e *VROpsProjectNoisinessExtractor) Extract() error {
 	// Delete the old data in the same transaction.
-	tx, err := e.DB.Get().Begin()
+	tx, err := e.DB.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Close()
 	if _, err := tx.Exec("DELETE FROM feature_vrops_project_noisiness"); err != nil {
 		return tx.Rollback()
 	}
@@ -77,7 +88,7 @@ func (e *VROpsProjectNoisinessExtractor) Extract() error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	count, err := e.DB.Get().Model((*VROpsProjectNoisiness)(nil)).Count()
+	count, err := e.DB.SelectInt("SELECT COUNT(*) FROM feature_vrops_project_noisiness")
 	if err != nil {
 		return err
 	}

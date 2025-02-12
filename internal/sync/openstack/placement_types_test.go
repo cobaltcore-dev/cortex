@@ -16,27 +16,11 @@ func TestResourceProviderTrait_GetName(t *testing.T) {
 	}
 }
 
-func TestResourceProviderTrait_GetPKField(t *testing.T) {
-	trait := ResourceProviderTrait{}
-	expected := "resource_provider_uuid,name"
-	if trait.GetPKField() != expected {
-		t.Errorf("expected %s, got %s", expected, trait.GetPKField())
-	}
-}
-
 func TestResourceProviderAggregate_GetName(t *testing.T) {
 	aggregate := ResourceProviderAggregate{}
 	expected := "openstack_resource_provider_aggregate"
 	if aggregate.GetName() != expected {
 		t.Errorf("expected %s, got %s", expected, aggregate.GetName())
-	}
-}
-
-func TestResourceProviderAggregate_GetPKField(t *testing.T) {
-	aggregate := ResourceProviderAggregate{}
-	expected := "resource_provider_uuid,uuid"
-	if aggregate.GetPKField() != expected {
-		t.Errorf("expected %s, got %s", expected, aggregate.GetPKField())
 	}
 }
 

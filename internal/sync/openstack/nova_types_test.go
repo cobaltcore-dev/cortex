@@ -49,27 +49,11 @@ func TestServer_GetName(t *testing.T) {
 	}
 }
 
-func TestServer_GetPKField(t *testing.T) {
-	server := Server{}
-	expected := "id"
-	if server.GetPKField() != expected {
-		t.Errorf("expected %s, got %s", expected, server.GetPKField())
-	}
-}
-
 func TestHypervisor_GetName(t *testing.T) {
 	hypervisor := Hypervisor{}
 	expected := "openstack_hypervisor"
 	if hypervisor.GetName() != expected {
 		t.Errorf("expected %s, got %s", expected, hypervisor.GetName())
-	}
-}
-
-func TestHypervisor_GetPKField(t *testing.T) {
-	hypervisor := Hypervisor{}
-	expected := "id"
-	if hypervisor.GetPKField() != expected {
-		t.Errorf("expected %s, got %s", expected, hypervisor.GetPKField())
 	}
 }
 

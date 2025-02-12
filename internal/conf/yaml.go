@@ -23,7 +23,7 @@ type SSOConfig struct {
 type DBConfig struct {
 	Host     string `yaml:"host"`
 	Port     string `yaml:"port"`
-	Name     string `yaml:"name"`
+	Database string `yaml:"database"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
 }

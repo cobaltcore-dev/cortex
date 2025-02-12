@@ -102,8 +102,8 @@ func TestResolveTraits(t *testing.T) {
 
 	expectedTraits := []string{"trait1", "trait2"}
 	for i, trait := range traits {
-		if trait.(ResourceProviderTrait).Name != expectedTraits[i] {
-			t.Errorf("expected trait %s, got %s", expectedTraits[i], trait.(ResourceProviderTrait).Name)
+		if trait.Name != expectedTraits[i] {
+			t.Errorf("expected trait %s, got %s", expectedTraits[i], trait.Name)
 		}
 	}
 }
@@ -144,8 +144,8 @@ func TestResolveAggregates(t *testing.T) {
 
 	expectedAggregates := []string{"aggregate1", "aggregate2"}
 	for i, aggregate := range aggregates {
-		if aggregate.(ResourceProviderAggregate).UUID != expectedAggregates[i] {
-			t.Errorf("expected aggregate %s, got %s", expectedAggregates[i], aggregate.(ResourceProviderAggregate).UUID)
+		if aggregate.UUID != expectedAggregates[i] {
+			t.Errorf("expected aggregate %s, got %s", expectedAggregates[i], aggregate.UUID)
 		}
 	}
 }

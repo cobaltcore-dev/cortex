@@ -13,16 +13,25 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Collection of Prometheus metrics to monitor scheduler pipeline
 type Monitor struct {
-	stepRunTimer             *prometheus.HistogramVec
-	stepWeightModObserver    *prometheus.HistogramVec
+	// A histogram to measure how long each step takes to run.
+	stepRunTimer *prometheus.HistogramVec
+	// A histogram to observe how much the step modifies the weights of the hosts.
+	stepWeightModObserver *prometheus.HistogramVec
+	// A histogram to observe how many hosts are removed from the state.
 	stepRemovedHostsObserver *prometheus.HistogramVec
-	apiRequestsTimer         *prometheus.HistogramVec
-	pipelineRunTimer         prometheus.Histogram
-	hostNumberInObserver     prometheus.Histogram
-	hostNumberOutObserver    prometheus.Histogram
+	// A histogram to measure how long the API requests take to run.
+	apiRequestsTimer *prometheus.HistogramVec
+	// A histogram to measure how long the pipeline takes to run in total.
+	pipelineRunTimer prometheus.Histogram
+	// A histogram to observe the number of hosts going into the scheduler pipeline.
+	hostNumberInObserver prometheus.Histogram
+	// A histogram to observe the number of hosts coming out of the scheduler pipeline.
+	hostNumberOutObserver prometheus.Histogram
 }
 
+// Create a new scheduler monitor and register the necessary Prometheus metrics.
 func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
@@ -91,16 +100,17 @@ type StepMonitor[S plugins.Step] struct {
 	removedHostsObserver prometheus.Observer
 }
 
+// Get the name of the wrapped step.
 func (s *StepMonitor[S]) GetName() string {
-	// Get the name of the wrapped step.
 	return s.Step.GetName()
 }
 
+// Initialize the wrapped step with the database and options.
 func (s *StepMonitor[S]) Init(db db.DB, opts yaml.MapSlice) error {
-	// Configure the wrapped step.
 	return s.Step.Init(db, opts)
 }
 
+// Schedule using the wrapped step and measure the time it takes.
 func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 	stepName := step.GetName()
 	var runTimer prometheus.Observer

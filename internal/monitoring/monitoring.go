@@ -10,16 +10,22 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
+// Custom prometheus registry that adds functionality to the default registry.
 type Registry struct {
+	// Inherited prometheus registry.
 	*prometheus.Registry
+	// Custom configuration for the monitoring.
 	config conf.MonitoringConfig
 }
 
+// Create a new registry with the given configuration.
+// This registry will include the default go collector and process collector.
 func NewRegistry(config conf.MonitoringConfig) *Registry {
 	registry := &Registry{
 		Registry: prometheus.NewRegistry(),
 		config:   config,
 	}
+	// Add go execution stats and process metrics to the registry.
 	registry.MustRegister(collectors.NewGoCollector())
 	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	return registry

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/go-pg/pg/v10"
 )
 
 type mockPrometheusAPI[M PrometheusMetric] struct {
@@ -31,33 +30,33 @@ func (api *mockPrometheusAPI[M]) FetchMetrics(
 }
 
 func TestSyncer_Init(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
-	syncer := &syncer[*VROpsVMMetric]{
+	syncer := &syncer[VROpsVMMetric]{
 		MetricName:    "test_metric",
-		PrometheusAPI: &mockPrometheusAPI[*VROpsVMMetric]{},
-		DB:            &mockDB,
+		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
+		DB:            *mockDB.DB,
 	}
 	syncer.Init()
 
 	// Verify the table was created
-	if _, err := mockDB.Get().Model((*VROpsVMMetric)(nil)).Exists(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	if !mockDB.TableExists(&VROpsVMMetric{}) {
+		t.Error("expected table to be created")
 	}
 }
 
 func TestSyncer_getSyncWindowStart(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	// Test case: No metrics in the database
-	syncer := &syncer[*VROpsVMMetric]{
+	syncer := &syncer[VROpsVMMetric]{
 		MetricName:    "test_metric",
-		PrometheusAPI: &mockPrometheusAPI[*VROpsVMMetric]{},
-		DB:            &mockDB,
+		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
+		DB:            *mockDB.DB,
 	}
 	syncer.Init()
 	start, err := syncer.getSyncWindowStart()
@@ -71,9 +70,9 @@ func TestSyncer_getSyncWindowStart(t *testing.T) {
 
 	// Test case: Metrics in the database
 	latestTimestamp := time.Now().Add(-time.Hour)
-	if _, err = mockDB.Get().Exec(
-		"INSERT INTO vrops_vm_metrics (name, timestamp) VALUES (?, ?)",
-		"test_metric", latestTimestamp,
+	if _, err = mockDB.Exec(
+		"INSERT INTO vrops_vm_metrics (name, timestamp) VALUES (:metric, :timestamp)",
+		map[string]any{"metric": "test_metric", "timestamp": latestTimestamp},
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -91,25 +90,25 @@ func TestSyncer_getSyncWindowStart(t *testing.T) {
 }
 
 func TestSyncer_sync(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
-	mockPrometheusAPI := &mockPrometheusAPI[*VROpsVMMetric]{
-		data: prometheusTimelineData[*VROpsVMMetric]{
-			Metrics: []*VROpsVMMetric{
+	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
+		data: prometheusTimelineData[VROpsVMMetric]{
+			Metrics: []VROpsVMMetric{
 				{Name: "test_metric", Timestamp: time.Now(), Value: 123.45},
 			},
 		},
 	}
 
-	syncer := &syncer[*VROpsVMMetric]{
+	syncer := &syncer[VROpsVMMetric]{
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
 		MetricName:            "test_metric",
 		PrometheusAPI:         mockPrometheusAPI,
-		DB:                    &mockDB,
+		DB:                    *mockDB.DB,
 	}
 	syncer.Init()
 
@@ -118,7 +117,7 @@ func TestSyncer_sync(t *testing.T) {
 
 	// Verify the metrics were inserted
 	var metrics []VROpsVMMetric
-	if err := mockDB.Get().Model(&metrics).Select(); err != nil {
+	if _, err := mockDB.Select(&metrics, "SELECT * FROM vrops_vm_metrics"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(metrics) != 4*7 {
@@ -134,21 +133,21 @@ func TestSyncer_sync(t *testing.T) {
 }
 
 func TestSyncer_sync_Failure(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
-	mockPrometheusAPI := &mockPrometheusAPI[*VROpsVMMetric]{
+	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
 		err: errors.New("failed to fetch metrics"),
 	}
 
-	syncer := &syncer[*VROpsVMMetric]{
+	syncer := &syncer[VROpsVMMetric]{
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
 		MetricName:            "test_metric",
 		PrometheusAPI:         mockPrometheusAPI,
-		DB:                    &mockDB,
+		DB:                    *mockDB.DB,
 	}
 	syncer.Init()
 
@@ -156,8 +155,8 @@ func TestSyncer_sync_Failure(t *testing.T) {
 	syncer.sync(start)
 
 	// Verify no metrics were inserted
-	var metrics []PrometheusMetric
-	if err := mockDB.Get().Model(&metrics).Select(); err != nil && errors.Is(err, pg.ErrNoRows) {
+	var metrics []VROpsVMMetric
+	if _, err := mockDB.Select(&metrics, "SELECT * FROM vrops_vm_metrics"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(metrics) != 0 {

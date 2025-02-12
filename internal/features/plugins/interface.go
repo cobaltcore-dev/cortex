@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Each feature extractor must conform to this interface.
 type FeatureExtractor interface {
 	// Configure the feature extractor with a database and options.
 	// This function should also create the needed database structures.

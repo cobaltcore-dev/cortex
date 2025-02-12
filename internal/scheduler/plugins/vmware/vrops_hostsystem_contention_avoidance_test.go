@@ -10,30 +10,22 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
-	"github.com/go-pg/pg/v10/orm"
 	"gopkg.in/yaml.v2"
 )
 
 func TestAvoidContendedHostsStep_Run(t *testing.T) {
-	mockDB := testlibDB.NewMockDB()
-	mockDB.Init()
+	mockDB := testlibDB.NewSqliteMockDB()
+	mockDB.Init(t)
 	defer mockDB.Close()
 
 	// Create dependency tables
-	deps := []interface{}{
-		(*vmware.VROpsHostsystemContention)(nil),
-	}
-	for _, dep := range deps {
-		if err := mockDB.
-			Get().
-			Model(dep).
-			CreateTable(&orm.CreateTableOptions{IfNotExists: true}); err != nil {
-			panic(err)
-		}
+	err := mockDB.CreateTable(mockDB.AddTable(vmware.VROpsHostsystemContention{}))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_vrops_hostsystem_contention table
-	_, err := mockDB.Get().Exec(`
+	_, err = mockDB.Exec(`
         INSERT INTO feature_vrops_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
         VALUES
             ('host1', 15.0, 25.0),
@@ -51,7 +43,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
 	step := &VROpsAvoidContendedHostsStep{}
-	if err := step.Init(&mockDB, opts); err != nil {
+	if err := step.Init(*mockDB.DB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
