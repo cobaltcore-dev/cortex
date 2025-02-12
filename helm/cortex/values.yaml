@@ -70,7 +70,7 @@ modes:
     service:
       type: ClusterIP
       metricsPort: 2112
-    args: ["--syncer"]
+    args: ["syncer"]
     replicas: 1
 
   # Extractor extracts features from the synced data.
@@ -78,7 +78,7 @@ modes:
     service:
       type: ClusterIP
       metricsPort: 2112
-    args: ["--extractor"]
+    args: ["extractor"]
     replicas: 1
 
   # Scheduler exposes the scheduler API and modifies the Nova scheduler weights.
@@ -87,7 +87,7 @@ modes:
       type: ClusterIP
       apiPort: 8080
       metricsPort: 2112
-    args: ["--scheduler"]
+    args: ["scheduler"]
     replicas: 2
 
 # Default sso certificate to use for all services.

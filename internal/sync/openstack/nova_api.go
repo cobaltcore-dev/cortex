@@ -29,6 +29,7 @@ type novaAPI[M NovaModel, L NovaList] struct {
 	monitor sync.Monitor
 }
 
+// Create a new Nova API.
 func NewNovaAPI[M NovaModel, L NovaList](
 	conf conf.SyncOpenStackConfig,
 	monitor sync.Monitor,

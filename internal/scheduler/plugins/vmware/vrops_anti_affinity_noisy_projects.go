@@ -17,6 +17,7 @@ type vROpsAntiAffinityNoisyProjectsStepOpts struct {
 
 // Step to avoid noisy projects by downvoting the hosts they are running on.
 type VROpsAntiAffinityNoisyProjectsStep struct {
+	// BaseStep is a helper struct that provides common functionality for all steps.
 	plugins.BaseStep[vROpsAntiAffinityNoisyProjectsStepOpts]
 }
 
