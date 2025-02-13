@@ -21,8 +21,8 @@ func (m *mockFeatureExtractor) Init(db db.DB, opts yaml.MapSlice) error {
 	return m.initErr
 }
 
-func (m *mockFeatureExtractor) Extract() error {
-	return m.extractErr
+func (m *mockFeatureExtractor) Extract() ([]plugins.Feature, error) {
+	return nil, m.extractErr
 }
 
 func (m *mockFeatureExtractor) GetName() string {

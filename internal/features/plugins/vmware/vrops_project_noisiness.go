@@ -44,14 +44,14 @@ func (e *VROpsProjectNoisinessExtractor) GetName() string {
 // 3. Store the avg cpu usage together with the current hosts in the database.
 // This feature can then be used to draw new VMs away from VMs of the same
 // project in case this project is known to cause high cpu usage.
-func (e *VROpsProjectNoisinessExtractor) Extract() error {
+func (e *VROpsProjectNoisinessExtractor) Extract() ([]plugins.Feature, error) {
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := tx.Exec("DELETE FROM feature_vrops_project_noisiness"); err != nil {
-		return tx.Rollback()
+		return nil, tx.Rollback()
 	}
 	// Extract the new data.
 	if _, err := tx.Exec(`
@@ -83,15 +83,20 @@ func (e *VROpsProjectNoisinessExtractor) Extract() error {
             avg_cpu_of_project
         FROM host_cpu_usage;
     `); err != nil {
-		return tx.Rollback()
+		return nil, tx.Rollback()
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return nil, err
 	}
-	count, err := e.DB.SelectInt("SELECT COUNT(*) FROM feature_vrops_project_noisiness")
-	if err != nil {
-		return err
+	// Load the extracted features from the database and return them.
+	var features []VROpsProjectNoisiness
+	if _, err := e.DB.Select(&features, "SELECT * FROM feature_vrops_project_noisiness"); err != nil {
+		return nil, err
 	}
-	slog.Info("features: extracted", "feature_vrops_project_noisiness", count)
-	return nil
+	output := make([]plugins.Feature, len(features))
+	for _, feature := range features {
+		output = append(output, plugins.Feature(feature))
+	}
+	slog.Info("features: extracted", "feature_vrops_project_noisiness", len(features))
+	return output, nil
 }

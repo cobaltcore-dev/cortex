@@ -14,9 +14,11 @@ type FeatureExtractor interface {
 	// This function should also create the needed database structures.
 	Init(db db.DB, opts yaml.MapSlice) error
 	// Extract features from the given data.
-	Extract() error
+	Extract() ([]Feature, error)
 	// Get the name of this feature extractor.
 	// This name is used to identify the extractor in metrics, config, logs, etc.
 	// Should be something like: "my_cool_feature_extractor".
 	GetName() string
 }
+
+type Feature interface{}

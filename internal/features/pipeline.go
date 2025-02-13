@@ -111,7 +111,7 @@ func (p *FeatureExtractorPipeline) Extract() {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if err := extractor.Extract(); err != nil {
+				if _, err := extractor.Extract(); err != nil {
 					slog.Error("feature extractor: failed to extract features", "error", err)
 					return
 				}

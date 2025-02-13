@@ -37,14 +37,14 @@ func (e *VROpsHostsystemResolver) GetName() string {
 }
 
 // Resolve vROps hostsystems to Nova compute hosts.
-func (e *VROpsHostsystemResolver) Extract() error {
+func (e *VROpsHostsystemResolver) Extract() ([]plugins.Feature, error) {
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := tx.Exec("DELETE FROM feature_vrops_resolved_hostsystem"); err != nil {
-		return tx.Rollback()
+		return nil, tx.Rollback()
 	}
 	if _, err := tx.Exec(`
 		INSERT INTO feature_vrops_resolved_hostsystem (vrops_hostsystem, nova_compute_host)
@@ -56,15 +56,20 @@ func (e *VROpsHostsystemResolver) Extract() error {
 		JOIN openstack_hypervisors h ON s.os_ext_srv_attr_hypervisor_hostname = h.hostname
 		GROUP BY m.hostsystem, h.service_host;
     `); err != nil {
-		return tx.Rollback()
+		return nil, tx.Rollback()
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return nil, err
 	}
-	count, err := e.DB.SelectInt("SELECT COUNT(*) FROM feature_vrops_resolved_hostsystem")
-	if err != nil {
-		return err
+	// Load the extracted features from the database and return them.
+	var features []ResolvedVROpsHostsystem
+	if _, err := e.DB.Select(&features, "SELECT * FROM feature_vrops_resolved_hostsystem"); err != nil {
+		return nil, err
 	}
-	slog.Info("features: extracted", "feature_vrops_resolved_hostsystem", count)
-	return nil
+	output := make([]plugins.Feature, len(features))
+	for i, feature := range features {
+		output[i] = feature
+	}
+	slog.Info("features: extracted", "feature_vrops_resolved_hostsystem", len(output))
+	return output, nil
 }

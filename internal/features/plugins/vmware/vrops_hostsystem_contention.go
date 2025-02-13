@@ -38,14 +38,14 @@ func (*VROpsHostsystemContentionExtractor) GetName() string {
 
 // Extract CPU contention of hostsystems.
 // Depends on resolved vROps hostsystems (feature_vrops_resolved_hostsystem).
-func (e *VROpsHostsystemContentionExtractor) Extract() error {
+func (e *VROpsHostsystemContentionExtractor) Extract() ([]plugins.Feature, error) {
 	// Delete the old data in the same transaction.
 	tx, err := e.DB.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := tx.Exec("DELETE FROM feature_vrops_hostsystem_contention"); err != nil {
-		return tx.Rollback()
+		return nil, tx.Rollback()
 	}
 	if _, err := tx.Exec(`
 		INSERT INTO feature_vrops_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
@@ -58,15 +58,20 @@ func (e *VROpsHostsystemContentionExtractor) Extract() error {
 		WHERE m.name = 'vrops_hostsystem_cpu_contention_percentage'
 		GROUP BY h.nova_compute_host;
     `); err != nil {
-		return tx.Rollback()
+		return nil, tx.Rollback()
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return nil, err
 	}
-	count, err := e.DB.SelectInt("SELECT COUNT(*) FROM feature_vrops_hostsystem_contention")
-	if err != nil {
-		return err
+	// Load the extracted features from the database and return them.
+	var features []VROpsHostsystemContention
+	if _, err := e.DB.Select(&features, "SELECT * FROM feature_vrops_hostsystem_contention"); err != nil {
+		return nil, err
 	}
-	slog.Info("features: extracted", "feature_vrops_hostsystem_contention", count)
-	return nil
+	output := make([]plugins.Feature, len(features))
+	for _, feature := range features {
+		output = append(output, plugins.Feature(feature))
+	}
+	slog.Info("features: extracted", "feature_vrops_hostsystem_contention", len(output))
+	return output, nil
 }

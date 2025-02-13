@@ -63,7 +63,7 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	if err := extractor.Init(*testDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if err = extractor.Extract(); err != nil {
+	if _, err = extractor.Extract(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
