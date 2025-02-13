@@ -12,37 +12,35 @@ import (
 )
 
 func TestVROpsHostsystemResolver_Init(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(*mockDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the table was created
-	if !mockDB.TableExists(ResolvedVROpsHostsystem{}) {
+	if !testDB.TableExists(ResolvedVROpsHostsystem{}) {
 		t.Error("expected table to be created")
 	}
 }
 
 func TestVROpsHostsystemResolver_Extract(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	// Create dependency tables
-	if err := mockDB.CreateTable(
-		mockDB.AddTable(prometheus.VROpsVMMetric{}),
-		mockDB.AddTable(openstack.Server{}),
-		mockDB.AddTable(openstack.Hypervisor{}),
+	if err := testDB.CreateTable(
+		testDB.AddTable(prometheus.VROpsVMMetric{}),
+		testDB.AddTable(openstack.Server{}),
+		testDB.AddTable(openstack.Hypervisor{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the metrics table
-	_, err := mockDB.Exec(`
+	_, err := testDB.Exec(`
         INSERT INTO vrops_vm_metrics (hostsystem, instance_uuid)
         VALUES
             ('hostsystem1', 'uuid1'),
@@ -53,7 +51,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the openstack_servers table
-	_, err = mockDB.Exec(`
+	_, err = testDB.Exec(`
         INSERT INTO openstack_servers (id, os_ext_srv_attr_hypervisor_hostname)
         VALUES
             ('uuid1', 'hostname1'),
@@ -64,7 +62,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the openstack_hypervisors table
-	_, err = mockDB.Exec(`
+	_, err = testDB.Exec(`
         INSERT INTO openstack_hypervisors (hostname, service_host)
         VALUES
             ('hostname1', 'service_host1'),
@@ -75,7 +73,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(*mockDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := extractor.Extract(); err != nil {
@@ -84,7 +82,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_vrops_resolved_hostsystem table
 	var resolvedHostsystems []ResolvedVROpsHostsystem
-	_, err = mockDB.Select(&resolvedHostsystems, "SELECT * FROM feature_vrops_resolved_hostsystem")
+	_, err = testDB.Select(&resolvedHostsystems, "SELECT * FROM feature_vrops_resolved_hostsystem")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

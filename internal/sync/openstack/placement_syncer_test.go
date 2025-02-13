@@ -38,16 +38,15 @@ func (m *MockPlacementAPI) ResolveAggregates(auth KeystoneAuth, provider Resourc
 }
 
 func TestPlacementSyncer_Init(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	mon := sync.Monitor{}
 	conf := conf.SyncOpenStackConfig{}
 	syncer := &placementSyncer{
 		Config:        conf,
 		API:           NewPlacementAPI(conf, mon),
-		DB:            *mockDB.DB,
+		DB:            *testDB.DB,
 		monitor:       mon,
 		sleepInterval: 0,
 	}
@@ -59,16 +58,15 @@ func TestPlacementSyncer_Init(t *testing.T) {
 		ResourceProviderTrait{},
 		ResourceProviderAggregate{},
 	} {
-		if !mockDB.TableExists(model) {
+		if !testDB.TableExists(model) {
 			t.Error("expected table to be created")
 		}
 	}
 }
 
 func TestPlacementSyncer_Sync(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	mockAPI := &MockPlacementAPI{
 		providers: []ResourceProvider{
@@ -88,7 +86,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	syncer := &placementSyncer{
 		Config:  conf.SyncOpenStackConfig{},
 		API:     mockAPI,
-		DB:      *mockDB.DB,
+		DB:      *testDB.DB,
 		monitor: sync.Monitor{},
 	}
 	syncer.Init()
@@ -101,7 +99,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 
 	// Check if the providers were inserted
 	var count int
-	err = mockDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProvider{}.TableName())
+	err = testDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProvider{}.TableName())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -110,7 +108,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	}
 
 	// Check if the traits were inserted
-	err = mockDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProviderTrait{}.TableName())
+	err = testDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProviderTrait{}.TableName())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -119,7 +117,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	}
 
 	// Check if the aggregates were inserted
-	err = mockDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProviderAggregate{}.TableName())
+	err = testDB.SelectOne(&count, "SELECT COUNT(*) FROM "+ResourceProviderAggregate{}.TableName())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

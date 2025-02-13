@@ -23,9 +23,8 @@ func (m *mockPipeline) Run(scenario plugins.Scenario, novaWeights map[string]flo
 }
 
 func TestCanRunScheduler(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	api := &externalSchedulingAPI{
 		Pipeline: &mockPipeline{},
@@ -83,9 +82,8 @@ func TestCanRunScheduler(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	// Mock the Pipeline
 	mockPipeline := &mockPipeline{}

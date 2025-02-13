@@ -16,55 +16,52 @@ func (m MockTable) TableName() string {
 	return "mock_table"
 }
 
-func TestSqliteMockDB_Init(t *testing.T) {
-	mockDB := NewSqliteMockDB()
-	mockDB.Init(t)
+func TestSqliteTestDB_Init(t *testing.T) {
+	testDB := NewSqliteTestDB(t)
 
-	if mockDB.DbMap == nil {
+	if testDB.DbMap == nil {
 		t.Fatal("expected DbMap to be initialized")
 	}
 
-	if err := mockDB.DbMap.Db.Ping(); err != nil {
+	if err := testDB.DbMap.Db.Ping(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestSqliteMockDB_CreateTable(t *testing.T) {
-	mockDB := NewSqliteMockDB()
-	mockDB.Init(t)
+func TestSqliteTestDB_CreateTable(t *testing.T) {
+	testDB := NewSqliteTestDB(t)
 
-	table := mockDB.AddTable(MockTable{})
-	err := mockDB.CreateTable(table)
+	table := testDB.AddTable(MockTable{})
+	err := testDB.CreateTable(table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if !mockDB.TableExists(MockTable{}) {
+	if !testDB.TableExists(MockTable{}) {
 		t.Fatal("expected table to exist")
 	}
 }
 
-func TestSqliteMockDB_TableExists(t *testing.T) {
-	mockDB := NewSqliteMockDB()
-	mockDB.Init(t)
+func TestSqliteTestDB_TableExists(t *testing.T) {
+	testDB := NewSqliteTestDB(t)
 
-	table := mockDB.AddTable(MockTable{})
-	err := mockDB.CreateTable(table)
+	table := testDB.AddTable(MockTable{})
+	err := testDB.CreateTable(table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if !mockDB.TableExists(MockTable{}) {
+	if !testDB.TableExists(MockTable{}) {
 		t.Fatal("expected table to exist")
 	}
 }
 
-func TestSqliteMockDB_Close(t *testing.T) {
-	mockDB := NewSqliteMockDB()
-	mockDB.Init(t)
-	mockDB.Close()
+func TestSqliteTestDB_Close(t *testing.T) {
+	testDB := NewSqliteTestDB(t)
 
-	if err := mockDB.DbMap.Db.Ping(); err == nil {
+	testDB.Close()
+
+	if err := testDB.DbMap.Db.Ping(); err == nil {
 		t.Fatal("expected error, got nil")
 	}
 }

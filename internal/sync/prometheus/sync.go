@@ -178,7 +178,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	if latestTimestamp.IsZero() {
 		return time.Time{}, errors.New("latestTimestamp is zero")
 	}
-	slog.Debug("latest timestamp", "latestTimestamp", latestTimestamp)
+	slog.Info("latest timestamp", "latestTimestamp", latestTimestamp)
 	return latestTimestamp, nil
 }
 

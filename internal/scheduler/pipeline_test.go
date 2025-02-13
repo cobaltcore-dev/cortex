@@ -33,9 +33,8 @@ func (m *mockPipelineStep) Run(scenario plugins.Scenario) (map[string]float64, e
 }
 
 func TestPipeline_Run(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	// Create an instance of the pipeline with a mock step
 	pipeline := &pipeline{

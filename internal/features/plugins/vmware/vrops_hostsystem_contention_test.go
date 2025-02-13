@@ -11,35 +11,33 @@ import (
 )
 
 func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	extractor := &VROpsHostsystemContentionExtractor{}
-	if err := extractor.Init(*mockDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if !mockDB.TableExists(VROpsHostsystemContention{}) {
+	if !testDB.TableExists(VROpsHostsystemContention{}) {
 		t.Error("expected table to be created")
 	}
 }
 
 func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	// Create dependency tables
-	if err := mockDB.CreateTable(
-		mockDB.AddTable(ResolvedVROpsHostsystem{}),
-		mockDB.AddTable(prometheus.VROpsHostMetric{}),
+	if err := testDB.CreateTable(
+		testDB.AddTable(ResolvedVROpsHostsystem{}),
+		testDB.AddTable(prometheus.VROpsHostMetric{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the vrops_host_metrics table
-	_, err := mockDB.Exec(`
+	_, err := testDB.Exec(`
         INSERT INTO vrops_host_metrics (hostsystem, name, value)
         VALUES
             ('hostsystem1', 'vrops_hostsystem_cpu_contention_percentage', 30.0),
@@ -51,7 +49,7 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the feature_vrops_resolved_hostsystem table
-	_, err = mockDB.Exec(`
+	_, err = testDB.Exec(`
         INSERT INTO feature_vrops_resolved_hostsystem (vrops_hostsystem, nova_compute_host)
         VALUES
             ('hostsystem1', 'compute_host1'),
@@ -62,7 +60,7 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemContentionExtractor{}
-	if err := extractor.Init(*mockDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err = extractor.Extract(); err != nil {
@@ -71,7 +69,7 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_vrops_hostsystem_contention table
 	var contentions []VROpsHostsystemContention
-	_, err = mockDB.Select(&contentions, "SELECT * FROM feature_vrops_hostsystem_contention")
+	_, err = testDB.Select(&contentions, "SELECT * FROM feature_vrops_hostsystem_contention")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

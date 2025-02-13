@@ -18,7 +18,7 @@ import (
 func NewHTTPClient(conf conf.SSOConfig) (*http.Client, error) {
 	if conf.Cert == "" {
 		// Disable SSO if no certificate is provided.
-		slog.Info("making http requests without SSO")
+		slog.Debug("making http requests without SSO")
 		return &http.Client{}, nil
 	}
 	// If we have a public key, we also need a private key.

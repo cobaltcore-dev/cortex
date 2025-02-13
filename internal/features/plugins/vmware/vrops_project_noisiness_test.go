@@ -12,37 +12,35 @@ import (
 )
 
 func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(*mockDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	// Will fail when the table does not exist
-	err := mockDB.SelectOne(&VROpsProjectNoisiness{}, "SELECT * FROM feature_vrops_project_noisiness LIMIT 1")
+	err := testDB.SelectOne(&VROpsProjectNoisiness{}, "SELECT * FROM feature_vrops_project_noisiness LIMIT 1")
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
 }
 
 func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	// Create dependency tables
-	if err := mockDB.CreateTable(
-		mockDB.AddTable(prometheus.VROpsVMMetric{}),
-		mockDB.AddTable(openstack.Server{}),
-		mockDB.AddTable(openstack.Hypervisor{}),
+	if err := testDB.CreateTable(
+		testDB.AddTable(prometheus.VROpsVMMetric{}),
+		testDB.AddTable(openstack.Server{}),
+		testDB.AddTable(openstack.Hypervisor{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the metrics table
-	if _, err := mockDB.Exec(`
+	if _, err := testDB.Exec(`
 	INSERT INTO vrops_vm_metrics (name, project, value, instance_uuid)
 	VALUES
 		('vrops_virtualmachine_cpu_demand_ratio', 'project1', 50, 'uuid1'),
@@ -53,7 +51,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the openstack_servers table
-	if _, err := mockDB.Exec(`
+	if _, err := testDB.Exec(`
 	INSERT INTO openstack_servers (id, tenant_id, os_ext_srv_attr_hypervisor_hostname)
 	VALUES
 		('uuid1', 'project1', 'host1'),
@@ -64,7 +62,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the openstack_hypervisors table
-	if _, err := mockDB.Exec(`
+	if _, err := testDB.Exec(`
 	INSERT INTO openstack_hypervisors (hostname, service_host)
 	VALUES
 		('host1', 'service_host1'),
@@ -74,7 +72,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(*mockDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB.DB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := extractor.Extract(); err != nil {
@@ -84,7 +82,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	// Verify the data was inserted into the feature_vrops_project_noisiness table
 	var noisiness []VROpsProjectNoisiness
 	q := `SELECT * FROM feature_vrops_project_noisiness ORDER BY project, compute_host`
-	if _, err := mockDB.Select(&noisiness, q); err != nil {
+	if _, err := testDB.Select(&noisiness, q); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	expected := []VROpsProjectNoisiness{

@@ -5,6 +5,8 @@ package db
 
 import (
 	"database/sql"
+	"log"
+	"os"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -12,29 +14,29 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type SqliteMockDB struct {
+type SqliteTestDB struct {
 	*db.DB
 }
 
-func NewSqliteMockDB() SqliteMockDB {
-	return SqliteMockDB{DB: &db.DB{}}
-}
-
-func (db *SqliteMockDB) Init(t *testing.T) {
+func NewSqliteTestDB(t *testing.T) SqliteTestDB {
 	tmpDir := t.TempDir()
 	sqlDB, err := sql.Open("sqlite3", tmpDir+"/test.db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.DbMap = &gorp.DbMap{Db: sqlDB, Dialect: gorp.SqliteDialect{}}
+	d := SqliteTestDB{DB: &db.DB{}}
+	dbmap := &gorp.DbMap{Db: sqlDB, Dialect: gorp.SqliteDialect{}}
+	dbmap.TraceOn("[gorp]", log.New(os.Stdout, "myapp:", log.Lmicroseconds))
+	d.DbMap = dbmap
+	return d
 }
 
 // Check if a table exists in the database.
 // Note: This overrides the method in db.DB, because sqlite needs
 // a different query to check if a table exists.
-func (db *SqliteMockDB) TableExists(table db.Table) bool {
+func (d *SqliteTestDB) TableExists(table db.Table) bool {
 	query := "SELECT name FROM sqlite_master WHERE type='table' AND name = :name"
 	var name string
-	err := db.SelectOne(&name, query, map[string]interface{}{"name": table.TableName()})
+	err := d.SelectOne(&name, query, map[string]interface{}{"name": table.TableName()})
 	return err == nil
 }

@@ -14,18 +14,17 @@ import (
 )
 
 func TestAvoidContendedHostsStep_Run(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	// Create dependency tables
-	err := mockDB.CreateTable(mockDB.AddTable(vmware.VROpsHostsystemContention{}))
+	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsHostsystemContention{}))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_vrops_hostsystem_contention table
-	_, err = mockDB.Exec(`
+	_, err = testDB.Exec(`
         INSERT INTO feature_vrops_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
         VALUES
             ('host1', 15.0, 25.0),
@@ -43,7 +42,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
 	step := &VROpsAvoidContendedHostsStep{}
-	if err := step.Init(*mockDB.DB, opts); err != nil {
+	if err := step.Init(*testDB.DB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

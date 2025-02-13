@@ -14,18 +14,17 @@ import (
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	// Create dependency tables
-	err := mockDB.CreateTable(mockDB.AddTable(vmware.VROpsProjectNoisiness{}))
+	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsProjectNoisiness{}))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_vrops_project_noisiness table
-	_, err = mockDB.Exec(`
+	_, err = testDB.Exec(`
         INSERT INTO feature_vrops_project_noisiness (project, compute_host, avg_cpu_of_project)
         VALUES
             ('project1', 'host1', 25.0),
@@ -40,7 +39,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
 	step := &VROpsAntiAffinityNoisyProjectsStep{}
-	if err := step.Init(*mockDB.DB, opts); err != nil {
+	if err := step.Init(*testDB.DB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

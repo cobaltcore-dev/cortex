@@ -58,29 +58,27 @@ func (m MockList) GetLinks() *[]PageLink { return m.Links }
 func (m MockList) GetModels() any        { return m.Models }
 
 func TestSyncer_Init(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
-	syncer := newNovaSyncer[MockTable, MockList](*mockDB.DB, conf.SyncOpenStackConfig{}, sync.Monitor{})
+	syncer := newNovaSyncer[MockTable, MockList](*testDB.DB, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	syncer.Init()
 
 	// Verify the table was created
-	if !mockDB.TableExists(MockTable{}) {
+	if !testDB.TableExists(MockTable{}) {
 		t.Error("expected table to be created")
 	}
 }
 
 func TestSyncer_Sync(t *testing.T) {
-	mockDB := testlibDB.NewSqliteMockDB()
-	mockDB.Init(t)
-	defer mockDB.Close()
+	testDB := testlibDB.NewSqliteTestDB(t)
+	defer testDB.Close()
 
 	syncer := &novaSyncer[MockTable, MockList]{
 		API: &MockNovaAPI[MockTable, MockList]{list: []MockTable{
 			{ID: "1", Val: "Test"}, {ID: "2", Val: "Test2"},
 		}},
-		DB: *mockDB.DB,
+		DB: *testDB.DB,
 	}
 	syncer.Init()
 
@@ -90,7 +88,7 @@ func TestSyncer_Sync(t *testing.T) {
 	}
 
 	// Check if the objects were inserted
-	count, err := mockDB.SelectInt("SELECT COUNT(*) FROM openstack_mock_table")
+	count, err := testDB.SelectInt("SELECT COUNT(*) FROM openstack_mock_table")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
