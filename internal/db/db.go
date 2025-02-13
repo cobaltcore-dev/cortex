@@ -27,13 +27,14 @@ type Table interface {
 
 // Create a new postgres database and wait until it is connected.
 func NewPostgresDB(c conf.DBConfig) DB {
+	stripYaml := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
-		HostName:          c.Host,
-		Port:              c.Port,
-		UserName:          c.User,
-		Password:          c.Password,
+		HostName:          stripYaml(c.Host),
+		Port:              stripYaml(c.Port),
+		UserName:          stripYaml(c.User),
+		Password:          stripYaml(c.Password),
 		ConnectionOptions: "sslmode=disable",
-		DatabaseName:      c.Database,
+		DatabaseName:      stripYaml(c.Database),
 	})
 	if err != nil {
 		panic(err)
