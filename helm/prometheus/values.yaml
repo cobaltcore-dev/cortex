@@ -24,6 +24,8 @@ alerts:
       severity: info
     cortexSyncObjectsDroppedToZero:
       severity: info
+    cortexSyncObjectsTooHigh:
+      severity: info
 
 kube-prometheus-stack:
   # Whether the CRDs of the prometheus-operator should be deployed
