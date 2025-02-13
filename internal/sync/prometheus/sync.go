@@ -169,7 +169,12 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	}
 	if err := s.DB.SelectOne(
 		&model,
-		fmt.Sprintf("SELECT name, timestamp FROM %s WHERE name = :name ORDER BY timestamp LIMIT 1", tableName),
+		fmt.Sprintf(`
+			SELECT name, timestamp FROM %s
+			WHERE name = :name
+			ORDER BY timestamp
+			DESC LIMIT 1
+		`, tableName),
 		map[string]any{"name": s.MetricName},
 	); err != nil {
 		return time.Time{}, fmt.Errorf("failed to get latest timestamp: %w", err)
