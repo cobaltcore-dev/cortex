@@ -39,7 +39,7 @@ func NewPostgresDB(c conf.DBConfig) DB {
 	if err != nil {
 		panic(err)
 	}
-	slog.Info("connecting to database", "dbURL", dbURL)
+	slog.Info("connecting to database", "dbURL", dbURL.String())
 	db, err := sql.Open("postgres", dbURL.String())
 	if err != nil {
 		panic(err)
