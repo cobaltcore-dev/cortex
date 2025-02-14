@@ -6,6 +6,7 @@ package vmware
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -15,8 +16,9 @@ import (
 
 func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	// Create dependency tables
 	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsHostsystemContention{}))
@@ -43,7 +45,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
 	step := &VROpsAvoidContendedHostsStep{}
-	if err := step.Init(*testDB, opts); err != nil {
+	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
