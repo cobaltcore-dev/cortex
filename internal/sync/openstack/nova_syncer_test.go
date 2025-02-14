@@ -58,10 +58,11 @@ func (m MockList) GetLinks() *[]PageLink { return m.Links }
 func (m MockList) GetModels() any        { return m.Models }
 
 func TestSyncer_Init(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
-	syncer := newNovaSyncer[MockTable, MockList](*testDB.DB, conf.SyncOpenStackConfig{}, sync.Monitor{})
+	syncer := newNovaSyncer[MockTable, MockList](*testDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	syncer.Init()
 
 	// Verify the table was created
@@ -71,14 +72,15 @@ func TestSyncer_Init(t *testing.T) {
 }
 
 func TestSyncer_Sync(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	syncer := &novaSyncer[MockTable, MockList]{
 		API: &MockNovaAPI[MockTable, MockList]{list: []MockTable{
 			{ID: "1", Val: "Test"}, {ID: "2", Val: "Test2"},
 		}},
-		DB: *testDB.DB,
+		DB: *testDB,
 	}
 	syncer.Init()
 

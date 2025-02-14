@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
 // Mock implementation of Pipeline
@@ -23,9 +22,6 @@ func (m *mockPipeline) Run(scenario plugins.Scenario, novaWeights map[string]flo
 }
 
 func TestCanRunScheduler(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
-
 	api := &externalSchedulingAPI{
 		Pipeline: &mockPipeline{},
 	}
@@ -82,9 +78,6 @@ func TestCanRunScheduler(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
-
 	// Mock the Pipeline
 	mockPipeline := &mockPipeline{}
 

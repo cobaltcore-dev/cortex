@@ -14,8 +14,9 @@ import (
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	// Create dependency tables
 	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsProjectNoisiness{}))
@@ -39,7 +40,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
 	step := &VROpsAntiAffinityNoisyProjectsStep{}
-	if err := step.Init(*testDB.DB, opts); err != nil {
+	if err := step.Init(*testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

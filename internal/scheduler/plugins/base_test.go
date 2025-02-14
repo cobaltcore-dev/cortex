@@ -16,8 +16,9 @@ type MockOptions struct {
 }
 
 func TestBaseStep_Init(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	opts := yaml.MapSlice{
 		{Key: "option1", Value: "value1"},
@@ -25,7 +26,7 @@ func TestBaseStep_Init(t *testing.T) {
 	}
 
 	step := BaseStep[MockOptions]{}
-	err := step.Init(*testDB.DB, opts)
+	err := step.Init(*testDB, opts)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

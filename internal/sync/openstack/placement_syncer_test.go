@@ -38,15 +38,16 @@ func (m *MockPlacementAPI) ResolveAggregates(auth KeystoneAuth, provider Resourc
 }
 
 func TestPlacementSyncer_Init(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	mon := sync.Monitor{}
 	conf := conf.SyncOpenStackConfig{}
 	syncer := &placementSyncer{
 		Config:        conf,
 		API:           NewPlacementAPI(conf, mon),
-		DB:            *testDB.DB,
+		DB:            *testDB,
 		monitor:       mon,
 		sleepInterval: 0,
 	}
@@ -65,8 +66,9 @@ func TestPlacementSyncer_Init(t *testing.T) {
 }
 
 func TestPlacementSyncer_Sync(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	mockAPI := &MockPlacementAPI{
 		providers: []ResourceProvider{
@@ -86,7 +88,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	syncer := &placementSyncer{
 		Config:  conf.SyncOpenStackConfig{},
 		API:     mockAPI,
-		DB:      *testDB.DB,
+		DB:      *testDB,
 		monitor: sync.Monitor{},
 	}
 	syncer.Init()
