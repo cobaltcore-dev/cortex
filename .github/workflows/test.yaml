@@ -15,7 +15,7 @@ jobs:
       - name: Test without Docker
         run: go test -v ./...
 
-  test-again-with-postgres:
+  test-with-postgres:
     runs-on: ubuntu-latest
     services:
       dind:
