@@ -12,9 +12,9 @@ import (
 )
 
 func TestVROpsHostsystemResolver_Init(t *testing.T) {
-	testDBManager := testlibDB.NewTestDB(t)
-	defer testDBManager.Close()
-	testDB := testDBManager.GetDB()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	extractor := &VROpsHostsystemResolver{}
 	if err := extractor.Init(*testDB, nil); err != nil {
@@ -28,9 +28,9 @@ func TestVROpsHostsystemResolver_Init(t *testing.T) {
 }
 
 func TestVROpsHostsystemResolver_Extract(t *testing.T) {
-	testDBManager := testlibDB.NewTestDB(t)
-	defer testDBManager.Close()
-	testDB := testDBManager.GetDB()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
@@ -65,10 +65,10 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 
 	// Insert mock data into the openstack_hypervisors table
 	_, err = testDB.Exec(`
-        INSERT INTO openstack_hypervisors (hostname, service_host)
+        INSERT INTO openstack_hypervisors (id, hostname, service_host)
         VALUES
-            ('hostname1', 'service_host1'),
-            ('hostname2', 'service_host2')
+            (1, 'hostname1', 'service_host1'),
+            (2, 'hostname2', 'service_host2')
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

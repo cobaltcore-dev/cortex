@@ -11,9 +11,9 @@ import (
 )
 
 func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
-	testDBManager := testlibDB.NewTestDB(t)
-	defer testDBManager.Close()
-	testDB := testDBManager.GetDB()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	extractor := &VROpsHostsystemContentionExtractor{}
 	if err := extractor.Init(*testDB, nil); err != nil {
@@ -26,9 +26,9 @@ func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
 }
 
 func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
-	testDBManager := testlibDB.NewTestDB(t)
-	defer testDBManager.Close()
-	testDB := testDBManager.GetDB()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	// Create dependency tables
 	if err := testDB.CreateTable(

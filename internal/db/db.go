@@ -92,11 +92,24 @@ func (d *DB) AddTable(t Table) *gorp.TableMap {
 
 // Check if a table exists in the database.
 func (d *DB) TableExists(t Table) bool {
-	query := `SELECT EXISTS (
-		SELECT 1
-		FROM   information_schema.tables
-		WHERE  table_name = :table_name
-	);`
+	var query string
+	switch d.DbMap.Dialect.(type) {
+	case gorp.PostgresDialect:
+		query = `SELECT EXISTS (
+			SELECT 1
+			FROM   information_schema.tables
+			WHERE  table_name = :table_name
+		);`
+	case gorp.SqliteDialect:
+		query = `SELECT EXISTS (
+			SELECT 1
+			FROM sqlite_master
+			WHERE type='table' AND name = :table_name
+		);`
+	default:
+		slog.Error("unsupported database dialect")
+		return false
+	}
 	var exists bool
 	err := d.SelectOne(&exists, query, map[string]any{"table_name": t.TableName()})
 	if err != nil {

@@ -14,9 +14,9 @@ import (
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
-	testDBManager := testlibDB.NewTestDB(t)
-	defer testDBManager.Close()
-	testDB := testDBManager.GetDB()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	// Create dependency tables
 	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsProjectNoisiness{}))

@@ -25,9 +25,9 @@ func (MockFeature) TableName() string {
 }
 
 func TestBaseExtractor_Init(t *testing.T) {
-	testDBManager := testlibDB.NewTestDB(t)
-	defer testDBManager.Close()
-	testDB := testDBManager.GetDB()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	opts := yaml.MapSlice{
 		{Key: "option1", Value: "value1"},

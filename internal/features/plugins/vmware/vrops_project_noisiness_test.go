@@ -12,9 +12,9 @@ import (
 )
 
 func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
-	testDBManager := testlibDB.NewTestDB(t)
-	defer testDBManager.Close()
-	testDB := testDBManager.GetDB()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	extractor := &VROpsProjectNoisinessExtractor{}
 	if err := extractor.Init(*testDB, nil); err != nil {
@@ -28,9 +28,9 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 }
 
 func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
-	testDBManager := testlibDB.NewTestDB(t)
-	defer testDBManager.Close()
-	testDB := testDBManager.GetDB()
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := dbEnv.DB
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
@@ -65,10 +65,10 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 
 	// Insert mock data into the openstack_hypervisors table
 	if _, err := testDB.Exec(`
-	INSERT INTO openstack_hypervisors (hostname, service_host)
+	INSERT INTO openstack_hypervisors (id, hostname, service_host)
 	VALUES
-		('host1', 'service_host1'),
-		('host2', 'service_host2')
+		(1, 'host1', 'service_host1'),
+		(2, 'host2', 'service_host2')
 	`); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
