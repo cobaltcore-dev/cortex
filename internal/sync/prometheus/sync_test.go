@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -31,13 +32,14 @@ func (api *mockPrometheusAPI[M]) FetchMetrics(
 
 func TestSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	syncer := &syncer[VROpsVMMetric]{
 		MetricName:    "test_metric",
 		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
-		DB:            *testDB,
+		DB:            testDB,
 	}
 	syncer.Init()
 
@@ -49,14 +51,15 @@ func TestSyncer_Init(t *testing.T) {
 
 func TestSyncer_getSyncWindowStart(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	// Test case: No metrics in the database
 	syncer := &syncer[VROpsVMMetric]{
 		MetricName:    "test_metric",
 		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
-		DB:            *testDB,
+		DB:            testDB,
 	}
 	syncer.Init()
 	start, err := syncer.getSyncWindowStart()
@@ -91,8 +94,9 @@ func TestSyncer_getSyncWindowStart(t *testing.T) {
 
 func TestSyncer_sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
 		data: prometheusTimelineData[VROpsVMMetric]{
@@ -108,7 +112,7 @@ func TestSyncer_sync(t *testing.T) {
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
 		MetricName:            "test_metric",
 		PrometheusAPI:         mockPrometheusAPI,
-		DB:                    *testDB,
+		DB:                    testDB,
 	}
 	syncer.Init()
 
@@ -134,8 +138,9 @@ func TestSyncer_sync(t *testing.T) {
 
 func TestSyncer_sync_Failure(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
 		err: errors.New("failed to fetch metrics"),
@@ -147,7 +152,7 @@ func TestSyncer_sync_Failure(t *testing.T) {
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
 		MetricName:            "test_metric",
 		PrometheusAPI:         mockPrometheusAPI,
-		DB:                    *testDB,
+		DB:                    testDB,
 	}
 	syncer.Init()
 
@@ -166,8 +171,9 @@ func TestSyncer_sync_Failure(t *testing.T) {
 
 func TestSyncer_DeleteOldMetrics(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
 		data: prometheusTimelineData[VROpsVMMetric]{
@@ -183,7 +189,7 @@ func TestSyncer_DeleteOldMetrics(t *testing.T) {
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
 		MetricName:            "test_metric",
 		PrometheusAPI:         mockPrometheusAPI,
-		DB:                    *testDB,
+		DB:                    testDB,
 	}
 	syncer.Init()
 

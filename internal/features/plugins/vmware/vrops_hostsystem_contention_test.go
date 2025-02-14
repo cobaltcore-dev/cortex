@@ -6,17 +6,19 @@ package vmware
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
 func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	extractor := &VROpsHostsystemContentionExtractor{}
-	if err := extractor.Init(*testDB, nil); err != nil {
+	if err := extractor.Init(testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -27,8 +29,9 @@ func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
 
 func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
@@ -62,7 +65,7 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemContentionExtractor{}
-	if err := extractor.Init(*testDB, nil); err != nil {
+	if err := extractor.Init(testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err = extractor.Extract(); err != nil {

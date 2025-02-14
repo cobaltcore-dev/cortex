@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
@@ -59,10 +60,11 @@ func (m MockList) GetModels() any        { return m.Models }
 
 func TestSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
-	syncer := newNovaSyncer[MockTable, MockList](*testDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
+	syncer := newNovaSyncer[MockTable, MockList](testDB, conf.SyncOpenStackConfig{}, sync.Monitor{})
 	syncer.Init()
 
 	// Verify the table was created
@@ -73,14 +75,15 @@ func TestSyncer_Init(t *testing.T) {
 
 func TestSyncer_Sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	syncer := &novaSyncer[MockTable, MockList]{
 		API: &MockNovaAPI[MockTable, MockList]{list: []MockTable{
 			{ID: "1", Val: "Test"}, {ID: "2", Val: "Test2"},
 		}},
-		DB: *testDB,
+		DB: testDB,
 	}
 	syncer.Init()
 

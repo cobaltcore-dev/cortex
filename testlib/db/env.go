@@ -10,15 +10,14 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/testlib/containers"
+	"github.com/cobaltcore-dev/cortex/testlib/db/containers"
 	"github.com/go-gorp/gorp"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/sapcc/go-bits/easypg"
 )
 
 type DBEnv struct {
-	*db.DB
+	*gorp.DbMap
 	Close func()
 }
 
@@ -29,18 +28,23 @@ func SetupDBEnv(t *testing.T) DBEnv {
 		slog.Info("Using real postgres container")
 		container := containers.PostgresContainer{}
 		container.Init(t)
-		db := db.NewPostgresDB(conf.DBConfig{
-			Host:     "localhost",
-			Port:     container.GetPort(),
-			User:     "postgres",
-			Password: "secret",
-			Database: "postgres",
+		dbURL, err := easypg.URLFrom(easypg.URLParts{
+			HostName:          "localhost",
+			Port:              container.GetPort(),
+			UserName:          "postgres",
+			Password:          "secret",
+			ConnectionOptions: "sslmode=disable",
+			DatabaseName:      "postgres",
 		})
-		env.DB = &db
-		env.Close = func() {
-			env.DB.Close()
-			container.Close()
+		if err != nil {
+			t.Fatal(err)
 		}
+		db, err := sql.Open("postgres", dbURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.DbMap = &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
+		env.Close = container.Close
 	} else {
 		slog.Info("Using sqlite")
 		tmpDir := t.TempDir()
@@ -48,12 +52,9 @@ func SetupDBEnv(t *testing.T) DBEnv {
 		if err != nil {
 			t.Fatal(err)
 		}
-		env.DB = &db.DB{}
-		env.DB.DbMap = &gorp.DbMap{Db: sqlDB, Dialect: gorp.SqliteDialect{}}
-		env.Close = func() {
-			env.DB.Close()
-		}
+		env.DbMap = &gorp.DbMap{Db: sqlDB, Dialect: gorp.SqliteDialect{}}
+		env.Close = func() {}
 	}
-	env.DB.DbMap.TraceOn("[gorp]", log.New(os.Stdout, "cortex:", log.Lmicroseconds))
+	env.DbMap.TraceOn("[gorp]", log.New(os.Stdout, "cortex:", log.Lmicroseconds))
 	return env
 }

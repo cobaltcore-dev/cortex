@@ -6,6 +6,7 @@ package plugins
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"gopkg.in/yaml.v2"
 )
@@ -17,8 +18,9 @@ type MockOptions struct {
 
 func TestBaseStep_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	opts := yaml.MapSlice{
 		{Key: "option1", Value: "value1"},
@@ -26,7 +28,7 @@ func TestBaseStep_Init(t *testing.T) {
 	}
 
 	step := BaseStep[MockOptions]{}
-	err := step.Init(*testDB, opts)
+	err := step.Init(testDB, opts)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

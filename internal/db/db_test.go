@@ -4,10 +4,12 @@
 package db
 
 import (
+	"os"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/testlib/containers"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/testlib/db/containers"
 )
 
 type MockTable struct {
@@ -20,6 +22,9 @@ func (m MockTable) TableName() string {
 }
 
 func TestNewDB(t *testing.T) {
+	if os.Getenv("POSTGRES_CONTAINER") != "1" {
+		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
+	}
 	container := containers.PostgresContainer{}
 	container.Init(t)
 	defer container.Close()
@@ -37,20 +42,10 @@ func TestNewDB(t *testing.T) {
 }
 
 func TestDB_CreateTable(t *testing.T) {
-	container := containers.PostgresContainer{}
-	container.Init(t)
-	defer container.Close()
-
-	config := conf.DBConfig{
-		Host:     "localhost",
-		Port:     container.GetPort(),
-		User:     "postgres",
-		Password: "secret",
-		Database: "postgres",
-	}
-
-	db := NewPostgresDB(config)
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
 	defer db.Close()
+	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
 	err := db.CreateTable(table)
@@ -64,20 +59,10 @@ func TestDB_CreateTable(t *testing.T) {
 }
 
 func TestDB_AddTable(t *testing.T) {
-	container := containers.PostgresContainer{}
-	container.Init(t)
-	defer container.Close()
-
-	config := conf.DBConfig{
-		Host:     "localhost",
-		Port:     container.GetPort(),
-		User:     "postgres",
-		Password: "secret",
-		Database: "postgres",
-	}
-
-	db := NewPostgresDB(config)
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
 	defer db.Close()
+	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
 	if table == nil {
@@ -86,20 +71,10 @@ func TestDB_AddTable(t *testing.T) {
 }
 
 func TestDB_TableExists(t *testing.T) {
-	container := containers.PostgresContainer{}
-	container.Init(t)
-	defer container.Close()
-
-	config := conf.DBConfig{
-		Host:     "localhost",
-		Port:     container.GetPort(),
-		User:     "postgres",
-		Password: "secret",
-		Database: "postgres",
-	}
-
-	db := NewPostgresDB(config)
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
 	defer db.Close()
+	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
 	err := db.CreateTable(table)
@@ -113,20 +88,10 @@ func TestDB_TableExists(t *testing.T) {
 }
 
 func TestDB_Close(t *testing.T) {
-	container := containers.PostgresContainer{}
-	container.Init(t)
-	defer container.Close()
-
-	config := conf.DBConfig{
-		Host:     "localhost",
-		Port:     container.GetPort(),
-		User:     "postgres",
-		Password: "secret",
-		Database: "postgres",
-	}
-
-	db := NewPostgresDB(config)
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
 	db.Close()
+	defer dbEnv.Close()
 
 	if err := db.DbMap.Db.Ping(); err == nil {
 		t.Fatal("expected error, got nil")
@@ -134,20 +99,10 @@ func TestDB_Close(t *testing.T) {
 }
 
 func TestUpsert(t *testing.T) {
-	container := containers.PostgresContainer{}
-	container.Init(t)
-	defer container.Close()
-
-	config := conf.DBConfig{
-		Host:     "localhost",
-		Port:     container.GetPort(),
-		User:     "postgres",
-		Password: "secret",
-		Database: "postgres",
-	}
-
-	db := NewPostgresDB(config)
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
 	defer db.Close()
+	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
 	err := db.CreateTable(table)
@@ -164,7 +119,7 @@ func TestUpsert(t *testing.T) {
 
 	// Verify the record was inserted
 	var insertedRecord MockTable
-	err = db.SelectOne(&insertedRecord, "SELECT * FROM mock_table WHERE id = $1", mockRecord.ID)
+	err = db.SelectOne(&insertedRecord, "SELECT * FROM mock_table WHERE id = :id", map[string]interface{}{"id": mockRecord.ID})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -181,7 +136,7 @@ func TestUpsert(t *testing.T) {
 
 	// Verify the record was updated
 	var updatedRecord MockTable
-	err = db.SelectOne(&updatedRecord, "SELECT * FROM mock_table WHERE id = $1", mockRecord.ID)
+	err = db.SelectOne(&updatedRecord, "SELECT * FROM mock_table WHERE id = :id", map[string]interface{}{"id": mockRecord.ID})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

@@ -6,6 +6,7 @@ package plugins
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"gopkg.in/yaml.v2"
 )
@@ -26,8 +27,9 @@ func (MockFeature) TableName() string {
 
 func TestBaseExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	opts := yaml.MapSlice{
 		{Key: "option1", Value: "value1"},
@@ -35,7 +37,7 @@ func TestBaseExtractor_Init(t *testing.T) {
 	}
 
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(*testDB, opts)
+	err := extractor.Init(testDB, opts)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

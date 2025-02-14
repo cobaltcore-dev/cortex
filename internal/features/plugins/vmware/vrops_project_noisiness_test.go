@@ -6,6 +6,7 @@ package vmware
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -13,11 +14,12 @@ import (
 
 func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(*testDB, nil); err != nil {
+	if err := extractor.Init(testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	// Will fail when the table does not exist
@@ -29,8 +31,9 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 
 func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
 	defer dbEnv.Close()
-	testDB := dbEnv.DB
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
@@ -74,7 +77,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(*testDB, nil); err != nil {
+	if err := extractor.Init(testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {

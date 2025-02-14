@@ -18,7 +18,6 @@ import (
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
 	*gorp.DbMap
-	DBConfig conf.DBConfig
 }
 
 type Table interface {
@@ -45,13 +44,11 @@ func NewPostgresDB(c conf.DBConfig) DB {
 		panic(err)
 	}
 
-	var sqlDB *sql.DB
 	// If the wait time exceeds 10 seconds, we will panic.
 	maxRetries := 10
 	for i := range maxRetries {
 		err := db.Ping()
 		if err == nil {
-			sqlDB = db
 			break
 		}
 		if i == maxRetries-1 {
@@ -61,10 +58,10 @@ func NewPostgresDB(c conf.DBConfig) DB {
 		time.Sleep(1 * time.Second)
 	}
 
-	sqlDB.SetMaxOpenConns(16)
-	dbMap := &gorp.DbMap{Db: sqlDB, Dialect: gorp.PostgresDialect{}}
+	db.SetMaxOpenConns(16)
+	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	slog.Info("database is ready")
-	return DB{DBConfig: c, DbMap: dbMap}
+	return DB{DbMap: dbMap}
 }
 
 // Adds missing functionality to gorp.DbMap which creates one table.
@@ -119,7 +116,7 @@ func (d *DB) TableExists(t Table) bool {
 	return exists
 }
 
-// Convenience function to the database connection.
+// Convenience function to close the database connection.
 func (d *DB) Close() {
 	if err := d.DbMap.Db.Close(); err != nil {
 		slog.Error("failed to close database connection", "error", err)
@@ -134,10 +131,21 @@ type upsertable interface {
 
 // Upsert a model into the database (Insert if possible, otherwise Update).
 func Upsert(u upsertable, model any) error {
+	// This is a hacky way to check if the error is a duplicate key error.
+	// In the future, we should look for a different solution.
+	errmsgs := []string{
+		"duplicate key value violates unique constraint", // postgres
+		"UNIQUE constraint failed",                       // sqlite
+	}
+
 	if err := u.Insert(model); err != nil {
-		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
-			if _, err := u.Update(model); err != nil {
-				return err
+		slog.Error("failed to insert model", "error", err)
+		for _, errmsg := range errmsgs {
+			if strings.Contains(err.Error(), errmsg) {
+				if _, err := u.Update(model); err != nil {
+					return err
+				}
+				return nil
 			}
 		}
 	}
