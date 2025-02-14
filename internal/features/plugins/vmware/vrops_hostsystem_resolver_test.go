@@ -12,11 +12,12 @@ import (
 )
 
 func TestVROpsHostsystemResolver_Init(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	testDBManager := testlibDB.NewTestDB(t)
+	defer testDBManager.Close()
+	testDB := testDBManager.GetDB()
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(*testDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -27,8 +28,9 @@ func TestVROpsHostsystemResolver_Init(t *testing.T) {
 }
 
 func TestVROpsHostsystemResolver_Extract(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	testDBManager := testlibDB.NewTestDB(t)
+	defer testDBManager.Close()
+	testDB := testDBManager.GetDB()
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
@@ -73,7 +75,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(*testDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {

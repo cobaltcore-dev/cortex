@@ -3,7 +3,21 @@ name: Test with Docker
 on: [push]
 
 jobs:
-  test:
+  test-with-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.23"
+
+      - name: Test without Docker
+        run: go test -v ./...
+
+  test-again-with-postgres:
     runs-on: ubuntu-latest
     services:
       dind:
@@ -20,4 +34,4 @@ jobs:
           go-version: "1.23"
 
       - name: Test with Docker
-        run: go test -v ./...
+        run: WITH_REAL_POSTGRES_CONTAINER=1 go test -v ./...

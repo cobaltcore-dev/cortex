@@ -14,8 +14,9 @@ import (
 )
 
 func TestAvoidContendedHostsStep_Run(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	testDBManager := testlibDB.NewTestDB(t)
+	defer testDBManager.Close()
+	testDB := testDBManager.GetDB()
 
 	// Create dependency tables
 	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsHostsystemContention{}))
@@ -42,7 +43,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
 	}
 	step := &VROpsAvoidContendedHostsStep{}
-	if err := step.Init(*testDB.DB, opts); err != nil {
+	if err := step.Init(*testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

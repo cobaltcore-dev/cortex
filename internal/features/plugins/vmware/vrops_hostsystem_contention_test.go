@@ -11,11 +11,12 @@ import (
 )
 
 func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	testDBManager := testlibDB.NewTestDB(t)
+	defer testDBManager.Close()
+	testDB := testDBManager.GetDB()
 
 	extractor := &VROpsHostsystemContentionExtractor{}
-	if err := extractor.Init(*testDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -25,8 +26,9 @@ func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
 }
 
 func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	testDBManager := testlibDB.NewTestDB(t)
+	defer testDBManager.Close()
+	testDB := testDBManager.GetDB()
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
@@ -60,7 +62,7 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemContentionExtractor{}
-	if err := extractor.Init(*testDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err = extractor.Extract(); err != nil {

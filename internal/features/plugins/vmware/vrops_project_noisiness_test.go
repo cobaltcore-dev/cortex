@@ -12,11 +12,12 @@ import (
 )
 
 func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	testDBManager := testlibDB.NewTestDB(t)
+	defer testDBManager.Close()
+	testDB := testDBManager.GetDB()
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(*testDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	// Will fail when the table does not exist
@@ -27,8 +28,9 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 }
 
 func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	testDBManager := testlibDB.NewTestDB(t)
+	defer testDBManager.Close()
+	testDB := testDBManager.GetDB()
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
@@ -72,7 +74,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(*testDB.DB, nil); err != nil {
+	if err := extractor.Init(*testDB, nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {

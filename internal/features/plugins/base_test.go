@@ -25,8 +25,9 @@ func (MockFeature) TableName() string {
 }
 
 func TestBaseExtractor_Init(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
+	testDBManager := testlibDB.NewTestDB(t)
+	defer testDBManager.Close()
+	testDB := testDBManager.GetDB()
 
 	opts := yaml.MapSlice{
 		{Key: "option1", Value: "value1"},
@@ -34,7 +35,7 @@ func TestBaseExtractor_Init(t *testing.T) {
 	}
 
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(*testDB.DB, opts)
+	err := extractor.Init(*testDB, opts)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

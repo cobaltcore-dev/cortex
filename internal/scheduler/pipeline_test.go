@@ -8,7 +8,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 	"gopkg.in/yaml.v2"
 )
@@ -33,9 +32,6 @@ func (m *mockPipelineStep) Run(scenario plugins.Scenario) (map[string]float64, e
 }
 
 func TestPipeline_Run(t *testing.T) {
-	testDB := testlibDB.NewSqliteTestDB(t)
-	defer testDB.Close()
-
 	// Create an instance of the pipeline with a mock step
 	pipeline := &pipeline{
 		executionOrder: [][]plugins.Step{

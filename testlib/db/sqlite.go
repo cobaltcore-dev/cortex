@@ -26,10 +26,12 @@ func NewSqliteTestDB(t *testing.T) SqliteTestDB {
 	}
 	d := SqliteTestDB{DB: &db.DB{}}
 	dbmap := &gorp.DbMap{Db: sqlDB, Dialect: gorp.SqliteDialect{}}
-	dbmap.TraceOn("[gorp]", log.New(os.Stdout, "myapp:", log.Lmicroseconds))
+	dbmap.TraceOn("[gorp]", log.New(os.Stdout, "cortex:", log.Lmicroseconds))
 	d.DbMap = dbmap
 	return d
 }
+
+func (db *SqliteTestDB) GetDB() *db.DB { return db.DB }
 
 // Check if a table exists in the database.
 // Note: This overrides the method in db.DB, because sqlite needs

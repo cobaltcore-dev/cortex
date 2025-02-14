@@ -30,9 +30,11 @@ func NewPostgresTestDB(t *testing.T) PostgresTestDB {
 		Database: "postgres",
 	})
 	testDB := PostgresTestDB{DB: &db, container: container}
-	testDB.DbMap.TraceOn("[gorp]", log.New(os.Stdout, "myapp:", log.Lmicroseconds))
+	testDB.DbMap.TraceOn("[gorp]", log.New(os.Stdout, "cortex:", log.Lmicroseconds))
 	return testDB
 }
+
+func (db *PostgresTestDB) GetDB() *db.DB { return db.DB }
 
 func (db *PostgresTestDB) Close() {
 	db.DB.Close()
