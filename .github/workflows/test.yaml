@@ -1,4 +1,4 @@
-name: Test with Docker
+name: Test
 
 on: [push]
 
