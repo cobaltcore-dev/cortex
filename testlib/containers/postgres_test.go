@@ -6,12 +6,17 @@ package containers
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"testing"
 
 	_ "github.com/lib/pq"
 )
 
 func TestPostgresContainer_Init(t *testing.T) {
+	if os.Getenv("POSTGRES_CONTAINER") != "1" {
+		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
+	}
+
 	container := PostgresContainer{}
 	container.Init(t)
 	defer container.Close()
@@ -32,6 +37,10 @@ func TestPostgresContainer_Init(t *testing.T) {
 }
 
 func TestPostgresContainer_Close(t *testing.T) {
+	if os.Getenv("POSTGRES_CONTAINER") != "1" {
+		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
+	}
+
 	container := PostgresContainer{}
 	container.Init(t)
 
