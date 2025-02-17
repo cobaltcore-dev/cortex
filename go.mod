@@ -7,7 +7,7 @@ replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
 require (
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/lib/pq v1.10.9
-	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/client_model v0.6.1
