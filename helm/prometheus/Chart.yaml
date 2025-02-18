@@ -6,7 +6,7 @@ dependencies:
   # CRDs of the prometheus operator, such as PrometheusRule, ServiceMonitor, etc.
   - name: kube-prometheus-stack
     repository: https://prometheus-community.github.io/helm-charts
-    version: 68.3.2
+    version: 68.5.0
     condition: kube-prometheus-stack.enabled
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
