@@ -35,7 +35,7 @@ func (api *keystoneAPI) Authenticate(ctx context.Context) error {
 		// Already authenticated.
 		return nil
 	}
-	slog.Info("authenticating against openstack")
+	slog.Info("authenticating against openstack", "url", api.keystoneConf.URL)
 	authOptions := gophercloud.AuthOptions{
 		IdentityEndpoint: api.keystoneConf.URL,
 		Username:         api.keystoneConf.OSUsername,
