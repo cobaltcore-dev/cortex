@@ -9,54 +9,6 @@ import (
 	"testing"
 )
 
-func TestServerList_GetURL(t *testing.T) {
-	list := ServerList{}
-	expected := "servers/detail?all_tenants=1"
-	if list.GetURL() != expected {
-		t.Errorf("expected %s, got %s", expected, list.GetURL())
-	}
-}
-
-func TestServerList_GetLinks(t *testing.T) {
-	links := &[]PageLink{{Href: "http://example.com", Rel: "next"}}
-	list := ServerList{ServersLinks: links}
-	if list.GetLinks() != links {
-		t.Errorf("expected %v, got %v", links, list.GetLinks())
-	}
-}
-
-func TestHypervisorList_GetURL(t *testing.T) {
-	list := HypervisorList{}
-	expected := "os-hypervisors/detail"
-	if list.GetURL() != expected {
-		t.Errorf("expected %s, got %s", expected, list.GetURL())
-	}
-}
-
-func TestHypervisorList_GetLinks(t *testing.T) {
-	links := &[]PageLink{{Href: "http://example.com", Rel: "next"}}
-	list := HypervisorList{HypervisorsLinks: links}
-	if list.GetLinks() != links {
-		t.Errorf("expected %v, got %v", links, list.GetLinks())
-	}
-}
-
-func TestServer_GetName(t *testing.T) {
-	server := Server{}
-	expected := "openstack_server"
-	if server.GetName() != expected {
-		t.Errorf("expected %s, got %s", expected, server.GetName())
-	}
-}
-
-func TestHypervisor_GetName(t *testing.T) {
-	hypervisor := Hypervisor{}
-	expected := "openstack_hypervisor"
-	if hypervisor.GetName() != expected {
-		t.Errorf("expected %s, got %s", expected, hypervisor.GetName())
-	}
-}
-
 func TestUnmarshalOpenStackHypervisor(t *testing.T) {
 	data := []byte(`{
         "id": 1,

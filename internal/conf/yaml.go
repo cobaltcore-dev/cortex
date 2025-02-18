@@ -61,15 +61,18 @@ type SyncPrometheusConfig struct {
 
 // Configuration for the sync/openstack module.
 type SyncOpenStackConfig struct {
-	Types []string `yaml:"types"`
+	// Configuration for the keystone service.
+	Keystone SyncOpenStackKeystoneConfig `yaml:"keystone"`
+	// Configuration for the nova service.
+	Nova SyncOpenStackNovaConfig `yaml:"nova"`
+	// Configuration for the placement service.
+	Placement SyncOpenStackPlacementConfig `yaml:"placement"`
+}
 
-	// URL to the OpenStack Keystone authentication endpoint.
-	KeystoneURL string `yaml:"keystoneURL"`
-	// URL to the OpenStack Nova API.
-	NovaURL string `yaml:"novaURL"`
-	// URL to the OpenStack Placement API.
-	PlacementURL string `yaml:"placementURL"`
-
+// Configuration for the keystone authentication.
+type SyncOpenStackKeystoneConfig struct {
+	// The URL of the keystone service.
+	URL string `yaml:"url"`
 	// The SSO certificate to use. If none is given, we won't
 	// use SSO to connect to the openstack services.
 	SSO SSOConfig `yaml:"sso,omitempty"`
@@ -83,6 +86,22 @@ type SyncOpenStackConfig struct {
 	OSUserDomainName string `yaml:"userDomainName"`
 	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
 	OSProjectDomainName string `yaml:"projectDomainName"`
+}
+
+// Configuration for the nova service.
+type SyncOpenStackNovaConfig struct {
+	// The URL of the nova service.
+	URL string `yaml:"url"`
+	// The types of resources to sync.
+	Types []string `yaml:"types"`
+}
+
+// Configuration for the placement service.
+type SyncOpenStackPlacementConfig struct {
+	// The URL of the placement service.
+	URL string `yaml:"url"`
+	// The types of resources to sync.
+	Types []string `yaml:"types"`
 }
 
 // Configuration for the sync module.

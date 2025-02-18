@@ -98,7 +98,7 @@ func TestDB_Close(t *testing.T) {
 	}
 }
 
-func TestUpsert(t *testing.T) {
+func TestReplaceAll(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
 	defer db.Close()
@@ -110,37 +110,44 @@ func TestUpsert(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert a new record
-	mockRecord := MockTable{ID: 1, Name: "test"}
-	err = Upsert(db, &mockRecord)
+	// Insert initial records
+	initialRecords := []MockTable{
+		{ID: 1, Name: "record1"},
+		{ID: 2, Name: "record2"},
+	}
+	for _, record := range initialRecords {
+		err = db.Insert(&record)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	}
+
+	// Replace with new records
+	newRecords := []MockTable{
+		{ID: 1, Name: "new_record1"},
+		{ID: 4, Name: "new_record2"},
+	}
+	err = ReplaceAll(db, newRecords...)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Verify the record was inserted
-	var insertedRecord MockTable
-	err = db.SelectOne(&insertedRecord, "SELECT * FROM mock_table WHERE id = :id", map[string]interface{}{"id": mockRecord.ID})
+	// Verify old records are deleted
+	var count int
+	err = db.SelectOne(&count, "SELECT COUNT(*) FROM mock_table WHERE id IN (1, 2)")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if insertedRecord.Name != "test" {
-		t.Errorf("expected name to be 'test', got %s", insertedRecord.Name)
+	if count != 1 {
+		t.Fatalf("expected 1 old records, got %d", count)
 	}
 
-	// Update the existing record
-	mockRecord.Name = "updated"
-	err = Upsert(db, &mockRecord)
+	// Verify new records are inserted
+	err = db.SelectOne(&count, "SELECT COUNT(*) FROM mock_table WHERE id IN (3, 4)")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-
-	// Verify the record was updated
-	var updatedRecord MockTable
-	err = db.SelectOne(&updatedRecord, "SELECT * FROM mock_table WHERE id = :id", map[string]interface{}{"id": mockRecord.ID})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if updatedRecord.Name != "updated" {
-		t.Errorf("expected name to be 'updated', got %s", updatedRecord.Name)
+	if count != 1 {
+		t.Fatalf("expected 1 new records, got %d", count)
 	}
 }

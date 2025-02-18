@@ -14,7 +14,19 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
-// Create a new HTTP client with the given SSO configuration.
+// Custom HTTP round tripper that logs each request.
+type requestLogger struct {
+	T http.RoundTripper
+}
+
+// RoundTrip logs the request URL before making the request.
+func (lrt *requestLogger) RoundTrip(req *http.Request) (*http.Response, error) {
+	slog.Info("making http request", "url", req.URL.String())
+	return lrt.T.RoundTrip(req)
+}
+
+// Create a new HTTP client with the given SSO configuration
+// and logging for each request.
 func NewHTTPClient(conf conf.SSOConfig) (*http.Client, error) {
 	if conf.Cert == "" {
 		// Disable SSO if no certificate is provided.
@@ -34,7 +46,7 @@ func NewHTTPClient(conf conf.SSOConfig) (*http.Client, error) {
 	}
 	caCertPool := x509.NewCertPool()
 	caCertPool.AddCert(cert.Leaf)
-	return &http.Client{Transport: &http.Transport{
+	return &http.Client{Transport: &requestLogger{T: &http.Transport{
 		TLSClientConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			RootCAs:      caCertPool,
@@ -42,5 +54,5 @@ func NewHTTPClient(conf conf.SSOConfig) (*http.Client, error) {
 			//nolint:gosec
 			InsecureSkipVerify: conf.SelfSigned,
 		},
-	}}, nil
+	}}}, nil
 }
