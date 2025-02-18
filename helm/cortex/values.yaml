@@ -219,7 +219,7 @@ conf:
                 - vrops_hostsystem_cpu_contention_percentage
 
   scheduler:
-     # The port to use for the scheduler API.
+    # The port to use for the scheduler API.
     port: 8080
     # Whether request bodies should be logged (debugging feature).
     logRequestBodies: false

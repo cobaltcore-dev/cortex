@@ -32,7 +32,7 @@ func TestNewPlacementSyncer(t *testing.T) {
 
 	mon := sync.Monitor{}
 	pc := &mockKeystoneAPI{}
-	conf := PlacementConf{}
+	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
 	syncer := newPlacementSyncer(testDB, mon, pc, conf)
 	if syncer == nil {
@@ -48,7 +48,7 @@ func TestPlacementSyncer_Init(t *testing.T) {
 
 	mon := sync.Monitor{}
 	pc := &mockKeystoneAPI{}
-	conf := PlacementConf{}
+	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
 	syncer := newPlacementSyncer(testDB, mon, pc, conf).(*placementSyncer)
 	syncer.Init(t.Context())
@@ -62,7 +62,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 
 	mon := sync.Monitor{}
 	pc := &mockKeystoneAPI{}
-	conf := PlacementConf{}
+	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
 	syncer := newPlacementSyncer(testDB, mon, pc, conf).(*placementSyncer)
 	syncer.api = &mockPlacementAPI{}
@@ -82,7 +82,7 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 
 	mon := sync.Monitor{}
 	pc := &mockKeystoneAPI{}
-	conf := PlacementConf{}
+	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
 	syncer := newPlacementSyncer(testDB, mon, pc, conf).(*placementSyncer)
 	syncer.api = &mockPlacementAPI{}
@@ -105,7 +105,7 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 
 	mon := sync.Monitor{}
 	pc := &mockKeystoneAPI{}
-	conf := PlacementConf{}
+	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
 	syncer := newPlacementSyncer(testDB, mon, pc, conf).(*placementSyncer)
 	syncer.api = &mockPlacementAPI{}
