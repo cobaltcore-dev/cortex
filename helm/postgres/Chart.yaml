@@ -5,7 +5,7 @@ version: 0.0.1
 dependencies:
   - name: postgresql
     repository: oci://registry-1.docker.io/bitnamicharts
-    version: 12.12.10
+    version: 16.4.9
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
   # of issues. See: https://github.com/sapcc/helm-charts/pkgs/container/helm-charts%2Fowner-info

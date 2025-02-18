@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 func createTempConfigFile(t *testing.T, content string) string {

@@ -9,7 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type mockPipelineStep struct {

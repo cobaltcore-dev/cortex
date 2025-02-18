@@ -11,7 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {

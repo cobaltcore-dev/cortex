@@ -5,7 +5,7 @@ package plugins
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Interface for a scheduler step.

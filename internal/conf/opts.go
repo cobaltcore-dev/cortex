@@ -4,7 +4,7 @@
 package conf
 
 import (
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Mixin that adds the ability to load options from a yaml map.

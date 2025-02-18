@@ -5,7 +5,7 @@ package plugins
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Each feature extractor must conform to this interface.
