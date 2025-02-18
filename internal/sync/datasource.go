@@ -3,10 +3,12 @@
 
 package sync
 
+import "context"
+
 // Common interface for data sources.
 type Datasource interface {
 	// Initialize the data source, e.g. create database tables.
-	Init()
+	Init(context.Context)
 	// Download data from the data source.
-	Sync()
+	Sync(context.Context)
 }

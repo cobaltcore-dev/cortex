@@ -4,71 +4,72 @@
 package openstack
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/gophercloud/gophercloud/v2"
 )
 
-var exampleConfig = conf.SyncOpenStackConfig{
-	KeystoneURL:         "http://auth.url",
-	OSUsername:          "username",
-	OSPassword:          "password",
-	OSProjectName:       "project_name",
-	OSUserDomainName:    "user_domain_name",
-	OSProjectDomainName: "project_domain_name",
+type mockKeystoneAPI struct{}
+
+func (m *mockKeystoneAPI) Authenticate(ctx context.Context) error {
+	return nil
 }
 
-func TestGetKeystoneAuth(t *testing.T) {
-	// Mock the OpenStack Identity service response
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/auth/tokens" && r.Method == http.MethodPost {
-			w.Header().Set("X-Subject-Token", "test_token")
-			w.WriteHeader(http.StatusCreated)
-			//nolint:errcheck
-			json.NewEncoder(w).Encode(struct{}{}) // Don't care about the content
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-		}
-	})
+func (m *mockKeystoneAPI) Client() *gophercloud.ProviderClient {
+	return &gophercloud.ProviderClient{}
+}
 
+//nolint:gocritic
+func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, KeystoneConf) {
 	server := httptest.NewServer(handler)
+	conf := KeystoneConf{
+		URL:                 server.URL + "/v3",
+		OSUsername:          "testuser",
+		OSUserDomainName:    "default",
+		OSPassword:          "password",
+		OSProjectName:       "testproject",
+		OSProjectDomainName: "default",
+	}
+	return server, conf
+}
+
+func TestNewKeystoneAPI(t *testing.T) {
+	keystoneConf := KeystoneConf{
+		URL:                 "http://example.com",
+		OSUsername:          "testuser",
+		OSUserDomainName:    "default",
+		OSPassword:          "password",
+		OSProjectName:       "testproject",
+		OSProjectDomainName: "default",
+	}
+
+	api := newKeystoneAPI(keystoneConf)
+	if api == nil {
+		t.Fatal("expected non-nil api")
+	}
+}
+
+func TestKeystoneAPI_Authenticate(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		if _, err := w.Write([]byte(`{"token": {"catalog": []}}`)); err != nil {
+			t.Fatalf("error writing response: %v", err)
+		}
+	}
+	server, keystoneConf := setupKeystoneMockServer(handler)
 	defer server.Close()
 
-	// Override the OS_AUTH_URL to point to the mock server
-	exampleConfig.KeystoneURL = server.URL
-	keystoneAPI := &keystoneAPI{
-		conf: exampleConfig,
-	}
-	auth, err := keystoneAPI.Authenticate()
+	api := newKeystoneAPI(keystoneConf).(*keystoneAPI)
+
+	err := api.Authenticate(t.Context())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-
-	// Verify the results
-	if auth.token != "test_token" {
-		t.Errorf("expected token to be %s, got %s", "test_token", auth.token)
-	}
-}
-
-func TestGetKeystoneAuthFailure(t *testing.T) {
-	// Mock the OpenStack Identity service response
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	})
-
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	// Override the OS_AUTH_URL to point to the mock server
-	exampleConfig.KeystoneURL = server.URL
-	keystoneAPI := &keystoneAPI{
-		conf: exampleConfig,
-	}
-	_, err := keystoneAPI.Authenticate()
-	if err == nil {
-		t.Fatalf("expected error, got none")
+	if api.client == nil {
+		t.Fatal("expected non-nil client after authentication")
 	}
 }

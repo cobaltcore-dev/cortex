@@ -4,6 +4,7 @@
 package prometheus
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -80,14 +81,14 @@ func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.
 }
 
 // Initialize all nested syncers.
-func (s CombinedSyncer) Init() {
+func (s CombinedSyncer) Init(ctx context.Context) {
 	for _, syncer := range s.Syncers {
-		syncer.Init()
+		syncer.Init(ctx)
 	}
 }
 
 // Sync all metrics in parallel.
-func (s CombinedSyncer) Sync() {
+func (s CombinedSyncer) Sync(context context.Context) {
 	if s.monitor.PipelineRunTimer != nil {
 		hist := s.monitor.PipelineRunTimer.WithLabelValues("prometheus")
 		timer := prometheus.NewTimer(hist)
@@ -98,7 +99,7 @@ func (s CombinedSyncer) Sync() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			syncer.Sync()
+			syncer.Sync(context)
 		}()
 	}
 	wg.Wait()
@@ -139,7 +140,7 @@ func newSyncerOfType[M PrometheusMetric](
 }
 
 // Create the necessary database tables if they do not exist.
-func (s *syncer[M]) Init() {
+func (s *syncer[M]) Init(ctx context.Context) {
 	slog.Info("initializing syncer", "metricName", s.MetricName)
 	var model M
 	if err := s.DB.CreateTable(s.DB.AddTable(model)); err != nil {
@@ -265,7 +266,9 @@ func (s *syncer[M]) countMetrics() {
 }
 
 // Sync the Prometheus metrics with the database.
-func (s *syncer[M]) Sync() {
+func (s *syncer[M]) Sync(context context.Context) {
+	// TODO: Add context cancellation.
+
 	// Make sure to count the metrics after everything is done,
 	// even when no new metrics were consumed.
 	defer s.countMetrics()

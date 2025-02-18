@@ -33,10 +33,10 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 	monitor := sync.NewSyncMonitor(registry)
 	syncers := []sync.Datasource{
 		prometheus.NewCombinedSyncer(config.Prometheus, db, monitor),
-		openstack.NewCombinedSyncer(config.OpenStack, db, monitor),
+		openstack.NewCombinedSyncer(ctx, config.OpenStack, monitor, db),
 	}
 	for _, syncer := range syncers {
-		syncer.Init()
+		syncer.Init(ctx)
 	}
 	for {
 		select {
@@ -49,7 +49,7 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 				wg.Add(1)
 				go func(syncer sync.Datasource) {
 					defer wg.Done()
-					syncer.Sync()
+					syncer.Sync(ctx)
 				}(syncer)
 			}
 			wg.Wait()

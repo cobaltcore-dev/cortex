@@ -4,134 +4,66 @@
 package openstack
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
+	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
 )
 
-type AuthRequest struct {
-	Auth Auth `json:"auth"`
-}
-
-type Auth struct {
-	Identity Identity `json:"identity"`
-	Scope    Scope    `json:"scope"`
-}
-
-type Identity struct {
-	Methods  []string `json:"methods"`
-	Password Password `json:"password"`
-}
-
-type Password struct {
-	User User `json:"user"`
-}
-
-type User struct {
-	Name     string `json:"name"`
-	Domain   Domain `json:"domain"`
-	Password string `json:"password"`
-}
-
-type Domain struct {
-	Name string `json:"name"`
-}
-
-type Scope struct {
-	Project Project `json:"project"`
-}
-
-type Project struct {
-	Name   string `json:"name"`
-	Domain Domain `json:"domain"`
-}
-
-type KeystoneAuth struct {
-	token string // From the response header X-Subject-Token
-}
+// Type alias for the OpenStack keystone configuration.
+type KeystoneConf = conf.SyncOpenStackKeystoneConfig
 
 type KeystoneAPI interface {
-	Authenticate() (*KeystoneAuth, error)
+	Authenticate(context.Context) error
+	Client() *gophercloud.ProviderClient
 }
 
 type keystoneAPI struct {
-	conf    conf.SyncOpenStackConfig
-	monitor sync.Monitor
+	client       *gophercloud.ProviderClient
+	keystoneConf KeystoneConf
 }
 
-func NewKeystoneAPI(conf conf.SyncOpenStackConfig, monitor sync.Monitor) KeystoneAPI {
-	return &keystoneAPI{
-		conf:    conf,
-		monitor: monitor,
-	}
+func newKeystoneAPI(keystoneConf KeystoneConf) KeystoneAPI {
+	return &keystoneAPI{keystoneConf: keystoneConf}
 }
 
-// Authenticate authenticates against the OpenStack Identity service (Keystone).
-// This uses the configured OpenStack credentials to obtain an authentication token.
-// We also extract URLs to the required services (e.g. Nova) from the response.
-func (k *keystoneAPI) Authenticate() (*KeystoneAuth, error) {
-	if k.monitor.PipelineRequestTimer != nil {
-		hist := k.monitor.PipelineRequestTimer.WithLabelValues("openstack_keystone")
-		timer := prometheus.NewTimer(hist)
-		defer timer.ObserveDuration()
+func (api *keystoneAPI) Authenticate(ctx context.Context) error {
+	if api.client != nil {
+		// Already authenticated.
+		return nil
 	}
-
-	authRequest := AuthRequest{
-		Auth: Auth{
-			Identity: Identity{
-				Methods: []string{"password"},
-				Password: Password{
-					User: User{
-						Name:     k.conf.OSUsername,
-						Domain:   Domain{Name: k.conf.OSUserDomainName},
-						Password: k.conf.OSPassword,
-					},
-				},
-			},
-			Scope: Scope{
-				Project: Project{
-					Name:   k.conf.OSProjectName,
-					Domain: Domain{Name: k.conf.OSProjectDomainName},
-				},
-			},
+	slog.Info("authenticating against openstack", "url", api.keystoneConf.URL)
+	authOptions := gophercloud.AuthOptions{
+		IdentityEndpoint: api.keystoneConf.URL,
+		Username:         api.keystoneConf.OSUsername,
+		DomainName:       api.keystoneConf.OSUserDomainName,
+		Password:         api.keystoneConf.OSPassword,
+		AllowReauth:      true,
+		Scope: &gophercloud.AuthScope{
+			ProjectName: api.keystoneConf.OSProjectName,
+			DomainName:  api.keystoneConf.OSProjectDomainName,
 		},
 	}
-
-	authRequestBody, err := json.Marshal(authRequest)
+	httpClient, err := sync.NewHTTPClient(api.keystoneConf.SSO)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal auth request: %w", err)
+		panic(err)
 	}
-
-	req, err := http.NewRequestWithContext(
-		context.Background(), http.MethodPost,
-		k.conf.KeystoneURL+"/auth/tokens", bytes.NewBuffer(authRequestBody),
-	)
+	provider, err := openstack.NewClient(authOptions.IdentityEndpoint)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create auth request: %w", err)
+		panic(err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	provider.HTTPClient = *httpClient
+	if err = openstack.Authenticate(ctx, provider, authOptions); err != nil {
+		panic(err)
+	}
+	api.client = provider
+	slog.Info("authenticated against openstack")
+	return nil
+}
 
-	client, err := sync.NewHTTPClient(k.conf.SSO)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("failed to authenticate, status code: %d", resp.StatusCode)
-	}
-	if k.monitor.PipelineRequestProcessedCounter != nil {
-		k.monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack_keystone").Inc()
-	}
-	return &KeystoneAuth{token: resp.Header.Get("X-Subject-Token")}, nil
+func (api *keystoneAPI) Client() *gophercloud.ProviderClient {
+	return api.client
 }

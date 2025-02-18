@@ -123,31 +123,30 @@ func (d *DB) Close() {
 	}
 }
 
-// Database or transaction that supports update and insert methods.
-type upsertable interface {
-	Update(list ...interface{}) (int64, error)
-	Insert(list ...interface{}) error
-}
-
-// Upsert a model into the database (Insert if possible, otherwise Update).
-func Upsert(u upsertable, model any) error {
-	// This is a hacky way to check if the error is a duplicate key error.
-	// In the future, we should look for a different solution.
-	errmsgs := []string{
-		"duplicate key value violates unique constraint", // postgres
-		"UNIQUE constraint failed",                       // sqlite
+// Replace all old objects of a table with new objects.
+func ReplaceAll[T Table](db DB, objs ...T) error {
+	var model T
+	tableName := model.TableName()
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("failed to begin transaction", "error", err)
+		return tx.Rollback()
 	}
-
-	if err := u.Insert(model); err != nil {
-		slog.Error("failed to insert model", "error", err)
-		for _, errmsg := range errmsgs {
-			if strings.Contains(err.Error(), errmsg) {
-				if _, err := u.Update(model); err != nil {
-					return err
-				}
-				return nil
-			}
-		}
+	if _, err = tx.Exec("DELETE FROM " + tableName); err != nil {
+		slog.Error("failed to delete old objects", "tableName", tableName, "error", err)
+		return tx.Rollback()
+	}
+	objsCompat := make([]any, len(objs))
+	for i, obj := range objs {
+		objsCompat[i] = &obj
+	}
+	if err = tx.Insert(objsCompat...); err != nil {
+		slog.Error("failed to insert new objects", "tableName", tableName, "error", err)
+		return tx.Rollback()
+	}
+	if err = tx.Commit(); err != nil {
+		slog.Error("failed to commit transaction", "error", err)
+		return err
 	}
 	return nil
 }

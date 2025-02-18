@@ -6,47 +6,11 @@ package openstack
 import (
 	"encoding/json"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
-type PageLink struct {
-	Href string `json:"href"`
-	Rel  string `json:"rel"`
-}
-
-type NovaList interface {
-	GetURL() string
-	GetLinks() *[]PageLink
-	GetModels() any
-}
-
-// Paginated list response from the Nova API under /servers/detail.
-// See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
-type ServerList struct {
-	Servers      []Server    `json:"servers"`
-	ServersLinks *[]PageLink `json:"servers_links"`
-}
-
-func (ServerList) GetURL() string          { return "servers/detail?all_tenants=1" }
-func (s ServerList) GetLinks() *[]PageLink { return s.ServersLinks }
-func (s ServerList) GetModels() any        { return s.Servers }
-
-// Paginated list response from the Nova API under /os-hypervisors/detail.
-// See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
-type HypervisorList struct {
-	Hypervisors      []Hypervisor `json:"hypervisors"`
-	HypervisorsLinks *[]PageLink  `json:"hypervisors_links"`
-}
-
-func (HypervisorList) GetURL() string          { return "os-hypervisors/detail" }
-func (h HypervisorList) GetLinks() *[]PageLink { return h.HypervisorsLinks }
-func (h HypervisorList) GetModels() any        { return h.Hypervisors }
-
-type NovaModel interface {
-	db.Table
-	// GetName returns the name of the OpenStack model.
-	GetName() string
-}
+// Type alias for the OpenStack nova configuration.
+type NovaConf = conf.SyncOpenStackNovaConfig
 
 // OpenStack server model as returned by the Nova API under /servers/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
@@ -82,7 +46,7 @@ type Server struct {
 	SecurityGroups                   json.RawMessage `json:"security_groups" db:"security_groups"`
 }
 
-func (Server) GetName() string   { return "openstack_server" }
+// Table in which the openstack model is stored.
 func (Server) TableName() string { return "openstack_servers" }
 
 // OpenStack hypervisor model as returned by the Nova API under /os-hypervisors/detail.
@@ -112,9 +76,6 @@ type Hypervisor struct {
 	DiskAvailableLeast    *int    `json:"disk_available_least" db:"disk_available_least"`
 	CPUInfo               string  `json:"cpu_info" db:"cpu_info"`
 }
-
-func (Hypervisor) GetName() string   { return "openstack_hypervisor" }
-func (Hypervisor) TableName() string { return "openstack_hypervisors" }
 
 // Custom unmarshaler for OpenStackHypervisor to handle nested JSON.
 // Specifically, we unwrap the "service" field into separate fields.
@@ -170,3 +131,6 @@ func (h *Hypervisor) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(aux)
 }
+
+// Table in which the openstack model is stored.
+func (Hypervisor) TableName() string { return "openstack_hypervisors" }

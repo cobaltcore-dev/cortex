@@ -13,8 +13,9 @@ sync:
       - name: metric_1
         type: metric_type_1
   openstack:
-    types:
-      - servers
+    nova:
+      types:
+        - servers
 features:
   extractors:
     - name: extractor_1
@@ -24,8 +25,9 @@ features:
             metrics:
               - metric_1
           openstack:
-            types:
-              - servers
+            nova:
+              types:
+                - servers
 scheduler:
   steps:
     - name: scheduler_1
@@ -41,7 +43,7 @@ scheduler:
 	}
 }
 
-func TestInvalidConf(t *testing.T) {
+func TestInvalidConf_MissingNovaDependency(t *testing.T) {
 	content := `
 sync:
   prometheus:
@@ -57,9 +59,25 @@ features:
             metrics:
               - metric_1
           openstack:
-            types:
-              # missing dependency
-              - hypervisors
+            nova:
+              types:
+                # missing dependency
+                - hypervisors
+`
+	conf := newConfigFromBytes([]byte(content))
+	if err := conf.Validate(); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}
+
+func TestInvalidConf_MissingResourceProviders(t *testing.T) {
+	content := `
+sync:
+  openstack:
+    placement:
+      types:
+        # missing resource_providers
+        - traits
 `
 	conf := newConfigFromBytes([]byte(content))
 	if err := conf.Validate(); err == nil {
