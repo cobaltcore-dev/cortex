@@ -90,16 +90,16 @@ type SyncOpenStackKeystoneConfig struct {
 
 // Configuration for the nova service.
 type SyncOpenStackNovaConfig struct {
-	// The URL of the nova service.
-	URL string `yaml:"url"`
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `yaml:"availability"`
 	// The types of resources to sync.
 	Types []string `yaml:"types"`
 }
 
 // Configuration for the placement service.
 type SyncOpenStackPlacementConfig struct {
-	// The URL of the placement service.
-	URL string `yaml:"url"`
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `yaml:"availability"`
 	// The types of resources to sync.
 	Types []string `yaml:"types"`
 }

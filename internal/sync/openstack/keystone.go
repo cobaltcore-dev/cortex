@@ -16,20 +16,30 @@ import (
 // Type alias for the OpenStack keystone configuration.
 type KeystoneConf = conf.SyncOpenStackKeystoneConfig
 
+// KeystoneAPI for OpenStack.
 type KeystoneAPI interface {
+	// Authenticate against the OpenStack keystone.
 	Authenticate(context.Context) error
+	// Get the OpenStack provider client.
 	Client() *gophercloud.ProviderClient
+	// Find the endpoint for the given service type and availability.
+	FindEndpoint(availability, serviceType string) (string, error)
 }
 
+// KeystoneAPI implementation.
 type keystoneAPI struct {
-	client       *gophercloud.ProviderClient
+	// OpenStack provider client.
+	client *gophercloud.ProviderClient
+	// OpenStack keystone configuration.
 	keystoneConf KeystoneConf
 }
 
+// Create a new OpenStack keystone API.
 func newKeystoneAPI(keystoneConf KeystoneConf) KeystoneAPI {
 	return &keystoneAPI{keystoneConf: keystoneConf}
 }
 
+// Authenticate against OpenStack keystone.
 func (api *keystoneAPI) Authenticate(ctx context.Context) error {
 	if api.client != nil {
 		// Already authenticated.
@@ -64,6 +74,15 @@ func (api *keystoneAPI) Authenticate(ctx context.Context) error {
 	return nil
 }
 
+// Find the endpoint for the given service type and availability.
+func (api *keystoneAPI) FindEndpoint(availability, serviceType string) (string, error) {
+	return api.client.EndpointLocator(gophercloud.EndpointOpts{
+		Type:         serviceType,
+		Availability: gophercloud.Availability(availability),
+	})
+}
+
+// Get the OpenStack provider client.
 func (api *keystoneAPI) Client() *gophercloud.ProviderClient {
 	return api.client
 }

@@ -49,11 +49,18 @@ func (api *placementAPI) Init(ctx context.Context) {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
 		panic(err)
 	}
+	// Automatically fetch the placement endpoint from the keystone service catalog.
+	provider := api.keystoneAPI.Client()
+	serviceType := "placement"
+	url, err := api.keystoneAPI.FindEndpoint(api.conf.Availability, serviceType)
+	if err != nil {
+		panic(err)
+	}
+	slog.Info("using placement endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
-		ProviderClient: api.keystoneAPI.Client(),
-		// For some reason gophercloud expects a trailing slash.
-		Endpoint: api.conf.URL + "/",
-		Type:     "placement",
+		ProviderClient: provider,
+		Endpoint:       url,
+		Type:           serviceType,
 		// Needed, otherwise openstack will return 404s for traits.
 		Microversion: "1.29",
 	}

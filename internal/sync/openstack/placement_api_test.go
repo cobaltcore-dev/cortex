@@ -14,13 +14,13 @@ import (
 
 func setupPlacementMockServer(handler http.HandlerFunc) (*httptest.Server, KeystoneAPI) {
 	server := httptest.NewServer(handler)
-	return server, &mockKeystoneAPI{}
+	return server, &mockKeystoneAPI{url: server.URL + "/"}
 }
 
 func TestNewPlacementAPI(t *testing.T) {
 	mon := sync.Monitor{}
 	k := &mockKeystoneAPI{}
-	conf := PlacementConf{URL: "http://example.com"}
+	conf := PlacementConf{}
 
 	api := NewPlacementAPI(mon, k, conf)
 	if api == nil {
@@ -40,7 +40,7 @@ func TestPlacementAPI_GetAllResourceProviders(t *testing.T) {
 	defer server.Close()
 
 	mon := sync.Monitor{}
-	conf := PlacementConf{URL: server.URL}
+	conf := PlacementConf{}
 
 	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
 	api.Init(t.Context())
@@ -70,7 +70,7 @@ func TestPlacementAPI_GetAllTraits(t *testing.T) {
 	defer server.Close()
 
 	mon := sync.Monitor{}
-	conf := PlacementConf{URL: server.URL}
+	conf := PlacementConf{}
 
 	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
@@ -101,7 +101,7 @@ func TestPlacementAPI_GetAllTraits_Error(t *testing.T) {
 	defer server.Close()
 
 	mon := sync.Monitor{}
-	conf := PlacementConf{URL: server.URL}
+	conf := PlacementConf{}
 
 	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())

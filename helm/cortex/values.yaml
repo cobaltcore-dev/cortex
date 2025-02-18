@@ -157,17 +157,15 @@ conf:
         userDomainName: openstack-domain-of-user
         projectDomainName: openstack-domain-of-project-scoped-to
       nova:
-        # Compute service URL for openstack.
-        url: https://path-to-nova/v2.1
-
+        # One of admin, public, or internal
+        availability: public
         # Nova objects to sync into the database.
         types:
           - hypervisors
           - servers
       placement:
-        # Placement service URL for openstack.
-        url: https://path-to-placement
-
+        # One of admin, public, or internal
+        availability: public
         # Placement objects to sync into the database.
         types:
           # - resource_providers
