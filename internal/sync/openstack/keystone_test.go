@@ -12,7 +12,9 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 )
 
-type mockKeystoneAPI struct{}
+type mockKeystoneAPI struct {
+	url string
+}
 
 func (m *mockKeystoneAPI) Authenticate(ctx context.Context) error {
 	return nil
@@ -20,6 +22,10 @@ func (m *mockKeystoneAPI) Authenticate(ctx context.Context) error {
 
 func (m *mockKeystoneAPI) Client() *gophercloud.ProviderClient {
 	return &gophercloud.ProviderClient{}
+}
+
+func (m *mockKeystoneAPI) FindEndpoint(availability, serviceType string) (string, error) {
+	return m.url, nil
 }
 
 //nolint:gocritic

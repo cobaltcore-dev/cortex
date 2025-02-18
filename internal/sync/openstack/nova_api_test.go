@@ -15,13 +15,13 @@ import (
 
 func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, KeystoneAPI) {
 	server := httptest.NewServer(handler)
-	return server, &mockKeystoneAPI{}
+	return server, &mockKeystoneAPI{url: server.URL + "/"}
 }
 
 func TestNewNovaAPI(t *testing.T) {
 	mon := sync.Monitor{}
 	k := &mockKeystoneAPI{}
-	conf := NovaConf{URL: "http://example.com"}
+	conf := NovaConf{}
 
 	api := newNovaAPI(mon, k, conf)
 	if api == nil {
@@ -44,7 +44,7 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 	defer server.Close()
 
 	mon := sync.Monitor{}
-	conf := NovaConf{URL: server.URL}
+	conf := NovaConf{Availability: "public"}
 
 	api := newNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())
@@ -76,7 +76,7 @@ func TestNovaAPI_GetAllHypervisors(t *testing.T) {
 	defer server.Close()
 
 	mon := sync.Monitor{}
-	conf := NovaConf{URL: server.URL}
+	conf := NovaConf{Availability: "public"}
 
 	api := newNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())

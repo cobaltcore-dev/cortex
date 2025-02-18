@@ -84,3 +84,16 @@ sync:
 		t.Fatalf("expected error, got nil")
 	}
 }
+
+func TestInvalidConf_InvalidServiceAvailability(t *testing.T) {
+	content := `
+sync:
+  openstack:
+    placement:
+      availability: whatever
+`
+	conf := newConfigFromBytes([]byte(content))
+	if err := conf.Validate(); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}

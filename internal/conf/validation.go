@@ -103,12 +103,24 @@ func (c *config) Validate() error {
 	// OpenStack urls should end without a slash.
 	for _, url := range []string{
 		c.SyncConfig.OpenStack.Keystone.URL,
-		c.SyncConfig.OpenStack.Nova.URL,
-		c.SyncConfig.OpenStack.Placement.URL,
 	} {
 		if strings.HasSuffix(url, "/") {
 			return fmt.Errorf("openstack url %s should not end with a slash", url)
 		}
+	}
+	// Check that the service availability is valid.
+	validAvailabilities := []string{"public", "internal", "admin"}
+	if c.SyncConfig.OpenStack.Nova.Availability == "" {
+		c.SyncConfig.OpenStack.Nova.Availability = "public"
+	}
+	if c.SyncConfig.OpenStack.Placement.Availability == "" {
+		c.SyncConfig.OpenStack.Placement.Availability = "public"
+	}
+	if !slices.Contains(validAvailabilities, c.SyncConfig.OpenStack.Nova.Availability) {
+		return fmt.Errorf("invalid nova availability %s", c.SyncConfig.OpenStack.Nova.Availability)
+	}
+	if !slices.Contains(validAvailabilities, c.SyncConfig.OpenStack.Placement.Availability) {
+		return fmt.Errorf("invalid placement availability %s", c.SyncConfig.OpenStack.Placement.Availability)
 	}
 	return nil
 }
