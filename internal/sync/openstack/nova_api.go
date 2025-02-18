@@ -5,111 +5,105 @@ package openstack
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
-	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Nova API interface to fetch objects from a paginated OpenStack API.
-type NovaAPI[M NovaModel, L NovaList] interface {
-	// Returns a list of models from the OpenStack Nova API.
-	List(auth KeystoneAuth) ([]M, error)
+type NovaAPI interface {
+	// Init the nova API.
+	Init(ctx context.Context)
+	// List all servers.
+	GetAllServers(ctx context.Context) ([]Server, error)
+	// List all hypervisors.
+	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 }
 
-// Nova API implementation.
-type novaAPI[M NovaModel, L NovaList] struct {
-	// Configuration for the Nova API.
-	conf conf.SyncOpenStackConfig
-	// Monitor to observe the api.
-	monitor sync.Monitor
+// API for OpenStack Nova.
+type novaAPI struct {
+	// Monitor to track the api.
+	mon sync.Monitor
+	// Keystone api to authenticate against.
+	keystoneAPI KeystoneAPI
+	// Nova configuration.
+	conf NovaConf
+	// Authenticated OpenStack service client to fetch the data.
+	sc *gophercloud.ServiceClient
 }
 
-// Create a new Nova API.
-func NewNovaAPI[M NovaModel, L NovaList](
-	conf conf.SyncOpenStackConfig,
-	monitor sync.Monitor,
-) NovaAPI[M, L] {
+// Create a new OpenStack server syncer.
+func newNovaAPI(mon sync.Monitor, k KeystoneAPI, conf NovaConf) NovaAPI {
+	return &novaAPI{mon: mon, keystoneAPI: k, conf: conf}
+}
 
-	return &novaAPI[M, L]{
-		conf:    conf,
-		monitor: monitor,
+// Init the nova API.
+func (api *novaAPI) Init(ctx context.Context) {
+	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
+		panic(err)
+	}
+	api.sc = &gophercloud.ServiceClient{
+		ProviderClient: api.keystoneAPI.Client(),
+		// For some reason gophercloud expects a trailing slash.
+		Endpoint: api.conf.URL + "/",
+		Type:     "compute",
 	}
 }
 
-// List returns a list of models from the OpenStack Nova API.
-// Note that this function may make multiple requests in case the returned
-// data has multiple pages.
-func (api *novaAPI[M, L]) List(auth KeystoneAuth) ([]M, error) {
-	return api.list(auth, nil)
-}
-
-// List a novaAPI page. If nil is given, the first page is returned.
-func (api *novaAPI[M, L]) list(auth KeystoneAuth, url *string) ([]M, error) {
-	var model M
-	var list L
-
-	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.WithLabelValues(model.GetName())
-		timer := prometheus.NewTimer(hist)
-		defer timer.ObserveDuration()
-	}
-
-	var pageURL = api.conf.NovaURL + "/" + list.GetURL()
-	if url != nil {
-		pageURL = *url
-	}
-	slog.Info("getting openstack list data", "pageURL", pageURL)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, pageURL, http.NoBody)
-	if err != nil {
-		slog.Error("failed to create request", "error", err)
-		return nil, err
-	}
-	req.Header.Set("X-Auth-Token", auth.token)
-	client, err := sync.NewHTTPClient(api.conf.SSO)
-	if err != nil {
-		slog.Error("failed to create HTTP client", "error", err)
-		return nil, err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("failed to send request", "error", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("unexpected status code", "status", resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(&list)
-	if err != nil {
-		slog.Error("failed to decode response", "error", err)
-		return nil, err
-	}
-
-	var results = list.GetModels().([]M)
-	// If we got a paginated response, follow the next link.
-	links := list.GetLinks()
-	if links != nil {
-		for _, link := range *links {
-			if link.Rel == "next" {
-				newList, err := api.list(auth, &link.Href)
-				if err != nil {
-					return nil, err
-				}
-				results = append(results, newList...)
-			}
+// Get all Nova servers.
+func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
+	label := Server{}.TableName()
+	slog.Info("fetching nova data", "label", label)
+	// Fetch all pages.
+	pages, err := func() (pagination.Page, error) {
+		if api.mon.PipelineRequestTimer != nil {
+			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+			timer := prometheus.NewTimer(hist)
+			defer timer.ObserveDuration()
 		}
+		return servers.List(api.sc, servers.ListOpts{AllTenants: true}).AllPages(ctx)
+	}()
+	if err != nil {
+		return nil, err
 	}
+	// Parse the json data into our custom model.
+	var data = &struct {
+		Servers []Server `json:"servers"`
+	}{}
+	if err := pages.(servers.ServerPage).ExtractInto(data); err != nil {
+		return nil, err
+	}
+	slog.Info("fetched", "label", label, "count", len(data.Servers))
+	return data.Servers, nil
+}
 
-	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.WithLabelValues(model.GetName()).Inc()
+// Get all Nova hypervisors.
+func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
+	label := Hypervisor{}.TableName()
+	slog.Info("fetching nova data", "label", label)
+	// Fetch all pages.
+	pages, err := func() (pagination.Page, error) {
+		if api.mon.PipelineRequestTimer != nil {
+			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+			timer := prometheus.NewTimer(hist)
+			defer timer.ObserveDuration()
+		}
+		return hypervisors.List(api.sc, hypervisors.ListOpts{}).AllPages(ctx)
+	}()
+	if err != nil {
+		return nil, err
 	}
-	slog.Info("got openstack list data", "pageURL", pageURL, "count", len(results))
-	return results, nil
+	// Parse the json data into our custom model.
+	var data = &struct {
+		Hypervisors []Hypervisor `json:"hypervisors"`
+	}{}
+	if err := pages.(hypervisors.HypervisorPage).ExtractInto(data); err != nil {
+		return nil, err
+	}
+	slog.Info("fetched", "label", label, "count", len(data.Hypervisors))
+	return data.Hypervisors, nil
 }

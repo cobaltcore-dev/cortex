@@ -40,9 +40,10 @@ sync:
       - name: vrops_hostsystem_cpu_contention_percentage
         type: vrops_host_metric
   openstack:
-    types:
-      - server
-      - hypervisor
+    nova:
+      types:
+        - server
+        - hypervisor
 features:
   extractors:
     - name: vrops_hostsystem_resolver
@@ -66,8 +67,8 @@ scheduler:
 	if len(syncConfig.Prometheus.Metrics) != 2 {
 		t.Errorf("Expected 2 Prometheus metrics, got %d", len(syncConfig.Prometheus.Metrics))
 	}
-	if len(syncConfig.OpenStack.Types) != 2 {
-		t.Errorf("Expected 2 OpenStack types, got %d", len(syncConfig.OpenStack.Types))
+	if len(syncConfig.OpenStack.Nova.Types) != 2 {
+		t.Errorf("Expected 2 OpenStack types, got %d", len(syncConfig.OpenStack.Nova.Types))
 	}
 
 	// Test FeaturesConfig

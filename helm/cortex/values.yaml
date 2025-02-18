@@ -143,29 +143,36 @@ conf:
           prometheusName: vrops_prometheus
 
     openstack:
-      # OpenStack objects to sync into the database.
-      types:
-        - nova_hypervisor
-        - nova_server
-        # Whether resource providers, traits, and aggregates should be synced.
-        # Currently we don't need this datasource, so it is disabled.
-        # - placement
+      keystone:
+        # Authentication/identity service URL for openstack.
+        url: https://path-to-keystone/v3
+        # Optional, only required if OpenStack is configured with SSO.
+        # Note: the certificate will be used for all other OpenStack services.
+        sso: *sharedSSOCert
 
-      # Authentication/identity service URL for openstack.
-      keystoneURL: https://path-to-keystone/v3
-      # Compute service URL for openstack.
-      novaURL: https://path-to-nova/v2.1
-      # Placement service URL for openstack.
-      placementURL: https://path-to-placement
-      # Optional, only required if OpenStack is configured with SSO.
-      sso: *sharedSSOCert
+        # OpenStack login credentials also used by the OpenStack CLI.
+        username: openstack-user-with-all-project-read-access
+        password: openstack-user-password
+        projectName: openstack-project-of-user
+        userDomainName: openstack-domain-of-user
+        projectDomainName: openstack-domain-of-project-scoped-to
+      nova:
+        # Compute service URL for openstack.
+        url: https://path-to-nova/v2.1
 
-      # OpenStack login credentials also used by the OpenStack CLI.
-      username: openstack-user-with-all-project-read-access
-      password: openstack-user-password
-      projectName: openstack-project-of-user
-      userDomainName: openstack-domain-of-user
-      projectDomainName: openstack-domain-of-project-scoped-to
+        # Nova objects to sync into the database.
+        types:
+          - hypervisors
+          - servers
+      placement:
+        # Placement service URL for openstack.
+        url: https://path-to-placement
+
+        # Placement objects to sync into the database.
+        types:
+          # - resource_providers
+          # Needs resource_providers.
+          # - traits
 
   features:
     # Configuration of features that should be extracted from the synced data.
@@ -186,9 +193,10 @@ conf:
                 # Any vrops vm metric suffices.
                 - vrops_virtualmachine_cpu_demand_ratio
             openstack:
-              types:
-                - nova_hypervisor
-                - nova_server
+              nova:
+                types:
+                  - hypervisors
+                  - servers
       - name: vrops_project_noisiness_extractor
         dependencies:
           sync:
@@ -196,9 +204,10 @@ conf:
               metrics:
                 - vrops_virtualmachine_cpu_demand_ratio
             openstack:
-              types:
-                - nova_hypervisor
-                - nova_server
+              nova:
+                types:
+                  - hypervisors
+                  - servers
       - name: vrops_hostsystem_contention_extractor
         dependencies:
           features:

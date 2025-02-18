@@ -4,148 +4,112 @@
 package openstack
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 )
 
-func TestListResourceProviders(t *testing.T) {
-	mockResponse := `{
-        "resource_providers": [
-            {
-                "uuid": "provider1",
-                "name": "Provider 1",
-                "parent_provider_uuid": "parent1",
-                "root_provider_uuid": "root1"
-            },
-            {
-                "uuid": "provider2",
-                "name": "Provider 2",
-                "parent_provider_uuid": "parent2",
-                "root_provider_uuid": "root2"
-            }
-        ]
-    }`
+func setupPlacementMockServer(handler http.HandlerFunc) (*httptest.Server, KeystoneAPI) {
+	server := httptest.NewServer(handler)
+	return server, &mockKeystoneAPI{}
+}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(mockResponse)); err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-	}))
-	defer server.Close()
+func TestNewPlacementAPI(t *testing.T) {
+	mon := sync.Monitor{}
+	k := &mockKeystoneAPI{}
+	conf := PlacementConf{URL: "http://example.com"}
 
-	api := &placementAPI{
-		conf: conf.SyncOpenStackConfig{
-			PlacementURL: server.URL,
-		},
-		client:  server.Client(),
-		monitor: sync.Monitor{},
-	}
-
-	auth := KeystoneAuth{
-		token: "test-token",
-	}
-	providers, err := api.ListResourceProviders(auth)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if len(providers) != 2 {
-		t.Errorf("expected 2 providers, got %d", len(providers))
-	}
-
-	expectedUUIDs := []string{"provider1", "provider2"}
-	for i, provider := range providers {
-		if provider.UUID != expectedUUIDs[i] {
-			t.Errorf("expected UUID %s, got %s", expectedUUIDs[i], provider.UUID)
-		}
+	api := NewPlacementAPI(mon, k, conf)
+	if api == nil {
+		t.Fatal("expected non-nil api")
 	}
 }
 
-func TestResolveTraits(t *testing.T) {
-	mockResponse := `{
-        "traits": ["trait1", "trait2"]
-    }`
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestPlacementAPI_GetAllResourceProviders(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(mockResponse)); err != nil {
-			t.Fatalf("expected no error, got %v", err)
+		if _, err := w.Write([]byte(`{"resource_providers": [{"uuid": "1", "name": "rp1", "parent_provider_uuid": "pp1", "root_provider_uuid": "rootp1", "resource_provider_generation": 1}]}`)); err != nil {
+			t.Fatalf("failed to write response: %v", err)
 		}
-	}))
+	}
+	server, k := setupPlacementMockServer(handler)
 	defer server.Close()
 
-	api := &placementAPI{
-		conf: conf.SyncOpenStackConfig{
-			PlacementURL: server.URL,
-		},
-		client:  server.Client(),
-		monitor: sync.Monitor{},
-	}
+	mon := sync.Monitor{}
+	conf := PlacementConf{URL: server.URL}
 
-	auth := KeystoneAuth{
-		token: "test-token",
-	}
-	provider := ResourceProvider{UUID: "provider1"}
-	traits, err := api.ResolveTraits(auth, provider)
+	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
+	api.Init(t.Context())
+
+	ctx := context.Background()
+	rps, err := api.GetAllResourceProviders(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-
-	if len(traits) != 2 {
-		t.Errorf("expected 2 traits, got %d", len(traits))
-	}
-
-	expectedTraits := []string{"trait1", "trait2"}
-	for i, trait := range traits {
-		if trait.Name != expectedTraits[i] {
-			t.Errorf("expected trait %s, got %s", expectedTraits[i], trait.Name)
-		}
+	if len(rps) != 1 {
+		t.Fatalf("expected 1 resource provider, got %d", len(rps))
 	}
 }
 
-func TestResolveAggregates(t *testing.T) {
-	mockResponse := `{
-        "aggregates": ["aggregate1", "aggregate2"]
-    }`
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(mockResponse)); err != nil {
-			t.Fatalf("expected no error, got %v", err)
+func TestPlacementAPI_GetAllTraits(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/resource_providers/1/traits" {
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write([]byte(`{"traits": ["trait1"]}`)); err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
+		} else {
+			w.WriteHeader(http.StatusNotFound)
 		}
-	}))
+	}
+	server, pc := setupPlacementMockServer(handler)
 	defer server.Close()
 
-	api := &placementAPI{
-		conf: conf.SyncOpenStackConfig{
-			PlacementURL: server.URL,
-		},
-		client:  server.Client(),
-		monitor: sync.Monitor{},
-	}
+	mon := sync.Monitor{}
+	conf := PlacementConf{URL: server.URL}
 
-	auth := KeystoneAuth{
-		token: "test-token",
-	}
-	provider := ResourceProvider{UUID: "provider1"}
-	aggregates, err := api.ResolveAggregates(auth, provider)
+	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
+	api.Init(t.Context())
+
+	ctx := context.Background()
+	providers := []ResourceProvider{{UUID: "1", Name: "rp1"}}
+	traits, err := api.GetAllTraits(ctx, providers)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-
-	if len(aggregates) != 2 {
-		t.Errorf("expected 2 aggregates, got %d", len(aggregates))
+	if len(traits) != 1 {
+		t.Fatalf("expected 1 trait, got %d", len(traits))
 	}
+}
 
-	expectedAggregates := []string{"aggregate1", "aggregate2"}
-	for i, aggregate := range aggregates {
-		if aggregate.UUID != expectedAggregates[i] {
-			t.Errorf("expected aggregate %s, got %s", expectedAggregates[i], aggregate.UUID)
+func TestPlacementAPI_GetAllTraits_Error(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/resource_providers/error/traits" {
+			w.WriteHeader(http.StatusInternalServerError)
+			if _, err := w.Write([]byte(`{"error": "error fetching traits"}`)); err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
+		} else {
+			w.WriteHeader(http.StatusNotFound)
 		}
+	}
+	server, pc := setupPlacementMockServer(handler)
+	defer server.Close()
+
+	mon := sync.Monitor{}
+	conf := PlacementConf{URL: server.URL}
+
+	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
+	api.Init(t.Context())
+
+	ctx := context.Background()
+	providers := []ResourceProvider{{UUID: "error", Name: "rp1"}}
+	_, err := api.GetAllTraits(ctx, providers)
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }

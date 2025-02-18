@@ -5,173 +5,159 @@ package openstack
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
-	"net/http"
+	gosync "sync"
+	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// OpenStack Placement API interface to fetch objects from the OpenStack Placement API.
 type PlacementAPI interface {
-	// Return a list of resource providers from the OpenStack Placement API.
-	ListResourceProviders(KeystoneAuth) ([]ResourceProvider, error)
-	// Return a list of traits for a resource provider from the OpenStack Placement API.
-	ResolveTraits(KeystoneAuth, ResourceProvider) ([]ResourceProviderTrait, error)
-	// Return a list of aggregates for a resource provider from the OpenStack Placement API.
-	ResolveAggregates(KeystoneAuth, ResourceProvider) ([]ResourceProviderAggregate, error)
+	// Init the placement API.
+	Init(ctx context.Context)
+	// Fetch all resource providers from the placement API.
+	GetAllResourceProviders(ctx context.Context) ([]ResourceProvider, error)
+	// Fetch all traits for the given resource providers from the placement API.
+	GetAllTraits(ctx context.Context, providers []ResourceProvider) ([]Trait, error)
 }
 
-// OpenStack Placement API implementation.
+// API for OpenStack placement.
 type placementAPI struct {
-	// Configuration for the Placement API.
-	conf conf.SyncOpenStackConfig
-	// Shared HTTP client to use for requests.
-	client *http.Client
-	// Monitor to observe the api.
-	monitor sync.Monitor
+	// Monitor to track the api.
+	mon sync.Monitor
+	// Keystone api to authenticate against.
+	keystoneAPI KeystoneAPI
+	// Placement configuration.
+	conf PlacementConf
+	// Authenticated OpenStack service client to fetch the data.
+	sc *gophercloud.ServiceClient
+	// Sleep interval to avoid overloading the API.
+	sleepInterval time.Duration
 }
 
-// Create a new Placement API.
-func NewPlacementAPI(conf conf.SyncOpenStackConfig, monitor sync.Monitor) PlacementAPI {
-	return &placementAPI{conf: conf, monitor: monitor}
+// Create a new OpenStack placement api.
+func NewPlacementAPI(mon sync.Monitor, k KeystoneAPI, conf PlacementConf) PlacementAPI {
+	return &placementAPI{mon: mon, keystoneAPI: k, conf: conf, sleepInterval: 50 * time.Millisecond}
 }
 
-// Fetch data from the OpenStack Placement API.
-func (api *placementAPI) fetch(auth KeystoneAuth, url string) (*http.Response, error) {
-	slog.Info("getting openstack data", "url", url)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
-	if err != nil {
-		slog.Error("failed to create request", "error", err)
-		return nil, err
+// Init the placement API.
+func (api *placementAPI) Init(ctx context.Context) {
+	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
+		panic(err)
 	}
-	req.Header.Set("X-Auth-Token", auth.token)
-	// Needed, otherwise openstack won't tell us traits and aggregates.
-	req.Header.Set("OpenStack-API-Version", "placement 1.29")
-	if api.client == nil {
-		client, err := sync.NewHTTPClient(api.conf.SSO)
-		if err != nil {
-			slog.Error("failed to create HTTP client", "error", err)
-			return nil, err
+	api.sc = &gophercloud.ServiceClient{
+		ProviderClient: api.keystoneAPI.Client(),
+		// For some reason gophercloud expects a trailing slash.
+		Endpoint: api.conf.URL + "/",
+		Type:     "placement",
+		// Needed, otherwise openstack will return 404s for traits.
+		Microversion: "1.29",
+	}
+}
+
+// Fetch all resource providers from the placement API.
+func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]ResourceProvider, error) {
+	label := ResourceProvider{}.TableName()
+	slog.Info("fetching placement data", "label", label)
+	// Fetch all pages.
+	pages, err := func() (pagination.Page, error) {
+		if api.mon.PipelineRequestTimer != nil {
+			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+			timer := prometheus.NewTimer(hist)
+			defer timer.ObserveDuration()
 		}
-		api.client = client
-	}
-	return api.client.Do(req)
-}
-
-// List returns a list of resource providers from the OpenStack Placement API.
-func (api *placementAPI) ListResourceProviders(auth KeystoneAuth) ([]ResourceProvider, error) {
-	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.
-			WithLabelValues("openstack_resource_provider")
-		timer := prometheus.NewTimer(hist)
-		defer timer.ObserveDuration()
-	}
-
-	url := api.conf.PlacementURL + "/resource_providers"
-	resp, err := api.fetch(auth, url)
+		return resourceproviders.List(api.sc, resourceproviders.ListOpts{}).AllPages(ctx)
+	}()
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	var responseJSON = struct {
+	// Parse the json data into our custom model.
+	var data = &struct {
 		ResourceProviders []ResourceProvider `json:"resource_providers"`
 	}{}
-	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
-	if err != nil {
-		slog.Error("failed to decode response", "error", err)
+	if err := pages.(resourceproviders.ResourceProvidersPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-
-	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.
-			WithLabelValues("openstack_resource_provider").Inc()
-	}
-	slog.Info("got openstack resource providers", "n", len(responseJSON.ResourceProviders))
-	return responseJSON.ResourceProviders, nil
+	slog.Info("fetched placement data", "label", label, "count", len(data.ResourceProviders))
+	return data.ResourceProviders, nil
 }
 
-// Return a list of traits for a resource provider from the OpenStack Placement API.
-func (api *placementAPI) ResolveTraits(auth KeystoneAuth, provider ResourceProvider) ([]ResourceProviderTrait, error) {
-	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.
-			WithLabelValues("openstack_resource_provider_trait")
+// Resolve the traits for the given resource providers.
+// This function fetches the traits for each resource provider in parallel.
+func (api *placementAPI) GetAllTraits(ctx context.Context, providers []ResourceProvider) ([]Trait, error) {
+	label := Trait{}.TableName()
+	slog.Info("fetching placement data", "label", label)
+	if api.mon.PipelineRequestTimer != nil {
+		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 
-	url := api.conf.PlacementURL + "/resource_providers/" + provider.UUID + "/traits"
-	resp, err := api.fetch(auth, url)
+	resultMutex := gosync.Mutex{}
+	results := []Trait{}
+	var wg gosync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Channel to communicate errors from goroutines.
+	errChan := make(chan error, len(providers))
+
+	for _, provider := range providers {
+		wg.Add(1)
+		go func(provider ResourceProvider) {
+			defer wg.Done()
+			// Fetch traits for the provider.
+			newResults, err := api.getTraits(ctx, provider)
+			if err != nil {
+				errChan <- err
+				cancel()
+				return
+			}
+			resultMutex.Lock()
+			results = append(results, newResults...)
+			resultMutex.Unlock()
+		}(provider)
+		time.Sleep(api.sleepInterval) // Don't overload the API.
+	}
+
+	// Wait for all goroutines to finish and close the error channel.
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+	// Return the first error encountered, if any.
+	for err := range errChan {
+		if err != nil {
+			slog.Error("failed to resolve traits", "error", err)
+			return nil, err
+		}
+	}
+	return results, nil
+}
+
+// Resolve the trait for the given resource provider.
+func (api *placementAPI) getTraits(ctx context.Context, provider ResourceProvider) ([]Trait, error) {
+	result := resourceproviders.GetTraits(ctx, api.sc, provider.UUID)
+	if result.Err != nil {
+		return nil, result.Err
+	}
+	obj, err := result.Extract()
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	var responseJSON = struct {
-		Traits                     []string `json:"traits"`
-		ResourceProviderGeneration int      `json:"resource_provider_generation"`
-	}{}
-
-	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
-	if err != nil {
-		slog.Error("failed to decode response", "error", err)
-		return nil, err
-	}
-
-	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.
-			WithLabelValues("openstack_resource_provider_trait").Inc()
-	}
-	slog.Info("got openstack resource provider traits", "n", len(responseJSON.Traits))
-	traits := make([]ResourceProviderTrait, len(responseJSON.Traits))
-	for i, trait := range responseJSON.Traits {
-		traits[i] = ResourceProviderTrait{
+	// We don't unwrap the object directly from json since it is nice
+	// to have the provider UUID in the trait model.
+	results := []Trait{}
+	for _, trait := range obj.Traits {
+		results = append(results, Trait{
 			ResourceProviderUUID:       provider.UUID,
 			Name:                       trait,
-			ResourceProviderGeneration: responseJSON.ResourceProviderGeneration,
-		}
+			ResourceProviderGeneration: provider.ResourceProviderGeneration,
+		})
 	}
-	return traits, nil
-}
-
-// Return a list of aggregates for a resource provider from the OpenStack Placement API.
-func (api *placementAPI) ResolveAggregates(auth KeystoneAuth, provider ResourceProvider) ([]ResourceProviderAggregate, error) {
-	if api.monitor.PipelineRequestTimer != nil {
-		hist := api.monitor.PipelineRequestTimer.
-			WithLabelValues("openstack_resource_provider_aggregate")
-		timer := prometheus.NewTimer(hist)
-		defer timer.ObserveDuration()
-	}
-
-	url := api.conf.PlacementURL + "/resource_providers/" + provider.UUID + "/aggregates"
-	resp, err := api.fetch(auth, url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var responseJSON = struct {
-		Aggregates                 []string `json:"aggregates"`
-		ResourceProviderGeneration int      `json:"resource_provider_generation"`
-	}{}
-	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
-	if err != nil {
-		slog.Error("failed to decode response", "error", err)
-		return nil, err
-	}
-
-	if api.monitor.PipelineRequestProcessedCounter != nil {
-		api.monitor.PipelineRequestProcessedCounter.
-			WithLabelValues("openstack_resource_provider_aggregate").Inc()
-	}
-	slog.Info("got openstack resource provider aggregates", "n", len(responseJSON.Aggregates))
-	aggregates := make([]ResourceProviderAggregate, len(responseJSON.Aggregates))
-	for i, uuid := range responseJSON.Aggregates {
-		aggregates[i] = ResourceProviderAggregate{
-			ResourceProviderUUID:       provider.UUID,
-			UUID:                       uuid,
-			ResourceProviderGeneration: responseJSON.ResourceProviderGeneration,
-		}
-	}
-	return aggregates, nil
+	return results, nil
 }

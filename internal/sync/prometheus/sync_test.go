@@ -41,7 +41,7 @@ func TestSyncer_Init(t *testing.T) {
 		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
 		DB:            testDB,
 	}
-	syncer.Init()
+	syncer.Init(t.Context())
 
 	// Verify the table was created
 	if !testDB.TableExists(&VROpsVMMetric{}) {
@@ -61,7 +61,7 @@ func TestSyncer_getSyncWindowStart(t *testing.T) {
 		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
 		DB:            testDB,
 	}
-	syncer.Init()
+	syncer.Init(t.Context())
 	start, err := syncer.getSyncWindowStart()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -114,7 +114,7 @@ func TestSyncer_sync(t *testing.T) {
 		PrometheusAPI:         mockPrometheusAPI,
 		DB:                    testDB,
 	}
-	syncer.Init()
+	syncer.Init(t.Context())
 
 	start := time.Now().Add(-syncer.SyncTimeRange)
 	syncer.sync(start)
@@ -154,7 +154,7 @@ func TestSyncer_sync_Failure(t *testing.T) {
 		PrometheusAPI:         mockPrometheusAPI,
 		DB:                    testDB,
 	}
-	syncer.Init()
+	syncer.Init(t.Context())
 
 	start := time.Now().Add(-syncer.SyncTimeRange)
 	syncer.sync(start)
@@ -191,7 +191,7 @@ func TestSyncer_DeleteOldMetrics(t *testing.T) {
 		PrometheusAPI:         mockPrometheusAPI,
 		DB:                    testDB,
 	}
-	syncer.Init()
+	syncer.Init(t.Context())
 
 	// Insert old metrics
 	oldTimestamp := time.Now().Add(-5 * 7 * 24 * time.Hour) // 5 weeks ago
