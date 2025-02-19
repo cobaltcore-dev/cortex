@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -18,12 +17,9 @@ import (
 // Configuration of feature extractors supported by the scheduler.
 // The actual features to extract are defined in the configuration file.
 var supportedExtractors = []plugins.FeatureExtractor{
-	// VMware-specific extractors
 	&vmware.VROpsHostsystemResolver{},
 	&vmware.VROpsProjectNoisinessExtractor{},
 	&vmware.VROpsHostsystemContentionExtractor{},
-	// KVM-specific extractors
-	&kvm.HostCPUUsageExtractor{},
 }
 
 // Pipeline that contains multiple feature extractors and executes them.
