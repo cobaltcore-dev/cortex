@@ -6,11 +6,11 @@ package scheduler
 import (
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/yaml.v3"
 )
 
 // Collection of Prometheus metrics to monitor scheduler pipeline
@@ -106,7 +106,7 @@ func (s *StepMonitor[S]) GetName() string {
 }
 
 // Initialize the wrapped step with the database and options.
-func (s *StepMonitor[S]) Init(db db.DB, opts yaml.MapSlice) error {
+func (s *StepMonitor[S]) Init(db db.DB, opts conf.RawOpts) error {
 	return s.Step.Init(db, opts)
 }
 

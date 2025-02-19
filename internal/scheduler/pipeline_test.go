@@ -6,17 +6,17 @@ package scheduler
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
-	"gopkg.in/yaml.v3"
 )
 
 type mockPipelineStep struct {
 	err error
 }
 
-func (m *mockPipelineStep) Init(db db.DB, opts yaml.MapSlice) error {
+func (m *mockPipelineStep) Init(db db.DB, opts conf.RawOpts) error {
 	return nil
 }
 

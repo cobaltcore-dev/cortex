@@ -5,8 +5,6 @@ package conf
 
 import (
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
 
 type MockOptions struct {
@@ -15,10 +13,10 @@ type MockOptions struct {
 }
 
 func TestYamlOpts(t *testing.T) {
-	opts := yaml.MapSlice{
-		{Key: "option1", Value: "value1"},
-		{Key: "option2", Value: 2},
-	}
+	opts := NewRawOpts(`
+        option1: value1
+        option2: 2
+    `)
 
 	yamlOpts := YamlOpts[MockOptions]{}
 	err := yamlOpts.Load(opts)

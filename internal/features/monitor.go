@@ -6,11 +6,11 @@ package features
 import (
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/yaml.v3"
 )
 
 // Collection of Prometheus metrics to monitor feature extraction.
@@ -69,7 +69,7 @@ func (m FeatureExtractorMonitor[F]) GetName() string {
 }
 
 // Initialize the wrapped feature extractor with the database and options.
-func (m FeatureExtractorMonitor[F]) Init(db db.DB, opts yaml.MapSlice) error {
+func (m FeatureExtractorMonitor[F]) Init(db db.DB, opts conf.RawOpts) error {
 	// Configure the wrapped feature extractor.
 	return m.FeatureExtractor.Init(db, opts)
 }

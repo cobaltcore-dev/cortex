@@ -6,12 +6,12 @@ package vmware
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
-	"gopkg.in/yaml.v3"
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
@@ -37,10 +37,10 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	opts := yaml.MapSlice{
-		yaml.MapItem{Key: "avgCPUThreshold", Value: 20.0},
-		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
-	}
+	opts := conf.NewRawOpts(`
+        avgCPUThreshold: 20.0
+        activationOnHit: -1.0
+    `)
 	step := &VROpsAntiAffinityNoisyProjectsStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)

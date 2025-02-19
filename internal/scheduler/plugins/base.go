@@ -6,7 +6,6 @@ package plugins
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"gopkg.in/yaml.v3"
 )
 
 // Common base for all steps that provides some functionality
@@ -21,7 +20,7 @@ type BaseStep[Opts any] struct {
 }
 
 // Init the step with the database and options.
-func (s *BaseStep[Opts]) Init(db db.DB, opts yaml.MapSlice) error {
+func (s *BaseStep[Opts]) Init(db db.DB, opts conf.RawOpts) error {
 	if err := s.YamlOpts.Load(opts); err != nil {
 		return err
 	}
