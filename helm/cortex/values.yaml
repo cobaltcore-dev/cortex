@@ -235,6 +235,13 @@ conf:
             prometheus:
               metrics:
                 - vrops_hostsystem_cpu_contention_percentage
+      # KVM-specific extractors.
+      - name: node_exporter_host_cpu_usage_extractor
+        dependencies:
+          sync:
+            prometheus:
+              metrics:
+                - node_exporter_cpu_usage_pct
 
   scheduler:
     # The port to use for the scheduler API.
@@ -268,3 +275,13 @@ conf:
           features:
             extractors:
               - vrops_hostsystem_contention_extractor
+      # KVM specific scheduler steps.
+      - name: kvm_avoid_overloaded_hosts
+        options:
+          avgCPUUsageThreshold: 10
+          maxCPUUsageThreshold: 20
+          activationOnHit: -1.0
+        dependencies:
+          features:
+            extractors:
+              - node_exporter_host_cpu_usage_extractor
