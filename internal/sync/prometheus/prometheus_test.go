@@ -26,7 +26,6 @@ func TestFetchMetrics(t *testing.T) {
 					"result": []map[string]interface{}{
 						{
 							"metric": map[string]interface{}{
-								"__name__":       "test_metric",
 								"cluster":        "test_cluster",
 								"cluster_type":   "test_cluster_type",
 								"collector":      "test_collector",
@@ -64,6 +63,9 @@ func TestFetchMetrics(t *testing.T) {
 	api := &prometheusAPI[VROpsVMMetric]{
 		hostConf: conf.SyncPrometheusHostConfig{
 			URL: server.URL,
+		},
+		metricConf: conf.SyncPrometheusMetricConfig{
+			Alias: "test_metric",
 		},
 	}
 	data, err := api.FetchMetrics("test_query", start, end, resolutionSeconds)

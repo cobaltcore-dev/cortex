@@ -161,7 +161,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 				return nil, fmt.Errorf("invalid value: %v", value[1])
 			}
 
-			metric := rangeMetric.Metric.With(valTime, valContent)
+			metric := rangeMetric.Metric.With(api.metricConf.Alias, valTime, valContent)
 			flatMetrics = append(flatMetrics, metric.(M))
 		}
 	}
