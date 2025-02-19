@@ -1,3 +1,6 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
 # For Pylance to not complain around:
 # type: ignore
 
