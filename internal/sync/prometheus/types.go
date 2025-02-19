@@ -12,15 +12,17 @@ import (
 // One metric datapoint in the Prometheus timeline.
 type PrometheusMetric interface {
 	db.Table
-	// Name under which the metric is stored in Prometheus.
+	// Name of the metric.
 	GetName() string
 	// Value of this metric datapoint.
 	GetValue() float64
 	// Timestamp of this metric datapoint.
 	GetTimestamp() time.Time
 	// Create a new instance of this metric with time and value set
-	// from a prometheus range metric query.
-	With(time time.Time, value float64) PrometheusMetric
+	// from a prometheus range metric query. Also pass a name attribute
+	// so that multiple different metrics stored in the same table can
+	// be distinguished.
+	With(name string, time time.Time, value float64) PrometheusMetric
 }
 
 // VROpsHostMetric represents a single metric value from Prometheus
@@ -28,7 +30,7 @@ type PrometheusMetric interface {
 // See: https://github.com/sapcc/vrops-exporter
 type VROpsHostMetric struct {
 	// The name of the metric.
-	Name string `json:"__name__" db:"name"`
+	Name string `db:"name"`
 	// Kubernetes cluster name in which the metrics exporter is running.
 	Cluster string `json:"cluster" db:"cluster"`
 	// Kubernetes cluster type in which the metrics exporter is running.
@@ -63,7 +65,8 @@ func (m VROpsHostMetric) TableName() string       { return "vrops_host_metrics" 
 func (m VROpsHostMetric) GetName() string         { return m.Name }
 func (m VROpsHostMetric) GetTimestamp() time.Time { return m.Timestamp }
 func (m VROpsHostMetric) GetValue() float64       { return m.Value }
-func (m VROpsHostMetric) With(t time.Time, v float64) PrometheusMetric {
+func (m VROpsHostMetric) With(n string, t time.Time, v float64) PrometheusMetric {
+	m.Name = n
 	m.Timestamp = t
 	m.Value = v
 	return m
@@ -74,7 +77,7 @@ func (m VROpsHostMetric) With(t time.Time, v float64) PrometheusMetric {
 // See: https://github.com/sapcc/vrops-exporter
 type VROpsVMMetric struct {
 	// The name of the metric.
-	Name string `json:"__name__" db:"name"`
+	Name string `db:"name"`
 	// Kubernetes cluster name in which the metrics exporter is running.
 	Cluster string `json:"cluster" db:"cluster"`
 	// Kubernetes cluster type in which the metrics exporter is running.
@@ -116,7 +119,8 @@ func (m VROpsVMMetric) TableName() string       { return "vrops_vm_metrics" }
 func (m VROpsVMMetric) GetName() string         { return m.Name }
 func (m VROpsVMMetric) GetTimestamp() time.Time { return m.Timestamp }
 func (m VROpsVMMetric) GetValue() float64       { return m.Value }
-func (m VROpsVMMetric) With(t time.Time, v float64) PrometheusMetric {
+func (m VROpsVMMetric) With(n string, t time.Time, v float64) PrometheusMetric {
+	m.Name = n
 	m.Timestamp = t
 	m.Value = v
 	return m
@@ -126,7 +130,7 @@ func (m VROpsVMMetric) With(t time.Time, v float64) PrometheusMetric {
 // See: https://github.com/prometheus/node_exporter
 type NodeExporterMetric struct {
 	// The name of the metric.
-	Name string `json:"__name__" db:"name"`
+	Name string `db:"name"`
 	// Name of the kubernetes node.
 	Node string `json:"node" db:"node"`
 	// Timestamp of the metric value.
@@ -139,7 +143,8 @@ func (m NodeExporterMetric) TableName() string       { return "node_exporter_met
 func (m NodeExporterMetric) GetName() string         { return m.Name }
 func (m NodeExporterMetric) GetTimestamp() time.Time { return m.Timestamp }
 func (m NodeExporterMetric) GetValue() float64       { return m.Value }
-func (m NodeExporterMetric) With(t time.Time, v float64) PrometheusMetric {
+func (m NodeExporterMetric) With(n string, t time.Time, v float64) PrometheusMetric {
+	m.Name = n
 	m.Timestamp = t
 	m.Value = v
 	return m
