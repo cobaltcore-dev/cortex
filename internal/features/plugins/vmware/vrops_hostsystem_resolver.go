@@ -67,8 +67,8 @@ func (e *VROpsHostsystemResolver) Extract() ([]plugins.Feature, error) {
 		return nil, err
 	}
 	output := make([]plugins.Feature, len(features))
-	for i, feature := range features {
-		output[i] = feature
+	for i, f := range features {
+		output[i] = f
 	}
 	slog.Info("features: extracted", "feature_vrops_resolved_hostsystem", len(output))
 	return output, nil

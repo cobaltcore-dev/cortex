@@ -94,8 +94,8 @@ func (e *VROpsProjectNoisinessExtractor) Extract() ([]plugins.Feature, error) {
 		return nil, err
 	}
 	output := make([]plugins.Feature, len(features))
-	for _, feature := range features {
-		output = append(output, plugins.Feature(feature))
+	for i, f := range features {
+		output[i] = f
 	}
 	slog.Info("features: extracted", "feature_vrops_project_noisiness", len(features))
 	return output, nil
