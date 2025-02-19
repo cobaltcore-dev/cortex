@@ -30,8 +30,13 @@ type DBConfig struct {
 
 // Metric configuration for the sync/prometheus module.
 type SyncPrometheusMetricConfig struct {
-	// The name of the metric in Prometheus.
-	Name string `yaml:"name"`
+	// The query to use to fetch the metric.
+	Query string `yaml:"query"`
+	// Especially when a more complex query is used, we need an alias
+	// under which the table will be stored in the database.
+	// Additionally, this alias is used to reference the metric in the
+	// feature extractors as dependency.
+	Alias string `yaml:"alias"`
 	// The type of the metric, mapping directly to a metric model.
 	Type string `yaml:"type"`
 
@@ -39,8 +44,10 @@ type SyncPrometheusMetricConfig struct {
 	IntervalSeconds   *int `yaml:"intervalSeconds,omitempty"`
 	ResolutionSeconds *int `yaml:"resolutionSeconds,omitempty"`
 
-	// The name of the prometheus to sync this metric from.
-	PrometheusName string `yaml:"prometheusName"`
+	// One or multiple prometheus names to fetch the metric from.
+	// If multiple names are given, the metric will be fetched from
+	// all of them.
+	PrometheusNames []string `yaml:"prometheusNames"`
 }
 
 // Configuration for a single prometheus host.

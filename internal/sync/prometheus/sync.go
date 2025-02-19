@@ -24,8 +24,9 @@ var supportedSyncers = map[string]func(
 	conf.SyncPrometheusMetricConfig,
 	sync.Monitor,
 ) sync.Datasource{
-	"vrops_host_metric": newSyncerOfType[VROpsHostMetric],
-	"vrops_vm_metric":   newSyncerOfType[VROpsVMMetric],
+	"vrops_host_metric":    newSyncerOfType[VROpsHostMetric],
+	"vrops_vm_metric":      newSyncerOfType[VROpsVMMetric],
+	"node_exporter_metric": newSyncerOfType[NodeExporterMetric],
 }
 
 // Prometheus syncer for an arbitrary prometheus metric model.
@@ -38,7 +39,9 @@ type syncer[M PrometheusMetric] struct {
 	// Note: this needs to be larger than the sampling rate of the metric.
 	SyncResolutionSeconds int
 	// The name of the metric to sync.
-	MetricName string
+	MetricAlias string
+	// The query to fetch the metric from Prometheus.
+	MetricQuery string
 	// The Prometheus API endpoint to fetch the metrics.
 	PrometheusAPI PrometheusAPI[M]
 	// The database to store the metrics in.
@@ -68,11 +71,14 @@ func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.
 		if !ok {
 			panic("unsupported metric type: " + metricConfig.Type)
 		}
-		hostConf, ok := hostConfByName[metricConfig.PrometheusName]
-		if !ok {
-			panic("unknown metric host: " + metricConfig.PrometheusName)
+		// Sync the metric from one or multiple prometheus hosts.
+		for _, prometheusName := range metricConfig.PrometheusNames {
+			hostConf, ok := hostConfByName[prometheusName]
+			if !ok {
+				panic("unknown metric host: " + prometheusName)
+			}
+			syncers = append(syncers, syncerFunc(db, hostConf, metricConfig, monitor))
 		}
-		syncers = append(syncers, syncerFunc(db, hostConf, metricConfig, monitor))
 	}
 	return CombinedSyncer{
 		Syncers: syncers,
@@ -131,7 +137,8 @@ func newSyncerOfType[M PrometheusMetric](
 		SyncTimeRange:         time.Duration(timeRangeSeconds) * time.Second,
 		SyncInterval:          time.Duration(intervalSeconds) * time.Second,
 		SyncResolutionSeconds: resolutionSeconds,
-		MetricName:            metricConf.Name,
+		MetricAlias:           metricConf.Alias,
+		MetricQuery:           metricConf.Query,
 		PrometheusAPI:         NewPrometheusAPI[M](hostConf, metricConf, monitor),
 		DB:                    db,
 		monitor:               monitor,
@@ -141,7 +148,7 @@ func newSyncerOfType[M PrometheusMetric](
 
 // Create the necessary database tables if they do not exist.
 func (s *syncer[M]) Init(ctx context.Context) {
-	slog.Info("initializing syncer", "metricName", s.MetricName)
+	slog.Info("initializing syncer", "metricAlias", s.MetricAlias, "metricQuery", s.MetricQuery)
 	var model M
 	if err := s.DB.CreateTable(s.DB.AddTable(model)); err != nil {
 		panic(err)
@@ -157,7 +164,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	tableName := model.TableName()
 	nRows, err := s.DB.SelectInt(
 		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = :name", tableName),
-		map[string]any{"name": s.MetricName},
+		map[string]any{"name": s.MetricAlias},
 	)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to count rows: %w", err)
@@ -176,7 +183,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 			ORDER BY timestamp
 			DESC LIMIT 1
 		`, tableName),
-		map[string]any{"name": s.MetricName},
+		map[string]any{"name": s.MetricAlias},
 	); err != nil {
 		return time.Time{}, fmt.Errorf("failed to get latest timestamp: %w", err)
 	}
@@ -202,13 +209,13 @@ func (s *syncer[M]) sync(start time.Time) {
 	var model M
 	tableName := model.TableName()
 	slog.Info(
-		"syncing Prometheus data", "metricName", s.MetricName,
+		"syncing Prometheus data", "metricAlias", s.MetricAlias,
 		"start", start, "end", end, "tableName", tableName,
 	)
 	// Drop all metrics that are older than 4 weeks.
 	result, err := s.DB.Exec(
 		fmt.Sprintf("DELETE FROM %s WHERE name = :name AND timestamp < :timestamp", tableName),
-		map[string]any{"name": s.MetricName, "timestamp": time.Now().Add(-s.SyncTimeRange)},
+		map[string]any{"name": s.MetricAlias, "timestamp": time.Now().Add(-s.SyncTimeRange)},
 	)
 	if err != nil {
 		slog.Error("failed to delete old metrics", "error", err)
@@ -222,7 +229,7 @@ func (s *syncer[M]) sync(start time.Time) {
 	slog.Info("deleted old metrics", "rows", rowsAffected)
 	// Fetch the metrics from Prometheus.
 	prometheusData, err := s.PrometheusAPI.FetchMetrics(
-		s.MetricName, start, end, s.SyncResolutionSeconds,
+		s.MetricQuery, start, end, s.SyncResolutionSeconds,
 	)
 	if err != nil {
 		slog.Error("failed to fetch metrics", "error", err)
@@ -238,7 +245,10 @@ func (s *syncer[M]) sync(start time.Time) {
 			}
 		}
 	}
-	slog.Info("synced Prometheus data", "newMetrics", len(prometheusData.Metrics), "start", start, "end", end)
+	slog.Info(
+		"synced Prometheus data", "newMetrics", len(prometheusData.Metrics),
+		"metricAlias", s.MetricAlias, "start", start, "end", end,
+	)
 
 	// Don't overload the Prometheus server.
 	time.Sleep(s.sleepInterval)
@@ -252,12 +262,12 @@ func (s *syncer[M]) countMetrics() {
 	var model M
 	if nRows, err := s.DB.SelectInt(
 		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = :name", model.TableName()),
-		map[string]any{"name": s.MetricName},
+		map[string]any{"name": s.MetricAlias},
 	); err == nil {
-		slog.Info("counted metrics", "nRows", nRows, "metricName", s.MetricName)
+		slog.Info("counted metrics", "nRows", nRows, "metricAlias", s.MetricAlias)
 		if s.monitor.PipelineObjectsGauge != nil {
 			s.monitor.PipelineObjectsGauge.
-				WithLabelValues("prometheus_" + s.MetricName).
+				WithLabelValues("prometheus_" + s.MetricAlias).
 				Set(float64(nRows))
 		}
 	} else {
@@ -273,7 +283,7 @@ func (s *syncer[M]) Sync(context context.Context) {
 	// even when no new metrics were consumed.
 	defer s.countMetrics()
 
-	slog.Info("syncing metrics", "metricName", s.MetricName)
+	slog.Info("syncing metrics", "metricAlias", s.MetricAlias)
 	// Sync this metric until we are caught up.
 	start, err := s.getSyncWindowStart()
 	if err != nil {
@@ -281,5 +291,5 @@ func (s *syncer[M]) Sync(context context.Context) {
 		return
 	}
 	s.sync(start)
-	slog.Info("synced metrics", "metricName", s.MetricName)
+	slog.Info("synced metrics", "metricAlias", s.MetricAlias)
 }

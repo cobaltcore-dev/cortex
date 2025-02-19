@@ -121,3 +121,26 @@ func (m VROpsVMMetric) With(t time.Time, v float64) PrometheusMetric {
 	m.Value = v
 	return m
 }
+
+// Metric exported by node exporter.
+// See: https://github.com/prometheus/node_exporter
+type NodeExporterMetric struct {
+	// The name of the metric.
+	Name string `json:"__name__" db:"name"`
+	// Name of the kubernetes node.
+	Node string `json:"node" db:"node"`
+	// Timestamp of the metric value.
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
+	// The value of the metric.
+	Value float64 `json:"value" db:"value"`
+}
+
+func (m NodeExporterMetric) TableName() string       { return "node_exporter_metrics" }
+func (m NodeExporterMetric) GetName() string         { return m.Name }
+func (m NodeExporterMetric) GetTimestamp() time.Time { return m.Timestamp }
+func (m NodeExporterMetric) GetValue() float64       { return m.Value }
+func (m NodeExporterMetric) With(t time.Time, v float64) PrometheusMetric {
+	m.Timestamp = t
+	m.Value = v
+	return m
+}

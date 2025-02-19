@@ -80,7 +80,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 
 	if api.monitor.PipelineRequestTimer != nil {
 		hist := api.monitor.PipelineRequestTimer.WithLabelValues(
-			"prometheus_" + api.metricConf.Name,
+			"prometheus_" + api.metricConf.Alias,
 		)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
@@ -168,7 +168,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 
 	if api.monitor.PipelineRequestProcessedCounter != nil {
 		api.monitor.PipelineRequestProcessedCounter.WithLabelValues(
-			"prometheus_" + api.metricConf.Name,
+			"prometheus_" + api.metricConf.Alias,
 		).Inc()
 	}
 	return &prometheusTimelineData[M]{
