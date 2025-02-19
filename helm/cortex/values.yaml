@@ -155,7 +155,10 @@ conf:
         # Node exporter metrics for KVM hosts.
         - alias: node_exporter_cpu_usage_pct
           query: |
-            100 - (rate(node_cpu_seconds_total{mode="idle"}[1m]) * 100)
+            (1 - (
+              sum by (node) (rate(node_cpu_seconds_total{mode="idle"}[1m])) /
+              count by (node) (rate(node_cpu_seconds_total{mode="idle"}[1m]))
+            )) * 100
           type: node_exporter_metric
           prometheusNames: [node_exporter_prometheus]
 
