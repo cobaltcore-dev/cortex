@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Configuration for single-sign-on (SSO).
@@ -114,7 +114,7 @@ type FeatureExtractorConfig struct {
 	// The name of the extractor.
 	Name string `yaml:"name"`
 	// Custom options for the extractor, as a raw yaml map.
-	Options yaml.MapSlice `yaml:"options,omitempty"`
+	Options RawOpts `yaml:"options,omitempty"`
 	// The dependencies this extractor needs.
 	DependencyConfig `yaml:"dependencies,omitempty"`
 }
@@ -128,7 +128,7 @@ type SchedulerStepConfig struct {
 	// The name of the step.
 	Name string `yaml:"name"`
 	// Custom options for the step, as a raw yaml map.
-	Options yaml.MapSlice `yaml:"options,omitempty"`
+	Options RawOpts `yaml:"options,omitempty"`
 	// The dependencies this step needs.
 	DependencyConfig `yaml:"dependencies,omitempty"`
 }

@@ -6,9 +6,9 @@ package plugins
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"gopkg.in/yaml.v2"
 )
 
 type MockOptions struct {
@@ -31,10 +31,10 @@ func TestBaseExtractor_Init(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	opts := yaml.MapSlice{
-		{Key: "option1", Value: "value1"},
-		{Key: "option2", Value: 2},
-	}
+	opts := conf.NewRawOpts(`
+        option1: value1
+        option2: 2
+    `)
 
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
 	err := extractor.Init(testDB, opts)

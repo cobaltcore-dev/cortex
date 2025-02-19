@@ -1,3 +1,6 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
 apiVersion: v2
 description: Prometheus alerts setup for Cortex.
 name: cortex-alerts
@@ -6,7 +9,7 @@ dependencies:
   # CRDs of the prometheus operator, such as PrometheusRule, ServiceMonitor, etc.
   - name: kube-prometheus-stack
     repository: https://prometheus-community.github.io/helm-charts
-    version: 68.5.0
+    version: 69.3.2
     condition: kube-prometheus-stack.enabled
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case

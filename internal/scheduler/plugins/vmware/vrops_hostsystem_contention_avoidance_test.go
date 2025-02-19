@@ -6,12 +6,12 @@ package vmware
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
-	"gopkg.in/yaml.v2"
 )
 
 func TestAvoidContendedHostsStep_Run(t *testing.T) {
@@ -39,11 +39,11 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := yaml.MapSlice{
-		yaml.MapItem{Key: "avgCPUContentionThreshold", Value: 10.0},
-		yaml.MapItem{Key: "maxCPUContentionThreshold", Value: 20.0},
-		yaml.MapItem{Key: "activationOnHit", Value: -1.0},
-	}
+	opts := conf.NewRawOpts(`
+        avgCPUContentionThreshold: 10.0
+        maxCPUContentionThreshold: 20.0
+        activationOnHit: -1.0
+    `)
 	step := &VROpsAvoidContendedHostsStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)

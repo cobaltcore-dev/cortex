@@ -6,7 +6,6 @@ package plugins
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"gopkg.in/yaml.v2"
 )
 
 // Common base for all extractors that provides some functionality
@@ -19,11 +18,11 @@ type BaseExtractor[Opts any, Feature db.Table] struct {
 }
 
 // Init the extractor with the database and options.
-func (s *BaseExtractor[Opts, Feature]) Init(db db.DB, opts yaml.MapSlice) error {
-	if err := s.YamlOpts.Load(opts); err != nil {
+func (e *BaseExtractor[Opts, Feature]) Init(db db.DB, opts conf.RawOpts) error {
+	if err := e.YamlOpts.Load(opts); err != nil {
 		return err
 	}
-	s.DB = db
+	e.DB = db
 	var f Feature
 	return db.CreateTable(db.AddTable(f))
 }

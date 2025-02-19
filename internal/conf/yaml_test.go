@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 func createTempConfigFile(t *testing.T, content string) string {
@@ -87,9 +87,9 @@ scheduler:
 		t.Fatalf("Failed to unmarshal YAML content: %v", err)
 	}
 
-	schedulerSteps := decodedContent["scheduler"].(map[any]any)["steps"].([]any)
-	step1Options := schedulerSteps[0].(map[any]any)["options"].(map[any]any)
-	step2Options := schedulerSteps[1].(map[any]any)["options"].(map[any]any)
+	schedulerSteps := decodedContent["scheduler"].(map[string]any)["steps"].([]any)
+	step1Options := schedulerSteps[0].(map[string]any)["options"].(map[string]any)
+	step2Options := schedulerSteps[1].(map[string]any)["options"].(map[string]any)
 
 	if step1Options["avgCPUThreshold"] != 20 {
 		t.Errorf("Expected avgCPUThreshold to be 20, got %v", step1Options["avgCPUThreshold"])

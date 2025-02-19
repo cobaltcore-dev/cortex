@@ -4,14 +4,14 @@
 package plugins
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"gopkg.in/yaml.v2"
 )
 
 // Interface for a scheduler step.
 type Step interface {
 	// Configure the step with a database and options.
-	Init(db db.DB, opts yaml.MapSlice) error
+	Init(db db.DB, opts conf.RawOpts) error
 	// Run this step of the scheduling pipeline.
 	// Return a map of hostnames to activation values. Important: hosts that are
 	// not in the map are considered as filtered out.
