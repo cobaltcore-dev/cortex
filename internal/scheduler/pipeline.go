@@ -20,8 +20,8 @@ import (
 // Configuration of steps supported by the scheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
 var supportedSteps = []plugins.Step{
-	&vmware.VROpsAntiAffinityNoisyProjectsStep{},
-	&vmware.VROpsAvoidContendedHostsStep{},
+	&vmware.AntiAffinityNoisyProjectsStep{},
+	&vmware.AvoidContendedHostsStep{},
 }
 
 // Sequence of scheduler steps that are executed in parallel.

@@ -251,7 +251,7 @@ conf:
     # input Nova weights.
     steps:
       # VMware specific scheduler steps.
-      - name: vrops_anti_affinity_noisy_projects
+      - name: vmware_anti_affinity_noisy_projects
         options:
           avgCPUThreshold: 20
           activationOnHit: -1.0
@@ -259,7 +259,7 @@ conf:
           features:
             extractors:
               - vrops_project_noisiness_extractor
-      - name: vrops_avoid_contended_hosts
+      - name: vmware_avoid_contended_hosts
         options:
           avgCPUContentionThreshold: 10
           maxCPUContentionThreshold: 20
