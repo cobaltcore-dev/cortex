@@ -53,7 +53,7 @@ func (deps *DependencyConfig) validate(c config) error {
 	}
 	confedMetrics := make(map[string]bool)
 	for _, metric := range c.SyncConfig.Prometheus.Metrics {
-		confedMetrics[metric.Name] = true
+		confedMetrics[metric.Alias] = true
 	}
 	for _, metric := range deps.Sync.Prometheus.MetricNames {
 		if !confedMetrics[metric] {

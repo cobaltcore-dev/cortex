@@ -10,7 +10,8 @@ func TestValidConf(t *testing.T) {
 sync:
   prometheus:
     metrics:
-      - name: metric_1
+      - alias: metric_1
+        query: metric_1
         type: metric_type_1
   openstack:
     nova:
@@ -48,7 +49,8 @@ func TestInvalidConf_MissingNovaDependency(t *testing.T) {
 sync:
   prometheus:
     metrics:
-      - name: metric_1
+      - alias: metric_1
+        query: metric_1
         type: metric_type_1
 features:
   extractors:

@@ -37,7 +37,8 @@ func TestSyncer_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	syncer := &syncer[VROpsVMMetric]{
-		MetricName:    "test_metric",
+		MetricAlias:   "test_metric",
+		MetricQuery:   "test_query",
 		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
 		DB:            testDB,
 	}
@@ -57,7 +58,8 @@ func TestSyncer_getSyncWindowStart(t *testing.T) {
 
 	// Test case: No metrics in the database
 	syncer := &syncer[VROpsVMMetric]{
-		MetricName:    "test_metric",
+		MetricAlias:   "test_metric",
+		MetricQuery:   "test_query",
 		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
 		DB:            testDB,
 	}
@@ -110,7 +112,8 @@ func TestSyncer_sync(t *testing.T) {
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
-		MetricName:            "test_metric",
+		MetricAlias:           "test_metric",
+		MetricQuery:           "test_query",
 		PrometheusAPI:         mockPrometheusAPI,
 		DB:                    testDB,
 	}
@@ -150,7 +153,8 @@ func TestSyncer_sync_Failure(t *testing.T) {
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
-		MetricName:            "test_metric",
+		MetricAlias:           "test_metric",
+		MetricQuery:           "test_query",
 		PrometheusAPI:         mockPrometheusAPI,
 		DB:                    testDB,
 	}
@@ -187,7 +191,8 @@ func TestSyncer_DeleteOldMetrics(t *testing.T) {
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
-		MetricName:            "test_metric",
+		MetricAlias:           "test_metric",
+		MetricQuery:           "test_query",
 		PrometheusAPI:         mockPrometheusAPI,
 		DB:                    testDB,
 	}
