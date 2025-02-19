@@ -10,25 +10,25 @@ import (
 
 // Options for the scheduling step, given through the
 // step config in the service yaml file.
-type vROpsAvoidContendedHostsStepOpts struct {
+type AvoidContendedHostsStepOpts struct {
 	AvgCPUContentionThreshold float64 `yaml:"avgCPUContentionThreshold"`
 	MaxCPUContentionThreshold float64 `yaml:"maxCPUContentionThreshold"`
 	ActivationOnHit           float64 `yaml:"activationOnHit"`
 }
 
 // Step to avoid contended hosts by downvoting them.
-type VROpsAvoidContendedHostsStep struct {
+type AvoidContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[vROpsAvoidContendedHostsStepOpts]
+	plugins.BaseStep[AvoidContendedHostsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *VROpsAvoidContendedHostsStep) GetName() string {
-	return "vrops_avoid_contended_hosts"
+func (s *AvoidContendedHostsStep) GetName() string {
+	return "vmware_avoid_contended_hosts"
 }
 
 // Downvote hosts that are highly contended.
-func (s *VROpsAvoidContendedHostsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
+func (s *AvoidContendedHostsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
 	activations := s.BaseStep.BaseActivations(scenario)
 	if !scenario.GetVMware() {
 		// Only run this step for VMware VMs.

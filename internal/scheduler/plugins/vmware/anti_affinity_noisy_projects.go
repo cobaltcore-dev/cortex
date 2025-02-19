@@ -10,24 +10,24 @@ import (
 
 // Options for the scheduling step, given through the
 // step config in the service yaml file.
-type vROpsAntiAffinityNoisyProjectsStepOpts struct {
+type AntiAffinityNoisyProjectsStepOpts struct {
 	AvgCPUThreshold float64 `yaml:"avgCPUThreshold"`
 	ActivationOnHit float64 `yaml:"activationOnHit"`
 }
 
 // Step to avoid noisy projects by downvoting the hosts they are running on.
-type VROpsAntiAffinityNoisyProjectsStep struct {
+type AntiAffinityNoisyProjectsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[vROpsAntiAffinityNoisyProjectsStepOpts]
+	plugins.BaseStep[AntiAffinityNoisyProjectsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *VROpsAntiAffinityNoisyProjectsStep) GetName() string {
-	return "vrops_anti_affinity_noisy_projects"
+func (s *AntiAffinityNoisyProjectsStep) GetName() string {
+	return "vmware_anti_affinity_noisy_projects"
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *VROpsAntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
+func (s *AntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
 	activations := s.BaseStep.BaseActivations(scenario)
 	if !scenario.GetVMware() {
 		// Only run this step for VMware VMs.

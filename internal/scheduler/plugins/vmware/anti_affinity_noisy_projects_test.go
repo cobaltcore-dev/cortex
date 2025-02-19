@@ -14,37 +14,34 @@ import (
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 )
 
-func TestAvoidContendedHostsStep_Run(t *testing.T) {
+func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
 	// Create dependency tables
-	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsHostsystemContention{}))
+	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsProjectNoisiness{}))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_vrops_hostsystem_contention table
+	// Insert mock data into the feature_vrops_project_noisiness table
 	_, err = testDB.Exec(`
-        INSERT INTO feature_vrops_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
+        INSERT INTO feature_vrops_project_noisiness (project, compute_host, avg_cpu_of_project)
         VALUES
-            ('host1', 15.0, 25.0),
-            ('host2', 5.0, 10.0),
-            ('host3', 20.0, 30.0)
+            ('project1', 'host1', 25.0),
+            ('project1', 'host2', 30.0),
+            ('project2', 'host3', 15.0)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-
-	// Create an instance of the step
 	opts := conf.NewRawOpts(`
-        avgCPUContentionThreshold: 10.0
-        maxCPUContentionThreshold: 20.0
+        avgCPUThreshold: 20.0
         activationOnHit: -1.0
     `)
-	step := &VROpsAvoidContendedHostsStep{}
+	step := &AntiAffinityNoisyProjectsStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -57,7 +54,8 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		{
 			name: "Non-vmware vm",
 			scenario: &testlibPlugins.MockScenario{
-				VMware: false,
+				ProjectID: "project1",
+				VMware:    false,
 				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
@@ -68,9 +66,10 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 			downvotedHosts: map[string]struct{}{},
 		},
 		{
-			name: "Avoid contended hosts",
+			name: "Noisy project",
 			scenario: &testlibPlugins.MockScenario{
-				VMware: true,
+				ProjectID: "project1",
+				VMware:    true,
 				Hosts: []testlibPlugins.MockScenarioHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
@@ -79,16 +78,31 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 			},
 			downvotedHosts: map[string]struct{}{
 				"host1": {},
-				"host3": {},
+				"host2": {},
 			},
 		},
 		{
-			name: "No contended hosts",
+			name: "Non-noisy project",
 			scenario: &testlibPlugins.MockScenario{
-				VMware: true,
+				ProjectID: "project2",
+				VMware:    true,
 				Hosts: []testlibPlugins.MockScenarioHost{
-					{ComputeHost: "host4", HypervisorHostname: "hypervisor4"},
-					{ComputeHost: "host5", HypervisorHostname: "hypervisor5"},
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
+					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
+					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
+				},
+			},
+			downvotedHosts: map[string]struct{}{},
+		},
+		{
+			name: "No noisy project data",
+			scenario: &testlibPlugins.MockScenario{
+				ProjectID: "project3",
+				VMware:    true,
+				Hosts: []testlibPlugins.MockScenarioHost{
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
+					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
+					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
 				},
 			},
 			downvotedHosts: map[string]struct{}{},

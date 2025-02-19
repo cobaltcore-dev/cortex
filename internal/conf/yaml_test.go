@@ -51,10 +51,10 @@ features:
     - name: vrops_hostsystem_contention_extractor
 scheduler:
   steps:
-    - name: vrops_anti_affinity_noisy_projects
+    - name: vmware_anti_affinity_noisy_projects
       options:
         avgCPUThreshold: 20
-    - name: vrops_avoid_contended_hosts
+    - name: vmware_avoid_contended_hosts
       options:
         maxCPUContentionThreshold: 50
 `
