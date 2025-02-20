@@ -4,8 +4,6 @@
 package vmware
 
 import (
-	"log/slog"
-
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 )
 
@@ -45,16 +43,8 @@ func (e *VROpsProjectNoisinessExtractor) GetName() string {
 // This feature can then be used to draw new VMs away from VMs of the same
 // project in case this project is known to cause high cpu usage.
 func (e *VROpsProjectNoisinessExtractor) Extract() ([]plugins.Feature, error) {
-	// Delete the old data in the same transaction.
-	tx, err := e.DB.Begin()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := tx.Exec("DELETE FROM feature_vrops_project_noisiness"); err != nil {
-		return nil, tx.Rollback()
-	}
-	// Extract the new data.
-	if _, err := tx.Exec(`
+	var features []VROpsProjectNoisiness
+	if _, err := e.DB.Select(&features, `
         WITH projects_avg_cpu AS (
             SELECT
                 m.project AS tenant_id,
@@ -76,27 +66,13 @@ func (e *VROpsProjectNoisinessExtractor) Extract() ([]plugins.Feature, error) {
             GROUP BY s.tenant_id, h.service_host
 			ORDER BY avg_cpu_of_project DESC
         )
-		INSERT INTO feature_vrops_project_noisiness
         SELECT
-            tenant_id,
-            service_host,
+            tenant_id AS project,
+            service_host AS compute_host,
             avg_cpu_of_project
         FROM host_cpu_usage;
     `); err != nil {
-		return nil, tx.Rollback()
-	}
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	// Load the extracted features from the database and return them.
-	var features []VROpsProjectNoisiness
-	if _, err := e.DB.Select(&features, "SELECT * FROM feature_vrops_project_noisiness"); err != nil {
-		return nil, err
-	}
-	output := make([]plugins.Feature, len(features))
-	for i, f := range features {
-		output[i] = f
-	}
-	slog.Info("features: extracted", "feature_vrops_project_noisiness", len(features))
-	return output, nil
+	return e.Extracted(features)
 }
