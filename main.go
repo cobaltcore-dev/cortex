@@ -114,6 +114,15 @@ func main() {
 	// uses this to check if the binary was built correctly)
 	bininfo.HandleVersionArgument()
 
+	config := conf.NewConfig()
+	// Set the configured logger.
+	config.GetLoggingConfig().SetDefaultLogger()
+	if err := config.Validate(); err != nil {
+		slog.Error("failed to validate config", "error", err)
+		panic(err)
+	}
+	slog.Info("config validated")
+
 	// Set runtime concurrency to match CPU limit imposed by Kubernetes
 	undoMaxprocs, err := maxprocs.Set(maxprocs.Logger(slog.Debug))
 	if err != nil {
@@ -140,13 +149,6 @@ func main() {
 	} else {
 		panic(fmt.Sprintf("usage: %s [syncer | extractor | scheduler]", os.Args[0]))
 	}
-
-	config := conf.NewConfig()
-	if err := config.Validate(); err != nil {
-		slog.Error("failed to validate config", "error", err)
-		panic(err)
-	}
-	slog.Info("config validated")
 
 	db := db.NewPostgresDB(config.GetDBConfig())
 	defer db.Close()
