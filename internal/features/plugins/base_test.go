@@ -54,3 +54,61 @@ func TestBaseExtractor_Init(t *testing.T) {
 		t.Fatal("expected table to exist")
 	}
 }
+
+func TestBaseExtractor_Extracted(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	// Create the table for MockFeature
+	err := testDB.CreateTable(testDB.AddTable(MockFeature{}))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	extractor := BaseExtractor[MockOptions, MockFeature]{DB: testDB}
+
+	// Insert mock data into the mock_feature table
+	mockFeatures := []MockFeature{
+		{ID: 1, Name: "feature1"},
+		{ID: 2, Name: "feature2"},
+	}
+
+	// Call the Extracted function
+	extractedFeatures, err := extractor.Extracted(mockFeatures)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify the data was replaced in the mock_feature table
+	var features []MockFeature
+	_, err = testDB.Select(&features, "SELECT * FROM mock_feature")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(features) != 2 {
+		t.Errorf("expected 2 rows, got %d", len(features))
+	}
+
+	expected := map[int]string{
+		1: "feature1",
+		2: "feature2",
+	}
+	for _, f := range features {
+		if expected[f.ID] != f.Name {
+			t.Errorf("expected name for ID %d to be %s, got %s", f.ID, expected[f.ID], f.Name)
+		}
+	}
+
+	// Verify the returned slice of features
+	if len(extractedFeatures) != 2 {
+		t.Errorf("expected 2 extracted features, got %d", len(extractedFeatures))
+	}
+	for i, f := range extractedFeatures {
+		if f.(MockFeature).ID != mockFeatures[i].ID || f.(MockFeature).Name != mockFeatures[i].Name {
+			t.Errorf("expected extracted feature %v, got %v", mockFeatures[i], f)
+		}
+	}
+}

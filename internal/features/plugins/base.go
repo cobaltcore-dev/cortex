@@ -4,6 +4,8 @@
 package plugins
 
 import (
+	"log/slog"
+
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 )
@@ -25,4 +27,19 @@ func (e *BaseExtractor[Opts, Feature]) Init(db db.DB, opts conf.RawOpts) error {
 	e.DB = db
 	var f Feature
 	return db.CreateTable(db.AddTable(f))
+}
+
+// Replace all features of the given model in the database and
+// return them as a slice of generic features for counting.
+func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {
+	if err := db.ReplaceAll(e.DB, fs...); err != nil {
+		return nil, err
+	}
+	output := make([]Feature, len(fs))
+	for i, f := range fs {
+		output[i] = f
+	}
+	var model F
+	slog.Info("features: extracted", model.TableName(), len(output))
+	return output, nil
 }
