@@ -19,6 +19,14 @@ type SSOConfig struct {
 	SelfSigned bool `yaml:"selfSigned,omitempty"`
 }
 
+// Configuration for structured logging.
+type LoggingConfig struct {
+	// The log level to use (debug, info, warn, error).
+	LevelStr string `yaml:"level"`
+	// The log format to use (json, text).
+	Format string `yaml:"format"`
+}
+
 // Database configuration.
 type DBConfig struct {
 	Host     string `yaml:"host"`
@@ -164,6 +172,7 @@ type MonitoringConfig struct {
 
 // Configuration for the cortex service.
 type Config interface {
+	GetLoggingConfig() LoggingConfig
 	GetDBConfig() DBConfig
 	GetSyncConfig() SyncConfig
 	GetFeaturesConfig() FeaturesConfig
@@ -174,6 +183,7 @@ type Config interface {
 }
 
 type config struct {
+	LoggingConfig    `yaml:"logging"`
 	DBConfig         `yaml:"db"`
 	SyncConfig       `yaml:"sync"`
 	FeaturesConfig   `yaml:"features"`
@@ -209,6 +219,7 @@ func newConfigFromBytes(bytes []byte) Config {
 	return &c
 }
 
+func (c *config) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
 func (c *config) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
 func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
