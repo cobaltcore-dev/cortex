@@ -4,8 +4,6 @@
 package kvm
 
 import (
-	"log/slog"
-
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 )
 
@@ -39,16 +37,8 @@ func (*NodeExporterHostCPUUsageExtractor) GetName() string {
 // Extract CPU usage of kvm hosts.
 // Depends on resolved kvm hosts (feature_resolved_host).
 func (e *NodeExporterHostCPUUsageExtractor) Extract() ([]plugins.Feature, error) {
-	// Delete the old data in the same transaction.
-	tx, err := e.DB.Begin()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := tx.Exec("DELETE FROM feature_host_cpu_usage"); err != nil {
-		return nil, tx.Rollback()
-	}
-	if _, err := tx.Exec(`
-		INSERT INTO feature_host_cpu_usage (compute_host, avg_cpu_usage, max_cpu_usage)
+	var features []NodeExporterHostCPUUsage
+	if _, err := e.DB.Select(&features, `
 		SELECT
 			node AS compute_host,
 			AVG(value) AS avg_cpu_usage,
@@ -57,20 +47,7 @@ func (e *NodeExporterHostCPUUsageExtractor) Extract() ([]plugins.Feature, error)
 		WHERE name = 'node_exporter_cpu_usage_pct'
 		GROUP BY node;
 	`); err != nil {
-		return nil, tx.Rollback()
-	}
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	// Load the extracted features from the database and return them.
-	var features []NodeExporterHostCPUUsage
-	if _, err := e.DB.Select(&features, "SELECT * FROM feature_host_cpu_usage"); err != nil {
-		return nil, err
-	}
-	output := make([]plugins.Feature, len(features))
-	for i, f := range features {
-		output[i] = f
-	}
-	slog.Info("features: extracted", "feature_host_cpu_usage", len(output))
-	return output, nil
+	return e.Extracted(features)
 }
