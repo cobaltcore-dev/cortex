@@ -39,7 +39,10 @@ func (deps *DependencyConfig) validate(c config) error {
 	}
 	for _, objectType := range deps.Sync.OpenStack.Nova.ObjectTypes {
 		if !confedNovaObjects[objectType] {
-			return fmt.Errorf("openstack object type dependency %s not satisfied", objectType)
+			return fmt.Errorf(
+				"openstack object type dependency %s not satisfied, got %v",
+				objectType, c.SyncConfig.OpenStack.Nova.Types,
+			)
 		}
 	}
 	confedPlacementObjects := make(map[string]bool)
@@ -48,7 +51,10 @@ func (deps *DependencyConfig) validate(c config) error {
 	}
 	for _, objectType := range deps.Sync.OpenStack.Placement.ObjectTypes {
 		if !confedPlacementObjects[objectType] {
-			return fmt.Errorf("openstack object type dependency %s not satisfied", objectType)
+			return fmt.Errorf(
+				"openstack object type dependency %s not satisfied, got %v",
+				objectType, c.SyncConfig.OpenStack.Placement.Types,
+			)
 		}
 	}
 	confedMetrics := make(map[string]bool)
@@ -57,7 +63,10 @@ func (deps *DependencyConfig) validate(c config) error {
 	}
 	for _, metric := range deps.Sync.Prometheus.MetricNames {
 		if !confedMetrics[metric] {
-			return fmt.Errorf("prometheus metric dependency %s not satisfied", metric)
+			return fmt.Errorf(
+				"prometheus metric dependency %s not satisfied, got %v",
+				metric, c.SyncConfig.Prometheus.Metrics,
+			)
 		}
 	}
 	confedExtractors := make(map[string]bool)
@@ -66,7 +75,10 @@ func (deps *DependencyConfig) validate(c config) error {
 	}
 	for _, extractor := range deps.Features.ExtractorNames {
 		if !confedExtractors[extractor] {
-			return fmt.Errorf("feature extractor dependency %s not satisfied", extractor)
+			return fmt.Errorf(
+				"feature extractor dependency %s not satisfied, got %v",
+				extractor, c.FeaturesConfig.Extractors,
+			)
 		}
 	}
 	return nil
