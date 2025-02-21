@@ -62,12 +62,12 @@ func (s CombinedSyncer) Sync(context context.Context) {
 	var wg gosync.WaitGroup
 	for _, syncer := range s.syncers {
 		wg.Add(1)
-		go func() {
+		go func(syncer Syncer) {
 			defer wg.Done()
 			if err := syncer.Sync(context); err != nil {
 				slog.Error("failed to sync objects", "error", err)
 			}
-		}()
+		}(syncer)
 	}
 	wg.Wait()
 }

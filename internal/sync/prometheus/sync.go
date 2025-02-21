@@ -103,10 +103,10 @@ func (s CombinedSyncer) Sync(context context.Context) {
 	var wg gosync.WaitGroup
 	for _, syncer := range s.Syncers {
 		wg.Add(1)
-		go func() {
+		go func(syncer sync.Datasource) {
 			defer wg.Done()
 			syncer.Sync(context)
-		}()
+		}(syncer)
 	}
 	wg.Wait()
 }
