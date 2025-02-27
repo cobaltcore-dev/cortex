@@ -32,6 +32,10 @@ renovate:
 dockerfile:
   enabled: true
 
+# Don't override REUSE.toml since it contains custom information.
+reuse:
+  enabled: false
+
 verbatim: |
   run: build/cortex
     ./build/cortex

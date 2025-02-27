@@ -113,13 +113,13 @@ func (p *FeatureExtractorPipeline) Extract() {
 		var wg sync.WaitGroup
 		for _, extractor := range extractors {
 			wg.Add(1)
-			go func() {
+			go func(extractor plugins.FeatureExtractor) {
 				defer wg.Done()
 				if _, err := extractor.Extract(); err != nil {
 					slog.Error("feature extractor: failed to extract features", "error", err)
 					return
 				}
-			}()
+			}(extractor)
 		}
 		wg.Wait()
 	}

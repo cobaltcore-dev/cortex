@@ -106,6 +106,12 @@ sharedSSOCert: &sharedSSOCert
 
 # Values passed to the service by conf.yaml
 conf:
+  logging:
+    # The log level to use (debug, info, warn, error).
+    level: debug
+    # The log format to use (json, text).
+    format: text
+
   # Configuration of metrics exported to the /metrics endpoint.
   monitoring:
     # The port to expose the metrics on.

@@ -95,7 +95,7 @@ func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64
 		var wg sync.WaitGroup
 		for _, step := range steps {
 			wg.Add(1)
-			go func() {
+			go func(step plugins.Step) {
 				defer wg.Done()
 				activations, err := step.Run(scenario)
 				if err != nil {
@@ -103,7 +103,7 @@ func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64
 					return
 				}
 				activationsByStep.Store(step.GetName(), activations)
-			}()
+			}(step)
 		}
 		wg.Wait()
 	}
