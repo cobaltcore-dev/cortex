@@ -6,7 +6,7 @@ replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
 
 require (
 	github.com/go-gorp/gorp v2.2.0+incompatible
-	github.com/gophercloud/gophercloud/v2 v2.5.0
+	github.com/gophercloud/gophercloud/v2 v2.6.0
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/ory/dockertest v3.3.5+incompatible
