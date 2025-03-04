@@ -40,6 +40,12 @@
         "/.*/"
       ],
       "groupName": "External dependencies"
+    },
+    {
+      "packagePatterns": [
+        "^helm/postgres$"
+      ],
+      "enabled": false
     }
   ],
   "prHourlyLimit": 0,
