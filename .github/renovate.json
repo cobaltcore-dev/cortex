@@ -42,7 +42,7 @@
     },
     {
       "enabled": false,
-      "matchPaths": [
+      "matchFileNames": [
         "helm/postgres/**"
       ]
     },
