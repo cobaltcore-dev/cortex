@@ -42,10 +42,10 @@
       "groupName": "External dependencies"
     },
     {
-      "packagePatterns": [
-        "^helm/postgres$"
-      ],
-      "enabled": false
+      "enabled": false,
+      "matchPackageNames": [
+        "/^helm/postgres$/"
+      ]
     }
   ],
   "prHourlyLimit": 0,
