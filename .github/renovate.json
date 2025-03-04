@@ -35,17 +35,17 @@
       "groupName": "github.com/sapcc"
     },
     {
+      "enabled": false,
+      "matchPackageNames": [
+        "postgresql"
+      ]
+    },
+    {
       "matchPackageNames": [
         "!/^github\\.com\\/sapcc\\/.*/",
         "/.*/"
       ],
       "groupName": "External dependencies"
-    },
-    {
-      "enabled": false,
-      "matchPackageNames": [
-        "postgresql"
-      ]
     }
   ],
   "prHourlyLimit": 0,
