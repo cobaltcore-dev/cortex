@@ -44,7 +44,7 @@
     {
       "enabled": false,
       "matchPackageNames": [
-        "/^helm/postgres$/"
+        "postgresql"
       ]
     }
   ],
