@@ -41,6 +41,12 @@
       ]
     },
     {
+      "enabled": false,
+      "matchPaths": [
+        "helm/postgres/**"
+      ]
+    },
+    {
       "matchPackageNames": [
         "!/^github\\.com\\/sapcc\\/.*/",
         "/.*/"
