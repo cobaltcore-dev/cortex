@@ -14,14 +14,18 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/vmware"
 )
 
 // Configuration of steps supported by the scheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
 var supportedSteps = []plugins.Step{
+	// VMware-specific steps
 	&vmware.AntiAffinityNoisyProjectsStep{},
 	&vmware.AvoidContendedHostsStep{},
+	// KVM-specific steps
+	&kvm.AvoidOverloadedHostsStep{},
 }
 
 // Sequence of scheduler steps that are executed in parallel.
