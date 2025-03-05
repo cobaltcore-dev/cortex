@@ -51,11 +51,6 @@ type SyncPrometheusMetricConfig struct {
 	TimeRangeSeconds  *int `yaml:"timeRangeSeconds,omitempty"`
 	IntervalSeconds   *int `yaml:"intervalSeconds,omitempty"`
 	ResolutionSeconds *int `yaml:"resolutionSeconds,omitempty"`
-
-	// One or multiple prometheus names to fetch the metric from.
-	// If multiple names are given, the metric will be fetched from
-	// all of them.
-	PrometheusNames []string `yaml:"prometheusNames"`
 }
 
 // Configuration for a single prometheus host.
@@ -66,6 +61,8 @@ type SyncPrometheusHostConfig struct {
 	URL string `yaml:"url"`
 	// The SSO configuration for this host.
 	SSO SSOConfig `yaml:"sso,omitempty"`
+	// The types of metrics this host provides.
+	ProvidedMetricTypes []string `yaml:"provides"`
 }
 
 // Configuration for the sync/prometheus module containing a list of metrics.

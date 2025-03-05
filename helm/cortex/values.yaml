@@ -135,12 +135,14 @@ conf:
     prometheus:
       # Prometheus hosts to consider when syncing the metrics.
       hosts:
-        - name: vrops_prometheus
+        - name: vmware_prometheus
           url: https://path-to-vrops-prometheus
+          provides: [vrops_vm_metric, vrops_host_metric]
           # Optional, only required if Prometheus is configured with SSO.
           sso: *sharedSSOCert
-        - name: node_exporter_prometheus
+        - name: kvm_prometheus
           url: https://path-to-node-exporter
+          provides: [node_exporter_metric]
           # Optional, only required if Prometheus is configured with SSO.
           sso: *sharedSSOCert
       # Prometheus metrics to sync into the database.
@@ -152,12 +154,10 @@ conf:
           query: |
             vrops_virtualmachine_cpu_demand_ratio{}
           type: vrops_vm_metric
-          prometheusNames: [vrops_prometheus]
         - alias: vrops_hostsystem_cpu_contention_percentage
           query: |
             vrops_hostsystem_cpu_contention_percentage{}
           type: vrops_host_metric
-          prometheusNames: [vrops_prometheus]
         # Node exporter metrics for KVM hosts.
         - alias: node_exporter_cpu_usage_pct
           query: |
@@ -166,7 +166,6 @@ conf:
               count by (node) (rate(node_cpu_seconds_total{mode="idle"}[1m]))
             )) * 100
           type: node_exporter_metric
-          prometheusNames: [node_exporter_prometheus]
 
     openstack:
       keystone:

@@ -134,5 +134,21 @@ func (c *config) Validate() error {
 	if !slices.Contains(validAvailabilities, c.SyncConfig.OpenStack.Placement.Availability) {
 		return fmt.Errorf("invalid placement availability %s", c.SyncConfig.OpenStack.Placement.Availability)
 	}
+	// Check that all confed metric types have a host to sync from.
+	confedMetricTypes := make(map[string]bool)
+	for _, metric := range c.SyncConfig.Prometheus.Metrics {
+		confedMetricTypes[metric.Type] = true
+	}
+	providedMetricTypes := make(map[string]bool)
+	for _, host := range c.SyncConfig.Prometheus.Hosts {
+		for _, metricType := range host.ProvidedMetricTypes {
+			providedMetricTypes[metricType] = true
+		}
+	}
+	for metricType := range confedMetricTypes {
+		if !providedMetricTypes[metricType] {
+			return fmt.Errorf("no host provided for metric type %s", metricType)
+		}
+	}
 	return nil
 }

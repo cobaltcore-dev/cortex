@@ -62,22 +62,19 @@ type CombinedSyncer struct {
 func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.Monitor) sync.Datasource {
 	slog.Info("loading syncers", "metrics", config.Metrics)
 	syncers := []sync.Datasource{}
-	hostConfByName := make(map[string]conf.SyncPrometheusHostConfig)
-	for _, hostConf := range config.Hosts {
-		hostConfByName[hostConf.Name] = hostConf
-	}
 	for _, metricConfig := range config.Metrics {
 		syncerFunc, ok := supportedSyncers[metricConfig.Type]
 		if !ok {
 			panic("unsupported metric type: " + metricConfig.Type)
 		}
-		// Sync the metric from one or multiple prometheus hosts.
-		for _, prometheusName := range metricConfig.PrometheusNames {
-			hostConf, ok := hostConfByName[prometheusName]
-			if !ok {
-				panic("unknown metric host: " + prometheusName)
+		// Get the prometheuses to sync this metric from.
+		for _, hostConf := range config.Hosts {
+			for _, providedMetricType := range hostConf.ProvidedMetricTypes {
+				if providedMetricType == metricConfig.Type {
+					slog.Info("adding syncer", "metricType", metricConfig.Type, "host", hostConf.Name)
+					syncers = append(syncers, syncerFunc(db, hostConf, metricConfig, monitor))
+				}
 			}
-			syncers = append(syncers, syncerFunc(db, hostConf, metricConfig, monitor))
 		}
 	}
 	return CombinedSyncer{
