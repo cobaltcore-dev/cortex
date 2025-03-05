@@ -9,6 +9,10 @@ func TestValidConf(t *testing.T) {
 	content := `
 sync:
   prometheus:
+    hosts:
+      - name: prometheus
+        url: http://prometheus:9090
+        provides: [metric_type_1]
     metrics:
       - alias: metric_1
         query: metric_1
@@ -93,6 +97,21 @@ sync:
   openstack:
     placement:
       availability: whatever
+`
+	conf := newConfigFromBytes([]byte(content))
+	if err := conf.Validate(); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}
+
+func TestInvalidConf_MissingHost(t *testing.T) {
+	content := `
+sync:
+  prometheus:
+    metrics:
+      - alias: metric_1
+        query: metric_1
+        type: metric_type_1
 `
 	conf := newConfigFromBytes([]byte(content))
 	if err := conf.Validate(); err == nil {
