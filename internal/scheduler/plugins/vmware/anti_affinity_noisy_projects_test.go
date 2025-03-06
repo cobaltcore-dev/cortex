@@ -38,8 +38,11 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	opts := conf.NewRawOpts(`
-        avgCPUThreshold: 20.0
-        activationOnHit: -1.0
+        # Min-max scaling for avg CPU usage of the project on a host.
+        avgCPUUsageLowerBound: 20
+        avgCPUUsageUpperBound: 100
+        avgCPUUsageActivationLowerBound: 0.0
+        avgCPUUsageActivationUpperBound: -0.5
     `)
 	step := &AntiAffinityNoisyProjectsStep{}
 	if err := step.Init(testDB, opts); err != nil {

@@ -40,9 +40,16 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 
 	// Create an instance of the step
 	opts := conf.NewRawOpts(`
-        avgCPUContentionThreshold: 10.0
-        maxCPUContentionThreshold: 20.0
-        activationOnHit: -1.0
+        # Min-max scaling for avg CPU contention on the host.
+        avgCPUContentionLowerBound: 10
+        avgCPUContentionUpperBound: 100
+        avgCPUContentionActivationLowerBound: 0.0
+        avgCPUContentionActivationUpperBound: -0.5
+        # Min-max scaling for max CPU contention on the host.
+        maxCPUContentionLowerBound: 20
+        maxCPUContentionUpperBound: 100
+        maxCPUContentionActivationLowerBound: 0.0
+        maxCPUContentionActivationUpperBound: -0.5
     `)
 	step := &AvoidContendedHostsStep{}
 	if err := step.Init(testDB, opts); err != nil {
