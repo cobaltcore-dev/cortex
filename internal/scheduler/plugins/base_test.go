@@ -16,6 +16,10 @@ type MockOptions struct {
 	Option2 int    `yaml:"option2"`
 }
 
+func (o MockOptions) Validate() error {
+	return nil
+}
+
 func TestBaseStep_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}

@@ -4,16 +4,37 @@
 package kvm
 
 import (
+	"errors"
+
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
-// Options for the scheduling step, given through the
-// step config in the service yaml file.
+// Options for the scheduling step, given through the step config in the service yaml file.
+// Use the options contained in this struct to configure the bounds for min-max scaling.
 type AvoidOverloadedHostsStepOpts struct {
-	AvgCPUUsageThreshold float64 `yaml:"avgCPUUsageThreshold"`
-	MaxCPUUsageThreshold float64 `yaml:"maxCPUUsageThreshold"`
-	ActivationOnHit      float64 `yaml:"activationOnHit"`
+	AvgCPUUsageLowerBound float64 `yaml:"avgCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
+	AvgCPUUsageUpperBound float64 `yaml:"avgCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
+
+	AvgCPUUsageActivationLowerBound float64 `yaml:"avgCPUUsageActivationLowerBound"`
+	AvgCPUUsageActivationUpperBound float64 `yaml:"avgCPUUsageActivationUpperBound"`
+
+	MaxCPUUsageLowerBound float64 `yaml:"maxCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
+	MaxCPUUsageUpperBound float64 `yaml:"maxCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
+
+	MaxCPUUsageActivationLowerBound float64 `yaml:"maxCPUUsageActivationLowerBound"`
+	MaxCPUUsageActivationUpperBound float64 `yaml:"maxCPUUsageActivationUpperBound"`
+}
+
+func (o AvoidOverloadedHostsStepOpts) Validate() error {
+	// Avoid zero-division during min-max scaling.
+	if o.AvgCPUUsageLowerBound == o.AvgCPUUsageUpperBound {
+		return errors.New("avgCPUUsageLowerBound and avgCPUUsageUpperBound must not be equal")
+	}
+	if o.MaxCPUUsageLowerBound == o.MaxCPUUsageUpperBound {
+		return errors.New("maxCPUUsageLowerBound and maxCPUUsageUpperBound must not be equal")
+	}
+	return nil
 }
 
 // Step to avoid high cpu hosts by downvoting them.
@@ -35,24 +56,33 @@ func (s *AvoidOverloadedHostsStep) Run(scenario plugins.Scenario) (map[string]fl
 		return activations, nil
 	}
 
-	var highlyUsedHosts []kvm.NodeExporterHostCPUUsage
-	if _, err := s.DB.Select(&highlyUsedHosts, `
+	var hostCPUUsages []kvm.NodeExporterHostCPUUsage
+	if _, err := s.DB.Select(&hostCPUUsages, `
 		SELECT * FROM feature_host_cpu_usage
-		WHERE avg_cpu_usage > :avg_cpu_usage_threshold
-		OR max_cpu_usage > :max_cpu_usage_threshold
-	`, map[string]any{
-		"avg_cpu_usage_threshold": s.Options.AvgCPUUsageThreshold,
-		"max_cpu_usage_threshold": s.Options.MaxCPUUsageThreshold,
-	}); err != nil {
+	`); err != nil {
 		return nil, err
 	}
 
-	// Push the VM away from highly used hosts.
-	for _, host := range highlyUsedHosts {
+	for _, host := range hostCPUUsages {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[host.ComputeHost]; ok {
-			activations[host.ComputeHost] = s.Options.ActivationOnHit
+		if _, ok := activations[host.ComputeHost]; !ok {
+			continue
 		}
+		activationAvg := plugins.MinMaxScale(
+			host.AvgCPUUsage,
+			s.Options.AvgCPUUsageLowerBound,
+			s.Options.AvgCPUUsageUpperBound,
+			s.Options.AvgCPUUsageActivationLowerBound,
+			s.Options.AvgCPUUsageActivationUpperBound,
+		)
+		activationMax := plugins.MinMaxScale(
+			host.MaxCPUUsage,
+			s.Options.MaxCPUUsageLowerBound,
+			s.Options.MaxCPUUsageUpperBound,
+			s.Options.MaxCPUUsageActivationLowerBound,
+			s.Options.MaxCPUUsageActivationUpperBound,
+		)
+		activations[host.ComputeHost] = activationAvg + activationMax
 	}
 	return activations, nil
 }

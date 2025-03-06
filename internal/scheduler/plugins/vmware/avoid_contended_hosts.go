@@ -4,6 +4,8 @@
 package vmware
 
 import (
+	"errors"
+
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
@@ -11,9 +13,28 @@ import (
 // Options for the scheduling step, given through the
 // step config in the service yaml file.
 type AvoidContendedHostsStepOpts struct {
-	AvgCPUContentionThreshold float64 `yaml:"avgCPUContentionThreshold"`
-	MaxCPUContentionThreshold float64 `yaml:"maxCPUContentionThreshold"`
-	ActivationOnHit           float64 `yaml:"activationOnHit"`
+	AvgCPUContentionLowerBound float64 `yaml:"avgCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
+	AvgCPUContentionUpperBound float64 `yaml:"avgCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
+
+	AvgCPUContentionActivationLowerBound float64 `yaml:"avgCPUContentionActivationLowerBound"`
+	AvgCPUContentionActivationUpperBound float64 `yaml:"avgCPUContentionActivationUpperBound"`
+
+	MaxCPUContentionLowerBound float64 `yaml:"maxCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
+	MaxCPUContentionUpperBound float64 `yaml:"maxCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
+
+	MaxCPUContentionActivationLowerBound float64 `yaml:"maxCPUContentionActivationLowerBound"`
+	MaxCPUContentionActivationUpperBound float64 `yaml:"maxCPUContentionActivationUpperBound"`
+}
+
+func (o AvoidContendedHostsStepOpts) Validate() error {
+	// Avoid zero-division during min-max scaling.
+	if o.AvgCPUContentionLowerBound == o.AvgCPUContentionUpperBound {
+		return errors.New("avgCPUContentionLowerBound and avgCPUContentionUpperBound must not be equal")
+	}
+	if o.MaxCPUContentionLowerBound == o.MaxCPUContentionUpperBound {
+		return errors.New("maxCPUContentionLowerBound and maxCPUContentionUpperBound must not be equal")
+	}
+	return nil
 }
 
 // Step to avoid contended hosts by downvoting them.
@@ -38,21 +59,31 @@ func (s *AvoidContendedHostsStep) Run(scenario plugins.Scenario) (map[string]flo
 	var highlyContendedHosts []vmware.VROpsHostsystemContention
 	if _, err := s.DB.Select(&highlyContendedHosts, `
 		SELECT * FROM feature_vrops_hostsystem_contention
-		WHERE avg_cpu_contention > :avg_cpu_contention_threshold
-		OR max_cpu_contention > :max_cpu_contention_threshold
-	`, map[string]any{
-		"avg_cpu_contention_threshold": s.Options.AvgCPUContentionThreshold,
-		"max_cpu_contention_threshold": s.Options.MaxCPUContentionThreshold,
-	}); err != nil {
+	`); err != nil {
 		return nil, err
 	}
 
 	// Push the VM away from highly contended hosts.
 	for _, host := range highlyContendedHosts {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[host.ComputeHost]; ok {
-			activations[host.ComputeHost] = s.Options.ActivationOnHit
+		if _, ok := activations[host.ComputeHost]; !ok {
+			continue
 		}
+		activationAvg := plugins.MinMaxScale(
+			host.AvgCPUContention,
+			s.Options.AvgCPUContentionLowerBound,
+			s.Options.AvgCPUContentionUpperBound,
+			s.Options.AvgCPUContentionActivationLowerBound,
+			s.Options.AvgCPUContentionActivationUpperBound,
+		)
+		activationMax := plugins.MinMaxScale(
+			host.MaxCPUContention,
+			s.Options.MaxCPUContentionLowerBound,
+			s.Options.MaxCPUContentionUpperBound,
+			s.Options.MaxCPUContentionActivationLowerBound,
+			s.Options.MaxCPUContentionActivationUpperBound,
+		)
+		activations[host.ComputeHost] = activationAvg + activationMax
 	}
 	return activations, nil
 }

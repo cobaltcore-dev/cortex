@@ -4,15 +4,28 @@
 package vmware
 
 import (
+	"errors"
+
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
-// Options for the scheduling step, given through the
-// step config in the service yaml file.
+// Options for the scheduling step, given through the step config in the service yaml file.
+// Use the options contained in this struct to configure the bounds for min-max scaling.
 type AntiAffinityNoisyProjectsStepOpts struct {
-	AvgCPUThreshold float64 `yaml:"avgCPUThreshold"`
-	ActivationOnHit float64 `yaml:"activationOnHit"`
+	AvgCPUUsageLowerBound float64 `yaml:"avgCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
+	AvgCPUUsageUpperBound float64 `yaml:"avgCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
+
+	AvgCPUUsageActivationLowerBound float64 `yaml:"avgCPUUsageActivationLowerBound"`
+	AvgCPUUsageActivationUpperBound float64 `yaml:"avgCPUUsageActivationUpperBound"`
+}
+
+func (o AntiAffinityNoisyProjectsStepOpts) Validate() error {
+	// Avoid zero-division during min-max scaling.
+	if o.AvgCPUUsageLowerBound == o.AvgCPUUsageUpperBound {
+		return errors.New("avgCPUUsageLowerBound and avgCPUUsageUpperBound must not be equal")
+	}
+	return nil
 }
 
 // Step to avoid noisy projects by downvoting the hosts they are running on.
@@ -36,35 +49,29 @@ func (s *AntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map[stri
 
 	projectID := scenario.GetProjectID()
 
-	// If the average CPU usage is above the threshold, the project is considered noisy.
-	var noisyProjects []vmware.VROpsProjectNoisiness
-	if _, err := s.DB.Select(&noisyProjects, `
+	// Check how noisy the project is on the compute hosts.
+	var projectNoisinessOnHosts []vmware.VROpsProjectNoisiness
+	if _, err := s.DB.Select(&projectNoisinessOnHosts, `
 		SELECT * FROM feature_vrops_project_noisiness
-		WHERE avg_cpu_of_project > :avg_cpu_threshold
-		AND project = :project_id
+		WHERE project = :project_id
 	`, map[string]any{
-		"avg_cpu_threshold": s.Options.AvgCPUThreshold,
-		"project_id":        projectID,
+		"project_id": projectID,
 	}); err != nil {
 		return nil, err
 	}
 
-	// Get the hosts we need to push the VM away from.
-	var hostsByProject = make(map[string][]string)
-	for _, p := range noisyProjects {
-		hostsByProject[p.Project] = append(hostsByProject[p.Project], p.ComputeHost)
-	}
-	hostnames, ok := hostsByProject[projectID]
-	if !ok {
-		// No noisy project, nothing to do.
-		return activations, nil
-	}
-	// Downvote the hosts this project is currently running on.
-	for _, host := range hostnames {
+	for _, p := range projectNoisinessOnHosts {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[host]; ok {
-			activations[host] = s.Options.ActivationOnHit
+		if _, ok := activations[p.ComputeHost]; !ok {
+			continue
 		}
+		activations[p.ComputeHost] = plugins.MinMaxScale(
+			p.AvgCPUOfProject,
+			s.Options.AvgCPUUsageLowerBound,
+			s.Options.AvgCPUUsageUpperBound,
+			s.Options.AvgCPUUsageActivationLowerBound,
+			s.Options.AvgCPUUsageActivationUpperBound,
+		)
 	}
 	return activations, nil
 }
