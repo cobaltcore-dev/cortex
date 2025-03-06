@@ -8,9 +8,20 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
+// Interface to which step options must conform.
+type StepOpts interface {
+	// Validate the options for this step.
+	Validate() error
+}
+
+// Empty options for steps that don't need any.
+type EmptyStepOpts struct{}
+
+func (o EmptyStepOpts) Validate() error { return nil }
+
 // Common base for all steps that provides some functionality
 // that would otherwise be duplicated across all steps.
-type BaseStep[Opts any] struct {
+type BaseStep[Opts StepOpts] struct {
 	// Options to pass via yaml to this step.
 	conf.YamlOpts[Opts]
 	// The activation function to use.
@@ -25,7 +36,7 @@ func (s *BaseStep[Opts]) Init(db db.DB, opts conf.RawOpts) error {
 		return err
 	}
 	s.DB = db
-	return nil
+	return s.Options.Validate()
 }
 
 // Get zero activations for all hosts.

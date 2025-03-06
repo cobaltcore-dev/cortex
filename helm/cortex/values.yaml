@@ -265,17 +265,27 @@ conf:
       # VMware specific scheduler steps.
       - name: vmware_anti_affinity_noisy_projects
         options:
-          avgCPUThreshold: 20
-          activationOnHit: -1.0
+          # Min-max scaling for avg CPU usage of the project on a host.
+          avgCPUUsageLowerBound: 0
+          avgCPUUsageUpperBound: 100
+          avgCPUUsageActivationLowerBound: 0.25
+          avgCPUUsageActivationUpperBound: -0.5
         dependencies:
           features:
             extractors:
               - vrops_project_noisiness_extractor
       - name: vmware_avoid_contended_hosts
         options:
-          avgCPUContentionThreshold: 10
-          maxCPUContentionThreshold: 20
-          activationOnHit: -1.0
+          # Min-max scaling for avg CPU contention on the host.
+          avgCPUContentionLowerBound: 0
+          avgCPUContentionUpperBound: 100
+          avgCPUContentionActivationLowerBound: 0.25
+          avgCPUContentionActivationUpperBound: -0.5
+          # Min-max scaling for max CPU contention on the host.
+          maxCPUContentionLowerBound: 0
+          maxCPUContentionUpperBound: 100
+          maxCPUContentionActivationLowerBound: 0.25
+          maxCPUContentionActivationUpperBound: -0.5
         dependencies:
           features:
             extractors:
@@ -283,9 +293,16 @@ conf:
       # KVM specific scheduler steps.
       - name: kvm_avoid_overloaded_hosts
         options:
-          avgCPUUsageThreshold: 10
-          maxCPUUsageThreshold: 20
-          activationOnHit: -1.0
+          # Min-max scaling for avg CPU usage on the host.
+          avgCPUUsageLowerBound: 0
+          avgCPUUsageUpperBound: 100
+          avgCPUUsageActivationLowerBound: 0.25
+          avgCPUUsageActivationUpperBound: -0.5
+          # Min-max scaling for max CPU usage on the host.
+          maxCPUUsageLowerBound: 0
+          maxCPUUsageUpperBound: 100
+          maxCPUUsageActivationLowerBound: 0.25
+          maxCPUUsageActivationUpperBound: -0.5
         dependencies:
           features:
             extractors:

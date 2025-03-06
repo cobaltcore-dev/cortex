@@ -17,8 +17,8 @@ import (
 type Monitor struct {
 	// A histogram to measure how long each step takes to run.
 	stepRunTimer *prometheus.HistogramVec
-	// A histogram to observe how much the step modifies the weights of the hosts.
-	stepWeightModObserver *prometheus.HistogramVec
+	// A metric to monitor how much the step modifies the weights of the hosts.
+	stepHostWeight *prometheus.GaugeVec
 	// A histogram to observe how many hosts are removed from the state.
 	stepRemovedHostsObserver *prometheus.HistogramVec
 	// A histogram to measure how long the API requests take to run.
@@ -38,11 +38,10 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		Help:    "Duration of scheduler pipeline step run",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"step"})
-	stepWeightModObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_weight_modification",
-		Help:    "Modification of host weight by scheduler pipeline step",
-		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
-	}, []string{"step"})
+	stepHostWeight := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "cortex_scheduler_pipeline_step_weight_modification",
+		Help: "Modification of host weight by scheduler pipeline step",
+	}, []string{"host", "step"})
 	stepRemovedHostsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_removed_hosts",
 		Help:    "Number of hosts removed by scheduler pipeline step",
@@ -70,7 +69,7 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 	})
 	registry.MustRegister(
 		stepRunTimer,
-		stepWeightModObserver,
+		stepHostWeight,
 		stepRemovedHostsObserver,
 		apiRequestsTimer,
 		pipelineRunTimer,
@@ -79,7 +78,7 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 	)
 	return Monitor{
 		stepRunTimer:             stepRunTimer,
-		stepWeightModObserver:    stepWeightModObserver,
+		stepHostWeight:           stepHostWeight,
 		stepRemovedHostsObserver: stepRemovedHostsObserver,
 		apiRequestsTimer:         apiRequestsTimer,
 		pipelineRunTimer:         pipelineRunTimer,
@@ -94,8 +93,8 @@ type StepMonitor[S plugins.Step] struct {
 	Step S
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
-	// A metric to observe how much the step modifies the weights of the hosts.
-	weightModObserver prometheus.Observer
+	// A metric to monitor how much the step modifies the weights of the hosts.
+	stepHostWeight *prometheus.GaugeVec
 	// A metric to observe how many hosts are removed from the state.
 	removedHostsObserver prometheus.Observer
 }
@@ -117,10 +116,6 @@ func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 	if m.stepRunTimer != nil {
 		runTimer = m.stepRunTimer.WithLabelValues(stepName)
 	}
-	var weightModObserver prometheus.Observer
-	if m.stepWeightModObserver != nil {
-		weightModObserver = m.stepWeightModObserver.WithLabelValues(stepName)
-	}
 	var removedHostsObserver prometheus.Observer
 	if m.stepRemovedHostsObserver != nil {
 		removedHostsObserver = m.stepRemovedHostsObserver.WithLabelValues(stepName)
@@ -128,7 +123,7 @@ func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 	return &StepMonitor[S]{
 		Step:                 step,
 		runTimer:             runTimer,
-		weightModObserver:    weightModObserver,
+		stepHostWeight:       m.stepHostWeight,
 		removedHostsObserver: removedHostsObserver,
 	}
 }
@@ -151,9 +146,9 @@ func (s *StepMonitor[S]) Run(scenario plugins.Scenario) (map[string]float64, err
 	}
 
 	// Observe how much the step modifies the weights of the hosts.
-	if s.weightModObserver != nil {
-		for _, weight := range weights {
-			s.weightModObserver.Observe(weight)
+	if s.stepHostWeight != nil {
+		for host, weight := range weights {
+			s.stepHostWeight.WithLabelValues(host, stepName).Add(weight)
 			if weight != 0.0 {
 				slog.Info("scheduler: modified host weight", "name", stepName, "weight", weight)
 			}
