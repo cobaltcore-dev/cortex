@@ -10,33 +10,62 @@
 
 Cortex is an intelligent service for initial placement and scheduling of compute workloads within an [OpenStack](https://www.openstack.org/) cloud environment. It is designed to improve resource usage in a data center by making smart(er) decisions about where to place VMs, with future support planned for storage and network workloads.
 
+## Background
+
+Efficient and balanced resource utilization is key for cloud infrastructure providers to maintain operational performance and cost-effectiveness. In a dynamic cloud environment where workloads are constantly being created, moved, and deleted, a smart placement can help avoid resource bottlenecks and ensure high availability.
+
+OpenStack provides core services for managing compute, storage, and network resources in a cloud environment ([learn more](https://docs.openstack.org/de/security-guide/introduction/introduction-to-openstack.html)). Cortex extends the scheduling logic of these services by adding a layer of intelligence that can make more informed decisions about where to place workloads based on the current state of the data center.
+
 ## Features
 
 - **Data sync:** Flexible framework to sync metrics and placement information of a data center.
 - **Knowledge extraction**: Logic to extract simple or advanced knowledge ("features") from the synced data.
-- **Smart scheduling:** Scheduling pipeline for VMs based on the extracted knowledge.
+- **Smart scheduling:** Fast and scalable scheduling pipeline for VMs based on the extracted knowledge.
+
+## Documentation
+
+Read the full documentation at [docs/readme.md](docs/readme.md).
+
+## Roadmap
+
+See our [roadmap](https://github.com/orgs/cobaltcore-dev/projects/14) and [issue tracker](https://github.com/cobaltcore-dev/cortex/issues) for upcoming features and improvements.
 
 ## Quickstart
 
-Copy the example secrets values file and insert your credentials.
+### 1. Tilt Values Setup
+
+Copy the example secrets values file. This file is used for local development and overrides the Helm chart values provided in [values.yaml](helm/cortex/values.yaml) for your local testing setup.
 ```bash
 cp cortex.secrets.example.yaml "${HOME}/cortex.secrets.yaml"
 ```
 
 > [!WARNING]
-> It is recommended to put the secrets file somewhere outside of the project directory, as it contains sensitive information. In this way, it won't be accidentally committed to the repository.
+> It is recommended to put the secrets file somewhere outside of the project directory. In this way, it won't be accidentally committed to the repository.
 
-Tell tilt where to find your secrets file:
+After copying the file, fill in the necessary values.
+
+Then, tell tilt where to find your secrets file:
 ```bash
 export TILT_VALUES_PATH="${HOME}/cortex.secrets.yaml"
 ```
 
-Run the tilt setup:
+### 2. Running Tilt
+
+Run the tilt setup in minikube:
 ```bash
 minikube start && tilt up
 ```
 
-Point your browser to http://localhost:10350/
+Point your browser to http://localhost:10350/ - if you did everything correctly, you should see the cortex services spin up in the browser.
+
+### 3. Simulate a Nova Request
+
+To simulate a Nova request to your Cortex instance in Tilt, you can run the following command:
+```bash
+go run cmd/sim.go
+```
+
+This will send a Nova-like request to the Cortex API, which will return a list of hosts that are ranked based on the current state of the data center.
 
 ## Support, Feedback, Contributing
 
