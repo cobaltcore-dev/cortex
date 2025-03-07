@@ -4,7 +4,6 @@
 package main
 
 import (
-	"log/slog"
 	"os"
 
 	"github.com/cobaltcore-dev/cortex/cmd/sim"
@@ -12,10 +11,6 @@ import (
 
 func main() {
 	args := os.Args[1:]
-	if len(args) == 0 {
-		slog.Error("usage: go run main.go [--noisy]")
-		panic("invalid usage")
-	}
 	if args[0] == "--noisy" {
 		sim.SimulateNoisyVMScheduling()
 		os.Exit(0)
@@ -24,4 +19,6 @@ func main() {
 		sim.SimulateRequestError()
 		os.Exit(0)
 	}
+	sim.SimulateVMScheduling()
+	os.Exit(0)
 }
