@@ -4,8 +4,6 @@
 package shared
 
 import (
-	"fmt"
-
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
@@ -49,12 +47,12 @@ func (*FlavorHostSpaceExtractor) GetName() string {
 // Depends on the OpenStack flavors and hypervisors to be synced.
 func (e *FlavorHostSpaceExtractor) Extract() ([]plugins.Feature, error) {
 	var hypervisors []openstack.Hypervisor
-	query := fmt.Sprintf("SELECT * FROM %s", openstack.Hypervisor{}.TableName())
+	query := "SELECT * FROM " + openstack.Hypervisor{}.TableName()
 	if _, err := e.DB.Select(&hypervisors, query); err != nil {
 		return nil, err
 	}
 	var flavors []openstack.Flavor
-	query = fmt.Sprintf("SELECT * FROM %s", openstack.Flavor{}.TableName())
+	query = "SELECT * FROM " + openstack.Flavor{}.TableName()
 	if _, err := e.DB.Select(&flavors, query); err != nil {
 		return nil, err
 	}
