@@ -5,9 +5,100 @@ package openstack
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
+
+func TestUnmarshalOpenStackServer(t *testing.T) {
+	data := []byte(`{
+        "id": "server1",
+        "name": "test-server",
+        "status": "ACTIVE",
+        "tenant_id": "tenant1",
+        "user_id": "user1",
+        "hostId": "host1",
+        "created": "2025-01-01T00:00:00Z",
+        "updated": "2025-01-02T00:00:00Z",
+        "accessIPv4": "192.168.0.1",
+        "accessIPv6": "fe80::1",
+        "OS-DCF:diskConfig": "AUTO",
+        "progress": 100,
+        "OS-EXT-AZ:availability_zone": "nova",
+        "config_drive": "True",
+        "key_name": "key1",
+        "OS-SRV-USG:launched_at": "2025-01-01T00:00:00Z",
+        "OS-SRV-USG:terminated_at": null,
+        "OS-EXT-SRV-ATTR:host": "host1",
+        "OS-EXT-SRV-ATTR:instance_name": "instance1",
+        "OS-EXT-SRV-ATTR:hypervisor_hostname": "hypervisor1",
+        "OS-EXT-STS:task_state": null,
+        "OS-EXT-STS:vm_state": "active",
+        "OS-EXT-STS:power_state": 1,
+        "flavor": {
+            "id": "flavor1"
+        }
+    }`)
+
+	var server Server
+	err := json.Unmarshal(data, &server)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if server.ID != "server1" {
+		t.Errorf("expected ID to be %s, got %s", "server1", server.ID)
+	}
+	if server.Name != "test-server" {
+		t.Errorf("expected name to be %s, got %s", "test-server", server.Name)
+	}
+	if server.FlavorID != "flavor1" {
+		t.Errorf("expected FlavorID to be %s, got %s", "flavor1", server.FlavorID)
+	}
+}
+
+func TestMarshalOpenStackServer(t *testing.T) {
+	server := Server{
+		ID:                             "server1",
+		Name:                           "test-server",
+		Status:                         "ACTIVE",
+		TenantID:                       "tenant1",
+		UserID:                         "user1",
+		HostID:                         "host1",
+		Created:                        "2025-01-01T00:00:00Z",
+		Updated:                        "2025-01-02T00:00:00Z",
+		AccessIPv4:                     "192.168.0.1",
+		AccessIPv6:                     "fe80::1",
+		OSDCFdiskConfig:                "AUTO",
+		Progress:                       100,
+		OSEXTAvailabilityZone:          "nova",
+		ConfigDrive:                    "True",
+		KeyName:                        "key1",
+		OSSRVUSGLaunchedAt:             "2025-01-01T00:00:00Z",
+		OSSRVUSGTerminatedAt:           nil,
+		OSEXTSRVATTRHost:               "host1",
+		OSEXTSRVATTRInstanceName:       "instance1",
+		OSEXTSRVATTRHypervisorHostname: "hypervisor1",
+		OSEXTSTSTaskState:              nil,
+		OSEXTSTSVmState:                "active",
+		OSEXTSTSPowerState:             1,
+		FlavorID:                       "flavor1",
+	}
+
+	data, err := json.Marshal(&server)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Check if the data contains "flavor":
+	if !json.Valid(data) {
+		t.Error("expected valid JSON, got invalid")
+	}
+	fmt.Println(string(data))
+	if !strings.Contains(string(data), `"flavor":{"id":"flavor1"}`) {
+		t.Error("expected JSON to contain 'flavor' with 'id'")
+	}
+}
 
 func TestUnmarshalOpenStackHypervisor(t *testing.T) {
 	data := []byte(`{

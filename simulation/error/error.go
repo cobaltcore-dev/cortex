@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package sim
+package main
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 )
 
 // Simulate a request error by sending a malformed payload to the scheduler.
-func SimulateRequestError() {
+func main() {
 	request := struct {
 		HereBeDragons string `json:"here_be_dragons"`
 	}{
