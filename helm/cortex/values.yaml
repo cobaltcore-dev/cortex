@@ -241,6 +241,7 @@ conf:
             prometheus:
               metrics:
                 - vrops_hostsystem_cpu_contention_percentage
+
       # KVM-specific extractors.
       - name: node_exporter_host_cpu_usage_extractor
         dependencies:
@@ -248,6 +249,16 @@ conf:
             prometheus:
               metrics:
                 - node_exporter_cpu_usage_pct
+
+      # Shared extractors.
+      - name: flavor_host_space_extractor
+        dependencies:
+          sync:
+            openstack:
+              nova:
+                types:
+                  - flavors
+                  - hypervisors
 
   scheduler:
     # The port to use for the scheduler API.
