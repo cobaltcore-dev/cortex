@@ -18,11 +18,11 @@ type FlavorHostSpace struct {
 	// Name of the OpenStack compute host.
 	ComputeHost string `db:"compute_host"`
 	// RAM left after the placement of the flavor.
-	RAMLeft int `db:"ram_left"`
+	RAMLeftMB int `db:"ram_left_mb"`
 	// CPU left after the placement of the flavor.
-	CPULeft int `db:"cpu_left"`
+	VCPUsLeft int `db:"vcpus_left"`
 	// Disk left after the placement of the flavor.
-	DiskLeft int `db:"disk_left"`
+	DiskLeftGB int `db:"disk_left_gb"`
 }
 
 // Table under which the feature is stored.
@@ -64,9 +64,9 @@ func (e *FlavorHostSpaceExtractor) Extract() ([]plugins.Feature, error) {
 			features = append(features, FlavorHostSpace{
 				FlavorID:    f.ID,
 				ComputeHost: h.ServiceHost,
-				RAMLeft:     h.FreeRAMMB - f.RAM,
-				CPULeft:     h.VCPUs - h.VCPUsUsed - f.VCPUs,
-				DiskLeft:    h.FreeDiskGB - f.Disk,
+				RAMLeftMB:   h.FreeRAMMB - f.RAM,
+				VCPUsLeft:   h.VCPUs - h.VCPUsUsed - f.VCPUs,
+				DiskLeftGB:  h.FreeDiskGB - f.Disk,
 			})
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/vmware"
 )
 
@@ -26,6 +27,8 @@ var supportedSteps = []plugins.Step{
 	&vmware.AvoidContendedHostsStep{},
 	// KVM-specific steps
 	&kvm.AvoidOverloadedHostsStep{},
+	// Shared steps
+	&shared.FlavorBinpackingStep{},
 }
 
 // Sequence of scheduler steps that are executed in parallel.

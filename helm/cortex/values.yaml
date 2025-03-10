@@ -302,6 +302,7 @@ conf:
           features:
             extractors:
               - vrops_hostsystem_contention_extractor
+
       # KVM specific scheduler steps.
       - name: kvm_avoid_overloaded_hosts
         options:
@@ -319,3 +320,29 @@ conf:
           features:
             extractors:
               - node_exporter_host_cpu_usage_extractor
+
+      # Shared scheduler steps.
+      - name: shared_flavor_binpacking
+        options:
+          # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
+          cpuEnabled: true
+          cpuFreeLowerBound: 0
+          cpuFreeUpperBound: 128
+          cpuFreeActivationLowerBound: 0.25
+          cpuFreeActivationUpperBound: -0.5
+          # Min-max scaling for gap-fitting based on memory space left (MB).
+          ramEnabled: true
+          ramFreeLowerBound: 0
+          ramFreeUpperBound: 4000000
+          ramFreeActivationLowerBound: 0.25
+          ramFreeActivationUpperBound: -0.5
+          # Min-max scaling for gap-fitting based on disk space left. (GB)
+          diskEnabled: false
+          diskFreeLowerBound: 0
+          diskFreeUpperBound: 1000
+          diskFreeActivationLowerBound: 0.25
+          diskFreeActivationUpperBound: -0.5
+        dependencies:
+          features:
+            extractors:
+              - flavor_host_space_extractor

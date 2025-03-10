@@ -32,7 +32,8 @@ type ScenarioHost interface {
 type Scenario interface {
 	// Get the project ID of the VM to be scheduled.
 	GetProjectID() string
-
+	// Get the flavor ID of the VM to be scheduled.
+	GetFlavorID() string
 	// Whether we are looking at a rebuild request.
 	GetRebuild() bool
 	// Whether we are looking at a resize request.
@@ -41,7 +42,8 @@ type Scenario interface {
 	GetLive() bool
 	// Whether the VM is a VMware VM.
 	GetVMware() bool
-
 	// Get the hosts in the state.
 	GetHosts() []ScenarioHost
+	// Get the number of VMs that should be scheduled.
+	GetNumVMs() int
 }

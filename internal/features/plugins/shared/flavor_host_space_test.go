@@ -80,25 +80,25 @@ func TestFlavorHostSpaceExtractor_Extract(t *testing.T) {
 
 	expected := map[string]map[string]FlavorHostSpace{
 		"host1": {
-			"flavor1": {FlavorID: "flavor1", ComputeHost: "host1", RAMLeft: 12000, CPULeft: 8, DiskLeft: 150},
-			"flavor2": {FlavorID: "flavor2", ComputeHost: "host1", RAMLeft: 8000, CPULeft: 4, DiskLeft: 100},
+			"flavor1": {FlavorID: "flavor1", ComputeHost: "host1", RAMLeftMB: 12000, VCPUsLeft: 8, DiskLeftGB: 150},
+			"flavor2": {FlavorID: "flavor2", ComputeHost: "host1", RAMLeftMB: 8000, VCPUsLeft: 4, DiskLeftGB: 100},
 		},
 		"host2": {
-			"flavor1": {FlavorID: "flavor1", ComputeHost: "host2", RAMLeft: 28000, CPULeft: 20, DiskLeft: 350},
-			"flavor2": {FlavorID: "flavor2", ComputeHost: "host2", RAMLeft: 24000, CPULeft: 16, DiskLeft: 300},
+			"flavor1": {FlavorID: "flavor1", ComputeHost: "host2", RAMLeftMB: 28000, VCPUsLeft: 20, DiskLeftGB: 350},
+			"flavor2": {FlavorID: "flavor2", ComputeHost: "host2", RAMLeftMB: 24000, VCPUsLeft: 16, DiskLeftGB: 300},
 		},
 	}
 
 	for _, s := range spaces {
 		exp := expected[s.ComputeHost][s.FlavorID]
-		if exp.RAMLeft != s.RAMLeft {
-			t.Errorf("expected ram_left for compute_host %s and flavor_id %s to be %d, got %d", s.ComputeHost, s.FlavorID, exp.RAMLeft, s.RAMLeft)
+		if exp.RAMLeftMB != s.RAMLeftMB {
+			t.Errorf("expected ram_left for compute_host %s and flavor_id %s to be %d, got %d", s.ComputeHost, s.FlavorID, exp.RAMLeftMB, s.RAMLeftMB)
 		}
-		if exp.CPULeft != s.CPULeft {
-			t.Errorf("expected cpu_left for compute_host %s and flavor_id %s to be %d, got %d", s.ComputeHost, s.FlavorID, exp.CPULeft, s.CPULeft)
+		if exp.VCPUsLeft != s.VCPUsLeft {
+			t.Errorf("expected cpu_left for compute_host %s and flavor_id %s to be %d, got %d", s.ComputeHost, s.FlavorID, exp.VCPUsLeft, s.VCPUsLeft)
 		}
-		if exp.DiskLeft != s.DiskLeft {
-			t.Errorf("expected disk_left for compute_host %s and flavor_id %s to be %d, got %d", s.ComputeHost, s.FlavorID, exp.DiskLeft, s.DiskLeft)
+		if exp.DiskLeftGB != s.DiskLeftGB {
+			t.Errorf("expected disk_left for compute_host %s and flavor_id %s to be %d, got %d", s.ComputeHost, s.FlavorID, exp.DiskLeftGB, s.DiskLeftGB)
 		}
 	}
 }
