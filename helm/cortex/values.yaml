@@ -188,6 +188,7 @@ conf:
         types:
           - hypervisors
           - servers
+          - flavors
       placement:
         # One of admin, public, or internal
         availability: public

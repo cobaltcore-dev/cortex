@@ -24,6 +24,10 @@ func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, erro
 	return []Hypervisor{{ID: 1, Hostname: "hypervisor1"}}, nil
 }
 
+func (m *mockNovaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
+	return []Flavor{{ID: "1", Name: "flavor1"}}, nil
+}
+
 func TestNewNovaSyncer(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
@@ -117,5 +121,28 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	}
 	if len(hypervisors) != 1 {
 		t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
+	}
+}
+
+func TestNovaSyncer_SyncFlavors(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	mon := sync.Monitor{}
+	pc := &mockKeystoneAPI{}
+	conf := NovaConf{Types: []string{"flavors"}}
+
+	syncer := newNovaSyncer(testDB, mon, pc, conf).(*novaSyncer)
+	syncer.api = &mockNovaAPI{}
+
+	ctx := context.Background()
+	flavors, err := syncer.SyncFlavors(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(flavors) != 1 {
+		t.Fatalf("expected 1 flavor, got %d", len(flavors))
 	}
 }
