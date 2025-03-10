@@ -7,14 +7,17 @@ import "github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 
 type MockScenario struct {
 	ProjectID string
+	FlavorID  string
 	Rebuild   bool
 	Resize    bool
 	Live      bool
 	VMware    bool
 	Hosts     []MockScenarioHost
+	NumVMs    int
 }
 
 func (s *MockScenario) GetProjectID() string { return s.ProjectID }
+func (s *MockScenario) GetFlavorID() string  { return s.FlavorID }
 func (s *MockScenario) GetRebuild() bool     { return s.Rebuild }
 func (s *MockScenario) GetResize() bool      { return s.Resize }
 func (s *MockScenario) GetLive() bool        { return s.Live }
@@ -26,6 +29,7 @@ func (s *MockScenario) GetHosts() []plugins.ScenarioHost {
 	}
 	return hosts
 }
+func (s *MockScenario) GetNumVMs() int { return s.NumVMs }
 
 type MockScenarioHost struct {
 	ComputeHost        string

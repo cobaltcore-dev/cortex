@@ -45,6 +45,9 @@ func (s *novaSyncer) Init(ctx context.Context) {
 	if slices.Contains(s.conf.Types, "hypervisors") {
 		tables = append(tables, s.db.AddTable(Hypervisor{}))
 	}
+	if slices.Contains(s.conf.Types, "flavors") {
+		tables = append(tables, s.db.AddTable(Flavor{}))
+	}
 	if err := s.db.CreateTable(tables...); err != nil {
 		panic(err)
 	}
@@ -60,6 +63,11 @@ func (s *novaSyncer) Sync(ctx context.Context) error {
 	}
 	if slices.Contains(s.conf.Types, "hypervisors") {
 		if _, err := s.SyncHypervisors(ctx); err != nil {
+			return err
+		}
+	}
+	if slices.Contains(s.conf.Types, "flavors") {
+		if _, err := s.SyncFlavors(ctx); err != nil {
 			return err
 		}
 	}
@@ -106,4 +114,25 @@ func (s *novaSyncer) SyncHypervisors(ctx context.Context) ([]Hypervisor, error) 
 		counter.Inc()
 	}
 	return hypervisors, nil
+}
+
+// Sync the OpenStack flavors into the database.
+func (s *novaSyncer) SyncFlavors(ctx context.Context) ([]Flavor, error) {
+	label := Flavor{}.TableName()
+	flavors, err := s.api.GetAllFlavors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.ReplaceAll(s.db, flavors...); err != nil {
+		return nil, err
+	}
+	if s.mon.PipelineObjectsGauge != nil {
+		gauge := s.mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(flavors)))
+	}
+	if s.mon.PipelineRequestProcessedCounter != nil {
+		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return flavors, nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -24,6 +25,8 @@ var supportedExtractors = []plugins.FeatureExtractor{
 	&vmware.VROpsHostsystemContentionExtractor{},
 	// KVM-specific extractors
 	&kvm.NodeExporterHostCPUUsageExtractor{},
+	// Shared extractors
+	&shared.FlavorHostSpaceExtractor{},
 }
 
 // Pipeline that contains multiple feature extractors and executes them.

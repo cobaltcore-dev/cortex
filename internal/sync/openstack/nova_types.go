@@ -134,3 +134,20 @@ func (h *Hypervisor) MarshalJSON() ([]byte, error) {
 
 // Table in which the openstack model is stored.
 func (Hypervisor) TableName() string { return "openstack_hypervisors" }
+
+// OpenStack flavor model as returned by the Nova API under /flavors/detail.
+// See: https://docs.openstack.org/api-ref/compute/#list-flavors
+type Flavor struct {
+	ID          string  `json:"id" db:"id,primarykey"`
+	Disk        int     `json:"disk" db:"disk"` // in GB.
+	RAM         int     `json:"ram" db:"ram"`   // in MB.
+	Name        string  `json:"name" db:"name"`
+	RxTxFactor  float64 `json:"rxtx_factor" db:"rxtx_factor"`
+	VCPUs       int     `json:"vcpus" db:"vcpus"`
+	IsPublic    bool    `json:"os-flavor-access:is_public" db:"is_public"`
+	Ephemeral   int     `json:"OS-FLV-EXT-DATA:ephemeral" db:"ephemeral"`
+	Description string  `json:"description" db:"description"`
+}
+
+// Table in which the openstack model is stored.
+func (Flavor) TableName() string { return "openstack_flavors" }

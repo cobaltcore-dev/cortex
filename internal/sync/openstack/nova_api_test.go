@@ -90,3 +90,35 @@ func TestNovaAPI_GetAllHypervisors(t *testing.T) {
 		t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
 	}
 }
+
+func TestNovaAPI_GetAllFlavors(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := struct {
+			Flavors []Flavor `json:"flavors"`
+		}{
+			Flavors: []Flavor{{ID: "1", Name: "flavor1"}},
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
+	}
+	server, k := setupNovaMockServer(handler)
+	defer server.Close()
+
+	mon := sync.Monitor{}
+	conf := NovaConf{Availability: "public"}
+
+	api := newNovaAPI(mon, k, conf).(*novaAPI)
+	api.Init(t.Context())
+
+	ctx := context.Background()
+	flavors, err := api.GetAllFlavors(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(flavors) != 1 {
+		t.Fatalf("expected 1 flavor, got %d", len(flavors))
+	}
+}
