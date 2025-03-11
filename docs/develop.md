@@ -58,13 +58,12 @@ The service will be accessible at [http://localhost:10350/](http://localhost:103
 
 ## Simulating a Nova Request
 
-To simulate a Nova request to your Cortex instance in Tilt, you can run the following command:
-
+To simulate Nova requests to your Cortex instance in Tilt, you can run the following command:
 ```bash
-go run cmd/sim.go
+go run simulation/fillup/fillup.go
 ```
 
-This will send a Nova-like request to your local Cortex API, which will return a list of hosts that are ranked based on the current state of the data center.
+The script will show where random new VMs would be placed.
 
 ## Prometheus Metrics and Alerts
 

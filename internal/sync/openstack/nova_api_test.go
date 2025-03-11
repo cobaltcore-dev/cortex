@@ -35,7 +35,8 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte(`{"servers": [{
             "id": "1",
-            "name": "server1"
+            "name": "server1",
+			"flavor": {"id": "1", "name": "flavor1"}
         }]}`)); err != nil {
 			t.Fatalf("failed to write response: %v", err)
 		}

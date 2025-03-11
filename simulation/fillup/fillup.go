@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -69,6 +70,7 @@ func main() {
 		// Choose a random server spec from the currently available servers.
 		// In this way we can simulate a scheduling request for a new server.
 		// The request should be somewhat representative of the existing landscape.
+		//nolint:gosec
 		server := originalServers[rand.Intn(len(originalServers))]
 		flavor := flavors[server.FlavorID]
 		if flavor.Name == "" {
@@ -109,6 +111,7 @@ func main() {
 				},
 			},
 			Rebuild: false,
+			//nolint:gosec
 			VMware:  rand.Intn(2) == 0,
 			Hosts:   hosts,
 			Weights: weights,
@@ -120,7 +123,8 @@ func main() {
 		ctx := context.Background()
 		req := must.Return(http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(requestBody)))
 		req.Header.Set("Content-Type", "application/json")
-		respRaw := must.Return(http.DefaultClient.Do(req))
+		respRaw, err := http.DefaultClient.Do(req)
+		must.Succeed(err)
 		defer respRaw.Body.Close()
 		if respRaw.StatusCode != http.StatusOK {
 			return
@@ -140,7 +144,8 @@ func main() {
 		hypervisors[host].LocalGBUsed += flavor.Disk
 		// Copy the original server but set a new ID and service host.
 		newServer := server
-		newServer.ID = fmt.Sprint(rand.Intn(1000000))
+		//nolint:gosec
+		newServer.ID = strconv.Itoa(rand.Intn(1000000))
 		newServer.OSEXTSRVATTRHost = host
 		servers[newServer.ID] = newServer
 
@@ -154,6 +159,7 @@ func main() {
 		columnWidth := 20
 
 		fmt.Print("\033[2J\033[H")
+		const full = "█"
 		eighths := []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"}
 		lines := make([]string, len(hostSorted))
 		linesTextOnly := make([]string, len(hostSorted))
@@ -207,8 +213,8 @@ func main() {
 				lines[i] += "\033[1;32m"
 			}
 			for range int(math.Floor(symbolsUsed)) {
-				lines[i] += "█"
-				linesTextOnly[i] += "█"
+				lines[i] += full
+				linesTextOnly[i] += full
 			}
 			interp := eighths[int(math.Floor(8*(symbolsUsed-math.Floor(symbolsUsed))))]
 			lines[i] += "\033[40m" + interp + "\033[0m"
@@ -251,8 +257,8 @@ func main() {
 				lines[i] += "\033[1;32m"
 			}
 			for range int(math.Floor(symbolsUsed)) {
-				lines[i] += "█"
-				linesTextOnly[i] += "█"
+				lines[i] += full
+				linesTextOnly[i] += full
 			}
 			interp := eighths[int(math.Floor(8*(symbolsUsed-math.Floor(symbolsUsed))))]
 			lines[i] += "\033[40m" + interp + "\033[0m"
@@ -295,8 +301,8 @@ func main() {
 				lines[i] += "\033[1;32m"
 			}
 			for range int(math.Floor(symbolsUsed)) {
-				lines[i] += "█"
-				linesTextOnly[i] += "█"
+				lines[i] += full
+				linesTextOnly[i] += full
 			}
 			interp := eighths[int(math.Floor(8*(symbolsUsed-math.Floor(symbolsUsed))))]
 			lines[i] += "\033[40m" + interp + "\033[0m"
