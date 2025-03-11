@@ -4,12 +4,17 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"math/rand"
 	"net/http"
+	"os"
 	"sort"
+	"strings"
+	"unicode/utf8"
 
 	"fmt"
 
@@ -66,6 +71,9 @@ func main() {
 		// The request should be somewhat representative of the existing landscape.
 		server := originalServers[rand.Intn(len(originalServers))]
 		flavor := flavors[server.FlavorID]
+		if flavor.Name == "" {
+			continue
+		}
 		// Choose all hosts that have enough resources to host the new server.
 		var hosts []scheduler.APINovaExternalSchedulerRequestHost
 		weights := make(map[string]float64)
@@ -141,30 +149,185 @@ func main() {
 			hostSorted = append(hostSorted, hypervisor.ServiceHost)
 		}
 		sort.Strings(hostSorted)
-		fmt.Println("------------------------------------------------")
-		for _, h := range hostSorted {
-			// 1 symbol = 1TB
-			symbolsFree := hypervisors[h].FreeRAMMB / 100_000
-			symbolsUsed := hypervisors[h].MemoryMBUsed / 100_000
-			memUsage := ""
+
+		// How wide the data columns should be.
+		columnWidth := 20
+
+		fmt.Print("\033[2J\033[H")
+		eighths := []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"}
+		lines := make([]string, len(hostSorted))
+		linesTextOnly := make([]string, len(hostSorted))
+
+		// Fillup whitespace to align the memory usage bars.
+		addpadding := func(lines, linesTextOnly []string) {
+			maxLineLength := 0
+			for _, line := range linesTextOnly {
+				if utf8.RuneCountInString(line) > maxLineLength {
+					maxLineLength = utf8.RuneCountInString(line)
+				}
+			}
+			for i, line := range linesTextOnly {
+				for range maxLineLength - utf8.RuneCountInString(line) {
+					lines[i] += " "
+					linesTextOnly[i] += " "
+				}
+				lines[i] += " "
+				linesTextOnly[i] += " "
+			}
+		}
+
+		for i, h := range hostSorted {
 			// Colorful if the host is the one that received the new server.
 			if h == host {
-				memUsage = "\033[1;32m"
+				lines[i] += "\033[1;32m"
 			}
-			memUsage += "["
-			for range symbolsUsed {
-				memUsage += "█"
-			}
-			for range symbolsFree {
-				memUsage += " "
-			}
-			memUsage += "]"
-			memUsage += fmt.Sprintf(" %d/%d GB", hypervisors[h].MemoryMBUsed/1_000, hypervisors[h].MemoryMB/1_000)
-			if h == host {
-				memUsage += "\033[0m"
-			}
-			fmt.Printf("Host %s: %s\n", h, memUsage)
+			lines[i] += "\033[K" + h + ":"
+			linesTextOnly[i] += h + ":"
 		}
-		fmt.Println("------------------------------------------------")
+		addpadding(lines, linesTextOnly)
+		maxMemoryMB := 0
+		for _, h := range hostSorted {
+			if hypervisors[h].MemoryMB > maxMemoryMB {
+				maxMemoryMB = hypervisors[h].MemoryMB
+			}
+		}
+		for i, h := range hostSorted {
+			if hypervisors[h].MemoryMB == 0 {
+				continue
+			}
+			capacityExceeded := hypervisors[h].MemoryMBUsed >= hypervisors[h].MemoryMB
+			mbPerSymbol := float64(maxMemoryMB) / float64(columnWidth)
+			symbolsFree := math.Max(0, float64(hypervisors[h].MemoryMB-hypervisors[h].MemoryMBUsed)/mbPerSymbol)
+			symbolsUsed := float64(hypervisors[h].MemoryMBUsed) / mbPerSymbol
+			if capacityExceeded {
+				lines[i] += "\033[1;31m"
+			}
+			// Colorful if the host is the one that received the new server.
+			if h == host {
+				lines[i] += "\033[1;32m"
+			}
+			for range int(math.Floor(symbolsUsed)) {
+				lines[i] += "█"
+				linesTextOnly[i] += "█"
+			}
+			interp := eighths[int(math.Floor(8*(symbolsUsed-math.Floor(symbolsUsed))))]
+			lines[i] += "\033[40m" + interp + "\033[0m"
+			linesTextOnly[i] += interp
+			for range int(math.Floor(symbolsFree)) {
+				lines[i] += "\033[40m \033[0m"
+				linesTextOnly[i] += " "
+			}
+			// Reset the color.
+			if h == host || capacityExceeded {
+				lines[i] += "\033[0m"
+			}
+		}
+		addpadding(lines, linesTextOnly)
+		for i, h := range hostSorted {
+			info := fmt.Sprintf(" %d/%d GB", hypervisors[h].MemoryMBUsed/1_000, hypervisors[h].MemoryMB/1_000)
+			lines[i] += info
+			linesTextOnly[i] += info
+		}
+		addpadding(lines, linesTextOnly)
+		maxVCPUs := 0
+		for _, h := range hostSorted {
+			if hypervisors[h].VCPUs > maxVCPUs {
+				maxVCPUs = hypervisors[h].VCPUs
+			}
+		}
+		for i, h := range hostSorted {
+			if hypervisors[h].VCPUs == 0 {
+				continue
+			}
+			capacityExceeded := hypervisors[h].VCPUsUsed >= hypervisors[h].VCPUs
+			vcpuPerSymbol := float64(maxVCPUs) / float64(columnWidth)
+			symbolsFree := math.Max(0, float64(hypervisors[h].VCPUs-hypervisors[h].VCPUsUsed)/vcpuPerSymbol)
+			symbolsUsed := float64(hypervisors[h].VCPUsUsed) / vcpuPerSymbol
+			if capacityExceeded {
+				lines[i] += "\033[1;31m"
+			}
+			// Colorful if the host is the one that received the new server.
+			if h == host {
+				lines[i] += "\033[1;32m"
+			}
+			for range int(math.Floor(symbolsUsed)) {
+				lines[i] += "█"
+				linesTextOnly[i] += "█"
+			}
+			interp := eighths[int(math.Floor(8*(symbolsUsed-math.Floor(symbolsUsed))))]
+			lines[i] += "\033[40m" + interp + "\033[0m"
+			linesTextOnly[i] += interp
+			for range int(math.Floor(symbolsFree)) {
+				lines[i] += " "
+				linesTextOnly[i] += " "
+			}
+			// Reset the color.
+			if h == host || capacityExceeded {
+				lines[i] += "\033[0m"
+			}
+		}
+		addpadding(lines, linesTextOnly)
+		for i, h := range hostSorted {
+			info := fmt.Sprintf(" %d/%d VCPUs", hypervisors[h].VCPUsUsed, hypervisors[h].VCPUs)
+			lines[i] += info
+			linesTextOnly[i] += info
+		}
+		addpadding(lines, linesTextOnly)
+		maxDiskGB := 0
+		for _, h := range hostSorted {
+			if hypervisors[h].LocalGB > maxDiskGB {
+				maxDiskGB = hypervisors[h].LocalGB
+			}
+		}
+		for i, h := range hostSorted {
+			if hypervisors[h].LocalGB == 0 {
+				continue
+			}
+			capacityExceeded := hypervisors[h].LocalGBUsed >= hypervisors[h].LocalGB
+			diskPerSymbol := float64(maxDiskGB) / float64(columnWidth)
+			symbolsFree := math.Max(0, float64(hypervisors[h].LocalGB-hypervisors[h].LocalGBUsed)/diskPerSymbol)
+			symbolsUsed := float64(hypervisors[h].LocalGBUsed) / diskPerSymbol
+			if capacityExceeded {
+				lines[i] += "\033[1;31m"
+			}
+			// Colorful if the host is the one that received the new server.
+			if h == host {
+				lines[i] += "\033[1;32m"
+			}
+			for range int(math.Floor(symbolsUsed)) {
+				lines[i] += "█"
+				linesTextOnly[i] += "█"
+			}
+			interp := eighths[int(math.Floor(8*(symbolsUsed-math.Floor(symbolsUsed))))]
+			lines[i] += "\033[40m" + interp + "\033[0m"
+			linesTextOnly[i] += interp
+			for range int(math.Floor(symbolsFree)) {
+				lines[i] += "\033[40m \033[0m"
+				linesTextOnly[i] += " "
+			}
+			// Reset the color.
+			if h == host || capacityExceeded {
+				lines[i] += "\033[0m"
+			}
+		}
+		addpadding(lines, linesTextOnly)
+		for i, h := range hostSorted {
+			info := fmt.Sprintf(" %d/%d GB", hypervisors[h].LocalGBUsed, hypervisors[h].LocalGB)
+			lines[i] += info
+			linesTextOnly[i] += info
+		}
+		for _, line := range lines {
+			fmt.Println(line)
+		}
+		fmt.Printf("Spawned flavor %s on host %s, continue? [y, N, default: y]", flavor.Name, host)
+		reader := bufio.NewReader(os.Stdin)
+		input := must.Return(reader.ReadString('\n'))
+		input = strings.TrimSpace(input)
+		if input == "" {
+			input = "y"
+		}
+		if input != "y" {
+			break
+		}
 	}
 }
