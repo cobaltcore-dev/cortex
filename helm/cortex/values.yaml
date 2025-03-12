@@ -261,10 +261,11 @@ conf:
                   - hypervisors
 
   scheduler:
-    # The port to use for the scheduler API.
-    port: 8080
-    # Whether request bodies should be logged (debugging feature).
-    logRequestBodies: false
+    api:
+      # The port to use for the scheduler API.
+      port: 8080
+      # Whether request bodies should be logged (debugging feature).
+      logRequestBodies: false
     # Configuration of scheduler steps that modify the Nova scheduler weights.
     # Each scheduler step can specify its own dependencies on extractors and
     # synced data.

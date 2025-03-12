@@ -96,7 +96,7 @@ func (c *config) Validate() error {
 			return err
 		}
 	}
-	if c.SchedulerConfig.LogRequestBodies {
+	if c.SchedulerConfig.API.LogRequestBodies {
 		slog.Warn("logging request bodies is enabled (debug feature)")
 	}
 	// If traits (placement) are specified, the resource providers must be synced as well.
