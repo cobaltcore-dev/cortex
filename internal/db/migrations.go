@@ -27,15 +27,15 @@ type migrater struct {
 func NewMigrater(db DB) Migrater {
 	// Read the embedded migration files.
 	migrations := map[string]string{}
-	files, err := migrationFiles.ReadDir(".")
+	files, err := migrationFiles.ReadDir("migrations")
 	if err != nil {
 		panic(err)
 	}
 	for _, file := range files {
 		if file.IsDir() {
-			panic("unexpected directory in migrations")
+			panic("migrations directory contains a directory")
 		}
-		content, err := migrationFiles.ReadFile(file.Name())
+		content, err := migrationFiles.ReadFile("migrations/" + file.Name())
 		if err != nil {
 			panic(err)
 		}

@@ -55,3 +55,19 @@ func TestMigrateWithFailure(t *testing.T) {
 
 	m.Migrate()
 }
+
+func TestNewMigrater(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
+	defer db.Close()
+	defer dbEnv.Close()
+
+	m := NewMigrater(db)
+	if m == nil {
+		t.Fatal("expected migrater to be created")
+	}
+
+	if len(m.(*migrater).migrations) == 0 {
+		t.Fatal("expected migrations to be read")
+	}
+}
