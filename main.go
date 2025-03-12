@@ -141,8 +141,11 @@ func main() {
 		panic(fmt.Sprintf("usage: %s [syncer | extractor | scheduler]", os.Args[0]))
 	}
 
-	db := db.NewPostgresDB(config.GetDBConfig())
-	defer db.Close()
+	dbInstance := db.NewPostgresDB(config.GetDBConfig())
+	defer dbInstance.Close()
+
+	migrater := db.NewMigrater(dbInstance)
+	migrater.Migrate()
 
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
@@ -150,11 +153,11 @@ func main() {
 
 	switch taskName {
 	case "syncer":
-		go runSyncer(ctx, registry, config.GetSyncConfig(), db)
+		go runSyncer(ctx, registry, config.GetSyncConfig(), dbInstance)
 	case "extractor":
-		go runExtractor(ctx, registry, config.GetFeaturesConfig(), db)
+		go runExtractor(ctx, registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
-		go runScheduler(ctx, registry, config.GetSchedulerConfig(), db)
+		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance)
 	default:
 		panic("unknown task")
 	}
