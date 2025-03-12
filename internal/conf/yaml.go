@@ -150,6 +150,11 @@ type SchedulerConfig struct {
 	// Scheduler steps by their name.
 	Steps []SchedulerStepConfig `yaml:"steps"`
 
+	API SchedulerAPIConfig `yaml:"api"`
+}
+
+// Configuration for the scheduler API.
+type SchedulerAPIConfig struct {
 	// If request bodies should be logged out.
 	// This feature is intended for debugging purposes only.
 	LogRequestBodies bool `yaml:"logRequestBodies"`

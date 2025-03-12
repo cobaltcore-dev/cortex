@@ -21,7 +21,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/sapcc/go-bits/must"
 )
@@ -77,7 +77,7 @@ func main() {
 			continue
 		}
 		// Choose all hosts that have enough resources to host the new server.
-		var hosts []scheduler.APINovaExternalSchedulerRequestHost
+		var hosts []api.NovaExternalSchedulerRequestHost
 		weights := make(map[string]float64)
 		for _, hypervisor := range hypervisors {
 			if hypervisor.MemoryMB-hypervisor.MemoryMBUsed < flavor.RAM {
@@ -89,22 +89,22 @@ func main() {
 			if hypervisor.VCPUs-hypervisor.VCPUsUsed < flavor.VCPUs {
 				continue
 			}
-			hosts = append(hosts, scheduler.APINovaExternalSchedulerRequestHost{
+			hosts = append(hosts, api.NovaExternalSchedulerRequestHost{
 				ComputeHost:        hypervisor.ServiceHost,
 				HypervisorHostname: hypervisor.Hostname,
 			})
 			weights[hypervisor.ServiceHost] = 1.0
 		}
 
-		request := scheduler.APINovaExternalSchedulerRequest{
-			Spec: scheduler.NovaObject[scheduler.NovaSpec]{
-				Data: scheduler.NovaSpec{
+		request := api.NovaExternalSchedulerRequest{
+			Spec: api.NovaObject[api.NovaSpec]{
+				Data: api.NovaSpec{
 					ProjectID:        server.TenantID,
 					UserID:           server.UserID,
 					AvailabilityZone: server.OSEXTAvailabilityZone,
 					NInstances:       1,
-					Flavor: scheduler.NovaObject[scheduler.NovaFlavor]{
-						Data: scheduler.NovaFlavor{
+					Flavor: api.NovaObject[api.NovaFlavor]{
+						Data: api.NovaFlavor{
 							FlavorID: flavor.ID,
 						},
 					},
@@ -129,7 +129,7 @@ func main() {
 		if respRaw.StatusCode != http.StatusOK {
 			return
 		}
-		var resp scheduler.APINovaExternalSchedulerResponse
+		var resp api.NovaExternalSchedulerResponse
 		must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
 
 		// Update the datacenter state based on the response.

@@ -21,8 +21,6 @@ type Monitor struct {
 	stepHostWeight *prometheus.GaugeVec
 	// A histogram to observe how many hosts are removed from the state.
 	stepRemovedHostsObserver *prometheus.HistogramVec
-	// A histogram to measure how long the API requests take to run.
-	apiRequestsTimer *prometheus.HistogramVec
 	// A histogram to measure how long the pipeline takes to run in total.
 	pipelineRunTimer prometheus.Histogram
 	// A histogram to observe the number of hosts going into the scheduler pipeline.
@@ -47,11 +45,6 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		Help:    "Number of hosts removed by scheduler pipeline step",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	}, []string{"step"})
-	apiRequestsTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_api_request_duration_seconds",
-		Help:    "Duration of API requests",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"method", "path", "status", "error"})
 	pipelineRunTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline run",
@@ -71,7 +64,6 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		stepRunTimer,
 		stepHostWeight,
 		stepRemovedHostsObserver,
-		apiRequestsTimer,
 		pipelineRunTimer,
 		hostNumberInObserver,
 		hostNumberOutObserver,
@@ -80,7 +72,6 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		stepRunTimer:             stepRunTimer,
 		stepHostWeight:           stepHostWeight,
 		stepRemovedHostsObserver: stepRemovedHostsObserver,
-		apiRequestsTimer:         apiRequestsTimer,
 		pipelineRunTimer:         pipelineRunTimer,
 		hostNumberInObserver:     hostNumberInObserver,
 		hostNumberOutObserver:    hostNumberOutObserver,

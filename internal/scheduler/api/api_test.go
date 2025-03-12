@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package api
 
 import (
 	"bytes"
@@ -22,19 +22,19 @@ func (m *mockPipeline) Run(scenario plugins.Scenario, novaWeights map[string]flo
 }
 
 func TestCanRunScheduler(t *testing.T) {
-	api := &externalSchedulingAPI{
+	api := &api{
 		Pipeline: &mockPipeline{},
 	}
 
 	tests := []struct {
 		name    string
-		request APINovaExternalSchedulerRequest
+		request NovaExternalSchedulerRequest
 		wantOk  bool
 	}{
 		{
 			name: "Missing weight for host",
-			request: APINovaExternalSchedulerRequest{
-				Hosts: []APINovaExternalSchedulerRequestHost{
+			request: NovaExternalSchedulerRequest{
+				Hosts: []NovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{},
@@ -43,8 +43,8 @@ func TestCanRunScheduler(t *testing.T) {
 		},
 		{
 			name: "Weight assigned to unknown host",
-			request: APINovaExternalSchedulerRequest{
-				Hosts: []APINovaExternalSchedulerRequestHost{
+			request: NovaExternalSchedulerRequest{
+				Hosts: []NovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -55,8 +55,8 @@ func TestCanRunScheduler(t *testing.T) {
 		},
 		{
 			name: "Valid request",
-			request: APINovaExternalSchedulerRequest{
-				Hosts: []APINovaExternalSchedulerRequestHost{
+			request: NovaExternalSchedulerRequest{
+				Hosts: []NovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				VMware: true,
@@ -81,28 +81,28 @@ func TestHandler(t *testing.T) {
 	// Mock the Pipeline
 	mockPipeline := &mockPipeline{}
 
-	api := &externalSchedulingAPI{
+	api := &api{
 		Pipeline: mockPipeline,
 	}
 
 	tests := []struct {
 		name           string
 		method         string
-		requestBody    APINovaExternalSchedulerRequest
+		requestBody    NovaExternalSchedulerRequest
 		wantStatusCode int
-		wantResponse   APINovaExternalSchedulerResponse
+		wantResponse   NovaExternalSchedulerResponse
 	}{
 		{
 			name:   "Invalid request method",
 			method: http.MethodGet,
-			requestBody: APINovaExternalSchedulerRequest{
+			requestBody: NovaExternalSchedulerRequest{
 				Spec: NovaObject[NovaSpec]{
 					Data: NovaSpec{
 						ProjectID:  "project1",
 						NInstances: 1,
 					},
 				},
-				Hosts: []APINovaExternalSchedulerRequestHost{
+				Hosts: []NovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -114,14 +114,14 @@ func TestHandler(t *testing.T) {
 		{
 			name:   "Invalid request body",
 			method: http.MethodPost,
-			requestBody: APINovaExternalSchedulerRequest{
+			requestBody: NovaExternalSchedulerRequest{
 				Spec: NovaObject[NovaSpec]{
 					Data: NovaSpec{
 						ProjectID:  "project1",
 						NInstances: 1,
 					},
 				},
-				Hosts: []APINovaExternalSchedulerRequestHost{
+				Hosts: []NovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -133,7 +133,7 @@ func TestHandler(t *testing.T) {
 		{
 			name:   "Valid request",
 			method: http.MethodPost,
-			requestBody: APINovaExternalSchedulerRequest{
+			requestBody: NovaExternalSchedulerRequest{
 				Spec: NovaObject[NovaSpec]{
 					Data: NovaSpec{
 						ProjectID:  "project1",
@@ -141,7 +141,7 @@ func TestHandler(t *testing.T) {
 					},
 				},
 				VMware: true,
-				Hosts: []APINovaExternalSchedulerRequestHost{
+				Hosts: []NovaExternalSchedulerRequestHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -149,7 +149,7 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			wantStatusCode: http.StatusOK,
-			wantResponse: APINovaExternalSchedulerResponse{
+			wantResponse: NovaExternalSchedulerResponse{
 				Hosts: []string{"host1"},
 			},
 		},
@@ -163,7 +163,7 @@ func TestHandler(t *testing.T) {
 			}
 			req, err := http.NewRequestWithContext(
 				context.Background(), tt.method,
-				api.GetNovaExternalSchedulerURL(), bytes.NewBuffer(requestBody),
+				"/scheduler/nova/external", bytes.NewBuffer(requestBody),
 			)
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
@@ -177,7 +177,7 @@ func TestHandler(t *testing.T) {
 			}
 
 			if tt.wantStatusCode == http.StatusOK {
-				var gotResponse APINovaExternalSchedulerResponse
+				var gotResponse NovaExternalSchedulerResponse
 				if err := json.NewDecoder(rr.Body).Decode(&gotResponse); err != nil {
 					t.Fatalf("failed to decode response: %v", err)
 				}

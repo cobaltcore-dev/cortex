@@ -17,6 +17,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
@@ -76,21 +77,11 @@ func runExtractor(ctx context.Context, registry *monitoring.Registry, config con
 
 // Run a webserver that listens for external scheduling requests.
 func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	monitor := scheduler.NewSchedulerMonitor(registry)
-	api := scheduler.NewExternalSchedulingAPI(config, db, monitor)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/up", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	mux.HandleFunc(
-		api.GetNovaExternalSchedulerURL(),
-		api.NovaExternalScheduler,
-	)
-	slog.Info("api listening on", "port", config.Port)
-	addr := fmt.Sprintf(":%d", config.Port)
-	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
-		panic(err)
-	}
+	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
+	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
+	apiMonitor := api.NewSchedulerMonitor(registry)
+	api := api.NewAPI(config.API, schedulerPipeline, apiMonitor)
+	api.Init(ctx)
 }
 
 // Run the prometheus metrics server for monitoring.
