@@ -18,6 +18,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/telemetry"
 )
 
 // Configuration of steps supported by the scheduler.
@@ -45,11 +46,11 @@ type Pipeline struct {
 	monitor Monitor
 	// Telemetry client to publish telemetry data.
 	// Only initialized if telemetry is enabled.
-	telemetry Telemetry
+	telemetryClient telemetry.Client
 }
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) Pipeline {
+func NewPipeline(config conf.SchedulerConfig, database db.DB, tc telemetry.Client, monitor Monitor) Pipeline {
 	supportedStepsByName := make(map[string]plugins.Step)
 	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
@@ -76,18 +77,12 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 		)
 	}
 
-	// Create a telemetry client if enabled.
-	var telemetry Telemetry
-	if config.Telemetry.Enabled {
-		telemetry = NewTelemetry(config.Telemetry)
-	}
-
 	return Pipeline{
 		// All steps can be run in parallel.
 		executionOrder:   [][]plugins.Step{steps},
 		applicationOrder: applicationOrder,
 		monitor:          monitor,
-		telemetry:        telemetry,
+		telemetryClient:  tc,
 	}
 }
 
@@ -159,13 +154,13 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	})
 
 	// If enabled, publish telemetry data.
-	if p.telemetry != nil {
-		go p.telemetry.Publish(TelemetryData{
-			Request: request,
-			Order:   p.applicationOrder,
-			In:      inWeights,
-			Steps:   stepWeights,
-			Out:     outWeights,
+	if p.telemetryClient != nil {
+		go p.telemetryClient.Publish(map[string]any{
+			"request": request,
+			"order":   p.applicationOrder,
+			"in":      inWeights,
+			"steps":   stepWeights,
+			"out":     outWeights,
 		})
 	}
 

@@ -7,8 +7,11 @@ metadata:
   url: https://github.com/cobaltcore-dev/cortex
 
 binaries:
-  - name:        cortex
+  - name: cortex
     fromPackage: .
+    installTo: bin/
+  - name: cortex-vis
+    fromPackage: vis/
     installTo: bin/
 
 golang:

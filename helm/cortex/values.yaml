@@ -100,22 +100,12 @@ vernemq:
   username: cortex
   password: cortex
   # Name under which the vernemq resources should be spawned.
-  fullnameOverride: "cortex-telementry"
+  fullnameOverride: "cortex-telemetry"
   # Pass a basic configuration through a configmap that is spawned
   # together with the vernemq instance.
   envFrom:
     - configMapRef:
-        name: "{{ .Values.vernemq.fullnameOverride | tpl }}"
-  # Pass username and password as additional environment variables.
-  additionalEnv:
-    - name: "DOCKER_VERNEMQ_USER_{{ .Values.vernemq.username | tpl }}"
-      valueFrom:
-        secretKeyRef:
-          name: "{{ .Values.vernemq.fullnameOverride | tpl }}"
-          key: "password"
-  # Configuration such that the browser can access the telemetry.
-  ws:
-    enabled: true
+        name: "cortex-telemetry"
 
 # Default sso certificate to use for all services.
 # The sso certificate values of individual services can be overridden.
@@ -145,6 +135,14 @@ conf:
     labels:
       github_org: cobaltcore-dev
       github_repo: cortex
+
+  # Configure here if telemetry should be sent to a vernemq instance.
+  telemetry:
+    enabled: true
+    # Must match vernemq.fullnameOverride, vernemq.username and vernemq.password.
+    url: "tcp://cortex-telemetry:1883"
+    username: "cortex"
+    password: "cortex"
 
   # Connection parameters for the database where data is stored.
   db:
@@ -290,12 +288,6 @@ conf:
       port: 8080
       # Whether request bodies should be logged (debugging feature).
       logRequestBodies: false
-    telemetry:
-      # Whether telemetry should be sent to a vernemq instance.
-      enabled: true
-      url: "tcp://{{ .Values.vernemq.fullnameOverride | tpl }}:1883"
-      username: "{{ .Values.vernemq.username | tpl }}"
-      password: "{{ .Values.vernemq.password | tpl }}"
     # Configuration of scheduler steps that modify the Nova scheduler weights.
     # Each scheduler step can specify its own dependencies on extractors and
     # synced data.

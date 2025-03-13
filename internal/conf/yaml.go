@@ -150,8 +150,7 @@ type SchedulerConfig struct {
 	// Scheduler steps by their name.
 	Steps []SchedulerStepConfig `yaml:"steps"`
 
-	API       SchedulerAPIConfig       `yaml:"api"`
-	Telemetry SchedulerTelemetryConfig `yaml:"telemetry"`
+	API SchedulerAPIConfig `yaml:"api"`
 }
 
 // Configuration for the scheduler API.
@@ -164,8 +163,8 @@ type SchedulerAPIConfig struct {
 	Port int `yaml:"port"`
 }
 
-// Configuration for the scheduler telemetry.
-type SchedulerTelemetryConfig struct {
+// Configuration for the telemetry client.
+type TelemetryConfig struct {
 	Enabled bool `yaml:"enabled"`
 	// The URL of the MQTT broker to use for telemetry.
 	URL string `yaml:"url"`
@@ -191,6 +190,7 @@ type Config interface {
 	GetFeaturesConfig() FeaturesConfig
 	GetSchedulerConfig() SchedulerConfig
 	GetMonitoringConfig() MonitoringConfig
+	GetTelemetryConfig() TelemetryConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
@@ -202,6 +202,7 @@ type config struct {
 	FeaturesConfig   `yaml:"features"`
 	SchedulerConfig  `yaml:"scheduler"`
 	MonitoringConfig `yaml:"monitoring"`
+	TelemetryConfig  `yaml:"telemetry"`
 }
 
 // Create a new configuration from the default config yaml file.
@@ -238,3 +239,4 @@ func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
 func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
 func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
 func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
+func (c *config) GetTelemetryConfig() TelemetryConfig   { return c.TelemetryConfig }

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package telemetry
 
 import (
 	"encoding/json"
@@ -12,46 +12,34 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-type TelemetryData struct {
-	// The original request from Nova that was sent to the scheduler.
-	Request api.Request `json:"request"`
-	// The order in which the scheduler steps were applied.
-	Order []string `json:"order"`
-	// Activations before any scheduler steps are run.
-	In map[string]float64 `json:"in"`
-	// Activations by scheduler step.
-	Steps map[string]map[string]float64 `json:"steps"`
-	// The final activations that were used to make a decision.
-	Out map[string]float64 `json:"out"`
+type Client interface {
+	Connect() error
+	Publish(any) error
+	Disconnect()
 }
 
-type Telemetry interface {
-	Publish(TelemetryData) error
-}
-
-type telemetry struct {
-	conf conf.SchedulerTelemetryConfig
+type client struct {
+	conf conf.TelemetryConfig
 	// MQTT client to publish telemetry data.
 	client *mqtt.Client
 	// Lock to prevent concurrent writes to the MQTT client.
 	lock *sync.Mutex
 }
 
-func NewTelemetry(conf conf.SchedulerTelemetryConfig) Telemetry {
-	return &telemetry{conf: conf, lock: &sync.Mutex{}}
+func NewClient(conf conf.TelemetryConfig) Client {
+	return &client{conf: conf, lock: &sync.Mutex{}}
 }
 
 // Connect to the mqtt broker.
-func (t *telemetry) connect() error {
+func (t *client) Connect() error {
 	if t.client != nil {
 		return nil
 	}
 
-	slog.Info("connecting to telmetry mqtt broker at", "url", t.conf.URL)
+	slog.Info("connecting to telemetry mqtt broker at", "url", t.conf.URL)
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(t.conf.URL)
 	opts.SetConnectTimeout(10 * time.Second)
@@ -80,22 +68,23 @@ func (t *telemetry) connect() error {
 		panic(conn.Error())
 	}
 	t.client = &client
+	slog.Info("connected to telemetry mqtt broker")
 
 	return nil
 }
 
 // Publish telemetry data to the mqtt broker.
-func (t *telemetry) Publish(telemetryData TelemetryData) error {
+func (t *client) Publish(obj any) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	// Connect if we aren't already.
-	if err := t.connect(); err != nil {
+	if err := t.Connect(); err != nil {
 		return err
 	}
 	client := *t.client
 
-	data, err := json.Marshal(telemetryData)
+	data, err := json.Marshal(obj)
 	if err != nil {
 		return err
 	}
@@ -105,5 +94,17 @@ func (t *telemetry) Publish(telemetryData TelemetryData) error {
 		slog.Error("failed to publish telemetry data", "err", pub.Error())
 		return pub.Error()
 	}
+	slog.Info("published telemetry data")
 	return nil
+}
+
+// Disconnect from the mqtt broker.
+func (t *client) Disconnect() {
+	if t.client == nil {
+		return
+	}
+	client := *t.client
+	client.Disconnect(1000)
+	t.client = nil
+	slog.Info("disconnected from telemetry mqtt broker")
 }

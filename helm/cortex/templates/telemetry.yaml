@@ -1,18 +1,11 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if index .vernemq "enabled" }}
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ .Values.vernemq.fullnameOverride }}
-data:
-  password: {{ .Values.vernemq.password | b64enc }}
----
+{{- if index .Values "vernemq" "enabled" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.vernemq.fullnameOverride }}
+  name: cortex-telemetry
 data:
   DOCKER_VERNEMQ_ACCEPT_EULA: "yes"
   DOCKER_VERNEMQ_ALLOW_REGISTER_DURING_NETSPLIT: "on"
@@ -22,4 +15,5 @@ data:
   DOCKER_VERNEMQ_ALLOW_ANONYMOUS: "off"
   DOCKER_VERNEMQ_MAX_ONLINE_MESSAGES: "10000"
   DOCKER_VERNEMQ_MAX_OFFLINE_MESSAGES: "-1"
+  DOCKER_VERNEMQ_USER_{{ .Values.vernemq.username }}: "{{ .Values.vernemq.password }}"
 {{- end }}

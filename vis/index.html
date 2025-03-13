@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cortex visualizer</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  </head>
+
+  <script src="./js/vendor/mqtt.js/mqtt.min.js"></script>
+  <script>
+    const client = mqtt.connect('ws://localhost:8004', {
+      clientId: 'cortex-vis-' + Math.random().toString(16).substr(2, 8),
+      username: 'cortex',
+      password: 'cortex',
+    });
+    client.on('error', function (err) {
+      console.log(err);
+      client.end();
+    });
+    client.on('connect', function () {
+      client.subscribe('cortex/vis');
+    });
+    client.on('message', function (topic, message) {
+      console.log(message.toString());
+    });
+  </script>
+</html>

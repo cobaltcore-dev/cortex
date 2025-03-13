@@ -21,6 +21,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/telemetry"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/jobloop"
@@ -76,9 +77,9 @@ func runExtractor(ctx context.Context, registry *monitoring.Registry, config con
 }
 
 // Run a webserver that listens for external scheduling requests.
-func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
+func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB, telemetry telemetry.Client) {
 	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
-	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
+	schedulerPipeline := scheduler.NewPipeline(config, db, telemetry, schedulerMonitor)
 	apiMonitor := api.NewSchedulerMonitor(registry)
 	api := api.NewAPI(config.API, &schedulerPipeline, apiMonitor)
 	api.Init(ctx)
@@ -147,6 +148,14 @@ func main() {
 	migrater := db.NewMigrater(dbInstance)
 	migrater.Migrate()
 
+	// If configured, send telemetry to an mqtt broker.
+	telemetryConf := config.GetTelemetryConfig()
+	var client telemetry.Client
+	if telemetryConf.Enabled {
+		client = telemetry.NewClient(telemetryConf) // Will lazily connect
+		defer client.Disconnect()
+	}
+
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
 	go runMonitoringServer(ctx, registry, monitoringConfig)
@@ -157,7 +166,7 @@ func main() {
 	case "extractor":
 		go runExtractor(ctx, registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
-		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance)
+		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance, client)
 	default:
 		panic("unknown task")
 	}
