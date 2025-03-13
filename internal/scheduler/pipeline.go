@@ -43,6 +43,9 @@ type Pipeline struct {
 	applicationOrder []string
 	// Monitor to observe the pipeline.
 	monitor Monitor
+	// Telemetry client to publish telemetry data.
+	// Only initialized if telemetry is enabled.
+	telemetry Telemetry
 }
 
 // Create a new pipeline with steps contained in the configuration.
@@ -73,11 +76,18 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 		)
 	}
 
+	// Create a telemetry client if enabled.
+	var telemetry Telemetry
+	if config.Telemetry.Enabled {
+		telemetry = NewTelemetry(config.Telemetry)
+	}
+
 	return Pipeline{
 		// All steps can be run in parallel.
 		executionOrder:   [][]plugins.Step{steps},
 		applicationOrder: applicationOrder,
 		monitor:          monitor,
+		telemetry:        telemetry,
 	}
 }
 
@@ -110,19 +120,32 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	// -99,000 or 99,000. We want to respect these values, but still adjust them
 	// to a meaningful value. If Nova really doesn't want us to run on a host, it
 	// should run a filter instead of setting a weight.
-	var outWeights = make(map[string]float64)
+	inWeights := map[string]float64{}
 	for hostname, weight := range novaWeights {
-		outWeights[hostname] = math.Tanh(weight)
+		inWeights[hostname] = math.Tanh(weight)
 	}
+
+	// Retrieve the step weights from the concurrency-safe map.
+	stepWeights := map[string]map[string]float64{}
+	activationsByStep.Range(func(key, value interface{}) bool {
+		stepName := key.(string)
+		activations := value.(map[string]float64)
+		stepWeights[stepName] = activations
+		return true
+	})
+
+	// Copy to avoid modifying the original weights.
+	outWeights := make(map[string]float64, len(inWeights))
+	maps.Copy(outWeights, inWeights)
 
 	// Apply all activations in the strict order defined by the configuration.
 	for _, stepName := range p.applicationOrder {
-		stepActivations, ok := activationsByStep.Load(stepName)
+		stepActivations, ok := stepWeights[stepName]
 		if !ok {
 			slog.Error("scheduler: missing activations for step", "name", stepName)
 			continue
 		}
-		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations.(map[string]float64))
+		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations)
 	}
 
 	if p.monitor.hostNumberOutObserver != nil {
@@ -134,5 +157,17 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	sort.Slice(hosts, func(i, j int) bool {
 		return outWeights[hosts[i]] > outWeights[hosts[j]]
 	})
+
+	// If enabled, publish telemetry data.
+	if p.telemetry != nil {
+		go p.telemetry.Publish(TelemetryData{
+			Request: request,
+			Order:   p.applicationOrder,
+			In:      inWeights,
+			Steps:   stepWeights,
+			Out:     outWeights,
+		})
+	}
+
 	return hosts, nil
 }

@@ -150,7 +150,8 @@ type SchedulerConfig struct {
 	// Scheduler steps by their name.
 	Steps []SchedulerStepConfig `yaml:"steps"`
 
-	API SchedulerAPIConfig `yaml:"api"`
+	API       SchedulerAPIConfig       `yaml:"api"`
+	Telemetry SchedulerTelemetryConfig `yaml:"telemetry"`
 }
 
 // Configuration for the scheduler API.
@@ -161,6 +162,16 @@ type SchedulerAPIConfig struct {
 
 	// The port to use for the scheduler API.
 	Port int `yaml:"port"`
+}
+
+// Configuration for the scheduler telemetry.
+type SchedulerTelemetryConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// The URL of the MQTT broker to use for telemetry.
+	URL string `yaml:"url"`
+	// Credentials for the MQTT broker.
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 // Configuration for the monitoring module.
