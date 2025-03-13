@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cortex visualizer</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  </head>
+
+  <script>
+    let time = null
+    setInterval(async () => {
+      const resp = await fetch('data.json')
+      const data = await resp.json()
+      if (data.time == time) return
+      time = data.time
+      console.log(data)
+    }, 1000);
+  </script>
+</html>

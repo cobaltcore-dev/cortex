@@ -38,19 +38,14 @@ k8s_resource('cortex-scheduler', port_forwards=[
 ], links=[
     link('localhost:8003/metrics', '/metrics'),
 ], labels=['Core-Services'])
-
-########### Visualization
-
 k8s_resource('cortex-telemetry', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
-], labels=['Visualization'])
-docker_build('cortex-vis', 'vis')
-k8s_yaml('./vis/app.yaml')
-k8s_resource('cortex-vis', port_forwards=[
-    port_forward(8005, 80),
+], labels=['Core-Services'])
+k8s_resource('cortex-visualizer', port_forwards=[
+    port_forward(8004, 8080),
 ], links=[
-    link('http://localhost:8005/', 'live visualization'),
-], labels=['Visualization'])
+    link('localhost:8004', 'visualizer'),
+], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
 k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))

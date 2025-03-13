@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -155,7 +156,8 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 
 	// If enabled, publish telemetry data.
 	if p.telemetryClient != nil {
-		go p.telemetryClient.Publish(map[string]any{
+		go p.telemetryClient.Publish("cortex/scheduler", map[string]any{
+			"time":    time.Now().Unix(),
 			"request": request,
 			"order":   p.applicationOrder,
 			"in":      inWeights,

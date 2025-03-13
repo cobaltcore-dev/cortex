@@ -65,6 +65,20 @@ owner-info:
   support-group: "cobaltcore-dev"
   enabled: true
 
+vernemq:
+  # Whether a vernemq instance should be spawned and telemetry sent.
+  enabled: true
+  # The username and password to use for the telemetry connection.
+  username: cortex
+  password: cortex
+  # Name under which the vernemq resources should be spawned.
+  fullnameOverride: "cortex-telemetry"
+  # Pass a basic configuration through a configmap that is spawned
+  # together with the vernemq instance.
+  envFrom:
+    - configMapRef:
+        name: "cortex-telemetry"
+
 # Modes in which the service should be run.
 # Each mode is translated into a separate service and deployment.
 modes:
@@ -93,19 +107,14 @@ modes:
     args: ["scheduler"]
     replicas: 2
 
-vernemq:
-  # Whether a vernemq instance should be spawned and telemetry sent.
-  enabled: true
-  # The username and password to use for the telemetry connection.
-  username: cortex
-  password: cortex
-  # Name under which the vernemq resources should be spawned.
-  fullnameOverride: "cortex-telemetry"
-  # Pass a basic configuration through a configmap that is spawned
-  # together with the vernemq instance.
-  envFrom:
-    - configMapRef:
-        name: "cortex-telemetry"
+  # Visualizer exposes an API that visualizes telemetry coming from the service.
+  - name: visualizer
+    service:
+      type: ClusterIP
+      apiPort: 8080
+      metricsPort: 2112
+    args: ["visualizer"]
+    replicas: 1
 
 # Default sso certificate to use for all services.
 # The sso certificate values of individual services can be overridden.
@@ -143,6 +152,10 @@ conf:
     url: "tcp://cortex-telemetry:1883"
     username: "cortex"
     password: "cortex"
+
+  # Configuration of the visualizer service.
+  visualizer:
+    port: 8080
 
   # Connection parameters for the database where data is stored.
   db:

@@ -163,6 +163,15 @@ type SchedulerAPIConfig struct {
 	Port int `yaml:"port"`
 }
 
+// Configuration for the monitoring module.
+type MonitoringConfig struct {
+	// The labels to add to all metrics.
+	Labels map[string]string `yaml:"labels"`
+
+	// The port to expose the metrics on.
+	Port int `yaml:"port"`
+}
+
 // Configuration for the telemetry client.
 type TelemetryConfig struct {
 	Enabled bool `yaml:"enabled"`
@@ -173,12 +182,9 @@ type TelemetryConfig struct {
 	Password string `yaml:"password"`
 }
 
-// Configuration for the monitoring module.
-type MonitoringConfig struct {
-	// The labels to add to all metrics.
-	Labels map[string]string `yaml:"labels"`
-
-	// The port to expose the metrics on.
+// Configuration for the visualizer module.
+type VisualizerConfig struct {
+	// The port to use for the visualizer API.
 	Port int `yaml:"port"`
 }
 
@@ -191,6 +197,7 @@ type Config interface {
 	GetSchedulerConfig() SchedulerConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetTelemetryConfig() TelemetryConfig
+	GetVisualizerConfig() VisualizerConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
@@ -203,6 +210,7 @@ type config struct {
 	SchedulerConfig  `yaml:"scheduler"`
 	MonitoringConfig `yaml:"monitoring"`
 	TelemetryConfig  `yaml:"telemetry"`
+	VisualizerConfig `yaml:"visualizer"`
 }
 
 // Create a new configuration from the default config yaml file.
@@ -240,3 +248,4 @@ func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfi
 func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
 func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
 func (c *config) GetTelemetryConfig() TelemetryConfig   { return c.TelemetryConfig }
+func (c *config) GetVisualizerConfig() VisualizerConfig { return c.VisualizerConfig }

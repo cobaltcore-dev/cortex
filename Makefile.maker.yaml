@@ -10,9 +10,6 @@ binaries:
   - name: cortex
     fromPackage: .
     installTo: bin/
-  - name: cortex-vis
-    fromPackage: vis/
-    installTo: bin/
 
 golang:
   setGoModVersion: true

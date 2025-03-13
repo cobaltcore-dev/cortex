@@ -22,6 +22,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/telemetry"
+	"github.com/cobaltcore-dev/cortex/internal/visualizer"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/jobloop"
@@ -96,6 +97,13 @@ func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, con
 	}
 }
 
+// Run the visualizer webserver that displays telemetry.
+func runVisualizer(ctx context.Context, registry *monitoring.Registry, config conf.VisualizerConfig, telemetry telemetry.Client) {
+	visMonitor := visualizer.NewVisualizerMonitor(registry)
+	vis := visualizer.NewVisualizer(config, telemetry, visMonitor)
+	vis.Init(ctx)
+}
+
 func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
@@ -150,10 +158,10 @@ func main() {
 
 	// If configured, send telemetry to an mqtt broker.
 	telemetryConf := config.GetTelemetryConfig()
-	var client telemetry.Client
+	var mqttClient telemetry.Client
 	if telemetryConf.Enabled {
-		client = telemetry.NewClient(telemetryConf) // Will lazily connect
-		defer client.Disconnect()
+		mqttClient = telemetry.NewClient(telemetryConf) // Will lazily connect
+		defer mqttClient.Disconnect()
 	}
 
 	monitoringConfig := config.GetMonitoringConfig()
@@ -166,7 +174,9 @@ func main() {
 	case "extractor":
 		go runExtractor(ctx, registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
-		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance, client)
+		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance, mqttClient)
+	case "visualizer":
+		go runVisualizer(ctx, registry, config.GetVisualizerConfig(), mqttClient)
 	default:
 		panic("unknown task")
 	}

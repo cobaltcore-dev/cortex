@@ -17,8 +17,9 @@ import (
 
 type Client interface {
 	Connect() error
-	Publish(any) error
+	Publish(topic string, obj any) error
 	Disconnect()
+	Subscribe(topic string, callback mqtt.MessageHandler) error
 }
 
 type client struct {
@@ -74,7 +75,7 @@ func (t *client) Connect() error {
 }
 
 // Publish telemetry data to the mqtt broker.
-func (t *client) Publish(obj any) error {
+func (t *client) Publish(topic string, obj any) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -89,12 +90,32 @@ func (t *client) Publish(obj any) error {
 		return err
 	}
 	dataStr := string(data)
-	pub := client.Publish("cortex/scheduler/telemetry", 2, true, dataStr)
+	pub := client.Publish(topic, 2, true, dataStr)
 	if pub.Wait() && pub.Error() != nil {
 		slog.Error("failed to publish telemetry data", "err", pub.Error())
 		return pub.Error()
 	}
 	slog.Info("published telemetry data")
+	return nil
+}
+
+// Subscribe to a topic on the mqtt broker.
+func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	// Connect if we aren't already.
+	if err := t.Connect(); err != nil {
+		return err
+	}
+	client := *t.client
+
+	token := client.Subscribe(topic, 2, callback)
+	if token.Wait() && token.Error() != nil {
+		slog.Error("failed to subscribe to topic", "topic", topic, "err", token.Error())
+		return token.Error()
+	}
+	slog.Info("subscribed to topic", "topic", topic)
 	return nil
 }
 
