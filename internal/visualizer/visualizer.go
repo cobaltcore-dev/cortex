@@ -26,18 +26,18 @@ type Visualizer interface {
 }
 
 type visualizer struct {
-	config          conf.VisualizerConfig
-	telemetryClient telemetry.Client
-	monitor         Monitor
-	data            *map[string]any
+	config             conf.VisualizerConfig
+	telemetryClient    telemetry.Client
+	monitor            Monitor
+	schedulerTelemetry *map[string]any
 }
 
 func NewVisualizer(config conf.VisualizerConfig, telemetryClient telemetry.Client, m Monitor) Visualizer {
 	return &visualizer{
-		config:          config,
-		telemetryClient: telemetryClient,
-		monitor:         m,
-		data:            &map[string]any{},
+		config:             config,
+		telemetryClient:    telemetryClient,
+		monitor:            m,
+		schedulerTelemetry: &map[string]any{},
 	}
 }
 
@@ -45,10 +45,10 @@ func NewVisualizer(config conf.VisualizerConfig, telemetryClient telemetry.Clien
 // Open a http server and serve a web page that shows the telemetry data.
 func (v *visualizer) Init(ctx context.Context) {
 	v.telemetryClient.Subscribe("cortex/scheduler", func(client mqtt.Client, msg mqtt.Message) {
-		if err := json.Unmarshal(msg.Payload(), v.data); err != nil {
+		if err := json.Unmarshal(msg.Payload(), v.schedulerTelemetry); err != nil {
 			slog.Error("failed to unmarshal telemetry message", "err", err)
 		}
-		slog.Info("received telemetry data", "data", v.data)
+		slog.Info("received scheduler telemetry data", "data", v.schedulerTelemetry)
 	})
 
 	mux := http.NewServeMux()
@@ -59,9 +59,10 @@ func (v *visualizer) Init(ctx context.Context) {
 		}
 		slog.Info("served visualizer page")
 	})
-	mux.HandleFunc("/data.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/scheduler-telemetry.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(*v.data); err != nil {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if err := json.NewEncoder(w).Encode(*v.schedulerTelemetry); err != nil {
 			slog.Error("failed to write response", "error", err)
 		}
 		slog.Info("served visualizer data")
