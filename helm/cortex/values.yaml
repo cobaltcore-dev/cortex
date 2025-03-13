@@ -93,6 +93,30 @@ modes:
     args: ["scheduler"]
     replicas: 2
 
+vernemq:
+  # Whether a vernemq instance should be spawned and telemetry sent.
+  enabled: true
+  # The username and password to use for the telemetry connection.
+  username: cortex
+  password: cortex
+  # Name under which the vernemq resources should be spawned.
+  fullnameOverride: "cortex-telementry"
+  # Pass a basic configuration through a configmap that is spawned
+  # together with the vernemq instance.
+  envFrom:
+    - configMapRef:
+        name: "{{ .Values.vernemq.fullnameOverride | tpl }}"
+  # Pass username and password as additional environment variables.
+  additionalEnv:
+    - name: "DOCKER_VERNEMQ_USER_{{ .Values.vernemq.username | tpl }}"
+      valueFrom:
+        secretKeyRef:
+          name: "{{ .Values.vernemq.fullnameOverride | tpl }}"
+          key: "password"
+  # Configuration such that the browser can access the telemetry.
+  ws:
+    enabled: true
+
 # Default sso certificate to use for all services.
 # The sso certificate values of individual services can be overridden.
 sharedSSOCert: &sharedSSOCert
@@ -266,15 +290,12 @@ conf:
       port: 8080
       # Whether request bodies should be logged (debugging feature).
       logRequestBodies: false
-
-    # Configure here if the scheduler should send telemetry to an MQTT broker.
-    # If disabled, no mqtt broker will be deployed and used.
     telemetry:
+      # Whether telemetry should be sent to a vernemq instance.
       enabled: true
-      url: "tcp://cortex-telemetry:1883"
-      username: cortex
-      password: cortex
-
+      url: "tcp://{{ .Values.vernemq.fullnameOverride | tpl }}:1883"
+      username: "{{ .Values.vernemq.username | tpl }}"
+      password: "{{ .Values.vernemq.password | tpl }}"
     # Configuration of scheduler steps that modify the Nova scheduler weights.
     # Each scheduler step can specify its own dependencies on extractors and
     # synced data.

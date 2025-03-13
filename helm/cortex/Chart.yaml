@@ -33,3 +33,8 @@ dependencies:
   - name: owner-info
     repository: oci://ghcr.io/sapcc/helm-charts
     version: 1.0.0
+  # Vernemq is a high-performance, distributed MQTT message broker. See: https://vernemq.com/
+  - name: vernemq
+    repository: https://vernemq.github.io/docker-vernemq
+    version: 2.0.1
+    condition: vernemq.enabled
