@@ -13,6 +13,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/shared"
@@ -31,14 +32,8 @@ var supportedSteps = []plugins.Step{
 	&shared.FlavorBinpackingStep{},
 }
 
-// Sequence of scheduler steps that are executed in parallel.
-type Pipeline interface {
-	// Evaluate the pipeline and return a list of hosts in order of preference.
-	Run(scenario plugins.Scenario, novaWeights map[string]float64) ([]string, error)
-}
-
 // Pipeline of scheduler steps.
-type pipeline struct {
+type Pipeline struct {
 	// The activation function to use when combining the
 	// results of the scheduler steps.
 	plugins.ActivationFunction
@@ -78,7 +73,7 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 		)
 	}
 
-	return &pipeline{
+	return Pipeline{
 		// All steps can be run in parallel.
 		executionOrder:   [][]plugins.Step{steps},
 		applicationOrder: applicationOrder,
@@ -87,9 +82,9 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
-func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64) ([]string, error) {
+func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]string, error) {
 	if p.monitor.hostNumberInObserver != nil {
-		p.monitor.hostNumberInObserver.Observe(float64(len(scenario.GetHosts())))
+		p.monitor.hostNumberInObserver.Observe(float64(len(request.Hosts)))
 	}
 
 	// Execute the scheduler steps in groups of the execution order.
@@ -100,7 +95,7 @@ func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64
 			wg.Add(1)
 			go func(step plugins.Step) {
 				defer wg.Done()
-				activations, err := step.Run(scenario)
+				activations, err := step.Run(request)
 				if err != nil {
 					slog.Error("scheduler: failed to run step", "error", err)
 					return
@@ -131,7 +126,7 @@ func (p *pipeline) Run(scenario plugins.Scenario, novaWeights map[string]float64
 	}
 
 	if p.monitor.hostNumberOutObserver != nil {
-		p.monitor.hostNumberOutObserver.Observe(float64(len(scenario.GetHosts())))
+		p.monitor.hostNumberOutObserver.Observe(float64(len(outWeights)))
 	}
 
 	// Sort the hosts (keys) by their weights.

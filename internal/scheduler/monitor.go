@@ -9,6 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -120,7 +121,7 @@ func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor[S]) Run(scenario plugins.Scenario) (map[string]float64, error) {
+func (s *StepMonitor[S]) Run(request api.Request) (map[string]float64, error) {
 	stepName := s.GetName()
 
 	slog.Info("scheduler: running step", "name", stepName)
@@ -131,7 +132,7 @@ func (s *StepMonitor[S]) Run(scenario plugins.Scenario) (map[string]float64, err
 		defer timer.ObserveDuration()
 	}
 
-	weights, err := s.Step.Run(scenario)
+	weights, err := s.Step.Run(request)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +149,8 @@ func (s *StepMonitor[S]) Run(scenario plugins.Scenario) (map[string]float64, err
 
 	// Observe how many hosts are removed from the state.
 	hostsInScenario := make(map[string]struct{})
-	for _, host := range scenario.GetHosts() {
-		hostsInScenario[host.GetComputeHost()] = struct{}{}
+	for _, host := range request.Hosts {
+		hostsInScenario[host.ComputeHost] = struct{}{}
 	}
 	nHostsRemoved := len(hostsInScenario) - len(weights)
 	if nHostsRemoved < 0 {

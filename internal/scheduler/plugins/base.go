@@ -6,6 +6,7 @@ package plugins
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 )
 
 // Interface to which step options must conform.
@@ -40,10 +41,10 @@ func (s *BaseStep[Opts]) Init(db db.DB, opts conf.RawOpts) error {
 }
 
 // Get zero activations for all hosts.
-func (s *BaseStep[Opts]) BaseActivations(scenario Scenario) Weights {
+func (s *BaseStep[Opts]) BaseActivations(request api.Request) Weights {
 	weights := make(Weights)
-	for _, host := range scenario.GetHosts() {
-		weights[host.GetComputeHost()] = s.ActivationFunction.NoEffect()
+	for _, host := range request.Hosts {
+		weights[host.ComputeHost] = s.ActivationFunction.NoEffect()
 	}
 	return weights
 }

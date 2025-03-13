@@ -9,9 +9,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 )
 
 func TestFlavorBinpackingStep_Run(t *testing.T) {
@@ -63,15 +62,23 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		scenario        plugins.Scenario
+		request         api.Request
 		expectedWeights map[string]float64
 	}{
 		{
 			name: "Single VM with flavor1",
-			scenario: &testlibPlugins.MockScenario{
-				FlavorID: "flavor1",
-				NumVMs:   1,
-				Hosts: []testlibPlugins.MockScenarioHost{
+			request: api.Request{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								FlavorID: "flavor1",
+							},
+						},
+						NInstances: 1,
+					},
+				},
+				Hosts: []api.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -83,10 +90,18 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 		},
 		{
 			name: "Single VM with flavor2",
-			scenario: &testlibPlugins.MockScenario{
-				FlavorID: "flavor2",
-				NumVMs:   1,
-				Hosts: []testlibPlugins.MockScenarioHost{
+			request: api.Request{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								FlavorID: "flavor2",
+							},
+						},
+						NInstances: 1,
+					},
+				},
+				Hosts: []api.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -98,10 +113,18 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 		},
 		{
 			name: "Multiple VMs",
-			scenario: &testlibPlugins.MockScenario{
-				FlavorID: "flavor1",
-				NumVMs:   2,
-				Hosts: []testlibPlugins.MockScenarioHost{
+			request: api.Request{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								FlavorID: "flavor1",
+							},
+						},
+						NInstances: 2,
+					},
+				},
+				Hosts: []api.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -115,7 +138,7 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weights, err := step.Run(tt.scenario)
+			weights, err := step.Run(tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

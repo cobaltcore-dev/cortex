@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/sapcc/go-bits/httpext"
 )
 
@@ -24,13 +23,17 @@ type API interface {
 	Init(context.Context)
 }
 
+type Pipeline interface {
+	Run(request Request, weights map[string]float64) ([]string, error)
+}
+
 type api struct {
-	Pipeline scheduler.Pipeline
+	Pipeline Pipeline
 	config   conf.SchedulerAPIConfig
 	monitor  Monitor
 }
 
-func NewAPI(config conf.SchedulerAPIConfig, pipeline scheduler.Pipeline, m Monitor) API {
+func NewAPI(config conf.SchedulerAPIConfig, pipeline Pipeline, m Monitor) API {
 	return &api{
 		Pipeline: pipeline,
 		config:   config,
@@ -52,7 +55,7 @@ func (api *api) Init(ctx context.Context) {
 
 // Check if the scheduler can run based on the request data.
 // Note: messages returned here are user-facing and should not contain internal details.
-func (api *api) canRunScheduler(requestData NovaExternalSchedulerRequest) (ok bool, reason string) {
+func (api *api) canRunScheduler(requestData Request) (ok bool, reason string) {
 	// Check that all hosts have a weight.
 	for _, host := range requestData.Hosts {
 		if _, ok := requestData.Weights[host.ComputeHost]; !ok {
@@ -141,7 +144,7 @@ func (api *api) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
 		r.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
 	}
 
-	var requestData NovaExternalSchedulerRequest
+	var requestData Request
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		h.respond(http.StatusBadRequest, err, "failed to decode request body")
 		return
@@ -159,12 +162,12 @@ func (api *api) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Evaluate the pipeline and return the ordered list of hosts.
-	hosts, err := api.Pipeline.Run(&requestData, requestData.Weights)
+	hosts, err := api.Pipeline.Run(requestData, requestData.Weights)
 	if err != nil {
 		h.respond(http.StatusInternalServerError, err, "failed to evaluate pipeline")
 		return
 	}
-	response := NovaExternalSchedulerResponse{Hosts: hosts}
+	response := Response{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
 		h.respond(http.StatusInternalServerError, err, "failed to encode response")

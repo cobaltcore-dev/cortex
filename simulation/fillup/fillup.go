@@ -77,7 +77,7 @@ func main() {
 			continue
 		}
 		// Choose all hosts that have enough resources to host the new server.
-		var hosts []api.NovaExternalSchedulerRequestHost
+		var hosts []api.Host
 		weights := make(map[string]float64)
 		for _, hypervisor := range hypervisors {
 			if hypervisor.MemoryMB-hypervisor.MemoryMBUsed < flavor.RAM {
@@ -89,14 +89,14 @@ func main() {
 			if hypervisor.VCPUs-hypervisor.VCPUsUsed < flavor.VCPUs {
 				continue
 			}
-			hosts = append(hosts, api.NovaExternalSchedulerRequestHost{
+			hosts = append(hosts, api.Host{
 				ComputeHost:        hypervisor.ServiceHost,
 				HypervisorHostname: hypervisor.Hostname,
 			})
 			weights[hypervisor.ServiceHost] = 1.0
 		}
 
-		request := api.NovaExternalSchedulerRequest{
+		request := api.Request{
 			Spec: api.NovaObject[api.NovaSpec]{
 				Data: api.NovaSpec{
 					ProjectID:        server.TenantID,
@@ -129,7 +129,7 @@ func main() {
 		if respRaw.StatusCode != http.StatusOK {
 			return
 		}
-		var resp api.NovaExternalSchedulerResponse
+		var resp api.Response
 		must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
 
 		// Update the datacenter state based on the response.

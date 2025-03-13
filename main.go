@@ -80,7 +80,7 @@ func runScheduler(ctx context.Context, registry *monitoring.Registry, config con
 	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
 	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
 	apiMonitor := api.NewSchedulerMonitor(registry)
-	api := api.NewAPI(config.API, schedulerPipeline, apiMonitor)
+	api := api.NewAPI(config.API, &schedulerPipeline, apiMonitor)
 	api.Init(ctx)
 }
 

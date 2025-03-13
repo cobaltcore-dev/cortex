@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
@@ -49,9 +50,9 @@ func (s *AvoidContendedHostsStep) GetName() string {
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidContendedHostsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
-	activations := s.BaseStep.BaseActivations(scenario)
-	if !scenario.GetVMware() {
+func (s *AvoidContendedHostsStep) Run(request api.Request) (map[string]float64, error) {
+	activations := s.BaseStep.BaseActivations(request)
+	if !request.VMware {
 		// Only run this step for VMware VMs.
 		return activations, nil
 	}

@@ -8,8 +8,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
-	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 )
 
 type mockPipelineStep struct {
@@ -24,7 +24,7 @@ func (m *mockPipelineStep) GetName() string {
 	return "mock_pipeline_step"
 }
 
-func (m *mockPipelineStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
+func (m *mockPipelineStep) Run(request api.Request) (map[string]float64, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -33,7 +33,7 @@ func (m *mockPipelineStep) Run(scenario plugins.Scenario) (map[string]float64, e
 
 func TestPipeline_Run(t *testing.T) {
 	// Create an instance of the pipeline with a mock step
-	pipeline := &pipeline{
+	pipeline := &Pipeline{
 		executionOrder: [][]plugins.Step{
 			{&mockPipelineStep{}},
 		},
@@ -44,13 +44,13 @@ func TestPipeline_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		scenario       plugins.Scenario
+		request        api.Request
 		expectedResult []string
 	}{
 		{
 			name: "Single step pipeline",
-			scenario: &testlibPlugins.MockScenario{
-				Hosts: []testlibPlugins.MockScenarioHost{
+			request: api.Request{
+				Hosts: []api.Host{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -63,7 +63,7 @@ func TestPipeline_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := pipeline.Run(
-				tt.scenario,
+				tt.request,
 				map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 			)
 			if err != nil {

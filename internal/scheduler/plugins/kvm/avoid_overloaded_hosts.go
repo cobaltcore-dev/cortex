@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
@@ -49,9 +50,9 @@ func (s *AvoidOverloadedHostsStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
-	activations := s.BaseStep.BaseActivations(scenario)
-	if scenario.GetVMware() {
+func (s *AvoidOverloadedHostsStep) Run(request api.Request) (map[string]float64, error) {
+	activations := s.BaseStep.BaseActivations(request)
+	if request.VMware {
 		// Don't run this step for VMware VMs.
 		return activations, nil
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
@@ -40,14 +41,12 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *AntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
-	activations := s.BaseStep.BaseActivations(scenario)
-	if !scenario.GetVMware() {
+func (s *AntiAffinityNoisyProjectsStep) Run(request api.Request) (map[string]float64, error) {
+	activations := s.BaseStep.BaseActivations(request)
+	if !request.VMware {
 		// Only run this step for VMware VMs.
 		return activations, nil
 	}
-
-	projectID := scenario.GetProjectID()
 
 	// Check how noisy the project is on the compute hosts.
 	var projectNoisinessOnHosts []vmware.VROpsProjectNoisiness
@@ -55,7 +54,7 @@ func (s *AntiAffinityNoisyProjectsStep) Run(scenario plugins.Scenario) (map[stri
 		SELECT * FROM feature_vrops_project_noisiness
 		WHERE project = :project_id
 	`, map[string]any{
-		"project_id": projectID,
+		"project_id": request.Spec.Data.ProjectID,
 	}); err != nil {
 		return nil, err
 	}

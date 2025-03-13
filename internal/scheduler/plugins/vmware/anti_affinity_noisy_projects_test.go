@@ -9,9 +9,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
@@ -51,15 +50,19 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		scenario       plugins.Scenario
+		request        api.Request
 		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Non-vmware vm",
-			scenario: &testlibPlugins.MockScenario{
-				ProjectID: "project1",
-				VMware:    false,
-				Hosts: []testlibPlugins.MockScenarioHost{
+			request: api.Request{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project1",
+					},
+				},
+				VMware: false,
+				Hosts: []api.Host{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -70,10 +73,14 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Noisy project",
-			scenario: &testlibPlugins.MockScenario{
-				ProjectID: "project1",
-				VMware:    true,
-				Hosts: []testlibPlugins.MockScenarioHost{
+			request: api.Request{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project1",
+					},
+				},
+				VMware: true,
+				Hosts: []api.Host{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -86,10 +93,14 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Non-noisy project",
-			scenario: &testlibPlugins.MockScenario{
-				ProjectID: "project2",
-				VMware:    true,
-				Hosts: []testlibPlugins.MockScenarioHost{
+			request: api.Request{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project2",
+					},
+				},
+				VMware: true,
+				Hosts: []api.Host{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -99,10 +110,14 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "No noisy project data",
-			scenario: &testlibPlugins.MockScenario{
-				ProjectID: "project3",
-				VMware:    true,
-				Hosts: []testlibPlugins.MockScenarioHost{
+			request: api.Request{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project3",
+					},
+				},
+				VMware: true,
+				Hosts: []api.Host{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
 					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
@@ -114,7 +129,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weights, err := step.Run(tt.scenario)
+			weights, err := step.Run(tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

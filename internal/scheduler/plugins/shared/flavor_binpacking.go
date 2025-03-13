@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
@@ -57,10 +58,10 @@ func (s *FlavorBinpackingStep) GetName() string {
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *FlavorBinpackingStep) Run(scenario plugins.Scenario) (map[string]float64, error) {
-	activations := s.BaseStep.BaseActivations(scenario)
+func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, error) {
+	activations := s.BaseStep.BaseActivations(request)
 
-	if scenario.GetNumVMs() != 1 {
+	if request.Spec.Data.NInstances > 1 {
 		return activations, nil
 	}
 
@@ -72,7 +73,7 @@ func (s *FlavorBinpackingStep) Run(scenario plugins.Scenario) (map[string]float6
 			ram_left_mb >= 0 AND
 			vcpus_left >= 0 AND
 			disk_left_gb >= 0
-	`, map[string]any{"id": scenario.GetFlavorID()}); err != nil {
+	`, map[string]any{"id": request.Spec.Data.Flavor.Data.FlavorID}); err != nil {
 		return nil, err
 	}
 
