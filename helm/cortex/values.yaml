@@ -266,6 +266,15 @@ conf:
       port: 8080
       # Whether request bodies should be logged (debugging feature).
       logRequestBodies: false
+
+    # Configure here if the scheduler should send telemetry to an MQTT broker.
+    # If disabled, no mqtt broker will be deployed and used.
+    telemetry:
+      enabled: true
+      url: "tcp://cortex-telemetry:1883"
+      username: cortex
+      password: cortex
+
     # Configuration of scheduler steps that modify the Nova scheduler weights.
     # Each scheduler step can specify its own dependencies on extractors and
     # synced data.
