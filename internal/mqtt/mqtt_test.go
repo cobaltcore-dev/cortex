@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/testlib/db/containers"
+	"github.com/cobaltcore-dev/cortex/testlib/mqtt/containers"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
