@@ -6,7 +6,7 @@ name: Test
 on: [push]
 
 jobs:
-  test-with-sqlite:
+  test-without-docker:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -18,7 +18,7 @@ jobs:
       - name: Test without Docker
         run: go test -v ./...
 
-  test-with-postgres:
+  test-with-docker:
     runs-on: ubuntu-latest
     services:
       dind:
