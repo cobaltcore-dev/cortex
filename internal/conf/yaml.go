@@ -172,6 +172,22 @@ type MonitoringConfig struct {
 	Port int `yaml:"port"`
 }
 
+// Configuration for the mqtt client.
+type MQTTConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// The URL of the MQTT broker to use for mqtt.
+	URL string `yaml:"url"`
+	// Credentials for the MQTT broker.
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
+// Configuration for the visualizer module.
+type VisualizerConfig struct {
+	// The port to use for the visualizer API.
+	Port int `yaml:"port"`
+}
+
 // Configuration for the cortex service.
 type Config interface {
 	GetLoggingConfig() LoggingConfig
@@ -180,6 +196,8 @@ type Config interface {
 	GetFeaturesConfig() FeaturesConfig
 	GetSchedulerConfig() SchedulerConfig
 	GetMonitoringConfig() MonitoringConfig
+	GetMQTTConfig() MQTTConfig
+	GetVisualizerConfig() VisualizerConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
@@ -191,6 +209,8 @@ type config struct {
 	FeaturesConfig   `yaml:"features"`
 	SchedulerConfig  `yaml:"scheduler"`
 	MonitoringConfig `yaml:"monitoring"`
+	MQTTConfig       `yaml:"mqtt"`
+	VisualizerConfig `yaml:"visualizer"`
 }
 
 // Create a new configuration from the default config yaml file.
@@ -227,3 +247,5 @@ func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
 func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
 func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
 func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
+func (c *config) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }
+func (c *config) GetVisualizerConfig() VisualizerConfig { return c.VisualizerConfig }
