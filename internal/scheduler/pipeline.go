@@ -14,12 +14,12 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/internal/telemetry"
 )
 
 // Configuration of steps supported by the scheduler.
@@ -45,13 +45,13 @@ type Pipeline struct {
 	applicationOrder []string
 	// Monitor to observe the pipeline.
 	monitor Monitor
-	// Telemetry client to publish telemetry data.
-	// Only initialized if telemetry is enabled.
-	telemetryClient telemetry.Client
+	// MQTT client to publish mqtt data.
+	// Only initialized if mqtt is enabled.
+	mqttClient mqtt.Client
 }
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline(config conf.SchedulerConfig, database db.DB, tc telemetry.Client, monitor Monitor) Pipeline {
+func NewPipeline(config conf.SchedulerConfig, database db.DB, tc mqtt.Client, monitor Monitor) Pipeline {
 	supportedStepsByName := make(map[string]plugins.Step)
 	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
@@ -83,7 +83,7 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, tc telemetry.Clien
 		executionOrder:   [][]plugins.Step{steps},
 		applicationOrder: applicationOrder,
 		monitor:          monitor,
-		telemetryClient:  tc,
+		mqttClient:       tc,
 	}
 }
 
@@ -154,9 +154,11 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 		return outWeights[hosts[i]] > outWeights[hosts[j]]
 	})
 
-	// If enabled, publish telemetry data.
-	if p.telemetryClient != nil {
-		go p.telemetryClient.Publish("cortex/scheduler", map[string]any{
+	// Publish information about the scheduling to an mqtt broker.
+	// In this way, other services can connect and record the scheduler
+	// behavior over a longer time, or react to the scheduling decision.
+	if p.mqttClient != nil {
+		go p.mqttClient.Publish("cortex/scheduler/pipeline/finished", map[string]any{
 			"time":    time.Now().Unix(),
 			"request": request,
 			"order":   p.applicationOrder,

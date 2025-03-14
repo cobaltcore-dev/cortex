@@ -16,13 +16,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
-	"github.com/cobaltcore-dev/cortex/internal/telemetry"
-	"github.com/cobaltcore-dev/cortex/internal/visualizer"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/jobloop"
@@ -78,9 +77,9 @@ func runExtractor(ctx context.Context, registry *monitoring.Registry, config con
 }
 
 // Run a webserver that listens for external scheduling requests.
-func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB, telemetry telemetry.Client) {
+func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB, mqtt mqtt.Client) {
 	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
-	schedulerPipeline := scheduler.NewPipeline(config, db, telemetry, schedulerMonitor)
+	schedulerPipeline := scheduler.NewPipeline(config, db, mqtt, schedulerMonitor)
 	apiMonitor := api.NewSchedulerMonitor(registry)
 	api := api.NewAPI(config.API, &schedulerPipeline, apiMonitor)
 	api.Init(ctx)
@@ -95,13 +94,6 @@ func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, con
 	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
 		panic(err)
 	}
-}
-
-// Run the visualizer webserver that displays telemetry.
-func runVisualizer(ctx context.Context, registry *monitoring.Registry, config conf.VisualizerConfig, telemetry telemetry.Client) {
-	visMonitor := visualizer.NewVisualizerMonitor(registry)
-	vis := visualizer.NewVisualizer(config, telemetry, visMonitor)
-	vis.Init(ctx)
 }
 
 func main() {
@@ -156,11 +148,11 @@ func main() {
 	migrater := db.NewMigrater(dbInstance)
 	migrater.Migrate()
 
-	// If configured, send telemetry to an mqtt broker.
-	telemetryConf := config.GetTelemetryConfig()
-	var mqttClient telemetry.Client
-	if telemetryConf.Enabled {
-		mqttClient = telemetry.NewClient(telemetryConf) // Will lazily connect
+	// If configured, send mqtt to an mqtt broker.
+	mqttConf := config.GetMQTTConfig()
+	var mqttClient mqtt.Client
+	if mqttConf.Enabled {
+		mqttClient = mqtt.NewClient(mqttConf) // Will lazily connect
 		defer mqttClient.Disconnect()
 	}
 
@@ -175,8 +167,6 @@ func main() {
 		go runExtractor(ctx, registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
 		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance, mqttClient)
-	case "visualizer":
-		go runVisualizer(ctx, registry, config.GetVisualizerConfig(), mqttClient)
 	default:
 		panic("unknown task")
 	}

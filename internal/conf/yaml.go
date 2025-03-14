@@ -172,10 +172,10 @@ type MonitoringConfig struct {
 	Port int `yaml:"port"`
 }
 
-// Configuration for the telemetry client.
-type TelemetryConfig struct {
+// Configuration for the mqtt client.
+type MQTTConfig struct {
 	Enabled bool `yaml:"enabled"`
-	// The URL of the MQTT broker to use for telemetry.
+	// The URL of the MQTT broker to use for mqtt.
 	URL string `yaml:"url"`
 	// Credentials for the MQTT broker.
 	Username string `yaml:"username"`
@@ -196,7 +196,7 @@ type Config interface {
 	GetFeaturesConfig() FeaturesConfig
 	GetSchedulerConfig() SchedulerConfig
 	GetMonitoringConfig() MonitoringConfig
-	GetTelemetryConfig() TelemetryConfig
+	GetMQTTConfig() MQTTConfig
 	GetVisualizerConfig() VisualizerConfig
 	// Check if the configuration is valid.
 	Validate() error
@@ -209,7 +209,7 @@ type config struct {
 	FeaturesConfig   `yaml:"features"`
 	SchedulerConfig  `yaml:"scheduler"`
 	MonitoringConfig `yaml:"monitoring"`
-	TelemetryConfig  `yaml:"telemetry"`
+	MQTTConfig       `yaml:"mqtt"`
 	VisualizerConfig `yaml:"visualizer"`
 }
 
@@ -247,5 +247,5 @@ func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
 func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
 func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
 func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
-func (c *config) GetTelemetryConfig() TelemetryConfig   { return c.TelemetryConfig }
+func (c *config) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }
 func (c *config) GetVisualizerConfig() VisualizerConfig { return c.VisualizerConfig }
