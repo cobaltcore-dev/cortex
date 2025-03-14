@@ -119,13 +119,19 @@
       if (topic === 'cortex/scheduler/pipeline/finished') {
         onSchedulerPipelineFinished(JSON.parse(message.toString()))
       }
+      if (topic === 'cortex/sync/openstack/nova/hypervisors') {
+        onHypervisorsSynced(JSON.parse(message.toString()))
+      }
     })
     client.on('connect', () => {
       console.log('Connected to MQTT broker.')
       client.subscribe('cortex/scheduler/pipeline/finished')
+      client.subscribe('cortex/sync/openstack/nova/hypervisors')
     })
 
-    let state = {}
+    onHypervisorsSynced = async (data) => {
+      console.log(data)
+    }
 
     onSchedulerPipelineFinished = async (data) => {
       let hosts = []

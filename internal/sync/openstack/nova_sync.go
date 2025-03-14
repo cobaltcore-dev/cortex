@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/go-gorp/gorp"
 )
@@ -22,15 +23,19 @@ type novaSyncer struct {
 	conf NovaConf
 	// Nova API client to fetch the data.
 	api NovaAPI
+	// MQTT client to publish mqtt data.
+	// Only initialized if mqtt is enabled.
+	mqttClient mqtt.Client
 }
 
 // Create a new OpenStack nova syncer.
 func newNovaSyncer(db db.DB, mon sync.Monitor, k KeystoneAPI, conf NovaConf) Syncer {
 	return &novaSyncer{
-		db:   db,
-		mon:  mon,
-		conf: conf,
-		api:  newNovaAPI(mon, k, conf),
+		db:         db,
+		mon:        mon,
+		conf:       conf,
+		api:        newNovaAPI(mon, k, conf),
+		mqttClient: mqtt.NewClient(),
 	}
 }
 
@@ -92,6 +97,10 @@ func (s *novaSyncer) SyncServers(ctx context.Context) ([]Server, error) {
 		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
+	// Publish information about the servers to an mqtt broker.
+	// In this way, the changes in server placement etc. can be monitored
+	// or visualized by other services.
+	go s.mqttClient.Publish("cortex/sync/openstack/nova/servers", servers)
 	return servers, nil
 }
 
@@ -113,6 +122,10 @@ func (s *novaSyncer) SyncHypervisors(ctx context.Context) ([]Hypervisor, error) 
 		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
+	// Publish information about the hypervisors to an mqtt broker.
+	// In this way, the changes in hypervisor usage etc. can be monitored
+	// or visualized by other services.
+	go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", hypervisors)
 	return hypervisors, nil
 }
 

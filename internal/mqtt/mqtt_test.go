@@ -5,6 +5,7 @@ package mqtt
 
 import (
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -21,7 +22,7 @@ func TestConnect(t *testing.T) {
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
-	client := NewClient(conf)
+	client := client{conf: conf, lock: &sync.Mutex{}}
 
 	err := client.Connect()
 	if err != nil {
@@ -38,7 +39,7 @@ func TestPublish(t *testing.T) {
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
-	client := NewClient(conf)
+	client := client{conf: conf, lock: &sync.Mutex{}}
 
 	err := client.Publish("test/topic", map[string]string{"key": "value"})
 	if err != nil {
@@ -55,7 +56,7 @@ func TestSubscribe(t *testing.T) {
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
-	client := NewClient(conf)
+	client := client{conf: conf, lock: &sync.Mutex{}}
 
 	err := client.Subscribe("test/topic", func(client mqtt.Client, msg mqtt.Message) {})
 	if err != nil {
@@ -72,7 +73,7 @@ func TestDisconnect(t *testing.T) {
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
-	client := NewClient(conf)
+	client := client{conf: conf, lock: &sync.Mutex{}}
 	err := client.Connect()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

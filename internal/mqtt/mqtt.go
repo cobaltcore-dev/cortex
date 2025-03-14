@@ -30,13 +30,14 @@ type client struct {
 	lock *sync.Mutex
 }
 
-func NewClient(conf conf.MQTTConfig) Client {
+func NewClient() Client {
+	conf := conf.NewConfig().GetMQTTConfig()
 	return &client{conf: conf, lock: &sync.Mutex{}}
 }
 
 // Connect to the mqtt broker.
 func (t *client) Connect() error {
-	if t.client != nil {
+	if t.client != nil || !t.conf.Enabled {
 		return nil
 	}
 
@@ -76,6 +77,10 @@ func (t *client) Connect() error {
 
 // Publish mqtt data to the mqtt broker.
 func (t *client) Publish(topic string, obj any) error {
+	if !t.conf.Enabled {
+		return nil
+	}
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -101,6 +106,10 @@ func (t *client) Publish(topic string, obj any) error {
 
 // Subscribe to a topic on the mqtt broker.
 func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
+	if !t.conf.Enabled {
+		return nil
+	}
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -121,7 +130,7 @@ func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
 
 // Disconnect from the mqtt broker.
 func (t *client) Disconnect() {
-	if t.client == nil {
+	if t.client == nil || !t.conf.Enabled {
 		return
 	}
 	client := *t.client

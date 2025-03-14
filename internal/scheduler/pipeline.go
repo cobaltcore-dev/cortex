@@ -51,7 +51,7 @@ type Pipeline struct {
 }
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline(config conf.SchedulerConfig, database db.DB, tc mqtt.Client, monitor Monitor) Pipeline {
+func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) Pipeline {
 	supportedStepsByName := make(map[string]plugins.Step)
 	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
@@ -83,7 +83,7 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, tc mqtt.Client, mo
 		executionOrder:   [][]plugins.Step{steps},
 		applicationOrder: applicationOrder,
 		monitor:          monitor,
-		mqttClient:       tc,
+		mqttClient:       mqtt.NewClient(),
 	}
 }
 
@@ -157,16 +157,14 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	// Publish information about the scheduling to an mqtt broker.
 	// In this way, other services can connect and record the scheduler
 	// behavior over a longer time, or react to the scheduling decision.
-	if p.mqttClient != nil {
-		go p.mqttClient.Publish("cortex/scheduler/pipeline/finished", map[string]any{
-			"time":    time.Now().Unix(),
-			"request": request,
-			"order":   p.applicationOrder,
-			"in":      inWeights,
-			"steps":   stepWeights,
-			"out":     outWeights,
-		})
-	}
+	go p.mqttClient.Publish("cortex/scheduler/pipeline/finished", map[string]any{
+		"time":    time.Now().Unix(),
+		"request": request,
+		"order":   p.applicationOrder,
+		"in":      inWeights,
+		"steps":   stepWeights,
+		"out":     outWeights,
+	})
 
 	return hosts, nil
 }

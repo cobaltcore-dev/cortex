@@ -16,7 +16,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
-	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -77,9 +76,9 @@ func runExtractor(ctx context.Context, registry *monitoring.Registry, config con
 }
 
 // Run a webserver that listens for external scheduling requests.
-func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB, mqtt mqtt.Client) {
+func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
-	schedulerPipeline := scheduler.NewPipeline(config, db, mqtt, schedulerMonitor)
+	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
 	apiMonitor := api.NewSchedulerMonitor(registry)
 	api := api.NewAPI(config.API, &schedulerPipeline, apiMonitor)
 	api.Init(ctx)
@@ -148,14 +147,6 @@ func main() {
 	migrater := db.NewMigrater(dbInstance)
 	migrater.Migrate()
 
-	// If configured, send mqtt to an mqtt broker.
-	mqttConf := config.GetMQTTConfig()
-	var mqttClient mqtt.Client
-	if mqttConf.Enabled {
-		mqttClient = mqtt.NewClient(mqttConf) // Will lazily connect
-		defer mqttClient.Disconnect()
-	}
-
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
 	go runMonitoringServer(ctx, registry, monitoringConfig)
@@ -166,7 +157,7 @@ func main() {
 	case "extractor":
 		go runExtractor(ctx, registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
-		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance, mqttClient)
+		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance)
 	default:
 		panic("unknown task")
 	}
