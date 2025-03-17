@@ -1,7 +1,7 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-FROM golang:1.24.0-alpine3.21 AS builder
+FROM golang:1.24.1-alpine3.21 AS builder
 
 RUN apk add --no-cache --no-progress ca-certificates gcc git make musl-dev
 
