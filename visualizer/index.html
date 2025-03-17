@@ -103,15 +103,6 @@
         margin: 0.5em;
         border: 2px solid var(--color-surface);
       }
-      /* Vertical line through the weight cells */
-      ::before {
-        content: '';
-        position: absolute;
-        top: 0; bottom: 0; left: 50%; width: 0;
-        border-left: 2px solid rgba(0, 0, 0, 0.05);
-        transform: translateX(-50%);
-        z-index: -2;
-      }
       /* Backdrop white for the weight cells */
       ::after {
         content: '';
@@ -150,11 +141,13 @@
       }
     }
 
-    /* Table cell showing the name of a step in the pipeline. */
-    th.stepname, td.stepname {
-      font-weight: bold;
+    /* Table row showing the name of a step in the pipeline. */
+    th.stepname {
       text-align: left;
-      padding-right: 1em;
+      font-weight: bold;
+      padding-left: 0.75em;
+      padding-top: 0.5em;
+      padding-bottom: 0.25em;
     }
 
     /* Highlighted rows in the table. */
@@ -303,6 +296,8 @@
       if (Object.keys(state.pipeline).length === 0) return
       if (Object.keys(state.hypervisors).length === 0) return
 
+      const greyout = 'filter: grayscale(50%); opacity: 0.25'
+
       const spec = state.pipeline.request.spec["nova_object.data"]
       const flavor = spec.flavor["nova_object.data"]
 
@@ -312,8 +307,10 @@
         hypervisors[hypervisor.service.host] = hypervisor
       }
       const hostnames = Object.keys(hypervisors).sort((a, b) => {
-        if (!state.pipeline.in[a]) return 1
-        if (!state.pipeline.in[b]) return -1
+        if (state.pipeline.in[a] === undefined) return 1
+        if (state.pipeline.in[b] === undefined) return -1
+        if (state.pipeline.out[a] === undefined) return 1
+        if (state.pipeline.out[b] === undefined) return -1
         return state.pipeline.out[b] - state.pipeline.out[a]
       })
 
@@ -330,6 +327,13 @@
       let table = '<table>'
       // Add weights to the table.
       for (const stepname of order) {
+        // Add a header with the name of the step.
+        table += `
+          <tr>
+            <th class="stepname" colspan="${hostnames.length + 1}">${stepname}</th>
+          </tr>
+        `
+
         const weights = steps[stepname]
         table += `<tr class="${highlights.includes(stepname) ? 'highlight' : ''}">`
         for (const host of hostnames) {
@@ -352,18 +356,23 @@
             </td>
           `
         }
-        table += `<td class="stepname">${stepname}</td>`
         table += '</tr>'
       }
       // Add hosts to the table.
       table += '<tr>'
       for (const host of hostnames) {
-        table += `<th class="hostname"><div>${host}</div></th>`
+        const hasWeight = state.pipeline.out[host] !== undefined
+        table += `
+          <th class="hostname" style="${hasWeight ? '' : greyout}">
+            <div>${host}</div>
+          </th>
+        `
       }
       table += '</tr>'
       // Add hypervisor statistics to the table.
       table += '<tr>'
       for (const host of hostnames) {
+        const hasWeight = state.pipeline.out[host] !== undefined
         const hypervisor = hypervisors[host]
         const cpusUsed = hypervisor.vcpus == 0 ? 0 : (hypervisor.vcpus_used / hypervisor.vcpus)
         const cpusUsedAfter = hypervisor.vcpus == 0 ? 0 :
@@ -375,7 +384,7 @@
         const diskUsedAfter = hypervisor.local_gb == 0 ? 0 :
           ((hypervisor.local_gb_used + flavor.disk) / hypervisor.local_gb)
         table += `
-          <td class="chart">
+          <td class="chart" style="${hasWeight ? '' : greyout}">
             <div class="backdrop">
               <p class="cpu"></p>
               <p class="mem"></p>
@@ -404,9 +413,10 @@
       // Additional information about the hypervisor.
       table += '<tr>'
       for (const host of hostnames) {
+        const hasWeight = state.pipeline.out[host] !== undefined
         const isDown = hypervisors[host].state === 'down'
         table += `
-          <th class="metainfo">
+          <th class="metainfo" style="${hasWeight ? '' : greyout}">
             <div>${isDown ? '<p class="issue">🚨 DOWN</p>' : ''}</div>
           </th>
         `
