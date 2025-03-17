@@ -6,7 +6,7 @@ name: Test
 on: [push]
 
 jobs:
-  test-with-sqlite:
+  test-without-docker:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -14,11 +14,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: 1.24.1
       - name: Test without Docker
         run: go test -v ./...
 
-  test-with-postgres:
+  test-with-docker:
     runs-on: ubuntu-latest
     services:
       dind:
@@ -31,6 +31,6 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: 1.24.1
       - name: Test with Docker
-        run: POSTGRES_CONTAINER=1 go test -v ./...
+        run: POSTGRES_CONTAINER=1 VERNEMQ_CONTAINER=1 go test -v ./...

@@ -105,7 +105,11 @@ func main() {
 					NInstances:       1,
 					Flavor: api.NovaObject[api.NovaFlavor]{
 						Data: api.NovaFlavor{
-							FlavorID: flavor.ID,
+							Name:       flavor.Name,
+							FlavorID:   flavor.ID,
+							MemoryMB:   flavor.RAM,
+							VCPUs:      flavor.VCPUs,
+							RootDiskGB: flavor.Disk,
 						},
 					},
 				},

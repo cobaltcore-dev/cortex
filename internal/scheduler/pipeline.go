@@ -10,9 +10,11 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/kvm"
@@ -43,6 +45,9 @@ type Pipeline struct {
 	applicationOrder []string
 	// Monitor to observe the pipeline.
 	monitor Monitor
+	// MQTT client to publish mqtt data.
+	// Only initialized if mqtt is enabled.
+	mqttClient mqtt.Client
 }
 
 // Create a new pipeline with steps contained in the configuration.
@@ -78,6 +83,7 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 		executionOrder:   [][]plugins.Step{steps},
 		applicationOrder: applicationOrder,
 		monitor:          monitor,
+		mqttClient:       mqtt.NewClient(),
 	}
 }
 
@@ -110,19 +116,32 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	// -99,000 or 99,000. We want to respect these values, but still adjust them
 	// to a meaningful value. If Nova really doesn't want us to run on a host, it
 	// should run a filter instead of setting a weight.
-	var outWeights = make(map[string]float64)
+	inWeights := map[string]float64{}
 	for hostname, weight := range novaWeights {
-		outWeights[hostname] = math.Tanh(weight)
+		inWeights[hostname] = math.Tanh(weight)
 	}
+
+	// Retrieve the step weights from the concurrency-safe map.
+	stepWeights := map[string]map[string]float64{}
+	activationsByStep.Range(func(key, value interface{}) bool {
+		stepName := key.(string)
+		activations := value.(map[string]float64)
+		stepWeights[stepName] = activations
+		return true
+	})
+
+	// Copy to avoid modifying the original weights.
+	outWeights := make(map[string]float64, len(inWeights))
+	maps.Copy(outWeights, inWeights)
 
 	// Apply all activations in the strict order defined by the configuration.
 	for _, stepName := range p.applicationOrder {
-		stepActivations, ok := activationsByStep.Load(stepName)
+		stepActivations, ok := stepWeights[stepName]
 		if !ok {
 			slog.Error("scheduler: missing activations for step", "name", stepName)
 			continue
 		}
-		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations.(map[string]float64))
+		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations)
 	}
 
 	if p.monitor.hostNumberOutObserver != nil {
@@ -134,5 +153,21 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	sort.Slice(hosts, func(i, j int) bool {
 		return outWeights[hosts[i]] > outWeights[hosts[j]]
 	})
+
+	// Publish information about the scheduling to an mqtt broker.
+	// In this way, other services can connect and record the scheduler
+	// behavior over a longer time, or react to the scheduling decision.
+	if p.mqttClient != nil {
+		//nolint:errcheck // Don't need to check the error here. It should be logged.
+		go p.mqttClient.Publish("cortex/scheduler/pipeline/finished", map[string]any{
+			"time":    time.Now().Unix(),
+			"request": request,
+			"order":   p.applicationOrder,
+			"in":      inWeights,
+			"steps":   stepWeights,
+			"out":     outWeights,
+		})
+	}
+
 	return hosts, nil
 }

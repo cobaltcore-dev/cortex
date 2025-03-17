@@ -65,6 +65,21 @@ owner-info:
   support-group: "cobaltcore-dev"
   enabled: true
 
+vernemq:
+  # Whether a vernemq instance should be spawned and mqtt sent.
+  enabled: true
+  # The username and password to use for the mqtt connection.
+  username: cortex
+  password: cortex
+  # Name under which the vernemq resources should be spawned.
+  fullnameOverride: "cortex-mqtt"
+  # Pass a basic configuration through a configmap that is spawned
+  # together with the vernemq instance.
+  envFrom:
+    - configMapRef:
+        name: "cortex-mqtt"
+  replicaCount: 1
+
 # Modes in which the service should be run.
 # Each mode is translated into a separate service and deployment.
 modes:
@@ -121,6 +136,14 @@ conf:
     labels:
       github_org: cobaltcore-dev
       github_repo: cortex
+
+  # Configure here if we should connect to an mqtt broker.
+  mqtt:
+    enabled: true
+    # Must match vernemq.fullnameOverride, vernemq.username and vernemq.password.
+    url: "tcp://cortex-mqtt:1883"
+    username: "cortex"
+    password: "cortex"
 
   # Connection parameters for the database where data is stored.
   db:

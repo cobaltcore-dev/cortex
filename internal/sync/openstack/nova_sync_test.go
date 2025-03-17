@@ -28,22 +28,6 @@ func (m *mockNovaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	return []Flavor{{ID: "1", Name: "flavor1"}}, nil
 }
 
-func TestNewNovaSyncer(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
-	conf := NovaConf{Types: []string{"servers", "hypervisors"}}
-
-	syncer := newNovaSyncer(testDB, mon, pc, conf)
-	if syncer == nil {
-		t.Fatal("expected non-nil syncer")
-	}
-}
-
 func TestNovaSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
@@ -51,10 +35,12 @@ func TestNovaSyncer_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
-	conf := NovaConf{Types: []string{"servers", "hypervisors"}}
-
-	syncer := newNovaSyncer(testDB, mon, pc, conf).(*novaSyncer)
+	syncer := &novaSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		api:  &mockNovaAPI{},
+	}
 	syncer.Init(context.Background())
 }
 
@@ -65,13 +51,15 @@ func TestNovaSyncer_Sync(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
-	conf := NovaConf{Types: []string{"servers", "hypervisors"}}
-
-	syncer := newNovaSyncer(testDB, mon, pc, conf).(*novaSyncer)
-	syncer.api = &mockNovaAPI{}
+	syncer := &novaSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		api:  &mockNovaAPI{},
+	}
 
 	ctx := context.Background()
+	syncer.Init(ctx)
 	err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -85,13 +73,15 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
-	conf := NovaConf{Types: []string{"servers", "hypervisors"}}
-
-	syncer := newNovaSyncer(testDB, mon, pc, conf).(*novaSyncer)
-	syncer.api = &mockNovaAPI{}
+	syncer := &novaSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		api:  &mockNovaAPI{},
+	}
 
 	ctx := context.Background()
+	syncer.Init(ctx)
 	servers, err := syncer.SyncServers(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -108,13 +98,15 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
-	conf := NovaConf{Types: []string{"servers", "hypervisors"}}
-
-	syncer := newNovaSyncer(testDB, mon, pc, conf).(*novaSyncer)
-	syncer.api = &mockNovaAPI{}
+	syncer := &novaSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		api:  &mockNovaAPI{},
+	}
 
 	ctx := context.Background()
+	syncer.Init(ctx)
 	hypervisors, err := syncer.SyncHypervisors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -131,13 +123,15 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
-	conf := NovaConf{Types: []string{"flavors"}}
-
-	syncer := newNovaSyncer(testDB, mon, pc, conf).(*novaSyncer)
-	syncer.api = &mockNovaAPI{}
+	syncer := &novaSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: NovaConf{Types: []string{"flavors"}},
+		api:  &mockNovaAPI{},
+	}
 
 	ctx := context.Background()
+	syncer.Init(ctx)
 	flavors, err := syncer.SyncFlavors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

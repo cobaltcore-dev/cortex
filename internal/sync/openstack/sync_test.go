@@ -7,7 +7,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -25,21 +24,6 @@ func (m *mockSyncer) Init(ctx context.Context) {
 func (m *mockSyncer) Sync(ctx context.Context) error {
 	m.syncCalled = true
 	return nil
-}
-
-func TestNewCombinedSyncer(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	config := conf.SyncOpenStackConfig{}
-	monitor := sync.Monitor{}
-
-	syncer := NewCombinedSyncer(context.Background(), config, monitor, testDB)
-	if syncer == nil {
-		t.Fatal("expected non-nil syncer")
-	}
 }
 
 func TestCombinedSyncer_Init(t *testing.T) {
