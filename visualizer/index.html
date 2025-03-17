@@ -263,7 +263,7 @@
 
   <section class="mqtt-url-input">
     <input type="text" id="mqtt-url" placeholder="Enter MQTT URL" value="ws://localhost:8004/mqtt" />
-    <button onclick="updateMqttUrl()">Reconnect MQTT</button>
+    <button onclick="reconnect()">Reconnect MQTT</button>
   </section>
 
   <script>
@@ -273,7 +273,7 @@
     }
 
     let client
-    async function connect() {
+    async function reconnect() {
       const url = document.getElementById('mqtt-url').value
       if (!url) return
       if (client) client.end()
@@ -297,7 +297,7 @@
         client.subscribe('cortex/sync/openstack/nova/hypervisors')
       })
     }
-    connect()
+    reconnect()
 
     async function redraw () {
       if (Object.keys(state.pipeline).length === 0) return
