@@ -38,6 +38,10 @@ k8s_resource('cortex-scheduler', port_forwards=[
 ], links=[
     link('localhost:8003/metrics', '/metrics'),
 ], labels=['Core-Services'])
+k8s_resource('cortex-mqtt', port_forwards=[
+    port_forward(1883, 1883), # Direct TCP connection
+    port_forward(8004, 8080), # Websocket connection
+], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
 k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))
@@ -45,7 +49,7 @@ k8s_resource('cortex-postgresql', port_forwards=[
     port_forward(5432, 5432),
 ], labels=['Core-Services'])
 
-########### Prometheus and Alertmanager
+########### Monitoring
 k8s_yaml(helm('./helm/prometheus', name='cortex-prometheus', set=[
     # Deploy prometheus operator CRDs, Prometheus, and Alertmanager
     'kube-prometheus-stack.enabled=true',
@@ -66,6 +70,13 @@ k8s_resource(
     objects=['cortex-alertmanager:Alertmanager:default'],
     labels=['Monitoring'],
 )
+docker_build('cortex-visualizer', 'visualizer')
+k8s_yaml('./visualizer/app.yaml')
+k8s_resource('cortex-visualizer', port_forwards=[
+    port_forward(8005, 80),
+], links=[
+    link('localhost:8005', 'visualizer'),
+], labels=['Monitoring'])
 
 ########### Plutono (Grafana Fork)
 docker_build('cortex-plutono', 'plutono')

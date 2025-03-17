@@ -172,6 +172,16 @@ type MonitoringConfig struct {
 	Port int `yaml:"port"`
 }
 
+// Configuration for the mqtt client.
+type MQTTConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// The URL of the MQTT broker to use for mqtt.
+	URL string `yaml:"url"`
+	// Credentials for the MQTT broker.
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
 // Configuration for the cortex service.
 type Config interface {
 	GetLoggingConfig() LoggingConfig
@@ -180,6 +190,7 @@ type Config interface {
 	GetFeaturesConfig() FeaturesConfig
 	GetSchedulerConfig() SchedulerConfig
 	GetMonitoringConfig() MonitoringConfig
+	GetMQTTConfig() MQTTConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
@@ -191,6 +202,7 @@ type config struct {
 	FeaturesConfig   `yaml:"features"`
 	SchedulerConfig  `yaml:"scheduler"`
 	MonitoringConfig `yaml:"monitoring"`
+	MQTTConfig       `yaml:"mqtt"`
 }
 
 // Create a new configuration from the default config yaml file.
@@ -227,3 +239,4 @@ func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
 func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
 func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
 func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
+func (c *config) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }

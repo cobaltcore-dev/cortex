@@ -5,6 +5,7 @@ go 1.24
 replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
 
 require (
+	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.6.0
 	github.com/lib/pq v1.10.9
@@ -13,7 +14,7 @@ require (
 	github.com/prometheus/client_golang v1.21.1
 	github.com/prometheus/client_model v0.6.1
 	github.com/sapcc/go-api-declarations v1.14.0
-	github.com/sapcc/go-bits v0.0.0-20250307173044-634e8ce82c05
+	github.com/sapcc/go-bits v0.0.0-20250303205011-14acb783d1d1
 	go.uber.org/automaxprocs v1.6.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -35,7 +36,7 @@ require (
 	github.com/poy/onpar v1.1.2 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/ziutek/mymysql v1.5.4 // indirect
-	golang.org/x/net v0.36.0 // indirect
+	golang.org/x/net v0.35.0 // indirect
 	gotest.tools v2.2.0+incompatible // indirect
 )
 
@@ -44,6 +45,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.18.2 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
@@ -55,6 +57,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	google.golang.org/protobuf v1.36.4 // indirect
 )
