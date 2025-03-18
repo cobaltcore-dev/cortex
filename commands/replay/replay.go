@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -63,7 +64,10 @@ func main() {
 		// Forward the request to the local Cortex instance
 		requestBody := must.Return(json.Marshal(request))
 		url := *cortexURL + "/scheduler/nova/external"
-		resp := must.Return(http.Post(url, "application/json", bytes.NewBuffer(requestBody)))
+		req := must.Return(http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewBuffer(requestBody)))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		must.Succeed(err)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			body := must.Return(io.ReadAll(resp.Body))
