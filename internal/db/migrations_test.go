@@ -71,3 +71,118 @@ func TestNewMigrater(t *testing.T) {
 		t.Fatal("expected migrations to be read")
 	}
 }
+
+func TestMigrateEmptyMigrations(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
+	defer db.Close()
+	defer dbEnv.Close()
+
+	// No migrations provided
+	migrations := map[string]string{}
+
+	m := &migrater{db: db, migrations: migrations}
+	m.Migrate()
+
+	// Ensure the migrations table is created even if no migrations exist
+	if !db.TableExists(Migration{}) {
+		t.Fatal("expected migrations table to exist")
+	}
+}
+
+func TestMigratePartialExecution(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
+	defer db.Close()
+	defer dbEnv.Close()
+
+	migrations := map[string]string{
+		"001_create_table.sql": "CREATE TABLE test (id INT);",
+		"002_insert_data.sql":  "INSERT INTO test (id) VALUES (1);",
+		"003_fail.sql":         "INVALID SQL;",
+	}
+
+	m := &migrater{db: db, migrations: migrations}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("expected panic, but code did not panic")
+		}
+	}()
+
+	// Run migrations, expecting a failure
+	m.Migrate()
+
+	// Ensure only the first migration was executed
+	if !db.TableExists(test{}) {
+		t.Fatal("expected table 'test' to exist")
+	}
+
+	// Ensure the second migration was not executed due to failure
+	var count int
+	err := db.SelectOne(&count, "SELECT COUNT(*) FROM test")
+	if err != nil {
+		t.Fatalf("unexpected error querying test table: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no rows in 'test' table, got %d", count)
+	}
+}
+
+func TestMigrateFreshDatabase(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
+	defer db.Close()
+	defer dbEnv.Close()
+
+	migrations := map[string]string{
+		"001_create_table.sql": "CREATE TABLE test (id INT);",
+		"002_insert_data.sql":  "INSERT INTO test (id) VALUES (1);",
+	}
+
+	m := &migrater{db: db, migrations: migrations}
+	m.Migrate()
+
+	// Ensure all migrations were executed
+	if !db.TableExists(test{}) {
+		t.Fatal("expected table 'test' to exist")
+	}
+
+	// Ensure data was inserted
+	var count int
+	err := db.SelectOne(&count, "SELECT COUNT(*) FROM test")
+	if err != nil {
+		t.Fatalf("unexpected error querying test table: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 row in 'test' table, got %d", count)
+	}
+}
+
+func TestMigrateAlreadyExecuted(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
+	defer db.Close()
+	defer dbEnv.Close()
+
+	migrations := map[string]string{
+		"001_create_table.sql": "CREATE TABLE test (id INT);",
+		"002_insert_data.sql":  "INSERT INTO test (id) VALUES (1);",
+	}
+
+	m := &migrater{db: db, migrations: migrations}
+	m.Migrate()
+
+	// Run migrations again
+	m.Migrate()
+
+	// Ensure no duplicate data was inserted
+	var count int
+	err := db.SelectOne(&count, "SELECT COUNT(*) FROM test")
+	if err != nil {
+		t.Fatalf("unexpected error querying test table: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 row in 'test' table, got %d", count)
+	}
+}

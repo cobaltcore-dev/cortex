@@ -6,6 +6,7 @@ package db
 import (
 	"embed"
 	"log/slog"
+	"slices"
 	"sort"
 )
 
@@ -21,6 +22,16 @@ type Migrater interface {
 type migrater struct {
 	migrations map[string]string
 	db         DB
+}
+
+// Migration model to keep track which migrations have been executed.
+type Migration struct {
+	FileName string `db:"file_name"`
+}
+
+// Table under which the migration model will be stored.
+func (Migration) TableName() string {
+	return "migrations"
 }
 
 // Create a new migrater with files embedded in the binary.
@@ -51,12 +62,66 @@ func (m *migrater) Migrate() {
 		migrationFileNames = append(migrationFileNames, name)
 	}
 	sort.Strings(migrationFileNames)
-	for _, name := range migrationFileNames {
-		migration := m.migrations[name]
-		slog.Info("executing migration", "name", name)
-		if _, err := m.db.Exec(migration); err != nil {
+
+	// Check if we are starting with a completely fresh database.
+	fresh := m.db.TableExists(Migration{})
+
+	// Create the table. Even if the table is already in the database, this
+	// operation will ensure that go-rm knows where to store the migration model.
+	if err := m.db.CreateTable(m.db.AddTable(Migration{})); err != nil {
+		panic(err)
+	}
+
+	// If the migrations table does not exist, assume the database is fresh
+	// which means that all migrations have been executed.
+	if fresh {
+		slog.Info("fresh database, tables will be created on-demand")
+		// Mark all migrations as executed.
+		var migrations []Migration
+		for _, name := range migrationFileNames {
+			migrations = append(migrations, Migration{FileName: name})
+		}
+		if err := ReplaceAll(m.db, migrations...); err != nil {
 			panic(err)
 		}
+		slog.Info("migrations executed")
+		return
+	}
+
+	// Get the migrations that were executed already.
+	var executedFiles []string
+	if _, err := m.db.Select(&executedFiles, "SELECT file_name FROM migrations"); err != nil {
+		panic(err)
+	}
+	migrationsToExecute := []string{}
+	for _, name := range migrationFileNames {
+		if slices.Contains(executedFiles, name) {
+			slog.Info("migration already executed, skipping", "name", name)
+			continue
+		}
+		migrationsToExecute = append(migrationsToExecute, name)
+	}
+
+	tx, err := m.db.Begin()
+	if err != nil {
+		slog.Error("failed to begin transaction", "error", err)
+		panic(tx.Rollback())
+	}
+	for _, fileName := range migrationsToExecute {
+		migration := m.migrations[fileName]
+		slog.Info("executing migration", "fileName", fileName)
+		if _, err := tx.Exec(migration); err != nil {
+			slog.Error("failed to execute migration", "fileName", fileName, "error", err)
+			panic(tx.Rollback())
+		}
+		migrationObj := Migration{FileName: fileName}
+		if err := tx.Insert(&migrationObj); err != nil {
+			slog.Error("failed to insert migration", "fileName", fileName, "error", err)
+			panic(tx.Rollback())
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		panic(err)
 	}
 	slog.Info("migrations executed")
 }
