@@ -25,6 +25,7 @@ var supportedExtractors = []plugins.FeatureExtractor{
 	&vmware.VROpsHostsystemContentionExtractor{},
 	// KVM-specific extractors
 	&kvm.NodeExporterHostCPUUsageExtractor{},
+	&kvm.NodeExporterHostMemoryActiveExtractor{},
 	// Shared extractors
 	&shared.FlavorHostSpaceExtractor{},
 }

@@ -24,3 +24,6 @@ go.work.sum
 
 # Just in case someone decides to put the secrets into the project dir.
 cortex.secrets.yaml
+
+# macOS specific files
+.DS_Store

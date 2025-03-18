@@ -13,7 +13,7 @@ import (
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
-func TestAvoidOverloadedHostsStep_Run(t *testing.T) {
+func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -50,7 +50,7 @@ func TestAvoidOverloadedHostsStep_Run(t *testing.T) {
         maxCPUUsageActivationLowerBound: 0.0
         maxCPUUsageActivationUpperBound: -0.5
     `)
-	step := &AvoidOverloadedHostsStep{}
+	step := &AvoidOverloadedHostsCPUStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
