@@ -60,7 +60,7 @@ The service will be accessible at [http://localhost:10350/](http://localhost:103
 
 To simulate Nova requests to your Cortex instance in Tilt, you can run the following command:
 ```bash
-go run simulation/fillup/fillup.go
+go run commands/fillup/fillup.go
 ```
 
 The script will show where random new VMs would be placed.
