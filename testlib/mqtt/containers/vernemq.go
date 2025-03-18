@@ -51,13 +51,13 @@ func (c *VernemqContainer) Init(t *testing.T) {
 		log.Fatalf("could not start resource: %s", err)
 	}
 	c.resource = resource
-	if err := c.resource.Expire(10); err != nil {
+	if err := c.resource.Expire(60); err != nil {
 		log.Fatalf("could not set expiration: %s", err)
 	}
 	// Wait for the mqtt connection to become available.
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker("tcp://localhost:" + c.GetPort())
-	opts.SetConnectTimeout(10 * time.Second)
+	opts.SetConnectTimeout(60 * time.Second)
 	opts.SetConnectRetry(true)
 	opts.SetConnectRetryInterval(5 * time.Second)
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
