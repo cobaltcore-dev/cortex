@@ -16,7 +16,7 @@ import (
 var migrationFiles embed.FS
 
 type Migrater interface {
-	Migrate()
+	Migrate(bool)
 }
 
 type migrater struct {
@@ -56,7 +56,7 @@ func NewMigrater(db DB) Migrater {
 }
 
 // Run all migrations ordered by their file name.
-func (m *migrater) Migrate() {
+func (m *migrater) Migrate(skipOnFresh bool) {
 	migrationFileNames := make([]string, 0, len(m.migrations))
 	for name := range m.migrations {
 		migrationFileNames = append(migrationFileNames, name)
@@ -64,7 +64,7 @@ func (m *migrater) Migrate() {
 	sort.Strings(migrationFileNames)
 
 	// Check if we are starting with a completely fresh database.
-	fresh := m.db.TableExists(Migration{})
+	fresh := !m.db.TableExists(Migration{})
 
 	// Create the table. Even if the table is already in the database, this
 	// operation will ensure that go-rm knows where to store the migration model.
@@ -74,7 +74,7 @@ func (m *migrater) Migrate() {
 
 	// If the migrations table does not exist, assume the database is fresh
 	// which means that all migrations have been executed.
-	if fresh {
+	if fresh && skipOnFresh {
 		slog.Info("fresh database, tables will be created on-demand")
 		// Mark all migrations as executed.
 		var migrations []Migration
