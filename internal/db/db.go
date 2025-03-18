@@ -72,7 +72,7 @@ func (d *DB) CreateTable(table ...*gorp.TableMap) error {
 		return tx.Rollback()
 	}
 	for _, t := range table {
-		slog.Info("creating table", "table", t.TableName)
+		slog.Info("creating table if exists", "table", t.TableName)
 		sql := t.SqlForCreate(true) // true means to add IF NOT EXISTS
 		if _, err := tx.Exec(sql); err != nil {
 			return tx.Rollback()
