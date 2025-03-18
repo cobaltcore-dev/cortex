@@ -189,6 +189,13 @@ conf:
               count by (node) (rate(node_cpu_seconds_total{mode="idle"}[1m]))
             )) * 100
           type: node_exporter_metric
+        - alias: node_exporter_memory_active_pct
+          query: |
+            (1 - (
+              (sum by (node) (node_memory_Active_bytes) / count by (node) (node_memory_Active_bytes)) /
+              (sum by (node) (node_memory_MemTotal_bytes) / count by (node) (node_memory_MemTotal_bytes))
+            )) * 100
+          type: node_exporter_metric
 
     openstack:
       keystone:
@@ -272,6 +279,12 @@ conf:
             prometheus:
               metrics:
                 - node_exporter_cpu_usage_pct
+      - name: node_exporter_host_memory_active_extractor
+        dependencies:
+          sync:
+            prometheus:
+              metrics:
+                - node_exporter_memory_active_pct
 
       # Shared extractors.
       - name: flavor_host_space_extractor
@@ -302,8 +315,8 @@ conf:
       - name: vmware_anti_affinity_noisy_projects
         options:
           # Min-max scaling for avg CPU usage of the project on a host.
-          avgCPUUsageLowerBound: 0
-          avgCPUUsageUpperBound: 100
+          avgCPUUsageLowerBound: 0 # pct
+          avgCPUUsageUpperBound: 100 # pct
           avgCPUUsageActivationLowerBound: 0.25
           avgCPUUsageActivationUpperBound: -0.5
         dependencies:
@@ -313,13 +326,13 @@ conf:
       - name: vmware_avoid_contended_hosts
         options:
           # Min-max scaling for avg CPU contention on the host.
-          avgCPUContentionLowerBound: 0
-          avgCPUContentionUpperBound: 100
+          avgCPUContentionLowerBound: 0 # pct
+          avgCPUContentionUpperBound: 100 # pct
           avgCPUContentionActivationLowerBound: 0.25
           avgCPUContentionActivationUpperBound: -0.5
           # Min-max scaling for max CPU contention on the host.
-          maxCPUContentionLowerBound: 0
-          maxCPUContentionUpperBound: 100
+          maxCPUContentionLowerBound: 0 # pct
+          maxCPUContentionUpperBound: 100 # pct
           maxCPUContentionActivationLowerBound: 0.25
           maxCPUContentionActivationUpperBound: -0.5
         dependencies:
@@ -328,42 +341,58 @@ conf:
               - vrops_hostsystem_contention_extractor
 
       # KVM specific scheduler steps.
-      - name: kvm_avoid_overloaded_hosts
+      - name: kvm_avoid_overloaded_hosts_cpu
         options:
           # Min-max scaling for avg CPU usage on the host.
-          avgCPUUsageLowerBound: 0
-          avgCPUUsageUpperBound: 100
+          avgCPUUsageLowerBound: 0 # pct
+          avgCPUUsageUpperBound: 100 # pct
           avgCPUUsageActivationLowerBound: 0.25
           avgCPUUsageActivationUpperBound: -0.5
           # Min-max scaling for max CPU usage on the host.
-          maxCPUUsageLowerBound: 0
-          maxCPUUsageUpperBound: 100
+          maxCPUUsageLowerBound: 0 # pct
+          maxCPUUsageUpperBound: 100 # pct
           maxCPUUsageActivationLowerBound: 0.25
           maxCPUUsageActivationUpperBound: -0.5
         dependencies:
           features:
             extractors:
               - node_exporter_host_cpu_usage_extractor
+      - name: kvm_avoid_overloaded_hosts_memory
+        options:
+          # Min-max scaling for avg memory usage on the host.
+          avgMemoryUsageLowerBound: 0 # pct
+          avgMemoryUsageUpperBound: 100 # pct
+          avgMemoryUsageActivationLowerBound: 0.25
+          avgMemoryUsageActivationUpperBound: -0.5
+          # Min-max scaling for max memory usage on the host.
+          maxMemoryUsageLowerBound: 0 # pct
+          maxMemoryUsageUpperBound: 100 # pct
+          maxMemoryUsageActivationLowerBound: 0.25
+          maxMemoryUsageActivationUpperBound: -0.5
+        dependencies:
+          features:
+            extractors:
+              - node_exporter_host_memory_active_extractor
 
       # Shared scheduler steps.
       - name: shared_flavor_binpacking
         options:
           # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
           cpuEnabled: true
-          cpuFreeLowerBound: 0
-          cpuFreeUpperBound: 128
+          cpuFreeLowerBound: 0 # vCPUs
+          cpuFreeUpperBound: 128 # vCPUs
           cpuFreeActivationLowerBound: 0.25
           cpuFreeActivationUpperBound: -0.5
           # Min-max scaling for gap-fitting based on memory space left (MB).
           ramEnabled: true
-          ramFreeLowerBound: 0
-          ramFreeUpperBound: 4000000
+          ramFreeLowerBound: 0 # MB
+          ramFreeUpperBound: 4000000 # MB
           ramFreeActivationLowerBound: 0.25
           ramFreeActivationUpperBound: -0.5
           # Min-max scaling for gap-fitting based on disk space left. (GB)
           diskEnabled: false
-          diskFreeLowerBound: 0
-          diskFreeUpperBound: 1000
+          diskFreeLowerBound: 0 # GB
+          diskFreeUpperBound: 1000 # GB
           diskFreeActivationLowerBound: 0.25
           diskFreeActivationUpperBound: -0.5
         dependencies:

@@ -35,7 +35,6 @@ func (*NodeExporterHostCPUUsageExtractor) GetName() string {
 }
 
 // Extract CPU usage of kvm hosts.
-// Depends on resolved kvm hosts (feature_resolved_host).
 func (e *NodeExporterHostCPUUsageExtractor) Extract() ([]plugins.Feature, error) {
 	var features []NodeExporterHostCPUUsage
 	if _, err := e.DB.Select(&features, `

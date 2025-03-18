@@ -13,7 +13,7 @@ import (
 
 // Options for the scheduling step, given through the step config in the service yaml file.
 // Use the options contained in this struct to configure the bounds for min-max scaling.
-type AvoidOverloadedHostsStepOpts struct {
+type AvoidOverloadedHostsCPUStepOpts struct {
 	AvgCPUUsageLowerBound float64 `yaml:"avgCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
 	AvgCPUUsageUpperBound float64 `yaml:"avgCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
 
@@ -27,7 +27,7 @@ type AvoidOverloadedHostsStepOpts struct {
 	MaxCPUUsageActivationUpperBound float64 `yaml:"maxCPUUsageActivationUpperBound"`
 }
 
-func (o AvoidOverloadedHostsStepOpts) Validate() error {
+func (o AvoidOverloadedHostsCPUStepOpts) Validate() error {
 	// Avoid zero-division during min-max scaling.
 	if o.AvgCPUUsageLowerBound == o.AvgCPUUsageUpperBound {
 		return errors.New("avgCPUUsageLowerBound and avgCPUUsageUpperBound must not be equal")
@@ -39,18 +39,18 @@ func (o AvoidOverloadedHostsStepOpts) Validate() error {
 }
 
 // Step to avoid high cpu hosts by downvoting them.
-type AvoidOverloadedHostsStep struct {
+type AvoidOverloadedHostsCPUStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AvoidOverloadedHostsStepOpts]
+	plugins.BaseStep[AvoidOverloadedHostsCPUStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *AvoidOverloadedHostsStep) GetName() string {
-	return "kvm_avoid_overloaded_hosts"
+func (s *AvoidOverloadedHostsCPUStep) GetName() string {
+	return "kvm_avoid_overloaded_hosts_cpu"
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsStep) Run(request api.Request) (map[string]float64, error) {
+func (s *AvoidOverloadedHostsCPUStep) Run(request api.Request) (map[string]float64, error) {
 	activations := s.BaseStep.BaseActivations(request)
 	if request.VMware {
 		// Don't run this step for VMware VMs.
