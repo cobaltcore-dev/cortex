@@ -126,9 +126,13 @@ func (api *prometheusAPI[M]) FetchMetrics(
 
 	err = json.NewDecoder(resp.Body).Decode(&prometheusData)
 	if err != nil {
+		bodyTrunc := string(bodyBytes)
+		if len(bodyTrunc) > 100 {
+			bodyTrunc = bodyTrunc[:100] + "..."
+		}
 		slog.Error(
 			"failed to decode response",
-			"body", string(bodyBytes),
+			"body", bodyTrunc,
 			"error", err,
 		)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
