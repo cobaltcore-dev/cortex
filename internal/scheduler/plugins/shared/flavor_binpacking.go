@@ -5,6 +5,7 @@ package shared
 
 import (
 	"errors"
+	"slices"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
@@ -13,6 +14,10 @@ import (
 
 // Options for the scheduling step, given through the step config in the service yaml file.
 type FlavorBinpackingStepOpts struct {
+	// Flavor names to consider for the binpacking.
+	// If this list is empty, all flavors are considered.
+	Flavors []string `yaml:"flavors"`
+
 	CPUEnabled                  bool    `yaml:"cpuEnabled"`
 	CPUFreeLowerBound           float64 `yaml:"cpuFreeLowerBound"` // -> mapped to ActivationLowerBound
 	CPUFreeUpperBound           float64 `yaml:"cpuFreeUpperBound"` // -> mapped to ActivationUpperBound
@@ -62,6 +67,11 @@ func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, err
 	activations := s.BaseStep.BaseActivations(request)
 
 	if request.Spec.Data.NInstances > 1 {
+		return activations, nil
+	}
+	flavorName := request.Spec.Data.Flavor.Data.Name
+	if len(s.Options.Flavors) > 0 && !slices.Contains(s.Options.Flavors, flavorName) {
+		// Skip this step if the flavor is not in the list of flavors to consider.
 		return activations, nil
 	}
 

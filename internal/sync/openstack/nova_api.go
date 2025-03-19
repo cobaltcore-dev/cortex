@@ -6,6 +6,7 @@ package openstack
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/gophercloud/gophercloud/v2"
@@ -20,12 +21,12 @@ type NovaAPI interface {
 	// Init the nova API.
 	Init(ctx context.Context)
 	// List all servers.
-	GetAllServers(ctx context.Context) ([]Server, error)
+	GetAllServers(ctx context.Context, changedSince time.Time) ([]Server, error)
 	// List all hypervisors.
-	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
+	GetAllHypervisors(ctx context.Context, changedSince time.Time) ([]Hypervisor, error)
 	// List all flavors.
 	// Note: This should only include the public flavors.
-	GetAllFlavors(ctx context.Context) ([]Flavor, error)
+	GetAllFlavors(ctx context.Context, changedSince time.Time) ([]Flavor, error)
 }
 
 // API for OpenStack Nova.
@@ -66,9 +67,9 @@ func (api *novaAPI) Init(ctx context.Context) {
 }
 
 // Get all Nova servers.
-func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
+func (api *novaAPI) GetAllServers(ctx context.Context, changedSince time.Time) ([]Server, error) {
 	label := Server{}.TableName()
-	slog.Info("fetching nova data", "label", label)
+	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {
@@ -76,8 +77,8 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
-		// TODO: Only retrieve the changed servers with changes-since.
-		return servers.List(api.sc, servers.ListOpts{AllTenants: true}).AllPages(ctx)
+		lo := servers.ListOpts{AllTenants: true, ChangesSince: changedSince.Format(time.RFC3339)}
+		return servers.List(api.sc, lo).AllPages(ctx)
 	}()
 	if err != nil {
 		return nil, err
@@ -94,9 +95,11 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 }
 
 // Get all Nova hypervisors.
-func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
+// Note: changedSince has no effect here since the Nova api does not support it.
+// We will fetch all hypervisors all the time.
+func (api *novaAPI) GetAllHypervisors(ctx context.Context, changedSince time.Time) ([]Hypervisor, error) {
 	label := Hypervisor{}.TableName()
-	slog.Info("fetching nova data", "label", label)
+	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {
@@ -104,7 +107,6 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
-		// TODO: Only retrieve the changed hypervisors with changes-since.
 		return hypervisors.List(api.sc, hypervisors.ListOpts{}).AllPages(ctx)
 	}()
 	if err != nil {
@@ -122,9 +124,9 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 }
 
 // Get all Nova flavors.
-func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
+func (api *novaAPI) GetAllFlavors(ctx context.Context, changedSince time.Time) ([]Flavor, error) {
 	label := Flavor{}.TableName()
-	slog.Info("fetching nova data", "label", label)
+	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {
@@ -132,8 +134,8 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
-		// TODO: Only retrieve the changed flavors with changes-since.
-		return flavors.ListDetail(api.sc, flavors.ListOpts{}).AllPages(ctx)
+		lo := flavors.ListOpts{ChangesSince: changedSince.Format(time.RFC3339)}
+		return flavors.ListDetail(api.sc, lo).AllPages(ctx)
 	}()
 	if err != nil {
 		return nil, err

@@ -145,7 +145,7 @@ func main() {
 	defer dbInstance.Close()
 
 	migrater := db.NewMigrater(dbInstance)
-	migrater.Migrate()
+	migrater.Migrate(true)
 
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)

@@ -27,7 +27,7 @@ func TestMigrate(t *testing.T) {
 	}
 
 	m := &migrater{db: db, migrations: migrations}
-	m.Migrate()
+	m.Migrate(false)
 
 	if !db.TableExists(test{}) {
 		t.Fatal("expected table to exist")
@@ -53,7 +53,7 @@ func TestMigrateWithFailure(t *testing.T) {
 		}
 	}()
 
-	m.Migrate()
+	m.Migrate(false)
 }
 
 func TestNewMigrater(t *testing.T) {
@@ -82,7 +82,7 @@ func TestMigrateEmptyMigrations(t *testing.T) {
 	migrations := map[string]string{}
 
 	m := &migrater{db: db, migrations: migrations}
-	m.Migrate()
+	m.Migrate(false)
 
 	// Ensure the migrations table is created even if no migrations exist
 	if !db.TableExists(Migration{}) {
@@ -111,7 +111,7 @@ func TestMigratePartialExecution(t *testing.T) {
 	}()
 
 	// Run migrations, expecting a failure
-	m.Migrate()
+	m.Migrate(false)
 
 	// Ensure only the first migration was executed
 	if !db.TableExists(test{}) {
@@ -141,7 +141,7 @@ func TestMigrateFreshDatabase(t *testing.T) {
 	}
 
 	m := &migrater{db: db, migrations: migrations}
-	m.Migrate()
+	m.Migrate(false)
 
 	// Ensure all migrations were executed
 	if !db.TableExists(test{}) {
@@ -171,10 +171,10 @@ func TestMigrateAlreadyExecuted(t *testing.T) {
 	}
 
 	m := &migrater{db: db, migrations: migrations}
-	m.Migrate()
+	m.Migrate(false)
 
 	// Run migrations again
-	m.Migrate()
+	m.Migrate(false)
 
 	// Ensure no duplicate data was inserted
 	var count int

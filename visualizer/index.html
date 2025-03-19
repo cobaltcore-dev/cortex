@@ -97,6 +97,7 @@
     td.weight {
       text-align: center;
       position: relative;
+      animation: weightAnimation 0.25s ease-in-out;
       div {
         border-radius: 0.5em;
         padding: 0.5em;
@@ -112,6 +113,11 @@
         background: var(--color-surface);
         z-index: -1;
       }
+    }
+    /* Animation for weights when they first appear */
+    @keyframes weightAnimation {
+      0% { opacity: 0; transform: scale(0.5); }
+      100% { opacity: 1; transform: scale(1); }
     }
 
     /* Table cell showing the hostname of a hypervisor. */
@@ -216,6 +222,16 @@
           align-items: center;
         }
       }
+    }
+    /* Animation for chart bars */
+    td.chart div.barsafter p,
+    td.chart div.barsbefore p {
+      animation: barAnim 0.25s ease-in-out;
+      overflow: hidden;
+    }
+    @keyframes barAnim {
+      0% { transform: scaleY(0); }
+      100% { transform: scaleY(1); }
     }
 
     /* Style for the input and button */

@@ -377,6 +377,9 @@ conf:
       # Shared scheduler steps.
       - name: shared_flavor_binpacking
         options:
+          # Flavor names to consider for binpacking.
+          # If empty, all flavors are considered.
+          flavors: []
           # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
           cpuEnabled: true
           cpuFreeLowerBound: 0 # vCPUs
