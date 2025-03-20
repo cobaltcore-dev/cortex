@@ -29,6 +29,15 @@ type VROpsHostsystemResolver struct {
 	]
 }
 
+// Get message topics that trigger a re-execution of this extractor.
+func (VROpsHostsystemResolver) Triggers() []string {
+	return []string{
+		"triggers/openstack_servers",
+		"triggers/openstack_hypervisors",
+		"triggers/vrops_vm_metrics",
+	}
+}
+
 // Name of this feature extractor that is used in the yaml config, for logging etc.
 func (e *VROpsHostsystemResolver) GetName() string {
 	return "vrops_hostsystem_resolver"

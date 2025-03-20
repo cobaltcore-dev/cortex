@@ -34,6 +34,14 @@ func (*VROpsHostsystemContentionExtractor) GetName() string {
 	return "vrops_hostsystem_contention_extractor"
 }
 
+// Get message topics that trigger a re-execution of this extractor.
+func (VROpsHostsystemContentionExtractor) Triggers() []string {
+	return []string{
+		"triggers/feature_vrops_resolved_hostsystem",
+		"triggers/vrops_hostsystem_cpu_contention_percentage",
+	}
+}
+
 // Extract CPU contention of hostsystems.
 // Depends on resolved vROps hostsystems (feature_vrops_resolved_hostsystem).
 func (e *VROpsHostsystemContentionExtractor) Extract() ([]plugins.Feature, error) {

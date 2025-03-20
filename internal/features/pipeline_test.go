@@ -29,6 +29,10 @@ func (m *mockFeatureExtractor) GetName() string {
 	return "mock_feature_extractor"
 }
 
+func (m *mockFeatureExtractor) Triggers() []string {
+	return nil
+}
+
 func TestFeatureExtractorPipeline_Extract(t *testing.T) {
 	// Test case: All extractors extract successfully
 	pipeline := &FeatureExtractorPipeline{

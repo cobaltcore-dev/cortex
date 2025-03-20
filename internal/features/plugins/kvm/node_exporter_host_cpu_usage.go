@@ -34,6 +34,13 @@ func (*NodeExporterHostCPUUsageExtractor) GetName() string {
 	return "node_exporter_host_cpu_usage_extractor"
 }
 
+// Get message topics that trigger a re-execution of this extractor.
+func (NodeExporterHostCPUUsageExtractor) Triggers() []string {
+	return []string{
+		"triggers/node_exporter_cpu_usage_pct",
+	}
+}
+
 // Extract CPU usage of kvm hosts.
 func (e *NodeExporterHostCPUUsageExtractor) Extract() ([]plugins.Feature, error) {
 	var features []NodeExporterHostCPUUsage

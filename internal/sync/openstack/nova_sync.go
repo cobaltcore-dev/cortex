@@ -73,22 +73,37 @@ func (s *novaSyncer) Init(ctx context.Context) {
 	}
 }
 
-// Sync the OpenStack nova objects.
+// Sync the OpenStack nova objects and publish triggers if enabled.
 func (s *novaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.conf.Types, "servers") {
 		if _, err := s.SyncServers(ctx); err != nil {
 			return err
 		}
+		// If enabled, notify others of the update.
+		if s.mqttClient != nil {
+			go s.mqttClient.Publish("triggers/openstack_servers", "")
+		}
 	}
 	if slices.Contains(s.conf.Types, "hypervisors") {
-		if _, err := s.SyncHypervisors(ctx); err != nil {
+		hypervisors, err := s.SyncHypervisors(ctx)
+		if err != nil {
 			return err
+		}
+		// If enabled, notify others of the update.
+		if s.mqttClient != nil {
+			// Publish additional information required for the visualizer.
+			go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", hypervisors)
+			go s.mqttClient.Publish("triggers/openstack_hypervisors", "")
 		}
 	}
 	if slices.Contains(s.conf.Types, "flavors") {
 		if _, err := s.SyncFlavors(ctx); err != nil {
 			return err
+		}
+		// If enabled, notify others of the update.
+		if s.mqttClient != nil {
+			go s.mqttClient.Publish("triggers/openstack_flavors", "")
 		}
 	}
 	return nil
@@ -127,12 +142,6 @@ func (s *novaSyncer) SyncServers(ctx context.Context) ([]Server, error) {
 		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
-	// Publish information about the servers to an mqtt broker.
-	// In this way, the changes in server placement etc. can be monitored
-	// or visualized by other services.
-	if s.mqttClient != nil {
-		go s.mqttClient.Publish("cortex/sync/openstack/nova/servers", servers)
-	}
 	return servers, nil
 }
 
@@ -168,12 +177,6 @@ func (s *novaSyncer) SyncHypervisors(ctx context.Context) ([]Hypervisor, error) 
 	if s.mon.PipelineRequestProcessedCounter != nil {
 		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
-	}
-	// Publish information about the hypervisors to an mqtt broker.
-	// In this way, the changes in hypervisor usage etc. can be monitored
-	// or visualized by other services.
-	if s.mqttClient != nil {
-		go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", hypervisors)
 	}
 	return hypervisors, nil
 }
