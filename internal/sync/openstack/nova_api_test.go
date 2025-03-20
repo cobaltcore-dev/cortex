@@ -52,7 +52,7 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 	api.Init(t.Context())
 
 	ctx := context.Background()
-	servers, err := api.GetAllServers(ctx, time.Time{})
+	servers, err := api.GetAllServers(ctx, &time.Time{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -84,7 +84,7 @@ func TestNovaAPI_GetAllHypervisors(t *testing.T) {
 	api.Init(t.Context())
 
 	ctx := context.Background()
-	hypervisors, err := api.GetAllHypervisors(ctx, time.Time{})
+	hypervisors, err := api.GetAllHypervisors(ctx, &time.Time{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -116,7 +116,7 @@ func TestNovaAPI_GetAllFlavors(t *testing.T) {
 	api.Init(t.Context())
 
 	ctx := context.Background()
-	flavors, err := api.GetAllFlavors(ctx, time.Time{})
+	flavors, err := api.GetAllFlavors(ctx, &time.Time{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
