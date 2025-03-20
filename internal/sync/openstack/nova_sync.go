@@ -131,7 +131,6 @@ func (s *novaSyncer) SyncServers(ctx context.Context) ([]Server, error) {
 	// In this way, the changes in server placement etc. can be monitored
 	// or visualized by other services.
 	if s.mqttClient != nil {
-		//nolint:errcheck // Don't need to check the error here. It should be logged.
 		go s.mqttClient.Publish("cortex/sync/openstack/nova/servers", servers)
 	}
 	return servers, nil
@@ -174,7 +173,6 @@ func (s *novaSyncer) SyncHypervisors(ctx context.Context) ([]Hypervisor, error) 
 	// In this way, the changes in hypervisor usage etc. can be monitored
 	// or visualized by other services.
 	if s.mqttClient != nil {
-		//nolint:errcheck // Don't need to check the error here. It should be logged.
 		go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", hypervisors)
 	}
 	return hypervisors, nil
