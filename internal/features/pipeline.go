@@ -132,15 +132,15 @@ func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureE
 	}
 }
 
-// Subscribe to the MQTT topics that trigger the feature extraction.
+// Extract features from the data sources when triggered by MQTT messages.
 // If mqtt is disabled, this function does nothing.
-func (p *FeatureExtractorPipeline) Subscribe() {
-	// Only initialized when mqtt is enabled.
-	mqttClient := mqtt.NewClient()
+func (p *FeatureExtractorPipeline) ExtractOnTrigger() {
+	// Subscribe to the MQTT topics that trigger the feature extraction.
+	mqttClient := mqtt.NewClient() // Only initialized when mqtt is enabled.
 	for topic, subgraphs := range p.triggerExecutionOrder {
 		if err := mqttClient.Subscribe(topic, func(_ pahomqtt.Client, _ pahomqtt.Message) {
 			for _, order := range subgraphs {
-				slog.Info("feature extractor: triggered by mqtt message", "topic", topic)
+				slog.Info("triggered feature extractors by mqtt message", "topic", topic)
 				p.extract(order)
 			}
 		}); err != nil {

@@ -37,8 +37,7 @@ func (*VROpsHostsystemContentionExtractor) GetName() string {
 // Get message topics that trigger a re-execution of this extractor.
 func (VROpsHostsystemContentionExtractor) Triggers() []string {
 	return []string{
-		"triggers/feature_vrops_resolved_hostsystem",
-		"triggers/vrops_hostsystem_cpu_contention_percentage",
+		"triggers/sync/prometheus/alias/vrops_hostsystem_cpu_contention_percentage",
 	}
 }
 

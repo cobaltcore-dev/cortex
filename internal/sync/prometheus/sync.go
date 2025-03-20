@@ -160,8 +160,8 @@ func newSyncerOfType[M PrometheusMetric](
 // Get the triggers produced by this syncer.
 func (s *syncer[M]) Triggers() []string {
 	return []string{
-		"triggers/" + s.MetricConf.Alias,
-		"triggers/" + s.MetricConf.Type,
+		"triggers/sync/prometheus/alias/" + s.MetricConf.Alias,
+		"triggers/sync/prometheus/types/" + s.MetricConf.Type,
 	}
 }
 

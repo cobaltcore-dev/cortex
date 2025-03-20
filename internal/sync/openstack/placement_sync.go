@@ -64,15 +64,21 @@ func (s *placementSyncer) Sync(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// If enabled, notify others of the update.
+		if s.mqttClient != nil {
+			topic := "triggers/sync/openstack/placement/types/resource_providers"
+			go s.mqttClient.Publish(topic, "")
+		}
 		// Dependencies of the resource providers.
 		if slices.Contains(s.conf.Types, "traits") {
 			if _, err := s.SyncTraits(ctx, rps); err != nil {
 				return err
 			}
-		}
-		// If enabled, notify others of the update.
-		if s.mqttClient != nil {
-			go s.mqttClient.Publish("triggers/openstack_resource_providers", "")
+			// If enabled, notify others of the update.
+			if s.mqttClient != nil {
+				topic := "triggers/sync/openstack/placement/types/traits"
+				go s.mqttClient.Publish(topic, "")
+			}
 		}
 	}
 	return nil

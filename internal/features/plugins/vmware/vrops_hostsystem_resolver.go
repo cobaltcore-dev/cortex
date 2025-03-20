@@ -32,9 +32,9 @@ type VROpsHostsystemResolver struct {
 // Get message topics that trigger a re-execution of this extractor.
 func (VROpsHostsystemResolver) Triggers() []string {
 	return []string{
-		"triggers/openstack_servers",
-		"triggers/openstack_hypervisors",
-		"triggers/vrops_vm_metrics",
+		"triggers/sync/openstack/nova/types/servers",
+		"triggers/sync/openstack/nova/types/hypervisors",
+		"triggers/sync/prometheus/type/vrops_vm_metrics",
 	}
 }
 

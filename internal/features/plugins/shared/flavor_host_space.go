@@ -46,8 +46,8 @@ func (*FlavorHostSpaceExtractor) GetName() string {
 // Get message topics that trigger a re-execution of this extractor.
 func (FlavorHostSpaceExtractor) Triggers() []string {
 	return []string{
-		"triggers/openstack_flavors",
-		"triggers/openstack_hypervisors",
+		"triggers/sync/openstack/nova/types/flavors",
+		"triggers/sync/openstack/nova/types/hypervisors",
 	}
 }
 

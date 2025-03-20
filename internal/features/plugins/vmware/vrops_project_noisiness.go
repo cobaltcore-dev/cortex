@@ -38,9 +38,9 @@ func (e *VROpsProjectNoisinessExtractor) GetName() string {
 // Get message topics that trigger a re-execution of this extractor.
 func (VROpsProjectNoisinessExtractor) Triggers() []string {
 	return []string{
-		"triggers/openstack_servers",
-		"triggers/openstack_hypervisors",
-		"triggers/vrops_virtualmachine_cpu_demand_ratio",
+		"triggers/sync/openstack/nova/types/servers",
+		"triggers/sync/openstack/nova/types/hypervisors",
+		"triggers/sync/prometheus/alias/vrops_virtualmachine_cpu_demand_ratio",
 	}
 }
 

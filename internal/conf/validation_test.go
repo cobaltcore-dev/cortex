@@ -28,7 +28,7 @@ features:
         sync:
           prometheus:
             metrics:
-              - metric_1
+              - alias: metric_1
           openstack:
             nova:
               types:
@@ -63,7 +63,7 @@ features:
         sync:
           prometheus:
             metrics:
-              - metric_1
+              - alias: metric_1
           openstack:
             nova:
               types:

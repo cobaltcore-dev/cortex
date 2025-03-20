@@ -63,6 +63,7 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 func runExtractor(ctx context.Context, registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
 	monitor := features.NewPipelineMonitor(registry)
 	pipeline := features.NewPipeline(config, db, monitor)
+	pipeline.ExtractOnTrigger()
 	for {
 		select {
 		case <-ctx.Done():

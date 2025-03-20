@@ -82,7 +82,7 @@ func (s *novaSyncer) Sync(ctx context.Context) error {
 		}
 		// If enabled, notify others of the update.
 		if s.mqttClient != nil {
-			go s.mqttClient.Publish("triggers/openstack_servers", "")
+			go s.mqttClient.Publish("triggers/sync/openstack/nova/types/servers", "")
 		}
 	}
 	if slices.Contains(s.conf.Types, "hypervisors") {
@@ -94,7 +94,7 @@ func (s *novaSyncer) Sync(ctx context.Context) error {
 		if s.mqttClient != nil {
 			// Publish additional information required for the visualizer.
 			go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", hypervisors)
-			go s.mqttClient.Publish("triggers/openstack_hypervisors", "")
+			go s.mqttClient.Publish("triggers/sync/openstack/nova/types/hypervisors", "")
 		}
 	}
 	if slices.Contains(s.conf.Types, "flavors") {
@@ -103,7 +103,7 @@ func (s *novaSyncer) Sync(ctx context.Context) error {
 		}
 		// If enabled, notify others of the update.
 		if s.mqttClient != nil {
-			go s.mqttClient.Publish("triggers/openstack_flavors", "")
+			go s.mqttClient.Publish("triggers/sync/openstack/nova/types/flavors", "")
 		}
 	}
 	return nil

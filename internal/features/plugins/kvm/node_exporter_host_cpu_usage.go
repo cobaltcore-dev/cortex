@@ -37,7 +37,7 @@ func (*NodeExporterHostCPUUsageExtractor) GetName() string {
 // Get message topics that trigger a re-execution of this extractor.
 func (NodeExporterHostCPUUsageExtractor) Triggers() []string {
 	return []string{
-		"triggers/node_exporter_cpu_usage_pct",
+		"triggers/sync/prometheus/alias/node_exporter_cpu_usage_pct",
 	}
 }
 
