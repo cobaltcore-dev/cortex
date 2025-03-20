@@ -33,6 +33,12 @@ features:
             nova:
               types:
                 - servers
+    - name: extractor_2
+      dependencies:
+        sync:
+          prometheus:
+            metrics:
+              - type: metric_type_1
 scheduler:
   steps:
     - name: scheduler_1
