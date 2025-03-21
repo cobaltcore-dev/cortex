@@ -66,6 +66,9 @@ owner-info:
   enabled: true
 
 vernemq:
+  image:
+    repository: ghcr.io/cobaltcore-dev/vernemq
+    tag: "sha-8c964a2"
   # Whether a vernemq instance should be spawned and mqtt sent.
   enabled: true
   # The username and password to use for the mqtt connection.
