@@ -17,15 +17,15 @@ type mockNovaAPI struct{}
 
 func (m *mockNovaAPI) Init(ctx context.Context) {}
 
-func (m *mockNovaAPI) GetAllServers(ctx context.Context, t time.Time) ([]Server, error) {
+func (m *mockNovaAPI) GetAllServers(ctx context.Context, t *time.Time) ([]Server, error) {
 	return []Server{{ID: "1", Name: "server1"}}, nil
 }
 
-func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context, t time.Time) ([]Hypervisor, error) {
+func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context, t *time.Time) ([]Hypervisor, error) {
 	return []Hypervisor{{ID: 1, Hostname: "hypervisor1"}}, nil
 }
 
-func (m *mockNovaAPI) GetAllFlavors(ctx context.Context, t time.Time) ([]Flavor, error) {
+func (m *mockNovaAPI) GetAllFlavors(ctx context.Context, t *time.Time) ([]Flavor, error) {
 	return []Flavor{{ID: "1", Name: "flavor1"}}, nil
 }
 
