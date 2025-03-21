@@ -98,12 +98,12 @@ func (s *novaSyncer) Sync(ctx context.Context) error {
 func (s *novaSyncer) SyncServers(ctx context.Context) ([]Server, error) {
 	label := Server{}.TableName()
 	// Check when the last sync run was performed, if there was one.
-	lastSyncTime := time.Time{} // Default to zero time.
+	var lastSyncTime *time.Time
 	var lastSync novaSync
 	if err := s.db.SelectOne(&lastSync, `
 		SELECT * FROM nova_sync WHERE name = :name ORDER BY time DESC LIMIT 1
 	`, map[string]any{"name": label}); err == nil {
-		lastSyncTime = lastSync.Time
+		lastSyncTime = &lastSync.Time
 		slog.Info("last nova sync run", "time", lastSync.Time)
 	} else {
 		slog.Info("no previous nova sync run")
@@ -141,12 +141,12 @@ func (s *novaSyncer) SyncServers(ctx context.Context) ([]Server, error) {
 func (s *novaSyncer) SyncHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	label := Hypervisor{}.TableName()
 	// Check when the last sync run was performed, if there was one.
-	lastSyncTime := time.Time{} // Default to zero time.
+	var lastSyncTime *time.Time
 	var lastSync novaSync
 	if err := s.db.SelectOne(&lastSync, `
 		SELECT * FROM nova_sync WHERE name = :name ORDER BY time DESC LIMIT 1
 	`, map[string]any{"name": label}); err == nil {
-		lastSyncTime = lastSync.Time
+		lastSyncTime = &lastSync.Time
 		slog.Info("last nova sync run", "time", lastSync.Time)
 	} else {
 		slog.Info("no previous nova sync run")
@@ -184,12 +184,12 @@ func (s *novaSyncer) SyncHypervisors(ctx context.Context) ([]Hypervisor, error) 
 func (s *novaSyncer) SyncFlavors(ctx context.Context) ([]Flavor, error) {
 	label := Flavor{}.TableName()
 	// Check when the last sync run was performed, if there was one.
-	lastSyncTime := time.Time{} // Default to zero time.
+	var lastSyncTime *time.Time // Default to zero time.
 	var lastSync novaSync
 	if err := s.db.SelectOne(&lastSync, `
 		SELECT * FROM nova_sync WHERE name = :name ORDER BY time DESC LIMIT 1
 	`, map[string]any{"name": label}); err == nil {
-		lastSyncTime = lastSync.Time
+		lastSyncTime = &lastSync.Time
 		slog.Info("last nova sync run", "time", lastSync.Time)
 	} else {
 		slog.Info("no previous nova sync run")
