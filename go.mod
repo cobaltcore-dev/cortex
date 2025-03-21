@@ -13,8 +13,8 @@ require (
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.21.1
 	github.com/prometheus/client_model v0.6.1
-	github.com/sapcc/go-api-declarations v1.14.0
-	github.com/sapcc/go-bits v0.0.0-20250303205011-14acb783d1d1
+	github.com/sapcc/go-api-declarations v1.14.1
+	github.com/sapcc/go-bits v0.0.0-20250320011137-5ec7b29ab444
 	go.uber.org/automaxprocs v1.6.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -50,7 +50,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/prometheus/common v0.62.0 // indirect
+	github.com/prometheus/common v0.63.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.58.0 // indirect
@@ -59,5 +59,5 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	google.golang.org/protobuf v1.36.4 // indirect
+	google.golang.org/protobuf v1.36.5 // indirect
 )
