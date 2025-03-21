@@ -159,7 +159,6 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	// In this way, other services can connect and record the scheduler
 	// behavior over a longer time, or react to the scheduling decision.
 	if p.mqttClient != nil {
-		//nolint:errcheck // Don't need to check the error here. It should be logged.
 		go p.mqttClient.Publish("cortex/scheduler/pipeline/finished", map[string]any{
 			"time":    time.Now().Unix(),
 			"request": request,

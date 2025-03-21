@@ -35,6 +35,15 @@ func (e *VROpsProjectNoisinessExtractor) GetName() string {
 	return "vrops_project_noisiness_extractor"
 }
 
+// Get message topics that trigger a re-execution of this extractor.
+func (VROpsProjectNoisinessExtractor) Triggers() []string {
+	return []string{
+		"triggers/sync/openstack/nova/types/servers",
+		"triggers/sync/openstack/nova/types/hypervisors",
+		"triggers/sync/prometheus/alias/vrops_virtualmachine_cpu_demand_ratio",
+	}
+}
+
 // Extract the noisiness for each project in OpenStack with the following steps:
 // 1. Get the average cpu usage of each project through the vROps metrics.
 // 2. Find on which hosts the projects are currently running through the

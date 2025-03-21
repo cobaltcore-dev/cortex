@@ -23,7 +23,10 @@ type DependencyConfig struct {
 			} `yaml:"placement,omitempty"`
 		} `yaml:"openstack,omitempty"`
 		Prometheus struct {
-			MetricNames []string `yaml:"metrics,omitempty"`
+			Metrics []struct {
+				Alias string `yaml:"alias,omitempty"`
+				Type  string `yaml:"type,omitempty"`
+			} `yaml:"metrics,omitempty"`
 		} `yaml:"prometheus,omitempty"`
 	}
 	Features struct {
@@ -57,12 +60,14 @@ func (deps *DependencyConfig) validate(c config) error {
 			)
 		}
 	}
-	confedMetrics := make(map[string]bool)
+	confedMetricAliases := make(map[string]bool)
+	confedMetricTypes := make(map[string]bool)
 	for _, metric := range c.SyncConfig.Prometheus.Metrics {
-		confedMetrics[metric.Alias] = true
+		confedMetricAliases[metric.Alias] = true
+		confedMetricTypes[metric.Type] = true
 	}
-	for _, metric := range deps.Sync.Prometheus.MetricNames {
-		if !confedMetrics[metric] {
+	for _, metric := range deps.Sync.Prometheus.Metrics {
+		if !confedMetricAliases[metric.Alias] && !confedMetricTypes[metric.Type] {
 			return fmt.Errorf(
 				"prometheus metric dependency %s not satisfied, got %v",
 				metric, c.SyncConfig.Prometheus.Metrics,

@@ -34,6 +34,13 @@ func (*NodeExporterHostMemoryActiveExtractor) GetName() string {
 	return "node_exporter_host_memory_active_extractor"
 }
 
+// Get message topics that trigger a re-execution of this extractor.
+func (NodeExporterHostMemoryActiveExtractor) Triggers() []string {
+	return []string{
+		"triggers/sync/prometheus/alias/node_exporter_memory_active_pct",
+	}
+}
+
 // Extract how much memory of kvm hosts is active.
 func (e *NodeExporterHostMemoryActiveExtractor) Extract() ([]plugins.Feature, error) {
 	var features []NodeExporterHostMemoryActive

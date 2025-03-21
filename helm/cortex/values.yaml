@@ -248,7 +248,7 @@ conf:
             prometheus:
               metrics:
                 # Any vrops vm metric suffices.
-                - vrops_virtualmachine_cpu_demand_ratio
+                - type: vrops_vm_metric
             openstack:
               nova:
                 types:
@@ -259,7 +259,7 @@ conf:
           sync:
             prometheus:
               metrics:
-                - vrops_virtualmachine_cpu_demand_ratio
+                - alias: vrops_virtualmachine_cpu_demand_ratio
             openstack:
               nova:
                 types:
@@ -273,7 +273,7 @@ conf:
           sync:
             prometheus:
               metrics:
-                - vrops_hostsystem_cpu_contention_percentage
+                - alias: vrops_hostsystem_cpu_contention_percentage
 
       # KVM-specific extractors.
       - name: node_exporter_host_cpu_usage_extractor
@@ -281,13 +281,13 @@ conf:
           sync:
             prometheus:
               metrics:
-                - node_exporter_cpu_usage_pct
+                - alias: node_exporter_cpu_usage_pct
       - name: node_exporter_host_memory_active_extractor
         dependencies:
           sync:
             prometheus:
               metrics:
-                - node_exporter_memory_active_pct
+                - alias: node_exporter_memory_active_pct
 
       # Shared extractors.
       - name: flavor_host_space_extractor

@@ -24,22 +24,6 @@ func (m *mockPlacementAPI) GetAllTraits(ctx context.Context, rps []ResourceProvi
 	return []Trait{{ResourceProviderUUID: "1", Name: "trait1"}}, nil
 }
 
-func TestNewPlacementSyncer(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
-	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
-
-	syncer := newPlacementSyncer(testDB, mon, pc, conf)
-	if syncer == nil {
-		t.Fatal("expected non-nil syncer")
-	}
-}
-
 func TestPlacementSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
@@ -50,7 +34,12 @@ func TestPlacementSyncer_Init(t *testing.T) {
 	pc := &mockKeystoneAPI{}
 	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
-	syncer := newPlacementSyncer(testDB, mon, pc, conf).(*placementSyncer)
+	syncer := &placementSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: conf,
+		api:  NewPlacementAPI(mon, pc, conf),
+	}
 	syncer.Init(t.Context())
 }
 
@@ -64,7 +53,12 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	pc := &mockKeystoneAPI{}
 	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
-	syncer := newPlacementSyncer(testDB, mon, pc, conf).(*placementSyncer)
+	syncer := &placementSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: conf,
+		api:  NewPlacementAPI(mon, pc, conf),
+	}
 	syncer.api = &mockPlacementAPI{}
 
 	ctx := context.Background()
@@ -84,7 +78,12 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 	pc := &mockKeystoneAPI{}
 	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
-	syncer := newPlacementSyncer(testDB, mon, pc, conf).(*placementSyncer)
+	syncer := &placementSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: conf,
+		api:  NewPlacementAPI(mon, pc, conf),
+	}
 	syncer.api = &mockPlacementAPI{}
 
 	ctx := context.Background()
@@ -107,7 +106,12 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 	pc := &mockKeystoneAPI{}
 	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
-	syncer := newPlacementSyncer(testDB, mon, pc, conf).(*placementSyncer)
+	syncer := &placementSyncer{
+		db:   testDB,
+		mon:  mon,
+		conf: conf,
+		api:  NewPlacementAPI(mon, pc, conf),
+	}
 	syncer.api = &mockPlacementAPI{}
 
 	ctx := context.Background()
