@@ -16,12 +16,16 @@ helm_repo(
     labels=['Repositories'],
 )
 
+# Build the helm charts
+local('test -f ./helm/cortex/Chart.lock || helm dep up ./helm/cortex')
+local('test -f ./helm/prometheus/Chart.lock || helm dep up ./helm/prometheus')
+local('test -f ./helm/postgres/Chart.lock || helm dep up ./helm/postgres')
+
 ########### Cortex Core Services
 tilt_values = os.getenv('TILT_VALUES_PATH')
 docker_build('cortex', '.', only=[
     'internal/', 'main.go', 'go.mod', 'go.sum', 'Makefile', tilt_values,
 ])
-local('helm dep up ./helm/cortex')
 k8s_yaml(helm('./helm/cortex', name='cortex', values=[tilt_values]))
 k8s_resource('cortex-syncer', port_forwards=[
     port_forward(8001, 2112),
@@ -45,14 +49,12 @@ k8s_resource('cortex-mqtt', port_forwards=[
 ], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
-local('helm dep up ./helm/postgres')
 k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))
 k8s_resource('cortex-postgresql', port_forwards=[
     port_forward(5432, 5432),
 ], labels=['Core-Services'])
 
 ########### Monitoring
-local('helm dep up ./helm/prometheus')
 k8s_yaml(helm('./helm/prometheus', name='cortex-prometheus', set=[
     # Deploy prometheus operator CRDs, Prometheus, and Alertmanager
     'kube-prometheus-stack.enabled=true',
