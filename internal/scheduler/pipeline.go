@@ -145,6 +145,14 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations)
 	}
 
+	// For now, the scheduler should not filter out all hosts.
+	// If it does, we should fall back to the original host list.
+	// This will prevent Cortex from blocking all scheduling requests.
+	if len(outWeights) == 0 {
+		slog.Warn("scheduler: all hosts filtered out, falling back to original host list")
+		outWeights = inWeights
+	}
+
 	if p.monitor.hostNumberOutObserver != nil {
 		p.monitor.hostNumberOutObserver.Observe(float64(len(outWeights)))
 	}
