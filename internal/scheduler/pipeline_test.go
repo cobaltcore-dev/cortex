@@ -118,7 +118,7 @@ func TestPipeline_FallbackToOriginalHosts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := pipeline.Run(
 				tt.request,
-				map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
+				map[string]float64{"host1": 1.0, "host2": 0.5, "host3": 0.0},
 			)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
