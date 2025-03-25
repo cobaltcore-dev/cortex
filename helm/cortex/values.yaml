@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 image:
-  repository: cortex
+  repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "main"
@@ -67,8 +67,8 @@ owner-info:
 
 vernemq:
   image:
-    repository: ghcr.io/cobaltcore-dev/vernemq
-    tag: "sha-8c964a2"
+    repository: ghcr.io/cobaltcore-dev/cortex-vernemq
+    tag: "sha-0373f39"
   # Whether a vernemq instance should be spawned and mqtt sent.
   enabled: true
   # The username and password to use for the mqtt connection.

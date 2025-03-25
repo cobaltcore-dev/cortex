@@ -23,7 +23,7 @@ local('test -f ./helm/postgres/Chart.lock || helm dep up ./helm/postgres')
 
 ########### Cortex Core Services
 tilt_values = os.getenv('TILT_VALUES_PATH')
-docker_build('cortex', '.', only=[
+docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
     'internal/', 'main.go', 'go.mod', 'go.sum', 'Makefile', tilt_values,
 ])
 k8s_yaml(helm('./helm/cortex', name='cortex', values=[tilt_values]))

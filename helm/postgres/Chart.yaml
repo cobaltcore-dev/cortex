@@ -4,7 +4,7 @@
 apiVersion: v2
 description: Postgres setup for Cortex.
 name: cortex-postgres
-version: 0.0.1
+version: 0.0.2
 dependencies:
   - name: postgresql
     repository: oci://registry-1.docker.io/bitnamicharts
