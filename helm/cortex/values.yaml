@@ -68,7 +68,7 @@ owner-info:
 vernemq:
   image:
     repository: ghcr.io/cobaltcore-dev/cortex-vernemq
-    tag: "sha-0373f39"
+    tag: "latest"
   # Whether a vernemq instance should be spawned and mqtt sent.
   enabled: true
   # The username and password to use for the mqtt connection.

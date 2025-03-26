@@ -6,9 +6,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 env:
   REGISTRY: ghcr.io
@@ -100,6 +97,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
+            latest
       - name: Build and Push VerneMQ
         id: push_vernemq
         uses: docker/build-push-action@v6
