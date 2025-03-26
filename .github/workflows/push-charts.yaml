@@ -2,7 +2,7 @@ name: Package and Publish Helm Charts
 on:
   push:
     branches:
-      - main
+      - release
 
 concurrency:
   group: push-charts-${{ github.repository }}
