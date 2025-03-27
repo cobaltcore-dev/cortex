@@ -1,7 +1,6 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if index .Values "vernemq" "enabled" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -18,4 +17,3 @@ data:
   DOCKER_VERNEMQ_USER_{{ .Values.vernemq.username }}: "{{ .Values.vernemq.password }}"
   DOCKER_VERNEMQ_LISTENER__TCP__LOCALHOST: "127.0.0.1:1883"
   DOCKER_VERNEMQ_LISTENER__WS__LOCALHOST: "127.0.0.1:8080"
-{{- end }}

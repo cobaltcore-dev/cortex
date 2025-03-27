@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockPipelineStep struct {
@@ -40,6 +41,7 @@ func TestPipeline_Run(t *testing.T) {
 		applicationOrder: []string{
 			"mock_pipeline_step",
 		},
+		mqttClient: &mqtt.MockClient{},
 	}
 
 	tests := []struct {

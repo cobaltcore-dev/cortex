@@ -17,7 +17,7 @@ import (
 
 type Client interface {
 	Connect() error
-	Publish(topic string, obj any) error
+	Publish(topic string, obj any)
 	Disconnect()
 	Subscribe(topic string, callback mqtt.MessageHandler) error
 }
@@ -37,7 +37,7 @@ func NewClient() Client {
 
 // Connect to the mqtt broker.
 func (t *client) Connect() error {
-	if t.client != nil || !t.conf.Enabled {
+	if t.client != nil {
 		return nil
 	}
 
@@ -77,11 +77,16 @@ func (t *client) Connect() error {
 }
 
 // Publish mqtt data to the mqtt broker.
-func (t *client) Publish(topic string, obj any) error {
-	if !t.conf.Enabled {
-		return nil
+// In case of errors, log them out and return.
+func (t *client) Publish(topic string, obj any) {
+	if err := t.publish(topic, obj); err != nil {
+		slog.Error("failed to publish mqtt data", "err", err)
 	}
+	slog.Info("published mqtt data", "topic", topic)
+}
 
+// Publish mqtt data to the mqtt broker.
+func (t *client) publish(topic string, obj any) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -98,19 +103,13 @@ func (t *client) Publish(topic string, obj any) error {
 	dataStr := string(data)
 	pub := client.Publish(topic, 2, true, dataStr)
 	if pub.Wait() && pub.Error() != nil {
-		slog.Error("failed to publish mqtt data", "err", pub.Error())
-		return pub.Error()
+		return err
 	}
-	slog.Info("published mqtt data")
 	return nil
 }
 
 // Subscribe to a topic on the mqtt broker.
 func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
-	if !t.conf.Enabled {
-		return nil
-	}
-
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -131,7 +130,7 @@ func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
 
 // Disconnect from the mqtt broker.
 func (t *client) Disconnect() {
-	if t.client == nil || !t.conf.Enabled {
+	if t.client == nil {
 		return
 	}
 	client := *t.client

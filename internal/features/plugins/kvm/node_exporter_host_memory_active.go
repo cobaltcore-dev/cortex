@@ -5,6 +5,7 @@ package kvm
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
 
 // Feature that maps memory active percentage of kvm hosts.
@@ -32,6 +33,13 @@ type NodeExporterHostMemoryActiveExtractor struct {
 // Name of this feature extractor that is used in the yaml config, for logging etc.
 func (*NodeExporterHostMemoryActiveExtractor) GetName() string {
 	return "node_exporter_host_memory_active_extractor"
+}
+
+// Get message topics that trigger a re-execution of this extractor.
+func (NodeExporterHostMemoryActiveExtractor) Triggers() []string {
+	return []string{
+		prometheus.TriggerMetricAliasSynced("node_exporter_memory_active_pct"),
+	}
 }
 
 // Extract how much memory of kvm hosts is active.

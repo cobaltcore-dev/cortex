@@ -174,7 +174,6 @@ type MonitoringConfig struct {
 
 // Configuration for the mqtt client.
 type MQTTConfig struct {
-	Enabled bool `yaml:"enabled"`
 	// The URL of the MQTT broker to use for mqtt.
 	URL string `yaml:"url"`
 	// Credentials for the MQTT broker.

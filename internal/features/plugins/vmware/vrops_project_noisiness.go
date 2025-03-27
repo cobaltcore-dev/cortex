@@ -5,6 +5,8 @@ package vmware
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
 
 // Feature that calculates the noisiness of projects and on which
@@ -33,6 +35,15 @@ type VROpsProjectNoisinessExtractor struct {
 // Name of this feature extractor that is used in the yaml config, for logging etc.
 func (e *VROpsProjectNoisinessExtractor) GetName() string {
 	return "vrops_project_noisiness_extractor"
+}
+
+// Get message topics that trigger a re-execution of this extractor.
+func (VROpsProjectNoisinessExtractor) Triggers() []string {
+	return []string{
+		openstack.TriggerNovaServersSynced,
+		openstack.TriggerNovaHypervisorsSynced,
+		prometheus.TriggerMetricAliasSynced("vrops_virtualmachine_cpu_demand_ratio"),
+	}
 }
 
 // Extract the noisiness for each project in OpenStack with the following steps:

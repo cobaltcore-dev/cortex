@@ -70,3 +70,102 @@ func TestDependencyGraph_Resolve(t *testing.T) {
 		})
 	}
 }
+
+func TestDependencyGraph_DistinctSubgraphs(t *testing.T) {
+	tests := []struct {
+		name      string
+		graph     DependencyGraph[string]
+		condition func(string) bool
+		expected  []DependencyGraph[string]
+	}{
+		{
+			name: "SingleSubgraph",
+			graph: DependencyGraph[string]{
+				Dependencies: map[string][]string{
+					"B": {"A"},
+					"C": {"B"},
+				},
+				Nodes: []string{"A", "B", "C"},
+			},
+			condition: func(node string) bool {
+				return node == "A" || node == "B" || node == "C"
+			},
+			expected: []DependencyGraph[string]{
+				{
+					Dependencies: map[string][]string{
+						"B": {"A"},
+						"C": {"B"},
+					},
+					Nodes: []string{"A", "B", "C"},
+				},
+			},
+		},
+		{
+			name: "MultipleSubgraphs",
+			graph: DependencyGraph[string]{
+				Dependencies: map[string][]string{
+					"E": {"D", "C"},
+					"C": {"B"},
+					"D": {"B"},
+					"B": {"A"},
+					"I": {"H", "G"},
+					"H": {"F"},
+					"G": {"F"},
+				},
+				Nodes: []string{"A", "B", "C", "D", "E", "F", "G", "H", "I"},
+			},
+			condition: func(node string) bool {
+				return node == "B" || node == "D" || node == "F"
+			},
+			expected: []DependencyGraph[string]{
+				{
+					Dependencies: map[string][]string{
+						"E": {"D", "C"},
+						"C": {"B"},
+						"D": {"B"},
+					},
+					Nodes: []string{"B", "C", "D", "E"},
+				},
+				{
+					Dependencies: map[string][]string{
+						"I": {"H", "G"},
+						"H": {"F"},
+						"G": {"F"},
+					},
+					Nodes: []string{"F", "G", "H", "I"},
+				},
+			},
+		},
+		{
+			name: "NoMatchingNodes",
+			graph: DependencyGraph[string]{
+				Dependencies: map[string][]string{
+					"B": {"A"},
+					"C": {"B"},
+				},
+				Nodes: []string{"A", "B", "C"},
+			},
+			condition: func(node string) bool {
+				return false
+			},
+			expected: []DependencyGraph[string]{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.graph.DistinctSubgraphs(tt.condition)
+			if len(result) != len(tt.expected) {
+				t.Errorf("DistinctSubgraphs() = %v, expected %v", result, tt.expected)
+				return
+			}
+			for i, subgraph := range result {
+				if !reflect.DeepEqual(subgraph.Dependencies, tt.expected[i].Dependencies) ||
+					!reflect.DeepEqual(subgraph.Nodes, tt.expected[i].Nodes) {
+					t.Errorf("DistinctSubgraphs() = %v, expected %v", result, tt.expected)
+					return
+				}
+			}
+		})
+	}
+}

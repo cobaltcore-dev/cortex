@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockNovaAPI struct{}
@@ -53,10 +54,11 @@ func TestNovaSyncer_Sync(t *testing.T) {
 
 	mon := sync.Monitor{}
 	syncer := &novaSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
-		api:  &mockNovaAPI{},
+		db:         testDB,
+		mon:        mon,
+		conf:       NovaConf{Types: []string{"servers", "hypervisors"}},
+		api:        &mockNovaAPI{},
+		mqttClient: &mqtt.MockClient{},
 	}
 
 	ctx := context.Background()
