@@ -54,7 +54,7 @@ jobs:
             GIT_TAG=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}
           subject-digest: ${{ steps.push_cortex.outputs.digest }}
@@ -108,7 +108,7 @@ jobs:
           tags: ${{ steps.meta_vernemq.outputs.tags }}
           labels: ${{ steps.meta_vernemq.outputs.labels }}
       - name: Generate Artifact Attestation
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-vernemq
           subject-digest: ${{ steps.push_vernemq.outputs.digest }}
