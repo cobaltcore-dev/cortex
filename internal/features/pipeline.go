@@ -5,6 +5,7 @@ package features
 
 import (
 	"log/slog"
+	"slices"
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -13,12 +14,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+
+	pahomqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 // Configuration of feature extractors supported by the scheduler.
-// The actual features to extract are defined in the configuration file.
-var supportedExtractors = []plugins.FeatureExtractor{
+var SupportedExtractors = []plugins.FeatureExtractor{
 	// VMware-specific extractors
 	&vmware.VROpsHostsystemResolver{},
 	&vmware.VROpsProjectNoisinessExtractor{},
@@ -32,18 +34,42 @@ var supportedExtractors = []plugins.FeatureExtractor{
 
 // Pipeline that contains multiple feature extractors and executes them.
 type FeatureExtractorPipeline struct {
-	// The order in which feature extractors are executed.
+	// The dependency graph of the feature extractors, which is used to
+	// determine the execution order of the feature extractors.
+	//
 	// For example, [[f1], [f2, f3], [f4]] means that f1 is executed first
 	// followed by f2 and f3 in parallel, and finally f4.
-	executionOrder [][]plugins.FeatureExtractor
+	dependencyGraph conf.DependencyGraph[plugins.FeatureExtractor]
+	// The resolved order in which feature extractors are executed when triggered
+	// by a message on a topic (key).
+	//
+	// Dimensions: distinct subgraph depending on the topic -> step -> extractor.
+	triggerExecutionOrder map[string][][][]plugins.FeatureExtractor
+	// Database to store the extracted features.
+	db db.DB
+	// Config to use for the feature extractors.
+	config conf.FeaturesConfig
 	// Monitor to use for tracking the pipeline.
 	monitor Monitor
 }
 
-// Create a new feature extractor pipeline with extractors contained in
-// the configuration. This function automatically resolves an execution
-// graph to automate parallel execution of the individual feature extractors.
+// Create a new feature extractor pipeline with extractors contained in the configuration.
 func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureExtractorPipeline {
+	return FeatureExtractorPipeline{
+		db:      database,
+		config:  config,
+		monitor: m,
+	}
+}
+
+// Initialize the feature extractors in the pipeline.
+func (p *FeatureExtractorPipeline) Init(supportedExtractors []plugins.FeatureExtractor) {
+	p.initDependencyGraph(supportedExtractors)
+	p.initTriggerExecutionOrder()
+}
+
+// Initialize the execution order of the feature extractors.
+func (p *FeatureExtractorPipeline) initDependencyGraph(supportedExtractors []plugins.FeatureExtractor) {
 	supportedExtractorsByName := make(map[string]plugins.FeatureExtractor)
 	for _, extractor := range supportedExtractors {
 		supportedExtractorsByName[extractor.GetName()] = extractor
@@ -51,13 +77,13 @@ func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureE
 
 	// Load all extractors from the configuration.
 	extractorsByName := make(map[string]plugins.FeatureExtractor)
-	for _, extractorConfig := range config.Extractors {
+	for _, extractorConfig := range p.config.Extractors {
 		extractorFunc, ok := supportedExtractorsByName[extractorConfig.Name]
 		if !ok {
 			panic("unknown feature extractor: " + extractorConfig.Name)
 		}
-		wrappedExtractor := monitorFeatureExtractor(extractorFunc, m)
-		if err := wrappedExtractor.Init(database, extractorConfig.Options); err != nil {
+		wrappedExtractor := monitorFeatureExtractor(extractorFunc, p.monitor)
+		if err := wrappedExtractor.Init(p.db, extractorConfig.Options); err != nil {
 			panic("failed to initialize feature extractor: " + err.Error())
 		}
 		extractorsByName[extractorConfig.Name] = wrappedExtractor
@@ -71,7 +97,7 @@ func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureE
 	// Build the dependency graph and resolve the execution order.
 	extractors := []plugins.FeatureExtractor{}
 	extractorDependencies := make(map[plugins.FeatureExtractor][]plugins.FeatureExtractor)
-	for _, extractorConfig := range config.Extractors {
+	for _, extractorConfig := range p.config.Extractors {
 		extractor := extractorsByName[extractorConfig.Name]
 		extractors = append(extractors, extractor)
 		dependencies := []plugins.FeatureExtractor{}
@@ -84,36 +110,73 @@ func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureE
 		}
 		extractorDependencies[extractor] = dependencies
 	}
-	dependencyGraph := conf.DependencyGraph[plugins.FeatureExtractor]{
+	p.dependencyGraph = conf.DependencyGraph[plugins.FeatureExtractor]{
 		Dependencies: extractorDependencies,
 		Nodes:        extractors,
 	}
-	executionOrder := dependencyGraph.Resolve()
-
-	// Print out the execution order to the log.
-	slog.Info("feature extractor: dependency graph resolved")
-	for i, extractors := range executionOrder {
-		for _, extractor := range extractors {
-			slog.Info(
-				"feature extractor: execution order",
-				"group", i, "name", extractor.GetName(),
-			)
-		}
-	}
-
-	return FeatureExtractorPipeline{executionOrder: executionOrder, monitor: m}
 }
 
-// Extract features from the data sources, in the sequence given by
-// the automatically calculated execution order.
-func (p *FeatureExtractorPipeline) Extract() {
-	if p.monitor.pipelineRunTimer != nil {
-		timer := prometheus.NewTimer(p.monitor.pipelineRunTimer)
-		defer timer.ObserveDuration()
+// Initialize the trigger execution order of the feature extractors.
+func (p *FeatureExtractorPipeline) initTriggerExecutionOrder() {
+	// Resolve which feature extractors to execute when triggers are received.
+	// First collect all triggers we are listening for.
+	triggers := make(map[string]struct{})
+	for _, extractor := range p.dependencyGraph.Nodes {
+		for _, topic := range extractor.Triggers() {
+			triggers[topic] = struct{}{}
+		}
 	}
+	// Then, for each topic, get the highest node in the dependency graph
+	// that has a trigger for this topic and resolve its subgraph.
+	triggerExecutionOrder := make(map[string][][][]plugins.FeatureExtractor)
+	for topic := range triggers {
+		condition := func(extractor plugins.FeatureExtractor) bool {
+			return slices.Contains(extractor.Triggers(), topic)
+		}
+		subgraphs := p.dependencyGraph.DistinctSubgraphs(condition)
+		triggerExecutionOrder[topic] = make([][][]plugins.FeatureExtractor, len(subgraphs))
+		for i, subgraph := range subgraphs {
+			order, err := subgraph.Resolve()
+			if err != nil {
+				panic("failed to resolve dependency graph: " + err.Error())
+			}
+			triggerExecutionOrder[topic][i] = order
+		}
+	}
+	p.triggerExecutionOrder = triggerExecutionOrder
+	slog.Info(
+		"feature extractor: resolved execution order",
+		"order", triggerExecutionOrder, "trigger", triggerExecutionOrder,
+	)
+}
 
+// Extract features from the data sources when triggered by MQTT messages.
+// If mqtt is disabled, this function does nothing.
+func (p *FeatureExtractorPipeline) ExtractOnTrigger() {
+	// Subscribe to the MQTT topics that trigger the feature extraction.
+	mqttClient := mqtt.NewClient()
+	for topic, subgraphs := range p.triggerExecutionOrder {
+		callback := func() {
+			for _, order := range subgraphs {
+				slog.Info("triggered feature extractors by mqtt message", "topic", topic)
+				p.extract(order)
+			}
+		}
+		if err := mqttClient.Subscribe(topic, func(_ pahomqtt.Client, _ pahomqtt.Message) {
+			// It's important to execute the callback in a goroutine.
+			// Otherwise, the MQTT client will block until the callback
+			// is finished, potentially leading to disconnects.
+			go callback()
+		}); err != nil {
+			panic("failed to subscribe to topic: " + topic)
+		}
+	}
+}
+
+// Extract features in the sequence given by the execution order.
+func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 	// Execute the extractors in groups of the execution order.
-	for _, extractors := range p.executionOrder {
+	for _, extractors := range order {
 		var wg sync.WaitGroup
 		for _, extractor := range extractors {
 			wg.Add(1)

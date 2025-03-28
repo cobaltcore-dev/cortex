@@ -43,6 +43,14 @@ func (*FlavorHostSpaceExtractor) GetName() string {
 	return "flavor_host_space_extractor"
 }
 
+// Get message topics that trigger a re-execution of this extractor.
+func (FlavorHostSpaceExtractor) Triggers() []string {
+	return []string{
+		openstack.TriggerNovaFlavorsSynced,
+		openstack.TriggerNovaHypervisorsSynced,
+	}
+}
+
 // Extract the space left on a compute host after the placement of a flavor.
 // Depends on the OpenStack flavors and hypervisors to be synced.
 func (e *FlavorHostSpaceExtractor) Extract() ([]plugins.Feature, error) {

@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
 
 // Feature that maps CPU contention of vROps hostsystems.
@@ -32,6 +33,13 @@ type VROpsHostsystemContentionExtractor struct {
 // Name of this feature extractor that is used in the yaml config, for logging etc.
 func (*VROpsHostsystemContentionExtractor) GetName() string {
 	return "vrops_hostsystem_contention_extractor"
+}
+
+// Get message topics that trigger a re-execution of this extractor.
+func (VROpsHostsystemContentionExtractor) Triggers() []string {
+	return []string{
+		prometheus.TriggerMetricAliasSynced("vrops_hostsystem_cpu_contention_percentage"),
+	}
 }
 
 // Extract CPU contention of hostsystems.

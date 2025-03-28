@@ -2,6 +2,10 @@
 
 This guide provides an overview of the Cortex architecture, its components, and how they interact.
 
+## Architecture Decision Records (ADRs)
+
+See the [Architecture Decision Records](./adrs) for more detailed information on specific architectural decisions.
+
 ## Integration
 
 Cortex is integrated with Nova, OpenStack's compute service. When new VMs are created or existing ones moved, Nova selects the right compute host as follows:

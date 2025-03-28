@@ -47,7 +47,6 @@ type Pipeline struct {
 	// Monitor to observe the pipeline.
 	monitor Monitor
 	// MQTT client to publish mqtt data.
-	// Only initialized if mqtt is enabled.
 	mqttClient mqtt.Client
 }
 
@@ -155,20 +154,17 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 		return outWeights[hosts[i]] > outWeights[hosts[j]]
 	})
 
-	// Publish information about the scheduling to an mqtt broker.
+	// Publish telemetry information about the scheduling to an mqtt broker.
 	// In this way, other services can connect and record the scheduler
 	// behavior over a longer time, or react to the scheduling decision.
-	if p.mqttClient != nil {
-		//nolint:errcheck // Don't need to check the error here. It should be logged.
-		go p.mqttClient.Publish("cortex/scheduler/pipeline/finished", map[string]any{
-			"time":    time.Now().Unix(),
-			"request": request,
-			"order":   p.applicationOrder,
-			"in":      inWeights,
-			"steps":   stepWeights,
-			"out":     outWeights,
-		})
-	}
+	go p.mqttClient.Publish("cortex/scheduler/pipeline/finished", map[string]any{
+		"time":    time.Now().Unix(),
+		"request": request,
+		"order":   p.applicationOrder,
+		"in":      inWeights,
+		"steps":   stepWeights,
+		"out":     outWeights,
+	})
 
 	return hosts, nil
 }

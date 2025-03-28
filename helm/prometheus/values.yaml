@@ -11,7 +11,11 @@ alerts:
     global:
       service: cortex
     # Labels applied to specific alerts.
-    cortexDown:
+    cortexSchedulerDown:
+      severity: warning
+    cortexSyncerDown:
+      severity: info
+    cortexExtractorDown:
       severity: info
     cortexHttpRequest400sTooHigh:
       severity: info
