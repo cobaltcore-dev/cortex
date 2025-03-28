@@ -14,7 +14,13 @@ spec:
   - name: cortex-alerts
     rules:
     - alert: CortexDown
-      expr: up{cortex_mode=~".+"} != 1
+      expr: |
+        up{cortex_mode="scheduler"} != 1 or
+        absent(up{cortex_mode="scheduler"}) or
+        up{cortex_mode="syncer"} != 1 or
+        absent(up{cortex_mode="syncer"}) or
+        up{cortex_mode="extractor"} != 1 or
+        absent(up{cortex_mode="extractor"})
       for: 1m
       labels:
         context: liveness
