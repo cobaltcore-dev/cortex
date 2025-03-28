@@ -37,4 +37,3 @@ dependencies:
   - name: vernemq
     repository: https://vernemq.github.io/docker-vernemq
     version: 2.0.1
-    condition: vernemq.enabled

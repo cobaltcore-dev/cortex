@@ -19,6 +19,8 @@ type FeatureExtractor interface {
 	// This name is used to identify the extractor in metrics, config, logs, etc.
 	// Should be something like: "my_cool_feature_extractor".
 	GetName() string
+	// Get message topics that trigger a re-execution of this extractor.
+	Triggers() []string
 }
 
 type Feature interface{}

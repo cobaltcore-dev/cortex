@@ -69,8 +69,6 @@ vernemq:
   image:
     repository: ghcr.io/cobaltcore-dev/cortex-vernemq
     tag: "latest"
-  # Whether a vernemq instance should be spawned and mqtt sent.
-  enabled: true
   # The username and password to use for the mqtt connection.
   username: cortex
   password: cortex
@@ -142,7 +140,6 @@ conf:
 
   # Configure here if we should connect to an mqtt broker.
   mqtt:
-    enabled: true
     # Must match vernemq.fullnameOverride, vernemq.username and vernemq.password.
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
@@ -248,7 +245,7 @@ conf:
             prometheus:
               metrics:
                 # Any vrops vm metric suffices.
-                - vrops_virtualmachine_cpu_demand_ratio
+                - type: vrops_vm_metric
             openstack:
               nova:
                 types:
@@ -259,7 +256,7 @@ conf:
           sync:
             prometheus:
               metrics:
-                - vrops_virtualmachine_cpu_demand_ratio
+                - alias: vrops_virtualmachine_cpu_demand_ratio
             openstack:
               nova:
                 types:
@@ -273,7 +270,7 @@ conf:
           sync:
             prometheus:
               metrics:
-                - vrops_hostsystem_cpu_contention_percentage
+                - alias: vrops_hostsystem_cpu_contention_percentage
 
       # KVM-specific extractors.
       - name: node_exporter_host_cpu_usage_extractor
@@ -281,13 +278,13 @@ conf:
           sync:
             prometheus:
               metrics:
-                - node_exporter_cpu_usage_pct
+                - alias: node_exporter_cpu_usage_pct
       - name: node_exporter_host_memory_active_extractor
         dependencies:
           sync:
             prometheus:
               metrics:
-                - node_exporter_memory_active_pct
+                - alias: node_exporter_memory_active_pct
 
       # Shared extractors.
       - name: flavor_host_space_extractor

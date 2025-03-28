@@ -60,19 +60,12 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 }
 
 // Periodically extract features from the database.
-func runExtractor(ctx context.Context, registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
+func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
 	monitor := features.NewPipelineMonitor(registry)
 	pipeline := features.NewPipeline(config, db, monitor)
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("extractor shutting down")
-			return
-		default:
-			pipeline.Extract()
-			time.Sleep(jobloop.DefaultJitter(time.Minute))
-		}
-	}
+	// Selects the extractors to run based on the config.
+	pipeline.Init(features.SupportedExtractors)
+	pipeline.ExtractOnTrigger()
 }
 
 // Run a webserver that listens for external scheduling requests.
@@ -155,7 +148,7 @@ func main() {
 	case "syncer":
 		go runSyncer(ctx, registry, config.GetSyncConfig(), dbInstance)
 	case "extractor":
-		go runExtractor(ctx, registry, config.GetFeaturesConfig(), dbInstance)
+		go runExtractor(registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
 		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance)
 	default:

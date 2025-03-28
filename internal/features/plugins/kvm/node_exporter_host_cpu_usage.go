@@ -5,6 +5,7 @@ package kvm
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
 
 // Feature that maps CPU usage of kvm hosts.
@@ -32,6 +33,13 @@ type NodeExporterHostCPUUsageExtractor struct {
 // Name of this feature extractor that is used in the yaml config, for logging etc.
 func (*NodeExporterHostCPUUsageExtractor) GetName() string {
 	return "node_exporter_host_cpu_usage_extractor"
+}
+
+// Get message topics that trigger a re-execution of this extractor.
+func (NodeExporterHostCPUUsageExtractor) Triggers() []string {
+	return []string{
+		prometheus.TriggerMetricAliasSynced("node_exporter_cpu_usage_pct"),
+	}
 }
 
 // Extract CPU usage of kvm hosts.
