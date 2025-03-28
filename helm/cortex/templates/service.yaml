@@ -9,7 +9,8 @@ metadata:
   name: {{ $.Chart.Name }}-{{ .name }}
   labels:
     {{- include "cortex.labels" $ | nindent 4 }}
-    cortex.mode: {{ .name }}
+    # This label will be added to the prometheus metrics.
+    component: {{ $.Chart.Name }}-{{ .name }}
 spec:
   type: {{ .service.type }}
   ports:
