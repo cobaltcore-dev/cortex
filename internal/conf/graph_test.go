@@ -63,7 +63,11 @@ func TestDependencyGraph_Resolve(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.graph.Resolve()
+			result, err := tt.graph.Resolve()
+			if err != nil {
+				t.Errorf("Resolve() error = %v", err)
+				return
+			}
 			if !reflect.DeepEqual(result, tt.expected) {
 				t.Errorf("Resolve() = %v, expected %v", result, tt.expected)
 			}
@@ -165,6 +169,57 @@ func TestDependencyGraph_DistinctSubgraphs(t *testing.T) {
 					t.Errorf("DistinctSubgraphs() = %v, expected %v", result, tt.expected)
 					return
 				}
+			}
+		})
+	}
+}
+
+func TestDependencyGraph_ResolveWithCycle(t *testing.T) {
+	tests := []struct {
+		name  string
+		graph DependencyGraph[string]
+	}{
+		{
+			name: "EasyCycle",
+			graph: DependencyGraph[string]{
+				Dependencies: map[string][]string{
+					"A":  {"B"},
+					"B:": {"A"},
+				},
+				Nodes: []string{"A", "B"},
+			},
+		},
+		{
+			name: "NestedCycle",
+			graph: DependencyGraph[string]{
+				Dependencies: map[string][]string{
+					"A":  {"B"},
+					"B":  {"C"},
+					"C:": {"B"},
+				},
+				Nodes: []string{"A", "B", "C"},
+			},
+		},
+		{
+			name: "LargeCycle",
+			graph: DependencyGraph[string]{
+				Dependencies: map[string][]string{
+					"A": {"B"},
+					"B": {"C"},
+					"C": {"D"},
+					"D": {"E"},
+					"E": {"F"},
+					"F": {"A"},
+				},
+				Nodes: []string{"A", "B", "C", "D", "E", "F"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := tt.graph.Resolve(); err == nil {
+				t.Errorf("Expected error, got nil")
 			}
 		})
 	}

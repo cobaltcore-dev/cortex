@@ -3,7 +3,10 @@
 
 package conf
 
-import "slices"
+import (
+	"fmt"
+	"slices"
+)
 
 // Dependency graph.
 type DependencyGraph[K comparable] struct {
@@ -18,7 +21,7 @@ type DependencyGraph[K comparable] struct {
 // multiple steps that can be run in parallel.
 // It starts with the steps that have no dependencies and then
 // recursively resolves the dependencies of the steps that depend on them.
-func (g *DependencyGraph[K]) Resolve() [][]K {
+func (g *DependencyGraph[K]) Resolve() ([][]K, error) {
 	inDegree := make(map[K]int)
 	for _, deps := range g.Dependencies {
 		for _, dep := range deps {
@@ -48,9 +51,16 @@ func (g *DependencyGraph[K]) Resolve() [][]K {
 		zeroInDegree = nextZeroInDegree
 	}
 
+	// If not all nodes could be resolved, there is a cycle in the graph.
+	for _, node := range g.Nodes {
+		if inDegree[node] > 0 {
+			return nil, fmt.Errorf("cycle detected in dependency graph: %v", node)
+		}
+	}
+
 	// Invert the result to get the correct order.
 	slices.Reverse(result)
-	return result
+	return result, nil
 }
 
 // Get distinct subgraphs from the dependency graph where a condition is met.

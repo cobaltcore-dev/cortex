@@ -135,7 +135,11 @@ func (p *FeatureExtractorPipeline) initTriggerExecutionOrder() {
 		subgraphs := p.dependencyGraph.DistinctSubgraphs(condition)
 		triggerExecutionOrder[topic] = make([][][]plugins.FeatureExtractor, len(subgraphs))
 		for i, subgraph := range subgraphs {
-			triggerExecutionOrder[topic][i] = subgraph.Resolve()
+			order, err := subgraph.Resolve()
+			if err != nil {
+				panic("failed to resolve dependency graph: " + err.Error())
+			}
+			triggerExecutionOrder[topic][i] = order
 		}
 	}
 	p.triggerExecutionOrder = triggerExecutionOrder

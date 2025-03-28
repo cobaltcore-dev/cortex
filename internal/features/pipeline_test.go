@@ -101,7 +101,6 @@ func TestFeatureExtractorPipeline_InitDependencyGraph(t *testing.T) {
 
 	// Call the function
 	pipeline.initDependencyGraph(supportedExtractors)
-	t.Logf("%v", pipeline.dependencyGraph.Resolve())
 
 	// Assertions
 	if len(pipeline.dependencyGraph.Nodes) != 3 {
