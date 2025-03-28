@@ -14,7 +14,7 @@ spec:
   - name: cortex-alerts
     rules:
     - alert: CortexDown
-      expr: up{github_org="cobaltcore-dev",github_repo="cortex"} == 0
+      expr: up{cortex_mode=~".+"} != 1
       for: 1m
       labels:
         context: liveness

@@ -9,9 +9,7 @@ metadata:
   name: {{ $.Chart.Name }}-{{ .name }}
   labels:
     {{- include "cortex.labels" $ | nindent 4 }}
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/targets: openstack
+    cortex.mode: {{ .name }}
 spec:
   type: {{ .service.type }}
   ports:
