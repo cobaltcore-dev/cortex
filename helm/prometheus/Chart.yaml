@@ -4,7 +4,7 @@
 apiVersion: v2
 description: Prometheus alerts setup for Cortex.
 name: cortex-alerts
-version: 0.0.3
+version: 0.1.0
 dependencies:
   # CRDs of the prometheus operator, such as PrometheusRule, ServiceMonitor, etc.
   - name: kube-prometheus-stack
