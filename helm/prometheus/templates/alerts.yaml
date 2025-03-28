@@ -103,7 +103,7 @@ spec:
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexHighMemoryUsage }}{{ .cortexHighMemoryUsage | toYaml | nindent 8 }}{{- end }}
       annotations:
-        summary: "High memory usage"
+        summary: "Cortex {{`{{$labels.component}}`}} uses too much memory"
         description: >
           Cortex should not be using more than 100 MiB of memory. Usually it
           should use much less, so there may be a memory leak or other changes
@@ -117,7 +117,7 @@ spec:
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexHighCPUUsage }}{{ .cortexHighCPUUsage | toYaml | nindent 8 }}{{- end }}
       annotations:
-        summary: "High CPU usage"
+        summary: "Cortex {{`{{$labels.component}}`}} uses too much CPU"
         description: >
           Cortex should not be using more than 50% of a single CPU core. Usually
           it should use much less, so there may be a CPU leak or other changes
@@ -164,7 +164,7 @@ spec:
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexSyncObjectsDroppedToZero }}{{ .cortexSyncObjectsDroppedToZero | toYaml | nindent 8 }}{{- end }}
       annotations:
-        summary: "Sync objects dropped to zero"
+        summary: "Cortex is not syncing any new data from {{`{{$labels.datasource}}`}}"
         description: >
           Cortex is not syncing any objects from a datasource. This may happen
           when the datasource (OpenStack, Prometheus, etc.) is down or the sync
@@ -181,7 +181,7 @@ spec:
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
         {{- if .cortexSyncObjectsTooHigh }}{{ .cortexSyncObjectsTooHigh | toYaml | nindent 8 }}{{- end }}
       annotations:
-        summary: "Sync objects too high"
+        summary: "Cortex is syncing unexpectedly many objects from {{`{{$labels.datasource}}`}}"
         description: >
           Cortex is syncing more than 1 million objects from a datasource. This
           may happen when the datasource (OpenStack, Prometheus, etc.) returns
