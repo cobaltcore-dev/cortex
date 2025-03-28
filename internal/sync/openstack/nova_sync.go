@@ -76,25 +76,33 @@ func (s *novaSyncer) Init(ctx context.Context) {
 func (s *novaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.conf.Types, "servers") {
-		if _, err := s.SyncServers(ctx); err != nil {
-			return err
-		}
-		go s.mqttClient.Publish(TriggerNovaServersSynced, "")
-	}
-	if slices.Contains(s.conf.Types, "hypervisors") {
-		hypervisors, err := s.SyncHypervisors(ctx)
+		newServers, err := s.SyncServers(ctx)
 		if err != nil {
 			return err
 		}
-		go s.mqttClient.Publish(TriggerNovaHypervisorsSynced, "")
-		// Publish additional information required for the visualizer.
-		go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", hypervisors)
+		if len(newServers) > 0 {
+			go s.mqttClient.Publish(TriggerNovaServersSynced, "")
+		}
 	}
-	if slices.Contains(s.conf.Types, "flavors") {
-		if _, err := s.SyncFlavors(ctx); err != nil {
+	if slices.Contains(s.conf.Types, "hypervisors") {
+		newHypervisors, err := s.SyncHypervisors(ctx)
+		if err != nil {
 			return err
 		}
-		go s.mqttClient.Publish(TriggerNovaFlavorsSynced, "")
+		if len(newHypervisors) > 0 {
+			go s.mqttClient.Publish(TriggerNovaHypervisorsSynced, "")
+			// Publish additional information required for the visualizer.
+			go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", newHypervisors)
+		}
+	}
+	if slices.Contains(s.conf.Types, "flavors") {
+		newFlavors, err := s.SyncFlavors(ctx)
+		if err != nil {
+			return err
+		}
+		if len(newFlavors) > 0 {
+			go s.mqttClient.Publish(TriggerNovaFlavorsSynced, "")
+		}
 	}
 	return nil
 }

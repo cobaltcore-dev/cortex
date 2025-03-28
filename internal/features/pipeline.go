@@ -156,11 +156,17 @@ func (p *FeatureExtractorPipeline) ExtractOnTrigger() {
 	// Subscribe to the MQTT topics that trigger the feature extraction.
 	mqttClient := mqtt.NewClient()
 	for topic, subgraphs := range p.triggerExecutionOrder {
-		if err := mqttClient.Subscribe(topic, func(_ pahomqtt.Client, _ pahomqtt.Message) {
+		callback := func() {
 			for _, order := range subgraphs {
 				slog.Info("triggered feature extractors by mqtt message", "topic", topic)
 				p.extract(order)
 			}
+		}
+		if err := mqttClient.Subscribe(topic, func(_ pahomqtt.Client, _ pahomqtt.Message) {
+			// It's important to execute the callback in a goroutine.
+			// Otherwise, the MQTT client will block until the callback
+			// is finished, potentially leading to disconnects.
+			go callback()
 		}); err != nil {
 			panic("failed to subscribe to topic: " + topic)
 		}

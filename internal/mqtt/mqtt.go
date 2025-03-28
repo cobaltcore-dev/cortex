@@ -47,14 +47,16 @@ func (t *client) Connect() error {
 	opts.SetConnectTimeout(10 * time.Second)
 	opts.SetConnectRetry(true)
 	opts.SetConnectRetryInterval(5 * time.Second)
-	opts.SetAutoReconnect(true)
+	opts.SetAutoReconnect(false) // Handle the reconnect logic ourselves
 	opts.SetKeepAlive(60 * time.Second)
 	opts.SetPingTimeout(10 * time.Second)
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		slog.Info("connected to mqtt broker")
 	})
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
-		slog.Error("connection to mqtt broker lost", "err", err)
+		// To avoid weird hanging issues, just panic and let the
+		// kubernetes crashloop backoff handle it.
+		panic(fmt.Errorf("connection to mqtt broker lost: %w", err))
 	})
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
 	opts.SetClientID(fmt.Sprintf("cortex-scheduler-%d", rand.Intn(1_000_000)))
