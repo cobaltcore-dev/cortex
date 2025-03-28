@@ -56,6 +56,7 @@ type FeatureExtractorPipeline struct {
 // Create a new feature extractor pipeline with extractors contained in the configuration.
 func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureExtractorPipeline {
 	return FeatureExtractorPipeline{
+		db:      database,
 		config:  config,
 		monitor: m,
 	}
