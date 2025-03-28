@@ -1,19 +1,21 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if index .Values "kube-prometheus-stack" "enabled" }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: cortex-prometheus
   labels:
     name: cortex-prometheus
+    prometheus: openstack
 spec:
   selector:
     matchLabels:
+      # Select all services from the Cortex helm chart.
       app.kubernetes.io/name: cortex
   namespaceSelector:
     any: true
+  targetLabels:
+    - component
   endpoints:
     - port: metrics
-{{- end }}
