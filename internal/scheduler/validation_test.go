@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
 // MockStep is a manual mock implementation of the plugins.Step interface.
@@ -37,7 +36,7 @@ func TestStepValidator_GetName(t *testing.T) {
 		Name: "mock-step",
 	}
 
-	validator := StepValidator[plugins.Step]{
+	validator := StepValidator{
 		Step: mockStep,
 	}
 
@@ -56,7 +55,7 @@ func TestStepValidator_Init(t *testing.T) {
 	testDB := db.DB{}
 	mockOpts := conf.RawOpts{}
 
-	validator := StepValidator[plugins.Step]{
+	validator := StepValidator{
 		Step: mockStep,
 	}
 
@@ -79,7 +78,7 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 		Hosts: []api.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 	}
 
-	validator := StepValidator[plugins.Step]{
+	validator := StepValidator{
 		Step: mockStep,
 		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
 			SameHostNumberInOut: false,
@@ -114,7 +113,7 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 		Hosts: []api.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 	}
 
-	validator := StepValidator[plugins.Step]{
+	validator := StepValidator{
 		Step: mockStep,
 		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
 			SameHostNumberInOut: false,
@@ -149,7 +148,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 		Hosts: []api.Host{{ComputeHost: "host1"}},
 	}
 
-	validator := StepValidator[plugins.Step]{
+	validator := StepValidator{
 		Step: mockStep,
 		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
 			SameHostNumberInOut: true, // Validation is disabled

@@ -19,21 +19,21 @@ import (
 type disabledValidations = conf.SchedulerStepDisabledValidationsConfig
 
 // Wrapper for scheduler steps that validates them before/after execution.
-type StepValidator[S plugins.Step] struct {
+type StepValidator struct {
 	// The wrapped step to validate.
-	Step S
+	Step plugins.Step
 	// By default, we execute all validations. However, through the config,
 	// we can also disable some validations if necessary.
 	DisabledValidations disabledValidations
 }
 
 // Get the name of the wrapped step.
-func (s *StepValidator[S]) GetName() string {
+func (s *StepValidator) GetName() string {
 	return s.Step.GetName()
 }
 
 // Initialize the wrapped step with the database and options.
-func (s *StepValidator[S]) Init(db db.DB, opts conf.RawOpts) error {
+func (s *StepValidator) Init(db db.DB, opts conf.RawOpts) error {
 	slog.Info(
 		"scheduler: init validation for step", "name", s.GetName(),
 		"disabled", s.DisabledValidations,
@@ -42,15 +42,15 @@ func (s *StepValidator[S]) Init(db db.DB, opts conf.RawOpts) error {
 }
 
 // Validate the wrapped step with the database and options.
-func validateStep[S plugins.Step](step S, disabledValidations disabledValidations) *StepValidator[S] {
-	return &StepValidator[S]{
+func validateStep[S plugins.Step](step S, disabledValidations disabledValidations) *StepValidator {
+	return &StepValidator{
 		Step:                step,
 		DisabledValidations: disabledValidations,
 	}
 }
 
 // Run the step and validate what happens.
-func (s *StepValidator[S]) Run(request api.Request) (map[string]float64, error) {
+func (s *StepValidator) Run(request api.Request) (map[string]float64, error) {
 	weights, err := s.Step.Run(request)
 	if err != nil {
 		return nil, err

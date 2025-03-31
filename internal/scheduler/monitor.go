@@ -80,9 +80,9 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 }
 
 // Wraps a scheduler step to monitor its execution.
-type StepMonitor[S plugins.Step] struct {
+type StepMonitor struct {
 	// The wrapped scheduler step to monitor.
-	Step S
+	Step plugins.Step
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
 	// A metric to monitor how much the step modifies the weights of the hosts.
@@ -92,17 +92,17 @@ type StepMonitor[S plugins.Step] struct {
 }
 
 // Get the name of the wrapped step.
-func (s *StepMonitor[S]) GetName() string {
+func (s *StepMonitor) GetName() string {
 	return s.Step.GetName()
 }
 
 // Initialize the wrapped step with the database and options.
-func (s *StepMonitor[S]) Init(db db.DB, opts conf.RawOpts) error {
+func (s *StepMonitor) Init(db db.DB, opts conf.RawOpts) error {
 	return s.Step.Init(db, opts)
 }
 
 // Schedule using the wrapped step and measure the time it takes.
-func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
+func monitorStep(step plugins.Step, m Monitor) *StepMonitor {
 	stepName := step.GetName()
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
@@ -112,7 +112,7 @@ func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 	if m.stepRemovedHostsObserver != nil {
 		removedHostsObserver = m.stepRemovedHostsObserver.WithLabelValues(stepName)
 	}
-	return &StepMonitor[S]{
+	return &StepMonitor{
 		Step:                 step,
 		runTimer:             runTimer,
 		stepHostWeight:       m.stepHostWeight,
@@ -121,7 +121,7 @@ func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor[S]) Run(request api.Request) (map[string]float64, error) {
+func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 	stepName := s.GetName()
 
 	if s.runTimer != nil {
