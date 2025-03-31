@@ -124,9 +124,6 @@ func monitorStep[S plugins.Step](step S, m Monitor) *StepMonitor[S] {
 func (s *StepMonitor[S]) Run(request api.Request) (map[string]float64, error) {
 	stepName := s.GetName()
 
-	slog.Info("scheduler: running step", "name", stepName)
-	defer slog.Info("scheduler: finished step", "name", stepName)
-
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)
 		defer timer.ObserveDuration()
