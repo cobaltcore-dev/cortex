@@ -65,11 +65,14 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 		if !ok {
 			panic("unknown pipeline step: " + stepConfig.Name)
 		}
-		wrappedStep := monitorStep(step, monitor)
-		if err := wrappedStep.Init(database, stepConfig.Options); err != nil {
+		// Monitor the step execution.
+		step = monitorStep(step, monitor)
+		// Validate the step during execution.
+		step = validateStep(step, stepConfig.DisabledValidations)
+		if err := step.Init(database, stepConfig.Options); err != nil {
 			panic("failed to initialize pipeline step: " + err.Error())
 		}
-		steps = append(steps, wrappedStep)
+		steps = append(steps, step)
 		applicationOrder = append(applicationOrder, stepConfig.Name)
 		slog.Info(
 			"scheduler: added step",
@@ -101,7 +104,9 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 			wg.Add(1)
 			go func(step plugins.Step) {
 				defer wg.Done()
+				slog.Info("scheduler: running step", "name", step.GetName())
 				activations, err := step.Run(request)
+				slog.Info("scheduler: finished step", "name", step.GetName())
 				if err != nil {
 					slog.Error("scheduler: failed to run step", "error", err)
 					return

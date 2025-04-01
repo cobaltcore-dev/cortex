@@ -143,6 +143,16 @@ type SchedulerStepConfig struct {
 	Options RawOpts `yaml:"options,omitempty"`
 	// The dependencies this step needs.
 	DependencyConfig `yaml:"dependencies,omitempty"`
+	// The validations to use for this step.
+	DisabledValidations SchedulerStepDisabledValidationsConfig `yaml:"disabledValidations,omitempty"`
+}
+
+// Config for which validations to disable for a scheduler step.
+type SchedulerStepDisabledValidationsConfig struct {
+	// Whether to validate that no hosts are removed or added from the scheduler
+	// step. This should only be disabled for scheduler steps that remove hosts.
+	// Thus, if no value is provided, the default is false.
+	SameHostNumberInOut bool `yaml:"sameHostNumberInOut,omitempty"`
 }
 
 // Configuration for the scheduler module.
