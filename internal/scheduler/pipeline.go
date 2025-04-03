@@ -92,6 +92,14 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
 func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]string, error) {
+	// Use a logger that is traceable.
+	traceLog := slog.With(
+		slog.String("req", request.Context.GlobalRequestID),
+		slog.String("user", request.Context.UserID),
+		slog.String("project", request.Context.ProjectID),
+	)
+	traceLog.Info("scheduler: starting pipeline", "hosts", request.Hosts)
+
 	if p.monitor.hostNumberInObserver != nil {
 		p.monitor.hostNumberInObserver.Observe(float64(len(request.Hosts)))
 	}
@@ -104,11 +112,11 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 			wg.Add(1)
 			go func(step plugins.Step) {
 				defer wg.Done()
-				slog.Info("scheduler: running step", "name", step.GetName())
+				traceLog.Info("scheduler: running step", "name", step.GetName())
 				activations, err := step.Run(request)
-				slog.Info("scheduler: finished step", "name", step.GetName())
+				traceLog.Info("scheduler: finished step", "name", step.GetName())
 				if err != nil {
-					slog.Error("scheduler: failed to run step", "error", err)
+					traceLog.Error("scheduler: failed to run step", "error", err)
 					return
 				}
 				activationsByStep.Store(step.GetName(), activations)
@@ -116,6 +124,7 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 		}
 		wg.Wait()
 	}
+	traceLog.Info("scheduler: finished pipeline")
 
 	// Nova may give us very large (positive/negative) weights such as
 	// -99,000 or 99,000. We want to respect these values, but still adjust them
@@ -125,10 +134,11 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	for hostname, weight := range novaWeights {
 		inWeights[hostname] = math.Tanh(weight)
 	}
+	traceLog.Info("scheduler: input weights", "weights", inWeights)
 
 	// Retrieve the step weights from the concurrency-safe map.
 	stepWeights := map[string]map[string]float64{}
-	activationsByStep.Range(func(key, value interface{}) bool {
+	activationsByStep.Range(func(key, value any) bool {
 		stepName := key.(string)
 		activations := value.(map[string]float64)
 		stepWeights[stepName] = activations
@@ -143,11 +153,12 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	for _, stepName := range p.applicationOrder {
 		stepActivations, ok := stepWeights[stepName]
 		if !ok {
-			slog.Error("scheduler: missing activations for step", "name", stepName)
+			traceLog.Error("scheduler: missing activations for step", "name", stepName)
 			continue
 		}
 		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations)
 	}
+	traceLog.Info("scheduler: output weights", "weights", outWeights)
 
 	if p.monitor.hostNumberOutObserver != nil {
 		p.monitor.hostNumberOutObserver.Observe(float64(len(outWeights)))
@@ -158,6 +169,7 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	sort.Slice(hosts, func(i, j int) bool {
 		return outWeights[hosts[i]] > outWeights[hosts[j]]
 	})
+	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
 
 	// Publish telemetry information about the scheduling to an mqtt broker.
 	// In this way, other services can connect and record the scheduler
