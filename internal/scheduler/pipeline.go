@@ -94,7 +94,8 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]string, error) {
 	// Use a logger that is traceable.
 	traceLog := slog.With(
-		slog.String("req", request.Context.GlobalRequestID),
+		slog.String("greq", request.Context.GlobalRequestID),
+		slog.String("req", request.Context.RequestID),
 		slog.String("user", request.Context.UserID),
 		slog.String("project", request.Context.ProjectID),
 	)
