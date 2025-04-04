@@ -24,7 +24,6 @@ func main() {
 	}
 	defer ch.Close()
 
-	// Declare a temporary exchange to bind to all topics
 	exchangeName := "nova"
 	err = ch.ExchangeDeclare(
 		exchangeName, // name
@@ -57,7 +56,7 @@ func main() {
 	// Bind the queue to the exchange with a wildcard routing key
 	err = ch.QueueBind(
 		q.Name,       // queue name
-		"#",          // routing key (wildcard for all topics)
+		"#",          // routing key
 		exchangeName, // exchange
 		false,        // no-wait
 		nil,          // arguments
@@ -82,8 +81,16 @@ func main() {
 
 	log.Println("Waiting for messages. To exit press CTRL+C")
 
-	// Print messages as they arrive
+	// Open a log file
+	logFile, err := os.OpenFile("amqp-log.out", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %v", err)
+	}
 	for msg := range msgs {
-		log.Printf("Received message: %s", msg.Body)
+		// Write the message to the log file
+		if _, err := logFile.WriteString(msg.ReplyTo + " <- " + msg.RoutingKey + ": " + string(msg.Body) + "\n"); err != nil {
+			log.Printf("Failed to write to log file: %v", err)
+		}
+		log.Printf("Received a message: %s", msg.Body)
 	}
 }
