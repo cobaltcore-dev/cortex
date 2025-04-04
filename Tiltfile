@@ -4,6 +4,14 @@
 # For Pylance to not complain around:
 # type: ignore
 
+# Don't track us.
+analytics_settings(False)
+
+if not os.getenv('TILT_VALUES_PATH'):
+    fail("TILT_VALUES_PATH is not set.")
+if not os.path.exists(os.getenv('TILT_VALUES_PATH')):
+    fail("TILT_VALUES_PATH "+ os.getenv('TILT_VALUES_PATH') + " does not exist.")
+
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo(
     'Bitnami Helm Repo',

@@ -114,6 +114,12 @@ func main() {
 					},
 				},
 			},
+			// Also send a mock context to see the request in the logs.
+			Context: api.NovaRequestContext{
+				GlobalRequestID: "1234567890",
+				UserID:          server.UserID,
+				ProjectID:       server.TenantID,
+			},
 			Rebuild: false,
 			//nolint:gosec
 			VMware:  rand.Intn(2) == 0,

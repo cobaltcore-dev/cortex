@@ -2,6 +2,10 @@
 
 This guide provides an overview of the Cortex architecture, its components, and how they interact.
 
+## Architecture Decision Records (ADRs)
+
+See the [Architecture Decision Records](./adrs) for more detailed information on specific architectural decisions.
+
 ## Integration
 
 Cortex is integrated with Nova, OpenStack's compute service. When new VMs are created or existing ones moved, Nova selects the right compute host as follows:
@@ -22,7 +26,7 @@ Cortex inserts an additional step:
 Cortex receives the list of possible hosts and their weights from Nova. It then calculates a new ranking based on the current state of the data center and returns the updated list to Nova. Nova then continues with the scheduling phase.
 
 > [!NOTE]
-> Since, by default, Nova does not support calling an external service, this functionality needs to be added like in [SAP's fork of Nova](https://github.com/sapcc/nova/blob/stable/xena-m3/nova/scheduler/external.py).
+> Since, by default, Nova does not support calling an external service, this functionality needs to be added like in [SAP's fork of Nova](https://github.com/sapcc/nova/blob/stable/2023.2-m3/nova/scheduler/external.py).
 
 ## Components
 
