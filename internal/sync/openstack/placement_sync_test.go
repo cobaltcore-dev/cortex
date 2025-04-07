@@ -63,7 +63,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	}
 	syncer.api = &mockPlacementAPI{}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -88,7 +88,7 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 	}
 	syncer.api = &mockPlacementAPI{}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	rps, err := syncer.SyncResourceProviders(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -116,7 +116,7 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 	}
 	syncer.api = &mockPlacementAPI{}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}
 	traits, err := syncer.SyncTraits(ctx, rps)
 	if err != nil {

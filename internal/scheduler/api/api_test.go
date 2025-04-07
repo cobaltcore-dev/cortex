@@ -5,7 +5,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -160,7 +159,7 @@ func TestHandler(t *testing.T) {
 				t.Fatalf("failed to marshal request body: %v", err)
 			}
 			req, err := http.NewRequestWithContext(
-				context.Background(), tt.method,
+				t.Context(), tt.method,
 				"/scheduler/nova/external", bytes.NewBuffer(requestBody),
 			)
 			if err != nil {

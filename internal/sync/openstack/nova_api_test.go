@@ -4,7 +4,6 @@
 package openstack
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -69,7 +68,7 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 		api := newNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
 
-		ctx := context.Background()
+		ctx := t.Context()
 		servers, err := api.GetAllServers(ctx, tt.time)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -115,7 +114,7 @@ func TestNovaAPI_GetAllHypervisors(t *testing.T) {
 		api := newNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
 
-		ctx := context.Background()
+		ctx := t.Context()
 		hypervisors, err := api.GetAllHypervisors(ctx, tt.time)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -166,7 +165,7 @@ func TestNovaAPI_GetAllFlavors(t *testing.T) {
 		api := newNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
 
-		ctx := context.Background()
+		ctx := t.Context()
 		flavors, err := api.GetAllFlavors(ctx, tt.time)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)

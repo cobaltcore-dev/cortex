@@ -9,12 +9,6 @@ run:
 formatters:
   enable:
     - gofmt
-    - goimports
-  settings:
-    goimports:
-      # Put local imports after 3rd-party packages
-      local-prefixes:
-        - github.com/cobaltcore-dev/cortex
   exclusions:
     generated: lax
     paths:
@@ -45,7 +39,6 @@ linters:
     - gocheckcompilerdirectives
     - goconst
     - gocritic
-    - gomoddirectives
     - gosec
     - govet
     - ineffassign

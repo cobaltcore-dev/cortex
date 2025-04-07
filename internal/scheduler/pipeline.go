@@ -157,7 +157,7 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 			traceLog.Error("scheduler: missing activations for step", "name", stepName)
 			continue
 		}
-		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations)
+		outWeights = p.Apply(outWeights, stepActivations)
 	}
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
 

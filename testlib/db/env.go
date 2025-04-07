@@ -55,6 +55,6 @@ func SetupDBEnv(t *testing.T) DBEnv {
 		env.DbMap = &gorp.DbMap{Db: sqlDB, Dialect: gorp.SqliteDialect{}}
 		env.Close = func() {}
 	}
-	env.DbMap.TraceOn("[gorp]", log.New(os.Stdout, "cortex:", log.Lmicroseconds))
+	env.TraceOn("[gorp]", log.New(os.Stdout, "cortex:", log.Lmicroseconds))
 	return env
 }

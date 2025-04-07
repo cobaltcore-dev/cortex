@@ -64,7 +64,7 @@ func (s *FlavorBinpackingStep) GetName() string {
 
 // Pack VMs on hosts based on their flavor.
 func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, error) {
-	activations := s.BaseStep.BaseActivations(request)
+	activations := s.BaseActivations(request)
 
 	if request.Spec.Data.NInstances > 1 {
 		return activations, nil
@@ -92,7 +92,7 @@ func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, err
 		if _, ok := activations[f.ComputeHost]; !ok {
 			continue
 		}
-		activationCPU := s.ActivationFunction.NoEffect()
+		activationCPU := s.NoEffect()
 		if s.Options.CPUEnabled {
 			activationCPU = plugins.MinMaxScale(
 				float64(f.VCPUsLeft),
@@ -102,7 +102,7 @@ func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, err
 				s.Options.CPUFreeActivationUpperBound,
 			)
 		}
-		activationRAM := s.ActivationFunction.NoEffect()
+		activationRAM := s.NoEffect()
 		if s.Options.RAMEnabled {
 			activationRAM = plugins.MinMaxScale(
 				float64(f.RAMLeftMB),
@@ -112,7 +112,7 @@ func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, err
 				s.Options.RAMFreeActivationUpperBound,
 			)
 		}
-		activationDisk := s.ActivationFunction.NoEffect()
+		activationDisk := s.NoEffect()
 		if s.Options.DiskEnabled {
 			activationDisk = plugins.MinMaxScale(
 				float64(f.DiskLeftGB),
