@@ -90,7 +90,7 @@ func (d *DB) AddTable(t Table) *gorp.TableMap {
 // Check if a table exists in the database.
 func (d *DB) TableExists(t Table) bool {
 	var query string
-	switch d.DbMap.Dialect.(type) {
+	switch d.Dialect.(type) {
 	case gorp.PostgresDialect:
 		query = `SELECT EXISTS (
 			SELECT 1
@@ -118,7 +118,7 @@ func (d *DB) TableExists(t Table) bool {
 
 // Convenience function to close the database connection.
 func (d *DB) Close() {
-	if err := d.DbMap.Db.Close(); err != nil {
+	if err := d.Db.Close(); err != nil {
 		slog.Error("failed to close database connection", "error", err)
 	}
 }

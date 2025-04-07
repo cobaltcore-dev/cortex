@@ -33,7 +33,7 @@ type BaseStep[Opts StepOpts] struct {
 
 // Init the step with the database and options.
 func (s *BaseStep[Opts]) Init(db db.DB, opts conf.RawOpts) error {
-	if err := s.YamlOpts.Load(opts); err != nil {
+	if err := s.Load(opts); err != nil {
 		return err
 	}
 	s.DB = db
@@ -44,7 +44,7 @@ func (s *BaseStep[Opts]) Init(db db.DB, opts conf.RawOpts) error {
 func (s *BaseStep[Opts]) BaseActivations(request api.Request) Weights {
 	weights := make(Weights)
 	for _, host := range request.Hosts {
-		weights[host.ComputeHost] = s.ActivationFunction.NoEffect()
+		weights[host.ComputeHost] = s.NoEffect()
 	}
 	return weights
 }
