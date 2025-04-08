@@ -36,7 +36,7 @@ var supportedSteps = []plugins.Step{
 }
 
 // Pipeline of scheduler steps.
-type Pipeline struct {
+type pipeline struct {
 	// The activation function to use when combining the
 	// results of the scheduler steps.
 	plugins.ActivationFunction
@@ -51,7 +51,7 @@ type Pipeline struct {
 }
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) Pipeline {
+func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) api.Pipeline {
 	supportedStepsByName := make(map[string]plugins.Step)
 	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
@@ -81,7 +81,7 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 		)
 	}
 
-	return Pipeline{
+	return &pipeline{
 		// All steps can be run in parallel.
 		executionOrder:   [][]plugins.Step{steps},
 		applicationOrder: applicationOrder,
@@ -91,18 +91,20 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) P
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
-func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]string, error) {
+func (p *pipeline) Run(request api.Request) ([]string, error) {
 	// Use a logger that is traceable.
+	ctx := request.GetContext()
 	traceLog := slog.With(
-		slog.String("greq", request.Context.GlobalRequestID),
-		slog.String("req", request.Context.RequestID),
-		slog.String("user", request.Context.UserID),
-		slog.String("project", request.Context.ProjectID),
+		slog.String("greq", ctx.GlobalRequestID),
+		slog.String("req", ctx.RequestID),
+		slog.String("user", ctx.UserID),
+		slog.String("project", ctx.ProjectID),
 	)
-	traceLog.Info("scheduler: starting pipeline", "hosts", request.Hosts)
+	hostsIn := request.GetHosts()
+	traceLog.Info("scheduler: starting pipeline", "hosts", hostsIn)
 
 	if p.monitor.hostNumberInObserver != nil {
-		p.monitor.hostNumberInObserver.Observe(float64(len(request.Hosts)))
+		p.monitor.hostNumberInObserver.Observe(float64(len(hostsIn)))
 	}
 
 	// Execute the scheduler steps in groups of the execution order.
@@ -132,7 +134,7 @@ func (p *Pipeline) Run(request api.Request, novaWeights map[string]float64) ([]s
 	// to a meaningful value. If Nova really doesn't want us to run on a host, it
 	// should run a filter instead of setting a weight.
 	inWeights := map[string]float64{}
-	for hostname, weight := range novaWeights {
+	for hostname, weight := range request.GetWeights() {
 		inWeights[hostname] = math.Tanh(weight)
 	}
 	traceLog.Info("scheduler: input weights", "weights", inWeights)

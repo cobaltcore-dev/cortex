@@ -52,7 +52,7 @@ func (s *AvoidOverloadedHostsCPUStep) GetName() string {
 // Downvote hosts that have high cpu load.
 func (s *AvoidOverloadedHostsCPUStep) Run(request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
-	if request.VMware {
+	if request.GetVMware() {
 		// Don't run this step for VMware VMs.
 		return activations, nil
 	}

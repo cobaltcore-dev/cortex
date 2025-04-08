@@ -43,7 +43,7 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *AntiAffinityNoisyProjectsStep) Run(request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
-	if !request.VMware {
+	if !request.GetVMware() {
 		// Only run this step for VMware VMs.
 		return activations, nil
 	}
@@ -54,7 +54,7 @@ func (s *AntiAffinityNoisyProjectsStep) Run(request api.Request) (map[string]flo
 		SELECT * FROM feature_vrops_project_noisiness
 		WHERE project = :project_id
 	`, map[string]any{
-		"project_id": request.Spec.Data.ProjectID,
+		"project_id": request.GetSpec().Data.ProjectID,
 	}); err != nil {
 		return nil, err
 	}

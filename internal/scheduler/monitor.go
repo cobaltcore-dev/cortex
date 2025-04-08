@@ -146,8 +146,8 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 
 	// Observe how many hosts are removed from the state.
 	hostsInScenario := make(map[string]struct{})
-	for _, host := range request.Hosts {
-		hostsInScenario[host.ComputeHost] = struct{}{}
+	for _, host := range request.GetHosts() {
+		hostsInScenario[host] = struct{}{}
 	}
 	nHostsRemoved := len(hostsInScenario) - len(weights)
 	if nHostsRemoved < 0 {

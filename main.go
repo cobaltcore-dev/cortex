@@ -17,7 +17,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	apihttp "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
@@ -72,8 +72,8 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
 	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
-	apiMonitor := api.NewSchedulerMonitor(registry)
-	api := api.NewAPI(config.API, &schedulerPipeline, apiMonitor)
+	apiMonitor := apihttp.NewSchedulerMonitor(registry)
+	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
 	api.Init(ctx)
 }
 
