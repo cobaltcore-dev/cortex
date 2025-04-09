@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 )
@@ -30,12 +29,13 @@ func TestNewNovaAPI(t *testing.T) {
 }
 
 func TestNovaAPI_GetAllServers(t *testing.T) {
+	exampleTime := "2023-01-01T00:00:00Z"
 	tests := []struct {
 		name string
-		time *time.Time
+		time *string
 	}{
 		{"nil", nil},
-		{"time", &time.Time{}},
+		{"time", &exampleTime},
 	}
 	for _, tt := range tests {
 		handler := func(w http.ResponseWriter, r *http.Request) {
@@ -43,10 +43,6 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 				// Check that the changes-since query parameter is not set.
 				if r.URL.Query().Get("changes-since") != "" {
 					t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
-				}
-			} else {
-				if r.URL.Query().Get("changes-since") != tt.time.Format(time.RFC3339) {
-					t.Fatalf("expected changes-since query parameter to be %s, got %s", tt.time.Format(time.RFC3339), r.URL.Query().Get("changes-since"))
 				}
 			}
 			w.Header().Add("Content-Type", "application/json")
@@ -69,7 +65,7 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 		api.Init(t.Context())
 
 		ctx := t.Context()
-		servers, err := api.GetAllServers(ctx, tt.time)
+		servers, err := api.GetNewServers(ctx, tt.time)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -80,98 +76,70 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 }
 
 func TestNovaAPI_GetAllHypervisors(t *testing.T) {
-	tests := []struct {
-		name string
-		time *time.Time
-	}{
-		{"nil", nil},
-		{"time", &time.Time{}},
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		// changes-since is not supported by the hypervisor api so
+		// the query parameter should not be set.
+		if r.URL.Query().Get("changes-since") != "" {
+			t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
+		}
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := struct {
+			Hypervisors []Hypervisor `json:"hypervisors"`
+		}{
+			Hypervisors: []Hypervisor{{ID: 1, Hostname: "hypervisor1"}},
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
 	}
-	for _, tt := range tests {
-		handler := func(w http.ResponseWriter, r *http.Request) {
-			// changes-since is not supported by the hypervisor api so
-			// the query parameter should not be set.
-			if r.URL.Query().Get("changes-since") != "" {
-				t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
-			}
-			w.Header().Add("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			resp := struct {
-				Hypervisors []Hypervisor `json:"hypervisors"`
-			}{
-				Hypervisors: []Hypervisor{{ID: 1, Hostname: "hypervisor1"}},
-			}
-			if err := json.NewEncoder(w).Encode(resp); err != nil {
-				t.Fatalf("failed to write response: %v", err)
-			}
-		}
-		server, k := setupNovaMockServer(handler)
-		defer server.Close()
+	server, k := setupNovaMockServer(handler)
+	defer server.Close()
 
-		mon := sync.Monitor{}
-		conf := NovaConf{Availability: "public"}
+	mon := sync.Monitor{}
+	conf := NovaConf{Availability: "public"}
 
-		api := newNovaAPI(mon, k, conf).(*novaAPI)
-		api.Init(t.Context())
+	api := newNovaAPI(mon, k, conf).(*novaAPI)
+	api.Init(t.Context())
 
-		ctx := t.Context()
-		hypervisors, err := api.GetAllHypervisors(ctx, tt.time)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if len(hypervisors) != 1 {
-			t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
-		}
+	ctx := t.Context()
+	hypervisors, err := api.GetAllHypervisors(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(hypervisors) != 1 {
+		t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
 	}
 }
 
 func TestNovaAPI_GetAllFlavors(t *testing.T) {
-	tests := []struct {
-		name string
-		time *time.Time
-	}{
-		{"nil", nil},
-		{"time", &time.Time{}},
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := struct {
+			Flavors []Flavor `json:"flavors"`
+		}{
+			Flavors: []Flavor{{ID: "1", Name: "flavor1"}},
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
 	}
-	for _, tt := range tests {
-		handler := func(w http.ResponseWriter, r *http.Request) {
-			if tt.time == nil {
-				// Check that the changes-since query parameter is not set.
-				if r.URL.Query().Get("changes-since") != "" {
-					t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
-				}
-			} else {
-				if r.URL.Query().Get("changes-since") != tt.time.Format(time.RFC3339) {
-					t.Fatalf("expected changes-since query parameter to be %s, got %s", tt.time.Format(time.RFC3339), r.URL.Query().Get("changes-since"))
-				}
-			}
-			w.Header().Add("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			resp := struct {
-				Flavors []Flavor `json:"flavors"`
-			}{
-				Flavors: []Flavor{{ID: "1", Name: "flavor1"}},
-			}
-			if err := json.NewEncoder(w).Encode(resp); err != nil {
-				t.Fatalf("failed to write response: %v", err)
-			}
-		}
-		server, k := setupNovaMockServer(handler)
-		defer server.Close()
+	server, k := setupNovaMockServer(handler)
+	defer server.Close()
 
-		mon := sync.Monitor{}
-		conf := NovaConf{Availability: "public"}
+	mon := sync.Monitor{}
+	conf := NovaConf{Availability: "public"}
 
-		api := newNovaAPI(mon, k, conf).(*novaAPI)
-		api.Init(t.Context())
+	api := newNovaAPI(mon, k, conf).(*novaAPI)
+	api.Init(t.Context())
 
-		ctx := t.Context()
-		flavors, err := api.GetAllFlavors(ctx, tt.time)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if len(flavors) != 1 {
-			t.Fatalf("expected 1 flavor, got %d", len(flavors))
-		}
+	ctx := t.Context()
+	flavors, err := api.GetAllFlavors(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(flavors) != 1 {
+		t.Fatalf("expected 1 flavor, got %d", len(flavors))
 	}
 }
