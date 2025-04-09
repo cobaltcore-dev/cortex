@@ -6,7 +6,6 @@ package openstack
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -18,15 +17,15 @@ type mockNovaAPI struct{}
 
 func (m *mockNovaAPI) Init(ctx context.Context) {}
 
-func (m *mockNovaAPI) GetAllServers(ctx context.Context, t *time.Time) ([]Server, error) {
+func (m *mockNovaAPI) GetNewServers(ctx context.Context, t *string) ([]Server, error) {
 	return []Server{{ID: "1", Name: "server1"}}, nil
 }
 
-func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context, t *time.Time) ([]Hypervisor, error) {
+func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	return []Hypervisor{{ID: 1, Hostname: "hypervisor1"}}, nil
 }
 
-func (m *mockNovaAPI) GetAllFlavors(ctx context.Context, t *time.Time) ([]Flavor, error) {
+func (m *mockNovaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	return []Flavor{{ID: "1", Name: "flavor1"}}, nil
 }
 
@@ -85,7 +84,7 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	servers, err := syncer.SyncServers(ctx)
+	servers, err := syncer.SyncNewServers(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -110,7 +109,7 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	hypervisors, err := syncer.SyncHypervisors(ctx)
+	hypervisors, err := syncer.SyncAllHypervisors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -135,7 +134,7 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	flavors, err := syncer.SyncFlavors(ctx)
+	flavors, err := syncer.SyncAllFlavors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
