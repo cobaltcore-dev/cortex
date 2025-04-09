@@ -42,12 +42,12 @@ func TestBaseExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if extractor.YamlOpts.Options.Option1 != "value1" {
-		t.Errorf("expected Option1 to be 'value1', got %s", extractor.YamlOpts.Options.Option1)
+	if extractor.Options.Option1 != "value1" {
+		t.Errorf("expected Option1 to be 'value1', got %s", extractor.Options.Option1)
 	}
 
-	if extractor.YamlOpts.Options.Option2 != 2 {
-		t.Errorf("expected Option2 to be 2, got %d", extractor.YamlOpts.Options.Option2)
+	if extractor.Options.Option2 != 2 {
+		t.Errorf("expected Option2 to be 2, got %d", extractor.Options.Option2)
 	}
 
 	if !testDB.TableExists(MockFeature{}) {

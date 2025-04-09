@@ -21,7 +21,7 @@ type BaseExtractor[Opts any, Feature db.Table] struct {
 
 // Init the extractor with the database and options.
 func (e *BaseExtractor[Opts, Feature]) Init(db db.DB, opts conf.RawOpts) error {
-	if err := e.YamlOpts.Load(opts); err != nil {
+	if err := e.Load(opts); err != nil {
 		return err
 	}
 	e.DB = db

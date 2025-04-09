@@ -37,11 +37,11 @@ func TestBaseStep_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if step.YamlOpts.Options.Option1 != "value1" {
-		t.Errorf("expected Option1 to be 'value1', got %s", step.YamlOpts.Options.Option1)
+	if step.Options.Option1 != "value1" {
+		t.Errorf("expected Option1 to be 'value1', got %s", step.Options.Option1)
 	}
 
-	if step.YamlOpts.Options.Option2 != 2 {
-		t.Errorf("expected Option2 to be 2, got %d", step.YamlOpts.Options.Option2)
+	if step.Options.Option2 != 2 {
+		t.Errorf("expected Option2 to be 2, got %d", step.Options.Option2)
 	}
 }

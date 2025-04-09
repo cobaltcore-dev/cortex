@@ -4,7 +4,6 @@
 package openstack
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -45,7 +44,7 @@ func TestPlacementAPI_GetAllResourceProviders(t *testing.T) {
 	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
 	api.Init(t.Context())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	rps, err := api.GetAllResourceProviders(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -75,7 +74,7 @@ func TestPlacementAPI_GetAllTraits(t *testing.T) {
 	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	providers := []ResourceProvider{{UUID: "1", Name: "rp1"}}
 	traits, err := api.GetAllTraits(ctx, providers)
 	if err != nil {
@@ -106,7 +105,7 @@ func TestPlacementAPI_GetAllTraits_Error(t *testing.T) {
 	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	providers := []ResourceProvider{{UUID: "error", Name: "rp1"}}
 	_, err := api.GetAllTraits(ctx, providers)
 	if err == nil {

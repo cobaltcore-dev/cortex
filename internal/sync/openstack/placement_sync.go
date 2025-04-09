@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/go-gorp/gorp"
 )
@@ -22,15 +23,18 @@ type placementSyncer struct {
 	conf PlacementConf
 	// Placement API client to fetch the data.
 	api PlacementAPI
+	// MQTT client to publish mqtt data.
+	mqttClient mqtt.Client
 }
 
 // Create a new OpenStack placement syncer.
 func newPlacementSyncer(db db.DB, mon sync.Monitor, k KeystoneAPI, conf PlacementConf) Syncer {
 	return &placementSyncer{
-		db:   db,
-		mon:  mon,
-		conf: conf,
-		api:  NewPlacementAPI(mon, k, conf),
+		db:         db,
+		mon:        mon,
+		conf:       conf,
+		api:        NewPlacementAPI(mon, k, conf),
+		mqttClient: mqtt.NewClient(),
 	}
 }
 
@@ -59,11 +63,13 @@ func (s *placementSyncer) Sync(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		go s.mqttClient.Publish(TriggerPlacementResourceProvidersSynced, "")
 		// Dependencies of the resource providers.
 		if slices.Contains(s.conf.Types, "traits") {
 			if _, err := s.SyncTraits(ctx, rps); err != nil {
 				return err
 			}
+			go s.mqttClient.Publish(TriggerPlacementTraitsSynced, "")
 		}
 	}
 	return nil

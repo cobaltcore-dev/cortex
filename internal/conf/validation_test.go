@@ -28,11 +28,17 @@ features:
         sync:
           prometheus:
             metrics:
-              - metric_1
+              - alias: metric_1
           openstack:
             nova:
               types:
                 - servers
+    - name: extractor_2
+      dependencies:
+        sync:
+          prometheus:
+            metrics:
+              - type: metric_type_1
 scheduler:
   steps:
     - name: scheduler_1
@@ -63,7 +69,7 @@ features:
         sync:
           prometheus:
             metrics:
-              - metric_1
+              - alias: metric_1
           openstack:
             nova:
               types:

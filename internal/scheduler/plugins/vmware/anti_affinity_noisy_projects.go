@@ -42,7 +42,7 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *AntiAffinityNoisyProjectsStep) Run(request api.Request) (map[string]float64, error) {
-	activations := s.BaseStep.BaseActivations(request)
+	activations := s.BaseActivations(request)
 	if !request.VMware {
 		// Only run this step for VMware VMs.
 		return activations, nil

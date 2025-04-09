@@ -13,6 +13,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -23,45 +24,24 @@ var supportedSyncers = map[string]func(
 	conf.SyncPrometheusHostConfig,
 	conf.SyncPrometheusMetricConfig,
 	sync.Monitor,
-) sync.Datasource{
+) Syncer{
 	"vrops_host_metric":    newSyncerOfType[VROpsHostMetric],
 	"vrops_vm_metric":      newSyncerOfType[VROpsVMMetric],
 	"node_exporter_metric": newSyncerOfType[NodeExporterMetric],
 }
 
-// Prometheus syncer for an arbitrary prometheus metric model.
-type syncer[M PrometheusMetric] struct {
-	// The time range to sync the metrics in.
-	SyncTimeRange time.Duration
-	// The sync interval for the metrics.
-	SyncInterval time.Duration
-	// The resolution of the metrics to sync.
-	// Note: this needs to be larger than the sampling rate of the metric.
-	SyncResolutionSeconds int
-	// The name of the metric to sync.
-	MetricAlias string
-	// The query to fetch the metric from Prometheus.
-	MetricQuery string
-	// The Prometheus API endpoint to fetch the metrics.
-	PrometheusAPI PrometheusAPI[M]
-	// The database to store the metrics in.
-	DB db.DB
-	// The sleep interval between syncs.
-	sleepInterval time.Duration
-
-	monitor sync.Monitor
-}
-
 // Syncer that syncs all configured metrics.
 type CombinedSyncer struct {
-	Syncers []sync.Datasource
+	syncers []Syncer
 	monitor sync.Monitor
+	// MQTT client to publish mqtt data.
+	mqttClient mqtt.Client
 }
 
 // Create multiple syncers configured by the external service configuration.
 func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.Monitor) sync.Datasource {
 	slog.Info("loading syncers", "metrics", config.Metrics)
-	syncers := []sync.Datasource{}
+	syncers := []Syncer{}
 	for _, metricConfig := range config.Metrics {
 		syncerFunc, ok := supportedSyncers[metricConfig.Type]
 		if !ok {
@@ -78,19 +58,20 @@ func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.
 		}
 	}
 	return CombinedSyncer{
-		Syncers: syncers,
-		monitor: monitor,
+		syncers:    syncers,
+		monitor:    monitor,
+		mqttClient: mqtt.NewClient(),
 	}
 }
 
 // Initialize all nested syncers.
 func (s CombinedSyncer) Init(ctx context.Context) {
-	for _, syncer := range s.Syncers {
+	for _, syncer := range s.syncers {
 		syncer.Init(ctx)
 	}
 }
 
-// Sync all metrics in parallel.
+// Sync all metrics in parallel and publish triggers.
 func (s CombinedSyncer) Sync(context context.Context) {
 	if s.monitor.PipelineRunTimer != nil {
 		hist := s.monitor.PipelineRunTimer.WithLabelValues("prometheus")
@@ -98,14 +79,44 @@ func (s CombinedSyncer) Sync(context context.Context) {
 		defer timer.ObserveDuration()
 	}
 	var wg gosync.WaitGroup
-	for _, syncer := range s.Syncers {
+	for _, syncer := range s.syncers {
 		wg.Add(1)
-		go func(syncer sync.Datasource) {
+		go func(syncer Syncer) {
 			defer wg.Done()
 			syncer.Sync(context)
+			for _, trigger := range syncer.Triggers() {
+				go s.mqttClient.Publish(trigger, "")
+			}
 		}(syncer)
 	}
 	wg.Wait()
+}
+
+type Syncer interface {
+	sync.Datasource
+	// Get triggers produced by this syncer.
+	Triggers() []string
+}
+
+// Prometheus syncer for an arbitrary prometheus metric model.
+type syncer[M PrometheusMetric] struct {
+	// The time range to sync the metrics in.
+	SyncTimeRange time.Duration
+	// The sync interval for the metrics.
+	SyncInterval time.Duration
+	// The resolution of the metrics to sync.
+	// Note: this needs to be larger than the sampling rate of the metric.
+	SyncResolutionSeconds int
+	// The metric conf.
+	MetricConf conf.SyncPrometheusMetricConfig
+	// The Prometheus API endpoint to fetch the metrics.
+	PrometheusAPI PrometheusAPI[M]
+	// The database to store the metrics in.
+	DB db.DB
+	// The sleep interval between syncs.
+	sleepInterval time.Duration
+
+	monitor sync.Monitor
 }
 
 // Create a new syncer for the given metric type.
@@ -115,7 +126,7 @@ func newSyncerOfType[M PrometheusMetric](
 	hostConf conf.SyncPrometheusHostConfig,
 	metricConf conf.SyncPrometheusMetricConfig,
 	monitor sync.Monitor,
-) sync.Datasource {
+) Syncer {
 	// Set default values if none are provided.
 	var timeRangeSeconds = 2419200 // 4 weeks
 	if metricConf.TimeRangeSeconds != nil {
@@ -134,8 +145,7 @@ func newSyncerOfType[M PrometheusMetric](
 		SyncTimeRange:         time.Duration(timeRangeSeconds) * time.Second,
 		SyncInterval:          time.Duration(intervalSeconds) * time.Second,
 		SyncResolutionSeconds: resolutionSeconds,
-		MetricAlias:           metricConf.Alias,
-		MetricQuery:           metricConf.Query,
+		MetricConf:            metricConf,
 		PrometheusAPI:         NewPrometheusAPI[M](hostConf, metricConf, monitor),
 		DB:                    db,
 		monitor:               monitor,
@@ -143,9 +153,17 @@ func newSyncerOfType[M PrometheusMetric](
 	}
 }
 
+// Get the triggers produced by this syncer.
+func (s *syncer[M]) Triggers() []string {
+	return []string{
+		TriggerMetricAliasSynced(s.MetricConf.Alias),
+		TriggerMetricTypeSynced(s.MetricConf.Type),
+	}
+}
+
 // Create the necessary database tables if they do not exist.
 func (s *syncer[M]) Init(ctx context.Context) {
-	slog.Info("initializing syncer", "metricAlias", s.MetricAlias, "metricQuery", s.MetricQuery)
+	slog.Info("initializing syncer", "conf", s.MetricConf)
 	var model M
 	if err := s.DB.CreateTable(s.DB.AddTable(model)); err != nil {
 		panic(err)
@@ -161,7 +179,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	tableName := model.TableName()
 	nRows, err := s.DB.SelectInt(
 		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = :name", tableName),
-		map[string]any{"name": s.MetricAlias},
+		map[string]any{"name": s.MetricConf.Alias},
 	)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to count rows: %w", err)
@@ -180,7 +198,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 			ORDER BY timestamp
 			DESC LIMIT 1
 		`, tableName),
-		map[string]any{"name": s.MetricAlias},
+		map[string]any{"name": s.MetricConf.Alias},
 	); err != nil {
 		return time.Time{}, fmt.Errorf("failed to get latest timestamp: %w", err)
 	}
@@ -206,13 +224,13 @@ func (s *syncer[M]) sync(start time.Time) {
 	var model M
 	tableName := model.TableName()
 	slog.Info(
-		"syncing Prometheus data", "metricAlias", s.MetricAlias,
+		"syncing Prometheus data", "metricAlias", s.MetricConf.Alias,
 		"start", start, "end", end, "tableName", tableName,
 	)
 	// Drop all metrics that are older than 4 weeks.
 	result, err := s.DB.Exec(
 		fmt.Sprintf("DELETE FROM %s WHERE name = :name AND timestamp < :timestamp", tableName),
-		map[string]any{"name": s.MetricAlias, "timestamp": time.Now().Add(-s.SyncTimeRange)},
+		map[string]any{"name": s.MetricConf.Alias, "timestamp": time.Now().Add(-s.SyncTimeRange)},
 	)
 	if err != nil {
 		slog.Error("failed to delete old metrics", "error", err)
@@ -226,7 +244,7 @@ func (s *syncer[M]) sync(start time.Time) {
 	slog.Info("deleted old metrics", "rows", rowsAffected)
 	// Fetch the metrics from Prometheus.
 	prometheusData, err := s.PrometheusAPI.FetchMetrics(
-		s.MetricQuery, start, end, s.SyncResolutionSeconds,
+		s.MetricConf.Query, start, end, s.SyncResolutionSeconds,
 	)
 	if err != nil {
 		slog.Error("failed to fetch metrics", "error", err)
@@ -244,7 +262,7 @@ func (s *syncer[M]) sync(start time.Time) {
 	}
 	slog.Info(
 		"synced Prometheus data", "newMetrics", len(prometheusData.Metrics),
-		"metricAlias", s.MetricAlias, "start", start, "end", end,
+		"metricAlias", s.MetricConf.Alias, "start", start, "end", end,
 	)
 
 	// Don't overload the Prometheus server.
@@ -259,12 +277,12 @@ func (s *syncer[M]) countMetrics() {
 	var model M
 	if nRows, err := s.DB.SelectInt(
 		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = :name", model.TableName()),
-		map[string]any{"name": s.MetricAlias},
+		map[string]any{"name": s.MetricConf.Alias},
 	); err == nil {
-		slog.Info("counted metrics", "nRows", nRows, "metricAlias", s.MetricAlias)
+		slog.Info("counted metrics", "nRows", nRows, "metricAlias", s.MetricConf.Alias)
 		if s.monitor.PipelineObjectsGauge != nil {
 			s.monitor.PipelineObjectsGauge.
-				WithLabelValues("prometheus_" + s.MetricAlias).
+				WithLabelValues("prometheus_" + s.MetricConf.Alias).
 				Set(float64(nRows))
 		}
 	} else {
@@ -280,7 +298,7 @@ func (s *syncer[M]) Sync(context context.Context) {
 	// even when no new metrics were consumed.
 	defer s.countMetrics()
 
-	slog.Info("syncing metrics", "metricAlias", s.MetricAlias)
+	slog.Info("syncing metrics", "metricAlias", s.MetricConf.Alias)
 	// Sync this metric until we are caught up.
 	start, err := s.getSyncWindowStart()
 	if err != nil {
@@ -288,5 +306,5 @@ func (s *syncer[M]) Sync(context context.Context) {
 		return
 	}
 	s.sync(start)
-	slog.Info("synced metrics", "metricAlias", s.MetricAlias)
+	slog.Info("synced metrics", "metricAlias", s.MetricConf.Alias)
 }

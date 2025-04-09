@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockNovaAPI struct{}
@@ -42,7 +43,7 @@ func TestNovaSyncer_Init(t *testing.T) {
 		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
 		api:  &mockNovaAPI{},
 	}
-	syncer.Init(context.Background())
+	syncer.Init(t.Context())
 }
 
 func TestNovaSyncer_Sync(t *testing.T) {
@@ -53,13 +54,14 @@ func TestNovaSyncer_Sync(t *testing.T) {
 
 	mon := sync.Monitor{}
 	syncer := &novaSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
-		api:  &mockNovaAPI{},
+		db:         testDB,
+		mon:        mon,
+		conf:       NovaConf{Types: []string{"servers", "hypervisors"}},
+		api:        &mockNovaAPI{},
+		mqttClient: &mqtt.MockClient{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	syncer.Init(ctx)
 	err := syncer.Sync(ctx)
 	if err != nil {
@@ -81,7 +83,7 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 		api:  &mockNovaAPI{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	syncer.Init(ctx)
 	servers, err := syncer.SyncServers(ctx)
 	if err != nil {
@@ -106,7 +108,7 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 		api:  &mockNovaAPI{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	syncer.Init(ctx)
 	hypervisors, err := syncer.SyncHypervisors(ctx)
 	if err != nil {
@@ -131,7 +133,7 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 		api:  &mockNovaAPI{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	syncer.Init(ctx)
 	flavors, err := syncer.SyncFlavors(ctx)
 	if err != nil {

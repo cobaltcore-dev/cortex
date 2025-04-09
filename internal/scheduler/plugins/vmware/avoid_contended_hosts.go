@@ -51,7 +51,7 @@ func (s *AvoidContendedHostsStep) GetName() string {
 
 // Downvote hosts that are highly contended.
 func (s *AvoidContendedHostsStep) Run(request api.Request) (map[string]float64, error) {
-	activations := s.BaseStep.BaseActivations(request)
+	activations := s.BaseActivations(request)
 	if !request.VMware {
 		// Only run this step for VMware VMs.
 		return activations, nil

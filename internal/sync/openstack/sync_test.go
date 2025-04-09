@@ -39,7 +39,7 @@ func TestCombinedSyncer_Init(t *testing.T) {
 	syncers := []Syncer{mockSyncer1, mockSyncer2}
 
 	combinedSyncer := CombinedSyncer{monitor: monitor, syncers: syncers}
-	combinedSyncer.Init(context.Background())
+	combinedSyncer.Init(t.Context())
 
 	if !mockSyncer1.initCalled {
 		t.Fatal("expected mockSyncer1.Init to be called")
@@ -62,7 +62,7 @@ func TestCombinedSyncer_Sync(t *testing.T) {
 	syncers := []Syncer{mockSyncer1, mockSyncer2}
 
 	combinedSyncer := CombinedSyncer{monitor: monitor, syncers: syncers}
-	combinedSyncer.Sync(context.Background())
+	combinedSyncer.Sync(t.Context())
 
 	if !mockSyncer1.syncCalled {
 		t.Fatal("expected mockSyncer1.Sync to be called")

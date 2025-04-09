@@ -93,7 +93,7 @@ func TestDB_Close(t *testing.T) {
 	db.Close()
 	defer dbEnv.Close()
 
-	if err := db.DbMap.Db.Ping(); err == nil {
+	if err := db.Db.Ping(); err == nil {
 		t.Fatal("expected error, got nil")
 	}
 }
