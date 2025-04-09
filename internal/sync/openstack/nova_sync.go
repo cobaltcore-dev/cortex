@@ -107,19 +107,27 @@ func (s *novaSyncer) SyncNewServers(ctx context.Context) ([]Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Check which servers only need to be updated instead of inserted.
-	// Using a contains query with the server ID:
-	q = "SELECT id FROM " + tableName + " WHERE id IN ("
-	for i, server := range newServers {
-		if i > 0 {
-			q += ", "
-		}
-		q += "'" + server.ID + "'"
-	}
-	q += ")"
-	var existingServers []Server
-	if _, err := s.db.Select(&existingServers, q); err != nil {
+	// Check if the servers are already in the database.
+	var nServersInDB int
+	q = "SELECT COUNT(*) FROM " + tableName
+	if err := s.db.SelectOne(&nServersInDB, q); err != nil {
 		return nil, err
+	}
+	var existingServers []Server
+	if nServersInDB > 0 {
+		// Check which servers only need to be updated instead of inserted.
+		// Using a contains query with the server ID:
+		q = "SELECT id FROM " + tableName + " WHERE id IN ("
+		for i, server := range newServers {
+			if i > 0 {
+				q += ", "
+			}
+			q += "'" + server.ID + "'"
+		}
+		q += ")"
+		if _, err := s.db.Select(&existingServers, q); err != nil {
+			return nil, err
+		}
 	}
 	existingServersByID := make(map[string]Server, len(existingServers))
 	for _, server := range existingServers {
