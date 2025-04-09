@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
 // MockStep is a manual mock implementation of the plugins.Step interface.
@@ -74,8 +75,8 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 		},
 	}
 
-	request := api.Request{
-		Hosts: []api.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	request := testlibAPI.MockRequest{
+		Hosts: []string{"host1", "host2"},
 	}
 
 	validator := StepValidator{
@@ -85,7 +86,7 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(request)
+	weights, err := validator.Run(&request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}
@@ -109,8 +110,8 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 		},
 	}
 
-	request := api.Request{
-		Hosts: []api.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	request := testlibAPI.MockRequest{
+		Hosts: []string{"host1", "host2"},
 	}
 
 	validator := StepValidator{
@@ -120,7 +121,7 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(request)
+	weights, err := validator.Run(&request)
 	if err == nil {
 		t.Errorf("Run() error = nil, want error")
 	}
@@ -144,8 +145,8 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 		},
 	}
 
-	request := api.Request{
-		Hosts: []api.Host{{ComputeHost: "host1"}},
+	request := testlibAPI.MockRequest{
+		Hosts: []string{"host1"},
 	}
 
 	validator := StepValidator{
@@ -155,7 +156,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(request)
+	weights, err := validator.Run(&request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}

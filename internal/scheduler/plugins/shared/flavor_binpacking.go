@@ -66,10 +66,11 @@ func (s *FlavorBinpackingStep) GetName() string {
 func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
 
-	if request.Spec.Data.NInstances > 1 {
+	spec := request.GetSpec()
+	if spec.Data.NInstances > 1 {
 		return activations, nil
 	}
-	flavorName := request.Spec.Data.Flavor.Data.Name
+	flavorName := spec.Data.Flavor.Data.Name
 	if len(s.Options.Flavors) > 0 && !slices.Contains(s.Options.Flavors, flavorName) {
 		// Skip this step if the flavor is not in the list of flavors to consider.
 		return activations, nil
@@ -83,7 +84,7 @@ func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, err
 			ram_left_mb >= 0 AND
 			vcpus_left >= 0 AND
 			disk_left_gb >= 0
-	`, map[string]any{"id": request.Spec.Data.Flavor.Data.FlavorID}); err != nil {
+	`, map[string]any{"id": spec.Data.Flavor.Data.FlavorID}); err != nil {
 		return nil, err
 	}
 

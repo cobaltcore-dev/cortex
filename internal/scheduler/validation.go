@@ -57,7 +57,7 @@ func (s *StepValidator) Run(request api.Request) (map[string]float64, error) {
 	}
 	// If not disabled, validate that the number of hosts stayed the same.
 	if !s.DisabledValidations.SameHostNumberInOut {
-		if len(weights) != len(request.Hosts) {
+		if len(weights) != len(request.GetHosts()) {
 			return nil, errors.New("number of hosts changed during step execution")
 		}
 	}

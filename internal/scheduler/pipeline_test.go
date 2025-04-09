@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
 type mockPipelineStep struct {
@@ -34,7 +35,7 @@ func (m *mockPipelineStep) Run(request api.Request) (map[string]float64, error) 
 
 func TestPipeline_Run(t *testing.T) {
 	// Create an instance of the pipeline with a mock step
-	pipeline := &Pipeline{
+	pipeline := &pipeline{
 		executionOrder: [][]plugins.Step{
 			{&mockPipelineStep{}},
 		},
@@ -46,17 +47,14 @@ func TestPipeline_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        api.Request
+		request        testlibAPI.MockRequest
 		expectedResult []string
 	}{
 		{
 			name: "Single step pipeline",
-			request: api.Request{
-				Hosts: []api.Host{
-					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
-					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
-					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
+			request: testlibAPI.MockRequest{
+				Hosts:   []string{"host1", "host2", "host3"},
+				Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 			},
 			expectedResult: []string{"host2", "host1"},
 		},
@@ -64,10 +62,7 @@ func TestPipeline_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := pipeline.Run(
-				tt.request,
-				map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
-			)
+			result, err := pipeline.Run(&tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

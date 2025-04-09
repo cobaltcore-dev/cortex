@@ -9,8 +9,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
 func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
@@ -57,18 +57,14 @@ func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        api.Request
+		request        api.MockRequest
 		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Non-vmware vm",
-			request: api.Request{
+			request: api.MockRequest{
 				VMware: false,
-				Hosts: []api.Host{
-					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
-					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
-					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
+				Hosts:  []string{"host1", "host2", "host3"},
 			},
 			// Should downvote hosts with high CPU usage
 			downvotedHosts: map[string]struct{}{
@@ -78,25 +74,18 @@ func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
 		},
 		{
 			name: "VMware vm",
-			request: api.Request{
+			request: api.MockRequest{
 				VMware: true,
-				Hosts: []api.Host{
-					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
-					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
-					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
+				Hosts:  []string{"host1", "host2", "host3"},
 			},
 			// Should not do anything for VMware VMs
 			downvotedHosts: map[string]struct{}{},
 		},
 		{
 			name: "No overloaded hosts",
-			request: api.Request{
+			request: api.MockRequest{
 				VMware: false,
-				Hosts: []api.Host{
-					{ComputeHost: "host4", HypervisorHostname: "hypervisor4"},
-					{ComputeHost: "host5", HypervisorHostname: "hypervisor5"},
-				},
+				Hosts:  []string{"host4", "host5"},
 			},
 			// Should not downvote any hosts
 			downvotedHosts: map[string]struct{}{},
@@ -105,7 +94,7 @@ func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weights, err := step.Run(tt.request)
+			weights, err := step.Run(&tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

@@ -22,6 +22,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/sapcc/go-bits/must"
 )
@@ -77,7 +78,7 @@ func main() {
 			continue
 		}
 		// Choose all hosts that have enough resources to host the new server.
-		var hosts []api.Host
+		var hosts []httpapi.ExternalSchedulerHost
 		weights := make(map[string]float64)
 		for _, hypervisor := range hypervisors {
 			if hypervisor.MemoryMB-hypervisor.MemoryMBUsed < flavor.RAM {
@@ -89,14 +90,14 @@ func main() {
 			if hypervisor.VCPUs-hypervisor.VCPUsUsed < flavor.VCPUs {
 				continue
 			}
-			hosts = append(hosts, api.Host{
+			hosts = append(hosts, httpapi.ExternalSchedulerHost{
 				ComputeHost:        hypervisor.ServiceHost,
 				HypervisorHostname: hypervisor.Hostname,
 			})
 			weights[hypervisor.ServiceHost] = 1.0
 		}
 
-		request := api.Request{
+		request := httpapi.ExternalSchedulerRequest{
 			Spec: api.NovaObject[api.NovaSpec]{
 				Data: api.NovaSpec{
 					ProjectID:        server.TenantID,
@@ -139,7 +140,7 @@ func main() {
 		if respRaw.StatusCode != http.StatusOK {
 			return
 		}
-		var resp api.Response
+		var resp httpapi.ExternalSchedulerResponse
 		must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
 
 		// Update the datacenter state based on the response.
