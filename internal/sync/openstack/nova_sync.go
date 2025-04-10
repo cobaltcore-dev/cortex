@@ -114,7 +114,7 @@ func (s *novaSyncer) SyncNewServers(ctx context.Context) ([]Server, error) {
 		return nil, err
 	}
 	var existingServers []Server
-	if nServersInDB > 0 {
+	if nServersInDB > 0 && len(newServers) > 0 {
 		// Check which servers only need to be updated instead of inserted.
 		// Using a contains query with the server ID:
 		q = "SELECT id FROM " + tableName + " WHERE id IN ("
@@ -133,16 +133,23 @@ func (s *novaSyncer) SyncNewServers(ctx context.Context) ([]Server, error) {
 	for _, server := range existingServers {
 		existingServersByID[server.ID] = server
 	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
 	for _, server := range newServers {
 		if _, ok := existingServersByID[server.ID]; ok {
-			if _, err := s.db.Update(&server); err != nil {
-				return nil, err
+			if _, err := tx.Update(&server); err != nil {
+				return nil, tx.Rollback()
 			}
 		} else {
-			if err := s.db.Insert(&server); err != nil {
-				return nil, err
+			if err := tx.Insert(&server); err != nil {
+				return nil, tx.Rollback()
 			}
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	// Delete servers that have a DELETED status.
 	q = "DELETE FROM " + Server{}.TableName() + " WHERE status = 'DELETED'"
