@@ -29,6 +29,15 @@ func (e *BaseExtractor[Opts, Feature]) Init(db db.DB, opts conf.RawOpts) error {
 	return db.CreateTable(db.AddTable(f))
 }
 
+// Extract the features directly from an sql query.
+func (e *BaseExtractor[Opts, F]) ExtractSQL(query string) ([]Feature, error) {
+	var features []F
+	if _, err := e.DB.Select(&features, query); err != nil {
+		return nil, err
+	}
+	return e.Extracted(features)
+}
+
 // Replace all features of the given model in the database and
 // return them as a slice of generic features for counting.
 func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {

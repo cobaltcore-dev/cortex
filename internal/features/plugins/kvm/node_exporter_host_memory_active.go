@@ -4,6 +4,8 @@
 package kvm
 
 import (
+	_ "embed"
+
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
@@ -42,19 +44,10 @@ func (NodeExporterHostMemoryActiveExtractor) Triggers() []string {
 	}
 }
 
+//go:embed node_exporter_host_memory_active.sql
+var nodeExporterHostMemoryActiveSQL string
+
 // Extract how much memory of kvm hosts is active.
 func (e *NodeExporterHostMemoryActiveExtractor) Extract() ([]plugins.Feature, error) {
-	var features []NodeExporterHostMemoryActive
-	if _, err := e.DB.Select(&features, `
-		SELECT
-			node AS compute_host,
-			AVG(value) AS avg_memory_active,
-			MAX(value) AS max_memory_active
-		FROM node_exporter_metrics
-		WHERE name = 'node_exporter_memory_active_pct'
-		GROUP BY node;
-	`); err != nil {
-		return nil, err
-	}
-	return e.Extracted(features)
+	return e.ExtractSQL(nodeExporterHostMemoryActiveSQL)
 }
