@@ -155,8 +155,15 @@ func (p *FeatureExtractorPipeline) initTriggerExecutionOrder() {
 func (p *FeatureExtractorPipeline) ExtractOnTrigger() {
 	// Subscribe to the MQTT topics that trigger the feature extraction.
 	mqttClient := mqtt.NewClient()
+	var lock sync.Mutex
 	for topic, subgraphs := range p.triggerExecutionOrder {
 		callback := func() {
+			// Always calculate on one execution order only.
+			// This will avoid the same feature extractor from being calculated
+			// multiple times simultaneously, leading to race conditions.
+			lock.Lock()
+			defer lock.Unlock()
+
 			for _, order := range subgraphs {
 				slog.Info("triggered feature extractors by mqtt message", "topic", topic)
 				p.extract(order)
