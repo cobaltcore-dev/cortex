@@ -192,3 +192,32 @@ type Flavor struct {
 
 // Table in which the openstack model is stored.
 func (Flavor) TableName() string { return "openstack_flavors" }
+
+// OpenStack migration model as returned by the Nova API under /os-migrations.
+// See: https://docs.openstack.org/api-ref/compute/#list-migrations
+type Migration struct {
+	ID                int    `json:"id" db:"id,primarykey"`
+	UUID              string `json:"uuid" db:"uuid"`
+	SourceCompute     string `json:"source_compute" db:"source_compute"`
+	DestCompute       string `json:"dest_compute" db:"dest_compute"`
+	SourceNode        string `json:"source_node" db:"source_node"`
+	DestNode          string `json:"dest_node" db:"dest_node"`
+	DestHost          string `json:"dest_host" db:"dest_host"`
+	OldInstanceTypeID int    `json:"old_instance_type_id" db:"old_instance_type_id"`
+	NewInstanceTypeID int    `json:"new_instance_type_id" db:"new_instance_type_id"`
+	InstanceUUID      string `json:"instance_uuid" db:"instance_uuid"`
+	// Note: the status field may not be updated by the syncer.
+	// Doing so would require us to poll the migration status of all
+	// migrations that are theoretically changeable. Use with caution.
+	Status        string  `json:"status" db:"status"`
+	MigrationType string  `json:"migration_type" db:"migration_type"`
+	UserID        *string `json:"user_id" db:"user_id"`
+	ProjectID     *string `json:"project_id" db:"project_id"`
+	CreatedAt     string  `json:"created_at" db:"created_at"`
+	// Note: the updated_at field may not be updated by the syncer
+	// after the object was first synced into the database. Use with caution.
+	UpdatedAt string `json:"updated_at" db:"updated_at"`
+}
+
+// Table in which the openstack model is stored.
+func (Migration) TableName() string { return "openstack_migrations" }
