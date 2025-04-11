@@ -77,14 +77,14 @@ func (deps *DependencyConfig) validate(c config) error {
 		}
 	}
 	confedExtractors := make(map[string]bool)
-	for _, extractor := range c.Extractors {
+	for _, extractor := range c.FeaturesConfig.Plugins {
 		confedExtractors[extractor.Name] = true
 	}
 	for _, extractor := range deps.Features.ExtractorNames {
 		if !confedExtractors[extractor] {
 			return fmt.Errorf(
 				"feature extractor dependency %s not satisfied, got %v",
-				extractor, c.Extractors,
+				extractor, c.FeaturesConfig.Plugins,
 			)
 		}
 	}
@@ -93,12 +93,17 @@ func (deps *DependencyConfig) validate(c config) error {
 
 // Check if all dependencies are satisfied.
 func (c *config) Validate() error {
-	for _, extractor := range c.Extractors {
+	for _, extractor := range c.FeaturesConfig.Plugins {
 		if err := extractor.validate(*c); err != nil {
 			return err
 		}
 	}
-	for _, step := range c.Steps {
+	for _, kpi := range c.KPIsConfig.Plugins {
+		if err := kpi.validate(*c); err != nil {
+			return err
+		}
+	}
+	for _, step := range c.SchedulerConfig.Plugins {
 		if err := step.validate(*c); err != nil {
 			return err
 		}
