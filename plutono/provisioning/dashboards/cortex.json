@@ -290,7 +290,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 11,
+        "h": 12,
         "w": 12,
         "x": 0,
         "y": 13
@@ -307,7 +307,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(sum by (le) (increase(cortex_vm_life_span_bucket[1m])))",
+          "expr": "increase(cortex_vm_life_span_bucket{flavor_id=\"all\"}[1m])",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -323,7 +323,6 @@
         "show": true,
         "showHistogram": false
       },
-      "transparent": true,
       "type": "heatmap",
       "xAxis": {
         "show": true
@@ -365,7 +364,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 11,
+        "h": 12,
         "w": 12,
         "x": 12,
         "y": 13
@@ -382,7 +381,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(sum by (le) (increase(cortex_vm_time_until_migration_bucket[1m])))",
+          "expr": "increase(cortex_vm_time_until_migration_bucket{flavor_id=\"all\"}[1m])",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -398,7 +397,6 @@
         "show": true,
         "showHistogram": false
       },
-      "transparent": true,
       "type": "heatmap",
       "xAxis": {
         "show": true
@@ -443,7 +441,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 25
       },
       "id": 62,
       "options": {
@@ -503,7 +501,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 25
       },
       "id": 61,
       "options": {
@@ -562,7 +560,7 @@
         "h": 11,
         "w": 10,
         "x": 0,
-        "y": 35
+        "y": 36
       },
       "id": 55,
       "options": {
@@ -584,7 +582,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "topk(30, (sum by(source_host) (rate(cortex_number_of_migrations{}[1m]))))",
+          "expr": "topk(30, (sum by(source_host) (rate(cortex_migrations_total{}[1m]))))",
           "interval": "",
           "legendFormat": "{{source_host}}",
           "queryType": "randomWalk",
@@ -620,7 +618,7 @@
         "h": 11,
         "w": 4,
         "x": 10,
-        "y": 35
+        "y": 36
       },
       "id": 54,
       "options": {
@@ -642,7 +640,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(type) (increase(cortex_number_of_migrations[1m]))",
+          "expr": "sum by(type) (increase(cortex_migrations_total[1m]))",
           "interval": "",
           "legendFormat": "Type: {{type}}",
           "queryType": "randomWalk",
@@ -678,7 +676,7 @@
         "h": 11,
         "w": 10,
         "x": 14,
-        "y": 35
+        "y": 36
       },
       "id": 56,
       "options": {
@@ -700,7 +698,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "topk(30, (sum by(target_host) (rate(cortex_number_of_migrations{}[1m]))))",
+          "expr": "topk(30, (sum by(target_host) (rate(cortex_migrations_total{}[1m]))))",
           "interval": "",
           "legendFormat": "{{target_host}}",
           "queryType": "randomWalk",
@@ -719,7 +717,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 47
       },
       "id": 29,
       "panels": [],
@@ -739,10 +737,10 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 11,
-        "w": 12,
+        "h": 10,
+        "w": 24,
         "x": 0,
-        "y": 47
+        "y": 48
       },
       "hiddenSeries": false,
       "id": 51,
@@ -752,6 +750,7 @@
         "current": false,
         "max": true,
         "min": true,
+        "rightSide": true,
         "show": true,
         "total": true,
         "values": true
@@ -837,9 +836,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 11,
-        "w": 12,
-        "x": 12,
-        "y": 47
+        "w": 24,
+        "x": 0,
+        "y": 58
       },
       "hiddenSeries": false,
       "id": 52,
@@ -936,7 +935,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 69
       },
       "hiddenSeries": false,
       "id": 26,
@@ -1044,7 +1043,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 70
+        "y": 81
       },
       "hiddenSeries": false,
       "id": 37,
@@ -1141,7 +1140,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 70
+        "y": 81
       },
       "hiddenSeries": false,
       "id": 40,
@@ -1253,7 +1252,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 70
+        "y": 81
       },
       "hiddenSeries": false,
       "id": 33,
@@ -1365,7 +1364,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 70
+        "y": 81
       },
       "hiddenSeries": false,
       "id": 42,
@@ -1493,7 +1492,7 @@
         "h": 31,
         "w": 12,
         "x": 0,
-        "y": 81
+        "y": 92
       },
       "id": 45,
       "options": {
@@ -1563,7 +1562,7 @@
         "h": 31,
         "w": 12,
         "x": 12,
-        "y": 81
+        "y": 92
       },
       "id": 46,
       "options": {
@@ -1606,7 +1605,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 112
+        "y": 123
       },
       "id": 31,
       "panels": [],
@@ -1631,7 +1630,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 113
+        "y": 124
       },
       "hiddenSeries": false,
       "id": 35,
@@ -1680,7 +1679,6 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "transparent": true,
       "type": "graph",
       "xaxis": {
         "buckets": null,
@@ -1739,7 +1737,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 125
+        "y": 136
       },
       "id": 43,
       "options": {
@@ -1781,7 +1779,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 137
+        "y": 148
       },
       "id": 23,
       "panels": [],
@@ -1804,7 +1802,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 138
+        "y": 149
       },
       "hiddenSeries": false,
       "id": 20,
@@ -1853,7 +1851,6 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "transparent": true,
       "type": "graph",
       "xaxis": {
         "buckets": null,
@@ -1916,7 +1913,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 150
+        "y": 161
       },
       "id": 21,
       "options": {
@@ -1988,7 +1985,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 150
+        "y": 161
       },
       "id": 38,
       "options": {
@@ -2032,7 +2029,7 @@
     "list": []
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
