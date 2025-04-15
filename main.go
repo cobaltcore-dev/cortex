@@ -12,6 +12,7 @@ import (
 	gosync "sync"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/commands/checks"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
@@ -131,7 +132,7 @@ func main() {
 		taskName = os.Args[1]
 		bininfo.SetTaskName(taskName)
 	} else {
-		panic(fmt.Sprintf("usage: %s [syncer | extractor | scheduler]", os.Args[0]))
+		panic(fmt.Sprintf("usage: %s [checks | syncer | extractor | scheduler]", os.Args[0]))
 	}
 
 	dbInstance := db.NewPostgresDB(config.GetDBConfig())
@@ -139,6 +140,14 @@ func main() {
 
 	migrater := db.NewMigrater(dbInstance)
 	migrater.Migrate(true)
+
+	// If we're running one-off tasks (commands), don't setup the monitoring server.
+	//nolint:gocritic // We may add more tasks in the future.
+	switch taskName {
+	case "checks":
+		checks.RunChecks(ctx, config)
+		return
+	}
 
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)

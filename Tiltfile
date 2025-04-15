@@ -56,6 +56,17 @@ k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(8004, 8080), # Websocket connection
 ], labels=['Core-Services'])
 
+########### Cortex Commands
+k8s_resource('cortex-cli', labels=['Commands'])
+local_resource(
+    'Run E2E Tests',
+    'kubectl exec -it cortex-cli -- /usr/bin/cortex checks',
+    deps=['./internal/checks'],
+    labels=['Commands'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+)
+
 ########### Postgres DB for Cortex Core Service
 k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))
 k8s_resource('cortex-postgresql', port_forwards=[
