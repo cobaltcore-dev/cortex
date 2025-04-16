@@ -29,7 +29,7 @@ type LoggingConfig struct {
 // Database configuration.
 type DBConfig struct {
 	Host     string `json:"host"`
-	Port     string `json:"port"`
+	Port     int    `json:"port"`
 	Database string `json:"database"`
 	User     string `json:"user"`
 	Password string `json:"password"`
@@ -213,9 +213,9 @@ type config struct {
 	MQTTConfig       `json:"mqtt"`
 }
 
-// Create a new configuration from the default config yaml file.
+// Create a new configuration from the default config json file.
 func NewConfig() Config {
-	return newConfigFromFile("/etc/config/conf.yaml")
+	return newConfigFromFile("/etc/config/conf.json")
 }
 
 // Create a new configuration from the given file.

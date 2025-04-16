@@ -6,6 +6,7 @@ package db
 import (
 	"database/sql"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,14 +27,14 @@ type Table interface {
 
 // Create a new postgres database and wait until it is connected.
 func NewPostgresDB(c conf.DBConfig) DB {
-	stripYaml := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
+	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
-		HostName:          stripYaml(c.Host),
-		Port:              stripYaml(c.Port),
-		UserName:          stripYaml(c.User),
-		Password:          stripYaml(c.Password),
+		HostName:          strip(c.Host),
+		Port:              strconv.Itoa(c.Port),
+		UserName:          strip(c.User),
+		Password:          strip(c.Password),
 		ConnectionOptions: "sslmode=disable",
-		DatabaseName:      stripYaml(c.Database),
+		DatabaseName:      strip(c.Database),
 	})
 	if err != nil {
 		panic(err)

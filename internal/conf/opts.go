@@ -3,7 +3,10 @@
 
 package conf
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"log/slog"
+)
 
 // Raw options that are not directly unmarshalled when loading from json.
 // Usage: call Unmarshal to unmarshal the options into a struct.
@@ -29,8 +32,10 @@ func (msg *RawOpts) Unmarshal(v any) error {
 }
 
 // Override the default json unmarshal behavior to postpone the unmarshal.
-func (msg *RawOpts) UnmarshalJSON(unmarshal func(any) error) error {
-	msg.unmarshal = unmarshal
+func (msg *RawOpts) UnmarshalJSON(data []byte) error {
+	msg.unmarshal = func(v any) error {
+		return json.Unmarshal(data, v)
+	}
 	return nil
 }
 
@@ -47,6 +52,7 @@ func (s *JsonOpts[Options]) Load(opts RawOpts) error {
 	if err := opts.Unmarshal(&o); err != nil {
 		return err
 	}
+	slog.Info("jsonopts: loaded", "options", o)
 	s.Options = o
 	return nil
 }

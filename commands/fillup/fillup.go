@@ -32,7 +32,7 @@ import (
 func main() {
 	db := db.NewPostgresDB(conf.DBConfig{
 		Host:     "localhost",
-		Port:     "5432",
+		Port:     5432,
 		User:     "postgres",
 		Password: "secret",
 		Database: "postgres",
