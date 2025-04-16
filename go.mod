@@ -16,6 +16,8 @@ require (
 	github.com/sapcc/go-api-declarations v1.14.3
 	github.com/sapcc/go-bits v0.0.0-20250410003731-7b4174e5d933
 	go.uber.org/automaxprocs v1.6.0
+	// TODO: We should replace this package, since the author decided to
+	// archive it on 1st of April 2025 (unfortunately no April fools joke).
 	gopkg.in/yaml.v3 v3.0.1
 )
 
