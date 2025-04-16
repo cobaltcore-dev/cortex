@@ -40,7 +40,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-            main
+            latest
       - name: Build and Push Cortex
         id: push_cortex
         uses: docker/build-push-action@v6
