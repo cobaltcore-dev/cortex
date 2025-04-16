@@ -197,3 +197,19 @@ func TestInvalidConf_MissingHost(t *testing.T) {
 		t.Fatalf("expected error, got nil")
 	}
 }
+
+func TestInvalidConf_MissingFeatureForKPI(t *testing.T) {
+	content := `
+kpis:
+  plugins:
+    - name: vm_life_span_kpi
+      dependencies:
+        features:
+          extractors:
+            - extractor_1
+`
+	conf := newConfigFromBytes([]byte(content))
+	if err := conf.Validate(); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}

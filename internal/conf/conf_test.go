@@ -55,7 +55,7 @@ func TestNewConfig(t *testing.T) {
     }
   },
   "features": {
-    "extractors": [
+    "plugins": [
       {
         "name": "vrops_hostsystem_resolver"
       },
@@ -68,7 +68,7 @@ func TestNewConfig(t *testing.T) {
     ]
   },
   "scheduler": {
-    "steps": [
+    "plugins": [
       {
         "name": "vmware_anti_affinity_noisy_projects",
         "options": {
@@ -81,6 +81,13 @@ func TestNewConfig(t *testing.T) {
           "maxCPUContentionThreshold": 50
         }
       }
+    ]
+  },
+  "kpis": {
+	"plugins": [
+	  {
+	    "name": "vm_life_span_kpi"
+	  }
     ]
   }
 }
@@ -100,21 +107,21 @@ func TestNewConfig(t *testing.T) {
 
 	// Test FeaturesConfig
 	featuresConfig := config.GetFeaturesConfig()
-	if len(featuresConfig.Extractors) != 3 {
-		t.Errorf("Expected 3 extractors, got %d", len(featuresConfig.Extractors))
+	if len(featuresConfig.Plugins) != 3 {
+		t.Errorf("Expected 3 extractors, got %d", len(featuresConfig.Plugins))
 	}
 
 	// Test SchedulerConfig
 	schedulerConfig := config.GetSchedulerConfig()
-	if len(schedulerConfig.Steps) != 2 {
-		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Steps))
+	if len(schedulerConfig.Plugins) != 2 {
+		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Plugins))
 	}
 	var decodedContent map[string]any
 	if err := json.Unmarshal([]byte(content), &decodedContent); err != nil {
 		t.Fatalf("Failed to unmarshal YAML content: %v", err)
 	}
 
-	schedulerSteps := decodedContent["scheduler"].(map[string]any)["steps"].([]any)
+	schedulerSteps := decodedContent["scheduler"].(map[string]any)["plugins"].([]any)
 	step1Options := schedulerSteps[0].(map[string]any)["options"].(map[string]any)
 	step2Options := schedulerSteps[1].(map[string]any)["options"].(map[string]any)
 
@@ -123,5 +130,11 @@ func TestNewConfig(t *testing.T) {
 	}
 	if step2Options["maxCPUContentionThreshold"] != 50.0 {
 		t.Errorf("Expected maxCPUContentionThreshold to be 50, got %v", step2Options["maxCPUContentionThreshold"])
+	}
+
+	// Test KPIsConfig
+	kpisConfig := config.GetKPIsConfig()
+	if len(kpisConfig.Plugins) != 1 {
+		t.Errorf("Expected 1 kpi, got %d", len(kpisConfig.Plugins))
 	}
 }

@@ -132,7 +132,7 @@ type FeatureExtractorConfig struct {
 
 // Configuration for the features module.
 type FeaturesConfig struct {
-	Extractors []FeatureExtractorConfig `json:"extractors"`
+	Plugins []FeatureExtractorConfig `json:"plugins"`
 }
 
 type SchedulerStepConfig struct {
@@ -156,8 +156,8 @@ type SchedulerStepDisabledValidationsConfig struct {
 
 // Configuration for the scheduler module.
 type SchedulerConfig struct {
-	// Scheduler steps by their name.
-	Steps []SchedulerStepConfig `json:"steps"`
+	// Scheduler step plugins by their name.
+	Plugins []SchedulerStepConfig `json:"plugins"`
 
 	API SchedulerAPIConfig `json:"api"`
 }
@@ -170,6 +170,22 @@ type SchedulerAPIConfig struct {
 
 	// The port to use for the scheduler API.
 	Port int `json:"port"`
+}
+
+// Configuration for the kpis module.
+type KPIsConfig struct {
+	// KPI plugins to use.
+	Plugins []KPIPluginConfig `yaml:"plugins"`
+}
+
+// Configuration for a single KPI plugin.
+type KPIPluginConfig struct {
+	// The name of the KPI plugin.
+	Name string `yaml:"name"`
+	// Custom options for the KPI plugin, as a raw yaml map.
+	Options RawOpts `yaml:"options,omitempty"`
+	// The dependencies this KPI plugin needs.
+	DependencyConfig `yaml:"dependencies,omitempty"`
 }
 
 // Configuration for the monitoring module.
@@ -197,6 +213,7 @@ type Config interface {
 	GetSyncConfig() SyncConfig
 	GetFeaturesConfig() FeaturesConfig
 	GetSchedulerConfig() SchedulerConfig
+	GetKPIsConfig() KPIsConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
 	// Check if the configuration is valid.
@@ -210,6 +227,7 @@ type config struct {
 	FeaturesConfig   `json:"features"`
 	SchedulerConfig  `json:"scheduler"`
 	MonitoringConfig `json:"monitoring"`
+	KPIsConfig       `json:"kpis"`
 	MQTTConfig       `json:"mqtt"`
 }
 
@@ -246,5 +264,6 @@ func (c *config) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
 func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
 func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
+func (c *config) GetKPIsConfig() KPIsConfig             { return c.KPIsConfig }
 func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
 func (c *config) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }

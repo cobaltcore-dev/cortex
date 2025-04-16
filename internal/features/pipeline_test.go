@@ -60,7 +60,7 @@ func TestFeatureExtractorPipeline_Extract_Failure(t *testing.T) {
 func TestFeatureExtractorPipeline_InitDependencyGraph(t *testing.T) {
 	// Mock configuration with two extractors and a dependency
 	config := conf.FeaturesConfig{
-		Extractors: []conf.FeatureExtractorConfig{
+		Plugins: []conf.FeatureExtractorConfig{
 			{
 				Name:    "extractor1",
 				Options: conf.RawOpts{},
@@ -135,7 +135,7 @@ func TestFeatureExtractorPipeline_InitDependencyGraph(t *testing.T) {
 func TestFeatureExtractorPipeline_InitTriggerExecutionOrder(t *testing.T) {
 	// Mock configuration with two extractors and triggers
 	config := conf.FeaturesConfig{
-		Extractors: []conf.FeatureExtractorConfig{
+		Plugins: []conf.FeatureExtractorConfig{
 			{
 				Name:    "extractor1",
 				Options: conf.RawOpts{},
