@@ -16,6 +16,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	apihttp "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
@@ -76,6 +77,14 @@ func runScheduler(ctx context.Context, registry *monitoring.Registry, config con
 	apiMonitor := apihttp.NewSchedulerMonitor(registry)
 	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
 	api.Init(ctx)
+}
+
+// Run a kpi service that periodically calculates kpis.
+func runKPIService(registry *monitoring.Registry, config conf.KPIsConfig, db db.DB) {
+	pipeline := kpis.NewPipeline(config)
+	if err := pipeline.Init(kpis.SupportedKPIs, db, registry); err != nil {
+		panic("failed to initialize kpi pipeline: " + err.Error())
+	}
 }
 
 // Run the prometheus metrics server for monitoring.
@@ -160,6 +169,8 @@ func main() {
 		go runExtractor(registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
 		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance)
+	case "kpis":
+		go runKPIService(registry, config.GetKPIsConfig(), dbInstance)
 	default:
 		panic("unknown task")
 	}

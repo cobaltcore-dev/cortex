@@ -32,7 +32,7 @@ func TestValidConf(t *testing.T) {
     }
   },
   "features": {
-    "extractors": [
+    "plugins": [
       {
         "name": "extractor_1",
         "dependencies": {
@@ -69,7 +69,7 @@ func TestValidConf(t *testing.T) {
     ]
   },
   "scheduler": {
-    "steps": [
+    "plugins": [
       {
         "name": "scheduler_1",
         "dependencies": {
@@ -106,7 +106,7 @@ func TestInvalidConf_MissingNovaDependency(t *testing.T) {
     }
   },
   "features": {
-    "extractors": [
+    "plugins": [
       {
         "name": "extractor_1",
         "dependencies": {
@@ -193,6 +193,35 @@ func TestInvalidConf_MissingHost(t *testing.T) {
 }
 `
 	conf := newConfigFromBytes([]byte(content))
+	if err := conf.Validate(); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}
+
+func TestInvalidConf_MissingFeatureForKPI(t *testing.T) {
+	content := `
+{
+  "kpis": {
+    "plugins": [
+      {
+        "name": "vm_life_span_kpi",
+        "dependencies": {
+          "features": {
+            "extractors": [
+              "extractor_1"
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
+`
+	conf := newConfigFromBytes([]byte(content))
+	if len(conf.GetKPIsConfig().Plugins) == 0 {
+		t.Fatalf("expected plugins, got none")
+	}
+	t.Log("conf.GetKPIsConfig().Plugins", conf.GetKPIsConfig().Plugins)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}

@@ -167,3 +167,89 @@ func TestMarshalOpenStackHypervisor(t *testing.T) {
 		t.Error("expected JSON to contain 'service'")
 	}
 }
+
+func TestUnmarshalOpenStackMigration(t *testing.T) {
+	data := []byte(`{
+        "id": 1,
+        "uuid": "migration-uuid",
+        "source_compute": "host1",
+        "dest_compute": "host2",
+        "source_node": "node1",
+        "dest_node": "node2",
+        "dest_host": "192.168.0.2",
+        "old_instance_type_id": 1,
+        "new_instance_type_id": 2,
+        "instance_uuid": "instance-uuid",
+        "status": "completed",
+        "migration_type": "resize",
+        "user_id": "user1",
+        "project_id": "project1",
+        "created_at": "2025-01-01T00:00:00Z",
+        "updated_at": "2025-01-02T00:00:00Z"
+    }`)
+
+	var migration Migration
+	err := json.Unmarshal(data, &migration)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if migration.ID != 1 {
+		t.Errorf("expected ID to be %d, got %d", 1, migration.ID)
+	}
+	if migration.UUID != "migration-uuid" {
+		t.Errorf("expected UUID to be %s, got %s", "migration-uuid", migration.UUID)
+	}
+	if migration.SourceCompute != "host1" {
+		t.Errorf("expected SourceCompute to be %s, got %s", "host1", migration.SourceCompute)
+	}
+	if migration.DestCompute != "host2" {
+		t.Errorf("expected DestCompute to be %s, got %s", "host2", migration.DestCompute)
+	}
+	if migration.Status != "completed" {
+		t.Errorf("expected Status to be %s, got %s", "completed", migration.Status)
+	}
+	if migration.MigrationType != "resize" {
+		t.Errorf("expected MigrationType to be %s, got %s", "resize", migration.MigrationType)
+	}
+}
+
+func TestMarshalOpenStackMigration(t *testing.T) {
+	migration := Migration{
+		ID:                1,
+		UUID:              "migration-uuid",
+		SourceCompute:     "host1",
+		DestCompute:       "host2",
+		SourceNode:        "node1",
+		DestNode:          "node2",
+		DestHost:          "192.168.0.2",
+		OldInstanceTypeID: 1,
+		NewInstanceTypeID: 2,
+		InstanceUUID:      "instance-uuid",
+		Status:            "completed",
+		MigrationType:     "resize",
+		UserID:            "user1",
+		ProjectID:         "project1",
+		CreatedAt:         "2025-01-01T00:00:00Z",
+		UpdatedAt:         "2025-01-02T00:00:00Z",
+	}
+
+	data, err := json.Marshal(migration)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Check if the data contains key fields:
+	if !json.Valid(data) {
+		t.Error("expected valid JSON, got invalid")
+	}
+	if !strings.Contains(string(data), `"id":1`) {
+		t.Error("expected JSON to contain 'id'")
+	}
+	if !strings.Contains(string(data), `"uuid":"migration-uuid"`) {
+		t.Error("expected JSON to contain 'uuid'")
+	}
+	if !strings.Contains(string(data), `"status":"completed"`) {
+		t.Error("expected JSON to contain 'status'")
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 )
@@ -28,14 +29,13 @@ func TestNewNovaAPI(t *testing.T) {
 	}
 }
 
-func TestNovaAPI_GetAllServers(t *testing.T) {
-	exampleTime := "2023-01-01T00:00:00Z"
+func TestNovaAPI_GetChangedServers(t *testing.T) {
 	tests := []struct {
 		name string
-		time *string
+		time *time.Time
 	}{
 		{"nil", nil},
-		{"time", &exampleTime},
+		{"time", &time.Time{}},
 	}
 	for _, tt := range tests {
 		handler := func(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +43,10 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 				// Check that the changes-since query parameter is not set.
 				if r.URL.Query().Get("changes-since") != "" {
 					t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
+				}
+			} else {
+				if r.URL.Query().Get("changes-since") != tt.time.Format(time.RFC3339) {
+					t.Fatalf("expected changes-since query parameter to be %s, got %s", tt.time.Format(time.RFC3339), r.URL.Query().Get("changes-since"))
 				}
 			}
 			w.Header().Add("Content-Type", "application/json")
@@ -65,7 +69,7 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 		api.Init(t.Context())
 
 		ctx := t.Context()
-		servers, err := api.GetNewServers(ctx, tt.time)
+		servers, err := api.GetChangedServers(ctx, tt.time)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -75,71 +79,157 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 	}
 }
 
-func TestNovaAPI_GetAllHypervisors(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		// changes-since is not supported by the hypervisor api so
-		// the query parameter should not be set.
-		if r.URL.Query().Get("changes-since") != "" {
-			t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
-		}
-		w.Header().Add("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		resp := struct {
-			Hypervisors []Hypervisor `json:"hypervisors"`
-		}{
-			Hypervisors: []Hypervisor{{ID: 1, Hostname: "hypervisor1"}},
-		}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			t.Fatalf("failed to write response: %v", err)
-		}
+func TestNovaAPI_GetChangedHypervisors(t *testing.T) {
+	tests := []struct {
+		name string
+		time *time.Time
+	}{
+		{"nil", nil},
+		{"time", &time.Time{}},
 	}
-	server, k := setupNovaMockServer(handler)
-	defer server.Close()
+	for _, tt := range tests {
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			// changes-since is not supported by the hypervisor api so
+			// the query parameter should not be set.
+			if r.URL.Query().Get("changes-since") != "" {
+				t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
+			}
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			resp := struct {
+				Hypervisors []Hypervisor `json:"hypervisors"`
+			}{
+				Hypervisors: []Hypervisor{{ID: 1, Hostname: "hypervisor1"}},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
+		}
+		server, k := setupNovaMockServer(handler)
+		defer server.Close()
 
-	mon := sync.Monitor{}
-	conf := NovaConf{Availability: "public"}
+		mon := sync.Monitor{}
+		conf := NovaConf{Availability: "public"}
 
-	api := newNovaAPI(mon, k, conf).(*novaAPI)
-	api.Init(t.Context())
+		api := newNovaAPI(mon, k, conf).(*novaAPI)
+		api.Init(t.Context())
 
-	ctx := t.Context()
-	hypervisors, err := api.GetAllHypervisors(ctx)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if len(hypervisors) != 1 {
-		t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
+		ctx := t.Context()
+		hypervisors, err := api.GetChangedHypervisors(ctx, tt.time)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if len(hypervisors) != 1 {
+			t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
+		}
 	}
 }
 
-func TestNovaAPI_GetAllFlavors(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		resp := struct {
-			Flavors []Flavor `json:"flavors"`
-		}{
-			Flavors: []Flavor{{ID: "1", Name: "flavor1"}},
+func TestNovaAPI_GetChangedFlavors(t *testing.T) {
+	tests := []struct {
+		name string
+		time *time.Time
+	}{
+		{"nil", nil},
+		{"time", &time.Time{}},
+	}
+	for _, tt := range tests {
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			if tt.time == nil {
+				// Check that the changes-since query parameter is not set.
+				if r.URL.Query().Get("changes-since") != "" {
+					t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
+				}
+			} else {
+				if r.URL.Query().Get("changes-since") != tt.time.Format(time.RFC3339) {
+					t.Fatalf("expected changes-since query parameter to be %s, got %s", tt.time.Format(time.RFC3339), r.URL.Query().Get("changes-since"))
+				}
+			}
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			resp := struct {
+				Flavors []Flavor `json:"flavors"`
+			}{
+				Flavors: []Flavor{{ID: "1", Name: "flavor1"}},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
 		}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			t.Fatalf("failed to write response: %v", err)
+		server, k := setupNovaMockServer(handler)
+		defer server.Close()
+
+		mon := sync.Monitor{}
+		conf := NovaConf{Availability: "public"}
+
+		api := newNovaAPI(mon, k, conf).(*novaAPI)
+		api.Init(t.Context())
+
+		ctx := t.Context()
+		flavors, err := api.GetChangedFlavors(ctx, tt.time)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if len(flavors) != 1 {
+			t.Fatalf("expected 1 flavor, got %d", len(flavors))
 		}
 	}
-	server, k := setupNovaMockServer(handler)
-	defer server.Close()
+}
 
-	mon := sync.Monitor{}
-	conf := NovaConf{Availability: "public"}
-
-	api := newNovaAPI(mon, k, conf).(*novaAPI)
-	api.Init(t.Context())
-
-	ctx := t.Context()
-	flavors, err := api.GetAllFlavors(ctx)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+func TestNovaAPI_GetChangedMigrations(t *testing.T) {
+	tests := []struct {
+		name string
+		time *time.Time
+	}{
+		{"nil", nil},
+		{"time", &time.Time{}},
 	}
-	if len(flavors) != 1 {
-		t.Fatalf("expected 1 flavor, got %d", len(flavors))
+	for _, tt := range tests {
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			if tt.time == nil {
+				// Check that the changes-since query parameter is not set.
+				if r.URL.Query().Get("changes-since") != "" {
+					t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
+				}
+			} else {
+				if r.URL.Query().Get("changes-since") != tt.time.Format(time.RFC3339) {
+					t.Fatalf("expected changes-since query parameter to be %s, got %s", tt.time.Format(time.RFC3339), r.URL.Query().Get("changes-since"))
+				}
+			}
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			resp := struct {
+				Migrations []Migration `json:"migrations"`
+				Links      []struct {
+					Rel  string `json:"rel"`
+					Href string `json:"href"`
+				} `json:"migrations_links"`
+			}{
+				Migrations: []Migration{{ID: 1, SourceCompute: "host1", DestCompute: "host2", Status: "completed"}},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
+		}
+		server, k := setupNovaMockServer(handler)
+		defer server.Close()
+
+		mon := sync.Monitor{}
+		conf := NovaConf{Availability: "public"}
+
+		api := newNovaAPI(mon, k, conf).(*novaAPI)
+		api.Init(t.Context())
+
+		ctx := t.Context()
+		migrations, err := api.GetChangedMigrations(ctx, tt.time)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if len(migrations) != 1 {
+			t.Fatalf("expected 1 migration, got %d", len(migrations))
+		}
+		if migrations[0].ID != 1 || migrations[0].SourceCompute != "host1" || migrations[0].DestCompute != "host2" || migrations[0].Status != "completed" {
+			t.Errorf("unexpected migration data: %+v", migrations[0])
+		}
 	}
 }
