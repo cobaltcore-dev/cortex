@@ -91,7 +91,6 @@ linters:
         - emptyStringTest
         - evalOrder
         - httpNoBody
-        - importShadow
         - initClause
         - methodExprCall
         - paramTypeCombine
