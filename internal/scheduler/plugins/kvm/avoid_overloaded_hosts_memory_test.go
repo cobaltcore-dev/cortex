@@ -39,17 +39,16 @@ func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := conf.NewRawOpts(`
-        avgMemoryUsageLowerBound: 10 # pct
-        avgMemoryUsageUpperBound: 100 # pct
-        avgMemoryUsageActivationLowerBound: 0.0
-        avgMemoryUsageActivationUpperBound: -0.5
-        # Min-max scaling for max memory usage on the host.
-        maxMemoryUsageLowerBound: 20 # pct
-        maxMemoryUsageUpperBound: 100 # pct
-        maxMemoryUsageActivationLowerBound: 0.0
-        maxMemoryUsageActivationUpperBound: -0.5
-    `)
+	opts := conf.NewRawOpts(`{
+        "avgMemoryUsageLowerBound": 10,
+        "avgMemoryUsageUpperBound": 100,
+        "avgMemoryUsageActivationLowerBound": 0.0,
+        "avgMemoryUsageActivationUpperBound": -0.5,
+        "maxMemoryUsageLowerBound": 20,
+        "maxMemoryUsageUpperBound": 100,
+        "maxMemoryUsageActivationLowerBound": 0.0,
+        "maxMemoryUsageActivationUpperBound": -0.5
+    }`)
 	step := &AvoidOverloadedHostsMemoryStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)

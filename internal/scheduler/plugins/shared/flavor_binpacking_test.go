@@ -39,23 +39,23 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := conf.NewRawOpts(`
-        cpuEnabled: true
-        cpuFreeLowerBound: 0
-        cpuFreeUpperBound: 4
-        cpuFreeActivationLowerBound: 0.0
-        cpuFreeActivationUpperBound: 1.0
-        ramEnabled: true
-        ramFreeLowerBound: 0
-        ramFreeUpperBound: 2048
-        ramFreeActivationLowerBound: 0.0
-        ramFreeActivationUpperBound: 1.0
-        diskEnabled: true
-        diskFreeLowerBound: 0
-        diskFreeUpperBound: 200
-        diskFreeActivationLowerBound: 0.0
-        diskFreeActivationUpperBound: 1.0
-    `)
+	opts := conf.NewRawOpts(`{
+        "cpuEnabled": true,
+        "cpuFreeLowerBound": 0,
+        "cpuFreeUpperBound": 4,
+        "cpuFreeActivationLowerBound": 0.0,
+        "cpuFreeActivationUpperBound": 1.0,
+        "ramEnabled": true,
+        "ramFreeLowerBound": 0,
+        "ramFreeUpperBound": 2048,
+        "ramFreeActivationLowerBound": 0.0,
+        "ramFreeActivationUpperBound": 1.0,
+        "diskEnabled": true,
+        "diskFreeLowerBound": 0,
+        "diskFreeUpperBound": 200,
+        "diskFreeActivationLowerBound": 0.0,
+        "diskFreeActivationUpperBound": 1.0
+    }`)
 	step := &FlavorBinpackingStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)

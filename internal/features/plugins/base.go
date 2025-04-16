@@ -14,7 +14,7 @@ import (
 // that would otherwise be duplicated across all extractors.
 type BaseExtractor[Opts any, Feature db.Table] struct {
 	// Options to pass via yaml to this step.
-	conf.YamlOpts[Opts]
+	conf.JsonOpts[Opts]
 	// Database connection.
 	DB db.DB
 }
