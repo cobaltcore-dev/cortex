@@ -20,6 +20,7 @@ func TestNewRegistry(t *testing.T) {
 
 	if registry == nil {
 		t.Fatalf("expected registry to be non-nil")
+		return
 	}
 	if registry.config.Labels["env"] != "test" {
 		t.Fatalf("expected registry config label 'env' to be 'test', got %v", registry.config.Labels["env"])
