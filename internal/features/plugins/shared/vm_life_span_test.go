@@ -70,7 +70,7 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VMLifeSpanExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("")); err != nil {
+	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
