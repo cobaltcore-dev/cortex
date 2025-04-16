@@ -6,5 +6,9 @@ kind: ConfigMap
 metadata:
   name: {{ include "cortex.fullname" . }}-config
 data:
-  conf.yaml: |-
-{{ include "cortex/templates/_conf.yaml.tpl" . | nindent 4 }}
+  conf.json: |-
+    {{- if .Values.conf }}
+    {{ toJson .Values.conf }}
+    {{- else }}
+    {}
+    {{- end }}

@@ -14,17 +14,17 @@ import (
 // Options for the scheduling step, given through the step config in the service yaml file.
 // Use the options contained in this struct to configure the bounds for min-max scaling.
 type AvoidOverloadedHostsCPUStepOpts struct {
-	AvgCPUUsageLowerBound float64 `yaml:"avgCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
-	AvgCPUUsageUpperBound float64 `yaml:"avgCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
+	AvgCPUUsageLowerBound float64 `json:"avgCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
+	AvgCPUUsageUpperBound float64 `json:"avgCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
 
-	AvgCPUUsageActivationLowerBound float64 `yaml:"avgCPUUsageActivationLowerBound"`
-	AvgCPUUsageActivationUpperBound float64 `yaml:"avgCPUUsageActivationUpperBound"`
+	AvgCPUUsageActivationLowerBound float64 `json:"avgCPUUsageActivationLowerBound"`
+	AvgCPUUsageActivationUpperBound float64 `json:"avgCPUUsageActivationUpperBound"`
 
-	MaxCPUUsageLowerBound float64 `yaml:"maxCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
-	MaxCPUUsageUpperBound float64 `yaml:"maxCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
+	MaxCPUUsageLowerBound float64 `json:"maxCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
+	MaxCPUUsageUpperBound float64 `json:"maxCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
 
-	MaxCPUUsageActivationLowerBound float64 `yaml:"maxCPUUsageActivationLowerBound"`
-	MaxCPUUsageActivationUpperBound float64 `yaml:"maxCPUUsageActivationUpperBound"`
+	MaxCPUUsageActivationLowerBound float64 `json:"maxCPUUsageActivationLowerBound"`
+	MaxCPUUsageActivationUpperBound float64 `json:"maxCPUUsageActivationUpperBound"`
 }
 
 func (o AvoidOverloadedHostsCPUStepOpts) Validate() error {

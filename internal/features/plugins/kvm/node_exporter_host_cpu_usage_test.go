@@ -19,7 +19,7 @@ func TestNodeExporterHostCPUUsageExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &NodeExporterHostCPUUsageExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("")); err != nil {
+	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -54,7 +54,7 @@ func TestNodeExporterHostCPUUsageExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &NodeExporterHostCPUUsageExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("")); err != nil {
+	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err = extractor.Extract(); err != nil {

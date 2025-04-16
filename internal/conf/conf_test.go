@@ -4,15 +4,14 @@
 package conf
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
 
 func createTempConfigFile(t *testing.T, content string) string {
 	tmpDir := t.TempDir()
-	tmpfile, err := os.CreateTemp(tmpDir, "yaml")
+	tmpfile, err := os.CreateTemp(tmpDir, "json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,34 +28,62 @@ func createTempConfigFile(t *testing.T, content string) string {
 
 func TestNewConfig(t *testing.T) {
 	content := `
-sync:
-  prometheus:
-    metrics:
-      - name: vrops_virtualmachine_cpu_demand_ratio
-        type: vrops_vm_metric
-        timeRangeSeconds: 2419200
-        intervalSeconds: 86400
-        resolutionSeconds: 43200
-      - name: vrops_hostsystem_cpu_contention_percentage
-        type: vrops_host_metric
-  openstack:
-    nova:
-      types:
-        - server
-        - hypervisor
-features:
-  extractors:
-    - name: vrops_hostsystem_resolver
-    - name: vrops_project_noisiness_extractor
-    - name: vrops_hostsystem_contention_extractor
-scheduler:
-  steps:
-    - name: vmware_anti_affinity_noisy_projects
-      options:
-        avgCPUThreshold: 20
-    - name: vmware_avoid_contended_hosts
-      options:
-        maxCPUContentionThreshold: 50
+{
+  "sync": {
+    "prometheus": {
+      "metrics": [
+        {
+          "name": "vrops_virtualmachine_cpu_demand_ratio",
+          "type": "vrops_vm_metric",
+          "timeRangeSeconds": 2419200,
+          "intervalSeconds": 86400,
+          "resolutionSeconds": 43200
+        },
+        {
+          "name": "vrops_hostsystem_cpu_contention_percentage",
+          "type": "vrops_host_metric"
+        }
+      ]
+    },
+    "openstack": {
+      "nova": {
+        "types": [
+          "server",
+          "hypervisor"
+        ]
+      }
+    }
+  },
+  "features": {
+    "extractors": [
+      {
+        "name": "vrops_hostsystem_resolver"
+      },
+      {
+        "name": "vrops_project_noisiness_extractor"
+      },
+      {
+        "name": "vrops_hostsystem_contention_extractor"
+      }
+    ]
+  },
+  "scheduler": {
+    "steps": [
+      {
+        "name": "vmware_anti_affinity_noisy_projects",
+        "options": {
+          "avgCPUThreshold": 20
+        }
+      },
+      {
+        "name": "vmware_avoid_contended_hosts",
+        "options": {
+          "maxCPUContentionThreshold": 50
+        }
+      }
+    ]
+  }
+}
 `
 	filepath := createTempConfigFile(t, content)
 
@@ -83,7 +110,7 @@ scheduler:
 		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Steps))
 	}
 	var decodedContent map[string]any
-	if err := yaml.Unmarshal([]byte(content), &decodedContent); err != nil {
+	if err := json.Unmarshal([]byte(content), &decodedContent); err != nil {
 		t.Fatalf("Failed to unmarshal YAML content: %v", err)
 	}
 
@@ -91,10 +118,10 @@ scheduler:
 	step1Options := schedulerSteps[0].(map[string]any)["options"].(map[string]any)
 	step2Options := schedulerSteps[1].(map[string]any)["options"].(map[string]any)
 
-	if step1Options["avgCPUThreshold"] != 20 {
+	if step1Options["avgCPUThreshold"] != 20.0 {
 		t.Errorf("Expected avgCPUThreshold to be 20, got %v", step1Options["avgCPUThreshold"])
 	}
-	if step2Options["maxCPUContentionThreshold"] != 50 {
+	if step2Options["maxCPUContentionThreshold"] != 50.0 {
 		t.Errorf("Expected maxCPUContentionThreshold to be 50, got %v", step2Options["maxCPUContentionThreshold"])
 	}
 }

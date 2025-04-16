@@ -38,18 +38,16 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := conf.NewRawOpts(`
-        # Min-max scaling for avg CPU usage on the host.
-        avgCPUUsageLowerBound: 10
-        avgCPUUsageUpperBound: 100
-        avgCPUUsageActivationLowerBound: 0.0
-        avgCPUUsageActivationUpperBound: -0.5
-        # Min-max scaling for max CPU usage on the host.
-        maxCPUUsageLowerBound: 20
-        maxCPUUsageUpperBound: 100
-        maxCPUUsageActivationLowerBound: 0.0
-        maxCPUUsageActivationUpperBound: -0.5
-    `)
+	opts := conf.NewRawOpts(`{
+        "avgCPUUsageLowerBound": 10,
+        "avgCPUUsageUpperBound": 100,
+        "avgCPUUsageActivationLowerBound": 0.0,
+        "avgCPUUsageActivationUpperBound": -0.5,
+        "maxCPUUsageLowerBound": 20,
+        "maxCPUUsageUpperBound": 100,
+        "maxCPUUsageActivationLowerBound": 0.0,
+        "maxCPUUsageActivationUpperBound": -0.5
+    }`)
 	step := &AvoidOverloadedHostsCPUStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)

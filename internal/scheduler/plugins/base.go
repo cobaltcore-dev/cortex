@@ -24,7 +24,7 @@ func (o EmptyStepOpts) Validate() error { return nil }
 // that would otherwise be duplicated across all steps.
 type BaseStep[Opts StepOpts] struct {
 	// Options to pass via yaml to this step.
-	conf.YamlOpts[Opts]
+	conf.JsonOpts[Opts]
 	// The activation function to use.
 	ActivationFunction
 	// Database connection.

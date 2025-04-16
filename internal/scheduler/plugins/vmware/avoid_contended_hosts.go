@@ -14,17 +14,17 @@ import (
 // Options for the scheduling step, given through the
 // step config in the service yaml file.
 type AvoidContendedHostsStepOpts struct {
-	AvgCPUContentionLowerBound float64 `yaml:"avgCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
-	AvgCPUContentionUpperBound float64 `yaml:"avgCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
+	AvgCPUContentionLowerBound float64 `json:"avgCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
+	AvgCPUContentionUpperBound float64 `json:"avgCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
 
-	AvgCPUContentionActivationLowerBound float64 `yaml:"avgCPUContentionActivationLowerBound"`
-	AvgCPUContentionActivationUpperBound float64 `yaml:"avgCPUContentionActivationUpperBound"`
+	AvgCPUContentionActivationLowerBound float64 `json:"avgCPUContentionActivationLowerBound"`
+	AvgCPUContentionActivationUpperBound float64 `json:"avgCPUContentionActivationUpperBound"`
 
-	MaxCPUContentionLowerBound float64 `yaml:"maxCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
-	MaxCPUContentionUpperBound float64 `yaml:"maxCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
+	MaxCPUContentionLowerBound float64 `json:"maxCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
+	MaxCPUContentionUpperBound float64 `json:"maxCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
 
-	MaxCPUContentionActivationLowerBound float64 `yaml:"maxCPUContentionActivationLowerBound"`
-	MaxCPUContentionActivationUpperBound float64 `yaml:"maxCPUContentionActivationUpperBound"`
+	MaxCPUContentionActivationLowerBound float64 `json:"maxCPUContentionActivationLowerBound"`
+	MaxCPUContentionActivationUpperBound float64 `json:"maxCPUContentionActivationUpperBound"`
 }
 
 func (o AvoidContendedHostsStepOpts) Validate() error {

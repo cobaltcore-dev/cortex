@@ -16,9 +16,6 @@ require (
 	github.com/sapcc/go-api-declarations v1.14.3
 	github.com/sapcc/go-bits v0.0.0-20250410003731-7b4174e5d933
 	go.uber.org/automaxprocs v1.6.0
-	// TODO: We should replace this package, since the author decided to
-	// archive it on 1st of April 2025 (unfortunately no April fools joke).
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -53,7 +50,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/common v0.63.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
-	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.58.0 // indirect
 	go.opentelemetry.io/otel/metric v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect

@@ -16,24 +16,24 @@ type DependencyConfig struct {
 	Sync struct {
 		OpenStack struct {
 			Nova struct {
-				ObjectTypes []string `yaml:"types,omitempty"`
-			} `yaml:"nova,omitempty"`
+				ObjectTypes []string `json:"types,omitempty"`
+			} `json:"nova,omitempty"`
 			Placement struct {
-				ObjectTypes []string `yaml:"types,omitempty"`
-			} `yaml:"placement,omitempty"`
-		} `yaml:"openstack,omitempty"`
+				ObjectTypes []string `json:"types,omitempty"`
+			} `json:"placement,omitempty"`
+		} `json:"openstack,omitempty"`
 		Prometheus struct {
 			Metrics []struct {
-				Alias string `yaml:"alias,omitempty"`
-				Type  string `yaml:"type,omitempty"`
-			} `yaml:"metrics,omitempty"`
-		} `yaml:"prometheus,omitempty"`
+				Alias string `json:"alias,omitempty"`
+				Type  string `json:"type,omitempty"`
+			} `json:"metrics,omitempty"`
+		} `json:"prometheus,omitempty"`
 	}
-	Features FeaturesDependency `yaml:"features,omitempty"`
+	Features FeaturesDependency `json:"features,omitempty"`
 }
 
 type FeaturesDependency struct {
-	ExtractorNames []string `yaml:"extractors,omitempty"`
+	ExtractorNames []string `json:"extractors,omitempty"`
 }
 
 // Validate if the dependencies are satisfied in the given config.
