@@ -11,8 +11,8 @@ import (
 // Common base for all KPIs that provides some functionality
 // that would otherwise be duplicated across all KPIs.
 type BaseKPI[Opts any] struct {
-	// Options to pass via yaml to this step.
-	conf.YamlOpts[Opts]
+	// Options to pass via json to this step.
+	conf.JsonOpts[Opts]
 	// Database connection.
 	DB db.DB
 }

@@ -175,17 +175,17 @@ type SchedulerAPIConfig struct {
 // Configuration for the kpis module.
 type KPIsConfig struct {
 	// KPI plugins to use.
-	Plugins []KPIPluginConfig `yaml:"plugins"`
+	Plugins []KPIPluginConfig `json:"plugins"`
 }
 
 // Configuration for a single KPI plugin.
 type KPIPluginConfig struct {
 	// The name of the KPI plugin.
-	Name string `yaml:"name"`
-	// Custom options for the KPI plugin, as a raw yaml map.
-	Options RawOpts `yaml:"options,omitempty"`
+	Name string `json:"name"`
+	// Custom options for the KPI plugin, as a raw json map.
+	Options RawOpts `json:"options,omitempty"`
 	// The dependencies this KPI plugin needs.
-	DependencyConfig `yaml:"dependencies,omitempty"`
+	DependencyConfig `json:"dependencies,omitempty"`
 }
 
 // Configuration for the monitoring module.

@@ -23,7 +23,7 @@ func TestVMLifeSpanExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &VMLifeSpanExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("")); err != nil {
+	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 

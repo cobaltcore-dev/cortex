@@ -32,10 +32,10 @@ func TestBaseKPI_Init(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	opts := conf.NewRawOpts(`
-        option1: value1
-        option2: 2
-    `)
+	opts := conf.NewRawOpts(`{
+        "option1": "value1",
+        "option2": 2
+    }`)
 	baseKPI := MockKPI{}
 	err := baseKPI.Init(testDB, opts)
 	if err != nil {
