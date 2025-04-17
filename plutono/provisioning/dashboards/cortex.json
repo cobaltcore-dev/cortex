@@ -299,6 +299,7 @@
       "hideZeroBuckets": false,
       "highlightCards": true,
       "id": 59,
+      "interval": null,
       "legend": {
         "show": true
       },
@@ -306,19 +307,19 @@
       "reverseYBuckets": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "sum by (le) (rate(cortex_vm_life_span_bucket{flavor_id=\"all\"}[60m]))",
+          "exemplar": false,
+          "expr": "sum(delta(cortex_vm_life_span_bucket{flavor_name=\"all\"}[1m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
-          "intervalFactor": 10,
+          "intervalFactor": 1,
           "legendFormat": "{{le}}",
           "refId": "A"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Life span of VMs (rate over 60min)",
+      "title": "Life span of deleted VMs",
       "tooltip": {
         "show": true,
         "showHistogram": false
@@ -354,8 +355,8 @@
         "colorScale": "sqrt",
         "colorScheme": "interpolateTurbo",
         "exponent": 0.01,
-        "max": 20,
-        "min": 0,
+        "max": null,
+        "min": null,
         "mode": "spectrum"
       },
       "dataFormat": "tsbuckets",
@@ -383,18 +384,18 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (le) (rate(cortex_vm_time_until_migration_bucket{flavor_id=\"all\"}[60m]))",
+          "expr": "sum(delta(cortex_vm_time_until_migration_bucket{flavor_name=\"all\"}[1m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
-          "intervalFactor": 10,
+          "intervalFactor": 1,
           "legendFormat": "{{le}}",
           "refId": "A"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Residency of VMs migrated away (rate over 60min)",
+      "title": "Residency of VMs migrated away",
       "tooltip": {
         "show": true,
         "showHistogram": false
@@ -441,7 +442,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 11,
+        "h": 13,
         "w": 12,
         "x": 0,
         "y": 25
@@ -480,6 +481,201 @@
       "type": "stat"
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "hiddenSeries": false,
+      "id": 56,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.35",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "(sum by(target_host) (delta(cortex_migrations_total{}[1m])))",
+          "interval": "",
+          "legendFormat": "{{target_host}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Incoming migrations",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:405",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:406",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "hiddenSeries": false,
+      "id": 55,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.35",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "(sum by(source_host) (delta(cortex_migrations_total{}[1m])))",
+          "format": "time_series",
+          "interval": "",
+          "legendFormat": "{{source_host}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Outgoing migrations",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:146",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:147",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
       "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
@@ -501,10 +697,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 11,
+        "h": 14,
         "w": 12,
-        "x": 12,
-        "y": 25
+        "x": 0,
+        "y": 38
       },
       "id": 61,
       "options": {
@@ -540,178 +736,101 @@
       "type": "stat"
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
       "datasource": "prometheus-openstack",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "orange",
-                "value": null
-              }
-            ]
-          }
-        },
+        "defaults": {},
         "overrides": []
       },
+      "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
-        "h": 11,
-        "w": 10,
-        "x": 0,
-        "y": 36
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 43
       },
-      "id": 55,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.5.35",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "topk(30, (sum by(source_host) (rate(cortex_migrations_total{}[60m]))))",
-          "interval": "",
-          "legendFormat": "{{source_host}}",
-          "queryType": "randomWalk",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Outgoing migrations (rate over 60min)",
-      "type": "stat"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "orange",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 11,
-        "w": 4,
-        "x": 10,
-        "y": 36
-      },
+      "hiddenSeries": false,
       "id": 54,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
       },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
       "pluginVersion": "7.5.35",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(type) (rate(cortex_migrations_total[60m]))",
+          "expr": "sum by(type) (delta(cortex_migrations_total[1m]))",
           "interval": "",
           "legendFormat": "Type: {{type}}",
           "queryType": "randomWalk",
           "refId": "A"
         }
       ],
+      "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Migrations by type (rate over 60min)",
-      "type": "stat"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "orange",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
       },
-      "gridPos": {
-        "h": 11,
-        "w": 10,
-        "x": 14,
-        "y": 36
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
       },
-      "id": 56,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.5.35",
-      "targets": [
+      "yaxes": [
         {
-          "exemplar": true,
-          "expr": "topk(30, (sum by(target_host) (rate(cortex_migrations_total{}[60m]))))",
-          "interval": "",
-          "legendFormat": "{{target_host}}",
-          "queryType": "randomWalk",
-          "refId": "A"
+          "$$hashKey": "object:494",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:495",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Incoming migrations (rate over 60min)",
-      "type": "stat"
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "collapsed": false,
@@ -720,7 +839,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 52
       },
       "id": 29,
       "panels": [],
@@ -743,7 +862,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 53
       },
       "hiddenSeries": false,
       "id": 51,
@@ -841,7 +960,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 63
       },
       "hiddenSeries": false,
       "id": 52,
@@ -938,7 +1057,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 74
       },
       "hiddenSeries": false,
       "id": 26,
@@ -1046,7 +1165,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 81
+        "y": 86
       },
       "hiddenSeries": false,
       "id": 37,
@@ -1143,7 +1262,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 81
+        "y": 86
       },
       "hiddenSeries": false,
       "id": 40,
@@ -1255,7 +1374,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 81
+        "y": 86
       },
       "hiddenSeries": false,
       "id": 33,
@@ -1367,7 +1486,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 81
+        "y": 86
       },
       "hiddenSeries": false,
       "id": 42,
@@ -1495,7 +1614,7 @@
         "h": 31,
         "w": 12,
         "x": 0,
-        "y": 92
+        "y": 97
       },
       "id": 45,
       "options": {
@@ -1565,7 +1684,7 @@
         "h": 31,
         "w": 12,
         "x": 12,
-        "y": 92
+        "y": 97
       },
       "id": 46,
       "options": {
@@ -1608,7 +1727,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 123
+        "y": 128
       },
       "id": 31,
       "panels": [],
@@ -1633,7 +1752,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 124
+        "y": 129
       },
       "hiddenSeries": false,
       "id": 35,
@@ -1740,7 +1859,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 136
+        "y": 141
       },
       "id": 43,
       "options": {
@@ -1782,7 +1901,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 148
+        "y": 153
       },
       "id": 23,
       "panels": [],
@@ -1805,7 +1924,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 149
+        "y": 154
       },
       "hiddenSeries": false,
       "id": 20,
@@ -1888,6 +2007,106 @@
       }
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 166
+      },
+      "hiddenSeries": false,
+      "id": 63,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.35",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum by (datasource) (increase(cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[1m])) / count by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Objects synced in database over 1 min",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:114",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:115",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
       "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
@@ -1916,7 +2135,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 161
+        "y": 178
       },
       "id": 21,
       "options": {
@@ -1988,7 +2207,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 161
+        "y": 178
       },
       "id": 38,
       "options": {
@@ -2032,7 +2251,7 @@
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
