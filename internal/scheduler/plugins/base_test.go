@@ -12,8 +12,8 @@ import (
 )
 
 type MockOptions struct {
-	Option1 string `yaml:"option1"`
-	Option2 int    `yaml:"option2"`
+	Option1 string `json:"option1"`
+	Option2 int    `json:"option2"`
 }
 
 func (o MockOptions) Validate() error {
@@ -26,10 +26,10 @@ func TestBaseStep_Init(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	opts := conf.NewRawOpts(`
-        option1: value1
-        option2: 2
-    `)
+	opts := conf.NewRawOpts(`{
+        "option1": "value1",
+        "option2": 2
+    }`)
 
 	step := BaseStep[MockOptions]{}
 	err := step.Init(testDB, opts)

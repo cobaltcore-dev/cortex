@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
 func TestFlavorBinpackingStep_Run(t *testing.T) {
@@ -38,23 +39,23 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := conf.NewRawOpts(`
-        cpuEnabled: true
-        cpuFreeLowerBound: 0
-        cpuFreeUpperBound: 4
-        cpuFreeActivationLowerBound: 0.0
-        cpuFreeActivationUpperBound: 1.0
-        ramEnabled: true
-        ramFreeLowerBound: 0
-        ramFreeUpperBound: 2048
-        ramFreeActivationLowerBound: 0.0
-        ramFreeActivationUpperBound: 1.0
-        diskEnabled: true
-        diskFreeLowerBound: 0
-        diskFreeUpperBound: 200
-        diskFreeActivationLowerBound: 0.0
-        diskFreeActivationUpperBound: 1.0
-    `)
+	opts := conf.NewRawOpts(`{
+        "cpuEnabled": true,
+        "cpuFreeLowerBound": 0,
+        "cpuFreeUpperBound": 4,
+        "cpuFreeActivationLowerBound": 0.0,
+        "cpuFreeActivationUpperBound": 1.0,
+        "ramEnabled": true,
+        "ramFreeLowerBound": 0,
+        "ramFreeUpperBound": 2048,
+        "ramFreeActivationLowerBound": 0.0,
+        "ramFreeActivationUpperBound": 1.0,
+        "diskEnabled": true,
+        "diskFreeLowerBound": 0,
+        "diskFreeUpperBound": 200,
+        "diskFreeActivationLowerBound": 0.0,
+        "diskFreeActivationUpperBound": 1.0
+    }`)
 	step := &FlavorBinpackingStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -62,12 +63,12 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		request         api.Request
+		request         testlibAPI.MockRequest
 		expectedWeights map[string]float64
 	}{
 		{
 			name: "Single VM with flavor1",
-			request: api.Request{
+			request: testlibAPI.MockRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
@@ -78,10 +79,7 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 						NInstances: 1,
 					},
 				},
-				Hosts: []api.Host{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
+				Hosts: []string{"host1", "host2"},
 			},
 			expectedWeights: map[string]float64{
 				"host1": 1.0 + 0.5 + 0.5, // CPU: 4/4, RAM: 1024/2048, Disk: 100/200
@@ -90,7 +88,7 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 		},
 		{
 			name: "Single VM with flavor2",
-			request: api.Request{
+			request: testlibAPI.MockRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
@@ -101,10 +99,7 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 						NInstances: 1,
 					},
 				},
-				Hosts: []api.Host{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
+				Hosts: []string{"host1", "host2"},
 			},
 			expectedWeights: map[string]float64{
 				"host1": 0.25 + 0.25 + 0.25, // CPU: 1/4, RAM: 512/2048, Disk: 50/200
@@ -113,7 +108,7 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 		},
 		{
 			name: "Multiple VMs",
-			request: api.Request{
+			request: testlibAPI.MockRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
@@ -124,10 +119,7 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 						NInstances: 2,
 					},
 				},
-				Hosts: []api.Host{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
+				Hosts: []string{"host1", "host2"},
 			},
 			expectedWeights: map[string]float64{
 				"host1": 0.0, // No weight change for multiple VMs
@@ -138,7 +130,7 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weights, err := step.Run(tt.request)
+			weights, err := step.Run(&tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

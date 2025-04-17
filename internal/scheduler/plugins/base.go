@@ -24,7 +24,7 @@ func (o EmptyStepOpts) Validate() error { return nil }
 // that would otherwise be duplicated across all steps.
 type BaseStep[Opts StepOpts] struct {
 	// Options to pass via yaml to this step.
-	conf.YamlOpts[Opts]
+	conf.JsonOpts[Opts]
 	// The activation function to use.
 	ActivationFunction
 	// Database connection.
@@ -43,8 +43,8 @@ func (s *BaseStep[Opts]) Init(db db.DB, opts conf.RawOpts) error {
 // Get zero activations for all hosts.
 func (s *BaseStep[Opts]) BaseActivations(request api.Request) Weights {
 	weights := make(Weights)
-	for _, host := range request.Hosts {
-		weights[host.ComputeHost] = s.NoEffect()
+	for _, host := range request.GetHosts() {
+		weights[host] = s.NoEffect()
 	}
 	return weights
 }

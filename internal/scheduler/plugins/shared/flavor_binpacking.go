@@ -16,25 +16,25 @@ import (
 type FlavorBinpackingStepOpts struct {
 	// Flavor names to consider for the binpacking.
 	// If this list is empty, all flavors are considered.
-	Flavors []string `yaml:"flavors"`
+	Flavors []string `json:"flavors"`
 
-	CPUEnabled                  bool    `yaml:"cpuEnabled"`
-	CPUFreeLowerBound           float64 `yaml:"cpuFreeLowerBound"` // -> mapped to ActivationLowerBound
-	CPUFreeUpperBound           float64 `yaml:"cpuFreeUpperBound"` // -> mapped to ActivationUpperBound
-	CPUFreeActivationLowerBound float64 `yaml:"cpuFreeActivationLowerBound"`
-	CPUFreeActivationUpperBound float64 `yaml:"cpuFreeActivationUpperBound"`
+	CPUEnabled                  bool    `json:"cpuEnabled"`
+	CPUFreeLowerBound           float64 `json:"cpuFreeLowerBound"` // -> mapped to ActivationLowerBound
+	CPUFreeUpperBound           float64 `json:"cpuFreeUpperBound"` // -> mapped to ActivationUpperBound
+	CPUFreeActivationLowerBound float64 `json:"cpuFreeActivationLowerBound"`
+	CPUFreeActivationUpperBound float64 `json:"cpuFreeActivationUpperBound"`
 
-	RAMEnabled                  bool    `yaml:"ramEnabled"`
-	RAMFreeLowerBound           float64 `yaml:"ramFreeLowerBound"` // -> mapped to ActivationLowerBound
-	RAMFreeUpperBound           float64 `yaml:"ramFreeUpperBound"` // -> mapped to ActivationUpperBound
-	RAMFreeActivationLowerBound float64 `yaml:"ramFreeActivationLowerBound"`
-	RAMFreeActivationUpperBound float64 `yaml:"ramFreeActivationUpperBound"`
+	RAMEnabled                  bool    `json:"ramEnabled"`
+	RAMFreeLowerBound           float64 `json:"ramFreeLowerBound"` // -> mapped to ActivationLowerBound
+	RAMFreeUpperBound           float64 `json:"ramFreeUpperBound"` // -> mapped to ActivationUpperBound
+	RAMFreeActivationLowerBound float64 `json:"ramFreeActivationLowerBound"`
+	RAMFreeActivationUpperBound float64 `json:"ramFreeActivationUpperBound"`
 
-	DiskEnabled                  bool    `yaml:"diskEnabled"`
-	DiskFreeLowerBound           float64 `yaml:"diskFreeLowerBound"` // -> mapped to ActivationLowerBound
-	DiskFreeUpperBound           float64 `yaml:"diskFreeUpperBound"` // -> mapped to ActivationUpperBound
-	DiskFreeActivationLowerBound float64 `yaml:"diskFreeActivationLowerBound"`
-	DiskFreeActivationUpperBound float64 `yaml:"diskFreeActivationUpperBound"`
+	DiskEnabled                  bool    `json:"diskEnabled"`
+	DiskFreeLowerBound           float64 `json:"diskFreeLowerBound"` // -> mapped to ActivationLowerBound
+	DiskFreeUpperBound           float64 `json:"diskFreeUpperBound"` // -> mapped to ActivationUpperBound
+	DiskFreeActivationLowerBound float64 `json:"diskFreeActivationLowerBound"`
+	DiskFreeActivationUpperBound float64 `json:"diskFreeActivationUpperBound"`
 }
 
 func (o FlavorBinpackingStepOpts) Validate() error {
@@ -66,10 +66,11 @@ func (s *FlavorBinpackingStep) GetName() string {
 func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
 
-	if request.Spec.Data.NInstances > 1 {
+	spec := request.GetSpec()
+	if spec.Data.NInstances > 1 {
 		return activations, nil
 	}
-	flavorName := request.Spec.Data.Flavor.Data.Name
+	flavorName := spec.Data.Flavor.Data.Name
 	if len(s.Options.Flavors) > 0 && !slices.Contains(s.Options.Flavors, flavorName) {
 		// Skip this step if the flavor is not in the list of flavors to consider.
 		return activations, nil
@@ -83,7 +84,7 @@ func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, err
 			ram_left_mb >= 0 AND
 			vcpus_left >= 0 AND
 			disk_left_gb >= 0
-	`, map[string]any{"id": request.Spec.Data.Flavor.Data.FlavorID}); err != nil {
+	`, map[string]any{"id": spec.Data.Flavor.Data.FlavorID}); err != nil {
 		return nil, err
 	}
 

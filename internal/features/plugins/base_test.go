@@ -12,8 +12,8 @@ import (
 )
 
 type MockOptions struct {
-	Option1 string `yaml:"option1"`
-	Option2 int    `yaml:"option2"`
+	Option1 string `json:"option1"`
+	Option2 int    `json:"option2"`
 }
 
 type MockFeature struct {
@@ -31,10 +31,10 @@ func TestBaseExtractor_Init(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	opts := conf.NewRawOpts(`
-        option1: value1
-        option2: 2
-    `)
+	opts := conf.NewRawOpts(`{
+        "option1": "value1",
+        "option2": 2
+    }`)
 
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
 	err := extractor.Init(testDB, opts)

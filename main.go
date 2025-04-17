@@ -12,12 +12,14 @@ import (
 	gosync "sync"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/commands/checks"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	apihttp "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
@@ -72,9 +74,17 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
 	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
-	apiMonitor := api.NewSchedulerMonitor(registry)
-	api := api.NewAPI(config.API, &schedulerPipeline, apiMonitor)
+	apiMonitor := apihttp.NewSchedulerMonitor(registry)
+	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
 	api.Init(ctx)
+}
+
+// Run a kpi service that periodically calculates kpis.
+func runKPIService(registry *monitoring.Registry, config conf.KPIsConfig, db db.DB) {
+	pipeline := kpis.NewPipeline(config)
+	if err := pipeline.Init(kpis.SupportedKPIs, db, registry); err != nil {
+		panic("failed to initialize kpi pipeline: " + err.Error())
+	}
 }
 
 // Run the prometheus metrics server for monitoring.
@@ -131,7 +141,7 @@ func main() {
 		taskName = os.Args[1]
 		bininfo.SetTaskName(taskName)
 	} else {
-		panic(fmt.Sprintf("usage: %s [syncer | extractor | scheduler]", os.Args[0]))
+		panic(fmt.Sprintf("usage: %s [checks | syncer | extractor | scheduler]", os.Args[0]))
 	}
 
 	dbInstance := db.NewPostgresDB(config.GetDBConfig())
@@ -139,6 +149,14 @@ func main() {
 
 	migrater := db.NewMigrater(dbInstance)
 	migrater.Migrate(true)
+
+	// If we're running one-off tasks (commands), don't setup the monitoring server.
+	//nolint:gocritic // We may add more tasks in the future.
+	switch taskName {
+	case "checks":
+		checks.RunChecks(ctx, config)
+		return
+	}
 
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
@@ -151,6 +169,8 @@ func main() {
 		go runExtractor(registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
 		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance)
+	case "kpis":
+		go runKPIService(registry, config.GetKPIsConfig(), dbInstance)
 	default:
 		panic("unknown task")
 	}

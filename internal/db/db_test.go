@@ -5,6 +5,7 @@ package db
 
 import (
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -29,9 +30,13 @@ func TestNewDB(t *testing.T) {
 	container.Init(t)
 	defer container.Close()
 
+	port, err := strconv.Atoi(container.GetPort())
+	if err != nil {
+		t.Fatalf("failed to convert port: %v", err)
+	}
 	config := conf.DBConfig{
 		Host:     "localhost",
-		Port:     container.GetPort(),
+		Port:     port,
 		User:     "postgres",
 		Password: "secret",
 		Database: "postgres",

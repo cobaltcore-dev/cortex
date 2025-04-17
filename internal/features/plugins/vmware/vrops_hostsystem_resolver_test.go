@@ -20,7 +20,7 @@ func TestVROpsHostsystemResolver_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("")); err != nil {
+	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -79,7 +79,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemResolver{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("")); err != nil {
+	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {

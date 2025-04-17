@@ -4,7 +4,6 @@
 package shared
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 )
@@ -75,9 +74,6 @@ func (e *FlavorHostSpaceExtractor) Extract() ([]plugins.Feature, error) {
 				DiskLeftGB:  h.FreeDiskGB - f.Disk,
 			})
 		}
-	}
-	if err := db.ReplaceAll(e.DB, features...); err != nil {
-		return nil, err
 	}
 	return e.Extracted(features)
 }

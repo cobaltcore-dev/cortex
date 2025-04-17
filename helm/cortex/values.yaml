@@ -5,7 +5,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-c69bd48"
+  tag: "sha-cea6b40"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -68,7 +68,7 @@ owner-info:
 vernemq:
   image:
     repository: ghcr.io/cobaltcore-dev/cortex-vernemq
-    tag: "sha-c69bd48"
+    tag: "sha-cea6b40"
   # The username and password to use for the mqtt connection.
   username: cortex
   password: cortex
@@ -108,6 +108,14 @@ modes:
       metricsPort: 2112
     args: ["scheduler"]
     replicas: 2
+
+  # Service that extracts and exposes KPIs.
+  - name: kpis
+    service:
+      type: ClusterIP
+      metricsPort: 2112
+    args: ["kpis"]
+    replicas: 1
 
 # Default sso certificate to use for all services.
 # The sso certificate values of individual services can be overridden.
@@ -219,6 +227,7 @@ conf:
           - hypervisors
           - servers
           - flavors
+          - migrations
       placement:
         # One of admin, public, or internal
         availability: public
@@ -237,7 +246,7 @@ conf:
     # Note that the order defined here will also be the order in which the
     # extractors are executed. If possible, extractors whose dependencies have
     # been executed will be executed in parallel to speed up the process.
-    extractors:
+    plugins:
       # VMware-specific extractors.
       - name: vrops_hostsystem_resolver
         dependencies:
@@ -295,6 +304,43 @@ conf:
                 types:
                   - flavors
                   - hypervisors
+      - name: vm_host_residency_extractor
+        dependencies:
+          sync:
+            openstack:
+              nova:
+                types:
+                  - flavors
+                  - servers
+                  - migrations
+      - name: vm_life_span_extractor
+        dependencies:
+          sync:
+            openstack:
+              nova:
+                types:
+                  - flavors
+                  - servers
+
+  kpis:
+    # Configuration of KPIs that should be extracted from the synced data.
+    # Each KPI can specify its own dependencies on other extractors and
+    # synced data.
+    #
+    # The `name` should correspond to a known KPI extractor plugin.
+    plugins:
+      - name: vm_migration_statistics_kpi
+        dependencies:
+          # Features needed to extract the key-performance indicators (KPIs).
+          features:
+            extractors:
+              - vm_host_residency_extractor
+      - name: vm_life_span_kpi
+        dependencies:
+          # Features needed to extract the key-performance indicators (KPIs).
+          features:
+            extractors:
+              - vm_life_span_extractor
 
   scheduler:
     api:
@@ -310,7 +356,7 @@ conf:
     # Note that all scheduler steps will be executed in parallel. However,
     # the order will be maintained when the weights are applied to the
     # input Nova weights.
-    steps:
+    plugins:
       # VMware specific scheduler steps.
       - name: vmware_anti_affinity_noisy_projects
         options:

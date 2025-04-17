@@ -4,6 +4,8 @@
 package kvm
 
 import (
+	_ "embed"
+
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
@@ -42,19 +44,10 @@ func (NodeExporterHostCPUUsageExtractor) Triggers() []string {
 	}
 }
 
+//go:embed node_exporter_host_cpu_usage.sql
+var nodeExporterHostCPUUsageSQL string
+
 // Extract CPU usage of kvm hosts.
 func (e *NodeExporterHostCPUUsageExtractor) Extract() ([]plugins.Feature, error) {
-	var features []NodeExporterHostCPUUsage
-	if _, err := e.DB.Select(&features, `
-		SELECT
-			node AS compute_host,
-			AVG(value) AS avg_cpu_usage,
-			MAX(value) AS max_cpu_usage
-		FROM node_exporter_metrics
-		WHERE name = 'node_exporter_cpu_usage_pct'
-		GROUP BY node;
-	`); err != nil {
-		return nil, err
-	}
-	return e.Extracted(features)
+	return e.ExtractSQL(nodeExporterHostCPUUsageSQL)
 }

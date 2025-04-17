@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -67,6 +68,9 @@ func (s *novaSyncer) Init(ctx context.Context) {
 	if slices.Contains(s.conf.Types, "flavors") {
 		tables = append(tables, s.db.AddTable(Flavor{}))
 	}
+	if slices.Contains(s.conf.Types, "migrations") {
+		tables = append(tables, s.db.AddTable(Migration{}))
+	}
 	if err := s.db.CreateTable(tables...); err != nil {
 		panic(err)
 	}
@@ -76,141 +80,191 @@ func (s *novaSyncer) Init(ctx context.Context) {
 func (s *novaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.conf.Types, "servers") {
-		newServers, err := s.SyncServers(ctx)
+		changedServers, err := s.SyncChangedServers(ctx)
 		if err != nil {
 			return err
 		}
-		if len(newServers) > 0 {
+		if len(changedServers) > 0 {
 			go s.mqttClient.Publish(TriggerNovaServersSynced, "")
 		}
 	}
 	if slices.Contains(s.conf.Types, "hypervisors") {
-		newHypervisors, err := s.SyncHypervisors(ctx)
+		changedHypervisors, err := s.SyncChangedHypervisors(ctx)
 		if err != nil {
 			return err
 		}
-		if len(newHypervisors) > 0 {
-			go s.mqttClient.Publish(TriggerNovaHypervisorsSynced, "")
-			// Publish additional information required for the visualizer.
-			go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", newHypervisors)
-		}
+		go s.mqttClient.Publish(TriggerNovaHypervisorsSynced, "")
+		// Publish additional information required for the visualizer.
+		go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", changedHypervisors)
 	}
 	if slices.Contains(s.conf.Types, "flavors") {
-		newFlavors, err := s.SyncFlavors(ctx)
+		changedFlavors, err := s.SyncChangedFlavors(ctx)
 		if err != nil {
 			return err
 		}
-		if len(newFlavors) > 0 {
+		if len(changedFlavors) > 0 {
 			go s.mqttClient.Publish(TriggerNovaFlavorsSynced, "")
+		}
+	}
+	if slices.Contains(s.conf.Types, "migrations") {
+		changedMigrations, err := s.SyncChangedMigrations(ctx)
+		if err != nil {
+			return err
+		}
+		if len(changedMigrations) > 0 {
+			go s.mqttClient.Publish(TriggerNovaMigrationsSynced, "")
 		}
 	}
 	return nil
 }
 
-// Sync the OpenStack servers into the database.
-func (s *novaSyncer) SyncServers(ctx context.Context) ([]Server, error) {
-	label := Server{}.TableName()
+// Check when the last sync run for a specific table was performed.
+// If there was no sync run, return nil.
+func (s *novaSyncer) getLastSyncTime(tableName string) *time.Time {
 	// Check when the last sync run was performed, if there was one.
 	var lastSyncTime *time.Time
 	var lastSync novaSync
 	if err := s.db.SelectOne(&lastSync, `
 		SELECT * FROM nova_sync WHERE name = :name ORDER BY time DESC LIMIT 1
-	`, map[string]any{"name": label}); err == nil {
+	`, map[string]any{"name": tableName}); err == nil {
 		lastSyncTime = &lastSync.Time
-		slog.Info("last nova sync run", "time", lastSync.Time)
+		slog.Info("last nova sync run", "time", lastSync.Time, "table", tableName)
 	} else {
-		slog.Info("no previous nova sync run")
+		slog.Info("no previous nova sync run", "table", tableName)
 	}
-	servers, err := s.api.GetAllServers(ctx, lastSyncTime)
+	return lastSyncTime
+}
+
+// Store a new sync run in the database.
+func (s *novaSyncer) setLastSyncTime(tableName string, time time.Time) {
+	if err := s.db.Insert(&novaSync{Name: tableName, Time: time}); err != nil {
+		slog.Error("failed to insert nova sync", "error", err)
+	}
+}
+
+// Upsert nova objects into the database.
+func upsert[O any](s *novaSyncer, objects []O, pk string, getpk func(O) string, tableName string) error {
+	nObjectsInDB := 0
+	q := "SELECT COUNT(*) FROM " + tableName
+	if err := s.db.SelectOne(&nObjectsInDB, q); err != nil {
+		return err
+	}
+	var existingObjects []O
+	if nObjectsInDB > 0 && len(objects) > 0 {
+		// Check which objects only need to be updated instead of inserted.
+		// Using a contains query with the object ID:
+		q = "SELECT " + pk + " FROM " + tableName + " WHERE " + pk + " IN ("
+		for i, object := range objects {
+			if i > 0 {
+				q += ", "
+			}
+			q += "'" + getpk(object) + "'"
+		}
+		q += ")"
+		if _, err := s.db.Select(&existingObjects, q); err != nil {
+			return err
+		}
+	}
+	existingObjectsByID := make(map[string]O, len(existingObjects))
+	for _, object := range existingObjects {
+		existingObjectsByID[getpk(object)] = object
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, object := range objects {
+		if _, ok := existingObjectsByID[getpk(object)]; ok {
+			if _, err := tx.Update(&object); err != nil {
+				return tx.Rollback()
+			}
+		} else {
+			if err := tx.Insert(&object); err != nil {
+				return tx.Rollback()
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		slog.Error("failed to commit transaction", "error", err)
+	}
+	// Check how many objects we have in the database.
+	q = "SELECT COUNT(*) FROM " + tableName
+	var count int
+	if err := s.db.SelectOne(&count, q); err != nil {
+		return err
+	}
+	if s.mon.PipelineObjectsGauge != nil {
+		gauge := s.mon.PipelineObjectsGauge.WithLabelValues(tableName)
+		gauge.Set(float64(count))
+	}
+	if s.mon.PipelineRequestProcessedCounter != nil {
+		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(tableName)
+		counter.Inc()
+	}
+	return nil
+}
+
+// Sync the OpenStack servers into the database.
+// Return only new servers that were created since the last sync.
+func (s *novaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
+	tableName := Server{}.TableName()
+	lastSyncTime := s.getLastSyncTime(tableName)
+	defer s.setLastSyncTime(tableName, time.Now())
+	changedServers, err := s.api.GetChangedServers(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
 	}
-	if err := db.ReplaceAll(s.db, servers...); err != nil {
+	err = upsert(s, changedServers, "id", func(s Server) string { return s.ID }, tableName)
+	if err != nil {
 		return nil, err
 	}
-	// Store a sync run in the database to not fetch all servers again.
-	if err := s.db.Insert(&novaSync{Name: label, Time: time.Now()}); err != nil {
-		return nil, err
-	}
-	if s.mon.PipelineObjectsGauge != nil {
-		gauge := s.mon.PipelineObjectsGauge.WithLabelValues(label)
-		gauge.Set(float64(len(servers)))
-	}
-	if s.mon.PipelineRequestProcessedCounter != nil {
-		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(label)
-		counter.Inc()
-	}
-	return servers, nil
+	return changedServers, nil
 }
 
 // Sync the OpenStack hypervisors into the database.
-func (s *novaSyncer) SyncHypervisors(ctx context.Context) ([]Hypervisor, error) {
-	label := Hypervisor{}.TableName()
-	// Check when the last sync run was performed, if there was one.
-	var lastSyncTime *time.Time
-	var lastSync novaSync
-	if err := s.db.SelectOne(&lastSync, `
-		SELECT * FROM nova_sync WHERE name = :name ORDER BY time DESC LIMIT 1
-	`, map[string]any{"name": label}); err == nil {
-		lastSyncTime = &lastSync.Time
-		slog.Info("last nova sync run", "time", lastSync.Time)
-	} else {
-		slog.Info("no previous nova sync run")
-	}
-	hypervisors, err := s.api.GetAllHypervisors(ctx, lastSyncTime)
+func (s *novaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, error) {
+	tableName := Hypervisor{}.TableName()
+	lastSyncTime := s.getLastSyncTime(tableName)
+	defer s.setLastSyncTime(tableName, time.Now())
+	changedHypervisors, err := s.api.GetChangedHypervisors(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
 	}
-	if err := db.ReplaceAll(s.db, hypervisors...); err != nil {
+	err = upsert(s, changedHypervisors, "id", func(h Hypervisor) string { return strconv.Itoa(h.ID) }, tableName)
+	if err != nil {
 		return nil, err
 	}
-	// Store a sync run in the database to not fetch all servers again.
-	if err := s.db.Insert(&novaSync{Name: label, Time: time.Now()}); err != nil {
-		return nil, err
-	}
-	if s.mon.PipelineObjectsGauge != nil {
-		gauge := s.mon.PipelineObjectsGauge.WithLabelValues(label)
-		gauge.Set(float64(len(hypervisors)))
-	}
-	if s.mon.PipelineRequestProcessedCounter != nil {
-		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(label)
-		counter.Inc()
-	}
-	return hypervisors, nil
+	return changedHypervisors, nil
 }
 
 // Sync the OpenStack flavors into the database.
-func (s *novaSyncer) SyncFlavors(ctx context.Context) ([]Flavor, error) {
-	label := Flavor{}.TableName()
-	// Check when the last sync run was performed, if there was one.
-	var lastSyncTime *time.Time // Default to zero time.
-	var lastSync novaSync
-	if err := s.db.SelectOne(&lastSync, `
-		SELECT * FROM nova_sync WHERE name = :name ORDER BY time DESC LIMIT 1
-	`, map[string]any{"name": label}); err == nil {
-		lastSyncTime = &lastSync.Time
-		slog.Info("last nova sync run", "time", lastSync.Time)
-	} else {
-		slog.Info("no previous nova sync run")
-	}
-	flavors, err := s.api.GetAllFlavors(ctx, lastSyncTime)
+func (s *novaSyncer) SyncChangedFlavors(ctx context.Context) ([]Flavor, error) {
+	tableName := Flavor{}.TableName()
+	lastSyncTime := s.getLastSyncTime(tableName)
+	defer s.setLastSyncTime(tableName, time.Now())
+	changedFlavors, err := s.api.GetChangedFlavors(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
 	}
-	if err := db.ReplaceAll(s.db, flavors...); err != nil {
+	err = upsert(s, changedFlavors, "id", func(f Flavor) string { return f.ID }, tableName)
+	if err != nil {
 		return nil, err
 	}
-	// Store a sync run in the database to not fetch all servers again.
-	if err := s.db.Insert(&novaSync{Name: label, Time: time.Now()}); err != nil {
+	return changedFlavors, nil
+}
+
+// Sync the OpenStack migrations into the database.
+func (s *novaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, error) {
+	tableName := Migration{}.TableName()
+	lastSyncTime := s.getLastSyncTime(tableName)
+	defer s.setLastSyncTime(tableName, time.Now())
+	changedMigrations, err := s.api.GetChangedMigrations(ctx, lastSyncTime)
+	if err != nil {
 		return nil, err
 	}
-	if s.mon.PipelineObjectsGauge != nil {
-		gauge := s.mon.PipelineObjectsGauge.WithLabelValues(label)
-		gauge.Set(float64(len(flavors)))
+	err = upsert(s, changedMigrations, "uuid", func(m Migration) string { return m.UUID }, tableName)
+	if err != nil {
+		return nil, err
 	}
-	if s.mon.PipelineRequestProcessedCounter != nil {
-		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(label)
-		counter.Inc()
-	}
-	return flavors, nil
+	return changedMigrations, nil
 }

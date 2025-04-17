@@ -14,17 +14,17 @@ import (
 // Options for the scheduling step, given through the step config in the service yaml file.
 // Use the options contained in this struct to configure the bounds for min-max scaling.
 type AvoidOverloadedHostsMemoryStepOpts struct {
-	AvgMemoryUsageLowerBound float64 `yaml:"avgMemoryUsageLowerBound"` // -> mapped to ActivationLowerBound
-	AvgMemoryUsageUpperBound float64 `yaml:"avgMemoryUsageUpperBound"` // -> mapped to ActivationUpperBound
+	AvgMemoryUsageLowerBound float64 `json:"avgMemoryUsageLowerBound"` // -> mapped to ActivationLowerBound
+	AvgMemoryUsageUpperBound float64 `json:"avgMemoryUsageUpperBound"` // -> mapped to ActivationUpperBound
 
-	AvgMemoryUsageActivationLowerBound float64 `yaml:"avgMemoryUsageActivationLowerBound"`
-	AvgMemoryUsageActivationUpperBound float64 `yaml:"avgMemoryUsageActivationUpperBound"`
+	AvgMemoryUsageActivationLowerBound float64 `json:"avgMemoryUsageActivationLowerBound"`
+	AvgMemoryUsageActivationUpperBound float64 `json:"avgMemoryUsageActivationUpperBound"`
 
-	MaxMemoryUsageLowerBound float64 `yaml:"maxMemoryUsageLowerBound"` // -> mapped to ActivationLowerBound
-	MaxMemoryUsageUpperBound float64 `yaml:"maxMemoryUsageUpperBound"` // -> mapped to ActivationUpperBound
+	MaxMemoryUsageLowerBound float64 `json:"maxMemoryUsageLowerBound"` // -> mapped to ActivationLowerBound
+	MaxMemoryUsageUpperBound float64 `json:"maxMemoryUsageUpperBound"` // -> mapped to ActivationUpperBound
 
-	MaxMemoryUsageActivationLowerBound float64 `yaml:"maxMemoryUsageActivationLowerBound"`
-	MaxMemoryUsageActivationUpperBound float64 `yaml:"maxMemoryUsageActivationUpperBound"`
+	MaxMemoryUsageActivationLowerBound float64 `json:"maxMemoryUsageActivationLowerBound"`
+	MaxMemoryUsageActivationUpperBound float64 `json:"maxMemoryUsageActivationUpperBound"`
 }
 
 func (o AvoidOverloadedHostsMemoryStepOpts) Validate() error {
@@ -52,7 +52,7 @@ func (s *AvoidOverloadedHostsMemoryStep) GetName() string {
 // Downvote hosts that have high cpu load.
 func (s *AvoidOverloadedHostsMemoryStep) Run(request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
-	if request.VMware {
+	if request.GetVMware() {
 		// Don't run this step for VMware VMs.
 		return activations, nil
 	}

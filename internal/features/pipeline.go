@@ -30,6 +30,8 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	&kvm.NodeExporterHostMemoryActiveExtractor{},
 	// Shared extractors
 	&shared.FlavorHostSpaceExtractor{},
+	&shared.VMHostResidencyExtractor{},
+	&shared.VMLifeSpanExtractor{},
 }
 
 // Pipeline that contains multiple feature extractors and executes them.
@@ -77,7 +79,7 @@ func (p *FeatureExtractorPipeline) initDependencyGraph(supportedExtractors []plu
 
 	// Load all extractors from the configuration.
 	extractorsByName := make(map[string]plugins.FeatureExtractor)
-	for _, extractorConfig := range p.config.Extractors {
+	for _, extractorConfig := range p.config.Plugins {
 		extractorFunc, ok := supportedExtractorsByName[extractorConfig.Name]
 		if !ok {
 			panic("unknown feature extractor: " + extractorConfig.Name)
@@ -97,7 +99,7 @@ func (p *FeatureExtractorPipeline) initDependencyGraph(supportedExtractors []plu
 	// Build the dependency graph and resolve the execution order.
 	extractors := []plugins.FeatureExtractor{}
 	extractorDependencies := make(map[plugins.FeatureExtractor][]plugins.FeatureExtractor)
-	for _, extractorConfig := range p.config.Extractors {
+	for _, extractorConfig := range p.config.Plugins {
 		extractor := extractorsByName[extractorConfig.Name]
 		extractors = append(extractors, extractor)
 		dependencies := []plugins.FeatureExtractor{}
@@ -155,8 +157,15 @@ func (p *FeatureExtractorPipeline) initTriggerExecutionOrder() {
 func (p *FeatureExtractorPipeline) ExtractOnTrigger() {
 	// Subscribe to the MQTT topics that trigger the feature extraction.
 	mqttClient := mqtt.NewClient()
+	var lock sync.Mutex
 	for topic, subgraphs := range p.triggerExecutionOrder {
 		callback := func() {
+			// Always calculate on one execution order only.
+			// This will avoid the same feature extractor from being calculated
+			// multiple times simultaneously, leading to race conditions.
+			lock.Lock()
+			defer lock.Unlock()
+
 			for _, order := range subgraphs {
 				slog.Info("triggered feature extractors by mqtt message", "topic", topic)
 				p.extract(order)

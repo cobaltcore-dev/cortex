@@ -14,7 +14,7 @@ import (
 // that would otherwise be duplicated across all extractors.
 type BaseExtractor[Opts any, Feature db.Table] struct {
 	// Options to pass via yaml to this step.
-	conf.YamlOpts[Opts]
+	conf.JsonOpts[Opts]
 	// Database connection.
 	DB db.DB
 }
@@ -27,6 +27,15 @@ func (e *BaseExtractor[Opts, Feature]) Init(db db.DB, opts conf.RawOpts) error {
 	e.DB = db
 	var f Feature
 	return db.CreateTable(db.AddTable(f))
+}
+
+// Extract the features directly from an sql query.
+func (e *BaseExtractor[Opts, F]) ExtractSQL(query string) ([]Feature, error) {
+	var features []F
+	if _, err := e.DB.Select(&features, query); err != nil {
+		return nil, err
+	}
+	return e.Extracted(features)
 }
 
 // Replace all features of the given model in the database and

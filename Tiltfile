@@ -51,10 +51,26 @@ k8s_resource('cortex-scheduler', port_forwards=[
 ], links=[
     link('localhost:8003/metrics', '/metrics'),
 ], labels=['Core-Services'])
+k8s_resource('cortex-kpis', port_forwards=[
+    port_forward(8004, 2112),
+], links=[
+    link('localhost:8004/metrics', '/metrics'),
+], labels=['Core-Services'])
 k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
-    port_forward(8004, 8080), # Websocket connection
+    port_forward(8005, 8080), # Websocket connection
 ], labels=['Core-Services'])
+
+########### Cortex Commands
+k8s_resource('cortex-cli', labels=['Commands'])
+local_resource(
+    'Run E2E Tests',
+    'kubectl exec -it cortex-cli -- /usr/bin/cortex checks',
+    deps=['./internal/checks'],
+    labels=['Commands'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+)
 
 ########### Postgres DB for Cortex Core Service
 k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))
@@ -86,9 +102,9 @@ k8s_resource(
 docker_build('cortex-visualizer', 'visualizer')
 k8s_yaml('./visualizer/app.yaml')
 k8s_resource('cortex-visualizer', port_forwards=[
-    port_forward(8005, 80),
+    port_forward(8006, 80),
 ], links=[
-    link('localhost:8005', 'visualizer'),
+    link('localhost:8006', 'visualizer'),
 ], labels=['Monitoring'])
 
 ########### Plutono (Grafana Fork)

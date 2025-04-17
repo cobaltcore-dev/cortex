@@ -5,7 +5,10 @@ package openstack
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -20,13 +23,15 @@ import (
 type NovaAPI interface {
 	// Init the nova API.
 	Init(ctx context.Context)
-	// List all servers.
-	GetAllServers(ctx context.Context, changedSince *time.Time) ([]Server, error)
-	// List all hypervisors.
-	GetAllHypervisors(ctx context.Context, changedSince *time.Time) ([]Hypervisor, error)
-	// List all flavors.
+	// Get all changed nova servers since the timestamp.
+	GetChangedServers(ctx context.Context, changedSince *time.Time) ([]Server, error)
+	// Get all changed nova hypervisors since the timestamp.
+	GetChangedHypervisors(ctx context.Context, changedSince *time.Time) ([]Hypervisor, error)
+	// Get all changed nova flavors since the timestamp.
 	// Note: This should only include the public flavors.
-	GetAllFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error)
+	GetChangedFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error)
+	// Get all changed nova migrations since the timestamp.
+	GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error)
 }
 
 // API for OpenStack Nova.
@@ -66,8 +71,8 @@ func (api *novaAPI) Init(ctx context.Context) {
 	}
 }
 
-// Get all Nova servers.
-func (api *novaAPI) GetAllServers(ctx context.Context, changedSince *time.Time) ([]Server, error) {
+// Get all changed Nova servers since the timestamp.
+func (api *novaAPI) GetChangedServers(ctx context.Context, changedSince *time.Time) ([]Server, error) {
 	label := Server{}.TableName()
 	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
 	// Fetch all pages.
@@ -99,10 +104,10 @@ func (api *novaAPI) GetAllServers(ctx context.Context, changedSince *time.Time) 
 	return data.Servers, nil
 }
 
-// Get all Nova hypervisors.
+// Get all Nova hypervisors since the timestamp.
 // Note: changedSince has no effect here since the Nova api does not support it.
 // We will fetch all hypervisors all the time.
-func (api *novaAPI) GetAllHypervisors(ctx context.Context, changedSince *time.Time) ([]Hypervisor, error) {
+func (api *novaAPI) GetChangedHypervisors(ctx context.Context, changedSince *time.Time) ([]Hypervisor, error) {
 	label := Hypervisor{}.TableName()
 	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
 	// Fetch all pages.
@@ -128,8 +133,8 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context, changedSince *time.Ti
 	return data.Hypervisors, nil
 }
 
-// Get all Nova flavors.
-func (api *novaAPI) GetAllFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error) {
+// Get all Nova flavors since the timestamp.
+func (api *novaAPI) GetChangedFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error) {
 	label := Flavor{}.TableName()
 	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
 	// Fetch all pages.
@@ -159,4 +164,63 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context, changedSince *time.Time) 
 	}
 	slog.Info("fetched", "label", label, "count", len(data.Flavors))
 	return data.Flavors, nil
+}
+
+// Get all Nova migrations.
+func (api *novaAPI) GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error) {
+	label := Migration{}.TableName()
+	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
+	// Note: currently we need to fetch this without gophercloud.
+	// See: https://github.com/gophercloud/gophercloud/pull/3244
+	if api.mon.PipelineRequestTimer != nil {
+		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+	initialURL := api.sc.Endpoint + "os-migrations"
+	// It is important to omit the changes-since parameter if it is nil.
+	// Otherwise Nova may return huge amounts of data since the beginning of time.
+	if changedSince != nil {
+		initialURL += "?changes-since=" + changedSince.Format(time.RFC3339)
+	}
+	var nextURL = &initialURL
+	var migrations []Migration
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Auth-Token", api.sc.Token())
+		// Needed for changes-since, user_id, and project_id.
+		req.Header.Set("X-OpenStack-Nova-API-Version", "2.80")
+		resp, err := api.sc.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			Migrations []Migration `json:"migrations"`
+			Links      []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"migrations_links"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&list)
+		if err != nil {
+			return nil, err
+		}
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
+		migrations = append(migrations, list.Migrations...)
+	}
+	slog.Info("fetched", "label", label, "count", len(migrations))
+	return migrations, nil
 }

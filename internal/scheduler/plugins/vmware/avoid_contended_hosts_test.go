@@ -9,8 +9,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
 func TestAvoidContendedHostsStep_Run(t *testing.T) {
@@ -38,18 +38,16 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := conf.NewRawOpts(`
-        # Min-max scaling for avg CPU contention on the host.
-        avgCPUContentionLowerBound: 10
-        avgCPUContentionUpperBound: 100
-        avgCPUContentionActivationLowerBound: 0.0
-        avgCPUContentionActivationUpperBound: -0.5
-        # Min-max scaling for max CPU contention on the host.
-        maxCPUContentionLowerBound: 20
-        maxCPUContentionUpperBound: 100
-        maxCPUContentionActivationLowerBound: 0.0
-        maxCPUContentionActivationUpperBound: -0.5
-    `)
+	opts := conf.NewRawOpts(`{
+        "avgCPUContentionLowerBound": 10,
+        "avgCPUContentionUpperBound": 100,
+        "avgCPUContentionActivationLowerBound": 0.0,
+        "avgCPUContentionActivationUpperBound": -0.5,
+        "maxCPUContentionLowerBound": 20,
+        "maxCPUContentionUpperBound": 100,
+        "maxCPUContentionActivationLowerBound": 0.0,
+        "maxCPUContentionActivationUpperBound": -0.5
+    }`)
 	step := &AvoidContendedHostsStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -57,31 +55,23 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        api.Request
+		request        testlibAPI.MockRequest
 		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Non-vmware vm",
-			request: api.Request{
+			request: testlibAPI.MockRequest{
 				VMware: false,
-				Hosts: []api.Host{
-					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
-					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
-					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
+				Hosts:  []string{"host1", "host2", "host3"},
 			},
 			// Should not do anything
 			downvotedHosts: map[string]struct{}{},
 		},
 		{
 			name: "Avoid contended hosts",
-			request: api.Request{
+			request: testlibAPI.MockRequest{
 				VMware: true,
-				Hosts: []api.Host{
-					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
-					{ComputeHost: "host2", HypervisorHostname: "hypervisor2"},
-					{ComputeHost: "host3", HypervisorHostname: "hypervisor3"},
-				},
+				Hosts:  []string{"host1", "host2", "host3"},
 			},
 			downvotedHosts: map[string]struct{}{
 				"host1": {},
@@ -90,12 +80,9 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 		},
 		{
 			name: "No contended hosts",
-			request: api.Request{
+			request: testlibAPI.MockRequest{
 				VMware: true,
-				Hosts: []api.Host{
-					{ComputeHost: "host4", HypervisorHostname: "hypervisor4"},
-					{ComputeHost: "host5", HypervisorHostname: "hypervisor5"},
-				},
+				Hosts:  []string{"host4", "host5"},
 			},
 			downvotedHosts: map[string]struct{}{},
 		},
@@ -103,7 +90,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weights, err := step.Run(tt.request)
+			weights, err := step.Run(&tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

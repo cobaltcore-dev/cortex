@@ -12,6 +12,9 @@ const TriggerNovaHypervisorsSynced = "triggers/sync/openstack/nova/types/hypervi
 // Trigger executed when new flavors are available.
 const TriggerNovaFlavorsSynced = "triggers/sync/openstack/nova/types/flavors"
 
+// Trigger executed when new migrations are available.
+const TriggerNovaMigrationsSynced = "triggers/sync/openstack/nova/types/migrations"
+
 // Trigger executed when new resource providers are available.
 const TriggerPlacementResourceProvidersSynced = "triggers/sync/openstack/placement/types/resource_providers"
 

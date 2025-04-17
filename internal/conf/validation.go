@@ -16,24 +16,24 @@ type DependencyConfig struct {
 	Sync struct {
 		OpenStack struct {
 			Nova struct {
-				ObjectTypes []string `yaml:"types,omitempty"`
-			} `yaml:"nova,omitempty"`
+				ObjectTypes []string `json:"types,omitempty"`
+			} `json:"nova,omitempty"`
 			Placement struct {
-				ObjectTypes []string `yaml:"types,omitempty"`
-			} `yaml:"placement,omitempty"`
-		} `yaml:"openstack,omitempty"`
+				ObjectTypes []string `json:"types,omitempty"`
+			} `json:"placement,omitempty"`
+		} `json:"openstack,omitempty"`
 		Prometheus struct {
 			Metrics []struct {
-				Alias string `yaml:"alias,omitempty"`
-				Type  string `yaml:"type,omitempty"`
-			} `yaml:"metrics,omitempty"`
-		} `yaml:"prometheus,omitempty"`
+				Alias string `json:"alias,omitempty"`
+				Type  string `json:"type,omitempty"`
+			} `json:"metrics,omitempty"`
+		} `json:"prometheus,omitempty"`
 	}
-	Features FeaturesDependency `yaml:"features,omitempty"`
+	Features FeaturesDependency `json:"features,omitempty"`
 }
 
 type FeaturesDependency struct {
-	ExtractorNames []string `yaml:"extractors,omitempty"`
+	ExtractorNames []string `json:"extractors,omitempty"`
 }
 
 // Validate if the dependencies are satisfied in the given config.
@@ -77,14 +77,14 @@ func (deps *DependencyConfig) validate(c config) error {
 		}
 	}
 	confedExtractors := make(map[string]bool)
-	for _, extractor := range c.Extractors {
+	for _, extractor := range c.FeaturesConfig.Plugins {
 		confedExtractors[extractor.Name] = true
 	}
 	for _, extractor := range deps.Features.ExtractorNames {
 		if !confedExtractors[extractor] {
 			return fmt.Errorf(
 				"feature extractor dependency %s not satisfied, got %v",
-				extractor, c.Extractors,
+				extractor, c.FeaturesConfig.Plugins,
 			)
 		}
 	}
@@ -93,12 +93,17 @@ func (deps *DependencyConfig) validate(c config) error {
 
 // Check if all dependencies are satisfied.
 func (c *config) Validate() error {
-	for _, extractor := range c.Extractors {
+	for _, extractor := range c.FeaturesConfig.Plugins {
 		if err := extractor.validate(*c); err != nil {
 			return err
 		}
 	}
-	for _, step := range c.Steps {
+	for _, kpi := range c.KPIsConfig.Plugins {
+		if err := kpi.validate(*c); err != nil {
+			return err
+		}
+	}
+	for _, step := range c.SchedulerConfig.Plugins {
 		if err := step.validate(*c); err != nil {
 			return err
 		}
