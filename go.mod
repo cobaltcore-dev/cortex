@@ -9,10 +9,10 @@ require (
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.7.0
 	github.com/lib/pq v1.10.9
-	github.com/mattn/go-sqlite3 v1.14.27
+	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.22.0
-	github.com/prometheus/client_model v0.6.1
+	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-api-declarations v1.14.3
 	github.com/sapcc/go-bits v0.0.0-20250410003731-7b4174e5d933
 	go.uber.org/automaxprocs v1.6.0
@@ -56,5 +56,5 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
-	google.golang.org/protobuf v1.36.5 // indirect
+	google.golang.org/protobuf v1.36.6 // indirect
 )
