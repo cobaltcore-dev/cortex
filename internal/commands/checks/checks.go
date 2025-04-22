@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -84,6 +85,12 @@ func checkSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
 	respRaw := must.Return(http.DefaultClient.Do(req))
 	defer respRaw.Body.Close()
 	if respRaw.StatusCode != http.StatusOK {
+		// Log the response body for debugging
+		bodyBytes := must.Return(io.ReadAll(respRaw.Body))
+		slog.Error("external scheduler API returned non-200 status code",
+			"statusCode", respRaw.StatusCode,
+			"responseBody", string(bodyBytes),
+		)
 		panic("external scheduler API returned non-200 status code")
 	}
 	var resp httpapi.ExternalSchedulerResponse

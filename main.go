@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	gosync "sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/commands/checks"
@@ -25,7 +24,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
-	"github.com/sapcc/go-bits/jobloop"
 	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -38,27 +36,9 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 		prometheus.NewCombinedSyncer(config.Prometheus, db, monitor),
 		openstack.NewCombinedSyncer(ctx, config.OpenStack, monitor, db),
 	}
-	for _, syncer := range syncers {
-		syncer.Init(ctx)
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("syncer shutting down")
-			return
-		default:
-			var wg gosync.WaitGroup
-			for _, syncer := range syncers {
-				wg.Add(1)
-				go func(syncer sync.Datasource) {
-					defer wg.Done()
-					syncer.Sync(ctx)
-				}(syncer)
-			}
-			wg.Wait()
-			time.Sleep(jobloop.DefaultJitter(time.Minute))
-		}
-	}
+	pipeline := sync.Pipeline{Syncers: syncers}
+	pipeline.Init(ctx)
+	go pipeline.SyncPeriodic(ctx) // blocking
 }
 
 // Periodically extract features from the database.
@@ -67,7 +47,7 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 	pipeline := features.NewPipeline(config, db, monitor)
 	// Selects the extractors to run based on the config.
 	pipeline.Init(features.SupportedExtractors)
-	pipeline.ExtractOnTrigger()
+	pipeline.ExtractOnTrigger() // non-blocking
 }
 
 // Run a webserver that listens for external scheduling requests.
@@ -76,7 +56,7 @@ func runScheduler(mux *http.ServeMux, registry *monitoring.Registry, config conf
 	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
 	apiMonitor := apihttp.NewSchedulerMonitor(registry)
 	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
-	api.Init(mux)
+	api.Init(mux) // non-blocking
 }
 
 // Run a kpi service that periodically calculates kpis.
@@ -84,7 +64,7 @@ func runKPIService(registry *monitoring.Registry, config conf.KPIsConfig, db db.
 	pipeline := kpis.NewPipeline(config)
 	if err := pipeline.Init(kpis.SupportedKPIs, db, registry); err != nil {
 		panic("failed to initialize kpi pipeline: " + err.Error())
-	}
+	} // non-blocking
 }
 
 // Run the prometheus metrics server for monitoring.
@@ -96,20 +76,6 @@ func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, con
 	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
 		panic(err)
 	}
-}
-
-// Run an api server that serves some basic endpoints and can be extended.
-func runAPIServer(ctx context.Context, config conf.APIConfig) *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/up", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	slog.Info("api listening", "port", config.Port)
-	addr := fmt.Sprintf(":%d", config.Port)
-	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
-		panic(err)
-	}
-	return mux
 }
 
 func main() {
@@ -176,19 +142,33 @@ func main() {
 	registry := monitoring.NewRegistry(monitoringConfig)
 	go runMonitoringServer(ctx, registry, monitoringConfig)
 
-	mux := runAPIServer(ctx, config.GetAPIConfig())
+	// Run an api server that serves some basic endpoints and can be extended.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/up", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	switch taskName {
 	case "syncer":
-		go runSyncer(ctx, registry, config.GetSyncConfig(), dbInstance)
+		runSyncer(ctx, registry, config.GetSyncConfig(), dbInstance)
 	case "extractor":
-		go runExtractor(registry, config.GetFeaturesConfig(), dbInstance)
+		runExtractor(registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
-		go runScheduler(mux, registry, config.GetSchedulerConfig(), dbInstance)
+		runScheduler(mux, registry, config.GetSchedulerConfig(), dbInstance)
 	case "kpis":
-		go runKPIService(registry, config.GetKPIsConfig(), dbInstance)
+		runKPIService(registry, config.GetKPIsConfig(), dbInstance)
 	default:
 		panic("unknown task")
 	}
+
+	// Run the api server after all other tasks have been started and
+	// all http handlers have been registered to the mux.
+	apiConf := config.GetAPIConfig()
+	addr := fmt.Sprintf(":%d", apiConf.Port)
+	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
+		panic(err)
+	}
+	slog.Info("api listening", "port", apiConf.Port)
+
 	select {}
 }
