@@ -47,7 +47,7 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 	pipeline := features.NewPipeline(config, db, monitor)
 	// Selects the extractors to run based on the config.
 	pipeline.Init(features.SupportedExtractors)
-	pipeline.ExtractOnTrigger() // non-blocking
+	go pipeline.ExtractOnTrigger() // blocking
 }
 
 // Run a webserver that listens for external scheduling requests.
