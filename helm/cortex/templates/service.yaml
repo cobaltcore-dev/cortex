@@ -12,15 +12,13 @@ metadata:
     # This label will be added to the prometheus metrics.
     component: {{ $.Chart.Name }}-{{ .name }}
 spec:
-  type: {{ .service.type }}
+  type: ClusterIP
   ports:
-    {{- if .service.apiPort }}
-    - port: {{ .service.apiPort }}
+    - port: {{ $.Values.conf.api.port }}
       targetPort: api
       protocol: TCP
       name: api
-    {{- end }}
-    - port: {{ .service.metricsPort }}
+    - port: {{ $.Values.conf.monitoring.port }}
       targetPort: metrics
       protocol: TCP
       name: metrics

@@ -5,7 +5,6 @@ package http
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,12 +15,11 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/sapcc/go-bits/httpext"
 )
 
 type HTTPAPI interface {
-	// Init the API mux and bind the handlers.
-	Init(context.Context)
+	// Bind the server handlers.
+	Init(*http.ServeMux)
 }
 
 type httpAPI struct {
@@ -39,15 +37,8 @@ func NewAPI(config conf.SchedulerAPIConfig, pipeline api.Pipeline, m Monitor) HT
 }
 
 // Init the API mux and bind the handlers.
-func (httpAPI *httpAPI) Init(ctx context.Context) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/up", httpAPI.Up)
+func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
 	mux.HandleFunc("/scheduler/nova/external", httpAPI.NovaExternalScheduler)
-	slog.Info("httpAPI listening on", "port", httpAPI.config.Port)
-	addr := fmt.Sprintf(":%d", httpAPI.config.Port)
-	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
-		panic(err)
-	}
 }
 
 // Check if the scheduler can run based on the request data.
@@ -104,12 +95,6 @@ func (h httpAPIhelper) respond(code int, err error, text string) {
 		return
 	}
 	// If there was no error, nothing else to do.
-}
-
-// Handle the GET request to check if the API is up.
-func (httpAPI *httpAPI) Up(w http.ResponseWriter, r *http.Request) {
-	h := httpAPI.newHelper(w, r, "/up")
-	h.respond(http.StatusOK, nil, "Success")
 }
 
 // Handle the POST request from the Nova scheduler.

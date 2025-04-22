@@ -71,12 +71,12 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 }
 
 // Run a webserver that listens for external scheduling requests.
-func runScheduler(ctx context.Context, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
+func runScheduler(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
 	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
 	apiMonitor := apihttp.NewSchedulerMonitor(registry)
 	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
-	api.Init(ctx)
+	api.Init(mux)
 }
 
 // Run a kpi service that periodically calculates kpis.
@@ -96,6 +96,20 @@ func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, con
 	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
 		panic(err)
 	}
+}
+
+// Run an api server that serves some basic endpoints and can be extended.
+func runAPIServer(ctx context.Context, config conf.APIConfig) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/up", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	slog.Info("api listening", "port", config.Port)
+	addr := fmt.Sprintf(":%d", config.Port)
+	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
+		panic(err)
+	}
+	return mux
 }
 
 func main() {
@@ -162,13 +176,15 @@ func main() {
 	registry := monitoring.NewRegistry(monitoringConfig)
 	go runMonitoringServer(ctx, registry, monitoringConfig)
 
+	mux := runAPIServer(ctx, config.GetAPIConfig())
+
 	switch taskName {
 	case "syncer":
 		go runSyncer(ctx, registry, config.GetSyncConfig(), dbInstance)
 	case "extractor":
 		go runExtractor(registry, config.GetFeaturesConfig(), dbInstance)
 	case "scheduler":
-		go runScheduler(ctx, registry, config.GetSchedulerConfig(), dbInstance)
+		go runScheduler(mux, registry, config.GetSchedulerConfig(), dbInstance)
 	case "kpis":
 		go runKPIService(registry, config.GetKPIsConfig(), dbInstance)
 	default:

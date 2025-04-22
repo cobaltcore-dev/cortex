@@ -32,12 +32,12 @@ resources:
 
 livenessProbe:
   httpGet:
-    path: /metrics
-    port: metrics
+    path: /up
+    port: api
 readinessProbe:
   httpGet:
-    path: /metrics
-    port: metrics
+    path: /up
+    port: api
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -86,34 +86,21 @@ vernemq:
 modes:
   # Syncer syncs data from external sources into the database(s).
   - name: syncer
-    service:
-      type: ClusterIP
-      metricsPort: 2112
     args: ["syncer"]
     replicas: 1
 
   # Extractor extracts features from the synced data.
   - name: extractor
-    service:
-      type: ClusterIP
-      metricsPort: 2112
     args: ["extractor"]
     replicas: 1
 
   # Scheduler exposes the scheduler API and modifies the Nova scheduler weights.
   - name: scheduler
-    service:
-      type: ClusterIP
-      apiPort: 8080
-      metricsPort: 2112
     args: ["scheduler"]
     replicas: 2
 
   # Service that extracts and exposes KPIs.
   - name: kpis
-    service:
-      type: ClusterIP
-      metricsPort: 2112
     args: ["kpis"]
     replicas: 1
 
@@ -152,6 +139,10 @@ conf:
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
     password: "cortex"
+
+  # The port to use for the api serve mux.
+  api:
+    port: 8080
 
   # Connection parameters for the database where data is stored.
   db:
@@ -344,8 +335,6 @@ conf:
 
   scheduler:
     api:
-      # The port to use for the scheduler API.
-      port: 8080
       # Whether request bodies should be logged (debugging feature).
       logRequestBodies: false
     # Configuration of scheduler steps that modify the Nova scheduler weights.
