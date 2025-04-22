@@ -4,12 +4,12 @@
 apiVersion: v2
 description: Postgres setup for Cortex.
 name: cortex-postgres
-version: 0.0.2
+version: 0.1.0
 dependencies:
   - name: postgresql
     repository: oci://registry-1.docker.io/bitnamicharts
     # Use a specific version of this chart which contains compliant images.
-    version: 12.10.0
+    version: 15.5.27
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
   # of issues. See: https://github.com/sapcc/helm-charts/pkgs/container/helm-charts%2Fowner-info
