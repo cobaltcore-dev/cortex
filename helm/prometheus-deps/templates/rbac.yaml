@@ -1,7 +1,6 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if index .Values "kube-prometheus-stack" "enabled" }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -44,4 +43,3 @@ subjects:
 - kind: ServiceAccount
   name: cortex-prometheus
   namespace: default
-{{- end }}

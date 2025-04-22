@@ -34,57 +34,6 @@ alerts:
     cortexSyncObjectsTooHigh:
       severity: info
 
-kube-prometheus-stack:
-  # Whether the CRDs of the prometheus-operator should be deployed
-  # together with a prometheus and alertmanager instance.
-  enabled: false
-
-  # kube-prometheus-stack deploys a bunch of junk we don't need.
-  # Therefore, we disable all components and only enable the prometheus operator.
-  # See: https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/ci/01-provision-crds-values.yaml
-  coreDns:
-    enabled: false
-  kubeApiServer:
-    enabled: false
-  kubeControllerManager:
-    enabled: false
-  kubeDns:
-    enabled: false
-  kubeEtcd:
-    enabled: false
-  kubeProxy:
-    enabled: false
-  kubeScheduler:
-    enabled: false
-  kubeStateMetrics:
-    enabled: false
-  kubelet:
-    enabled: false
-  nodeExporter:
-    enabled: false
-  grafana:
-    enabled: false
-  defaultRules:
-    create: false
-  alertmanager:
-    enabled: false
-  prometheus:
-    enabled: false
-  fullnameOverride: "cortex"
-  prometheusOperator:
-    enabled: true
-    fullnameOverride: cortex-prometheus-operator
-    serviceMonitor:
-      selfMonitor: false
-    tls:
-      enabled: false
-    admissionWebhooks:
-      enabled: false
-    namespaces:
-      releaseNamespace: true
-      additional:
-        - kube-system
-
 owner-info:
   helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/prometheus"
   maintainers:
