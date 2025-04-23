@@ -79,10 +79,8 @@ k8s_resource('cortex-postgresql', port_forwards=[
 ], labels=['Core-Services'])
 
 ########### Monitoring
-k8s_yaml(helm('./helm/prometheus', name='cortex-prometheus', set=[
-    # Deploy prometheus operator CRDs, Prometheus, and Alertmanager
-    'kube-prometheus-stack.enabled=true',
-]))
+k8s_yaml(helm('./helm/prometheus-deps', name='cortex-prometheus-deps')) # Operator
+k8s_yaml(helm('./helm/prometheus', name='cortex-prometheus')) # Alerts + ServiceMonitor
 k8s_resource('cortex-prometheus-operator', labels=['Monitoring'])
 k8s_resource(
     new_name='cortex-prometheus',

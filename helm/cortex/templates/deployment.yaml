@@ -42,13 +42,11 @@ spec:
           image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
-            {{- if .service.apiPort }}
             - name: api
-              containerPort: {{ .service.apiPort }}
+              containerPort: {{ $.Values.conf.api.port }}
               protocol: TCP
-            {{- end }}
             - name: metrics
-              containerPort: {{ .service.metricsPort }}
+              containerPort: {{ $.Values.conf.monitoring.port }}
               protocol: TCP
           livenessProbe:
             {{- toYaml $.Values.livenessProbe | nindent 12 }}

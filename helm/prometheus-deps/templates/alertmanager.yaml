@@ -1,7 +1,6 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if index .Values "kube-prometheus-stack" "enabled" }}
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
 metadata:
@@ -30,4 +29,3 @@ spec:
   alertmanagerConfigSelector:
     matchLabels:
       alertmanagerConfig: cortex-alertmanager
-{{- end }}

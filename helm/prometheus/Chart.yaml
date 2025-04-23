@@ -4,13 +4,8 @@
 apiVersion: v2
 description: Prometheus alerts setup for Cortex.
 name: cortex-alerts
-version: 0.1.0
+version: 0.2.0
 dependencies:
-  # CRDs of the prometheus operator, such as PrometheusRule, ServiceMonitor, etc.
-  - name: kube-prometheus-stack
-    repository: https://prometheus-community.github.io/helm-charts
-    version: 70.4.2
-    condition: kube-prometheus-stack.enabled
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
   # of issues. See: https://github.com/sapcc/helm-charts/pkgs/container/helm-charts%2Fowner-info

@@ -167,9 +167,6 @@ type SchedulerAPIConfig struct {
 	// If request bodies should be logged out.
 	// This feature is intended for debugging purposes only.
 	LogRequestBodies bool `json:"logRequestBodies"`
-
-	// The port to use for the scheduler API.
-	Port int `json:"port"`
 }
 
 // Configuration for the kpis module.
@@ -206,6 +203,12 @@ type MQTTConfig struct {
 	Password string `json:"password"`
 }
 
+// Configuration for the api port.
+type APIConfig struct {
+	// The port to expose the API on.
+	Port int `json:"port"`
+}
+
 // Configuration for the cortex service.
 type Config interface {
 	GetLoggingConfig() LoggingConfig
@@ -216,6 +219,7 @@ type Config interface {
 	GetKPIsConfig() KPIsConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
+	GetAPIConfig() APIConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
@@ -229,6 +233,7 @@ type config struct {
 	MonitoringConfig `json:"monitoring"`
 	KPIsConfig       `json:"kpis"`
 	MQTTConfig       `json:"mqtt"`
+	APIConfig        `json:"api"`
 }
 
 // Create a new configuration from the default config json file.
@@ -267,3 +272,4 @@ func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConf
 func (c *config) GetKPIsConfig() KPIsConfig             { return c.KPIsConfig }
 func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
 func (c *config) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }
+func (c *config) GetAPIConfig() APIConfig               { return c.APIConfig }

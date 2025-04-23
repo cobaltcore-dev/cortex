@@ -1,7 +1,6 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if index .Values "kube-prometheus-stack" "enabled" }}
 apiVersion: monitoring.coreos.com/v1
 kind: Prometheus
 metadata:
@@ -25,4 +24,3 @@ spec:
   ruleSelector:
     matchLabels:
       type: alerting-rules
-{{- end }}
