@@ -21,6 +21,7 @@ spec:
     - namespace: default
       name: alertmanager-operated
       port: web
+  scrapeInterval: 60s
   ruleSelector:
     matchLabels:
       type: alerting-rules
