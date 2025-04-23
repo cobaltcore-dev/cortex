@@ -193,10 +193,11 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (service) (rate(process_cpu_seconds_total{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[1m]))",
+          "expr": "sum by (service) (rate(process_cpu_seconds_total{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[2m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
+          "intervalFactor": 1,
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -308,7 +309,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_vm_life_span_bucket{flavor_name=\"all\"}[1m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_vm_life_span_bucket{flavor_name=\"all\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -384,7 +385,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(delta(cortex_vm_time_until_migration_bucket{flavor_name=\"all\"}[1m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_vm_time_until_migration_bucket{flavor_name=\"all\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -527,7 +528,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "(sum by(target_host) (delta(cortex_migrations_total{}[1m])))",
+          "expr": "(sum by(target_host) (delta(cortex_migrations_total{}[2m])))",
           "interval": "",
           "legendFormat": "{{target_host}}",
           "queryType": "randomWalk",
@@ -624,7 +625,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "(sum by(source_host) (delta(cortex_migrations_total{}[1m])))",
+          "expr": "(sum by(source_host) (delta(cortex_migrations_total{}[2m])))",
           "format": "time_series",
           "interval": "",
           "legendFormat": "{{source_host}}",
@@ -782,7 +783,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(type) (delta(cortex_migrations_total[1m]))",
+          "expr": "sum by(type) (delta(cortex_migrations_total[2m]))",
           "interval": "",
           "legendFormat": "Type: {{type}}",
           "queryType": "randomWalk",
@@ -793,7 +794,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Migrations by type (rate over 60min)",
+      "title": "Migrations by type",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -895,7 +896,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket[60m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket[2m])) by (le, step))",
           "interval": "",
           "legendFormat": "{{step}}",
           "refId": "A"
@@ -905,7 +906,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Resorted hosts by scheduler step (rate over 60min)",
+      "title": "Resorted hosts by scheduler step (rate over 2min)",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -992,7 +993,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(vmware,rebuild,resize,live) (rate(cortex_scheduler_pipeline_requests_total{}[60m]))",
+          "expr": "sum by(vmware,rebuild,resize,live) (rate(cortex_scheduler_pipeline_requests_total{}[2m]))",
           "interval": "",
           "legendFormat": "Rebuild: {{rebuild}}, Resize: {{resize}}, Live: {{live}}, VMware: {{vmware}}",
           "refId": "A"
@@ -1002,7 +1003,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Requests by type (rate over 60min)",
+      "title": "Requests by type (rate over 2min)",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1090,7 +1091,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_run_duration_seconds_bucket[1m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
           "interval": "",
           "legendFormat": "{{step}}",
           "refId": "A"
@@ -1197,7 +1198,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(rate(cortex_scheduler_api_request_duration_seconds_count{status=~\"2.+\"}[1m])) by (method, path, status, error)",
+          "expr": "sum(rate(cortex_scheduler_api_request_duration_seconds_count{status=~\"2.+\"}[2m])) by (method, path, status, error)",
           "interval": "",
           "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
           "refId": "A"
@@ -1294,7 +1295,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(rate(cortex_scheduler_api_request_duration_seconds_count{status=~\"4.+|5.+\"}[1m])) by (method, path, status, error)",
+          "expr": "sum(rate(cortex_scheduler_api_request_duration_seconds_count{status=~\"4.+|5.+\"}[2m])) by (method, path, status, error)",
           "instant": false,
           "interval": "",
           "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
@@ -1409,7 +1410,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_api_request_duration_seconds_bucket{status=~\"2.+\"}[1m])) by (le, method, path, status, error))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_api_request_duration_seconds_bucket{status=~\"2.+\"}[2m])) by (le, method, path, status, error))",
           "interval": "",
           "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
           "refId": "A"
@@ -1521,7 +1522,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_api_request_duration_seconds_bucket{status=~\"4.+|5.+\"}[1m])) by (le, method, path, status, error))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_api_request_duration_seconds_bucket{status=~\"4.+|5.+\"}[2m])) by (le, method, path, status, error))",
           "interval": "",
           "legendFormat": "{{method}} {{path}} {{status}} {{error}}",
           "refId": "A"
@@ -1638,7 +1639,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "bottomk(1, min by (host, step) (rate(cortex_scheduler_pipeline_step_weight_modification[1m])) < 0) by (host)",
+          "expr": "bottomk(1, min by (host, step) (rate(cortex_scheduler_pipeline_step_weight_modification[2m])) < 0) by (host)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1708,7 +1709,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "topk(1, max by (host, step) (rate(cortex_scheduler_pipeline_step_weight_modification[1m])) > 0) by (host)",
+          "expr": "topk(1, max by (host, step) (rate(cortex_scheduler_pipeline_step_weight_modification[2m])) > 0) by (host)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1785,7 +1786,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_feature_pipeline_step_run_duration_seconds_bucket[1m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_feature_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
           "interval": "",
           "legendFormat": "{{step}}",
           "refId": "A"
@@ -1957,7 +1958,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_sync_run_duration_seconds_bucket[1m])) by (le, datasource))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_sync_run_duration_seconds_bucket[2m])) by (le, datasource))",
           "interval": "",
           "legendFormat": "{{datasource}}",
           "refId": "A"
@@ -2055,7 +2056,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (datasource) (increase(cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[1m])) / count by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "expr": "sum by (datasource) (increase(cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[2m])) / count by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
           "format": "time_series",
           "instant": false,
           "interval": "",
