@@ -121,7 +121,7 @@ func main() {
 		taskName = os.Args[1]
 		bininfo.SetTaskName(taskName)
 	} else {
-		panic(fmt.Sprintf("usage: %s [checks | syncer | extractor | scheduler]", os.Args[0]))
+		panic(fmt.Sprintf("usage: %s [checks | syncer | extractor | scheduler | kpis]", os.Args[0]))
 	}
 
 	dbInstance := db.NewPostgresDB(config.GetDBConfig())
