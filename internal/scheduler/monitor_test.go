@@ -3,7 +3,57 @@
 
 package scheduler
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/testlib/monitoring"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
+)
+
+func TestStepMonitorRun(t *testing.T) {
+	runTimer := &monitoring.MockObserver{}
+	removedHostsObserver := &monitoring.MockObserver{}
+	reorderingsObserver := &monitoring.MockObserver{}
+	monitor := &StepMonitor{
+		Step: &plugins.MockStep{
+			Name: "mock_step",
+			RunFunc: func(request api.Request) (map[string]float64, error) {
+				return map[string]float64{"host1": 0.0, "host2": 1.0, "host3": 0.0}, nil
+			},
+		},
+		runTimer:             runTimer,
+		stepHostWeight:       nil,
+		removedHostsObserver: removedHostsObserver,
+		reorderingsObserver:  reorderingsObserver,
+	}
+	request := &testlibAPI.MockRequest{
+		Hosts:   []string{"host1", "host2", "host3"},
+		Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
+	}
+	if _, err := monitor.Run(request); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if len(removedHostsObserver.Observations) != 1 {
+		t.Errorf("removedHostsObserver.Observations = %v, want 1", len(removedHostsObserver.Observations))
+	}
+	if removedHostsObserver.Observations[0] != 0 {
+		t.Errorf("removedHostsObserver.Observations[0] = %v, want 0", removedHostsObserver.Observations[0])
+	}
+	if len(reorderingsObserver.Observations) != 1 {
+		t.Errorf("reorderingsObserver.Observations = %v, want 1", len(reorderingsObserver.Observations))
+	}
+	if reorderingsObserver.Observations[0] != 2 {
+		t.Errorf("reorderingsObserver.Observations[0] = %v, want 2", reorderingsObserver.Observations[0])
+	}
+	if len(runTimer.Observations) != 1 {
+		t.Errorf("runTimer.Observations = %v, want 1", len(runTimer.Observations))
+	}
+	if runTimer.Observations[0] <= 0 {
+		t.Errorf("runTimer.Observations[0] = %v, want > 0", runTimer.Observations[0])
+	}
+}
 
 func TestLevenshteinDistance(t *testing.T) {
 	tests := []struct {

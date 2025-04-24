@@ -11,29 +11,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 )
 
-// MockStep is a manual mock implementation of the plugins.Step interface.
-type MockStep struct {
-	Name     string
-	InitFunc func(db db.DB, opts conf.RawOpts) error
-	RunFunc  func(request api.Request) (map[string]float64, error)
-}
-
-func (m *MockStep) GetName() string {
-	return m.Name
-}
-
-func (m *MockStep) Init(db db.DB, opts conf.RawOpts) error {
-	return m.InitFunc(db, opts)
-}
-
-func (m *MockStep) Run(request api.Request) (map[string]float64, error) {
-	return m.RunFunc(request)
-}
-
 func TestStepValidator_GetName(t *testing.T) {
-	mockStep := &MockStep{
+	mockStep := &plugins.MockStep{
 		Name: "mock-step",
 	}
 
@@ -47,7 +29,7 @@ func TestStepValidator_GetName(t *testing.T) {
 }
 
 func TestStepValidator_Init(t *testing.T) {
-	mockStep := &MockStep{
+	mockStep := &plugins.MockStep{
 		InitFunc: func(db db.DB, opts conf.RawOpts) error {
 			return nil
 		},
@@ -66,7 +48,7 @@ func TestStepValidator_Init(t *testing.T) {
 }
 
 func TestStepValidator_Run_ValidHosts(t *testing.T) {
-	mockStep := &MockStep{
+	mockStep := &plugins.MockStep{
 		RunFunc: func(request api.Request) (map[string]float64, error) {
 			return map[string]float64{
 				"host1": 1.0,
@@ -102,7 +84,7 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 }
 
 func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
-	mockStep := &MockStep{
+	mockStep := &plugins.MockStep{
 		RunFunc: func(request api.Request) (map[string]float64, error) {
 			return map[string]float64{
 				"host1": 1.0,
@@ -137,7 +119,7 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 }
 
 func TestStepValidator_Run_DisabledValidation(t *testing.T) {
-	mockStep := &MockStep{
+	mockStep := &plugins.MockStep{
 		RunFunc: func(request api.Request) (map[string]float64, error) {
 			return map[string]float64{
 				"host1": 1.0,
@@ -171,7 +153,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 }
 
 func TestValidateStep(t *testing.T) {
-	mockStep := &MockStep{}
+	mockStep := &plugins.MockStep{}
 	disabledValidations := conf.SchedulerStepDisabledValidationsConfig{
 		SameHostNumberInOut: true,
 	}
