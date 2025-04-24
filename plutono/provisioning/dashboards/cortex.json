@@ -478,7 +478,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Average life span of newly created vms by flavor",
+      "title": "Average life span of deleted vms by flavor",
       "type": "stat"
     },
     {
@@ -2252,7 +2252,7 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
