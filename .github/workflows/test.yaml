@@ -1,7 +1,7 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-name: Test
+name: Test and Report Coverage
 
 on: [push]
 
@@ -15,10 +15,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.24.2
-      - name: Test without Docker
+      - name: Test quickly without Docker
         run: go test -v ./...
 
   test-with-docker:
+    # We don't need to run this longer test if the previous one already failed.
+    needs: test-without-docker
     runs-on: ubuntu-latest
     services:
       dind:
@@ -32,5 +34,64 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.24.2
-      - name: Test with Docker
-        run: POSTGRES_CONTAINER=1 VERNEMQ_CONTAINER=1 go test -v ./...
+      - name: Run tests with Docker and calculate coverage
+        run: |
+          POSTGRES_CONTAINER=1 VERNEMQ_CONTAINER=1 go test -v -coverpkg=./internal/... -coverprofile=pr_profile.cov ./internal/...
+          CURRENT_COVERAGE=$(go tool cover -func pr_profile.cov | grep total | awk '{print $3}' | tr -d '%')
+          echo "CURRENT_COVERAGE=$CURRENT_COVERAGE" >> $GITHUB_ENV
+
+      # Steps below are only executed if the workflow is triggered by a pull request
+      - name: Checkout base commit (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Run tests on base commit and calculate previous coverage (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          POSTGRES_CONTAINER=1 VERNEMQ_CONTAINER=1 go test -v -coverpkg=./internal/... -coverprofile=base_profile.cov ./internal/...
+          PREVIOUS_COVERAGE=$(go tool cover -func base_profile.cov | grep total | awk '{print $3}' | tr -d '%')
+          echo "PREVIOUS_COVERAGE=$PREVIOUS_COVERAGE" >> $GITHUB_ENV
+      - name: Calculate coverage change (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          CHANGE=$(echo "$CURRENT_COVERAGE - $PREVIOUS_COVERAGE" | bc)
+          echo "CHANGE=$CHANGE" >> $GITHUB_ENV
+      - name: Delete old coverage comments (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const coverageCommentTag = '<!-- coverage-comment -->';
+            for (const comment of comments) {
+              if (comment.body.includes(coverageCommentTag)) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              }
+            }
+      - name: Post coverage comment (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const currentCoverage = process.env.CURRENT_COVERAGE || 'unknown';
+            const previousCoverage = process.env.PREVIOUS_COVERAGE || 'unknown';
+            const change = process.env.CHANGE || 'unknown';
+            const commentBody = `
+              <!-- coverage-comment -->
+              Coverage in go module **internal/**: **${currentCoverage}%** (${change >= 0 ? '+' : ''}${change}%)
+            `;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody,
+            });
