@@ -217,14 +217,19 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 		defer timer.ObserveDuration()
 	}
 
-	weights, err := s.Step.Run(request)
+	inWeights := request.GetWeights()
+	outWeights, err := s.Step.Run(request)
 	if err != nil {
 		return nil, err
 	}
+	slog.Info(
+		"scheduler: finished step", "name", stepName,
+		"inWeights", inWeights, "outWeights", outWeights,
+	)
 
 	// Observe how much the step modifies the weights of the hosts.
 	if s.stepHostWeight != nil {
-		for host, weight := range weights {
+		for host, weight := range outWeights {
 			s.stepHostWeight.WithLabelValues(host, stepName).Add(weight)
 			if weight != 0.0 {
 				slog.Info("scheduler: modified host weight", "name", stepName, "weight", weight)
@@ -233,11 +238,9 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 	}
 
 	// Observe how many hosts are removed from the state.
-	hostsInScenario := make(map[string]struct{})
-	for _, host := range request.GetHosts() {
-		hostsInScenario[host] = struct{}{}
-	}
-	nHostsRemoved := len(hostsInScenario) - len(weights)
+	hostsIn := request.GetHosts()
+	hostsOut := slices.Collect(maps.Keys(outWeights))
+	nHostsRemoved := len(hostsIn) - len(hostsOut)
 	if nHostsRemoved < 0 {
 		slog.Info("scheduler: removed hosts", "name", stepName, "count", nHostsRemoved)
 	}
@@ -248,14 +251,19 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 	// Observe the number of reorderings conducted by the scheduler.
 	if s.reorderingsObserver != nil {
 		// Calculate the Levenshtein distance between the hosts going in and out.
-		hosts := slices.Collect(maps.Keys(weights))
-		sort.Slice(hosts, func(i, j int) bool {
-			return weights[hosts[i]] > weights[hosts[j]]
+		sort.Slice(hostsIn, func(i, j int) bool {
+			return inWeights[hostsIn[i]] > inWeights[hostsIn[j]]
 		})
-		distance := levenshteinDistance(request.GetHosts(), hosts)
-		slog.Info("scheduler: reorderings", "name", stepName, "distance", distance, "hosts_in", request.GetHosts(), "hosts_out", hosts)
+		sort.Slice(hostsOut, func(i, j int) bool {
+			return outWeights[hostsOut[i]] > outWeights[hostsOut[j]]
+		})
+		distance := levenshteinDistance(hostsIn, hostsOut)
+		slog.Info(
+			"scheduler: reorderings", "name", stepName, "distance", distance,
+			"hostsIn", hostsIn, "hostsOut", hostsOut,
+		)
 		s.reorderingsObserver.Observe(float64(distance))
 	}
 
-	return weights, nil
+	return outWeights, nil
 }
