@@ -23,4 +23,4 @@ type FeatureExtractor interface {
 	Triggers() []string
 }
 
-type Feature interface{}
+type Feature any
