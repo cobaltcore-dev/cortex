@@ -15,7 +15,6 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
   "links": [],
   "panels": [
     {
@@ -56,10 +55,13 @@
       "id": 39,
       "legend": {
         "alignAsTable": true,
-        "avg": true,
-        "current": false,
-        "max": true,
-        "min": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "hideZero": false,
+        "max": false,
+        "min": false,
+        "rightSide": true,
         "show": true,
         "total": false,
         "values": true
@@ -71,14 +73,14 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "exemplar": true,
@@ -93,11 +95,22 @@
       "thresholds": [
         {
           "$$hashKey": "object:833",
-          "colorMode": "critical",
+          "colorMode": "warning",
           "fill": true,
           "line": false,
           "op": "gt",
-          "value": 100,
+          "value": 1000,
+          "yaxis": "left"
+        },
+        {
+          "$$hashKey": "object:255",
+          "colorMode": "critical",
+          "fill": true,
+          "fillColor": "#F2495C",
+          "line": false,
+          "lineColor": "rgba(31, 96, 196, 0.6)",
+          "op": "gt",
+          "value": 4000,
           "yaxis": "left"
         }
       ],
@@ -124,7 +137,7 @@
           "format": "decmbytes",
           "label": null,
           "logBase": 1,
-          "max": "150",
+          "max": "5000",
           "min": null,
           "show": true
         },
@@ -167,10 +180,11 @@
       "id": 41,
       "legend": {
         "alignAsTable": true,
-        "avg": true,
-        "current": false,
-        "max": true,
-        "min": true,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": true,
         "show": true,
         "total": false,
         "values": true
@@ -182,14 +196,14 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "exemplar": true,
@@ -205,11 +219,20 @@
       "thresholds": [
         {
           "$$hashKey": "object:384",
-          "colorMode": "critical",
+          "colorMode": "warning",
           "fill": true,
           "line": false,
           "op": "gt",
-          "value": 0.5,
+          "value": 1,
+          "yaxis": "left"
+        },
+        {
+          "$$hashKey": "object:352",
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1.5,
           "yaxis": "left"
         }
       ],
@@ -236,7 +259,7 @@
           "format": "percentunit",
           "label": null,
           "logBase": 1,
-          "max": "1",
+          "max": "2",
           "min": null,
           "show": true
         },
@@ -264,9 +287,9 @@
         "x": 0,
         "y": 12
       },
-      "id": 48,
+      "id": 71,
       "panels": [],
-      "title": "KPIs",
+      "title": "KPIs: VM Life Span",
       "type": "row"
     },
     {
@@ -297,7 +320,7 @@
         "y": 13
       },
       "heatmap": {},
-      "hideZeroBuckets": false,
+      "hideZeroBuckets": true,
       "highlightCards": true,
       "id": 59,
       "interval": null,
@@ -320,13 +343,12 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Life span of deleted VMs",
+      "title": "Life span of deleted VMs (change over time)",
       "tooltip": {
         "show": true,
         "showHistogram": false
       },
       "tooltipDecimals": null,
-      "transparent": true,
       "type": "heatmap",
       "xAxis": {
         "show": true
@@ -374,9 +396,10 @@
         "y": 13
       },
       "heatmap": {},
-      "hideZeroBuckets": false,
+      "hideZeroBuckets": true,
       "highlightCards": true,
-      "id": 60,
+      "id": 65,
+      "interval": null,
       "legend": {
         "show": true
       },
@@ -384,8 +407,8 @@
       "reverseYBuckets": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "sum(delta(cortex_vm_time_until_migration_bucket{flavor_name=\"all\"}[2m]) / 2) by (le)",
+          "exemplar": false,
+          "expr": "sum(cortex_vm_life_span_bucket{flavor_name=\"all\"}) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -396,12 +419,12 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Residency of VMs migrated away",
+      "title": "Life span of deleted VMs (total)",
       "tooltip": {
         "show": true,
         "showHistogram": false
       },
-      "transparent": true,
+      "tooltipDecimals": null,
       "type": "heatmap",
       "xAxis": {
         "show": true
@@ -433,8 +456,108 @@
             "mode": "absolute",
             "steps": [
               {
+                "color": "rgb(33, 33, 33)",
+                "value": null
+              },
+              {
+                "color": "dark-blue",
+                "value": 0
+              },
+              {
+                "color": "semi-dark-blue",
+                "value": 100
+              },
+              {
+                "color": "blue",
+                "value": 1000
+              },
+              {
+                "color": "light-blue",
+                "value": 10000
+              },
+              {
+                "color": "super-light-blue",
+                "value": 10000
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 64,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (flavor_name) (cortex_vm_life_span_count))",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{flavor_name}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Newly created vms by flavor",
+      "type": "stat"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
                 "color": "blue",
                 "value": null
+              },
+              {
+                "color": "dark-blue",
+                "value": 0
+              },
+              {
+                "color": "semi-dark-blue",
+                "value": 60
+              },
+              {
+                "color": "blue",
+                "value": 3600
+              },
+              {
+                "color": "light-blue",
+                "value": 86400
+              },
+              {
+                "color": "super-light-blue",
+                "value": 604800
               }
             ]
           },
@@ -443,9 +566,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 13,
+        "h": 16,
         "w": 12,
-        "x": 0,
+        "x": 12,
         "y": 25
       },
       "id": 62,
@@ -464,7 +587,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -478,8 +601,22 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Average life span of deleted vms by flavor",
+      "title": "Average life span of newly created vms by flavor",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "id": 73,
+      "panels": [],
+      "title": "KPIs: VM Migrations and Time Until Migration",
+      "type": "row"
     },
     {
       "aliasColors": {},
@@ -494,21 +631,25 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 9,
+        "h": 6,
         "w": 12,
-        "x": 12,
-        "y": 25
+        "x": 0,
+        "y": 42
       },
       "hiddenSeries": false,
       "id": 56,
       "legend": {
+        "alignAsTable": false,
         "avg": false,
         "current": false,
+        "hideEmpty": false,
+        "hideZero": true,
         "max": false,
         "min": false,
+        "rightSide": true,
         "show": true,
-        "total": false,
-        "values": false
+        "total": true,
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
@@ -517,18 +658,18 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "exemplar": true,
-          "expr": "(sum by(target_host) (delta(cortex_migrations_total{}[2m])))",
+          "expr": "(sum by(target_host) (delta(cortex_migrations_total{}[2m])/2))",
           "interval": "",
           "legendFormat": "{{target_host}}",
           "queryType": "randomWalk",
@@ -542,7 +683,7 @@
       "title": "Incoming migrations",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -556,6 +697,7 @@
       "yaxes": [
         {
           "$$hashKey": "object:405",
+          "decimals": 0,
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -591,21 +733,25 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 9,
+        "h": 6,
         "w": 12,
         "x": 12,
-        "y": 34
+        "y": 42
       },
       "hiddenSeries": false,
-      "id": 55,
+      "id": 68,
       "legend": {
+        "alignAsTable": false,
         "avg": false,
         "current": false,
+        "hideEmpty": false,
+        "hideZero": true,
         "max": false,
         "min": false,
+        "rightSide": true,
         "show": true,
-        "total": false,
-        "values": false
+        "total": true,
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
@@ -614,21 +760,20 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "exemplar": true,
-          "expr": "(sum by(source_host) (delta(cortex_migrations_total{}[2m])))",
-          "format": "time_series",
+          "expr": "(sum by(source_host) (delta(cortex_migrations_total{}[2m])/2))",
           "interval": "",
-          "legendFormat": "{{source_host}}",
+          "legendFormat": "{{target_host}}",
           "queryType": "randomWalk",
           "refId": "A"
         }
@@ -640,7 +785,7 @@
       "title": "Outgoing migrations",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -653,7 +798,8 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:146",
+          "$$hashKey": "object:405",
+          "decimals": 0,
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -662,7 +808,7 @@
           "show": true
         },
         {
-          "$$hashKey": "object:147",
+          "$$hashKey": "object:406",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -675,6 +821,154 @@
         "align": false,
         "alignLevel": null
       }
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "heatmap": {},
+      "hideZeroBuckets": true,
+      "highlightCards": true,
+      "id": 60,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(delta(cortex_vm_time_until_migration_bucket{flavor_name=\"all\"}[2m]) / 2) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Residency of VMs migrated away (change over time)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "s",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "heatmap": {},
+      "hideZeroBuckets": true,
+      "highlightCards": true,
+      "id": 66,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_vm_time_until_migration_bucket{flavor_name=\"all\"}) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Residency of VMs migrated away (total)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "s",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
     },
     {
       "datasource": "prometheus-openstack",
@@ -690,6 +984,106 @@
               {
                 "color": "blue",
                 "value": null
+              },
+              {
+                "color": "dark-blue",
+                "value": 0
+              },
+              {
+                "color": "semi-dark-blue",
+                "value": 10
+              },
+              {
+                "color": "blue",
+                "value": 100
+              },
+              {
+                "color": "light-blue",
+                "value": 1000
+              },
+              {
+                "color": "super-light-blue",
+                "value": 10000
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 60
+      },
+      "id": 67,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (flavor_name) (cortex_vm_time_until_migration_count))",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{flavor_name}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Migrations by flavor",
+      "type": "stat"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-blue",
+                "value": null
+              },
+              {
+                "color": "dark-blue",
+                "value": 0
+              },
+              {
+                "color": "semi-dark-blue",
+                "value": 60
+              },
+              {
+                "color": "blue",
+                "value": 3600
+              },
+              {
+                "color": "light-blue",
+                "value": 86400
+              },
+              {
+                "color": "super-light-blue",
+                "value": 604800
               }
             ]
           },
@@ -698,10 +1092,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 14,
+        "h": 18,
         "w": 12,
-        "x": 0,
-        "y": 38
+        "x": 12,
+        "y": 60
       },
       "id": 61,
       "options": {
@@ -719,7 +1113,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -749,21 +1143,25 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 9,
+        "h": 6,
         "w": 12,
-        "x": 12,
-        "y": 43
+        "x": 0,
+        "y": 72
       },
       "hiddenSeries": false,
-      "id": 54,
+      "id": 69,
       "legend": {
+        "alignAsTable": false,
         "avg": false,
         "current": false,
+        "hideEmpty": false,
+        "hideZero": true,
         "max": false,
         "min": false,
+        "rightSide": true,
         "show": true,
-        "total": false,
-        "values": false
+        "total": true,
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
@@ -772,20 +1170,20 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(type) (delta(cortex_migrations_total[2m]))",
+          "expr": "sum by(type) (delta(cortex_migrations_total[2m])/2)",
           "interval": "",
-          "legendFormat": "Type: {{type}}",
+          "legendFormat": "{{target_host}}",
           "queryType": "randomWalk",
           "refId": "A"
         }
@@ -797,7 +1195,7 @@
       "title": "Migrations by type",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -810,7 +1208,8 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:494",
+          "$$hashKey": "object:405",
+          "decimals": 0,
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -819,7 +1218,7 @@
           "show": true
         },
         {
-          "$$hashKey": "object:495",
+          "$$hashKey": "object:406",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -840,7 +1239,558 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 78
+      },
+      "id": 23,
+      "panels": [],
+      "title": "Data Sync",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 17,
+        "w": 12,
+        "x": 0,
+        "y": 79
+      },
+      "hiddenSeries": false,
+      "id": 63,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "hideZero": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": true,
+        "total": true,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.37",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum by (datasource) (increase(cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[2m])) / count by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Objects synced in database over 1 min",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:114",
+          "format": "short",
+          "label": null,
+          "logBase": 10,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:115",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 17,
+        "w": 12,
+        "x": 12,
+        "y": 79
+      },
+      "hiddenSeries": false,
+      "id": 20,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "hideZero": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": true,
+        "total": true,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.37",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_sync_run_duration_seconds_bucket[2m])) by (le, datasource))",
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Total time needed to sync",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:438",
+          "format": "s",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:439",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-blue",
+                "value": null
+              },
+              {
+                "color": "dark-blue",
+                "value": 10
+              },
+              {
+                "color": "semi-dark-blue",
+                "value": 100
+              },
+              {
+                "color": "blue",
+                "value": 1000
+              },
+              {
+                "color": "light-blue",
+                "value": 10000
+              },
+              {
+                "color": "super-light-blue",
+                "value": 100000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 15,
+        "w": 12,
+        "x": 0,
+        "y": 96
+      },
+      "id": 21,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}) / count by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Objects synced in database",
+      "type": "stat"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 15,
+        "w": 12,
+        "x": 12,
+        "y": 96
+      },
+      "id": 38,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "(sum by (datasource) (cortex_sync_request_duration_seconds_count / cortex_sync_request_processed_total)) / (count by (datasource) (cortex_sync_request_duration_seconds_count / cortex_sync_request_processed_total))",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Sync request success rate",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "datasource": "prometheus-openstack",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 111
+      },
+      "id": 31,
+      "panels": [],
+      "title": "Feature Extraction",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 19,
+        "w": 12,
+        "x": 0,
+        "y": 112
+      },
+      "hiddenSeries": false,
+      "id": 35,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "hideZero": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": true,
+        "total": true,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.37",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_feature_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
+          "interval": "",
+          "legendFormat": "{{step}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Total feature extraction time",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:1402",
+          "format": "s",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:1403",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-blue",
+                "value": null
+              },
+              {
+                "color": "dark-blue",
+                "value": 10
+              },
+              {
+                "color": "semi-dark-blue",
+                "value": 100
+              },
+              {
+                "color": "blue",
+                "value": 1000
+              },
+              {
+                "color": "light-blue",
+                "value": 10000
+              },
+              {
+                "color": "super-light-blue",
+                "value": 100000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 19,
+        "w": 12,
+        "x": 12,
+        "y": 112
+      },
+      "id": 43,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum by (step) (cortex_feature_pipeline_step_features{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}) / count by (step) (cortex_feature_pipeline_step_features{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Extracted features in database",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "datasource": "prometheus-openstack",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 131
       },
       "id": 29,
       "panels": [],
@@ -863,7 +1813,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 132
       },
       "hiddenSeries": false,
       "id": 51,
@@ -885,7 +1835,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -961,7 +1911,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 142
       },
       "hiddenSeries": false,
       "id": 52,
@@ -982,7 +1932,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1058,7 +2008,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 74
+        "y": 153
       },
       "hiddenSeries": false,
       "id": 26,
@@ -1080,7 +2030,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1166,7 +2116,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 86
+        "y": 165
       },
       "hiddenSeries": false,
       "id": 37,
@@ -1187,7 +2137,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1263,7 +2213,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 86
+        "y": 165
       },
       "hiddenSeries": false,
       "id": 40,
@@ -1284,7 +2234,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1375,7 +2325,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 86
+        "y": 165
       },
       "hiddenSeries": false,
       "id": 33,
@@ -1399,7 +2349,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1487,7 +2437,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 86
+        "y": 165
       },
       "hiddenSeries": false,
       "id": 42,
@@ -1511,7 +2461,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1615,7 +2565,7 @@
         "h": 31,
         "w": 12,
         "x": 0,
-        "y": 97
+        "y": 176
       },
       "id": 45,
       "options": {
@@ -1635,7 +2585,7 @@
         },
         "textMode": "value_and_name"
       },
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -1685,7 +2635,7 @@
         "h": 31,
         "w": 12,
         "x": 12,
-        "y": 97
+        "y": 176
       },
       "id": 46,
       "options": {
@@ -1705,7 +2655,7 @@
         },
         "textMode": "value_and_name"
       },
-      "pluginVersion": "7.5.35",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -1719,528 +2669,6 @@
         }
       ],
       "title": "Most impactful upvoting scheduler step by host",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "datasource": "prometheus-openstack",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 128
-      },
-      "id": 31,
-      "panels": [],
-      "title": "Feature Extraction",
-      "type": "row"
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 129
-      },
-      "hiddenSeries": false,
-      "id": 35,
-      "legend": {
-        "alignAsTable": true,
-        "avg": true,
-        "current": false,
-        "max": true,
-        "min": true,
-        "rightSide": true,
-        "show": true,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.5.35",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_feature_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
-          "interval": "",
-          "legendFormat": "{{step}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Total feature extraction time",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:1402",
-          "format": "s",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:1403",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 141
-      },
-      "id": 43,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.5.35",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum by (step) (cortex_feature_pipeline_step_features{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}) / count by (step) (cortex_feature_pipeline_step_features{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{datasource}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Extracted features in database",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "datasource": "prometheus-openstack",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 153
-      },
-      "id": 23,
-      "panels": [],
-      "title": "Data Sync",
-      "type": "row"
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 154
-      },
-      "hiddenSeries": false,
-      "id": 20,
-      "legend": {
-        "alignAsTable": true,
-        "avg": true,
-        "current": false,
-        "max": true,
-        "min": true,
-        "rightSide": true,
-        "show": true,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.5.35",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": true,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_sync_run_duration_seconds_bucket[2m])) by (le, datasource))",
-          "interval": "",
-          "legendFormat": "{{datasource}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Total time needed to sync",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:438",
-          "format": "s",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:439",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 166
-      },
-      "hiddenSeries": false,
-      "id": 63,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.5.35",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum by (datasource) (increase(cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[2m])) / count by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{datasource}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Objects synced in database over 1 min",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:114",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:115",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1000000
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 12,
-        "x": 0,
-        "y": 178
-      },
-      "id": 21,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.5.35",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}) / count by (datasource) (cortex_sync_objects{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{datasource}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Objects synced in database",
-      "type": "stat"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.9
-              },
-              {
-                "color": "yellow",
-                "value": 0.95
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 12,
-        "x": 12,
-        "y": 178
-      },
-      "id": 38,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.5.35",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "(sum by (datasource) (cortex_sync_request_duration_seconds_count / cortex_sync_request_processed_total)) / (count by (datasource) (cortex_sync_request_duration_seconds_count / cortex_sync_request_processed_total))",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{datasource}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Sync request success rate",
       "type": "stat"
     }
   ],
@@ -2259,5 +2687,5 @@
   "timezone": "",
   "title": "Cortex",
   "uid": "cortex",
-  "version": 1
+  "version": 5
 }
