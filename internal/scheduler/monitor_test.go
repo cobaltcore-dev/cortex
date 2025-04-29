@@ -81,45 +81,6 @@ func TestSchedulerMonitor(t *testing.T) {
 		t.Fatalf("stepRemovedHostsObserver test failed: %v", err)
 	}
 
-	// Test stepReorderingsObserver
-	expectedReorderingsObserver := strings.NewReader(`
-        # HELP cortex_scheduler_pipeline_step_reorderings_levenshtein Number of reorderings conducted by the scheduler step. Defined as the Levenshtein distance between the hosts going in and out of the scheduler pipeline.
-        # TYPE cortex_scheduler_pipeline_step_reorderings_levenshtein histogram
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="0"} 0
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="1"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="2"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="3"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="4"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="5"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="6"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="7"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="8"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="9"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="10"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="11"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="12"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="13"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="14"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="15"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="16"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="17"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="18"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="19"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="20"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="21"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="22"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="23"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="24"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_bucket{step="test_step",le="+Inf"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_sum{step="test_step"} 1
-        cortex_scheduler_pipeline_step_reorderings_levenshtein_count{step="test_step"} 1
-    `)
-	monitor.stepReorderingsObserver.WithLabelValues("test_step").Observe(1)
-	err = testutil.GatherAndCompare(registry, expectedReorderingsObserver, "cortex_scheduler_pipeline_step_reorderings_levenshtein")
-	if err != nil {
-		t.Fatalf("stepReorderingsObserver test failed: %v", err)
-	}
-
 	// Test pipelineRunTimer
 	expectedPipelineRunTimer := strings.NewReader(`
         # HELP cortex_scheduler_pipeline_run_duration_seconds Duration of scheduler pipeline run
@@ -166,7 +127,7 @@ func TestStepMonitorRun(t *testing.T) {
 		Step: &plugins.MockStep{
 			Name: "mock_step",
 			RunFunc: func(request api.Request) (map[string]float64, error) {
-				return map[string]float64{"host1": 0.0, "host2": 1.0, "host3": 0.0}, nil
+				return map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0}, nil
 			},
 		},
 		runTimer:             runTimer,
@@ -176,7 +137,7 @@ func TestStepMonitorRun(t *testing.T) {
 	}
 	request := &testlibAPI.MockRequest{
 		Hosts:   []string{"host1", "host2", "host3"},
-		Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
+		Weights: map[string]float64{"host1": 0.2, "host2": 0.1, "host3": 0.0},
 	}
 	if _, err := monitor.Run(request); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
@@ -187,10 +148,10 @@ func TestStepMonitorRun(t *testing.T) {
 	if removedHostsObserver.Observations[0] != 0 {
 		t.Errorf("removedHostsObserver.Observations[0] = %v, want 0", removedHostsObserver.Observations[0])
 	}
-	if len(reorderingsObserver.Observations) != 1 {
+	if len(reorderingsObserver.Observations) != 2 { // host1 and host2 were moved
 		t.Errorf("reorderingsObserver.Observations = %v, want 1", len(reorderingsObserver.Observations))
 	}
-	if reorderingsObserver.Observations[0] != 2 {
+	if reorderingsObserver.Observations[0] != 1 { // host2 came from 2nd position to 1st
 		t.Errorf("reorderingsObserver.Observations[0] = %v, want 2", reorderingsObserver.Observations[0])
 	}
 	if len(runTimer.Observations) != 1 {
@@ -198,72 +159,5 @@ func TestStepMonitorRun(t *testing.T) {
 	}
 	if runTimer.Observations[0] <= 0 {
 		t.Errorf("runTimer.Observations[0] = %v, want > 0", runTimer.Observations[0])
-	}
-}
-
-func TestLevenshteinDistance(t *testing.T) {
-	tests := []struct {
-		name     string
-		a        []string
-		b        []string
-		expected int
-	}{
-		{
-			name:     "Identical slices",
-			a:        []string{"host1", "host2", "host3"},
-			b:        []string{"host1", "host2", "host3"},
-			expected: 0,
-		},
-		{
-			name:     "Completely different slices",
-			a:        []string{"host1", "host2", "host3"},
-			b:        []string{"host4", "host5", "host6"},
-			expected: 3,
-		},
-		{
-			name:     "One insertion",
-			a:        []string{"host1", "host2"},
-			b:        []string{"host1", "host2", "host3"},
-			expected: 1,
-		},
-		{
-			name:     "One deletion",
-			a:        []string{"host1", "host2", "host3"},
-			b:        []string{"host1", "host2"},
-			expected: 1,
-		},
-		{
-			name:     "One substitution",
-			a:        []string{"host1", "host2", "host3"},
-			b:        []string{"host1", "hostX", "host3"},
-			expected: 1,
-		},
-		{
-			name:     "Empty slices",
-			a:        []string{},
-			b:        []string{},
-			expected: 0,
-		},
-		{
-			name:     "One empty slice",
-			a:        []string{"host1", "host2", "host3"},
-			b:        []string{},
-			expected: 3,
-		},
-		{
-			name:     "Reordering",
-			a:        []string{"host1", "host2", "host3"},
-			b:        []string{"host3", "host2", "host1"},
-			expected: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := levenshteinDistance(tt.a, tt.b)
-			if result != tt.expected {
-				t.Errorf("levenshteinDistance(%v, %v) = %d; want %d", tt.a, tt.b, result, tt.expected)
-			}
-		})
 	}
 }

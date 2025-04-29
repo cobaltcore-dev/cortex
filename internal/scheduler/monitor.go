@@ -26,7 +26,7 @@ type Monitor struct {
 	stepHostWeight *prometheus.GaugeVec
 	// A histogram to observe how many hosts are removed from the state.
 	stepRemovedHostsObserver *prometheus.HistogramVec
-	// Observer for the number of reorderings conducted by the scheduler, by step.
+	// Histogram measuring where the host at a given index came from originally.
 	stepReorderingsObserver *prometheus.HistogramVec
 	// A histogram to measure how long the pipeline takes to run in total.
 	pipelineRunTimer prometheus.Histogram
@@ -55,10 +55,10 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	}, []string{"step"})
 	stepReorderingsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_reorderings_levenshtein",
-		Help:    "Number of reorderings conducted by the scheduler step. Defined as the Levenshtein distance between the hosts going in and out of the scheduler pipeline.",
-		Buckets: prometheus.LinearBuckets(0, 1, 25),
-	}, []string{"step"})
+		Name:    "cortex_scheduler_pipeline_step_shift_origin",
+		Help:    "From which index of the host list the host came from originally.",
+		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 20),
+	}, []string{"step", "outidx"})
 	pipelineRunTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline run",
@@ -131,7 +131,7 @@ type StepMonitor struct {
 	stepHostWeight *prometheus.GaugeVec
 	// A metric to observe how many hosts are removed from the state.
 	removedHostsObserver prometheus.Observer
-	// A metric to observe the number of reorderings conducted by the scheduler.
+	// A metric measuring where the host at a given index came from originally.
 	reorderingsObserver prometheus.Observer
 }
 
@@ -167,45 +167,6 @@ func monitorStep(step plugins.Step, m Monitor) *StepMonitor {
 		removedHostsObserver: removedHostsObserver,
 		reorderingsObserver:  reorderingsObserver,
 	}
-}
-
-// Calculate the Levenshtein distance between two arrays.
-//
-// The Levenshtein distance is a measure of the difference between two sequences.
-// It is defined as the minimum number of single-character edits (insertions,
-// deletions, or substitutions) required to change one word into the other.
-//
-// We use the Levenshtein distance to see how many "edits" have been made to
-// the hosts in the scheduler pipeline. This is useful to monitor how much
-// the scheduler is changing the hosts in the pipeline, and to detect
-// potential issues with the scheduler's behavior.
-func levenshteinDistance(a, b []string) int {
-	// Create a 2D array to store the distances.
-	distance := make([][]int, len(a)+1)
-	for i := range distance {
-		distance[i] = make([]int, len(b)+1)
-	}
-	// Initialize the first row and column.
-	for i := range distance {
-		distance[i][0] = i
-	}
-	for j := range distance[0] {
-		distance[0][j] = j
-	}
-	// Calculate the distances.
-	for i := 1; i <= len(a); i++ {
-		for j := 1; j <= len(b); j++ {
-			cost := 0
-			if a[i-1] != b[j-1] {
-				cost = 1
-			}
-			distance[i][j] = min(
-				min(distance[i-1][j]+1, distance[i][j-1]+1),
-				distance[i-1][j-1]+cost,
-			)
-		}
-	}
-	return distance[len(a)][len(b)]
 }
 
 // Run the step and observe its execution.
@@ -248,21 +209,27 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 		s.removedHostsObserver.Observe(float64(nHostsRemoved))
 	}
 
-	// Observe the number of reorderings conducted by the scheduler.
-	if s.reorderingsObserver != nil {
-		// Calculate the Levenshtein distance between the hosts going in and out.
-		sort.Slice(hostsIn, func(i, j int) bool {
-			return inWeights[hostsIn[i]] > inWeights[hostsIn[j]]
-		})
-		sort.Slice(hostsOut, func(i, j int) bool {
-			return outWeights[hostsOut[i]] > outWeights[hostsOut[j]]
-		})
-		distance := levenshteinDistance(hostsIn, hostsOut)
-		slog.Info(
-			"scheduler: reorderings", "name", stepName, "distance", distance,
-			"hostsIn", hostsIn, "hostsOut", hostsOut,
-		)
-		s.reorderingsObserver.Observe(float64(distance))
+	// Calculate additional metrics to see which hosts were reordered and how far.
+	sort.Slice(hostsIn, func(i, j int) bool {
+		return inWeights[hostsIn[i]] > inWeights[hostsIn[j]]
+	})
+	sort.Slice(hostsOut, func(i, j int) bool {
+		return outWeights[hostsOut[i]] > outWeights[hostsOut[j]]
+	})
+	for idx := range min(len(hostsOut), 5) { // Look at the first 5 hosts.
+		if hostsIn[idx] != hostsOut[idx] {
+			// The host at this index was moved from its original position.
+			// Observe how far it was moved.
+			originalIdx := slices.Index(hostsIn, hostsOut[idx])
+			if s.reorderingsObserver != nil {
+				s.reorderingsObserver.Observe(float64(originalIdx))
+			}
+			slog.Info(
+				"scheduler: reordered host",
+				"name", stepName, "host", hostsOut[idx],
+				"originalIdx", originalIdx,
+			)
+		}
 	}
 
 	return outWeights, nil
