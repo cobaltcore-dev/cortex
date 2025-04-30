@@ -5,7 +5,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-14f61b2"
+  tag: "sha-b242fa3"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -68,7 +68,7 @@ owner-info:
 vernemq:
   image:
     repository: ghcr.io/cobaltcore-dev/cortex-vernemq
-    tag: "sha-dcd234c"
+    tag: "sha-b242fa3"
   # The username and password to use for the mqtt connection.
   username: cortex
   password: cortex
