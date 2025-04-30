@@ -122,7 +122,6 @@ func TestSchedulerMonitor(t *testing.T) {
 func TestStepMonitorRun(t *testing.T) {
 	runTimer := &testlibMonitoring.MockObserver{}
 	removedHostsObserver := &testlibMonitoring.MockObserver{}
-	reorderingsObserver := &testlibMonitoring.MockObserver{}
 	monitor := &StepMonitor{
 		Step: &plugins.MockStep{
 			Name: "mock_step",
@@ -133,7 +132,6 @@ func TestStepMonitorRun(t *testing.T) {
 		runTimer:             runTimer,
 		stepHostWeight:       nil,
 		removedHostsObserver: removedHostsObserver,
-		reorderingsObserver:  reorderingsObserver,
 	}
 	request := &testlibAPI.MockRequest{
 		Hosts:   []string{"host1", "host2", "host3"},
@@ -147,12 +145,6 @@ func TestStepMonitorRun(t *testing.T) {
 	}
 	if removedHostsObserver.Observations[0] != 0 {
 		t.Errorf("removedHostsObserver.Observations[0] = %v, want 0", removedHostsObserver.Observations[0])
-	}
-	if len(reorderingsObserver.Observations) != 2 { // host1 and host2 were moved
-		t.Errorf("reorderingsObserver.Observations = %v, want 1", len(reorderingsObserver.Observations))
-	}
-	if reorderingsObserver.Observations[0] != 1 { // host2 came from 2nd position to 1st
-		t.Errorf("reorderingsObserver.Observations[0] = %v, want 2", reorderingsObserver.Observations[0])
 	}
 	if len(runTimer.Observations) != 1 {
 		t.Errorf("runTimer.Observations = %v, want 1", len(runTimer.Observations))
