@@ -44,43 +44,6 @@ func (k *VMLifeSpanKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.lifeSpanDesc
 }
 
-// Calculate the histogram of vm life spans.
-func (k *VMLifeSpanKPI) histogram(vmLifeSpans []shared.VMLifeSpan) (
-	hists map[string]map[float64]uint64,
-	counts map[string]uint64,
-	sums map[string]float64,
-) {
-
-	hists = map[string]map[float64]uint64{}
-	counts = map[string]uint64{}
-	sums = map[string]float64{}
-	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
-	for _, lifeSpan := range vmLifeSpans {
-		keys := []string{lifeSpan.FlavorName + "," + lifeSpan.FlavorID, "all,all"}
-		for _, key := range keys {
-			if _, ok := hists[key]; !ok {
-				hists[key] = make(map[float64]uint64, len(buckets))
-			}
-			for _, bucket := range buckets {
-				if float64(lifeSpan.Duration) <= bucket {
-					hists[key][bucket]++
-				}
-			}
-			counts[key]++
-			sums[key] += float64(lifeSpan.Duration)
-		}
-	}
-	// Fill up empty buckets
-	for key, hist := range hists {
-		for _, bucket := range buckets {
-			if _, ok := hist[bucket]; !ok {
-				hists[key][bucket] = 0
-			}
-		}
-	}
-	return hists, counts, sums
-}
-
 func (k *VMLifeSpanKPI) Collect(ch chan<- prometheus.Metric) {
 	var vmLifeSpans []shared.VMLifeSpan
 	tableName := shared.VMLifeSpan{}.TableName()
@@ -88,7 +51,14 @@ func (k *VMLifeSpanKPI) Collect(ch chan<- prometheus.Metric) {
 		slog.Error("failed to select vm life spans", "err", err)
 		return
 	}
-	hists, counts, sums := k.histogram(vmLifeSpans)
+	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
+	keysFunc := func(lifeSpan shared.VMLifeSpan) []string {
+		return []string{lifeSpan.FlavorName + "," + lifeSpan.FlavorID, "all,all"}
+	}
+	valueFunc := func(lifeSpan shared.VMLifeSpan) float64 {
+		return float64(lifeSpan.Duration)
+	}
+	hists, counts, sums := plugins.Histogram(vmLifeSpans, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
 		if len(labels) != 2 {

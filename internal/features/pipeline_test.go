@@ -15,6 +15,7 @@ import (
 type mockFeatureExtractor struct {
 	name       string
 	triggers   []string
+	features   []plugins.Feature
 	initErr    error
 	extractErr error
 }
@@ -24,7 +25,7 @@ func (m *mockFeatureExtractor) Init(db db.DB, opts conf.RawOpts) error {
 }
 
 func (m *mockFeatureExtractor) Extract() ([]plugins.Feature, error) {
-	return nil, m.extractErr
+	return m.features, m.extractErr
 }
 
 func (m *mockFeatureExtractor) GetName() string {

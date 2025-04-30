@@ -42,7 +42,7 @@ func TestNewDB(t *testing.T) {
 		Database: "postgres",
 	}
 
-	db := NewPostgresDB(config)
+	db := NewPostgresDB(config, nil)
 	db.Close()
 }
 
