@@ -64,8 +64,10 @@ func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry) DB {
 	db.SetMaxOpenConns(16)
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	slog.Info("database is ready")
-	// Expose metrics for the database connection pool.
-	registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
+	if registry != nil {
+		// Expose metrics for the database connection pool.
+		registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
+	}
 	return DB{DbMap: dbMap}
 }
 
