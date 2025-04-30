@@ -124,12 +124,6 @@ func main() {
 		panic(fmt.Sprintf("usage: %s [checks | syncer | extractor | scheduler | kpis]", os.Args[0]))
 	}
 
-	dbInstance := db.NewPostgresDB(config.GetDBConfig())
-	defer dbInstance.Close()
-
-	migrater := db.NewMigrater(dbInstance)
-	migrater.Migrate(true)
-
 	// If we're running one-off tasks (commands), don't setup the monitoring server.
 	//nolint:gocritic // We may add more tasks in the future.
 	switch taskName {
@@ -141,6 +135,12 @@ func main() {
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
 	go runMonitoringServer(ctx, registry, monitoringConfig)
+
+	dbInstance := db.NewPostgresDB(config.GetDBConfig(), registry)
+	defer dbInstance.Close()
+
+	migrater := db.NewMigrater(dbInstance)
+	migrater.Migrate(true)
 
 	// Run an api server that serves some basic endpoints and can be extended.
 	mux := http.NewServeMux()

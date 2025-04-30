@@ -5,6 +5,7 @@ go 1.24
 replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
 
 require (
+	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.7.0

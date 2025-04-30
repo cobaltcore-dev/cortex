@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/dlmiddlecote/sqlstats"
 	"github.com/go-gorp/gorp"
 	_ "github.com/lib/pq"
 	"github.com/sapcc/go-bits/easypg"
@@ -26,7 +28,7 @@ type Table interface {
 }
 
 // Create a new postgres database and wait until it is connected.
-func NewPostgresDB(c conf.DBConfig) DB {
+func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry) DB {
 	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          strip(c.Host),
@@ -62,6 +64,10 @@ func NewPostgresDB(c conf.DBConfig) DB {
 	db.SetMaxOpenConns(16)
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	slog.Info("database is ready")
+	if registry != nil {
+		// Expose metrics for the database connection pool.
+		registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
+	}
 	return DB{DbMap: dbMap}
 }
 
