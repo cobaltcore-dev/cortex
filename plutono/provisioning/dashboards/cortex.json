@@ -15,6 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -287,6 +288,699 @@
         "x": 0,
         "y": 12
       },
+      "id": 88,
+      "panels": [],
+      "title": "KPIs: VMware Project Noisiness",
+      "type": "row"
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 86,
+      "interval": null,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum(cortex_vmware_project_noisiness_bucket{}) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "VMware Project Noisiness on Host (Avg. CPU % over 4 Weeks)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "percent",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 84,
+      "panels": [],
+      "title": "KPIs: VMware Host CPU Contention",
+      "type": "row"
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 82,
+      "interval": null,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum(cortex_vmware_host_cpu_contention_max_bucket{}) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "VMware Host CPU Contention (Maximum over 4 Weeks)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "percent",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 85,
+      "interval": null,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum(cortex_vmware_host_cpu_contention_avg_bucket{}) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "VMware Host CPU Contention (Average over 4 Weeks)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "percent",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 76,
+      "panels": [],
+      "title": "KPIs: Hypervisor Resource Utilization (Reserved)",
+      "type": "row"
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 74,
+      "interval": null,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum(cortex_host_utilization_pct_bucket{resource=\"cpu\"}) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Hypervisor Resources Used (Reservation, CPU %)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "percent",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 77,
+      "interval": null,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum(cortex_host_utilization_pct_bucket{resource=\"memory\"}) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Hypervisor Resources Used (Reservation, Memory %)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "percent",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 51
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 78,
+      "interval": null,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum(cortex_host_utilization_pct_bucket{resource=\"disk\"}) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Hypervisor Resources Used (Reserved, Disk %)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "percent",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 4,
+        "x": 12,
+        "y": 51
+      },
+      "id": 79,
+      "interval": null,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "text": {}
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sort_desc(topk(5,cortex_host_utilization_per_host_pct{resource=\"cpu\"}))",
+          "format": "time_series",
+          "instant": true,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{compute_host_name}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Top 5 (Reserved, CPU %)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 4,
+        "x": 16,
+        "y": 51
+      },
+      "id": 80,
+      "interval": null,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "text": {}
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sort_desc(topk(5,cortex_host_utilization_per_host_pct{resource=\"memory\"}))",
+          "format": "time_series",
+          "instant": true,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{compute_host_name}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Top 5 (Reserved, Memory %)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 4,
+        "x": 20,
+        "y": 51
+      },
+      "id": 81,
+      "interval": null,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "text": {}
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sort_desc(topk(5,cortex_host_utilization_per_host_pct{resource=\"disk\"}))",
+          "format": "time_series",
+          "instant": true,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{compute_host_name}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Top 5 (Reserved, Disk %)",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
       "id": 71,
       "panels": [],
       "title": "KPIs: VM Life Span",
@@ -317,7 +1011,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 64
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -393,7 +1087,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 64
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -489,7 +1183,7 @@
         "h": 16,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 76
       },
       "id": 64,
       "options": {
@@ -569,7 +1263,7 @@
         "h": 16,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 76
       },
       "id": 62,
       "options": {
@@ -611,7 +1305,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 92
       },
       "id": 73,
       "panels": [],
@@ -634,7 +1328,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 42
+        "y": 93
       },
       "hiddenSeries": false,
       "id": 56,
@@ -736,7 +1430,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 42
+        "y": 93
       },
       "hiddenSeries": false,
       "id": 68,
@@ -847,7 +1541,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 99
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -921,7 +1615,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 99
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -1015,7 +1709,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 60
+        "y": 111
       },
       "id": 67,
       "options": {
@@ -1095,7 +1789,7 @@
         "h": 18,
         "w": 12,
         "x": 12,
-        "y": 60
+        "y": 111
       },
       "id": 61,
       "options": {
@@ -1146,7 +1840,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 123
       },
       "hiddenSeries": false,
       "id": 69,
@@ -1239,7 +1933,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 78
+        "y": 129
       },
       "id": 23,
       "panels": [],
@@ -1264,7 +1958,7 @@
         "h": 17,
         "w": 12,
         "x": 0,
-        "y": 79
+        "y": 130
       },
       "hiddenSeries": false,
       "id": 63,
@@ -1365,7 +2059,7 @@
         "h": 17,
         "w": 12,
         "x": 12,
-        "y": 79
+        "y": 130
       },
       "hiddenSeries": false,
       "id": 20,
@@ -1493,7 +2187,7 @@
         "h": 15,
         "w": 12,
         "x": 0,
-        "y": 96
+        "y": 147
       },
       "id": 21,
       "options": {
@@ -1553,7 +2247,7 @@
         "h": 15,
         "w": 12,
         "x": 12,
-        "y": 96
+        "y": 147
       },
       "id": 38,
       "options": {
@@ -1595,7 +2289,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 111
+        "y": 162
       },
       "id": 31,
       "panels": [],
@@ -1620,7 +2314,7 @@
         "h": 19,
         "w": 12,
         "x": 0,
-        "y": 112
+        "y": 163
       },
       "hiddenSeries": false,
       "id": 35,
@@ -1748,7 +2442,7 @@
         "h": 19,
         "w": 12,
         "x": 12,
-        "y": 112
+        "y": 163
       },
       "id": 43,
       "options": {
@@ -1790,7 +2484,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 131
+        "y": 182
       },
       "id": 29,
       "panels": [],
@@ -1813,7 +2507,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 132
+        "y": 183
       },
       "hiddenSeries": false,
       "id": 51,
@@ -1911,7 +2605,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 142
+        "y": 193
       },
       "hiddenSeries": false,
       "id": 52,
@@ -2008,7 +2702,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 153
+        "y": 204
       },
       "hiddenSeries": false,
       "id": 26,
@@ -2116,7 +2810,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 165
+        "y": 216
       },
       "hiddenSeries": false,
       "id": 37,
@@ -2213,7 +2907,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 165
+        "y": 216
       },
       "hiddenSeries": false,
       "id": 40,
@@ -2325,7 +3019,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 165
+        "y": 216
       },
       "hiddenSeries": false,
       "id": 33,
@@ -2437,7 +3131,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 165
+        "y": 216
       },
       "hiddenSeries": false,
       "id": 42,
@@ -2565,7 +3259,7 @@
         "h": 31,
         "w": 12,
         "x": 0,
-        "y": 176
+        "y": 227
       },
       "id": 45,
       "options": {
@@ -2635,7 +3329,7 @@
         "h": 31,
         "w": 12,
         "x": 12,
-        "y": 176
+        "y": 227
       },
       "id": 46,
       "options": {
@@ -2680,12 +3374,12 @@
     "list": []
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Cortex",
   "uid": "cortex",
-  "version": 5
+  "version": 2
 }

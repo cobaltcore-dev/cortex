@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/db/containers"
 )
@@ -42,7 +43,7 @@ func TestNewDB(t *testing.T) {
 		Database: "postgres",
 	}
 
-	db := NewPostgresDB(config)
+	db := NewPostgresDB(config, &monitoring.Registry{})
 	db.Close()
 }
 
