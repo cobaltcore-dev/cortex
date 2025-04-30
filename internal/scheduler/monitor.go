@@ -132,7 +132,7 @@ type StepMonitor struct {
 	// A metric to observe how many hosts are removed from the state.
 	removedHostsObserver prometheus.Observer
 	// A metric measuring where the host at a given index came from originally.
-	reorderingsObserver prometheus.Observer
+	stepReorderingsObserver *prometheus.HistogramVec
 }
 
 // Get the name of the wrapped step.
@@ -156,16 +156,12 @@ func monitorStep(step plugins.Step, m Monitor) *StepMonitor {
 	if m.stepRemovedHostsObserver != nil {
 		removedHostsObserver = m.stepRemovedHostsObserver.WithLabelValues(stepName)
 	}
-	var reorderingsObserver prometheus.Observer
-	if m.stepReorderingsObserver != nil {
-		reorderingsObserver = m.stepReorderingsObserver.WithLabelValues(stepName)
-	}
 	return &StepMonitor{
-		Step:                 step,
-		runTimer:             runTimer,
-		stepHostWeight:       m.stepHostWeight,
-		removedHostsObserver: removedHostsObserver,
-		reorderingsObserver:  reorderingsObserver,
+		Step:                    step,
+		runTimer:                runTimer,
+		stepHostWeight:          m.stepHostWeight,
+		removedHostsObserver:    removedHostsObserver,
+		stepReorderingsObserver: m.stepReorderingsObserver,
 	}
 }
 
@@ -221,8 +217,9 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 			// The host at this index was moved from its original position.
 			// Observe how far it was moved.
 			originalIdx := slices.Index(hostsIn, hostsOut[idx])
-			if s.reorderingsObserver != nil {
-				s.reorderingsObserver.Observe(float64(originalIdx))
+			if s.stepReorderingsObserver != nil {
+				o := s.stepReorderingsObserver.WithLabelValues(stepName, hostsOut[idx])
+				o.Observe(float64(originalIdx))
 			}
 			slog.Info(
 				"scheduler: reordered host",

@@ -243,6 +243,7 @@ func (s *syncer[M]) sync(start time.Time) {
 	}
 	slog.Info("deleted old metrics", "rows", rowsAffected)
 	// Fetch the metrics from Prometheus.
+	// TODO: Rewrite this to batch-fetch and insert.
 	prometheusData, err := s.PrometheusAPI.FetchMetrics(
 		s.MetricConf.Query, start, end, s.SyncResolutionSeconds,
 	)
