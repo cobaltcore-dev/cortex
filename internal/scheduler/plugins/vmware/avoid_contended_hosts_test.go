@@ -29,9 +29,10 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	_, err = testDB.Exec(`
         INSERT INTO feature_vrops_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
         VALUES
-            ('host1', 15.0, 25.0),
-            ('host2', 5.0, 10.0),
-            ('host3', 20.0, 30.0)
+            ('host1', 0.0, 0.0),
+            ('host2', 100.0, 0.0),
+            ('host3', 0.0, 100.0),
+			('host4', 100.0, 100.0)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -39,14 +40,14 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 
 	// Create an instance of the step
 	opts := conf.NewRawOpts(`{
-        "avgCPUContentionLowerBound": 10,
+        "avgCPUContentionLowerBound": 0,
         "avgCPUContentionUpperBound": 100,
         "avgCPUContentionActivationLowerBound": 0.0,
-        "avgCPUContentionActivationUpperBound": -0.5,
-        "maxCPUContentionLowerBound": 20,
+        "avgCPUContentionActivationUpperBound": -1.0,
+        "maxCPUContentionLowerBound": 0,
         "maxCPUContentionUpperBound": 100,
         "maxCPUContentionActivationLowerBound": 0.0,
-        "maxCPUContentionActivationUpperBound": -0.5
+        "maxCPUContentionActivationUpperBound": -1.0
     }`)
 	step := &AvoidContendedHostsStep{}
 	if err := step.Init(testDB, opts); err != nil {
@@ -54,37 +55,47 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		request        testlibAPI.MockRequest
-		downvotedHosts map[string]struct{}
+		name     string
+		request  testlibAPI.MockRequest
+		expected map[string]float64
 	}{
 		{
 			name: "Non-vmware vm",
 			request: testlibAPI.MockRequest{
 				VMware: false,
-				Hosts:  []string{"host1", "host2", "host3"},
+				Hosts:  []string{"host1", "host2", "host3", "host4"},
 			},
 			// Should not do anything
-			downvotedHosts: map[string]struct{}{},
+			expected: map[string]float64{
+				"host1": 0,
+				"host2": 0,
+				"host3": 0,
+				"host4": 0,
+			},
 		},
 		{
 			name: "Avoid contended hosts",
 			request: testlibAPI.MockRequest{
 				VMware: true,
-				Hosts:  []string{"host1", "host2", "host3"},
+				Hosts:  []string{"host1", "host2", "host3", "host4"},
 			},
-			downvotedHosts: map[string]struct{}{
-				"host1": {},
-				"host3": {},
+			expected: map[string]float64{
+				"host1": 0,
+				"host2": -1,
+				"host3": -1,
+				"host4": -2, // Max and avg contention stack up.
 			},
 		},
 		{
-			name: "No contended hosts",
+			name: "Missing data",
 			request: testlibAPI.MockRequest{
 				VMware: true,
 				Hosts:  []string{"host4", "host5"},
 			},
-			downvotedHosts: map[string]struct{}{},
+			expected: map[string]float64{
+				"host4": -2,
+				"host5": 0, // No data but still contained in the result.
+			},
 		},
 	}
 
@@ -96,14 +107,9 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
 			}
 			// Check that the weights have decreased
 			for host, weight := range weights {
-				if _, ok := tt.downvotedHosts[host]; ok {
-					if weight >= 0 {
-						t.Errorf("expected weight for host %s to be less than 0, got %f", host, weight)
-					}
-				} else {
-					if weight != 0 {
-						t.Errorf("expected weight for host %s to be 0, got %f", host, weight)
-					}
+				expected := tt.expected[host]
+				if weight != expected {
+					t.Errorf("expected weight for host %s to be %f, got %f", host, expected, weight)
 				}
 			}
 		})
