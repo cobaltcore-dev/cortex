@@ -5,6 +5,8 @@ package prometheus
 
 import (
 	"errors"
+	"log/slog"
+	"runtime"
 	"testing"
 	"time"
 
@@ -241,4 +243,72 @@ func TestSyncer_DeleteOldMetrics(t *testing.T) {
 			t.Errorf("expected old metrics to be deleted, but found metric with timestamp %v", metric.Timestamp)
 		}
 	}
+}
+
+func TestSyncer_BenchmarkMemoryUsage(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	dbEnv.TraceOff() // Will otherwise cause a lot of output
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	// Create a mock Prometheus API that returns a large number of metrics
+	largeMetricCount := 10000
+	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
+		data: prometheusTimelineData[VROpsVMMetric]{
+			Metrics: make([]VROpsVMMetric, largeMetricCount),
+		},
+	}
+	for i := range largeMetricCount {
+		mockPrometheusAPI.data.Metrics[i] = VROpsVMMetric{
+			Name:      "test_metric",
+			Timestamp: time.Now().Add(time.Duration(-i) * time.Second),
+			Value:     float64(i),
+		}
+	}
+
+	syncer := &syncer[VROpsVMMetric]{
+		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
+		SyncInterval:          24 * time.Hour,
+		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
+		MetricConf: conf.SyncPrometheusMetricConfig{
+			Alias: "test_metric",
+			Query: "test_query",
+		},
+		PrometheusAPI: mockPrometheusAPI,
+		DB:            testDB,
+	}
+	syncer.Init(t.Context())
+
+	// Measure memory usage before syncing
+	var memStatsBefore runtime.MemStats
+	runtime.ReadMemStats(&memStatsBefore)
+
+	// Run the sync function
+	start := time.Now().Add(-syncer.SyncTimeRange)
+	syncer.sync(start)
+
+	// Measure memory usage after syncing
+	var memStatsAfter runtime.MemStats
+	runtime.ReadMemStats(&memStatsAfter)
+
+	// Calculate memory usage
+	allocatedMemory := memStatsAfter.Alloc - memStatsBefore.Alloc
+	t.Logf("Memory used by sync function: %d bytes", allocatedMemory)
+
+	// Verify the metrics were inserted
+	var metrics []VROpsVMMetric
+	if _, err := testDB.Select(&metrics, "SELECT * FROM vrops_vm_metrics"); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(metrics) == 0 {
+		t.Error("expected metrics to be inserted, but found none")
+	}
+
+	// Ensure memory usage is within acceptable limits
+	const memoryThreshold = 100 * 1024 * 1024
+	if allocatedMemory > memoryThreshold {
+		t.Errorf("memory usage exceeded threshold: %d bytes used, threshold is %d bytes", allocatedMemory, memoryThreshold)
+	}
+	slog.Debug("Memory usage within acceptable limits", "allocatedMemory", allocatedMemory, "threshold", memoryThreshold)
 }

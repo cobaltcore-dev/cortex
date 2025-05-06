@@ -5,7 +5,9 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"log/slog"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -156,4 +158,81 @@ func ReplaceAll[T Table](db DB, objs ...T) error {
 		return err
 	}
 	return nil
+}
+
+// Bulk insert objects into the database.
+// Note: This function does NOT support auto-incrementing primary keys.
+func BulkInsert[T Table](db DB, objs ...T) error {
+	if len(objs) == 0 {
+		// Nothing to do.
+		return nil
+	}
+
+	// Detect the table based on the first object.
+	objType := reflect.ValueOf(objs).Index(0).Type()
+	table, err := db.TableFor(objType, false)
+	if err != nil {
+		slog.Error("failed to get table for object", "error", err)
+		return err
+	}
+
+	var builder strings.Builder
+	builder.WriteString("INSERT INTO ")
+	builder.WriteString(db.Dialect.QuotedTableForQuery(table.SchemaName, table.TableName))
+	builder.WriteString(" (")
+
+	// Build the column names.
+	for idx, col := range table.Columns {
+		if col.Transient {
+			continue
+		}
+		builder.WriteString(db.Dialect.QuoteField(col.ColumnName))
+		if idx < len(table.Columns)-1 {
+			builder.WriteString(", ")
+		}
+	}
+	builder.WriteString(") VALUES ")
+
+	// Build the values.
+	for i, obj := range objs {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString("(")
+		for j, col := range table.Columns {
+			if col.Transient {
+				continue
+			}
+			val := reflect.ValueOf(obj).FieldByIndex([]int{j})
+			value := val.Interface()
+			if val.Kind() == reflect.Ptr {
+				if val.IsNil() {
+					value = nil
+				} else {
+					value = val.Elem().Interface()
+				}
+			}
+			switch value := value.(type) {
+			case string:
+				builder.WriteString("'" + value + "'")
+			case time.Time:
+				builder.WriteString("'" + value.Format(time.RFC3339) + "'")
+			case nil:
+				builder.WriteString("NULL")
+			default:
+				builder.WriteString(fmt.Sprintf("%v", value))
+			}
+			if j < len(table.Columns)-1 {
+				builder.WriteString(", ")
+			}
+		}
+		builder.WriteString(")")
+	}
+
+	builder.WriteString(db.Dialect.QuerySuffix())
+	query := builder.String()
+
+	slog.Info("bulk insert query", "query", query)
+	_, err = db.Exec(query)
+	return err
 }
