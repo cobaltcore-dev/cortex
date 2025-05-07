@@ -250,7 +250,7 @@ func (s *syncer[M]) sync(start time.Time) {
 		slog.Error("failed to fetch metrics", "error", err)
 		return
 	}
-	if err := db.BulkInsertBatched(s.DB, 1000, prometheusData.Metrics...); err != nil {
+	if err := db.BulkInsert(s.DB, s.DB, prometheusData.Metrics...); err != nil {
 		slog.Error("failed to bulk insert metrics", "error", err)
 		return
 	}

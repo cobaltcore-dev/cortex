@@ -205,7 +205,7 @@ func TestBulkInsert(t *testing.T) {
 	}
 
 	// Perform bulk insert
-	err = BulkInsert(db, records...)
+	err = BulkInsert(db, db, records...)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
