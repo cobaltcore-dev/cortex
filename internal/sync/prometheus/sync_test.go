@@ -6,6 +6,7 @@ package prometheus
 import (
 	"errors"
 	"log/slog"
+	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -246,6 +247,10 @@ func TestSyncer_DeleteOldMetrics(t *testing.T) {
 }
 
 func TestSyncer_BenchmarkMemoryUsage(t *testing.T) {
+	if os.Getenv("BENCHMARK") != "1" {
+		t.Skip("skipping test; set BENCHMARK=1 to run")
+	}
+
 	dbEnv := testlibDB.SetupDBEnv(t)
 	dbEnv.TraceOff() // Will otherwise cause a lot of output
 	testDB := db.DB{DbMap: dbEnv.DbMap}

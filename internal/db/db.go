@@ -224,7 +224,7 @@ func BulkInsert[T Table](executor gorp.SqlExecutor, db DB, allObjs ...T) error {
 		builder.WriteString(db.Dialect.QuerySuffix())
 		query := builder.String()
 
-		slog.Debug("bulk insert query", "query", query)
+		slog.Debug("bulk inserting objects", "n", len(objs))
 		if _, err = executor.Exec(query, params...); err != nil {
 			slog.Error("failed to execute bulk insert", "error", err)
 			return err
