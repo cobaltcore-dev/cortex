@@ -58,3 +58,28 @@ func TestHistogram(t *testing.T) {
 		t.Errorf("sums = %v, want %v", sums, expectedSums)
 	}
 }
+
+func TestHistogram_EmptyFeatures(t *testing.T) {
+	// Test with no features
+	features := []mockFeature{}
+	buckets := []float64{1.0, 2.0, 3.0}
+
+	keysFunc := func(f mockFeature) []string {
+		return f.keys
+	}
+	valueFunc := func(f mockFeature) float64 {
+		return f.value
+	}
+
+	hists, counts, sums := Histogram(features, buckets, keysFunc, valueFunc)
+
+	if len(hists) != 0 {
+		t.Errorf("expected no histograms, got %v", hists)
+	}
+	if len(counts) != 0 {
+		t.Errorf("expected no counts, got %v", counts)
+	}
+	if len(sums) != 0 {
+		t.Errorf("expected no sums, got %v", sums)
+	}
+}
