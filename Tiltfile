@@ -27,6 +27,7 @@ helm_repo(
 # Build the helm charts
 local('test -f ./helm/cortex/Chart.lock || helm dep up ./helm/cortex')
 local('test -f ./helm/prometheus/Chart.lock || helm dep up ./helm/prometheus')
+local('test -f ./helm/prometheus-deps/Chart.lock || helm dep up ./helm/prometheus-deps')
 local('test -f ./helm/postgres/Chart.lock || helm dep up ./helm/postgres')
 
 ########### Cortex Core Services
