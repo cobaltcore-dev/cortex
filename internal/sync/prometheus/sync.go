@@ -243,7 +243,6 @@ func (s *syncer[M]) sync(start time.Time) {
 	}
 	slog.Info("deleted old metrics", "rows", rowsAffected)
 	// Fetch the metrics from Prometheus.
-	// TODO: Rewrite this to batch-fetch and insert.
 	prometheusData, err := s.PrometheusAPI.FetchMetrics(
 		s.MetricConf.Query, start, end, s.SyncResolutionSeconds,
 	)
@@ -251,15 +250,9 @@ func (s *syncer[M]) sync(start time.Time) {
 		slog.Error("failed to fetch metrics", "error", err)
 		return
 	}
-	// Insert in smaller batches to avoid OOM issues.
-	batchSize := 100
-	for i := 0; i < len(prometheusData.Metrics); i += batchSize {
-		metrics := prometheusData.Metrics[i:min(i+batchSize, len(prometheusData.Metrics))]
-		for _, metric := range metrics {
-			if err = s.DB.Insert(&metric); err != nil {
-				slog.Error("failed to insert metrics", "error", err)
-			}
-		}
+	if err := db.BulkInsert(s.DB, s.DB, prometheusData.Metrics...); err != nil {
+		slog.Error("failed to bulk insert metrics", "error", err)
+		return
 	}
 	slog.Info(
 		"synced Prometheus data", "newMetrics", len(prometheusData.Metrics),

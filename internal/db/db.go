@@ -6,6 +6,7 @@ package db
 import (
 	"database/sql"
 	"log/slog"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -143,17 +144,91 @@ func ReplaceAll[T Table](db DB, objs ...T) error {
 		slog.Error("failed to delete old objects", "tableName", tableName, "error", err)
 		return tx.Rollback()
 	}
-	objsCompat := make([]any, len(objs))
-	for i, obj := range objs {
-		objsCompat[i] = &obj
-	}
-	if err = tx.Insert(objsCompat...); err != nil {
+	if err = BulkInsert(tx, db, objs...); err != nil {
 		slog.Error("failed to insert new objects", "tableName", tableName, "error", err)
 		return tx.Rollback()
 	}
 	if err = tx.Commit(); err != nil {
 		slog.Error("failed to commit transaction", "error", err)
 		return err
+	}
+	return nil
+}
+
+// Bulk insert objects into the database, using an executor which
+// can be a transaction or a database connection itself.
+//
+// Note: This function does NOT support auto-incrementing primary keys.
+func BulkInsert[T Table](executor gorp.SqlExecutor, db DB, allObjs ...T) error {
+	if len(allObjs) == 0 {
+		// Nothing to do.
+		return nil
+	}
+
+	// Commit every n objects to avoid running out of memory and avoid
+	// hitting the database parameter limit.
+	const batchSize = 1000
+
+	for i := 0; i < len(allObjs); i += batchSize {
+		end := min(i+batchSize, len(allObjs))
+		objs := allObjs[i:end]
+		// Detect the table based on the first object.
+		objType := reflect.ValueOf(objs).Index(0).Type()
+		table, err := db.TableFor(objType, false)
+		if err != nil {
+			slog.Error("failed to get table for object", "error", err)
+			return err
+		}
+
+		// Using a strings.Builder is much faster than string concatenation.
+		var builder strings.Builder
+		builder.WriteString("INSERT INTO ")
+		builder.WriteString(db.Dialect.QuotedTableForQuery(table.SchemaName, table.TableName))
+		builder.WriteString(" (")
+
+		// Build the column names.
+		for idx, col := range table.Columns {
+			if col.Transient {
+				continue
+			}
+			builder.WriteString(db.Dialect.QuoteField(col.ColumnName))
+			if idx < len(table.Columns)-1 {
+				builder.WriteString(", ")
+			}
+		}
+		builder.WriteString(") VALUES ")
+
+		var params []any
+		// Build the values.
+		paramIdx := 0
+		for i, obj := range objs {
+			if i > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteString("(")
+			for j, col := range table.Columns {
+				if col.Transient {
+					continue
+				}
+				val := reflect.ValueOf(obj).FieldByIndex([]int{j}).Interface()
+				params = append(params, val)
+				builder.WriteString(db.Dialect.BindVar(paramIdx))
+				if j < len(table.Columns)-1 {
+					builder.WriteString(", ")
+				}
+				paramIdx++
+			}
+			builder.WriteString(")")
+		}
+
+		builder.WriteString(db.Dialect.QuerySuffix())
+		query := builder.String()
+
+		slog.Debug("bulk inserting objects", "n", len(objs))
+		if _, err = executor.Exec(query, params...); err != nil {
+			slog.Error("failed to execute bulk insert", "error", err)
+			return err
+		}
 	}
 	return nil
 }

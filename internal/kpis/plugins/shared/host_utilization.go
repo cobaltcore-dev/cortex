@@ -5,6 +5,7 @@ package shared
 
 import (
 	"log/slog"
+	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -32,7 +33,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.hostResourceUsedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources used on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "hypervisor_host_name", "resource"},
+		[]string{"hypervisor_id", "compute_host_name", "hypervisor_host_name", "resource"},
 		nil,
 	)
 	k.hostResourceUsedHist = prometheus.NewDesc(
@@ -62,6 +63,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				float64(hypervisor.VCPUsUsed)/float64(hypervisor.VCPUs),
+				strconv.Itoa(hypervisor.ID),
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"cpu",
@@ -72,6 +74,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				float64(hypervisor.MemoryMBUsed)/float64(hypervisor.MemoryMB),
+				strconv.Itoa(hypervisor.ID),
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"memory",
@@ -82,6 +85,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				float64(hypervisor.LocalGBUsed)/float64(hypervisor.LocalGB),
+				strconv.Itoa(hypervisor.ID),
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"disk",
