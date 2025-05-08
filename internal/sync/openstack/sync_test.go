@@ -84,7 +84,7 @@ func TestNewCombinedSyncer(t *testing.T) {
 	mqttClient := &mqtt.MockClient{}     // Mock or initialize as needed
 	config := conf.SyncOpenStackConfig{} // Populate with test configuration
 
-	combinedSyncer := NewCombinedSyncer(context.Background(), config, monitor, testDB, mqttClient)
+	combinedSyncer := NewCombinedSyncer(t.Context(), config, monitor, testDB, mqttClient)
 
 	if combinedSyncer == nil {
 		t.Fatal("expected NewCombinedSyncer to return a non-nil CombinedSyncer")

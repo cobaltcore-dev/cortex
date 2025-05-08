@@ -52,7 +52,7 @@ func NewCombinedSyncer(
 	slog.Info("loading syncers", "metrics", config.Metrics)
 	syncers := []Syncer{}
 	for _, metricConfig := range config.Metrics {
-		syncerFunc, ok := supportedSyncers[metricConfig.Type]
+		syncerFuncInstance, ok := supportedSyncers[metricConfig.Type]
 		if !ok {
 			panic("unsupported metric type: " + metricConfig.Type)
 		}
@@ -61,7 +61,7 @@ func NewCombinedSyncer(
 			for _, providedMetricType := range hostConf.ProvidedMetricTypes {
 				if providedMetricType == metricConfig.Type {
 					slog.Info("adding syncer", "metricType", metricConfig.Type, "host", hostConf.Name)
-					syncers = append(syncers, syncerFunc(db, hostConf, metricConfig, monitor))
+					syncers = append(syncers, syncerFuncInstance(db, hostConf, metricConfig, monitor))
 				}
 			}
 		}
