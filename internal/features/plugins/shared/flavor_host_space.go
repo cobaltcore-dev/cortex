@@ -4,6 +4,8 @@
 package shared
 
 import (
+	_ "embed"
+
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 )
@@ -50,31 +52,11 @@ func (FlavorHostSpaceExtractor) Triggers() []string {
 	}
 }
 
+//go:embed flavor_host_space.sql
+var flavorHostSpaceQuery string
+
 // Extract the space left on a compute host after the placement of a flavor.
 // Depends on the OpenStack flavors and hypervisors to be synced.
 func (e *FlavorHostSpaceExtractor) Extract() ([]plugins.Feature, error) {
-	// TODO: Do this in a single SQL query.
-	var hypervisors []openstack.Hypervisor
-	query := "SELECT * FROM " + openstack.Hypervisor{}.TableName()
-	if _, err := e.DB.Select(&hypervisors, query); err != nil {
-		return nil, err
-	}
-	var flavors []openstack.Flavor
-	query = "SELECT * FROM " + openstack.Flavor{}.TableName()
-	if _, err := e.DB.Select(&flavors, query); err != nil {
-		return nil, err
-	}
-	var features []FlavorHostSpace
-	for _, h := range hypervisors {
-		for _, f := range flavors {
-			features = append(features, FlavorHostSpace{
-				FlavorID:    f.ID,
-				ComputeHost: h.ServiceHost,
-				RAMLeftMB:   h.FreeRAMMB - f.RAM,
-				VCPUsLeft:   h.VCPUs - h.VCPUsUsed - f.VCPUs,
-				DiskLeftGB:  h.FreeDiskGB - f.Disk,
-			})
-		}
-	}
-	return e.Extracted(features)
+	return e.ExtractSQL(flavorHostSpaceQuery)
 }
