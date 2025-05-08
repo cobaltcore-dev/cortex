@@ -87,7 +87,7 @@ jobs:
             const path = require('path');
 
             // Extract the last line of the coverage report
-            const coverageReport = fs.readFileSync(path.join(__dirname, 'pr_func_coverage.txt'), 'utf8');
+            const coverageReport = fs.readFileSync('pr_func_coverage.txt', 'utf8');
             const lines = coverageReport.trim().split('\n');
             const lastLine = lines[lines.length - 1];
             const coverageMatch = lastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
