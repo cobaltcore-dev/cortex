@@ -17,6 +17,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/features"
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	apihttp "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -52,8 +53,9 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 
 // Run a webserver that listens for external scheduling requests.
 func runScheduler(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	schedulerMonitor := scheduler.NewSchedulerMonitor(registry)
-	schedulerPipeline := scheduler.NewPipeline(config, db, schedulerMonitor)
+	monitor := scheduler.NewSchedulerMonitor(registry)
+	mqttClient := mqtt.NewClient()
+	schedulerPipeline := scheduler.NewPipeline(scheduler.SupportedSteps, config, db, monitor, mqttClient)
 	apiMonitor := apihttp.NewSchedulerMonitor(registry)
 	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
 	api.Init(mux) // non-blocking

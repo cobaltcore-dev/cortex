@@ -210,3 +210,26 @@ func TestPipeline_RunSteps(t *testing.T) {
 		t.Errorf("expected weight 1.0 for host2, got %f", result["mock_pipeline_step"]["host2"])
 	}
 }
+
+func TestNewPipeline(t *testing.T) {
+	config := conf.SchedulerConfig{
+		Plugins: []conf.SchedulerStepConfig{
+			{Name: "mock_pipeline_step", Options: conf.RawOpts{}},
+		},
+	}
+	database := db.DB{}  // Mock or initialize as needed
+	monitor := Monitor{} // Replace with an actual mock implementation if available
+	mqttClient := &mqtt.MockClient{}
+
+	pipeline := NewPipeline([]plugins.Step{&mockPipelineStep{}}, config, database, monitor, mqttClient).(*pipeline)
+
+	if len(pipeline.executionOrder) != 1 {
+		t.Fatalf("expected 1 execution order group, got %d", len(pipeline.executionOrder))
+	}
+	if len(pipeline.executionOrder[0]) != 1 {
+		t.Fatalf("expected 1 step in the execution order, got %d", len(pipeline.executionOrder[0]))
+	}
+	if pipeline.executionOrder[0][0].GetName() != "mock_pipeline_step" {
+		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][0].GetName())
+	}
+}
