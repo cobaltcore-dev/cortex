@@ -39,7 +39,7 @@ func TestPlacementSyncer_Init(t *testing.T) {
 		db:   testDB,
 		mon:  mon,
 		conf: conf,
-		api:  NewPlacementAPI(mon, pc, conf),
+		api:  newPlacementAPI(mon, pc, conf),
 	}
 	syncer.Init(t.Context())
 }
@@ -58,7 +58,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 		db:         testDB,
 		mon:        mon,
 		conf:       conf,
-		api:        NewPlacementAPI(mon, pc, conf),
+		api:        newPlacementAPI(mon, pc, conf),
 		mqttClient: &mqtt.MockClient{},
 	}
 	syncer.api = &mockPlacementAPI{}
@@ -84,7 +84,7 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 		db:   testDB,
 		mon:  mon,
 		conf: conf,
-		api:  NewPlacementAPI(mon, pc, conf),
+		api:  newPlacementAPI(mon, pc, conf),
 	}
 	syncer.api = &mockPlacementAPI{}
 
@@ -112,7 +112,7 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 		db:   testDB,
 		mon:  mon,
 		conf: conf,
-		api:  NewPlacementAPI(mon, pc, conf),
+		api:  newPlacementAPI(mon, pc, conf),
 	}
 	syncer.api = &mockPlacementAPI{}
 

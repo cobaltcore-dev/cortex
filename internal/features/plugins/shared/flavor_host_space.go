@@ -53,6 +53,7 @@ func (FlavorHostSpaceExtractor) Triggers() []string {
 // Extract the space left on a compute host after the placement of a flavor.
 // Depends on the OpenStack flavors and hypervisors to be synced.
 func (e *FlavorHostSpaceExtractor) Extract() ([]plugins.Feature, error) {
+	// TODO: Do this in a single SQL query.
 	var hypervisors []openstack.Hypervisor
 	query := "SELECT * FROM " + openstack.Hypervisor{}.TableName()
 	if _, err := e.DB.Select(&hypervisors, query); err != nil {

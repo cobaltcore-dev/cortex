@@ -43,17 +43,6 @@ type novaSyncer struct {
 	mqttClient mqtt.Client
 }
 
-// Create a new OpenStack nova syncer.
-func newNovaSyncer(db db.DB, mon sync.Monitor, k KeystoneAPI, conf NovaConf) Syncer {
-	return &novaSyncer{
-		db:         db,
-		mon:        mon,
-		conf:       conf,
-		api:        newNovaAPI(mon, k, conf),
-		mqttClient: mqtt.NewClient(),
-	}
-}
-
 // Init the OpenStack nova syncer.
 func (s *novaSyncer) Init(ctx context.Context) {
 	s.api.Init(ctx)

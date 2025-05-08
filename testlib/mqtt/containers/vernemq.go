@@ -34,8 +34,8 @@ func (c *VernemqContainer) Init(t *testing.T) {
 		log.Fatalf("could not connect to Docker: %s", err)
 	}
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "vernemq/vernemq",
-		Tag:        "2.0.1",
+		Repository: "ghcr.io/cobaltcore-dev/cortex-vernemq",
+		Tag:        "latest",
 		Env: []string{
 			"DOCKER_VERNEMQ_ACCEPT_EULA=yes",
 			"DOCKER_VERNEMQ_ALLOW_ANONYMOUS=on",

@@ -112,3 +112,57 @@ func TestBaseExtractor_Extracted(t *testing.T) {
 		}
 	}
 }
+
+func TestBaseExtractor_ExtractSQL(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	// Create the table for MockFeature
+	err := testDB.CreateTable(testDB.AddTable(MockFeature{}))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert mock data into the mock_feature table
+	mockFeatures := []MockFeature{
+		{ID: 1, Name: "feature1"},
+		{ID: 2, Name: "feature2"},
+	}
+	for _, feature := range mockFeatures {
+		if err := testDB.Insert(&feature); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	}
+
+	extractor := BaseExtractor[MockOptions, MockFeature]{DB: testDB}
+
+	// Define the SQL query to extract features
+	query := "SELECT * FROM mock_feature"
+
+	// Call the ExtractSQL function
+	extractedFeatures, err := extractor.ExtractSQL(query)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify the returned slice of features
+	if len(extractedFeatures) != 2 {
+		t.Errorf("expected 2 extracted features, got %d", len(extractedFeatures))
+	}
+	expected := map[int]string{
+		1: "feature1",
+		2: "feature2",
+	}
+	// Correctly cast the generic Feature type to MockFeature
+	for _, f := range extractedFeatures {
+		mockFeature, ok := f.(MockFeature)
+		if !ok {
+			t.Fatalf("expected type MockFeature, got %T", f)
+		}
+		if expected[mockFeature.ID] != mockFeature.Name {
+			t.Errorf("expected name for ID %d to be %s, got %s", mockFeature.ID, expected[mockFeature.ID], mockFeature.Name)
+		}
+	}
+}

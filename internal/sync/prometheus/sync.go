@@ -18,13 +18,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// List of supported metric types that can be specified in the yaml config.
-var supportedSyncers = map[string]func(
+type syncerFunc func(
 	db.DB,
 	conf.SyncPrometheusHostConfig,
 	conf.SyncPrometheusMetricConfig,
 	sync.Monitor,
-) Syncer{
+) Syncer
+
+// List of supported metric types that can be specified in the yaml config.
+var SupportedSyncers = map[string]syncerFunc{
 	"vrops_host_metric":    newSyncerOfType[VROpsHostMetric],
 	"vrops_vm_metric":      newSyncerOfType[VROpsVMMetric],
 	"node_exporter_metric": newSyncerOfType[NodeExporterMetric],
@@ -39,11 +41,18 @@ type CombinedSyncer struct {
 }
 
 // Create multiple syncers configured by the external service configuration.
-func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.Monitor) sync.Datasource {
+func NewCombinedSyncer(
+	supportedSyncers map[string]syncerFunc,
+	config conf.SyncPrometheusConfig,
+	db db.DB,
+	monitor sync.Monitor,
+	mqttClient mqtt.Client,
+) sync.Datasource {
+
 	slog.Info("loading syncers", "metrics", config.Metrics)
 	syncers := []Syncer{}
 	for _, metricConfig := range config.Metrics {
-		syncerFunc, ok := supportedSyncers[metricConfig.Type]
+		syncerFuncInstance, ok := supportedSyncers[metricConfig.Type]
 		if !ok {
 			panic("unsupported metric type: " + metricConfig.Type)
 		}
@@ -52,7 +61,7 @@ func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.
 			for _, providedMetricType := range hostConf.ProvidedMetricTypes {
 				if providedMetricType == metricConfig.Type {
 					slog.Info("adding syncer", "metricType", metricConfig.Type, "host", hostConf.Name)
-					syncers = append(syncers, syncerFunc(db, hostConf, metricConfig, monitor))
+					syncers = append(syncers, syncerFuncInstance(db, hostConf, metricConfig, monitor))
 				}
 			}
 		}
@@ -60,7 +69,7 @@ func NewCombinedSyncer(config conf.SyncPrometheusConfig, db db.DB, monitor sync.
 	return CombinedSyncer{
 		syncers:    syncers,
 		monitor:    monitor,
-		mqttClient: mqtt.NewClient(),
+		mqttClient: mqttClient,
 	}
 }
 

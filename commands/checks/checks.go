@@ -1,8 +1,6 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build !test
-
 package checks
 
 import (

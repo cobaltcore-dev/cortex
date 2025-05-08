@@ -53,14 +53,17 @@ type FeatureExtractorPipeline struct {
 	config conf.FeaturesConfig
 	// Monitor to use for tracking the pipeline.
 	monitor Monitor
+	// MQTT client to publish the extracted features.
+	mqttClient mqtt.Client
 }
 
 // Create a new feature extractor pipeline with extractors contained in the configuration.
 func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureExtractorPipeline {
 	return FeatureExtractorPipeline{
-		db:      database,
-		config:  config,
-		monitor: m,
+		db:         database,
+		config:     config,
+		monitor:    m,
+		mqttClient: mqtt.NewClient(),
 	}
 }
 
@@ -156,9 +159,9 @@ func (p *FeatureExtractorPipeline) initTriggerExecutionOrder() {
 // If mqtt is disabled, this function does nothing.
 func (p *FeatureExtractorPipeline) ExtractOnTrigger() {
 	// Subscribe to the MQTT topics that trigger the feature extraction.
-	mqttClient := mqtt.NewClient()
 	var lock sync.Mutex
 	for topic, subgraphs := range p.triggerExecutionOrder {
+		slog.Info("subscribing to mqtt topic", "topic", topic, "subgraphs", subgraphs)
 		callback := func() {
 			// Always calculate on one execution order only.
 			// This will avoid the same feature extractor from being calculated
@@ -171,7 +174,7 @@ func (p *FeatureExtractorPipeline) ExtractOnTrigger() {
 				p.extract(order)
 			}
 		}
-		if err := mqttClient.Subscribe(topic, func(_ pahomqtt.Client, _ pahomqtt.Message) {
+		if err := p.mqttClient.Subscribe(topic, func(_ pahomqtt.Client, _ pahomqtt.Message) {
 			// It's important to execute the callback in a goroutine.
 			// Otherwise, the MQTT client will block until the callback
 			// is finished, potentially leading to disconnects.
