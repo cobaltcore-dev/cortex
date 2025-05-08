@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v2
-description: Prometheus alerts setup for Cortex.
-name: cortex-alerts
+description: Prometheus alerts dependencies for Cortex.
+name: cortex-alerts-deps
 version: 0.2.0
 dependencies:
   # CRDs of the prometheus operator, such as PrometheusRule, ServiceMonitor, etc.
