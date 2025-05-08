@@ -2,6 +2,8 @@ module github.com/cobaltcore-dev/cortex
 
 go 1.24
 
+replace github.com/cobaltcore-dev/cortex/commands => ./commands
+
 replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
 
 require (
