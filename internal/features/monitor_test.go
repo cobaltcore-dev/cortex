@@ -20,7 +20,9 @@ func TestFeatureExtractorMonitor(t *testing.T) {
 	mockExtractor := &mockFeatureExtractor{
 		name: "mock_extractor",
 		// Usually the features are a struct, but it doesn't matter for this test
-		features: []plugins.Feature{"1", "2"},
+		extractFunc: func() ([]plugins.Feature, error) {
+			return []plugins.Feature{"1", "2"}, nil
+		},
 	}
 
 	// Wrap the mock extractor with the monitor

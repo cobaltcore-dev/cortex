@@ -31,7 +31,10 @@ type client struct {
 }
 
 func NewClient() Client {
-	conf := conf.NewConfig().GetMQTTConfig()
+	return NewClientWithConfig(conf.NewConfig().GetMQTTConfig())
+}
+
+func NewClientWithConfig(conf conf.MQTTConfig) Client {
 	return &client{conf: conf, lock: &sync.Mutex{}}
 }
 
