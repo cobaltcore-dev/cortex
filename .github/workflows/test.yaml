@@ -52,26 +52,6 @@ jobs:
           name: pr-func-coverage
           path: pr_func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
-      - name: Checkout base commit (PR only)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-      - name: Run tests on base commit and calculate previous coverage (PR only)
-        if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          export POSTGRES_CONTAINER=1
-          export VERNEMQ_CONTAINER=1
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=base_profile.cov ./internal/...
-          go tool cover -func base_profile.cov > base_func_coverage.txt
-      - name: Upload previous coverage file (PR only)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: base-func-coverage
-          path: base_func_coverage.txt
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/github-script@v7
@@ -98,12 +78,6 @@ jobs:
         with:
           name: pr-func-coverage
           path: .
-      - name: Download previous coverage file (PR only)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: base-func-coverage
-          path: .
       - name: Post coverage comment (PR only)
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/github-script@v7
@@ -112,77 +86,22 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            // Helper function to parse coverage files
-            function parseCoverageFile(filePath) {
-              const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
-              const coverageData = {};
-              for (const line of lines) {
-                const match = line.match(/^(.*?):(\d+):\s+(.*?)\s+([\d.]+)%$/);
-                if (match) {
-                  const [_, file, lineNumber, functionName, coverage] = match;
-                  const key = `${file}:${lineNumber}`;
-                  coverageData[key] = {
-                    functionName,
-                    coverage: parseFloat(coverage),
-                  };
-                }
-              }
-              return coverageData;
-            }
+            // Extract the last line of the coverage report
+            const coverageReport = fs.readFileSync(path.join(__dirname, 'pr_func_coverage.txt'), 'utf8');
+            const lines = coverageReport.trim().split('\n');
+            const lastLine = lines[lines.length - 1];
+            const coverageMatch = lastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+            const coveragePercentage = coverageMatch ? coverageMatch[1] : 'unknown';
 
-            // Read and parse the coverage files
-            const prCoverage = parseCoverageFile('pr_func_coverage.txt');
-            const baseCoverage = parseCoverageFile('base_func_coverage.txt');
-
-            // Calculate changes in coverage
-            const coverageChanges = [];
-            for (const key in prCoverage) {
-              const prData = prCoverage[key];
-              const baseData = baseCoverage[key];
-              const change = baseData
-                ? (prData.coverage - baseData.coverage).toFixed(2)
-                : prData.coverage.toFixed(2);
-              if (change === '0.00') {
-                // Skip unchanged functions
-                continue;
-              }
-              coverageChanges.push({
-                file: key.split(':')[0].replace('github.com/cobaltcore-dev/cortex/', ''),
-                line: key.split(':')[1],
-                functionName: prData.functionName,
-                coverage: prData.coverage.toFixed(2),
-                change: baseData ? `${change >= 0 ? '+' : ''}${change}%` : 'New',
-              });
-            }
-
-            // Generate the comment body
-            const currentCoverage = (
-              Object.values(prCoverage).reduce((sum, { coverage }) => sum + coverage, 0) /
-              Object.keys(prCoverage).length
-            ).toFixed(2);
-            const baseCoverageAvg = baseCoverage
-              ? (
-                  Object.values(baseCoverage).reduce((sum, { coverage }) => sum + coverage, 0) /
-                  Object.keys(baseCoverage).length
-                ).toFixed(2)
-              : 0;
-            const change = (currentCoverage - baseCoverageAvg).toFixed(2);
-
-            const packageDetails = coverageChanges
-              .map(
-                ({ file, line, functionName, coverage, change }) =>
-                  "- "+"`"+`${file}:${line}`+"`"+`${functionName} ${coverage}% (${change})`
-              )
-              .join('\n');
-
-            const commentBody = `
-              <!-- coverage-comment -->
-              <details>
-              <summary>Coverage in go module internal/: ${currentCoverage}% (${change >= 0 ? '+' : ''}${change}%)</summary>
-
-              ${packageDetails}
-              </details>
-            `;
+            let commentBody = '<!-- coverage-comment -->\n';
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in go module internal/: ';
+            commentBody += coveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += coverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
 
             // Post the comment
             await github.rest.issues.createComment({
