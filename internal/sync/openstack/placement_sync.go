@@ -27,17 +27,6 @@ type placementSyncer struct {
 	mqttClient mqtt.Client
 }
 
-// Create a new OpenStack placement syncer.
-func newPlacementSyncer(db db.DB, mon sync.Monitor, k KeystoneAPI, conf PlacementConf) Syncer {
-	return &placementSyncer{
-		db:         db,
-		mon:        mon,
-		conf:       conf,
-		api:        NewPlacementAPI(mon, k, conf),
-		mqttClient: mqtt.NewClient(),
-	}
-}
-
 // Init the OpenStack resource provider and trait syncer.
 func (s *placementSyncer) Init(ctx context.Context) {
 	s.api.Init(ctx)

@@ -33,9 +33,10 @@ import (
 // Periodically fetch data from the datasources and insert it into the database.
 func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
 	monitor := sync.NewSyncMonitor(registry)
+	mqttClient := mqtt.NewClient()
 	syncers := []sync.Datasource{
-		prometheus.NewCombinedSyncer(config.Prometheus, db, monitor),
-		openstack.NewCombinedSyncer(ctx, config.OpenStack, monitor, db),
+		prometheus.NewCombinedSyncer(prometheus.SupportedSyncers, config.Prometheus, db, monitor, mqttClient),
+		openstack.NewCombinedSyncer(ctx, config.OpenStack, monitor, db, mqttClient),
 	}
 	pipeline := sync.Pipeline{Syncers: syncers}
 	pipeline.Init(ctx)

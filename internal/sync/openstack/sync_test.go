@@ -7,9 +7,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockSyncer struct {
@@ -70,4 +72,23 @@ func TestCombinedSyncer_Sync(t *testing.T) {
 	if !mockSyncer2.syncCalled {
 		t.Fatal("expected mockSyncer2.Sync to be called")
 	}
+}
+
+func TestNewCombinedSyncer(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	monitor := sync.Monitor{}
+	mqttClient := &mqtt.MockClient{}     // Mock or initialize as needed
+	config := conf.SyncOpenStackConfig{} // Populate with test configuration
+
+	combinedSyncer := NewCombinedSyncer(context.Background(), config, monitor, testDB, mqttClient)
+
+	if combinedSyncer == nil {
+		t.Fatal("expected NewCombinedSyncer to return a non-nil CombinedSyncer")
+	}
+
+	// Additional assertions can be added here to verify the state of the returned CombinedSyncer
 }

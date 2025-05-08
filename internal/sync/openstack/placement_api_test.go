@@ -21,7 +21,7 @@ func TestNewPlacementAPI(t *testing.T) {
 	k := &mockKeystoneAPI{}
 	conf := PlacementConf{}
 
-	api := NewPlacementAPI(mon, k, conf)
+	api := newPlacementAPI(mon, k, conf)
 	if api == nil {
 		t.Fatal("expected non-nil api")
 	}
@@ -41,7 +41,7 @@ func TestPlacementAPI_GetAllResourceProviders(t *testing.T) {
 	mon := sync.Monitor{}
 	conf := PlacementConf{}
 
-	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
+	api := newPlacementAPI(mon, k, conf).(*placementAPI)
 	api.Init(t.Context())
 
 	ctx := t.Context()
@@ -71,7 +71,7 @@ func TestPlacementAPI_GetAllTraits(t *testing.T) {
 	mon := sync.Monitor{}
 	conf := PlacementConf{}
 
-	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
+	api := newPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
 
 	ctx := t.Context()
@@ -102,7 +102,7 @@ func TestPlacementAPI_GetAllTraits_Error(t *testing.T) {
 	mon := sync.Monitor{}
 	conf := PlacementConf{}
 
-	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
+	api := newPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
 
 	ctx := t.Context()

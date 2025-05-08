@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -32,13 +33,26 @@ func NewCombinedSyncer(
 	config conf.SyncOpenStackConfig,
 	monitor sync.Monitor,
 	db db.DB,
+	mqttClient mqtt.Client,
 ) sync.Datasource {
 
 	keystoneAPI := newKeystoneAPI(config.Keystone)
 	slog.Info("loading openstack sub-syncers")
 	syncers := []Syncer{
-		newNovaSyncer(db, monitor, keystoneAPI, config.Nova),
-		newPlacementSyncer(db, monitor, keystoneAPI, config.Placement),
+		&novaSyncer{
+			db:         db,
+			mon:        monitor,
+			conf:       config.Nova,
+			api:        newNovaAPI(monitor, keystoneAPI, config.Nova),
+			mqttClient: mqttClient,
+		},
+		&placementSyncer{
+			db:         db,
+			mon:        monitor,
+			conf:       config.Placement,
+			api:        newPlacementAPI(monitor, keystoneAPI, config.Placement),
+			mqttClient: mqttClient,
+		},
 	}
 	return CombinedSyncer{monitor: monitor, syncers: syncers}
 }
