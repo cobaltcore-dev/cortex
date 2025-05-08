@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/commands/checks"
+	"github.com/cobaltcore-dev/cortex/commands/checks"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features"
