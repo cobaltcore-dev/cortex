@@ -27,12 +27,13 @@ helm_repo(
 # Build the helm charts
 local('test -f ./helm/cortex/Chart.lock || helm dep up ./helm/cortex')
 local('test -f ./helm/prometheus/Chart.lock || helm dep up ./helm/prometheus')
+local('test -f ./helm/prometheus-deps/Chart.lock || helm dep up ./helm/prometheus-deps')
 local('test -f ./helm/postgres/Chart.lock || helm dep up ./helm/postgres')
 
 ########### Cortex Core Services
 tilt_values = os.getenv('TILT_VALUES_PATH')
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
-    'internal/', 'main.go', 'go.mod', 'go.sum', 'Makefile', tilt_values,
+    'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile', tilt_values,
 ])
 k8s_yaml(helm('./helm/cortex', name='cortex', values=[tilt_values]))
 k8s_resource('cortex-syncer', port_forwards=[

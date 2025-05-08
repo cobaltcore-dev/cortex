@@ -2,6 +2,8 @@ module github.com/cobaltcore-dev/cortex
 
 go 1.24
 
+replace github.com/cobaltcore-dev/cortex/commands => ./commands
+
 replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
 
 require (
@@ -15,7 +17,7 @@ require (
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-api-declarations v1.15.0
-	github.com/sapcc/go-bits v0.0.0-20250423153018-e4213f99573c
+	github.com/sapcc/go-bits v0.0.0-20250501121442-a1d2d0135a19
 	go.uber.org/automaxprocs v1.6.0
 )
 
@@ -44,7 +46,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/golang-migrate/migrate/v4 v4.18.2 // indirect
+	github.com/golang-migrate/migrate/v4 v4.18.3 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -56,7 +58,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )

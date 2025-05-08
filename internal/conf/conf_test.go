@@ -84,14 +84,39 @@ func TestNewConfig(t *testing.T) {
     ]
   },
   "kpis": {
-	"plugins": [
-	  {
-	    "name": "vm_life_span_kpi"
-	  }
+    "plugins": [
+      {
+        "name": "vm_life_span_kpi"
+      }
     ]
+  },
+  "logging": {
+    "level": "debug",
+    "format": "text"
+  },
+  "db": {
+    "host": "cortex-postgresql",
+    "port": 5432,
+    "user": "postgres",
+    "password": "secret",
+    "database": "postgres"
+  },
+  "monitoring": {
+    "port": 2112,
+    "labels": {
+      "github_org": "cobaltcore-dev",
+      "github_repo": "cortex"
+    }
+  },
+  "mqtt": {
+    "url": "tcp://cortex-mqtt:1883",
+    "username": "cortex",
+    "password": "cortex"
+  },
+  "api": {
+    "port": 8080
   }
-}
-`
+}`
 	filepath := createTempConfigFile(t, content)
 
 	config := newConfigFromFile(filepath)
@@ -136,5 +161,59 @@ func TestNewConfig(t *testing.T) {
 	kpisConfig := config.GetKPIsConfig()
 	if len(kpisConfig.Plugins) != 1 {
 		t.Errorf("Expected 1 kpi, got %d", len(kpisConfig.Plugins))
+	}
+
+	// Test LoggingConfig
+	loggingConfig := config.GetLoggingConfig()
+	if loggingConfig.LevelStr == "" {
+		t.Errorf("Expected non-empty log level, got empty string")
+	}
+	if loggingConfig.Format == "" {
+		t.Errorf("Expected non-empty log format, got empty string")
+	}
+
+	// Test DBConfig
+	dbConfig := config.GetDBConfig()
+	if dbConfig.Host == "" {
+		t.Errorf("Expected non-empty DB host, got empty string")
+	}
+	if dbConfig.Port == 0 {
+		t.Errorf("Expected non-zero DB port, got 0")
+	}
+	if dbConfig.Database == "" {
+		t.Errorf("Expected non-empty DB name, got empty string")
+	}
+	if dbConfig.User == "" {
+		t.Errorf("Expected non-empty DB user, got empty string")
+	}
+	if dbConfig.Password == "" {
+		t.Errorf("Expected non-empty DB password, got empty string")
+	}
+
+	// Test MonitoringConfig
+	monitoringConfig := config.GetMonitoringConfig()
+	if len(monitoringConfig.Labels) == 0 {
+		t.Errorf("Expected non-empty monitoring labels, got empty map")
+	}
+	if monitoringConfig.Port == 0 {
+		t.Errorf("Expected non-zero monitoring port, got 0")
+	}
+
+	// Test MQTTConfig
+	mqttConfig := config.GetMQTTConfig()
+	if mqttConfig.URL == "" {
+		t.Errorf("Expected non-empty MQTT URL, got empty string")
+	}
+	if mqttConfig.Username == "" {
+		t.Errorf("Expected non-empty MQTT username, got empty string")
+	}
+	if mqttConfig.Password == "" {
+		t.Errorf("Expected non-empty MQTT password, got empty string")
+	}
+
+	// Test APIConfig
+	apiConfig := config.GetAPIConfig()
+	if apiConfig.Port == 0 {
+		t.Errorf("Expected non-zero API port, got 0")
 	}
 }

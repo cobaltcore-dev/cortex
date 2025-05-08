@@ -24,7 +24,7 @@ import (
 
 // Configuration of steps supported by the scheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = []plugins.Step{
+var SupportedSteps = []plugins.Step{
 	// VMware-specific steps
 	&vmware.AntiAffinityNoisyProjectsStep{},
 	&vmware.AvoidContendedHostsStep{},
@@ -51,7 +51,14 @@ type pipeline struct {
 }
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) api.Pipeline {
+func NewPipeline(
+	supportedSteps []plugins.Step,
+	config conf.SchedulerConfig,
+	database db.DB,
+	monitor Monitor,
+	mqttClient mqtt.Client,
+) api.Pipeline {
+
 	supportedStepsByName := make(map[string]plugins.Step)
 	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
@@ -86,7 +93,7 @@ func NewPipeline(config conf.SchedulerConfig, database db.DB, monitor Monitor) a
 		executionOrder:   [][]plugins.Step{steps},
 		applicationOrder: applicationOrder,
 		monitor:          monitor,
-		mqttClient:       mqtt.NewClient(),
+		mqttClient:       mqttClient,
 	}
 }
 

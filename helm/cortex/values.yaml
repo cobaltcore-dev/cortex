@@ -5,7 +5,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-b242fa3"
+  tag: "sha-f03d0a0"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -68,7 +68,7 @@ owner-info:
 vernemq:
   image:
     repository: ghcr.io/cobaltcore-dev/cortex-vernemq
-    tag: "sha-b242fa3"
+    tag: "sha-f03d0a0"
   # The username and password to use for the mqtt connection.
   username: cortex
   password: cortex
@@ -368,9 +368,9 @@ conf:
         options:
           # Min-max scaling for avg CPU usage of the project on a host.
           avgCPUUsageLowerBound: 0 # pct
-          avgCPUUsageUpperBound: 100 # pct
-          avgCPUUsageActivationLowerBound: 0.25
-          avgCPUUsageActivationUpperBound: -0.5
+          avgCPUUsageUpperBound: 10 # pct
+          avgCPUUsageActivationLowerBound: 0.0
+          avgCPUUsageActivationUpperBound: -1.0
         dependencies:
           features:
             extractors:
@@ -379,14 +379,14 @@ conf:
         options:
           # Min-max scaling for avg CPU contention on the host.
           avgCPUContentionLowerBound: 0 # pct
-          avgCPUContentionUpperBound: 100 # pct
-          avgCPUContentionActivationLowerBound: 0.25
-          avgCPUContentionActivationUpperBound: -0.5
+          avgCPUContentionUpperBound: 10 # pct
+          avgCPUContentionActivationLowerBound: 0.0
+          avgCPUContentionActivationUpperBound: -0.75
           # Min-max scaling for max CPU contention on the host.
           maxCPUContentionLowerBound: 0 # pct
-          maxCPUContentionUpperBound: 100 # pct
-          maxCPUContentionActivationLowerBound: 0.25
-          maxCPUContentionActivationUpperBound: -0.5
+          maxCPUContentionUpperBound: 10 # pct
+          maxCPUContentionActivationLowerBound: 0.0
+          maxCPUContentionActivationUpperBound: -0.25
         dependencies:
           features:
             extractors:
@@ -397,14 +397,14 @@ conf:
         options:
           # Min-max scaling for avg CPU usage on the host.
           avgCPUUsageLowerBound: 0 # pct
-          avgCPUUsageUpperBound: 100 # pct
-          avgCPUUsageActivationLowerBound: 0.25
-          avgCPUUsageActivationUpperBound: -0.5
+          avgCPUUsageUpperBound: 10 # pct
+          avgCPUUsageActivationLowerBound: 0.0
+          avgCPUUsageActivationUpperBound: -0.75
           # Min-max scaling for max CPU usage on the host.
           maxCPUUsageLowerBound: 0 # pct
-          maxCPUUsageUpperBound: 100 # pct
-          maxCPUUsageActivationLowerBound: 0.25
-          maxCPUUsageActivationUpperBound: -0.5
+          maxCPUUsageUpperBound: 10 # pct
+          maxCPUUsageActivationLowerBound: 0.0
+          maxCPUUsageActivationUpperBound: -0.25
         dependencies:
           features:
             extractors:
@@ -413,14 +413,14 @@ conf:
         options:
           # Min-max scaling for avg memory usage on the host.
           avgMemoryUsageLowerBound: 0 # pct
-          avgMemoryUsageUpperBound: 100 # pct
-          avgMemoryUsageActivationLowerBound: 0.25
-          avgMemoryUsageActivationUpperBound: -0.5
+          avgMemoryUsageUpperBound: 10 # pct
+          avgMemoryUsageActivationLowerBound: 0.0
+          avgMemoryUsageActivationUpperBound: -0.75
           # Min-max scaling for max memory usage on the host.
           maxMemoryUsageLowerBound: 0 # pct
-          maxMemoryUsageUpperBound: 100 # pct
-          maxMemoryUsageActivationLowerBound: 0.25
-          maxMemoryUsageActivationUpperBound: -0.5
+          maxMemoryUsageUpperBound: 10 # pct
+          maxMemoryUsageActivationLowerBound: 0.0
+          maxMemoryUsageActivationUpperBound: -0.25
         dependencies:
           features:
             extractors:
@@ -435,21 +435,21 @@ conf:
           # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
           cpuEnabled: true
           cpuFreeLowerBound: 0 # vCPUs
-          cpuFreeUpperBound: 128 # vCPUs
-          cpuFreeActivationLowerBound: 0.25
+          cpuFreeUpperBound: 512 # vCPUs
+          cpuFreeActivationLowerBound: 0.0
           cpuFreeActivationUpperBound: -0.5
           # Min-max scaling for gap-fitting based on memory space left (MB).
           ramEnabled: true
           ramFreeLowerBound: 0 # MB
           ramFreeUpperBound: 4000000 # MB
-          ramFreeActivationLowerBound: 0.25
+          ramFreeActivationLowerBound: 0.0
           ramFreeActivationUpperBound: -0.5
           # Min-max scaling for gap-fitting based on disk space left. (GB)
           diskEnabled: false
           diskFreeLowerBound: 0 # GB
           diskFreeUpperBound: 1000 # GB
-          diskFreeActivationLowerBound: 0.25
-          diskFreeActivationUpperBound: -0.5
+          diskFreeActivationLowerBound: 0.0
+          diskFreeActivationUpperBound: -0.25
         dependencies:
           features:
             extractors:

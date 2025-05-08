@@ -40,7 +40,7 @@ type placementAPI struct {
 }
 
 // Create a new OpenStack placement api.
-func NewPlacementAPI(mon sync.Monitor, k KeystoneAPI, conf PlacementConf) PlacementAPI {
+func newPlacementAPI(mon sync.Monitor, k KeystoneAPI, conf PlacementConf) PlacementAPI {
 	return &placementAPI{mon: mon, keystoneAPI: k, conf: conf, sleepInterval: 50 * time.Millisecond}
 }
 

@@ -26,6 +26,10 @@ OpenStack provides core services for managing compute, storage, and network reso
 
 Read the full documentation at [docs/readme.md](docs/readme.md).
 
+## Roadmap
+
+See our [roadmap](https://github.com/orgs/cobaltcore-dev/projects/14) and [issue tracker](https://github.com/cobaltcore-dev/cortex/issues) for upcoming features and improvements.
+
 ## Quickstart
 
 ### 1. Tilt Values Setup
