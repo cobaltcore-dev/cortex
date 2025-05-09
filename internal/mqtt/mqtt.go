@@ -137,6 +137,11 @@ func (t *client) Disconnect() {
 	}
 	client := *t.client
 	t.client = nil
-	client.Disconnect(0)
+	// Note: the disconnect will run in a goroutine.
+	client.Disconnect(1000)
+	// Wait for the disconnect to finish.
+	for client.IsConnected() {
+		time.Sleep(100 * time.Millisecond)
+	}
 	slog.Info("disconnected from mqtt broker")
 }
