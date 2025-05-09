@@ -138,7 +138,7 @@ func (t *client) Disconnect() {
 		return
 	}
 	client := *t.client
-	client.Disconnect(1000)
 	t.client = nil
+	client.Disconnect(1000)
 	slog.Info("disconnected from mqtt broker")
 }
