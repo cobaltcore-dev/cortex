@@ -51,9 +51,6 @@ func (t *client) Connect() error {
 	opts.SetConnectRetry(false)
 	opts.SetKeepAlive(60 * time.Second)
 	opts.SetPingTimeout(10 * time.Second)
-	opts.SetOnConnectHandler(func(client mqtt.Client) {
-		slog.Info("connected to mqtt broker")
-	})
 	opts.SetCleanSession(true)
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
 		panic(err)

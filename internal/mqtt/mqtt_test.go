@@ -23,6 +23,7 @@ func TestConnect(t *testing.T) {
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
 	c := client{conf: conf, lock: &sync.Mutex{}}
+	defer c.Disconnect()
 
 	err := c.Connect()
 	if err != nil {
@@ -40,6 +41,7 @@ func TestPublish(t *testing.T) {
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
 	c := client{conf: conf, lock: &sync.Mutex{}}
+	defer c.Disconnect()
 
 	err := c.publish("test/topic", map[string]string{"key": "value"})
 	if err != nil {
@@ -57,6 +59,7 @@ func TestSubscribe(t *testing.T) {
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
 	c := client{conf: conf, lock: &sync.Mutex{}}
+	defer c.Disconnect()
 
 	err := c.Subscribe("test/topic", func(client mqtt.Client, msg mqtt.Message) {})
 	if err != nil {
@@ -74,6 +77,7 @@ func TestDisconnect(t *testing.T) {
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
 	c := client{conf: conf, lock: &sync.Mutex{}}
+	defer c.Disconnect()
 	err := c.Connect()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

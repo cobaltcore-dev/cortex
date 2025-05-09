@@ -66,6 +66,7 @@ func (c *VernemqContainer) Init(t *testing.T) {
 	if conn := client.Connect(); conn.Wait() && conn.Error() != nil {
 		panic(conn.Error())
 	}
+	log.Println("vernemq container is ready")
 }
 
 func (c *VernemqContainer) Close() {

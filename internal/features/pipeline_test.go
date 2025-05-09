@@ -197,6 +197,7 @@ func TestFeatureExtractorPipeline_ExtractOnTrigger(t *testing.T) {
 
 	mqttConf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
 	mqttClient := mqtt.NewClientWithConfig(mqttConf)
+	defer mqttClient.Disconnect()
 
 	// Mock feature extractors
 	var wg sync.WaitGroup
