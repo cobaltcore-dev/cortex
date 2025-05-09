@@ -17,6 +17,7 @@ import (
 	"github.com/go-gorp/gorp"
 	_ "github.com/lib/pq"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/jobloop"
 )
 
 // Wrapper around gorp.DbMap that adds some convenience functions.
@@ -70,6 +71,26 @@ func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry) DB {
 		registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
 	}
 	return DB{DbMap: dbMap}
+}
+
+// Check periodically if the database is alive. If not, panic.
+func (d *DB) CheckLivenessPeriodically() {
+	var failures int
+	for {
+		if err := d.Db.Ping(); err != nil {
+			if failures > 5 {
+				slog.Error("database is unreachable, giving up", "error", err)
+				panic(err)
+			}
+			slog.Error("failed to ping database", "error", err)
+			time.Sleep(jobloop.DefaultJitter(1 * time.Second))
+			failures++
+			continue
+		}
+		failures = 0
+		slog.Debug("check ok: database is reachable")
+		time.Sleep(jobloop.DefaultJitter(10 * time.Second))
+	}
 }
 
 // Adds missing functionality to gorp.DbMap which creates one table.

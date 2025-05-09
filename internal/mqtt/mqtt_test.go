@@ -28,11 +28,16 @@ func TestConnect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	c.Disconnect()
 }
 
 func TestPublish(t *testing.T) {
 	if os.Getenv("VERNEMQ_CONTAINER") != "1" {
 		t.Skip("skipping test; set VERNEMQ_CONTAINER=1 to run")
+	}
+	// FIXME: It seems like GitHub Actions kills the container on the publish call.
+	if os.Getenv("GITHUB_ACTIONS") == "1" {
+		t.Skip("skipping test; GITHUB_ACTIONS=1")
 	}
 
 	container := containers.VernemqContainer{}
@@ -40,11 +45,12 @@ func TestPublish(t *testing.T) {
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
 	c := client{conf: conf, lock: &sync.Mutex{}}
-
 	err := c.publish("test/topic", map[string]string{"key": "value"})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	t.Log("published message to test/topic")
+	c.Disconnect()
 }
 
 func TestSubscribe(t *testing.T) {
@@ -62,6 +68,7 @@ func TestSubscribe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	c.Disconnect()
 }
 
 func TestDisconnect(t *testing.T) {
@@ -79,4 +86,5 @@ func TestDisconnect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	c.Disconnect()
+	c.Disconnect() // Should do nothing (already disconnected)
 }
