@@ -62,7 +62,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
-				float64(hypervisor.VCPUsUsed)/float64(hypervisor.VCPUs),
+				100*float64(hypervisor.VCPUsUsed)/float64(hypervisor.VCPUs),
 				strconv.Itoa(hypervisor.ID),
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
@@ -73,7 +73,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
-				float64(hypervisor.MemoryMBUsed)/float64(hypervisor.MemoryMB),
+				100*float64(hypervisor.MemoryMBUsed)/float64(hypervisor.MemoryMB),
 				strconv.Itoa(hypervisor.ID),
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
@@ -84,7 +84,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
-				float64(hypervisor.LocalGBUsed)/float64(hypervisor.LocalGB),
+				100*float64(hypervisor.LocalGBUsed)/float64(hypervisor.LocalGB),
 				strconv.Itoa(hypervisor.ID),
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
