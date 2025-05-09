@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       dind:
-        image: docker:23.0-rc-dind-rootless
+        image: docker:rc-dind-rootless
         ports:
           - 2375:2375
     steps:
