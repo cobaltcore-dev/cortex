@@ -4,7 +4,7 @@
 apiVersion: v2
 description: Prometheus alerts setup for Cortex.
 name: cortex-alerts
-version: 0.2.0
+version: 0.2.1
 dependencies:
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
