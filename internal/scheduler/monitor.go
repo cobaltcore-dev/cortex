@@ -54,10 +54,14 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		Help:    "Number of hosts removed by scheduler pipeline step",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	}, []string{"step"})
+	buckets := []float64{}
+	buckets = append(buckets, prometheus.LinearBuckets(0, 1, 10)...)
+	buckets = append(buckets, prometheus.LinearBuckets(10, 10, 4)...)
+	buckets = append(buckets, prometheus.LinearBuckets(50, 50, 6)...)
 	stepReorderingsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_shift_origin",
 		Help:    "From which index of the host list the host came from originally.",
-		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 20),
+		Buckets: buckets,
 	}, []string{"step", "outidx"})
 	pipelineRunTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
