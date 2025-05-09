@@ -53,6 +53,11 @@ func (t *client) Connect() error {
 	opts.SetPingTimeout(10 * time.Second)
 	opts.SetCleanSession(true)
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
+		// Check if we disconnected by hand, otherwise panic.
+		if t.client == nil {
+			slog.Info("disconnected from mqtt broker")
+			return
+		}
 		panic(err)
 	})
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
