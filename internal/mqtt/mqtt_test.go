@@ -45,6 +45,7 @@ func TestPublish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	t.Log("published message to test/topic")
 	c.Disconnect()
 }
 
