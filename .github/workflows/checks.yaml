@@ -3,7 +3,7 @@
 # Edit Makefile.maker.yaml instead.                                            #
 ################################################################################
 
-# Copyright 2024 SAP SE
+# SPDX-FileCopyrightText: Copyright 2024 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
 name: Checks
@@ -29,9 +29,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           check-latest: true
-          go-version: 1.24.2
+          go-version: 1.24.3
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         with:
           version: latest
       - name: Dependency Licenses Review
