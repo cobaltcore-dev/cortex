@@ -25,6 +25,7 @@ func (c VernemqContainer) GetPort() string {
 }
 
 func (c *VernemqContainer) Init(t *testing.T) {
+	log.Println("starting vernemq container")
 	pool, err := dockertest.NewPool("")
 	if err != nil {
 		log.Fatalf("could not construct pool: %s", err)
