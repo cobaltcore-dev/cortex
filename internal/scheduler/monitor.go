@@ -218,7 +218,7 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 			// Observe how far it was moved.
 			originalIdx := slices.Index(hostsIn, hostsOut[idx])
 			if s.stepReorderingsObserver != nil {
-				o := s.stepReorderingsObserver.WithLabelValues(stepName, hostsOut[idx])
+				o := s.stepReorderingsObserver.WithLabelValues(stepName, strconv.Itoa(idx))
 				o.Observe(float64(originalIdx))
 			}
 			slog.Info(
