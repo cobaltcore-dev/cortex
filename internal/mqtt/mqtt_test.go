@@ -77,7 +77,6 @@ func TestDisconnect(t *testing.T) {
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
 	c := client{conf: conf, lock: &sync.Mutex{}}
-	defer c.Disconnect()
 	err := c.Connect()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
