@@ -828,7 +828,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sort_desc(topk(5,cortex_host_utilization_per_host_pct{resource=\"cpu\"}))",
+          "expr": "sort_desc(topk(10, cortex_host_utilization_per_host_pct{resource=\"cpu\"}))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -839,7 +839,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Top 5 (Reserved, CPU %)",
+      "title": "Top 10 (CPU %)",
       "type": "bargauge"
     },
     {
@@ -893,7 +893,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sort_desc(topk(5,cortex_host_utilization_per_host_pct{resource=\"memory\"}))",
+          "expr": "sort_desc(topk(10,cortex_host_utilization_per_host_pct{resource=\"memory\"}))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -904,7 +904,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Top 5 (Reserved, Memory %)",
+      "title": "Top 10 (Reserved, Memory %)",
       "type": "bargauge"
     },
     {
@@ -958,7 +958,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sort_desc(topk(5,cortex_host_utilization_per_host_pct{resource=\"disk\"}))",
+          "expr": "sort_desc(topk(10,cortex_host_utilization_per_host_pct{resource=\"disk\"}))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -969,7 +969,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Top 5 (Reserved, Disk %)",
+      "title": "Top 10 (Reserved, Disk %)",
       "type": "bargauge"
     },
     {
