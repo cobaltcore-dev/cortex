@@ -39,12 +39,7 @@ func NewClientWithConfig(conf conf.MQTTConfig) Client {
 }
 
 // Called when the connection to the mqtt broker is lost.
-func (t *client) onConnectionLost(client mqtt.Client, err error) {
-	// Check if we disconnected by hand, otherwise panic.
-	if t.client == nil {
-		slog.Info("disconnected manually from mqtt broker")
-		return
-	}
+func (t *client) onUnexpectedConnectionLoss(client mqtt.Client, err error) {
 	panic(err)
 }
 
@@ -62,9 +57,9 @@ func (t *client) Connect() error {
 	opts.SetKeepAlive(60 * time.Second)
 	opts.SetPingTimeout(10 * time.Second)
 	opts.SetCleanSession(true)
-	opts.SetConnectionLostHandler(t.onConnectionLost)
+	opts.SetConnectionLostHandler(t.onUnexpectedConnectionLoss)
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
-	opts.SetClientID(fmt.Sprintf("cortex-scheduler-%d", rand.Intn(1_000_000)))
+	opts.SetClientID(fmt.Sprintf("cortex-%d", rand.Intn(1_000_000)))
 	opts.SetOrderMatters(false)
 	opts.SetProtocolVersion(4)
 	opts.SetDefaultPublishHandler(func(client mqtt.Client, msg mqtt.Message) {
@@ -142,6 +137,6 @@ func (t *client) Disconnect() {
 	}
 	client := *t.client
 	t.client = nil
-	client.Disconnect(1000)
+	client.Disconnect(0)
 	slog.Info("disconnected from mqtt broker")
 }
