@@ -139,10 +139,11 @@ func main() {
 	registry := monitoring.NewRegistry(monitoringConfig)
 	go runMonitoringServer(ctx, registry, monitoringConfig)
 
-	dbInstance := db.NewPostgresDB(config.GetDBConfig(), registry)
-	defer dbInstance.Close()
+	database := db.NewPostgresDB(config.GetDBConfig(), registry)
+	defer database.Close()
+	go database.CheckLivenessPeriodically()
 
-	migrater := db.NewMigrater(dbInstance)
+	migrater := db.NewMigrater(database)
 	migrater.Migrate(true)
 
 	// Run an api server that serves some basic endpoints and can be extended.
@@ -153,13 +154,13 @@ func main() {
 
 	switch taskName {
 	case "syncer":
-		runSyncer(ctx, registry, config.GetSyncConfig(), dbInstance)
+		runSyncer(ctx, registry, config.GetSyncConfig(), database)
 	case "extractor":
-		runExtractor(registry, config.GetFeaturesConfig(), dbInstance)
+		runExtractor(registry, config.GetFeaturesConfig(), database)
 	case "scheduler":
-		runScheduler(mux, registry, config.GetSchedulerConfig(), dbInstance)
+		runScheduler(mux, registry, config.GetSchedulerConfig(), database)
 	case "kpis":
-		runKPIService(registry, config.GetKPIsConfig(), dbInstance)
+		runKPIService(registry, config.GetKPIsConfig(), database)
 	default:
 		panic("unknown task")
 	}

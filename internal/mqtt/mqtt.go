@@ -48,18 +48,15 @@ func (t *client) Connect() error {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(t.conf.URL)
 	opts.SetConnectTimeout(10 * time.Second)
-	opts.SetConnectRetry(true)
-	opts.SetConnectRetryInterval(5 * time.Second)
+	opts.SetConnectRetry(false)
 	opts.SetKeepAlive(60 * time.Second)
 	opts.SetPingTimeout(10 * time.Second)
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		slog.Info("connected to mqtt broker")
 	})
-	opts.SetAutoReconnect(true)
-	opts.SetResumeSubs(true)
-	opts.SetCleanSession(false)
+	opts.SetCleanSession(true)
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
-		slog.Error("mqtt connection lost", "err", err)
+		panic(err)
 	})
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
 	opts.SetClientID(fmt.Sprintf("cortex-scheduler-%d", rand.Intn(1_000_000)))
