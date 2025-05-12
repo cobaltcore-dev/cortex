@@ -15,6 +15,10 @@ image:
   tag: "sha-1e1e93f"
 
 rabbitmq:
+  # Disable the network policy which otherwise
+  # blocks traffic on port 1883.
+  networkPolicy:
+    enabled: false
   # The username and password to use for the mqtt connection.
   auth:
     username: cortex
