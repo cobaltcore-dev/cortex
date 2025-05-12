@@ -14,21 +14,24 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: "sha-1e1e93f"
 
-vernemq:
-  image:
-    repository: ghcr.io/cobaltcore-dev/cortex-vernemq
-    tag: "sha-1e1e93f"
+rabbitmq:
   # The username and password to use for the mqtt connection.
-  username: cortex
-  password: cortex
-  # Name under which the vernemq resources should be spawned.
+  auth:
+    username: cortex
+    password: cortex
+  plugins: "rabbitmq_mqtt rabbitmq_management rabbitmq_peer_discovery_k8s"
+  # Name under which the rabbitmq resources should be spawned.
   fullnameOverride: "cortex-mqtt"
-  # Pass a basic configuration through a configmap that is spawned
-  # together with the vernemq instance.
-  envFrom:
-    - configMapRef:
-        name: "cortex-mqtt"
-  replicaCount: 1
+  extraConfiguration: |-
+    mqtt.listeners.tcp.default = 1883
+  extraContainerPorts:
+    - name: mqtt
+      containerPort: 1883
+  service:
+    extraPorts:
+      - name: mqtt
+        port: 1883
+        targetPort: 1883
 
 imagePullSecrets: []
 nameOverride: ""
@@ -135,7 +138,7 @@ conf:
 
   # Configure here if we should connect to an mqtt broker.
   mqtt:
-    # Must match vernemq.fullnameOverride, vernemq.username and vernemq.password.
+    # Must match rabbitmq settings from above.
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
     password: "cortex"

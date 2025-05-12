@@ -15,17 +15,17 @@ import (
 	"github.com/ory/dockertest/docker"
 )
 
-type VernemqContainer struct {
+type RabbitMQContainer struct {
 	pool     *dockertest.Pool
 	resource *dockertest.Resource
 }
 
-func (c VernemqContainer) GetPort() string {
+func (c RabbitMQContainer) GetPort() string {
 	return c.resource.GetPort("1883/tcp")
 }
 
-func (c *VernemqContainer) Init(t *testing.T) {
-	log.Println("starting vernemq container")
+func (c *RabbitMQContainer) Init(t *testing.T) {
+	log.Println("starting rabbitmq container")
 	pool, err := dockertest.NewPool("")
 	if err != nil {
 		log.Fatalf("could not construct pool: %s", err)
@@ -35,12 +35,12 @@ func (c *VernemqContainer) Init(t *testing.T) {
 		log.Fatalf("could not connect to Docker: %s", err)
 	}
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "ghcr.io/cobaltcore-dev/cortex-vernemq",
+		Repository: "rabbitmq",
 		Tag:        "latest",
-		Env: []string{
-			"DOCKER_VERNEMQ_ACCEPT_EULA=yes",
-			"DOCKER_VERNEMQ_ALLOW_ANONYMOUS=on",
-		},
+		// TODO: pass configuration to the container similar to helm chart.
+		// The container needs to open a tcp listener on port 1883 and
+		// needs to enable the mqtt plugin.
+		Env: []string{},
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
 		config.AutoRemove = true
@@ -63,14 +63,15 @@ func (c *VernemqContainer) Init(t *testing.T) {
 	opts.SetConnectRetryInterval(5 * time.Second)
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
 	opts.SetClientID(fmt.Sprintf("cortex-testlib-runup-%d", rand.Intn(1_000_000)))
+	opts.SetProtocolVersion(5)
 	client := mqtt.NewClient(opts)
 	if conn := client.Connect(); conn.Wait() && conn.Error() != nil {
 		panic(conn.Error())
 	}
-	log.Println("vernemq container is ready")
+	log.Println("rabbitmq container is ready")
 }
 
-func (c *VernemqContainer) Close() {
+func (c *RabbitMQContainer) Close() {
 	if err := c.pool.Purge(c.resource); err != nil {
 		log.Fatalf("could not purge resource: %s", err)
 	}

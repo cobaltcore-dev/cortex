@@ -42,7 +42,7 @@ jobs:
         run: |
           export GITHUB_ACTIONS=1
           export POSTGRES_CONTAINER=1
-          export VERNEMQ_CONTAINER=1
+          export RABBITMQ_CONTAINER=1
           go test -v \
             -coverpkg=./internal/... \
             -coverprofile=pr_profile.cov ./internal/...
