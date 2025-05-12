@@ -14,11 +14,11 @@ import (
 )
 
 func TestConnect(t *testing.T) {
-	if os.Getenv("VERNEMQ_CONTAINER") != "1" {
-		t.Skip("skipping test; set VERNEMQ_CONTAINER=1 to run")
+	if os.Getenv("RABBITMQ_CONTAINER") != "1" {
+		t.Skip("skipping test; set RABBITMQ_CONTAINER=1 to run")
 	}
 
-	container := containers.VernemqContainer{}
+	container := containers.RabbitMQContainer{}
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
@@ -32,15 +32,15 @@ func TestConnect(t *testing.T) {
 }
 
 func TestPublish(t *testing.T) {
-	if os.Getenv("VERNEMQ_CONTAINER") != "1" {
-		t.Skip("skipping test; set VERNEMQ_CONTAINER=1 to run")
+	if os.Getenv("RABBITMQ_CONTAINER") != "1" {
+		t.Skip("skipping test; set RABBITMQ_CONTAINER=1 to run")
 	}
 	// FIXME: It seems like GitHub Actions kills the container on the publish call.
 	if os.Getenv("GITHUB_ACTIONS") == "1" {
 		t.Skip("skipping test; GITHUB_ACTIONS=1")
 	}
 
-	container := containers.VernemqContainer{}
+	container := containers.RabbitMQContainer{}
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
@@ -54,11 +54,11 @@ func TestPublish(t *testing.T) {
 }
 
 func TestSubscribe(t *testing.T) {
-	if os.Getenv("VERNEMQ_CONTAINER") != "1" {
-		t.Skip("skipping test; set VERNEMQ_CONTAINER=1 to run")
+	if os.Getenv("RABBITMQ_CONTAINER") != "1" {
+		t.Skip("skipping test; set RABBITMQ_CONTAINER=1 to run")
 	}
 
-	container := containers.VernemqContainer{}
+	container := containers.RabbitMQContainer{}
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
@@ -72,11 +72,11 @@ func TestSubscribe(t *testing.T) {
 }
 
 func TestDisconnect(t *testing.T) {
-	if os.Getenv("VERNEMQ_CONTAINER") != "1" {
-		t.Skip("skipping test; set VERNEMQ_CONTAINER=1 to run")
+	if os.Getenv("RABBITMQ_CONTAINER") != "1" {
+		t.Skip("skipping test; set RABBITMQ_CONTAINER=1 to run")
 	}
 
-	container := containers.VernemqContainer{}
+	container := containers.RabbitMQContainer{}
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
