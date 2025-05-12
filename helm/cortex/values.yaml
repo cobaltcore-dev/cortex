@@ -97,7 +97,7 @@ modes:
   # Scheduler exposes the scheduler API and modifies the Nova scheduler weights.
   - name: scheduler
     args: ["scheduler"]
-    replicas: 2
+    replicas: 1
 
   # Service that extracts and exposes KPIs.
   - name: kpis
