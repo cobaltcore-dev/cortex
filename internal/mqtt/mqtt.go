@@ -61,7 +61,7 @@ func (t *client) Connect() error {
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
 	opts.SetClientID(fmt.Sprintf("cortex-%d", rand.Intn(1_000_000)))
 	opts.SetOrderMatters(false)
-	opts.SetProtocolVersion(4)
+	opts.SetProtocolVersion(5)
 	opts.SetDefaultPublishHandler(func(client mqtt.Client, msg mqtt.Message) {
 		slog.Warn("received unexpected message on topic", "topic", msg.Topic())
 	})

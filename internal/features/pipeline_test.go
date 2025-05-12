@@ -187,11 +187,11 @@ func TestFeatureExtractorPipeline_InitTriggerExecutionOrder(t *testing.T) {
 
 // Add a unit test for the ExtractOnTrigger function
 func TestFeatureExtractorPipeline_ExtractOnTrigger(t *testing.T) {
-	if os.Getenv("VERNEMQ_CONTAINER") != "1" {
-		t.Skip("skipping test; set VERNEMQ_CONTAINER=1 to run")
+	if os.Getenv("RABBITMQ_CONTAINER") != "1" {
+		t.Skip("skipping test; set RABBITMQ_CONTAINER=1 to run")
 	}
 
-	container := containers.VernemqContainer{}
+	container := containers.RabbitMQContainer{}
 	container.Init(t)
 	defer container.Close()
 

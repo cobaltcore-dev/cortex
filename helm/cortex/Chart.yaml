@@ -33,7 +33,7 @@ dependencies:
   - name: owner-info
     repository: oci://ghcr.io/sapcc/helm-charts
     version: 1.0.0
-  # Vernemq is a high-performance, distributed MQTT message broker. See: https://vernemq.com/
-  - name: vernemq
-    repository: https://vernemq.github.io/docker-vernemq
-    version: 2.0.1
+  # RabbitMQ is a message broker, see: https://artifacthub.io/packages/helm/bitnami/rabbitmq
+  - name: rabbitmq
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 16.0.2
