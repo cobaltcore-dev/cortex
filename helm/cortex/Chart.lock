@@ -1,0 +1,9 @@
+dependencies:
+- name: owner-info
+  repository: oci://ghcr.io/sapcc/helm-charts
+  version: 1.0.0
+- name: vernemq
+  repository: https://vernemq.github.io/docker-vernemq
+  version: 2.0.1
+digest: sha256:e6e751ca082cd49835d5df5de868abd7dcfa3cafee1f6d6e453150e84e5cbbd6
+generated: "2025-05-12T14:31:23.27728+02:00"
