@@ -2,8 +2,8 @@ dependencies:
 - name: owner-info
   repository: oci://ghcr.io/sapcc/helm-charts
   version: 1.0.0
-- name: vernemq
-  repository: https://vernemq.github.io/docker-vernemq
-  version: 2.0.1
-digest: sha256:e6e751ca082cd49835d5df5de868abd7dcfa3cafee1f6d6e453150e84e5cbbd6
-generated: "2025-05-12T14:31:23.27728+02:00"
+- name: rabbitmq
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 16.0.2
+digest: sha256:f79ad0d4a3ab8669dbf47a9b1c6c572bdcf53c3384f32a15bbc0663c0bcce68f
+generated: "2025-05-12T15:02:03.711284+02:00"

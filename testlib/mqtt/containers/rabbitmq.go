@@ -7,13 +7,22 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"testing"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/ory/dockertest"
 	"github.com/ory/dockertest/docker"
+
+	_ "embed"
 )
+
+//go:embed rabbitmq.conf
+var rabbitMQConfig string
+
+//go:embed rabbitmq-entrypoint.sh
+var rabbitMQEntrypoint string
 
 type RabbitMQContainer struct {
 	pool     *dockertest.Pool
@@ -25,6 +34,34 @@ func (c RabbitMQContainer) GetPort() string {
 }
 
 func (c *RabbitMQContainer) Init(t *testing.T) {
+	// Create a temporary directory for the conf and entrypoint files.
+	// We will mount these files into the container.
+	tmpDir := t.TempDir()
+	tmpConfFile, err := os.CreateTemp(tmpDir, "rabbitmq.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tmpConfFile.Write([]byte(rabbitMQConfig)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpConfFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	tmpEntrypointFile, err := os.CreateTemp(tmpDir, "test-entrypoint.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tmpEntrypointFile.Write([]byte(rabbitMQEntrypoint)); err != nil {
+		t.Fatal(err)
+	}
+	// Make the entrypoint file executable.
+	if err := os.Chmod(tmpEntrypointFile.Name(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpEntrypointFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
 	log.Println("starting rabbitmq container")
 	pool, err := dockertest.NewPool("")
 	if err != nil {
@@ -37,10 +74,12 @@ func (c *RabbitMQContainer) Init(t *testing.T) {
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "rabbitmq",
 		Tag:        "latest",
-		// TODO: pass configuration to the container similar to helm chart.
-		// The container needs to open a tcp listener on port 1883 and
-		// needs to enable the mqtt plugin.
-		Env: []string{},
+		Mounts: []string{
+			fmt.Sprintf("%s:%s", tmpConfFile.Name(), "/etc/rabbitmq/rabbitmq.conf"),
+			fmt.Sprintf("%s:%s", tmpEntrypointFile.Name(), "/usr/local/bin/test-entrypoint.sh"),
+		},
+		Cmd:          []string{"sh", "/usr/local/bin/test-entrypoint.sh"},
+		ExposedPorts: []string{"1883/tcp"},
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
 		config.AutoRemove = true
