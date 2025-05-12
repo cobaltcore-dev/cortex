@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"math"
 	"math/rand"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"fmt"
@@ -30,6 +32,19 @@ import (
 // Simulate filling the datacenter with vms.
 // The vm specs will be randomly picked based on existing vms in the datacenter.
 func main() {
+	noinput := flag.Bool("noinput", false, "Do not ask for confirmation before spawning a new server")
+	delay := flag.Int("delay", 1, "Delay in seconds between each request if noinput is set")
+	help := flag.Bool("help", false, "Show this help message")
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options]\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+	if *help {
+		flag.Usage()
+		os.Exit(0)
+	}
+
 	db := db.NewPostgresDB(conf.DBConfig{
 		Host:     "localhost",
 		Port:     5432,
@@ -336,15 +351,21 @@ func main() {
 		for _, line := range lines {
 			fmt.Println(line)
 		}
-		fmt.Printf("Spawned flavor %s on host %s, continue? [y, N, default: y]", flavor.Name, host)
-		reader := bufio.NewReader(os.Stdin)
-		input := must.Return(reader.ReadString('\n'))
-		input = strings.TrimSpace(input)
-		if input == "" {
-			input = "y"
-		}
-		if input != "y" {
-			break
+		if *noinput {
+			// Sleep for the specified delay.
+			<-time.After(time.Duration(*delay) * time.Second)
+		} else {
+			// Ask for confirmation before spawning the new server.
+			fmt.Printf("Spawned flavor %s on host %s, continue? [y, N, default: y]", flavor.Name, host)
+			reader := bufio.NewReader(os.Stdin)
+			input := must.Return(reader.ReadString('\n'))
+			input = strings.TrimSpace(input)
+			if input == "" {
+				input = "y"
+			}
+			if input != "y" {
+				break
+			}
 		}
 	}
 }
