@@ -1,11 +1,34 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
+owner-info:
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex"
+  maintainers:
+    - "p.matthes@sap.com"
+  support-group: "cobaltcore-dev"
+  enabled: true
+
 image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-9c503de"
+  tag: "sha-1e1e93f"
+
+vernemq:
+  image:
+    repository: ghcr.io/cobaltcore-dev/cortex-vernemq
+    tag: "sha-1e1e93f"
+  # The username and password to use for the mqtt connection.
+  username: cortex
+  password: cortex
+  # Name under which the vernemq resources should be spawned.
+  fullnameOverride: "cortex-mqtt"
+  # Pass a basic configuration through a configmap that is spawned
+  # together with the vernemq instance.
+  envFrom:
+    - configMapRef:
+        name: "cortex-mqtt"
+  replicaCount: 1
 
 imagePullSecrets: []
 nameOverride: ""
@@ -57,29 +80,6 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
-
-owner-info:
-  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex"
-  maintainers:
-    - "p.matthes@sap.com"
-  support-group: "cobaltcore-dev"
-  enabled: true
-
-vernemq:
-  image:
-    repository: ghcr.io/cobaltcore-dev/cortex-vernemq
-    tag: "sha-9c503de"
-  # The username and password to use for the mqtt connection.
-  username: cortex
-  password: cortex
-  # Name under which the vernemq resources should be spawned.
-  fullnameOverride: "cortex-mqtt"
-  # Pass a basic configuration through a configmap that is spawned
-  # together with the vernemq instance.
-  envFrom:
-    - configMapRef:
-        name: "cortex-mqtt"
-  replicaCount: 1
 
 # Modes in which the service should be run.
 # Each mode is translated into a separate service and deployment.
