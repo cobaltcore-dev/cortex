@@ -7,6 +7,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $.Chart.Name }}-{{ .name }}
+  annotations:
+    # Roll the service when its configmap changes.
+    checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
   labels:
     app: {{ $.Chart.Name }}-{{ .name }}
     {{- include "cortex.labels" $ | nindent 4 }}
