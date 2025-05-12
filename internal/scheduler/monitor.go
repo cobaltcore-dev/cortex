@@ -217,20 +217,18 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 		return outWeights[hostsOut[i]] > outWeights[hostsOut[j]]
 	})
 	for idx := range min(len(hostsOut), 5) { // Look at the first 5 hosts.
-		if hostsIn[idx] != hostsOut[idx] {
-			// The host at this index was moved from its original position.
-			// Observe how far it was moved.
-			originalIdx := slices.Index(hostsIn, hostsOut[idx])
-			if s.stepReorderingsObserver != nil {
-				o := s.stepReorderingsObserver.WithLabelValues(stepName, strconv.Itoa(idx))
-				o.Observe(float64(originalIdx))
-			}
-			slog.Info(
-				"scheduler: reordered host",
-				"name", stepName, "host", hostsOut[idx],
-				"originalIdx", originalIdx,
-			)
+		// The host at this index was moved from its original position.
+		// Observe how far it was moved.
+		originalIdx := slices.Index(hostsIn, hostsOut[idx])
+		if s.stepReorderingsObserver != nil {
+			o := s.stepReorderingsObserver.WithLabelValues(stepName, strconv.Itoa(idx))
+			o.Observe(float64(originalIdx))
 		}
+		slog.Info(
+			"scheduler: reordered host",
+			"name", stepName, "host", hostsOut[idx],
+			"originalIdx", originalIdx, "newIdx", idx,
+		)
 	}
 
 	return outWeights, nil
