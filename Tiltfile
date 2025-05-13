@@ -59,7 +59,7 @@ k8s_resource('cortex-kpis', port_forwards=[
 ], labels=['Core-Services'])
 k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
-    port_forward(8005, 8080), # Websocket connection
+    port_forward(8005, 15675), # Websocket connection
 ], labels=['Core-Services'])
 
 ########### Cortex Commands
