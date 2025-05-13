@@ -19,12 +19,11 @@ rabbitmq:
   # blocks traffic on port 1883 (tcp mqtt) + 15675 (websocket).
   networkPolicy:
     enabled: false
-  auth:
-    erlangCookie: "cortex"
   # The username and password to use for the mqtt connection.
   auth:
     username: cortex
     password: cortex
+    erlangCookie: "cortex"
   plugins: "rabbitmq_mqtt rabbitmq_web_mqtt rabbitmq_management rabbitmq_peer_discovery_k8s"
   # Name under which the rabbitmq resources should be spawned.
   fullnameOverride: "cortex-mqtt"
