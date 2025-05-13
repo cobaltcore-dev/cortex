@@ -12,7 +12,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-1e1e93f"
+  tag: "sha-3508e95"
 
 rabbitmq:
   # Disable the network policy which otherwise
