@@ -10,12 +10,12 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func TestVernemqContainer_Init(t *testing.T) {
-	if os.Getenv("VERNEMQ_CONTAINER") != "1" {
-		t.Skip("skipping test; set VERNEMQ_CONTAINER=1 to run")
+func TestRabbitMQContainer_Init(t *testing.T) {
+	if os.Getenv("RABBITMQ_CONTAINER") != "1" {
+		t.Skip("skipping test; set RABBITMQ_CONTAINER=1 to run")
 	}
 
-	container := VernemqContainer{}
+	container := RabbitMQContainer{}
 	container.Init(t)
 
 	// Should not panic.

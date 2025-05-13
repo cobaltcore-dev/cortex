@@ -54,10 +54,14 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		Help:    "Number of hosts removed by scheduler pipeline step",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	}, []string{"step"})
+	buckets := []float64{}
+	buckets = append(buckets, prometheus.LinearBuckets(0, 1, 10)...)
+	buckets = append(buckets, prometheus.LinearBuckets(10, 10, 4)...)
+	buckets = append(buckets, prometheus.LinearBuckets(50, 50, 6)...)
 	stepReorderingsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_shift_origin",
 		Help:    "From which index of the host list the host came from originally.",
-		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 20),
+		Buckets: buckets,
 	}, []string{"step", "outidx"})
 	pipelineRunTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
@@ -213,20 +217,18 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 		return outWeights[hostsOut[i]] > outWeights[hostsOut[j]]
 	})
 	for idx := range min(len(hostsOut), 5) { // Look at the first 5 hosts.
-		if hostsIn[idx] != hostsOut[idx] {
-			// The host at this index was moved from its original position.
-			// Observe how far it was moved.
-			originalIdx := slices.Index(hostsIn, hostsOut[idx])
-			if s.stepReorderingsObserver != nil {
-				o := s.stepReorderingsObserver.WithLabelValues(stepName, hostsOut[idx])
-				o.Observe(float64(originalIdx))
-			}
-			slog.Info(
-				"scheduler: reordered host",
-				"name", stepName, "host", hostsOut[idx],
-				"originalIdx", originalIdx,
-			)
+		// The host at this index was moved from its original position.
+		// Observe how far it was moved.
+		originalIdx := slices.Index(hostsIn, hostsOut[idx])
+		if s.stepReorderingsObserver != nil {
+			o := s.stepReorderingsObserver.WithLabelValues(stepName, strconv.Itoa(idx))
+			o.Observe(float64(originalIdx))
 		}
+		slog.Info(
+			"scheduler: reordered host",
+			"name", stepName, "host", hostsOut[idx],
+			"originalIdx", originalIdx, "newIdx", idx,
+		)
 	}
 
 	return outWeights, nil

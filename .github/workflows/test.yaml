@@ -18,7 +18,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24.2
+          go-version: 1.24.3
       - name: Test quickly without Docker
         run: go test -v ./...
 
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       dind:
-        image: docker:23.0-rc-dind-rootless
+        image: docker:rc-dind-rootless
         ports:
           - 2375:2375
     steps:
@@ -37,11 +37,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24.2
+          go-version: 1.24.3
       - name: Run tests with Docker and calculate coverage
         run: |
+          export GITHUB_ACTIONS=1
           export POSTGRES_CONTAINER=1
-          export VERNEMQ_CONTAINER=1
+          export RABBITMQ_CONTAINER=1
           go test -v \
             -coverpkg=./internal/... \
             -coverprofile=pr_profile.cov ./internal/...

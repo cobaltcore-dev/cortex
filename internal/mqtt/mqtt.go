@@ -38,6 +38,11 @@ func NewClientWithConfig(conf conf.MQTTConfig) Client {
 	return &client{conf: conf, lock: &sync.Mutex{}}
 }
 
+// Called when the connection to the mqtt broker is lost.
+func (t *client) onUnexpectedConnectionLoss(client mqtt.Client, err error) {
+	panic(err)
+}
+
 // Connect to the mqtt broker.
 func (t *client) Connect() error {
 	if t.client != nil {
@@ -48,23 +53,15 @@ func (t *client) Connect() error {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(t.conf.URL)
 	opts.SetConnectTimeout(10 * time.Second)
-	opts.SetConnectRetry(true)
-	opts.SetConnectRetryInterval(5 * time.Second)
+	opts.SetConnectRetry(false)
 	opts.SetKeepAlive(60 * time.Second)
 	opts.SetPingTimeout(10 * time.Second)
-	opts.SetOnConnectHandler(func(client mqtt.Client) {
-		slog.Info("connected to mqtt broker")
-	})
-	opts.SetAutoReconnect(true)
-	opts.SetResumeSubs(true)
-	opts.SetCleanSession(false)
-	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
-		slog.Error("mqtt connection lost", "err", err)
-	})
+	opts.SetCleanSession(true)
+	opts.SetConnectionLostHandler(t.onUnexpectedConnectionLoss)
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
-	opts.SetClientID(fmt.Sprintf("cortex-scheduler-%d", rand.Intn(1_000_000)))
+	opts.SetClientID(fmt.Sprintf("cortex-%d", rand.Intn(1_000_000)))
 	opts.SetOrderMatters(false)
-	opts.SetProtocolVersion(4)
+	opts.SetProtocolVersion(5)
 	opts.SetDefaultPublishHandler(func(client mqtt.Client, msg mqtt.Message) {
 		slog.Warn("received unexpected message on topic", "topic", msg.Topic())
 	})
@@ -139,7 +136,12 @@ func (t *client) Disconnect() {
 		return
 	}
 	client := *t.client
-	client.Disconnect(1000)
 	t.client = nil
+	// Note: the disconnect will run in a goroutine.
+	client.Disconnect(1000)
+	// Wait for the disconnect to finish.
+	for client.IsConnected() {
+		time.Sleep(100 * time.Millisecond)
+	}
 	slog.Info("disconnected from mqtt broker")
 }

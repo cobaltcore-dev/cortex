@@ -67,6 +67,9 @@ Add an message broker into the architecture and connect the syncer + feature ext
 
 E.g., VerneMQT (MQTT) is a message broker that could be used.
 
+> [!NOTE]  
+> We use RabbitMQ now.
+
 Cons:
 - Need to add mqtt broker and maintain that (operational overhead)
 

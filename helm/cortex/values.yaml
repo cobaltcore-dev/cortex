@@ -1,11 +1,41 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
+owner-info:
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex"
+  maintainers:
+    - "p.matthes@sap.com"
+  support-group: "cobaltcore-dev"
+  enabled: true
+
 image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-f03d0a0"
+  tag: "sha-1e1e93f"
+
+rabbitmq:
+  # Disable the network policy which otherwise
+  # blocks traffic on port 1883.
+  networkPolicy:
+    enabled: false
+  # The username and password to use for the mqtt connection.
+  auth:
+    username: cortex
+    password: cortex
+  plugins: "rabbitmq_mqtt rabbitmq_management rabbitmq_peer_discovery_k8s"
+  # Name under which the rabbitmq resources should be spawned.
+  fullnameOverride: "cortex-mqtt"
+  extraConfiguration: |-
+    mqtt.listeners.tcp.default = 1883
+  extraContainerPorts:
+    - name: mqtt
+      containerPort: 1883
+  service:
+    extraPorts:
+      - name: mqtt
+        port: 1883
+        targetPort: 1883
 
 imagePullSecrets: []
 nameOverride: ""
@@ -58,29 +88,6 @@ tolerations: []
 
 affinity: {}
 
-owner-info:
-  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex"
-  maintainers:
-    - "p.matthes@sap.com"
-  support-group: "cobaltcore-dev"
-  enabled: true
-
-vernemq:
-  image:
-    repository: ghcr.io/cobaltcore-dev/cortex-vernemq
-    tag: "sha-f03d0a0"
-  # The username and password to use for the mqtt connection.
-  username: cortex
-  password: cortex
-  # Name under which the vernemq resources should be spawned.
-  fullnameOverride: "cortex-mqtt"
-  # Pass a basic configuration through a configmap that is spawned
-  # together with the vernemq instance.
-  envFrom:
-    - configMapRef:
-        name: "cortex-mqtt"
-  replicaCount: 1
-
 # Modes in which the service should be run.
 # Each mode is translated into a separate service and deployment.
 modes:
@@ -97,7 +104,7 @@ modes:
   # Scheduler exposes the scheduler API and modifies the Nova scheduler weights.
   - name: scheduler
     args: ["scheduler"]
-    replicas: 2
+    replicas: 1
 
   # Service that extracts and exposes KPIs.
   - name: kpis
@@ -135,7 +142,7 @@ conf:
 
   # Configure here if we should connect to an mqtt broker.
   mqtt:
-    # Must match vernemq.fullnameOverride, vernemq.username and vernemq.password.
+    # Must match rabbitmq settings from above.
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
     password: "cortex"
