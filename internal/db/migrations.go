@@ -34,6 +34,16 @@ func (Migration) TableName() string {
 	return "migrations"
 }
 
+// Indexes for the migration model.
+func (Migration) Indexes() []Index {
+	return []Index{
+		{
+			Name:        "idx_migrations_file_name",
+			ColumnNames: []string{"file_name"},
+		},
+	}
+}
+
 // Create a new migrater with files embedded in the binary.
 func NewMigrater(db DB) Migrater {
 	// Read the embedded migration files.

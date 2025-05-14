@@ -3,7 +3,10 @@
 
 package openstack
 
-import "github.com/cobaltcore-dev/cortex/internal/conf"
+import (
+	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
+)
 
 // Type alias for the OpenStack placement configuration.
 type PlacementConf = conf.SyncOpenStackPlacementConfig
@@ -21,6 +24,9 @@ type ResourceProvider struct {
 // Table in which the openstack model is stored.
 func (r ResourceProvider) TableName() string { return "openstack_resource_providers" }
 
+// Indexes for the resource provider table.
+func (r ResourceProvider) Indexes() []db.Index { return nil }
+
 // Resource provider trait model from the OpenStack placement API.
 type Trait struct {
 	ResourceProviderUUID       string `db:"resource_provider_uuid,primarykey"`
@@ -30,3 +36,6 @@ type Trait struct {
 
 // Table in which the openstack trait model is stored.
 func (r Trait) TableName() string { return "openstack_resource_provider_traits" }
+
+// Indexes for the resource provider trait table.
+func (r Trait) Indexes() []db.Index { return nil }

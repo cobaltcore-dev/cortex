@@ -6,6 +6,7 @@ package vmware
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
@@ -20,6 +21,11 @@ type VROpsHostsystemContention struct {
 // Table under which the feature is stored.
 func (VROpsHostsystemContention) TableName() string {
 	return "feature_vrops_hostsystem_contention"
+}
+
+// Indexes for the feature.
+func (VROpsHostsystemContention) Indexes() []db.Index {
+	return nil
 }
 
 // Extractor that extracts CPU contention of vROps hostsystems and stores

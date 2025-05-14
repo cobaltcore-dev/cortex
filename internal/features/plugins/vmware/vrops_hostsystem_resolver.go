@@ -6,6 +6,7 @@ package vmware
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
@@ -21,6 +22,11 @@ type ResolvedVROpsHostsystem struct {
 // Table under which the feature is stored.
 func (ResolvedVROpsHostsystem) TableName() string {
 	return "feature_vrops_resolved_hostsystem"
+}
+
+// Indexes for the feature.
+func (ResolvedVROpsHostsystem) Indexes() []db.Index {
+	return nil
 }
 
 // Extractor that resolves the vROps metrics hostsystem label to the

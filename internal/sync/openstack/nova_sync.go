@@ -29,6 +29,11 @@ func (novaSync) TableName() string {
 	return "nova_sync"
 }
 
+// Indexes for the nova sync table.
+func (novaSync) Indexes() []db.Index {
+	return nil
+}
+
 // Syncer for OpenStack nova.
 type novaSyncer struct {
 	// Database to store the nova objects in.
