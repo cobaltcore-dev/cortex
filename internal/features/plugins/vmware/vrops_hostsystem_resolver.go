@@ -26,7 +26,12 @@ func (ResolvedVROpsHostsystem) TableName() string {
 
 // Indexes for the feature.
 func (ResolvedVROpsHostsystem) Indexes() []db.Index {
-	return nil
+	return []db.Index{
+		{
+			Name:        "idx_vrops_resolved_hostsystem",
+			ColumnNames: []string{"vrops_hostsystem"},
+		},
+	}
 }
 
 // Extractor that resolves the vROps metrics hostsystem label to the

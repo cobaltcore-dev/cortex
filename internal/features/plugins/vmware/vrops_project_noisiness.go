@@ -27,7 +27,12 @@ func (VROpsProjectNoisiness) TableName() string {
 
 // Indexes for the feature.
 func (VROpsProjectNoisiness) Indexes() []db.Index {
-	return nil
+	return []db.Index{
+		{
+			Name:        "idx_vrops_project_noisiness_project",
+			ColumnNames: []string{"project"},
+		},
+	}
 }
 
 // Extractor that extracts the noisiness of projects and on which compute
