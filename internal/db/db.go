@@ -121,6 +121,7 @@ func (d *DB) AddTable(t Table) *gorp.TableMap {
 	slog.Info("adding table", "table", t.TableName(), "model", t)
 	tablemap := d.AddTableWithName(t, t.TableName())
 	for _, index := range t.Indexes() {
+		slog.Info("adding index", "index", index.Name, "table", t.TableName(), "columns", index.ColumnNames)
 		tablemap.AddIndex(index.Name, "Btree", index.ColumnNames)
 	}
 	return tablemap
