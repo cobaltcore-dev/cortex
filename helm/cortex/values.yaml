@@ -241,8 +241,6 @@ conf:
           # Needs resource_providers.
           # - traits
 
-  bla: blub
-
   features:
     # Configuration of features that should be extracted from the synced data.
     # Each extractor can specify its own dependencies on other extractors or
