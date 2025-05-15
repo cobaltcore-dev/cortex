@@ -6,6 +6,7 @@ package shared
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 )
@@ -25,6 +26,11 @@ type VMLifeSpan struct {
 // Table under which the feature is stored.
 func (VMLifeSpan) TableName() string {
 	return "feature_vm_life_span"
+}
+
+// Indexes for the feature.
+func (VMLifeSpan) Indexes() []db.Index {
+	return nil
 }
 
 // Extractor that extracts the time elapsed until the vm was deleted.

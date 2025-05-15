@@ -6,6 +6,7 @@ package kvm
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
@@ -20,6 +21,11 @@ type NodeExporterHostMemoryActive struct {
 // Table under which the feature is stored.
 func (NodeExporterHostMemoryActive) TableName() string {
 	return "feature_host_memory_active"
+}
+
+// Indexes for the feature.
+func (NodeExporterHostMemoryActive) Indexes() []db.Index {
+	return nil
 }
 
 // Extractor that extracts how much memory of kvm hosts is active and stores

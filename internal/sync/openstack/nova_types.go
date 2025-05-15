@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 // Type alias for the OpenStack nova configuration.
@@ -89,6 +90,9 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 
 // Table in which the openstack model is stored.
 func (Server) TableName() string { return "openstack_servers" }
+
+// Index for the openstack model.
+func (Server) Indexes() []db.Index { return nil }
 
 // OpenStack hypervisor model as returned by the Nova API under /os-hypervisors/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
@@ -176,6 +180,9 @@ func (h *Hypervisor) MarshalJSON() ([]byte, error) {
 // Table in which the openstack model is stored.
 func (Hypervisor) TableName() string { return "openstack_hypervisors" }
 
+// Index for the openstack model.
+func (Hypervisor) Indexes() []db.Index { return nil }
+
 // OpenStack flavor model as returned by the Nova API under /flavors/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-flavors
 type Flavor struct {
@@ -192,6 +199,9 @@ type Flavor struct {
 
 // Table in which the openstack model is stored.
 func (Flavor) TableName() string { return "openstack_flavors" }
+
+// Index for the openstack model.
+func (Flavor) Indexes() []db.Index { return nil }
 
 // OpenStack migration model as returned by the Nova API under /os-migrations.
 // See: https://docs.openstack.org/api-ref/compute/#list-migrations
@@ -216,3 +226,6 @@ type Migration struct {
 
 // Table in which the openstack model is stored.
 func (Migration) TableName() string { return "openstack_migrations" }
+
+// Index for the openstack model.
+func (Migration) Indexes() []db.Index { return nil }

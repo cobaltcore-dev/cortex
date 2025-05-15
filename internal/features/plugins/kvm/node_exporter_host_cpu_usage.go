@@ -6,6 +6,7 @@ package kvm
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
@@ -20,6 +21,11 @@ type NodeExporterHostCPUUsage struct {
 // Table under which the feature is stored.
 func (NodeExporterHostCPUUsage) TableName() string {
 	return "feature_host_cpu_usage"
+}
+
+// Indexes for the feature.
+func (NodeExporterHostCPUUsage) Indexes() []db.Index {
+	return nil
 }
 
 // Extractor that extracts CPU usage of kvm hosts and stores

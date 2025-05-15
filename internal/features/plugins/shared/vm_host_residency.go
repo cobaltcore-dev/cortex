@@ -6,6 +6,7 @@ package shared
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 )
@@ -44,6 +45,11 @@ type VMHostResidency struct {
 // Table under which the feature is stored.
 func (VMHostResidency) TableName() string {
 	return "feature_vm_host_residency"
+}
+
+// Indexes for the feature.
+func (VMHostResidency) Indexes() []db.Index {
+	return nil
 }
 
 // Extractor that extracts the time elapsed until the first migration of a virtual machine.
