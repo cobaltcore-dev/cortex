@@ -49,7 +49,8 @@ func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry) DB {
 	if err != nil {
 		panic(err)
 	}
-	slog.Info("connecting to database", "dbURL", dbURL.String())
+	// Strip the password from the URL for logging.
+	slog.Info("connecting to database", "url", strings.ReplaceAll(dbURL.String(), strip(c.Password), "****"))
 	db, err := sql.Open("postgres", dbURL.String())
 	if err != nil {
 		panic(err)
