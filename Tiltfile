@@ -72,6 +72,7 @@ local_resource(
     trigger_mode=TRIGGER_MODE_MANUAL,
     auto_init=False,
 )
+k8s_resource('cortex-migrations', labels=['Commands'])
 
 ########### Postgres DB for Cortex Core Service
 k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))
