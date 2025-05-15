@@ -43,6 +43,14 @@ rabbitmq:
         port: 15675
         targetPort: 15675
 
+migrationsJob:
+  # Additional annotations for the created database migrations job.
+  podAnnotations:
+    # If you use linkerd, this will disable injection for the migrations job.
+    # Otherwise, the linkerd-proxy container will hang around forever and
+    # block the job from completing.
+    "linkerd.io/inject": disabled
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
