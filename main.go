@@ -81,6 +81,19 @@ func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, con
 	}
 }
 
+// Message printed if cortex is started with unknown arguments.
+const usage = `
+  commands:
+  -checks  Run end-to-end tests.
+  -migrate Run database migrations.
+
+  modes:
+  -syncer    Sync data from external datasources into the database.
+  -extractor Extract knowledge from the synced data and store it in the database.
+  -scheduler Serve scheduling requests with a http API.
+  -kpis      Expose KPIs extracted from the database.
+`
+
 func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
@@ -124,27 +137,30 @@ func main() {
 		taskName = os.Args[1]
 		bininfo.SetTaskName(taskName)
 	} else {
-		panic(fmt.Sprintf("usage: %s [checks | syncer | extractor | scheduler | kpis]", os.Args[0]))
+		slog.Error("invalid arguments", "args", os.Args)
+		panic(usage)
 	}
 
-	// If we're running one-off tasks (commands), don't setup the monitoring server.
-	//nolint:gocritic // We may add more tasks in the future.
+	// Set up the monitoring registry and database connection.
+	monitoringConfig := config.GetMonitoringConfig()
+	registry := monitoring.NewRegistry(monitoringConfig)
+	database := db.NewPostgresDB(config.GetDBConfig(), registry)
+	defer database.Close()
+
+	// Check if we want to perform one-time tasks like checks or migrations.
 	switch taskName {
 	case "checks":
 		checks.RunChecks(ctx, config)
 		return
+	case "migrate":
+		migrater := db.NewMigrater(database)
+		migrater.Migrate(true)
+		slog.Info("migrations executed")
+		return
 	}
 
-	monitoringConfig := config.GetMonitoringConfig()
-	registry := monitoring.NewRegistry(monitoringConfig)
-	go runMonitoringServer(ctx, registry, monitoringConfig)
-
-	database := db.NewPostgresDB(config.GetDBConfig(), registry)
-	defer database.Close()
 	go database.CheckLivenessPeriodically()
-
-	migrater := db.NewMigrater(database)
-	migrater.Migrate(true)
+	go runMonitoringServer(ctx, registry, monitoringConfig)
 
 	// Run an api server that serves some basic endpoints and can be extended.
 	mux := http.NewServeMux()
