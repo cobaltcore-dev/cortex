@@ -14,35 +14,6 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: "sha-3508e95"
 
-rabbitmq:
-  # Disable the network policy which otherwise
-  # blocks traffic on port 1883 (tcp mqtt) + 15675 (websocket).
-  networkPolicy:
-    enabled: false
-  # The username and password to use for the mqtt connection.
-  auth:
-    username: cortex
-    password: cortex
-    erlangCookie: "cortex"
-  plugins: "rabbitmq_mqtt rabbitmq_web_mqtt rabbitmq_management rabbitmq_peer_discovery_k8s"
-  # Name under which the rabbitmq resources should be spawned.
-  fullnameOverride: "cortex-mqtt"
-  extraConfiguration: |-
-    mqtt.listeners.tcp.default = 1883
-  extraContainerPorts:
-    - name: mqtt
-      containerPort: 1883
-    - name: websocket
-      containerPort: 15675
-  service:
-    extraPorts:
-      - name: mqtt
-        port: 1883
-        targetPort: 1883
-      - name: websocket
-        port: 15675
-        targetPort: 15675
-
 migrationsJob:
   # Additional annotations for the created database migrations job.
   podAnnotations:
@@ -51,29 +22,13 @@ migrationsJob:
     # block the job from completing.
     "linkerd.io/inject": disabled
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-
-podAnnotations: {}
-podLabels: {}
-
-podSecurityContext: {}
-  # fsGroup: 2000
-
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
+# Resources granted to the cortex services.
 resources:
   limits:
     cpu: 250m
     memory: 1024Mi
 
+# Liveness and readiness probes for the cortex services.
 livenessProbe:
   httpGet:
     path: /up
@@ -82,25 +37,6 @@ readinessProbe:
   httpGet:
     path: /up
     port: api
-
-# Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
 
 # Modes in which the service should be run.
 # Each mode is translated into a separate service and deployment.
@@ -475,3 +411,18 @@ conf:
           features:
             extractors:
               - flavor_host_space_extractor
+
+# Generic modifiers added on the initial creation of this helm chart.
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+securityContext: {}
+volumes: []
+volumeMounts: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
