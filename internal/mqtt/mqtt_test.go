@@ -84,10 +84,12 @@ func TestUnexpectedConnectionLoss(t *testing.T) {
 	container.Init(t)
 
 	conf := conf.MQTTConfig{
-		URL:                         "tcp://localhost:" + container.GetPort(),
-		ConnectionLostTimeoutDelay:  10,
-		ConnectionLostMaxRetries:    10,
-		ConnectionLostRetryInterval: 2,
+		URL: "tcp://localhost:" + container.GetPort(),
+		Reconnect: conf.MQTTReconnectConfig{
+			InitialDelay:  10,
+			MaxRetries:    10,
+			RetryInterval: 2,
+		},
 	}
 	c := client{conf: conf, lock: &sync.Mutex{}, subscriptions: make(map[string]mqtt.MessageHandler)}
 	// no need to defer the container close here, as it will be closed in the test below

@@ -45,20 +45,20 @@ func NewClientWithConfig(conf conf.MQTTConfig) Client {
 func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
 	slog.Error("connection to mqtt broker lost", "err", err)
 
-	slog.Info("attempting to reconnect to mqtt broker", "url", t.conf.URL, "delay", t.conf.ConnectionLostTimeoutDelay, "maxRetries", t.conf.ConnectionLostMaxRetries, "retryInterval", t.conf.ConnectionLostRetryInterval)
+	slog.Info("attempting to reconnect to mqtt broker", "url", t.conf.URL, "delay", t.conf.Reconnect.InitialDelay, "maxRetries", t.conf.Reconnect.MaxRetries, "retryInterval", t.conf.Reconnect.RetryInterval)
 
-	delay := time.Duration(t.conf.ConnectionLostTimeoutDelay) * time.Second
+	delay := time.Duration(t.conf.Reconnect.InitialDelay) * time.Second
 	time.Sleep(jobloop.DefaultJitter(delay))
 
 	t.client = nil
 
-	for retry := range t.conf.ConnectionLostMaxRetries {
+	for retry := range t.conf.Reconnect.MaxRetries {
 		slog.Info("attempting to reconnect to mqtt broker", "attempt", retry+1, "url", t.conf.URL)
 
 		if err := t.Connect(); err != nil {
 			slog.Error("failed to reconnect to mqtt broker", "err", err)
-			if retry < t.conf.ConnectionLostMaxRetries-1 {
-				time.Sleep(time.Duration(t.conf.ConnectionLostRetryInterval) * time.Second)
+			if retry < t.conf.Reconnect.MaxRetries-1 {
+				time.Sleep(time.Duration(t.conf.Reconnect.RetryInterval) * time.Second)
 			}
 			t.client = nil
 			continue
@@ -71,7 +71,7 @@ func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
 		return
 	}
 
-	slog.Error("failed to reconnect to mqtt broker after max retries", "maxRetries", t.conf.ConnectionLostMaxRetries)
+	slog.Error("failed to reconnect to mqtt broker after max retries", "maxRetries", t.conf.Reconnect.MaxRetries)
 	panic(err)
 }
 

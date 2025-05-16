@@ -194,22 +194,25 @@ type MonitoringConfig struct {
 	Port int `json:"port"`
 }
 
+type MQTTReconnectConfig struct {
+	// The initial delay before the first reconnection attempt on connection loss.
+	InitialDelay int `json:"initialDelay"`
+
+	// The interval between reconnection attempts on connection loss.
+	RetryInterval int `json:"retryInterval"`
+
+	// The maximum number of reconnection attempts on connection loss before panic.
+	MaxRetries int `json:"maxRetries"`
+}
+
 // Configuration for the mqtt client.
 type MQTTConfig struct {
 	// The URL of the MQTT broker to use for mqtt.
 	URL string `json:"url"`
 	// Credentials for the MQTT broker.
-	Username string `json:"username"`
-	Password string `json:"password"`
-
-	// The initial delay before the first reconnection attempt on connection loss.
-	ConnectionLostTimeoutDelay int `json:"connectionLostTimeoutDelay"`
-
-	// The interval between reconnection attempts on connection loss.
-	ConnectionLostRetryInterval int `json:"connectionLostRetryInterval"`
-
-	// The maximum number of reconnection attempts on connection loss before panic.
-	ConnectionLostMaxRetries int `json:"connectionLostMaxRetries"`
+	Username  string              `json:"username"`
+	Password  string              `json:"password"`
+	Reconnect MQTTReconnectConfig `json:"reconnect"`
 }
 
 // Configuration for the api port.

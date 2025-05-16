@@ -90,7 +90,7 @@ func (d *DB) CheckLivenessPeriodically() {
 				panic(err)
 			}
 			slog.Error("failed to ping database", "error", err)
-			time.Sleep(jobloop.DefaultJitter(1 * time.Second))
+			time.Sleep(jobloop.DefaultJitter(10 * time.Second))
 			failures++
 			continue
 		}
