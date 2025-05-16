@@ -92,7 +92,7 @@ conf:
 
   # Configure here if we should connect to an mqtt broker.
   mqtt:
-    # Must match rabbitmq settings from above.
+    # Must match rabbitmq settings from the cortex-mqtt chart.
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
     password: "cortex"
