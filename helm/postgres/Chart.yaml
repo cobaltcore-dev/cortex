@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v2
-description: Postgres setup for Cortex.
 name: cortex-postgres
+description: Postgres setup for Cortex.
+type: application
 version: 0.1.0
 dependencies:
   - name: postgresql
