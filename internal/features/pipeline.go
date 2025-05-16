@@ -58,12 +58,12 @@ type FeatureExtractorPipeline struct {
 }
 
 // Create a new feature extractor pipeline with extractors contained in the configuration.
-func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor) FeatureExtractorPipeline {
+func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor, mqttClient mqtt.Client) FeatureExtractorPipeline {
 	return FeatureExtractorPipeline{
 		db:         database,
 		config:     config,
 		monitor:    m,
-		mqttClient: mqtt.NewClient(),
+		mqttClient: mqttClient,
 	}
 }
 

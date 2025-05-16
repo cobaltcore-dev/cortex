@@ -34,6 +34,10 @@ import (
 func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
 	monitor := sync.NewSyncMonitor(registry)
 	mqttClient := mqtt.NewClient()
+	if err := mqttClient.Connect(); err != nil {
+		panic("failed to connect to mqtt broker: " + err.Error())
+	}
+	defer mqttClient.Disconnect()
 	syncers := []sync.Datasource{
 		prometheus.NewCombinedSyncer(prometheus.SupportedSyncers, config.Prometheus, db, monitor, mqttClient),
 		openstack.NewCombinedSyncer(ctx, config.OpenStack, monitor, db, mqttClient),
@@ -46,7 +50,14 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 // Periodically extract features from the database.
 func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
 	monitor := features.NewPipelineMonitor(registry)
-	pipeline := features.NewPipeline(config, db, monitor)
+
+	mqttClient := mqtt.NewClient()
+	if err := mqttClient.Connect(); err != nil {
+		panic("failed to connect to mqtt broker: " + err.Error())
+	}
+	defer mqttClient.Disconnect()
+
+	pipeline := features.NewPipeline(config, db, monitor, mqttClient)
 	// Selects the extractors to run based on the config.
 	pipeline.Init(features.SupportedExtractors)
 	go pipeline.ExtractOnTrigger() // blocking
@@ -56,6 +67,10 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 func runScheduler(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	monitor := scheduler.NewSchedulerMonitor(registry)
 	mqttClient := mqtt.NewClient()
+	if err := mqttClient.Connect(); err != nil {
+		panic("failed to connect to mqtt broker: " + err.Error())
+	}
+	defer mqttClient.Disconnect()
 	schedulerPipeline := scheduler.NewPipeline(scheduler.SupportedSteps, config, db, monitor, mqttClient)
 	apiMonitor := apihttp.NewSchedulerMonitor(registry)
 	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
