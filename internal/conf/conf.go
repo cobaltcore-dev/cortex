@@ -201,6 +201,15 @@ type MQTTConfig struct {
 	// Credentials for the MQTT broker.
 	Username string `json:"username"`
 	Password string `json:"password"`
+
+	// The initial delay before the first reconnection attempt on connection loss.
+	ConnectionLostTimeoutDelay int `json:"connectionLostTimeoutDelay"`
+
+	// The interval between reconnection attempts on connection loss.
+	ConnectionLostRetryInterval int `json:"connectionLostRetryInterval"`
+
+	// The maximum number of reconnection attempts on connection loss before panic.
+	ConnectionLostMaxRetries int `json:"connectionLostMaxRetries"`
 }
 
 // Configuration for the api port.

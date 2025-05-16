@@ -152,6 +152,9 @@ conf:
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
     password: "cortex"
+    connectionLostTimeoutDelay: 20
+    connectionLostRetryInterval: 10
+    connectionLostMaxRetries: 10
 
   # The port to use for the api serve mux.
   api:

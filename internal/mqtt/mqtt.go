@@ -13,6 +13,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/sapcc/go-bits/jobloop"
 )
 
 type Client interface {
@@ -28,6 +29,8 @@ type client struct {
 	client *mqtt.Client
 	// Lock to prevent concurrent writes to the MQTT client.
 	lock *sync.Mutex
+
+	subscriptions map[string]mqtt.MessageHandler
 }
 
 func NewClient() Client {
@@ -35,11 +38,40 @@ func NewClient() Client {
 }
 
 func NewClientWithConfig(conf conf.MQTTConfig) Client {
-	return &client{conf: conf, lock: &sync.Mutex{}}
+	return &client{conf: conf, lock: &sync.Mutex{}, subscriptions: make(map[string]mqtt.MessageHandler)}
 }
 
 // Called when the connection to the mqtt broker is lost.
-func (t *client) onUnexpectedConnectionLoss(client mqtt.Client, err error) {
+func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
+	slog.Error("connection to mqtt broker lost", "err", err)
+
+	slog.Info("attempting to reconnect to mqtt broker", "url", t.conf.URL, "delay", t.conf.ConnectionLostTimeoutDelay, "maxRetries", t.conf.ConnectionLostMaxRetries, "retryInterval", t.conf.ConnectionLostRetryInterval)
+
+	delay := time.Duration(t.conf.ConnectionLostTimeoutDelay) * time.Second
+	time.Sleep(jobloop.DefaultJitter(delay))
+
+	t.client = nil
+
+	for retry := range t.conf.ConnectionLostMaxRetries {
+		slog.Info("attempting to reconnect to mqtt broker", "attempt", retry+1, "url", t.conf.URL)
+
+		if err := t.Connect(); err != nil {
+			slog.Error("failed to reconnect to mqtt broker", "err", err)
+			if retry < t.conf.ConnectionLostMaxRetries-1 {
+				time.Sleep(time.Duration(t.conf.ConnectionLostRetryInterval) * time.Second)
+			}
+			t.client = nil
+			continue
+		}
+		slog.Info("reconnected to mqtt broker")
+		if err := t.resubscribeAllTopics(); err != nil {
+			slog.Error("failed to resubscribe to all topics", "err", err)
+			panic(err)
+		}
+		return
+	}
+
+	slog.Error("failed to reconnect to mqtt broker after max retries", "maxRetries", t.conf.ConnectionLostMaxRetries)
 	panic(err)
 }
 
@@ -56,6 +88,10 @@ func (t *client) Connect() error {
 	opts.SetConnectRetry(false)
 	opts.SetKeepAlive(60 * time.Second)
 	opts.SetPingTimeout(10 * time.Second)
+
+	// Changing this value to false might lead to unexpected behavior because
+	// in the onUnexpectedConnectionLoss method the client manually resubscribes
+	// to all the topics, when the client reconnects.
 	opts.SetCleanSession(true)
 	opts.SetConnectionLostHandler(t.onUnexpectedConnectionLoss)
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
@@ -70,7 +106,7 @@ func (t *client) Connect() error {
 
 	client := mqtt.NewClient(opts)
 	if conn := client.Connect(); conn.Wait() && conn.Error() != nil {
-		panic(conn.Error())
+		return conn.Error()
 	}
 	t.client = &client
 	slog.Info("connected to mqtt broker")
@@ -110,6 +146,18 @@ func (t *client) publish(topic string, obj any) error {
 	return nil
 }
 
+// Resubscribe to all topics after a reconnect.
+func (t *client) resubscribeAllTopics() error {
+	for topic, handler := range t.subscriptions {
+		if err := t.Subscribe(topic, handler); err != nil {
+			slog.Error("failed to resubscribe to topic", "topic", topic, "err", err)
+			return err
+		}
+		slog.Info("resubscribed to topic", "topic", topic)
+	}
+	return nil
+}
+
 // Subscribe to a topic on the mqtt broker.
 func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
 	t.lock.Lock()
@@ -127,6 +175,11 @@ func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
 		return token.Error()
 	}
 	slog.Info("subscribed to topic", "topic", topic)
+
+	if t.subscriptions == nil {
+		t.subscriptions = make(map[string]mqtt.MessageHandler)
+	}
+	t.subscriptions[topic] = callback
 	return nil
 }
 
