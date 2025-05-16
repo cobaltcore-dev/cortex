@@ -63,7 +63,8 @@ func TestSubscribe(t *testing.T) {
 	container.Init(t)
 	defer container.Close()
 	conf := conf.MQTTConfig{URL: "tcp://localhost:" + container.GetPort()}
-	c := client{conf: conf, lock: &sync.Mutex{}}
+	subscriptions := make(map[string]mqtt.MessageHandler)
+	c := client{conf: conf, lock: &sync.Mutex{}, subscriptions: subscriptions}
 
 	err := c.Subscribe("test/topic", func(client mqtt.Client, msg mqtt.Message) {})
 	if err != nil {
@@ -91,7 +92,8 @@ func TestUnexpectedConnectionLoss(t *testing.T) {
 			RetryInterval: 2,
 		},
 	}
-	c := client{conf: conf, lock: &sync.Mutex{}, subscriptions: make(map[string]mqtt.MessageHandler)}
+	subscriptions := make(map[string]mqtt.MessageHandler)
+	c := client{conf: conf, lock: &sync.Mutex{}, subscriptions: subscriptions}
 	// no need to defer the container close here, as it will be closed in the test below
 
 	reconnected := make(chan string)

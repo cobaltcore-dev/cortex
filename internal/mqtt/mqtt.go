@@ -44,8 +44,9 @@ func NewClientWithConfig(conf conf.MQTTConfig) Client {
 // Called when the connection to the mqtt broker is lost.
 func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
 	slog.Error("connection to mqtt broker lost", "err", err)
+	t.Disconnect()
 
-	slog.Info("attempting to reconnect to mqtt broker", "url", t.conf.URL, "delay", t.conf.Reconnect.InitialDelay, "maxRetries", t.conf.Reconnect.MaxRetries, "retryInterval", t.conf.Reconnect.RetryInterval)
+	slog.Info("attempting to reconnect to mqtt broker", "conf", t.conf)
 
 	delay := time.Duration(t.conf.Reconnect.InitialDelay) * time.Second
 	time.Sleep(jobloop.DefaultJitter(delay))
@@ -58,7 +59,8 @@ func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
 		if err := t.Connect(); err != nil {
 			slog.Error("failed to reconnect to mqtt broker", "err", err)
 			if retry < t.conf.Reconnect.MaxRetries-1 {
-				time.Sleep(time.Duration(t.conf.Reconnect.RetryInterval) * time.Second)
+				interval := time.Duration(t.conf.Reconnect.RetryInterval) * time.Second
+				time.Sleep(jobloop.DefaultJitter(interval))
 			}
 			t.client = nil
 			continue
@@ -176,9 +178,6 @@ func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
 	}
 	slog.Info("subscribed to topic", "topic", topic)
 
-	if t.subscriptions == nil {
-		t.subscriptions = make(map[string]mqtt.MessageHandler)
-	}
 	t.subscriptions[topic] = callback
 	return nil
 }
