@@ -26,8 +26,9 @@ helm_repo(
 
 # Build the helm charts
 local('test -f ./helm/cortex/Chart.lock || helm dep up ./helm/cortex')
+local('test -f ./helm/mqtt/Chart.lock || helm dep up ./helm/mqtt')
 local('test -f ./helm/prometheus/Chart.lock || helm dep up ./helm/prometheus')
-local('test -f ./helm/prometheus-deps/Chart.lock || helm dep up ./helm/prometheus-deps')
+local('test -f ./helm/prometheus-operator/Chart.lock || helm dep up ./helm/prometheus-operator')
 local('test -f ./helm/postgres/Chart.lock || helm dep up ./helm/postgres')
 
 ########### Cortex Core Services
@@ -57,10 +58,6 @@ k8s_resource('cortex-kpis', port_forwards=[
 ], links=[
     link('localhost:8004/metrics', '/metrics'),
 ], labels=['Core-Services'])
-k8s_resource('cortex-mqtt', port_forwards=[
-    port_forward(1883, 1883), # Direct TCP connection
-    port_forward(8005, 15675), # Websocket connection
-], labels=['Core-Services'])
 
 ########### Cortex Commands
 k8s_resource('cortex-cli', labels=['Commands'])
@@ -74,6 +71,13 @@ local_resource(
 )
 k8s_resource('cortex-migrations', labels=['Commands'])
 
+########### RabbitMQ MQTT for Cortex Core Service
+k8s_yaml(helm('./helm/mqtt', name='cortex-mqtt'))
+k8s_resource('cortex-mqtt', port_forwards=[
+    port_forward(1883, 1883), # Direct TCP connection
+    port_forward(8005, 15675), # Websocket connection
+], labels=['Core-Services'])
+
 ########### Postgres DB for Cortex Core Service
 k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))
 k8s_resource('cortex-postgresql', port_forwards=[
@@ -81,7 +85,7 @@ k8s_resource('cortex-postgresql', port_forwards=[
 ], labels=['Core-Services'])
 
 ########### Monitoring
-k8s_yaml(helm('./helm/prometheus-deps', name='cortex-prometheus-deps')) # Operator
+k8s_yaml(helm('./helm/prometheus-operator', name='cortex-prometheus-operator')) # Operator
 k8s_yaml(helm('./helm/prometheus', name='cortex-prometheus')) # Alerts + ServiceMonitor
 k8s_resource('cortex-prometheus-operator', labels=['Monitoring'])
 k8s_resource(
