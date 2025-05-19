@@ -29,28 +29,30 @@ type client struct {
 	client *mqtt.Client
 	// Lock to prevent concurrent writes to the MQTT client.
 	lock *sync.Mutex
-
+	// monitor for mqtt related metrics
+	monitor Monitor
+	// all current subscribed topics of the client
 	subscriptions map[string]mqtt.MessageHandler
 }
 
-func NewClient() Client {
-	return NewClientWithConfig(conf.NewConfig().GetMQTTConfig())
+func NewClient(monitor Monitor) Client {
+	return NewClientWithConfig(conf.NewConfig().GetMQTTConfig(), monitor)
 }
 
-func NewClientWithConfig(conf conf.MQTTConfig) Client {
-	return &client{conf: conf, lock: &sync.Mutex{}, subscriptions: make(map[string]mqtt.MessageHandler)}
+func NewClientWithConfig(conf conf.MQTTConfig, monitor Monitor) Client {
+	return &client{
+		conf:          conf,
+		lock:          &sync.Mutex{},
+		subscriptions: make(map[string]mqtt.MessageHandler),
+		monitor:       monitor,
+	}
 }
 
 // Called when the connection to the mqtt broker is lost.
 func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
+
 	slog.Error("connection to mqtt broker lost", "err", err)
 	t.Disconnect()
-
-	slog.Info("attempting to reconnect to mqtt broker", "conf", t.conf)
-
-	delay := time.Duration(t.conf.Reconnect.InitialDelay) * time.Second
-	time.Sleep(jobloop.DefaultJitter(delay))
-
 	t.client = nil
 
 	for retry := range t.conf.Reconnect.MaxRetries {
@@ -81,6 +83,10 @@ func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
 func (t *client) Connect() error {
 	if t.client != nil {
 		return nil
+	}
+
+	if t.monitor.connectionAttempts != nil {
+		t.monitor.connectionAttempts.Inc()
 	}
 
 	slog.Info("connecting to mqtt broker at", "url", t.conf.URL)

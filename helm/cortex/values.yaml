@@ -97,9 +97,8 @@ conf:
     username: "cortex"
     password: "cortex"
     reconnect:
-      initialDelay: 20
-      maxRetries: 10
-      retryInterval: 10
+      maxRetries: 20
+      retryInterval: 1
 
   # The port to use for the api serve mux.
   api:

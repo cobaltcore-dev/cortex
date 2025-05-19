@@ -195,9 +195,6 @@ type MonitoringConfig struct {
 }
 
 type MQTTReconnectConfig struct {
-	// The initial delay before the first reconnection attempt on connection loss.
-	InitialDelay int `json:"initialDelay"`
-
 	// The interval between reconnection attempts on connection loss.
 	RetryInterval int `json:"retryInterval"`
 

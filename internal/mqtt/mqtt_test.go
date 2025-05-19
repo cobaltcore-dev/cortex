@@ -87,8 +87,7 @@ func TestUnexpectedConnectionLoss(t *testing.T) {
 	conf := conf.MQTTConfig{
 		URL: "tcp://localhost:" + container.GetPort(),
 		Reconnect: conf.MQTTReconnectConfig{
-			InitialDelay:  10,
-			MaxRetries:    10,
+			MaxRetries:    20,
 			RetryInterval: 2,
 		},
 	}

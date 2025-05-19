@@ -33,7 +33,7 @@ import (
 // Periodically fetch data from the datasources and insert it into the database.
 func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
 	monitor := sync.NewSyncMonitor(registry)
-	mqttClient := mqtt.NewClient()
+	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
@@ -51,7 +51,7 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
 	monitor := features.NewPipelineMonitor(registry)
 
-	mqttClient := mqtt.NewClient()
+	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
@@ -66,7 +66,7 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 // Run a webserver that listens for external scheduling requests.
 func runScheduler(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	monitor := scheduler.NewSchedulerMonitor(registry)
-	mqttClient := mqtt.NewClient()
+	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
@@ -159,7 +159,8 @@ func main() {
 	// Set up the monitoring registry and database connection.
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
-	database := db.NewPostgresDB(config.GetDBConfig(), registry)
+
+	database := db.NewPostgresDB(config.GetDBConfig(), registry, db.NewDBMonitor(registry))
 	defer database.Close()
 
 	// Check if we want to perform one-time tasks like checks or migrations.
