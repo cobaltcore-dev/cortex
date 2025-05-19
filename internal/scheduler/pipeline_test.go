@@ -28,11 +28,13 @@ func (m *mockPipelineStep) GetName() string {
 	return "mock_pipeline_step"
 }
 
-func (m *mockPipelineStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
+func (m *mockPipelineStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return map[string]float64{"host1": 0.0, "host2": 1.0}, nil
+	return &plugins.StepResult{
+		Activations: map[string]float64{"host1": 0.0, "host2": 1.0},
+	}, nil
 }
 
 func TestPipeline_Run(t *testing.T) {

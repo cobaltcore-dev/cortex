@@ -64,17 +64,17 @@ func (s *FlavorBinpackingStep) GetName() string {
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-	activations := s.BaseActivations(request)
+func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	result := s.BaseResult(request)
 
 	spec := request.GetSpec()
 	if spec.Data.NInstances > 1 {
-		return activations, nil
+		return result, nil
 	}
 	flavorName := spec.Data.Flavor.Data.Name
 	if len(s.Options.Flavors) > 0 && !slices.Contains(s.Options.Flavors, flavorName) {
 		// Skip this step if the flavor is not in the list of flavors to consider.
-		return activations, nil
+		return result, nil
 	}
 
 	var flavorHostSpaces []shared.FlavorHostSpace
@@ -91,7 +91,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 
 	for _, f := range flavorHostSpaces {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[f.ComputeHost]; !ok {
+		if _, ok := result.Activations[f.ComputeHost]; !ok {
 			continue
 		}
 		activationCPU := s.NoEffect()
@@ -124,7 +124,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 				s.Options.DiskFreeActivationUpperBound,
 			)
 		}
-		activations[f.ComputeHost] = activationCPU + activationRAM + activationDisk
+		result.Activations[f.ComputeHost] = activationCPU + activationRAM + activationDisk
 	}
-	return activations, nil
+	return result, nil
 }

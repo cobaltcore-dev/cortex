@@ -50,16 +50,16 @@ func validateStep[S plugins.Step](step S, disabledValidations disabledValidation
 }
 
 // Run the step and validate what happens.
-func (s *StepValidator) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-	weights, err := s.Step.Run(traceLog, request)
+func (s *StepValidator) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	result, err := s.Step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
 	}
 	// If not disabled, validate that the number of hosts stayed the same.
 	if !s.DisabledValidations.SameHostNumberInOut {
-		if len(weights) != len(request.GetHosts()) {
+		if len(result.Activations) != len(request.GetHosts()) {
 			return nil, errors.New("number of hosts changed during step execution")
 		}
 	}
-	return weights, nil
+	return result, nil
 }

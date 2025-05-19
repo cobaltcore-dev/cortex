@@ -11,12 +11,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
+	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 )
 
 func TestStepValidator_GetName(t *testing.T) {
-	mockStep := &plugins.MockStep{
+	mockStep := &testlibPlugins.MockStep{
 		Name: "mock-step",
 	}
 
@@ -30,7 +31,7 @@ func TestStepValidator_GetName(t *testing.T) {
 }
 
 func TestStepValidator_Init(t *testing.T) {
-	mockStep := &plugins.MockStep{
+	mockStep := &testlibPlugins.MockStep{
 		InitFunc: func(db db.DB, opts conf.RawOpts) error {
 			return nil
 		},
@@ -49,11 +50,13 @@ func TestStepValidator_Init(t *testing.T) {
 }
 
 func TestStepValidator_Run_ValidHosts(t *testing.T) {
-	mockStep := &plugins.MockStep{
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-			return map[string]float64{
-				"host1": 1.0,
-				"host2": 1.0,
+	mockStep := &testlibPlugins.MockStep{
+		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+			return &plugins.StepResult{
+				Activations: map[string]float64{
+					"host1": 1.0,
+					"host2": 1.0,
+				},
 			}, nil
 		},
 	}
@@ -69,7 +72,7 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(slog.Default(), &request)
+	result, err := validator.Run(slog.Default(), &request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}
@@ -79,16 +82,18 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 		"host2": 1.0,
 	}
 
-	if !reflect.DeepEqual(weights, expectedWeights) {
-		t.Errorf("Run() weights = %v, want %v", weights, expectedWeights)
+	if !reflect.DeepEqual(result.Activations, expectedWeights) {
+		t.Errorf("Run() weights = %v, want %v", result.Activations, expectedWeights)
 	}
 }
 
 func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
-	mockStep := &plugins.MockStep{
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-			return map[string]float64{
-				"host1": 1.0,
+	mockStep := &testlibPlugins.MockStep{
+		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+			return &plugins.StepResult{
+				Activations: map[string]float64{
+					"host1": 1.0,
+				},
 			}, nil
 		},
 	}
@@ -104,13 +109,13 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(slog.Default(), &request)
+	result, err := validator.Run(slog.Default(), &request)
 	if err == nil {
 		t.Errorf("Run() error = nil, want error")
 	}
 
-	if weights != nil {
-		t.Errorf("Run() weights = %v, want nil", weights)
+	if result != nil {
+		t.Errorf("Run() weights = %v, want nil", result.Activations)
 	}
 
 	expectedError := "number of hosts changed during step execution"
@@ -120,10 +125,12 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 }
 
 func TestStepValidator_Run_DisabledValidation(t *testing.T) {
-	mockStep := &plugins.MockStep{
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-			return map[string]float64{
-				"host1": 1.0,
+	mockStep := &testlibPlugins.MockStep{
+		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+			return &plugins.StepResult{
+				Activations: map[string]float64{
+					"host1": 1.0,
+				},
 			}, nil
 		},
 	}
@@ -139,7 +146,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(slog.Default(), &request)
+	result, err := validator.Run(slog.Default(), &request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}
@@ -148,13 +155,13 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 		"host1": 1.0,
 	}
 
-	if !reflect.DeepEqual(weights, expectedWeights) {
-		t.Errorf("Run() weights = %v, want %v", weights, expectedWeights)
+	if !reflect.DeepEqual(result.Activations, expectedWeights) {
+		t.Errorf("Run() weights = %v, want %v", result.Activations, expectedWeights)
 	}
 }
 
 func TestValidateStep(t *testing.T) {
-	mockStep := &plugins.MockStep{}
+	mockStep := &testlibPlugins.MockStep{}
 	disabledValidations := conf.SchedulerStepDisabledValidationsConfig{
 		SameHostNumberInOut: true,
 	}

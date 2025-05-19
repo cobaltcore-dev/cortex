@@ -51,11 +51,11 @@ func (s *AvoidOverloadedHostsMemoryStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-	activations := s.BaseActivations(request)
+func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	result := s.BaseResult(request)
 	if request.GetVMware() {
 		// Don't run this step for VMware VMs.
-		return activations, nil
+		return result, nil
 	}
 
 	var hostMemoryActive []kvm.NodeExporterHostMemoryActive
@@ -67,7 +67,7 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 
 	for _, host := range hostMemoryActive {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[host.ComputeHost]; !ok {
+		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
 		activationAvg := plugins.MinMaxScale(
@@ -84,7 +84,7 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 			s.Options.MaxMemoryUsageActivationLowerBound,
 			s.Options.MaxMemoryUsageActivationUpperBound,
 		)
-		activations[host.ComputeHost] = activationAvg + activationMax
+		result.Activations[host.ComputeHost] = activationAvg + activationMax
 	}
-	return activations, nil
+	return result, nil
 }

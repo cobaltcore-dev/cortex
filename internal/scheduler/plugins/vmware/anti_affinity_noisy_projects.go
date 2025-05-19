@@ -42,11 +42,11 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-	activations := s.BaseActivations(request)
+func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	result := s.BaseResult(request)
 	if !request.GetVMware() {
 		// Only run this step for VMware VMs.
-		return activations, nil
+		return result, nil
 	}
 
 	// Check how noisy the project is on the compute hosts.
@@ -62,10 +62,10 @@ func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.R
 
 	for _, p := range projectNoisinessOnHosts {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[p.ComputeHost]; !ok {
+		if _, ok := result.Activations[p.ComputeHost]; !ok {
 			continue
 		}
-		activations[p.ComputeHost] = plugins.MinMaxScale(
+		result.Activations[p.ComputeHost] = plugins.MinMaxScale(
 			p.AvgCPUOfProject,
 			s.Options.AvgCPUUsageLowerBound,
 			s.Options.AvgCPUUsageUpperBound,
@@ -73,5 +73,5 @@ func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.R
 			s.Options.AvgCPUUsageActivationUpperBound,
 		)
 	}
-	return activations, nil
+	return result, nil
 }

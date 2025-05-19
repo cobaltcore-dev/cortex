@@ -170,7 +170,7 @@ func monitorStep(step plugins.Step, m Monitor) *StepMonitor {
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
+func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
 	stepName := s.GetName()
 
 	if s.runTimer != nil {
@@ -179,18 +179,18 @@ func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (map[strin
 	}
 
 	inWeights := request.GetWeights()
-	outWeights, err := s.Step.Run(traceLog, request)
+	stepResult, err := s.Step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
 	}
 	traceLog.Info(
 		"scheduler: finished step", "name", stepName,
-		"inWeights", inWeights, "outWeights", outWeights,
+		"inWeights", inWeights, "outWeights", stepResult.Activations,
 	)
 
 	// Observe how much the step modifies the weights of the hosts.
 	if s.stepHostWeight != nil {
-		for host, weight := range outWeights {
+		for host, weight := range stepResult.Activations {
 			s.stepHostWeight.WithLabelValues(host, stepName).Add(weight)
 			if weight != 0.0 {
 				traceLog.Info("scheduler: modified host weight", "name", stepName, "weight", weight)
@@ -200,7 +200,7 @@ func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (map[strin
 
 	// Observe how many hosts are removed from the state.
 	hostsIn := request.GetHosts()
-	hostsOut := slices.Collect(maps.Keys(outWeights))
+	hostsOut := slices.Collect(maps.Keys(stepResult.Activations))
 	nHostsRemoved := len(hostsIn) - len(hostsOut)
 	if nHostsRemoved < 0 {
 		traceLog.Info("scheduler: removed hosts", "name", stepName, "count", nHostsRemoved)
@@ -214,7 +214,7 @@ func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (map[strin
 		return inWeights[hostsIn[i]] > inWeights[hostsIn[j]]
 	})
 	sort.Slice(hostsOut, func(i, j int) bool {
-		return outWeights[hostsOut[i]] > outWeights[hostsOut[j]]
+		return stepResult.Activations[hostsOut[i]] > stepResult.Activations[hostsOut[j]]
 	})
 	for idx := range min(len(hostsOut), 5) { // Look at the first 5 hosts.
 		// The host at this index was moved from its original position.
@@ -231,5 +231,5 @@ func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (map[strin
 		)
 	}
 
-	return outWeights, nil
+	return stepResult, nil
 }

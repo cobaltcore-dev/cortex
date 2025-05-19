@@ -51,11 +51,11 @@ func (s *AvoidContendedHostsStep) GetName() string {
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-	activations := s.BaseActivations(request)
+func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	result := s.BaseResult(request)
 	if !request.GetVMware() {
 		// Only run this step for VMware VMs.
-		return activations, nil
+		return result, nil
 	}
 
 	var highlyContendedHosts []vmware.VROpsHostsystemContention
@@ -68,7 +68,7 @@ func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request
 	// Push the VM away from highly contended hosts.
 	for _, host := range highlyContendedHosts {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[host.ComputeHost]; !ok {
+		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
 		activationAvg := plugins.MinMaxScale(
@@ -85,7 +85,7 @@ func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request
 			s.Options.MaxCPUContentionActivationLowerBound,
 			s.Options.MaxCPUContentionActivationUpperBound,
 		)
-		activations[host.ComputeHost] = activationAvg + activationMax
+		result.Activations[host.ComputeHost] = activationAvg + activationMax
 	}
-	return activations, nil
+	return result, nil
 }
