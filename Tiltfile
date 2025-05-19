@@ -25,11 +25,11 @@ helm_repo(
 )
 
 # Build the helm charts
-local('test -f ./helm/cortex/Chart.lock || helm dep up ./helm/cortex')
-local('test -f ./helm/mqtt/Chart.lock || helm dep up ./helm/mqtt')
-local('test -f ./helm/prometheus/Chart.lock || helm dep up ./helm/prometheus')
-local('test -f ./helm/prometheus-operator/Chart.lock || helm dep up ./helm/prometheus-operator')
-local('test -f ./helm/postgres/Chart.lock || helm dep up ./helm/postgres')
+local('helm dep up ./helm/cortex')
+local('helm dep up ./helm/mqtt')
+local('helm dep up ./helm/prometheus')
+local('helm dep up ./helm/prometheus-operator')
+local('helm dep up ./helm/postgres')
 
 ########### Cortex Core Services
 tilt_values = os.getenv('TILT_VALUES_PATH')
