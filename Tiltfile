@@ -24,19 +24,39 @@ helm_repo(
     labels=['Repositories'],
 )
 
-# Build the helm charts
-local('helm dep up ./helm/cortex')
-local('helm dep up ./helm/mqtt')
-local('helm dep up ./helm/prometheus')
-local('helm dep up ./helm/prometheus-operator')
-local('helm dep up ./helm/postgres')
+def synced_helm(path_to_chart, name, values=[]):
+    """
+    Tilt provides a helm() function that renders a chart and watches it.
+    However, it also declares file watchers for all files in the chart.
+    This means that if we want to run helm dep build to sync the chart/
+    dependencies before helm(), this will end in an infinite deployment loop.
+    Therefore, we need to selectively watch the files we care about.
+    """
+
+    # Build the chart dependencies from the Chart.lock.
+    local('helm dep build ' + path_to_chart)
+
+    # Build the command to get the rendered kubernetes yaml.
+    cmd = 'helm template'
+    for value_file in values:
+        cmd += ' -f ' + value_file
+    cmd += ' --name-template ' + name
+    cmd += ' ' + path_to_chart
+
+    watch_file(path_to_chart + '/Chart.yaml')
+    watch_file(path_to_chart + '/Chart.lock')
+    for value_file in values:
+        watch_file(value_file)
+    watch_file(path_to_chart + '/templates')
+
+    return local(cmd)
 
 ########### Cortex Core Services
 tilt_values = os.getenv('TILT_VALUES_PATH')
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
     'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile', tilt_values,
 ])
-k8s_yaml(helm('./helm/cortex', name='cortex', values=[tilt_values]))
+k8s_yaml(synced_helm('./helm/cortex', name='cortex', values=[tilt_values]))
 k8s_resource('cortex-syncer', port_forwards=[
     port_forward(8001, 2112),
 ], links=[
@@ -72,21 +92,21 @@ local_resource(
 k8s_resource('cortex-migrations', labels=['Commands'])
 
 ########### RabbitMQ MQTT for Cortex Core Service
-k8s_yaml(helm('./helm/mqtt', name='cortex-mqtt'))
+k8s_yaml(synced_helm('./helm/mqtt', name='cortex-mqtt'))
 k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
     port_forward(8005, 15675), # Websocket connection
 ], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
-k8s_yaml(helm('./helm/postgres', name='cortex-postgres'))
+k8s_yaml(synced_helm('./helm/postgres', name='cortex-postgres'))
 k8s_resource('cortex-postgresql', port_forwards=[
     port_forward(5432, 5432),
 ], labels=['Core-Services'])
 
 ########### Monitoring
-k8s_yaml(helm('./helm/prometheus-operator', name='cortex-prometheus-operator')) # Operator
-k8s_yaml(helm('./helm/prometheus', name='cortex-prometheus')) # Alerts + ServiceMonitor
+k8s_yaml(synced_helm('./helm/prometheus-operator', name='cortex-prometheus-operator')) # Operator
+k8s_yaml(synced_helm('./helm/prometheus', name='cortex-prometheus')) # Alerts + ServiceMonitor
 k8s_resource('cortex-prometheus-operator', labels=['Monitoring'])
 k8s_resource(
     new_name='cortex-prometheus',
