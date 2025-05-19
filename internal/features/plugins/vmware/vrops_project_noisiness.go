@@ -6,6 +6,7 @@ package vmware
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
@@ -22,6 +23,16 @@ type VROpsProjectNoisiness struct {
 // Table under which the feature is stored.
 func (VROpsProjectNoisiness) TableName() string {
 	return "feature_vrops_project_noisiness"
+}
+
+// Indexes for the feature.
+func (VROpsProjectNoisiness) Indexes() []db.Index {
+	return []db.Index{
+		{
+			Name:        "idx_vrops_project_noisiness_project",
+			ColumnNames: []string{"project"},
+		},
+	}
 }
 
 // Extractor that extracts the noisiness of projects and on which compute

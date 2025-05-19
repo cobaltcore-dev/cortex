@@ -27,6 +27,12 @@ type DB struct {
 
 type Table interface {
 	TableName() string
+	Indexes() []Index
+}
+
+type Index struct {
+	Name        string
+	ColumnNames []string
 }
 
 // Create a new postgres database and wait until it is connected.
@@ -43,7 +49,8 @@ func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry) DB {
 	if err != nil {
 		panic(err)
 	}
-	slog.Info("connecting to database", "dbURL", dbURL.String())
+	// Strip the password from the URL for logging.
+	slog.Info("connecting to database", "url", strings.ReplaceAll(dbURL.String(), strip(c.Password), "****"))
 	db, err := sql.Open("postgres", dbURL.String())
 	if err != nil {
 		panic(err)
@@ -113,7 +120,12 @@ func (d *DB) CreateTable(table ...*gorp.TableMap) error {
 // Adds a Model table to the database.
 func (d *DB) AddTable(t Table) *gorp.TableMap {
 	slog.Info("adding table", "table", t.TableName(), "model", t)
-	return d.AddTableWithName(t, t.TableName())
+	tablemap := d.AddTableWithName(t, t.TableName())
+	for _, index := range t.Indexes() {
+		slog.Info("adding index", "index", index.Name, "table", t.TableName(), "columns", index.ColumnNames)
+		tablemap.AddIndex(index.Name, "Btree", index.ColumnNames)
+	}
+	return tablemap
 }
 
 // Check if a table exists in the database.

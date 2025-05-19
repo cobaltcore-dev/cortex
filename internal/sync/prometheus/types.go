@@ -62,6 +62,7 @@ type VROpsHostMetric struct {
 }
 
 func (m VROpsHostMetric) TableName() string       { return "vrops_host_metrics" }
+func (m VROpsHostMetric) Indexes() []db.Index     { return nil }
 func (m VROpsHostMetric) GetName() string         { return m.Name }
 func (m VROpsHostMetric) GetTimestamp() time.Time { return m.Timestamp }
 func (m VROpsHostMetric) GetValue() float64       { return m.Value }
@@ -116,6 +117,7 @@ type VROpsVMMetric struct {
 }
 
 func (m VROpsVMMetric) TableName() string       { return "vrops_vm_metrics" }
+func (m VROpsVMMetric) Indexes() []db.Index     { return nil }
 func (m VROpsVMMetric) GetName() string         { return m.Name }
 func (m VROpsVMMetric) GetTimestamp() time.Time { return m.Timestamp }
 func (m VROpsVMMetric) GetValue() float64       { return m.Value }
@@ -140,6 +142,7 @@ type NodeExporterMetric struct {
 }
 
 func (m NodeExporterMetric) TableName() string       { return "node_exporter_metrics" }
+func (m NodeExporterMetric) Indexes() []db.Index     { return nil }
 func (m NodeExporterMetric) GetName() string         { return m.Name }
 func (m NodeExporterMetric) GetTimestamp() time.Time { return m.Timestamp }
 func (m NodeExporterMetric) GetValue() float64       { return m.Value }

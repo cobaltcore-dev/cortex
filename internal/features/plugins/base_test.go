@@ -25,6 +25,10 @@ func (MockFeature) TableName() string {
 	return "mock_feature"
 }
 
+func (MockFeature) Indexes() []db.Index {
+	return nil
+}
+
 func TestBaseExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}

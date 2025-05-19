@@ -6,6 +6,7 @@ package shared
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 )
@@ -27,6 +28,16 @@ type FlavorHostSpace struct {
 // Table under which the feature is stored.
 func (FlavorHostSpace) TableName() string {
 	return "feature_flavor_host_space"
+}
+
+// Indexes for the feature.
+func (FlavorHostSpace) Indexes() []db.Index {
+	return []db.Index{
+		{
+			Name:        "idx_flavor_host_space_flavor_id",
+			ColumnNames: []string{"flavor_id"},
+		},
+	}
 }
 
 // Extractor that extracts the space left on a compute host after the placement

@@ -14,6 +14,7 @@ type test struct {
 }
 
 func (test) TableName() string { return "test" }
+func (test) Indexes() []Index  { return nil }
 
 func TestMigrate(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)

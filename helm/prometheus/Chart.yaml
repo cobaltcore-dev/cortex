@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v2
-description: Prometheus alerts setup for Cortex.
-name: cortex-alerts
+name: cortex-prometheus
+description: Prometheus alerts + metrics setup for Cortex.
+type: application
 version: 0.2.1
 dependencies:
   # Owner info adds a configmap to the kubernetes cluster with information on

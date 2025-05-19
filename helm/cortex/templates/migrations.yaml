@@ -1,0 +1,45 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+# Declare a hook that migrates the database after a Helm upgrade.
+# See: https://helm.sh/docs/topics/charts_hooks/
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cortex.fullname" $ }}-migrations
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    # Run this job before Helm upgrades are applied.
+    # Note: since we use pre-upgrade here, it is assumed that the configmap
+    # is already present in the cluster and can be mounted.
+    "helm.sh/hook": pre-upgrade
+spec:
+  template:
+    metadata:
+      name: {{ include "cortex.fullname" $ }}-migrations
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+      annotations:
+        {{- with $.Values.migrationsJob.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: {{ include "cortex.fullname" $ }}-migrations
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          args: ["migrate"]
+          volumeMounts:
+            - name: {{ include "cortex.fullname" $ }}-config-volume
+              mountPath: /etc/config
+      volumes:
+        - name: {{ include "cortex.fullname" $ }}-config-volume
+          configMap:
+            name: {{ include "cortex.fullname" $ }}-config
