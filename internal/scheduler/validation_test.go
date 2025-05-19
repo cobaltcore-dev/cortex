@@ -4,6 +4,7 @@
 package scheduler
 
 import (
+	"log/slog"
 	"reflect"
 	"testing"
 
@@ -49,7 +50,7 @@ func TestStepValidator_Init(t *testing.T) {
 
 func TestStepValidator_Run_ValidHosts(t *testing.T) {
 	mockStep := &plugins.MockStep{
-		RunFunc: func(request api.Request) (map[string]float64, error) {
+		RunFunc: func(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 			return map[string]float64{
 				"host1": 1.0,
 				"host2": 1.0,
@@ -68,7 +69,7 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(&request)
+	weights, err := validator.Run(slog.Default(), &request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}
@@ -85,7 +86,7 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 
 func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 	mockStep := &plugins.MockStep{
-		RunFunc: func(request api.Request) (map[string]float64, error) {
+		RunFunc: func(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 			return map[string]float64{
 				"host1": 1.0,
 			}, nil
@@ -103,7 +104,7 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(&request)
+	weights, err := validator.Run(slog.Default(), &request)
 	if err == nil {
 		t.Errorf("Run() error = nil, want error")
 	}
@@ -120,7 +121,7 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 
 func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 	mockStep := &plugins.MockStep{
-		RunFunc: func(request api.Request) (map[string]float64, error) {
+		RunFunc: func(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 			return map[string]float64{
 				"host1": 1.0,
 			}, nil
@@ -138,7 +139,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 		},
 	}
 
-	weights, err := validator.Run(&request)
+	weights, err := validator.Run(slog.Default(), &request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}

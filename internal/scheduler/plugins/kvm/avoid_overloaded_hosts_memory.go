@@ -5,6 +5,7 @@ package kvm
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
@@ -50,7 +51,7 @@ func (s *AvoidOverloadedHostsMemoryStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsMemoryStep) Run(request api.Request) (map[string]float64, error) {
+func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
 	if request.GetVMware() {
 		// Don't run this step for VMware VMs.

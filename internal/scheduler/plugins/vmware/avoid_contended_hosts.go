@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
@@ -50,7 +51,7 @@ func (s *AvoidContendedHostsStep) GetName() string {
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidContendedHostsStep) Run(request api.Request) (map[string]float64, error) {
+func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
 	if !request.GetVMware() {
 		// Only run this step for VMware VMs.

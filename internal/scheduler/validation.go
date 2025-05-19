@@ -50,8 +50,8 @@ func validateStep[S plugins.Step](step S, disabledValidations disabledValidation
 }
 
 // Run the step and validate what happens.
-func (s *StepValidator) Run(request api.Request) (map[string]float64, error) {
-	weights, err := s.Step.Run(request)
+func (s *StepValidator) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
+	weights, err := s.Step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
 	}

@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
@@ -41,7 +42,7 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *AntiAffinityNoisyProjectsStep) Run(request api.Request) (map[string]float64, error) {
+func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
 	if !request.GetVMware() {
 		// Only run this step for VMware VMs.

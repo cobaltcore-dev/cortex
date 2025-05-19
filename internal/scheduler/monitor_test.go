@@ -4,6 +4,7 @@
 package scheduler
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -125,7 +126,7 @@ func TestStepMonitorRun(t *testing.T) {
 	monitor := &StepMonitor{
 		Step: &plugins.MockStep{
 			Name: "mock_step",
-			RunFunc: func(request api.Request) (map[string]float64, error) {
+			RunFunc: func(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 				return map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0}, nil
 			},
 		},
@@ -137,7 +138,7 @@ func TestStepMonitorRun(t *testing.T) {
 		Hosts:   []string{"host1", "host2", "host3"},
 		Weights: map[string]float64{"host1": 0.2, "host2": 0.1, "host3": 0.0},
 	}
-	if _, err := monitor.Run(request); err != nil {
+	if _, err := monitor.Run(slog.Default(), request); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 	if len(removedHostsObserver.Observations) != 1 {

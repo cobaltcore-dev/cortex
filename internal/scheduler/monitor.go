@@ -170,7 +170,7 @@ func monitorStep(step plugins.Step, m Monitor) *StepMonitor {
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
+func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 	stepName := s.GetName()
 
 	if s.runTimer != nil {
@@ -179,11 +179,11 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 	}
 
 	inWeights := request.GetWeights()
-	outWeights, err := s.Step.Run(request)
+	outWeights, err := s.Step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
 	}
-	slog.Info(
+	traceLog.Info(
 		"scheduler: finished step", "name", stepName,
 		"inWeights", inWeights, "outWeights", outWeights,
 	)
@@ -193,7 +193,7 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 		for host, weight := range outWeights {
 			s.stepHostWeight.WithLabelValues(host, stepName).Add(weight)
 			if weight != 0.0 {
-				slog.Info("scheduler: modified host weight", "name", stepName, "weight", weight)
+				traceLog.Info("scheduler: modified host weight", "name", stepName, "weight", weight)
 			}
 		}
 	}
@@ -203,7 +203,7 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 	hostsOut := slices.Collect(maps.Keys(outWeights))
 	nHostsRemoved := len(hostsIn) - len(hostsOut)
 	if nHostsRemoved < 0 {
-		slog.Info("scheduler: removed hosts", "name", stepName, "count", nHostsRemoved)
+		traceLog.Info("scheduler: removed hosts", "name", stepName, "count", nHostsRemoved)
 	}
 	if s.removedHostsObserver != nil {
 		s.removedHostsObserver.Observe(float64(nHostsRemoved))
@@ -224,7 +224,7 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 			o := s.stepReorderingsObserver.WithLabelValues(stepName, strconv.Itoa(idx))
 			o.Observe(float64(originalIdx))
 		}
-		slog.Info(
+		traceLog.Info(
 			"scheduler: reordered host",
 			"name", stepName, "host", hostsOut[idx],
 			"originalIdx", originalIdx, "newIdx", idx,

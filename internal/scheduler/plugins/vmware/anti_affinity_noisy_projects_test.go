@@ -4,6 +4,7 @@
 package vmware
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -113,7 +114,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weights, err := step.Run(&tt.request)
+			weights, err := step.Run(slog.Default(), &tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

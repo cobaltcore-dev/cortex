@@ -5,6 +5,7 @@ package shared
 
 import (
 	"errors"
+	"log/slog"
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
@@ -63,7 +64,7 @@ func (s *FlavorBinpackingStep) GetName() string {
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *FlavorBinpackingStep) Run(request api.Request) (map[string]float64, error) {
+func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 	activations := s.BaseActivations(request)
 
 	spec := request.GetSpec()

@@ -28,7 +28,7 @@ func (m *mockPipelineStep) GetName() string {
 	return "mock_pipeline_step"
 }
 
-func (m *mockPipelineStep) Run(request api.Request) (map[string]float64, error) {
+func (m *mockPipelineStep) Run(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
 	if m.err != nil {
 		return nil, m.err
 	}

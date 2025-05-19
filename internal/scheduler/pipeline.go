@@ -117,10 +117,10 @@ func (p *pipeline) runSteps(log *slog.Logger, request api.Request) map[string]ma
 		var wg sync.WaitGroup
 		for _, step := range steps {
 			wg.Add(1)
-			go func(step plugins.Step) {
+			go func() {
 				defer wg.Done()
 				log.Info("scheduler: running step", "name", step.GetName())
-				activations, err := step.Run(request)
+				activations, err := step.Run(log, request)
 				log.Info("scheduler: finished step", "name", step.GetName())
 				if err != nil {
 					log.Error("scheduler: failed to run step", "error", err)
@@ -129,7 +129,7 @@ func (p *pipeline) runSteps(log *slog.Logger, request api.Request) map[string]ma
 				lock.Lock()
 				defer lock.Unlock()
 				activationsByStep[step.GetName()] = activations
-			}(step)
+			}()
 		}
 		wg.Wait()
 	}
