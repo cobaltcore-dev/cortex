@@ -194,13 +194,22 @@ type MonitoringConfig struct {
 	Port int `json:"port"`
 }
 
+type MQTTReconnectConfig struct {
+	// The interval between reconnection attempts on connection loss.
+	RetryInterval int `json:"retryInterval"`
+
+	// The maximum number of reconnection attempts on connection loss before panic.
+	MaxRetries int `json:"maxRetries"`
+}
+
 // Configuration for the mqtt client.
 type MQTTConfig struct {
 	// The URL of the MQTT broker to use for mqtt.
 	URL string `json:"url"`
 	// Credentials for the MQTT broker.
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username  string              `json:"username"`
+	Password  string              `json:"password"`
+	Reconnect MQTTReconnectConfig `json:"reconnect"`
 }
 
 // Configuration for the api port.

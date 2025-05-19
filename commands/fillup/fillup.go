@@ -51,7 +51,7 @@ func main() {
 		User:     "postgres",
 		Password: "secret",
 		Database: "postgres",
-	}, nil)
+	}, nil, db.Monitor{})
 	defer db.Close()
 
 	// Get openstack objects from the database. We will use this data to simulate
