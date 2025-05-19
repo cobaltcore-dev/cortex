@@ -29,9 +29,9 @@ type client struct {
 	client *mqtt.Client
 	// Lock to prevent concurrent writes to the MQTT client.
 	lock *sync.Mutex
-	// monitor for mqtt related metrics
+	// Monitor for mqtt related metrics
 	monitor Monitor
-	// all current subscribed topics of the client
+	// All current subscribed topics of the client
 	subscriptions map[string]mqtt.MessageHandler
 }
 
@@ -60,7 +60,7 @@ func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
 		if err := t.Connect(); err != nil {
 			slog.Error("failed to reconnect to mqtt broker", "err", err)
 			if retry < t.conf.Reconnect.MaxRetries-1 {
-				interval := time.Duration(t.conf.Reconnect.RetryInterval) * time.Second
+				interval := time.Duration(t.conf.Reconnect.RetryIntervalSeconds) * time.Second
 				time.Sleep(jobloop.DefaultJitter(interval))
 			}
 			t.client = nil

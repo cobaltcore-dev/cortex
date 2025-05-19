@@ -23,6 +23,7 @@ import (
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
 	*gorp.DbMap
+	conf conf.DBConfig
 	// Monitor for database related metrics like connection attempts.
 	monitor Monitor
 }
@@ -79,16 +80,15 @@ func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry, monitor Monit
 		// Expose metrics for the database connection pool.
 		registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
 	}
-	return DB{DbMap: dbMap, monitor: monitor}
+	return DB{DbMap: dbMap, monitor: monitor, conf: c}
 }
 
 // Check periodically if the database is alive. If not, panic.
 func (d *DB) CheckLivenessPeriodically() {
 	var failures int
 	for {
-		maxRetries := 20
 		if err := d.Db.Ping(); err != nil {
-			if failures > maxRetries {
+			if failures > d.conf.Reconnect.MaxRetries {
 				slog.Error("database is unreachable, giving up", "error", err)
 				panic(err)
 			}
@@ -98,7 +98,8 @@ func (d *DB) CheckLivenessPeriodically() {
 			}
 
 			slog.Error("failed to ping database", "error", err, "attempt", failures)
-			time.Sleep(jobloop.DefaultJitter(1 * time.Second))
+			interval := time.Duration(d.conf.Reconnect.RetryIntervalSeconds) * time.Second
+			time.Sleep(jobloop.DefaultJitter(interval))
 			continue
 		}
 		failures = 0

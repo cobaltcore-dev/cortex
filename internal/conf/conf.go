@@ -26,13 +26,21 @@ type LoggingConfig struct {
 	Format string `json:"format"`
 }
 
+type DBReconnectConfig struct {
+	// The interval between reconnection attempts on connection loss.
+	RetryIntervalSeconds int `json:"retryIntervalSeconds"`
+	// The maximum number of reconnection attempts on connection loss before panic.
+	MaxRetries int `json:"maxRetries"`
+}
+
 // Database configuration.
 type DBConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	User     string `json:"user"`
-	Password string `json:"password"`
+	Host      string            `json:"host"`
+	Port      int               `json:"port"`
+	Database  string            `json:"database"`
+	User      string            `json:"user"`
+	Password  string            `json:"password"`
+	Reconnect DBReconnectConfig `json:"reconnect"`
 }
 
 // Metric configuration for the sync/prometheus module.
@@ -196,7 +204,7 @@ type MonitoringConfig struct {
 
 type MQTTReconnectConfig struct {
 	// The interval between reconnection attempts on connection loss.
-	RetryInterval int `json:"retryInterval"`
+	RetryIntervalSeconds int `json:"retryIntervalSeconds"`
 
 	// The maximum number of reconnection attempts on connection loss before panic.
 	MaxRetries int `json:"maxRetries"`

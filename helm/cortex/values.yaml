@@ -98,7 +98,7 @@ conf:
     password: "cortex"
     reconnect:
       maxRetries: 20
-      retryInterval: 1
+      retryIntervalSeconds: 1
 
   # The port to use for the api serve mux.
   api:
@@ -111,6 +111,9 @@ conf:
     user: postgres
     password: secret
     database: postgres
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
 
   # Sync plugins config.
   sync:
