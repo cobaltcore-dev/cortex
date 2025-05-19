@@ -188,18 +188,6 @@ func (t *client) Subscribe(topic string, callback mqtt.MessageHandler) error {
 	return nil
 }
 
-func (t *client) Unsubscribe(topic string) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	client := *t.client
-	token := client.Unsubscribe(topic)
-	if token.Wait() && token.Error() != nil {
-		return token.Error()
-	}
-	delete(t.subscriptions, topic)
-	return nil
-}
-
 // Disconnect from the mqtt broker.
 func (t *client) Disconnect() {
 	if t.client == nil {
