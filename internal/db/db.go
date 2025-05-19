@@ -88,7 +88,7 @@ func (d *DB) CheckLivenessPeriodically() {
 	var failures int
 	for {
 		if err := d.Db.Ping(); err != nil {
-			if failures > d.conf.Reconnect.MaxRetries {
+			if failures >= d.conf.Reconnect.MaxRetries {
 				slog.Error("database is unreachable, giving up", "error", err)
 				panic(err)
 			}
@@ -104,7 +104,8 @@ func (d *DB) CheckLivenessPeriodically() {
 		}
 		failures = 0
 		slog.Debug("check ok: database is reachable")
-		time.Sleep(jobloop.DefaultJitter(10 * time.Second))
+		sleepTime := time.Duration(d.conf.Reconnect.LivenessPingIntervalSeconds) * time.Second
+		time.Sleep(jobloop.DefaultJitter(sleepTime))
 	}
 }
 

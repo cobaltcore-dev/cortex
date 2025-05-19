@@ -27,6 +27,8 @@ type LoggingConfig struct {
 }
 
 type DBReconnectConfig struct {
+	// The interval between liveness pings to the database.
+	LivenessPingIntervalSeconds int `json:"livenessPingIntervalSeconds"`
 	// The interval between reconnection attempts on connection loss.
 	RetryIntervalSeconds int `json:"retryIntervalSeconds"`
 	// The maximum number of reconnection attempts on connection loss before panic.

@@ -114,6 +114,7 @@ conf:
     reconnect:
       maxRetries: 20
       retryIntervalSeconds: 1
+      livenessPingIntervalSeconds: 5
 
   # Sync plugins config.
   sync:
