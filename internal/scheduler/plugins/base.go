@@ -41,10 +41,19 @@ func (s *BaseStep[Opts]) Init(db db.DB, opts conf.RawOpts) error {
 }
 
 // Get a default result (no action) for the input hosts given in the request.
-func (s *BaseStep[Opts]) BaseResult(request api.Request) *StepResult {
+func (s *BaseStep[Opts]) PrepareResult(request api.Request) *StepResult {
 	activations := make(map[string]float64)
 	for _, host := range request.GetHosts() {
 		activations[host] = s.NoEffect()
 	}
-	return &StepResult{Activations: activations, Stats: make(map[string]HostStats)}
+	stats := make(map[string]StepStatistics)
+	return &StepResult{Activations: activations, Statistics: stats}
+}
+
+// Get default statistics for the input hosts given in the request.
+func (s *BaseStep[Opts]) PrepareStats(request api.Request, unit string) StepStatistics {
+	return StepStatistics{
+		Unit:  unit,
+		Hosts: make(map[string]float64, len(request.GetHosts())),
+	}
 }

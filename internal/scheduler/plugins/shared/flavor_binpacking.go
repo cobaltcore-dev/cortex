@@ -65,7 +65,16 @@ func (s *FlavorBinpackingStep) GetName() string {
 
 // Pack VMs on hosts based on their flavor.
 func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-	result := s.BaseResult(request)
+	result := s.PrepareResult(request)
+	if s.Options.CPUEnabled {
+		result.Statistics["cpu free after flavor placement"] = s.PrepareStats(request, "vCPUs")
+	}
+	if s.Options.RAMEnabled {
+		result.Statistics["ram free after flavor placement"] = s.PrepareStats(request, "MB")
+	}
+	if s.Options.DiskEnabled {
+		result.Statistics["disk free after flavor placement"] = s.PrepareStats(request, "GB")
+	}
 
 	spec := request.GetSpec()
 	if spec.Data.NInstances > 1 {
@@ -103,6 +112,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 				s.Options.CPUFreeActivationLowerBound,
 				s.Options.CPUFreeActivationUpperBound,
 			)
+			result.Statistics["cpu free after flavor placement"].Hosts[f.ComputeHost] = float64(f.VCPUsLeft)
 		}
 		activationRAM := s.NoEffect()
 		if s.Options.RAMEnabled {
@@ -113,6 +123,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 				s.Options.RAMFreeActivationLowerBound,
 				s.Options.RAMFreeActivationUpperBound,
 			)
+			result.Statistics["ram free after flavor placement"].Hosts[f.ComputeHost] = float64(f.RAMLeftMB)
 		}
 		activationDisk := s.NoEffect()
 		if s.Options.DiskEnabled {
@@ -123,6 +134,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 				s.Options.DiskFreeActivationLowerBound,
 				s.Options.DiskFreeActivationUpperBound,
 			)
+			result.Statistics["disk free after flavor placement"].Hosts[f.ComputeHost] = float64(f.DiskLeftGB)
 		}
 		result.Activations[f.ComputeHost] = activationCPU + activationRAM + activationDisk
 	}

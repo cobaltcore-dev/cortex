@@ -52,7 +52,9 @@ func (s *AvoidOverloadedHostsMemoryStep) GetName() string {
 
 // Downvote hosts that have high cpu load.
 func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-	result := s.BaseResult(request)
+	result := s.PrepareResult(request)
+	result.Statistics["avg memory active"] = s.PrepareStats(request, "%")
+	result.Statistics["max memory active"] = s.PrepareStats(request, "%")
 	if request.GetVMware() {
 		// Don't run this step for VMware VMs.
 		return result, nil
@@ -85,6 +87,8 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 			s.Options.MaxMemoryUsageActivationUpperBound,
 		)
 		result.Activations[host.ComputeHost] = activationAvg + activationMax
+		result.Statistics["avg memory active"].Hosts[host.ComputeHost] = host.AvgMemoryActive
+		result.Statistics["max memory active"].Hosts[host.ComputeHost] = host.MaxMemoryActive
 	}
 	return result, nil
 }

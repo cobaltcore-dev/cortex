@@ -231,5 +231,38 @@ func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (*plugins.
 		)
 	}
 
+	// Based on the provided step statistics, log something like this:
+	// max cpu contention: before [ 100%, 50%, 40% ], after [ 40%, 50%, 100% ]
+	for statName, statData := range stepResult.Statistics {
+		if statData.Hosts == nil {
+			continue
+		}
+		msg := "scheduler: statistics for step " + stepName
+		msg += " -- " + statName + ""
+		before := ""
+		for i, host := range hostsIn {
+			if hostStat, ok := statData.Hosts[host]; ok {
+				before += strconv.FormatFloat(hostStat, 'f', 2, 64) + " " + statData.Unit
+			} else {
+				before += "-"
+			}
+			if i < len(hostsIn)-1 {
+				before += ", "
+			}
+		}
+		after := ""
+		for i, host := range hostsOut {
+			if hostStat, ok := statData.Hosts[host]; ok {
+				after += strconv.FormatFloat(hostStat, 'f', 2, 64) + " " + statData.Unit
+			} else {
+				after += "-"
+			}
+			if i < len(hostsOut)-1 {
+				after += ", "
+			}
+		}
+		traceLog.Info(msg, "before", before, "after", after)
+	}
+
 	return stepResult, nil
 }

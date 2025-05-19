@@ -7,7 +7,7 @@ type StepResult struct {
 	// The activations calculated by this step.
 	Activations map[string]float64
 
-	// Host statistics like:
+	// Step statistics like:
 	//
 	//	{
 	//	  "max cpu contention": {
@@ -22,10 +22,10 @@ type StepResult struct {
 	//
 	// These statistics are used to display the step's effect on the hosts.
 	// For example: max cpu contention: before [ 100%, 50%, 40% ], after [ 40%, 50%, 100% ]
-	Stats map[string]HostStats
+	Statistics map[string]StepStatistics
 }
 
-type HostStats struct {
+type StepStatistics struct {
 	// The unit of the statistic.
 	Unit string
 	// The hosts and their values.

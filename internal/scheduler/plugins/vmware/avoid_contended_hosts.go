@@ -52,7 +52,10 @@ func (s *AvoidContendedHostsStep) GetName() string {
 
 // Downvote hosts that are highly contended.
 func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-	result := s.BaseResult(request)
+	result := s.PrepareResult(request)
+	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
+	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
+
 	if !request.GetVMware() {
 		// Only run this step for VMware VMs.
 		return result, nil
@@ -86,6 +89,8 @@ func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request
 			s.Options.MaxCPUContentionActivationUpperBound,
 		)
 		result.Activations[host.ComputeHost] = activationAvg + activationMax
+		result.Statistics["avg cpu contention"].Hosts[host.ComputeHost] = host.AvgCPUContention
+		result.Statistics["max cpu contention"].Hosts[host.ComputeHost] = host.MaxCPUContention
 	}
 	return result, nil
 }

@@ -52,7 +52,10 @@ func (s *AvoidOverloadedHostsCPUStep) GetName() string {
 
 // Downvote hosts that have high cpu load.
 func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-	result := s.BaseResult(request)
+	result := s.PrepareResult(request)
+	result.Statistics["avg cpu usage"] = s.PrepareStats(request, "%")
+	result.Statistics["max cpu usage"] = s.PrepareStats(request, "%")
+
 	if request.GetVMware() {
 		// Don't run this step for VMware VMs.
 		return result, nil
@@ -85,6 +88,8 @@ func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.Req
 			s.Options.MaxCPUUsageActivationUpperBound,
 		)
 		result.Activations[host.ComputeHost] = activationAvg + activationMax
+		result.Statistics["avg cpu usage"].Hosts[host.ComputeHost] = host.AvgCPUUsage
+		result.Statistics["max cpu usage"].Hosts[host.ComputeHost] = host.MaxCPUUsage
 	}
 	return result, nil
 }

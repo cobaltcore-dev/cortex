@@ -43,7 +43,8 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-	result := s.BaseResult(request)
+	result := s.PrepareResult(request)
+	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")
 	if !request.GetVMware() {
 		// Only run this step for VMware VMs.
 		return result, nil
@@ -72,6 +73,7 @@ func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.R
 			s.Options.AvgCPUUsageActivationLowerBound,
 			s.Options.AvgCPUUsageActivationUpperBound,
 		)
+		result.Statistics["avg cpu usage of this project"].Hosts[p.ComputeHost] = p.AvgCPUOfProject
 	}
 	return result, nil
 }
