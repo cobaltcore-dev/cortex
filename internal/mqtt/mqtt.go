@@ -50,7 +50,6 @@ func NewClientWithConfig(conf conf.MQTTConfig, monitor Monitor) Client {
 
 // Called when the connection to the mqtt broker is lost.
 func (t *client) onUnexpectedConnectionLoss(_ mqtt.Client, err error) {
-
 	slog.Error("connection to mqtt broker lost", "err", err)
 	t.Disconnect()
 	t.client = nil
