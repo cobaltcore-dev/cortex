@@ -96,6 +96,9 @@ conf:
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
     password: "cortex"
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
 
   # The port to use for the api serve mux.
   api:
@@ -108,6 +111,10 @@ conf:
     user: postgres
     password: secret
     database: postgres
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
+      livenessPingIntervalSeconds: 5
 
   # Sync plugins config.
   sync:

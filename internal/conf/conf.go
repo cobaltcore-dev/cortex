@@ -26,13 +26,23 @@ type LoggingConfig struct {
 	Format string `json:"format"`
 }
 
+type DBReconnectConfig struct {
+	// The interval between liveness pings to the database.
+	LivenessPingIntervalSeconds int `json:"livenessPingIntervalSeconds"`
+	// The interval between reconnection attempts on connection loss.
+	RetryIntervalSeconds int `json:"retryIntervalSeconds"`
+	// The maximum number of reconnection attempts on connection loss before panic.
+	MaxRetries int `json:"maxRetries"`
+}
+
 // Database configuration.
 type DBConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	User     string `json:"user"`
-	Password string `json:"password"`
+	Host      string            `json:"host"`
+	Port      int               `json:"port"`
+	Database  string            `json:"database"`
+	User      string            `json:"user"`
+	Password  string            `json:"password"`
+	Reconnect DBReconnectConfig `json:"reconnect"`
 }
 
 // Metric configuration for the sync/prometheus module.
@@ -194,13 +204,22 @@ type MonitoringConfig struct {
 	Port int `json:"port"`
 }
 
+type MQTTReconnectConfig struct {
+	// The interval between reconnection attempts on connection loss.
+	RetryIntervalSeconds int `json:"retryIntervalSeconds"`
+
+	// The maximum number of reconnection attempts on connection loss before panic.
+	MaxRetries int `json:"maxRetries"`
+}
+
 // Configuration for the mqtt client.
 type MQTTConfig struct {
 	// The URL of the MQTT broker to use for mqtt.
 	URL string `json:"url"`
 	// Credentials for the MQTT broker.
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username  string              `json:"username"`
+	Password  string              `json:"password"`
+	Reconnect MQTTReconnectConfig `json:"reconnect"`
 }
 
 // Configuration for the api port.

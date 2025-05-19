@@ -23,6 +23,9 @@ import (
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
 	*gorp.DbMap
+	conf conf.DBConfig
+	// Monitor for database related metrics like connection attempts.
+	monitor Monitor
 }
 
 type Table interface {
@@ -36,7 +39,7 @@ type Index struct {
 }
 
 // Create a new postgres database and wait until it is connected.
-func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry) DB {
+func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry, monitor Monitor) DB {
 	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          strip(c.Host),
@@ -77,7 +80,7 @@ func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry) DB {
 		// Expose metrics for the database connection pool.
 		registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
 	}
-	return DB{DbMap: dbMap}
+	return DB{DbMap: dbMap, monitor: monitor, conf: c}
 }
 
 // Check periodically if the database is alive. If not, panic.
@@ -85,18 +88,24 @@ func (d *DB) CheckLivenessPeriodically() {
 	var failures int
 	for {
 		if err := d.Db.Ping(); err != nil {
-			if failures > 5 {
+			if failures >= d.conf.Reconnect.MaxRetries {
 				slog.Error("database is unreachable, giving up", "error", err)
 				panic(err)
 			}
-			slog.Error("failed to ping database", "error", err)
-			time.Sleep(jobloop.DefaultJitter(1 * time.Second))
 			failures++
+			if d.monitor.connectionAttempts != nil {
+				d.monitor.connectionAttempts.Inc()
+			}
+
+			slog.Error("failed to ping database", "error", err, "attempt", failures)
+			interval := time.Duration(d.conf.Reconnect.RetryIntervalSeconds) * time.Second
+			time.Sleep(jobloop.DefaultJitter(interval))
 			continue
 		}
 		failures = 0
 		slog.Debug("check ok: database is reachable")
-		time.Sleep(jobloop.DefaultJitter(10 * time.Second))
+		sleepTime := time.Duration(d.conf.Reconnect.LivenessPingIntervalSeconds) * time.Second
+		time.Sleep(jobloop.DefaultJitter(sleepTime))
 	}
 }
 

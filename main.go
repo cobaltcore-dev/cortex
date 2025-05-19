@@ -33,7 +33,11 @@ import (
 // Periodically fetch data from the datasources and insert it into the database.
 func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
 	monitor := sync.NewSyncMonitor(registry)
-	mqttClient := mqtt.NewClient()
+	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
+	if err := mqttClient.Connect(); err != nil {
+		panic("failed to connect to mqtt broker: " + err.Error())
+	}
+	defer mqttClient.Disconnect()
 	syncers := []sync.Datasource{
 		prometheus.NewCombinedSyncer(prometheus.SupportedSyncers, config.Prometheus, db, monitor, mqttClient),
 		openstack.NewCombinedSyncer(ctx, config.OpenStack, monitor, db, mqttClient),
@@ -46,7 +50,14 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 // Periodically extract features from the database.
 func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
 	monitor := features.NewPipelineMonitor(registry)
-	pipeline := features.NewPipeline(config, db, monitor)
+
+	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
+	if err := mqttClient.Connect(); err != nil {
+		panic("failed to connect to mqtt broker: " + err.Error())
+	}
+	defer mqttClient.Disconnect()
+
+	pipeline := features.NewPipeline(config, db, monitor, mqttClient)
 	// Selects the extractors to run based on the config.
 	pipeline.Init(features.SupportedExtractors)
 	go pipeline.ExtractOnTrigger() // blocking
@@ -55,7 +66,11 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 // Run a webserver that listens for external scheduling requests.
 func runScheduler(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	monitor := scheduler.NewSchedulerMonitor(registry)
-	mqttClient := mqtt.NewClient()
+	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
+	if err := mqttClient.Connect(); err != nil {
+		panic("failed to connect to mqtt broker: " + err.Error())
+	}
+	defer mqttClient.Disconnect()
 	schedulerPipeline := scheduler.NewPipeline(scheduler.SupportedSteps, config, db, monitor, mqttClient)
 	apiMonitor := apihttp.NewSchedulerMonitor(registry)
 	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
@@ -144,7 +159,8 @@ func main() {
 	// Set up the monitoring registry and database connection.
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
-	database := db.NewPostgresDB(config.GetDBConfig(), registry)
+
+	database := db.NewPostgresDB(config.GetDBConfig(), registry, db.NewDBMonitor(registry))
 	defer database.Close()
 
 	// Check if we want to perform one-time tasks like checks or migrations.
