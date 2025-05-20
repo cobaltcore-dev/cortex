@@ -10,9 +10,10 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibMonitoring "github.com/cobaltcore-dev/cortex/testlib/monitoring"
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
+	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
@@ -124,10 +125,12 @@ func TestStepMonitorRun(t *testing.T) {
 	runTimer := &testlibMonitoring.MockObserver{}
 	removedHostsObserver := &testlibMonitoring.MockObserver{}
 	monitor := &StepMonitor{
-		Step: &plugins.MockStep{
+		Step: &testlibPlugins.MockStep{
 			Name: "mock_step",
-			RunFunc: func(traceLog *slog.Logger, request api.Request) (map[string]float64, error) {
-				return map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0}, nil
+			RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+				return &plugins.StepResult{
+					Activations: map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0},
+				}, nil
 			},
 		},
 		runTimer:             runTimer,

@@ -120,7 +120,7 @@ func (p *pipeline) runSteps(log *slog.Logger, request api.Request) map[string]ma
 			go func() {
 				defer wg.Done()
 				log.Info("scheduler: running step", "name", step.GetName())
-				activations, err := step.Run(log, request)
+				result, err := step.Run(log, request)
 				log.Info("scheduler: finished step", "name", step.GetName())
 				if err != nil {
 					log.Error("scheduler: failed to run step", "error", err)
@@ -128,7 +128,7 @@ func (p *pipeline) runSteps(log *slog.Logger, request api.Request) map[string]ma
 				}
 				lock.Lock()
 				defer lock.Unlock()
-				activationsByStep[step.GetName()] = activations
+				activationsByStep[step.GetName()] = result.Activations
 			}()
 		}
 		wg.Wait()
