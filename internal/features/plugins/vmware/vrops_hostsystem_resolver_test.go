@@ -40,7 +40,6 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	if err := testDB.CreateTable(
 		testDB.AddTable(prometheus.VROpsVMMetric{}),
 		testDB.AddTable(openstack.Server{}),
-		testDB.AddTable(openstack.Hypervisor{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -58,21 +57,10 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 
 	// Insert mock data into the openstack_servers table
 	_, err = testDB.Exec(`
-        INSERT INTO openstack_servers (id, os_ext_srv_attr_hypervisor_hostname)
+        INSERT INTO openstack_servers (id, os_ext_srv_attr_host)
         VALUES
-            ('uuid1', 'hostname1'),
-            ('uuid2', 'hostname2')
-    `)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Insert mock data into the openstack_hypervisors table
-	_, err = testDB.Exec(`
-        INSERT INTO openstack_hypervisors (id, hostname, service_host)
-        VALUES
-            (1, 'hostname1', 'service_host1'),
-            (2, 'hostname2', 'service_host2')
+            ('uuid1', 'service_host1'),
+            ('uuid2', 'service_host2')
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
