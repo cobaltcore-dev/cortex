@@ -105,7 +105,8 @@ k8s_resource('cortex-postgresql', port_forwards=[
 ], labels=['Core-Services'])
 
 ########### Monitoring
-k8s_yaml(synced_helm('./helm/prometheus-operator', name='cortex-prometheus-operator')) # Operator
+# TODO: Make the operator work together with synced_helm
+k8s_yaml(helm('./helm/prometheus-operator', name='cortex-prometheus-operator')) # Operator
 k8s_yaml(synced_helm('./helm/prometheus', name='cortex-prometheus')) # Alerts + ServiceMonitor
 k8s_resource('cortex-prometheus-operator', labels=['Monitoring'])
 k8s_resource(
