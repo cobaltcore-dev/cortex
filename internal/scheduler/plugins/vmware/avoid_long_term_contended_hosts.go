@@ -39,7 +39,7 @@ func (o AvoidLongTermContendedHostsStepOpts) Validate() error {
 	return nil
 }
 
-// Step to avoid contended hosts by downvoting them.
+// Step to avoid long term contended hosts by downvoting them.
 type AvoidLongTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
 	plugins.BaseStep[AvoidLongTermContendedHostsStepOpts]
@@ -47,7 +47,7 @@ type AvoidLongTermContendedHostsStep struct {
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
 func (s *AvoidLongTermContendedHostsStep) GetName() string {
-	return "vmware_avoid_contended_hosts"
+	return "vmware_avoid_long_term_contended_hosts"
 }
 
 // Downvote hosts that are highly contended.

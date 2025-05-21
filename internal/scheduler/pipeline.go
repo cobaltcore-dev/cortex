@@ -28,6 +28,7 @@ var SupportedSteps = []plugins.Step{
 	// VMware-specific steps
 	&vmware.AntiAffinityNoisyProjectsStep{},
 	&vmware.AvoidLongTermContendedHostsStep{},
+	&vmware.AvoidShortTermContendedHostsStep{},
 	// KVM-specific steps
 	&kvm.AvoidOverloadedHostsCPUStep{},
 	&kvm.AvoidOverloadedHostsMemoryStep{},

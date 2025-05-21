@@ -355,7 +355,7 @@ conf:
           features:
             extractors:
               - vrops_project_noisiness_extractor
-      - name: vmware_avoid_contended_hosts
+      - name: vmware_avoid_long_term_contended_hosts
         options:
           # Min-max scaling for avg CPU contention on the host.
           avgCPUContentionLowerBound: 0 # pct
@@ -371,6 +371,22 @@ conf:
           features:
             extractors:
               - vrops_hostsystem_contention_long_term_extractor
+      - name: vmware_avoid_short_term_contended_hosts
+        options:
+          # Min-max scaling for avg CPU contention on the host.
+          avgCPUContentionLowerBound: 0 # pct
+          avgCPUContentionUpperBound: 10 # pct
+          avgCPUContentionActivationLowerBound: 0.0
+          avgCPUContentionActivationUpperBound: -0.75
+          # Min-max scaling for max CPU contention on the host.
+          maxCPUContentionLowerBound: 0 # pct
+          maxCPUContentionUpperBound: 10 # pct
+          maxCPUContentionActivationLowerBound: 0.0
+          maxCPUContentionActivationUpperBound: -0.25
+        dependencies:
+          features:
+            extractors:
+              - vrops_hostsystem_contention_short_term_extractor
 
       # KVM specific scheduler steps.
       - name: kvm_avoid_overloaded_hosts_cpu
