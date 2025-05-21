@@ -33,14 +33,14 @@ func TestVMwareHostContentionKPI_Collect(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(vmware.VROpsHostsystemContention{}),
+		testDB.AddTable(vmware.VROpsHostsystemContentionLongTerm{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_vrops_hostsystem_contention table
 	_, err := testDB.Exec(`
-        INSERT INTO feature_vrops_hostsystem_contention (
+        INSERT INTO feature_vrops_hostsystem_contention_long_term (
             compute_host, avg_cpu_contention, max_cpu_contention
         )
         VALUES

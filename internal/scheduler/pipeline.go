@@ -27,7 +27,7 @@ import (
 var SupportedSteps = []plugins.Step{
 	// VMware-specific steps
 	&vmware.AntiAffinityNoisyProjectsStep{},
-	&vmware.AvoidContendedHostsStep{},
+	&vmware.AvoidLongTermContendedHostsStep{},
 	// KVM-specific steps
 	&kvm.AvoidOverloadedHostsCPUStep{},
 	&kvm.AvoidOverloadedHostsMemoryStep{},

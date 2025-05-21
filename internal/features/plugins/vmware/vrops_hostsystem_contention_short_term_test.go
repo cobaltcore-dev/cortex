@@ -12,23 +12,23 @@ import (
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
-func TestVROpsHostsystemContentionExtractor_Init(t *testing.T) {
+func TestVROpsHostsystemContentionShortTermExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	extractor := &VROpsHostsystemContentionExtractor{}
+	extractor := &VROpsHostsystemContentionShortTermExtractor{}
 	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if !testDB.TableExists(VROpsHostsystemContention{}) {
+	if !testDB.TableExists(VROpsHostsystemContentionShortTerm{}) {
 		t.Error("expected table to be created")
 	}
 }
 
-func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
+func TestVROpsHostsystemContentionShortTermExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -46,9 +46,9 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	_, err := testDB.Exec(`
         INSERT INTO vrops_host_metrics (hostsystem, name, value)
         VALUES
-            ('hostsystem1', 'vrops_hostsystem_cpu_contention_percentage', 30.0),
-            ('hostsystem2', 'vrops_hostsystem_cpu_contention_percentage', 40.0),
-            ('hostsystem1', 'vrops_hostsystem_cpu_contention_percentage', 50.0)
+            ('hostsystem1', 'vrops_hostsystem_cpu_contention_short_term_percentage', 30.0),
+            ('hostsystem2', 'vrops_hostsystem_cpu_contention_short_term_percentage', 40.0),
+            ('hostsystem1', 'vrops_hostsystem_cpu_contention_short_term_percentage', 50.0)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -65,7 +65,7 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	extractor := &VROpsHostsystemContentionExtractor{}
+	extractor := &VROpsHostsystemContentionShortTermExtractor{}
 	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -74,8 +74,8 @@ func TestVROpsHostsystemContentionExtractor_Extract(t *testing.T) {
 	}
 
 	// Verify the data was inserted into the feature_vrops_hostsystem_contention table
-	var contentions []VROpsHostsystemContention
-	_, err = testDB.Select(&contentions, "SELECT * FROM feature_vrops_hostsystem_contention")
+	var contentions []VROpsHostsystemContentionShortTerm
+	_, err = testDB.Select(&contentions, "SELECT * FROM feature_vrops_hostsystem_contention_short_term")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

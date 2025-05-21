@@ -140,10 +140,17 @@ conf:
           query: |
             vrops_virtualmachine_cpu_demand_ratio{}
           type: vrops_vm_metric
-        - alias: vrops_hostsystem_cpu_contention_percentage
+        - alias: vrops_hostsystem_cpu_contention_long_term_percentage
           query: |
             vrops_hostsystem_cpu_contention_percentage{}
           type: vrops_host_metric
+        - alias: vrops_hostsystem_cpu_contention_short_term_percentage
+          query: |
+            vrops_hostsystem_cpu_contention_percentage{}
+          type: vrops_host_metric
+          timeRangeSeconds: 43200 # 12 hours
+          intervalSeconds: 3600 # 1 hour
+          resolutionSeconds: 600 # 10 minutes
         # Node exporter metrics for KVM hosts.
         - alias: node_exporter_cpu_usage_pct
           query: |
@@ -234,7 +241,7 @@ conf:
           sync:
             prometheus:
               metrics:
-                - alias: vrops_hostsystem_cpu_contention_percentage
+                - alias: vrops_hostsystem_cpu_contention_long_term_percentage
 
       # KVM-specific extractors.
       - name: node_exporter_host_cpu_usage_extractor

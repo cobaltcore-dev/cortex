@@ -14,7 +14,7 @@ import (
 
 // Options for the scheduling step, given through the
 // step config in the service yaml file.
-type AvoidContendedHostsStepOpts struct {
+type AvoidLongTermContendedHostsStepOpts struct {
 	AvgCPUContentionLowerBound float64 `json:"avgCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
 	AvgCPUContentionUpperBound float64 `json:"avgCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
 
@@ -28,7 +28,7 @@ type AvoidContendedHostsStepOpts struct {
 	MaxCPUContentionActivationUpperBound float64 `json:"maxCPUContentionActivationUpperBound"`
 }
 
-func (o AvoidContendedHostsStepOpts) Validate() error {
+func (o AvoidLongTermContendedHostsStepOpts) Validate() error {
 	// Avoid zero-division during min-max scaling.
 	if o.AvgCPUContentionLowerBound == o.AvgCPUContentionUpperBound {
 		return errors.New("avgCPUContentionLowerBound and avgCPUContentionUpperBound must not be equal")
@@ -40,18 +40,18 @@ func (o AvoidContendedHostsStepOpts) Validate() error {
 }
 
 // Step to avoid contended hosts by downvoting them.
-type AvoidContendedHostsStep struct {
+type AvoidLongTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AvoidContendedHostsStepOpts]
+	plugins.BaseStep[AvoidLongTermContendedHostsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *AvoidContendedHostsStep) GetName() string {
+func (s *AvoidLongTermContendedHostsStep) GetName() string {
 	return "vmware_avoid_contended_hosts"
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+func (s *AvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
@@ -61,9 +61,9 @@ func (s *AvoidContendedHostsStep) Run(traceLog *slog.Logger, request api.Request
 		return result, nil
 	}
 
-	var highlyContendedHosts []vmware.VROpsHostsystemContention
+	var highlyContendedHosts []vmware.VROpsHostsystemContentionLongTerm
 	if _, err := s.DB.Select(&highlyContendedHosts, `
-		SELECT * FROM feature_vrops_hostsystem_contention
+		SELECT * FROM feature_vrops_hostsystem_contention_long_term
 	`); err != nil {
 		return nil, err
 	}

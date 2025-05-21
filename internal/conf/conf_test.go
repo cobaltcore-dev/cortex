@@ -40,7 +40,7 @@ func TestNewConfig(t *testing.T) {
           "resolutionSeconds": 43200
         },
         {
-          "name": "vrops_hostsystem_cpu_contention_percentage",
+          "name": "vrops_hostsystem_cpu_contention_long_term_percentage",
           "type": "vrops_host_metric"
         }
       ]

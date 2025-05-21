@@ -48,27 +48,27 @@ func (k *VMwareHostContentionKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *VMwareHostContentionKPI) Collect(ch chan<- prometheus.Metric) {
-	var contentions []vmware.VROpsHostsystemContention
-	tableName := vmware.VROpsHostsystemContention{}.TableName()
+	var contentions []vmware.VROpsHostsystemContentionLongTerm
+	tableName := vmware.VROpsHostsystemContentionLongTerm{}.TableName()
 	if _, err := k.DB.Select(&contentions, "SELECT * FROM "+tableName); err != nil {
 		slog.Error("failed to select hostsystem contention", "err", err)
 		return
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)
-	keysFunc := func(contention vmware.VROpsHostsystemContention) []string {
+	keysFunc := func(contention vmware.VROpsHostsystemContentionLongTerm) []string {
 		return []string{"cpu_contention_max"}
 	}
-	valueFunc := func(contention vmware.VROpsHostsystemContention) float64 {
+	valueFunc := func(contention vmware.VROpsHostsystemContentionLongTerm) float64 {
 		return contention.MaxCPUContention
 	}
 	hists, counts, sums := plugins.Histogram(contentions, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostCPUContentionMax, counts[key], sums[key], hist)
 	}
-	keysFunc = func(contention vmware.VROpsHostsystemContention) []string {
+	keysFunc = func(contention vmware.VROpsHostsystemContentionLongTerm) []string {
 		return []string{"cpu_contention_avg"}
 	}
-	valueFunc = func(contention vmware.VROpsHostsystemContention) float64 {
+	valueFunc = func(contention vmware.VROpsHostsystemContentionLongTerm) float64 {
 		return float64(contention.AvgCPUContention)
 	}
 	hists, counts, sums = plugins.Histogram(contentions, buckets, keysFunc, valueFunc)
