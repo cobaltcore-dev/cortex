@@ -1,14 +1,14 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package extractor
 
 import (
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )

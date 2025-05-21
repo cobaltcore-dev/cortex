@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )

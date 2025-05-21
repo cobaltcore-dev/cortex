@@ -6,9 +6,9 @@ package shared
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )

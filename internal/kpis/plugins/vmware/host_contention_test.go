@@ -6,9 +6,9 @@ package vmware
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )

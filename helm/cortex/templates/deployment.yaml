@@ -10,6 +10,7 @@ metadata:
   annotations:
     # Roll the service when its configmap changes.
     checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+    kubectl.kubernetes.io/default-container: {{ $.Chart.Name }}-{{ .name }}
   labels:
     app: {{ $.Chart.Name }}-{{ .name }}
     {{- include "cortex.labels" $ | nindent 4 }}
@@ -37,6 +38,9 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      {{- if .serviceAccountName }}
+      serviceAccountName: {{ .serviceAccountName }}
+      {{- end }}
       containers:
         - name: {{ $.Chart.Name }}-{{ .name }}
           args: {{ .args | toJson }}

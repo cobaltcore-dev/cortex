@@ -1,20 +1,24 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package extractor
 
 import (
+	"context"
 	"log/slog"
 	"slices"
 	"sync"
 
+	"github.com/cobaltcore-dev/cortex/extractor/plugins"
+	"github.com/cobaltcore-dev/cortex/extractor/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pahomqtt "github.com/eclipse/paho.mqtt.golang"
 )
@@ -36,6 +40,11 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 
 // Pipeline that contains multiple feature extractors and executes them.
 type FeatureExtractorPipeline struct {
+	// Client for the kubernetes API.
+	client.Client
+	// Kubernetes scheme to use for the feature extractors.
+	Scheme *runtime.Scheme
+
 	// The dependency graph of the feature extractors, which is used to
 	// determine the execution order of the feature extractors.
 	//
@@ -202,4 +211,9 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 		}
 		wg.Wait()
 	}
+}
+
+func (r *FeatureExtractorPipeline) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	slog.Info("reconciling feature extractor", "name", req.Name, "namespace", req.Namespace)
+	return ctrl.Result{}, nil
 }

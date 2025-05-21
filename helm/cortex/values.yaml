@@ -50,6 +50,7 @@ modes:
   - name: extractor
     args: ["extractor"]
     replicas: 1
+    serviceAccountName: cortex-feature-manager
 
   # Scheduler exposes the scheduler API and modifies the Nova scheduler weights.
   - name: scheduler

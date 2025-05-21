@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package extractor
 
 import (
 	"errors"
@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt/containers"
 )

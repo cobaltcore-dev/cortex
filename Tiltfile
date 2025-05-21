@@ -34,7 +34,7 @@ def synced_helm(path_to_chart, name, values=[]):
     """
 
     # Build the chart dependencies from the Chart.lock.
-    local('helm dep build ' + path_to_chart)
+    # local('helm dep build ' + path_to_chart)
 
     # Build the command to get the rendered kubernetes yaml.
     cmd = 'helm template'
@@ -54,7 +54,8 @@ def synced_helm(path_to_chart, name, values=[]):
 ########### Cortex Core Services
 tilt_values = os.getenv('TILT_VALUES_PATH')
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
-    'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile', tilt_values,
+    'internal/', 'extractor/', 'commands/',
+    'main.go', 'go.mod', 'go.sum', 'Makefile', tilt_values,
 ])
 k8s_yaml(synced_helm('./helm/cortex', name='cortex', values=[tilt_values]))
 k8s_resource('cortex-syncer', port_forwards=[
@@ -78,6 +79,10 @@ k8s_resource('cortex-kpis', port_forwards=[
 ], links=[
     link('localhost:8004/metrics', '/metrics'),
 ], labels=['Core-Services'])
+
+########### Cortex Features
+
+k8s_yaml(synced_helm('./helm/features', name='cortex-features'))
 
 ########### Cortex Commands
 k8s_resource('cortex-cli', labels=['Commands'])

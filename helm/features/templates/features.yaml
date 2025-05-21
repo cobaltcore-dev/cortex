@@ -1,0 +1,6 @@
+apiVersion: extractor.cortex.sap/v1
+kind: Feature
+metadata:
+  name: feature
+spec:
+  foo: blablobib

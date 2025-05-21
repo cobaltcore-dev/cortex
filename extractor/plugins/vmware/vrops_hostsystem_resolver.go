@@ -6,8 +6,8 @@ package vmware
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )

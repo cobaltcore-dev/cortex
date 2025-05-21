@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
