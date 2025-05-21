@@ -233,7 +233,7 @@ conf:
                 types:
                   - hypervisors
                   - servers
-      - name: vrops_hostsystem_contention_extractor
+      - name: vrops_hostsystem_contention_long_term_extractor
         dependencies:
           features:
             extractors:
@@ -242,6 +242,15 @@ conf:
             prometheus:
               metrics:
                 - alias: vrops_hostsystem_cpu_contention_long_term_percentage
+      - name: vrops_hostsystem_contention_short_term_extractor
+        dependencies:
+          features:
+            extractors:
+              - vrops_hostsystem_resolver
+          sync:
+            prometheus:
+              metrics:
+                - alias: vrops_hostsystem_cpu_contention_short_term_percentage
 
       # KVM-specific extractors.
       - name: node_exporter_host_cpu_usage_extractor
@@ -296,7 +305,7 @@ conf:
         dependencies:
           features:
             extractors:
-              - vrops_hostsystem_contention_extractor
+              - vrops_hostsystem_contention_long_term_extractor
       - name: vmware_project_noisiness_kpi
         dependencies:
           features:
@@ -361,7 +370,7 @@ conf:
         dependencies:
           features:
             extractors:
-              - vrops_hostsystem_contention_extractor
+              - vrops_hostsystem_contention_long_term_extractor
 
       # KVM specific scheduler steps.
       - name: kvm_avoid_overloaded_hosts_cpu
