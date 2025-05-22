@@ -148,9 +148,9 @@ conf:
           query: |
             vrops_hostsystem_cpu_contention_percentage{}
           type: vrops_host_metric
-          timeRangeSeconds: 43200 # 12 hours
-          intervalSeconds: 3600 # 1 hour
-          resolutionSeconds: 600 # 10 minutes
+          timeRangeSeconds: 1200 # 20 minutes
+          intervalSeconds:  300 # 5 minutes
+          resolutionSeconds: 60 # 1 minute
         # Node exporter metrics for KVM hosts.
         - alias: node_exporter_cpu_usage_pct
           query: |
