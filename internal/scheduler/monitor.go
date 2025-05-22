@@ -127,6 +127,9 @@ func (m *Monitor) observePipelineResult(request api.Request, result []string) {
 
 // Wraps a scheduler step to monitor its execution.
 type StepMonitor struct {
+	// Mixin that can be embedded in a step to provide some activation function tooling.
+	plugins.ActivationFunction
+
 	// The wrapped scheduler step to monitor.
 	Step plugins.Step
 	// A timer to measure how long the step takes to run.
@@ -211,10 +214,16 @@ func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (*plugins.
 
 	// Calculate additional metrics to see which hosts were reordered and how far.
 	sort.Slice(hostsIn, func(i, j int) bool {
-		return inWeights[hostsIn[i]] > inWeights[hostsIn[j]]
+		iHost, jHost := hostsOut[i], hostsOut[j]
+		return s.Norm(inWeights[iHost]) > s.Norm(inWeights[jHost])
 	})
 	sort.Slice(hostsOut, func(i, j int) bool {
-		return stepResult.Activations[hostsOut[i]] > stepResult.Activations[hostsOut[j]]
+		// Add the weights together to get an estimate how far this step alone
+		// would have moved the host.
+		iHost, jHost := hostsOut[i], hostsOut[j]
+		iSum := s.Norm(inWeights[iHost]) + s.Norm(stepResult.Activations[iHost])
+		jSum := s.Norm(inWeights[jHost]) + s.Norm(stepResult.Activations[jHost])
+		return iSum > jSum
 	})
 	for idx := range min(len(hostsOut), 5) { // Look at the first 5 hosts.
 		// The host at this index was moved from its original position.

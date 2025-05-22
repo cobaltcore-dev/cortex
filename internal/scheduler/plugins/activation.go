@@ -11,6 +11,11 @@ type ActivationFunction struct{}
 // Get activations that will have no effect on the host.
 func (m *ActivationFunction) NoEffect() float64 { return 0 }
 
+// Normalize a single value using the activation function.
+func (m *ActivationFunction) Norm(activation float64) float64 {
+	return math.Tanh(activation)
+}
+
 // Apply the activation function to the weights map.
 // All hosts that are not in the activations map are removed.
 func (m *ActivationFunction) Apply(in, activations map[string]float64) map[string]float64 {
