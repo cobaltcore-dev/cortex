@@ -14,21 +14,21 @@ import (
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
-func TestAvoidContendedHostsStep_Run(t *testing.T) {
+func TestAvoidShortTermContendedHostsStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
 	// Create dependency tables
-	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsHostsystemContention{}))
+	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsHostsystemContentionShortTerm{}))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_vrops_hostsystem_contention table
 	_, err = testDB.Exec(`
-        INSERT INTO feature_vrops_hostsystem_contention (compute_host, avg_cpu_contention, max_cpu_contention)
+        INSERT INTO feature_vrops_hostsystem_contention_short_term (compute_host, avg_cpu_contention, max_cpu_contention)
         VALUES
             ('host1', 0.0, 0.0),
             ('host2', 100.0, 0.0),
@@ -50,7 +50,7 @@ func TestAvoidContendedHostsStep_Run(t *testing.T) {
         "maxCPUContentionActivationLowerBound": 0.0,
         "maxCPUContentionActivationUpperBound": -1.0
     }`)
-	step := &AvoidContendedHostsStep{}
+	step := &AvoidShortTermContendedHostsStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

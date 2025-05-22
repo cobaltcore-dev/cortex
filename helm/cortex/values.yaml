@@ -140,10 +140,17 @@ conf:
           query: |
             vrops_virtualmachine_cpu_demand_ratio{}
           type: vrops_vm_metric
-        - alias: vrops_hostsystem_cpu_contention_percentage
+        - alias: vrops_hostsystem_cpu_contention_long_term_percentage
           query: |
             vrops_hostsystem_cpu_contention_percentage{}
           type: vrops_host_metric
+        - alias: vrops_hostsystem_cpu_contention_short_term_percentage
+          query: |
+            vrops_hostsystem_cpu_contention_percentage{}
+          type: vrops_host_metric
+          timeRangeSeconds: 1200 # 20 minutes
+          intervalSeconds:  300 # 5 minutes
+          resolutionSeconds: 60 # 1 minute
         # Node exporter metrics for KVM hosts.
         - alias: node_exporter_cpu_usage_pct
           query: |
@@ -226,7 +233,7 @@ conf:
                 types:
                   - hypervisors
                   - servers
-      - name: vrops_hostsystem_contention_extractor
+      - name: vrops_hostsystem_contention_long_term_extractor
         dependencies:
           features:
             extractors:
@@ -234,7 +241,16 @@ conf:
           sync:
             prometheus:
               metrics:
-                - alias: vrops_hostsystem_cpu_contention_percentage
+                - alias: vrops_hostsystem_cpu_contention_long_term_percentage
+      - name: vrops_hostsystem_contention_short_term_extractor
+        dependencies:
+          features:
+            extractors:
+              - vrops_hostsystem_resolver
+          sync:
+            prometheus:
+              metrics:
+                - alias: vrops_hostsystem_cpu_contention_short_term_percentage
 
       # KVM-specific extractors.
       - name: node_exporter_host_cpu_usage_extractor
@@ -289,7 +305,7 @@ conf:
         dependencies:
           features:
             extractors:
-              - vrops_hostsystem_contention_extractor
+              - vrops_hostsystem_contention_long_term_extractor
       - name: vmware_project_noisiness_kpi
         dependencies:
           features:
@@ -339,7 +355,7 @@ conf:
           features:
             extractors:
               - vrops_project_noisiness_extractor
-      - name: vmware_avoid_contended_hosts
+      - name: vmware_avoid_long_term_contended_hosts
         options:
           # Min-max scaling for avg CPU contention on the host.
           avgCPUContentionLowerBound: 0 # pct
@@ -354,7 +370,23 @@ conf:
         dependencies:
           features:
             extractors:
-              - vrops_hostsystem_contention_extractor
+              - vrops_hostsystem_contention_long_term_extractor
+      - name: vmware_avoid_short_term_contended_hosts
+        options:
+          # Min-max scaling for avg CPU contention on the host.
+          avgCPUContentionLowerBound: 0 # pct
+          avgCPUContentionUpperBound: 10 # pct
+          avgCPUContentionActivationLowerBound: 0.0
+          avgCPUContentionActivationUpperBound: -0.75
+          # Min-max scaling for max CPU contention on the host.
+          maxCPUContentionLowerBound: 0 # pct
+          maxCPUContentionUpperBound: 10 # pct
+          maxCPUContentionActivationLowerBound: 0.0
+          maxCPUContentionActivationUpperBound: -0.25
+        dependencies:
+          features:
+            extractors:
+              - vrops_hostsystem_contention_short_term_extractor
 
       # KVM specific scheduler steps.
       - name: kvm_avoid_overloaded_hosts_cpu

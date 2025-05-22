@@ -236,7 +236,7 @@ func (s *syncer[M]) sync(start time.Time) {
 		"syncing Prometheus data", "metricAlias", s.MetricConf.Alias,
 		"start", start, "end", end, "tableName", tableName,
 	)
-	// Drop all metrics that are older than 4 weeks.
+	// Drop all metrics that are older than <timeRangeSeconds> from the config file. (Default is 4 weeks)
 	result, err := s.DB.Exec(
 		fmt.Sprintf("DELETE FROM %s WHERE name = :name AND timestamp < :timestamp", tableName),
 		map[string]any{"name": s.MetricConf.Alias, "timestamp": time.Now().Add(-s.SyncTimeRange)},
