@@ -4,14 +4,16 @@
 package scheduler
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 	testlibMonitoring "github.com/cobaltcore-dev/cortex/testlib/monitoring"
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
+	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
@@ -123,10 +125,12 @@ func TestStepMonitorRun(t *testing.T) {
 	runTimer := &testlibMonitoring.MockObserver{}
 	removedHostsObserver := &testlibMonitoring.MockObserver{}
 	monitor := &StepMonitor{
-		Step: &plugins.MockStep{
+		Step: &testlibPlugins.MockStep{
 			Name: "mock_step",
-			RunFunc: func(request api.Request) (map[string]float64, error) {
-				return map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0}, nil
+			RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+				return &plugins.StepResult{
+					Activations: map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0},
+				}, nil
 			},
 		},
 		runTimer:             runTimer,
@@ -137,7 +141,7 @@ func TestStepMonitorRun(t *testing.T) {
 		Hosts:   []string{"host1", "host2", "host3"},
 		Weights: map[string]float64{"host1": 0.2, "host2": 0.1, "host3": 0.0},
 	}
-	if _, err := monitor.Run(request); err != nil {
+	if _, err := monitor.Run(slog.Default(), request); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 	if len(removedHostsObserver.Observations) != 1 {

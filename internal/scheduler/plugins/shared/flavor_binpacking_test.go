@@ -4,6 +4,7 @@
 package shared
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -130,12 +131,12 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weights, err := step.Run(&tt.request)
+			result, err := step.Run(slog.Default(), &tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 			for host, expectedWeight := range tt.expectedWeights {
-				if weight, ok := weights[host]; ok {
+				if weight, ok := result.Activations[host]; ok {
 					if weight != expectedWeight {
 						t.Errorf("expected weight for host %s to be %f, got %f", host, expectedWeight, weight)
 					}

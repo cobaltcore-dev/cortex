@@ -10,7 +10,7 @@ import (
 
 func TestActivationFunction_NoEffect(t *testing.T) {
 	af := ActivationFunction{}
-	expected := Weight(0)
+	expected := 0.0
 	if af.NoEffect() != expected {
 		t.Errorf("expected %v, got %v", expected, af.NoEffect())
 	}
@@ -21,47 +21,47 @@ func TestActivationFunction_Apply(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		in          Weights
-		activations Weights
-		expected    Weights
+		in          map[string]float64
+		activations map[string]float64
+		expected    map[string]float64
 	}{
 		{
 			name: "all hosts in activations",
-			in: Weights{
+			in: map[string]float64{
 				"host1": 1.0,
 				"host2": 2.0,
 			},
-			activations: Weights{
+			activations: map[string]float64{
 				"host1": 0.5,
 				"host2": -0.5,
 			},
-			expected: Weights{
+			expected: map[string]float64{
 				"host1": 1.0 + math.Tanh(0.5),
 				"host2": 2.0 + math.Tanh(-0.5),
 			},
 		},
 		{
 			name: "some hosts not in activations",
-			in: Weights{
+			in: map[string]float64{
 				"host1": 1.0,
 				"host2": 2.0,
 				"host3": 3.0,
 			},
-			activations: Weights{
+			activations: map[string]float64{
 				"host1": 0.5,
 			},
-			expected: Weights{
+			expected: map[string]float64{
 				"host1": 1.0 + math.Tanh(0.5),
 			},
 		},
 		{
 			name: "no hosts in activations",
-			in: Weights{
+			in: map[string]float64{
 				"host1": 1.0,
 				"host2": 2.0,
 			},
-			activations: Weights{},
-			expected:    Weights{},
+			activations: map[string]float64{},
+			expected:    map[string]float64{},
 		},
 	}
 

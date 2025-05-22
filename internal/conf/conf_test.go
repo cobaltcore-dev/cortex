@@ -40,7 +40,7 @@ func TestNewConfig(t *testing.T) {
           "resolutionSeconds": 43200
         },
         {
-          "name": "vrops_hostsystem_cpu_contention_percentage",
+          "name": "vrops_hostsystem_cpu_contention_long_term_percentage",
           "type": "vrops_host_metric"
         }
       ]
@@ -63,7 +63,7 @@ func TestNewConfig(t *testing.T) {
         "name": "vrops_project_noisiness_extractor"
       },
       {
-        "name": "vrops_hostsystem_contention_extractor"
+        "name": "vrops_hostsystem_contention_long_term_extractor"
       }
     ]
   },
@@ -76,7 +76,7 @@ func TestNewConfig(t *testing.T) {
         }
       },
       {
-        "name": "vmware_avoid_contended_hosts",
+        "name": "vmware_avoid_long_term_contended_hosts",
         "options": {
           "maxCPUContentionThreshold": 50
         }

@@ -5,6 +5,7 @@ package kvm
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
@@ -50,11 +51,13 @@ func (s *AvoidOverloadedHostsMemoryStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsMemoryStep) Run(request api.Request) (map[string]float64, error) {
-	activations := s.BaseActivations(request)
+func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	result := s.PrepareResult(request)
+	result.Statistics["avg memory active"] = s.PrepareStats(request, "%")
+	result.Statistics["max memory active"] = s.PrepareStats(request, "%")
 	if request.GetVMware() {
 		// Don't run this step for VMware VMs.
-		return activations, nil
+		return result, nil
 	}
 
 	var hostMemoryActive []kvm.NodeExporterHostMemoryActive
@@ -66,7 +69,7 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(request api.Request) (map[string]fl
 
 	for _, host := range hostMemoryActive {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[host.ComputeHost]; !ok {
+		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
 		activationAvg := plugins.MinMaxScale(
@@ -83,7 +86,9 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(request api.Request) (map[string]fl
 			s.Options.MaxMemoryUsageActivationLowerBound,
 			s.Options.MaxMemoryUsageActivationUpperBound,
 		)
-		activations[host.ComputeHost] = activationAvg + activationMax
+		result.Activations[host.ComputeHost] = activationAvg + activationMax
+		result.Statistics["avg memory active"].Hosts[host.ComputeHost] = host.AvgMemoryActive
+		result.Statistics["max memory active"].Hosts[host.ComputeHost] = host.MaxMemoryActive
 	}
-	return activations, nil
+	return result, nil
 }

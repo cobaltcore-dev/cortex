@@ -4,6 +4,7 @@
 package kvm
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -92,12 +93,12 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			weights, err := step.Run(&tt.request)
+			result, err := step.Run(slog.Default(), &tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 			// Check that the weights have decreased
-			for host, weight := range weights {
+			for host, weight := range result.Activations {
 				if _, ok := tt.downvotedHosts[host]; ok {
 					if weight >= 0 {
 						t.Errorf("expected weight for host %s to be less than 0, got %f", host, weight)

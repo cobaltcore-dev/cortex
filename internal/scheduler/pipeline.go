@@ -27,7 +27,8 @@ import (
 var SupportedSteps = []plugins.Step{
 	// VMware-specific steps
 	&vmware.AntiAffinityNoisyProjectsStep{},
-	&vmware.AvoidContendedHostsStep{},
+	&vmware.AvoidLongTermContendedHostsStep{},
+	&vmware.AvoidShortTermContendedHostsStep{},
 	// KVM-specific steps
 	&kvm.AvoidOverloadedHostsCPUStep{},
 	&kvm.AvoidOverloadedHostsMemoryStep{},
@@ -117,10 +118,10 @@ func (p *pipeline) runSteps(log *slog.Logger, request api.Request) map[string]ma
 		var wg sync.WaitGroup
 		for _, step := range steps {
 			wg.Add(1)
-			go func(step plugins.Step) {
+			go func() {
 				defer wg.Done()
 				log.Info("scheduler: running step", "name", step.GetName())
-				activations, err := step.Run(request)
+				result, err := step.Run(log, request)
 				log.Info("scheduler: finished step", "name", step.GetName())
 				if err != nil {
 					log.Error("scheduler: failed to run step", "error", err)
@@ -128,8 +129,8 @@ func (p *pipeline) runSteps(log *slog.Logger, request api.Request) map[string]ma
 				}
 				lock.Lock()
 				defer lock.Unlock()
-				activationsByStep[step.GetName()] = activations
-			}(step)
+				activationsByStep[step.GetName()] = result.Activations
+			}()
 		}
 		wg.Wait()
 	}

@@ -5,6 +5,7 @@ package vmware
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
@@ -13,7 +14,7 @@ import (
 
 // Options for the scheduling step, given through the
 // step config in the service yaml file.
-type AvoidContendedHostsStepOpts struct {
+type AvoidShortTermContendedHostsStepOpts struct {
 	AvgCPUContentionLowerBound float64 `json:"avgCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
 	AvgCPUContentionUpperBound float64 `json:"avgCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
 
@@ -27,7 +28,7 @@ type AvoidContendedHostsStepOpts struct {
 	MaxCPUContentionActivationUpperBound float64 `json:"maxCPUContentionActivationUpperBound"`
 }
 
-func (o AvoidContendedHostsStepOpts) Validate() error {
+func (o AvoidShortTermContendedHostsStepOpts) Validate() error {
 	// Avoid zero-division during min-max scaling.
 	if o.AvgCPUContentionLowerBound == o.AvgCPUContentionUpperBound {
 		return errors.New("avgCPUContentionLowerBound and avgCPUContentionUpperBound must not be equal")
@@ -38,28 +39,31 @@ func (o AvoidContendedHostsStepOpts) Validate() error {
 	return nil
 }
 
-// Step to avoid contended hosts by downvoting them.
-type AvoidContendedHostsStep struct {
+// Step to avoid recently contended hosts by downvoting them.
+type AvoidShortTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AvoidContendedHostsStepOpts]
+	plugins.BaseStep[AvoidShortTermContendedHostsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *AvoidContendedHostsStep) GetName() string {
-	return "vmware_avoid_contended_hosts"
+func (s *AvoidShortTermContendedHostsStep) GetName() string {
+	return "vmware_avoid_short_term_contended_hosts"
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidContendedHostsStep) Run(request api.Request) (map[string]float64, error) {
-	activations := s.BaseActivations(request)
+func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	result := s.PrepareResult(request)
+	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
+	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
+
 	if !request.GetVMware() {
 		// Only run this step for VMware VMs.
-		return activations, nil
+		return result, nil
 	}
 
-	var highlyContendedHosts []vmware.VROpsHostsystemContention
+	var highlyContendedHosts []vmware.VROpsHostsystemContentionShortTerm
 	if _, err := s.DB.Select(&highlyContendedHosts, `
-		SELECT * FROM feature_vrops_hostsystem_contention
+		SELECT * FROM feature_vrops_hostsystem_contention_short_term
 	`); err != nil {
 		return nil, err
 	}
@@ -67,7 +71,7 @@ func (s *AvoidContendedHostsStep) Run(request api.Request) (map[string]float64, 
 	// Push the VM away from highly contended hosts.
 	for _, host := range highlyContendedHosts {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[host.ComputeHost]; !ok {
+		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
 		activationAvg := plugins.MinMaxScale(
@@ -84,7 +88,9 @@ func (s *AvoidContendedHostsStep) Run(request api.Request) (map[string]float64, 
 			s.Options.MaxCPUContentionActivationLowerBound,
 			s.Options.MaxCPUContentionActivationUpperBound,
 		)
-		activations[host.ComputeHost] = activationAvg + activationMax
+		result.Activations[host.ComputeHost] = activationAvg + activationMax
+		result.Statistics["avg cpu contention"].Hosts[host.ComputeHost] = host.AvgCPUContention
+		result.Statistics["max cpu contention"].Hosts[host.ComputeHost] = host.MaxCPUContention
 	}
-	return activations, nil
+	return result, nil
 }

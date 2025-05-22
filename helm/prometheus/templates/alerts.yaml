@@ -188,4 +188,32 @@ spec:
           unexpectedly many objects, or when the database cannot drop old objects.
           No immediate action is needed, but should this condition persist for a
           longer time, the database may fill up and crash.
+
+    - alert: CortexTooManyMQTTConnectionAttempts
+      expr: rate(cortex_mqtt_connection_attempts_total[5m]) > 0.1
+      for: 1m
+      labels:
+        context: mqtt
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexTooManyMQTTConnectionAttempts }}{{ .cortexTooManyMQTTConnectionAttempts | toYaml | nindent 8 }}{{- end }}
+      annotations:
+        summary: "Cortex is trying to connect to MQTT too often"
+        description: >
+          Cortex is trying to connect to the MQTT broker too often. This may
+          happen when the broker is down or the connection parameters are
+          misconfigured.
+
+    - alert: CortexTooManyDBConnectionAttempts
+      expr: rate(cortex_db_connection_attempts_total[5m]) > 0.1
+      for: 1m
+      labels:
+        context: db
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexTooManyDBConnectionAttempts }}{{ .cortexTooManyDBConnectionAttempts | toYaml | nindent 8 }}{{- end }}
+      annotations:
+        summary: "Cortex is trying to connect to the database too often"
+        description: >
+          Cortex is trying to connect to the database too often. This may happen
+          when the database is down or the connection parameters are misconfigured.
+
 {{- end }}

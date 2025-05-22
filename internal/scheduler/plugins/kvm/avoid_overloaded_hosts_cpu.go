@@ -5,6 +5,7 @@ package kvm
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
@@ -50,11 +51,14 @@ func (s *AvoidOverloadedHostsCPUStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsCPUStep) Run(request api.Request) (map[string]float64, error) {
-	activations := s.BaseActivations(request)
+func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	result := s.PrepareResult(request)
+	result.Statistics["avg cpu usage"] = s.PrepareStats(request, "%")
+	result.Statistics["max cpu usage"] = s.PrepareStats(request, "%")
+
 	if request.GetVMware() {
 		// Don't run this step for VMware VMs.
-		return activations, nil
+		return result, nil
 	}
 
 	var hostCPUUsages []kvm.NodeExporterHostCPUUsage
@@ -66,7 +70,7 @@ func (s *AvoidOverloadedHostsCPUStep) Run(request api.Request) (map[string]float
 
 	for _, host := range hostCPUUsages {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := activations[host.ComputeHost]; !ok {
+		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
 		activationAvg := plugins.MinMaxScale(
@@ -83,7 +87,9 @@ func (s *AvoidOverloadedHostsCPUStep) Run(request api.Request) (map[string]float
 			s.Options.MaxCPUUsageActivationLowerBound,
 			s.Options.MaxCPUUsageActivationUpperBound,
 		)
-		activations[host.ComputeHost] = activationAvg + activationMax
+		result.Activations[host.ComputeHost] = activationAvg + activationMax
+		result.Statistics["avg cpu usage"].Hosts[host.ComputeHost] = host.AvgCPUUsage
+		result.Statistics["max cpu usage"].Hosts[host.ComputeHost] = host.MaxCPUUsage
 	}
-	return activations, nil
+	return result, nil
 }

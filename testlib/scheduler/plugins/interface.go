@@ -4,16 +4,19 @@
 package plugins
 
 import (
+	"log/slog"
+
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
 )
 
 // MockStep is a manual mock implementation of the plugins.Step interface.
 type MockStep struct {
 	Name     string
 	InitFunc func(db db.DB, opts conf.RawOpts) error
-	RunFunc  func(request api.Request) (map[string]float64, error)
+	RunFunc  func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error)
 }
 
 func (m *MockStep) GetName() string {
@@ -24,6 +27,6 @@ func (m *MockStep) Init(db db.DB, opts conf.RawOpts) error {
 	return m.InitFunc(db, opts)
 }
 
-func (m *MockStep) Run(request api.Request) (map[string]float64, error) {
-	return m.RunFunc(request)
+func (m *MockStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+	return m.RunFunc(traceLog, request)
 }

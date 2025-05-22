@@ -4,5 +4,5 @@ SELECT
     MAX(m.value) AS max_cpu_contention
 FROM vrops_host_metrics m
 JOIN feature_vrops_resolved_hostsystem h ON m.hostsystem = h.vrops_hostsystem
-WHERE m.name = 'vrops_hostsystem_cpu_contention_percentage'
+WHERE m.name = 'vrops_hostsystem_cpu_contention_long_term_percentage'
 GROUP BY h.nova_compute_host;

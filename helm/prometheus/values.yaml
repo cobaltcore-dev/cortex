@@ -33,6 +33,10 @@ alerts:
       severity: info
     cortexSyncObjectsTooHigh:
       severity: info
+    cortexTooManyMQTTConnectionAttempts:
+      severity: info
+    cortexTooManyDBConnectionAttempts:
+      severity: info
 
 owner-info:
   helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/prometheus"

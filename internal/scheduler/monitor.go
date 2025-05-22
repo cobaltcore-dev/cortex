@@ -170,7 +170,7 @@ func monitorStep(step plugins.Step, m Monitor) *StepMonitor {
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
+func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
 	stepName := s.GetName()
 
 	if s.runTimer != nil {
@@ -179,31 +179,31 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 	}
 
 	inWeights := request.GetWeights()
-	outWeights, err := s.Step.Run(request)
+	stepResult, err := s.Step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
 	}
-	slog.Info(
+	traceLog.Info(
 		"scheduler: finished step", "name", stepName,
-		"inWeights", inWeights, "outWeights", outWeights,
+		"inWeights", inWeights, "outWeights", stepResult.Activations,
 	)
 
 	// Observe how much the step modifies the weights of the hosts.
 	if s.stepHostWeight != nil {
-		for host, weight := range outWeights {
+		for host, weight := range stepResult.Activations {
 			s.stepHostWeight.WithLabelValues(host, stepName).Add(weight)
 			if weight != 0.0 {
-				slog.Info("scheduler: modified host weight", "name", stepName, "weight", weight)
+				traceLog.Info("scheduler: modified host weight", "name", stepName, "weight", weight)
 			}
 		}
 	}
 
 	// Observe how many hosts are removed from the state.
 	hostsIn := request.GetHosts()
-	hostsOut := slices.Collect(maps.Keys(outWeights))
+	hostsOut := slices.Collect(maps.Keys(stepResult.Activations))
 	nHostsRemoved := len(hostsIn) - len(hostsOut)
 	if nHostsRemoved < 0 {
-		slog.Info("scheduler: removed hosts", "name", stepName, "count", nHostsRemoved)
+		traceLog.Info("scheduler: removed hosts", "name", stepName, "count", nHostsRemoved)
 	}
 	if s.removedHostsObserver != nil {
 		s.removedHostsObserver.Observe(float64(nHostsRemoved))
@@ -214,7 +214,7 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 		return inWeights[hostsIn[i]] > inWeights[hostsIn[j]]
 	})
 	sort.Slice(hostsOut, func(i, j int) bool {
-		return outWeights[hostsOut[i]] > outWeights[hostsOut[j]]
+		return stepResult.Activations[hostsOut[i]] > stepResult.Activations[hostsOut[j]]
 	})
 	for idx := range min(len(hostsOut), 5) { // Look at the first 5 hosts.
 		// The host at this index was moved from its original position.
@@ -224,12 +224,45 @@ func (s *StepMonitor) Run(request api.Request) (map[string]float64, error) {
 			o := s.stepReorderingsObserver.WithLabelValues(stepName, strconv.Itoa(idx))
 			o.Observe(float64(originalIdx))
 		}
-		slog.Info(
+		traceLog.Info(
 			"scheduler: reordered host",
 			"name", stepName, "host", hostsOut[idx],
 			"originalIdx", originalIdx, "newIdx", idx,
 		)
 	}
 
-	return outWeights, nil
+	// Based on the provided step statistics, log something like this:
+	// max cpu contention: before [ 100%, 50%, 40% ], after [ 40%, 50%, 100% ]
+	for statName, statData := range stepResult.Statistics {
+		if statData.Hosts == nil {
+			continue
+		}
+		msg := "scheduler: statistics for step " + stepName
+		msg += " -- " + statName + ""
+		before := ""
+		for i, host := range hostsIn {
+			if hostStat, ok := statData.Hosts[host]; ok {
+				before += strconv.FormatFloat(hostStat, 'f', 2, 64) + " " + statData.Unit
+			} else {
+				before += "-"
+			}
+			if i < len(hostsIn)-1 {
+				before += ", "
+			}
+		}
+		after := ""
+		for i, host := range hostsOut {
+			if hostStat, ok := statData.Hosts[host]; ok {
+				after += strconv.FormatFloat(hostStat, 'f', 2, 64) + " " + statData.Unit
+			} else {
+				after += "-"
+			}
+			if i < len(hostsOut)-1 {
+				after += ", "
+			}
+		}
+		traceLog.Info(msg, "before", before, "after", after)
+	}
+
+	return stepResult, nil
 }

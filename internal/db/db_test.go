@@ -10,8 +10,11 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/db/containers"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 type MockTable struct {
@@ -47,7 +50,7 @@ func TestNewDB(t *testing.T) {
 		Database: "postgres",
 	}
 
-	db := NewPostgresDB(config, nil)
+	db := NewPostgresDB(config, nil, Monitor{})
 	db.Close()
 }
 
@@ -272,4 +275,58 @@ func TestBulkInsert(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestUnexpectedConnectionLoss(t *testing.T) {
+	// The test is only relevant for postgres and not sqlite.
+	if os.Getenv("POSTGRES_CONTAINER") != "1" {
+		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
+	}
+	container := containers.PostgresContainer{}
+	container.Init(t)
+	// no need to defer the container close here, as it will be closed in the test below
+
+	port, err := strconv.Atoi(container.GetPort())
+	if err != nil {
+		t.Fatalf("failed to convert port: %v", err)
+	}
+	config := conf.DBConfig{
+		Host:     "localhost",
+		Port:     port,
+		User:     "postgres",
+		Password: "secret",
+		Database: "postgres",
+		Reconnect: conf.DBReconnectConfig{
+			MaxRetries:                  10,
+			RetryIntervalSeconds:        0,
+			LivenessPingIntervalSeconds: 0,
+		},
+	}
+
+	registry := &monitoring.Registry{Registry: prometheus.NewRegistry()}
+	monitor := NewDBMonitor(registry)
+
+	db := NewPostgresDB(config, nil, monitor)
+	defer db.Close()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("expected panic, but code did not panic")
+		}
+
+		if err := db.Db.Ping(); err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		// Check if the connection attempts metric was incremented
+		if monitor.connectionAttempts == nil {
+			t.Fatalf("expected connection attempts metric to be registered")
+		}
+		attempts := testutil.ToFloat64(monitor.connectionAttempts)
+		if attempts != float64(config.Reconnect.MaxRetries) {
+			t.Errorf("expected %v connection attempts, got %v", config.Reconnect.MaxRetries, attempts)
+		}
+	}()
+	container.Close()
+	db.CheckLivenessPeriodically()
 }
