@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 )
 
 // Mock implementation of Pipeline

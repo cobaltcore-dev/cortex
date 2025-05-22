@@ -67,7 +67,7 @@ k8s_resource('cortex-extractor', port_forwards=[
 ], links=[
     link('localhost:8002/metrics', '/metrics'),
 ], labels=['Core-Services'])
-k8s_resource('cortex-scheduler', port_forwards=[
+k8s_resource('cortex-scheduler-nova', port_forwards=[
     port_forward(8080, 8080),
     port_forward(8003, 2112),
 ], links=[

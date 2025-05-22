@@ -8,8 +8,9 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -66,7 +67,7 @@ func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.R
 		if _, ok := result.Activations[p.ComputeHost]; !ok {
 			continue
 		}
-		result.Activations[p.ComputeHost] = plugins.MinMaxScale(
+		result.Activations[p.ComputeHost] = scheduler.MinMaxScale(
 			p.AvgCPUOfProject,
 			s.Options.AvgCPUUsageLowerBound,
 			s.Options.AvgCPUUsageUpperBound,

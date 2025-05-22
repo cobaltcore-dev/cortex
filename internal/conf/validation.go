@@ -103,7 +103,7 @@ func (c *config) Validate() error {
 			return err
 		}
 	}
-	for _, step := range c.SchedulerConfig.Plugins {
+	for _, step := range c.Nova.Plugins {
 		if err := step.validate(*c); err != nil {
 			return err
 		}

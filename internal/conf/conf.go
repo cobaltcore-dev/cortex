@@ -145,7 +145,12 @@ type FeaturesConfig struct {
 	Plugins []FeatureExtractorConfig `json:"plugins"`
 }
 
-type SchedulerStepConfig struct {
+type NovaSchedulerConfig struct {
+	// Scheduler step plugins by their name.
+	Plugins []NovaSchedulerStepConfig `json:"plugins"`
+}
+
+type NovaSchedulerStepConfig struct {
 	// The name of the step.
 	Name string `json:"name"`
 	// Custom options for the step, as a raw yaml map.
@@ -153,11 +158,11 @@ type SchedulerStepConfig struct {
 	// The dependencies this step needs.
 	DependencyConfig `json:"dependencies,omitempty"`
 	// The validations to use for this step.
-	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
+	DisabledValidations NovaSchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
 }
 
 // Config for which validations to disable for a scheduler step.
-type SchedulerStepDisabledValidationsConfig struct {
+type NovaSchedulerStepDisabledValidationsConfig struct {
 	// Whether to validate that no hosts are removed or added from the scheduler
 	// step. This should only be disabled for scheduler steps that remove hosts.
 	// Thus, if no value is provided, the default is false.
@@ -166,8 +171,7 @@ type SchedulerStepDisabledValidationsConfig struct {
 
 // Configuration for the scheduler module.
 type SchedulerConfig struct {
-	// Scheduler step plugins by their name.
-	Plugins []SchedulerStepConfig `json:"plugins"`
+	Nova NovaSchedulerConfig `json:"nova"`
 
 	API SchedulerAPIConfig `json:"api"`
 }

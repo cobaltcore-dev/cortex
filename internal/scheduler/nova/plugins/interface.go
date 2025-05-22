@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 )
 
 // Interface for a scheduler step.

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package nova
 
 import (
 	"log/slog"
@@ -10,8 +10,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
 )
@@ -67,7 +67,7 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 
 	validator := StepValidator{
 		Step: mockStep,
-		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
+		DisabledValidations: conf.NovaSchedulerStepDisabledValidationsConfig{
 			SameHostNumberInOut: false,
 		},
 	}
@@ -104,7 +104,7 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 
 	validator := StepValidator{
 		Step: mockStep,
-		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
+		DisabledValidations: conf.NovaSchedulerStepDisabledValidationsConfig{
 			SameHostNumberInOut: false,
 		},
 	}
@@ -141,7 +141,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 
 	validator := StepValidator{
 		Step: mockStep,
-		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
+		DisabledValidations: conf.NovaSchedulerStepDisabledValidationsConfig{
 			SameHostNumberInOut: true, // Validation is disabled
 		},
 	}
@@ -162,7 +162,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 
 func TestValidateStep(t *testing.T) {
 	mockStep := &testlibPlugins.MockStep{}
-	disabledValidations := conf.SchedulerStepDisabledValidationsConfig{
+	disabledValidations := conf.NovaSchedulerStepDisabledValidationsConfig{
 		SameHostNumberInOut: true,
 	}
 

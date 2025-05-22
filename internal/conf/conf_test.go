@@ -68,20 +68,22 @@ func TestNewConfig(t *testing.T) {
     ]
   },
   "scheduler": {
-    "plugins": [
-      {
-        "name": "vmware_anti_affinity_noisy_projects",
-        "options": {
-          "avgCPUThreshold": 20
+    "nova": {
+      "plugins": [
+        {
+            "name": "vmware_anti_affinity_noisy_projects",
+            "options": {
+            "avgCPUThreshold": 20
+            }
+        },
+        {
+            "name": "vmware_avoid_long_term_contended_hosts",
+            "options": {
+            "maxCPUContentionThreshold": 50
+            }
         }
-      },
-      {
-        "name": "vmware_avoid_long_term_contended_hosts",
-        "options": {
-          "maxCPUContentionThreshold": 50
-        }
-      }
-    ]
+      ]
+    }
   },
   "kpis": {
     "plugins": [
@@ -138,15 +140,15 @@ func TestNewConfig(t *testing.T) {
 
 	// Test SchedulerConfig
 	schedulerConfig := config.GetSchedulerConfig()
-	if len(schedulerConfig.Plugins) != 2 {
-		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Plugins))
+	if len(schedulerConfig.Nova.Plugins) != 2 {
+		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Nova.Plugins))
 	}
 	var decodedContent map[string]any
 	if err := json.Unmarshal([]byte(content), &decodedContent); err != nil {
 		t.Fatalf("Failed to unmarshal YAML content: %v", err)
 	}
 
-	schedulerSteps := decodedContent["scheduler"].(map[string]any)["plugins"].([]any)
+	schedulerSteps := decodedContent["scheduler"].(map[string]any)["nova"].(map[string]any)["plugins"].([]any)
 	step1Options := schedulerSteps[0].(map[string]any)["options"].(map[string]any)
 	step2Options := schedulerSteps[1].(map[string]any)["options"].(map[string]any)
 

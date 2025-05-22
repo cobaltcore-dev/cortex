@@ -8,13 +8,14 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the
 // step config in the service yaml file.
-type AvoidShortTermContendedHostsStepOpts struct {
+type AvoidLongTermContendedHostsStepOpts struct {
 	AvgCPUContentionLowerBound float64 `json:"avgCPUContentionLowerBound"` // -> mapped to ActivationLowerBound
 	AvgCPUContentionUpperBound float64 `json:"avgCPUContentionUpperBound"` // -> mapped to ActivationUpperBound
 
@@ -28,7 +29,7 @@ type AvoidShortTermContendedHostsStepOpts struct {
 	MaxCPUContentionActivationUpperBound float64 `json:"maxCPUContentionActivationUpperBound"`
 }
 
-func (o AvoidShortTermContendedHostsStepOpts) Validate() error {
+func (o AvoidLongTermContendedHostsStepOpts) Validate() error {
 	// Avoid zero-division during min-max scaling.
 	if o.AvgCPUContentionLowerBound == o.AvgCPUContentionUpperBound {
 		return errors.New("avgCPUContentionLowerBound and avgCPUContentionUpperBound must not be equal")
@@ -39,19 +40,19 @@ func (o AvoidShortTermContendedHostsStepOpts) Validate() error {
 	return nil
 }
 
-// Step to avoid recently contended hosts by downvoting them.
-type AvoidShortTermContendedHostsStep struct {
+// Step to avoid long term contended hosts by downvoting them.
+type AvoidLongTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AvoidShortTermContendedHostsStepOpts]
+	plugins.BaseStep[AvoidLongTermContendedHostsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *AvoidShortTermContendedHostsStep) GetName() string {
-	return "vmware_avoid_short_term_contended_hosts"
+func (s *AvoidLongTermContendedHostsStep) GetName() string {
+	return "vmware_avoid_long_term_contended_hosts"
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+func (s *AvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
@@ -61,9 +62,9 @@ func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request ap
 		return result, nil
 	}
 
-	var highlyContendedHosts []vmware.VROpsHostsystemContentionShortTerm
+	var highlyContendedHosts []vmware.VROpsHostsystemContentionLongTerm
 	if _, err := s.DB.Select(&highlyContendedHosts, `
-		SELECT * FROM feature_vrops_hostsystem_contention_short_term
+		SELECT * FROM feature_vrops_hostsystem_contention_long_term
 	`); err != nil {
 		return nil, err
 	}
@@ -74,14 +75,14 @@ func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request ap
 		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
-		activationAvg := plugins.MinMaxScale(
+		activationAvg := scheduler.MinMaxScale(
 			host.AvgCPUContention,
 			s.Options.AvgCPUContentionLowerBound,
 			s.Options.AvgCPUContentionUpperBound,
 			s.Options.AvgCPUContentionActivationLowerBound,
 			s.Options.AvgCPUContentionActivationUpperBound,
 		)
-		activationMax := plugins.MinMaxScale(
+		activationMax := scheduler.MinMaxScale(
 			host.MaxCPUContention,
 			s.Options.MaxCPUContentionLowerBound,
 			s.Options.MaxCPUContentionUpperBound,

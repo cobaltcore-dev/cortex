@@ -23,8 +23,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/sapcc/go-bits/must"
 )

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package nova
 
 import (
 	"errors"
@@ -9,14 +9,14 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // The config type has a long name, so we use a shorter alias here.
 // The name is intentionally long to make it explicit that we disable
 // validations for the scheduler step instead of enabling them.
-type disabledValidations = conf.SchedulerStepDisabledValidationsConfig
+type disabledValidations = conf.NovaSchedulerStepDisabledValidationsConfig
 
 // Wrapper for scheduler steps that validates them before/after execution.
 type StepValidator struct {

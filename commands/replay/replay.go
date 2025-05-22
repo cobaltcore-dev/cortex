@@ -51,7 +51,7 @@ func main() {
 	}
 	defer client.Disconnect(1000)
 
-	topic := "cortex/scheduler/pipeline/finished"
+	topic := "cortex/scheduler/nova/pipeline/finished"
 	client.Subscribe(topic, 2, func(client mqtt.Client, msg mqtt.Message) {
 		// Unwrap the "request" from the message
 		var payload map[string]any

@@ -18,8 +18,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler"
-	apihttp "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
+	apihttp "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
@@ -64,14 +64,14 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 }
 
 // Run a webserver that listens for external scheduling requests.
-func runScheduler(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	monitor := scheduler.NewSchedulerMonitor(registry)
+func runSchedulerNova(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
+	monitor := nova.NewSchedulerMonitor(registry)
 	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
 	defer mqttClient.Disconnect()
-	schedulerPipeline := scheduler.NewPipeline(scheduler.SupportedSteps, config, db, monitor, mqttClient)
+	schedulerPipeline := nova.NewPipeline(nova.SupportedSteps, config, db, monitor, mqttClient)
 	apiMonitor := apihttp.NewSchedulerMonitor(registry)
 	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
 	api.Init(mux) // non-blocking
@@ -103,10 +103,10 @@ const usage = `
   -migrate Run database migrations.
 
   modes:
-  -syncer    Sync data from external datasources into the database.
-  -extractor Extract knowledge from the synced data and store it in the database.
-  -scheduler Serve scheduling requests with a http API.
-  -kpis      Expose KPIs extracted from the database.
+  -syncer         Sync data from external datasources into the database.
+  -extractor      Extract knowledge from the synced data and store it in the database.
+  -scheduler-nova Serve Nova scheduling requests with a http API.
+  -kpis           Expose KPIs extracted from the database.
 `
 
 func main() {
@@ -189,8 +189,8 @@ func main() {
 		runSyncer(ctx, registry, config.GetSyncConfig(), database)
 	case "extractor":
 		runExtractor(registry, config.GetFeaturesConfig(), database)
-	case "scheduler":
-		runScheduler(mux, registry, config.GetSchedulerConfig(), database)
+	case "scheduler-nova":
+		runSchedulerNova(mux, registry, config.GetSchedulerConfig(), database)
 	case "kpis":
 		runKPIService(registry, config.GetKPIsConfig(), database)
 	default:

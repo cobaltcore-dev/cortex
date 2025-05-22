@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package nova
 
 import (
 	"log/slog"
@@ -13,8 +13,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -41,16 +42,16 @@ type Monitor struct {
 // Create a new scheduler monitor and register the necessary Prometheus metrics.
 func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
+		Name:    "cortex_scheduler_nova_pipeline_step_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline step run",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"step"})
 	stepHostWeight := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_scheduler_pipeline_step_weight_modification",
+		Name: "cortex_scheduler_nova_pipeline_step_weight_modification",
 		Help: "Modification of host weight by scheduler pipeline step",
 	}, []string{"host", "step"})
 	stepRemovedHostsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_removed_hosts",
+		Name:    "cortex_scheduler_nova_pipeline_step_removed_hosts",
 		Help:    "Number of hosts removed by scheduler pipeline step",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	}, []string{"step"})
@@ -59,27 +60,27 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 	buckets = append(buckets, prometheus.LinearBuckets(10, 10, 4)...)
 	buckets = append(buckets, prometheus.LinearBuckets(50, 50, 6)...)
 	stepReorderingsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_shift_origin",
+		Name:    "cortex_scheduler_nova_pipeline_step_shift_origin",
 		Help:    "From which index of the host list the host came from originally.",
 		Buckets: buckets,
 	}, []string{"step", "outidx"})
 	pipelineRunTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
+		Name:    "cortex_scheduler_nova_pipeline_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline run",
 		Buckets: prometheus.DefBuckets,
 	})
 	hostNumberInObserver := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_host_number_in",
+		Name:    "cortex_scheduler_nova_pipeline_host_number_in",
 		Help:    "Number of hosts going into the scheduler pipeline",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	})
 	hostNumberOutObserver := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_host_number_out",
+		Name:    "cortex_scheduler_nova_pipeline_host_number_out",
 		Help:    "Number of hosts coming out of the scheduler pipeline",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	})
 	requestCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cortex_scheduler_pipeline_requests_total",
+		Name: "cortex_scheduler_nova_pipeline_requests_total",
 		Help: "Total number of requests processed by the scheduler.",
 	}, []string{"rebuild", "resize", "live", "vmware"})
 	registry.MustRegister(
@@ -128,7 +129,7 @@ func (m *Monitor) observePipelineResult(request api.Request, result []string) {
 // Wraps a scheduler step to monitor its execution.
 type StepMonitor struct {
 	// Mixin that can be embedded in a step to provide some activation function tooling.
-	plugins.ActivationFunction
+	scheduler.ActivationFunction
 
 	// The wrapped scheduler step to monitor.
 	Step plugins.Step
@@ -214,7 +215,7 @@ func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (*plugins.
 
 	// Calculate additional metrics to see which hosts were reordered and how far.
 	sort.Slice(hostsIn, func(i, j int) bool {
-		iHost, jHost := hostsOut[i], hostsOut[j]
+		iHost, jHost := hostsIn[i], hostsIn[j]
 		return s.Norm(inWeights[iHost]) > s.Norm(inWeights[jHost])
 	})
 	sort.Slice(hostsOut, func(i, j int) bool {

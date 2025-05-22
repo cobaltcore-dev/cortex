@@ -8,8 +8,9 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -72,14 +73,14 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
-		activationAvg := plugins.MinMaxScale(
+		activationAvg := scheduler.MinMaxScale(
 			host.AvgMemoryActive,
 			s.Options.AvgMemoryUsageLowerBound,
 			s.Options.AvgMemoryUsageUpperBound,
 			s.Options.AvgMemoryUsageActivationLowerBound,
 			s.Options.AvgMemoryUsageActivationUpperBound,
 		)
-		activationMax := plugins.MinMaxScale(
+		activationMax := scheduler.MinMaxScale(
 			host.MaxMemoryActive,
 			s.Options.MaxMemoryUsageLowerBound,
 			s.Options.MaxMemoryUsageUpperBound,

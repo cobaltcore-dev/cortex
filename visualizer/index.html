@@ -293,7 +293,7 @@
         protocolVersion: 4,
       })
       client.on('message', (topic, message) => {
-        if (topic === 'cortex/scheduler/pipeline/finished') {
+        if (topic === 'cortex/scheduler/nova/pipeline/finished') {
           state.pipeline = JSON.parse(message.toString())
         }
         if (topic === 'cortex/sync/openstack/nova/hypervisors') {
@@ -303,7 +303,7 @@
       })
       client.on('connect', () => {
         console.log('Connected to MQTT broker.')
-        client.subscribe('cortex/scheduler/pipeline/finished')
+        client.subscribe('cortex/scheduler/nova/pipeline/finished')
         client.subscribe('cortex/sync/openstack/nova/hypervisors')
       })
     }

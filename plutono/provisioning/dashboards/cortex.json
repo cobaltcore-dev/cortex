@@ -2531,7 +2531,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"0\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2607,7 +2607,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"1\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"1\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2683,7 +2683,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"2\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"2\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2759,7 +2759,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"3\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"3\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2835,7 +2835,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"4\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"4\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2911,7 +2911,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\"}[2m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"0\"}[2m])) by (le, step))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -2995,7 +2995,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(vmware,rebuild,resize,live) (rate(cortex_scheduler_pipeline_requests_total{}[2m]))",
+          "expr": "sum by(vmware,rebuild,resize,live) (rate(cortex_scheduler_nova_pipeline_requests_total{}[2m]))",
           "interval": "",
           "legendFormat": "Rebuild: {{rebuild}}, Resize: {{resize}}, Live: {{live}}, VMware: {{vmware}}",
           "refId": "A"
@@ -3093,7 +3093,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
           "interval": "",
           "legendFormat": "{{step}}",
           "refId": "A"
@@ -3641,7 +3641,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "bottomk(1, min by (host, step) (rate(cortex_scheduler_pipeline_step_weight_modification[2m])) < 0) by (host)",
+          "expr": "bottomk(1, min by (host, step) (rate(cortex_scheduler_nova_pipeline_step_weight_modification[2m])) < 0) by (host)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -3711,7 +3711,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "topk(1, max by (host, step) (rate(cortex_scheduler_pipeline_step_weight_modification[2m])) > 0) by (host)",
+          "expr": "topk(1, max by (host, step) (rate(cortex_scheduler_nova_pipeline_step_weight_modification[2m])) > 0) by (host)",
           "format": "time_series",
           "instant": false,
           "interval": "",

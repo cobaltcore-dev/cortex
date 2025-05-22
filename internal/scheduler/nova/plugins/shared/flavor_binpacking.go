@@ -9,8 +9,9 @@ import (
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -105,7 +106,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 		}
 		activationCPU := s.NoEffect()
 		if s.Options.CPUEnabled {
-			activationCPU = plugins.MinMaxScale(
+			activationCPU = scheduler.MinMaxScale(
 				float64(f.VCPUsLeft),
 				s.Options.CPUFreeLowerBound,
 				s.Options.CPUFreeUpperBound,
@@ -116,7 +117,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 		}
 		activationRAM := s.NoEffect()
 		if s.Options.RAMEnabled {
-			activationRAM = plugins.MinMaxScale(
+			activationRAM = scheduler.MinMaxScale(
 				float64(f.RAMLeftMB),
 				s.Options.RAMFreeLowerBound,
 				s.Options.RAMFreeUpperBound,
@@ -127,7 +128,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 		}
 		activationDisk := s.NoEffect()
 		if s.Options.DiskEnabled {
-			activationDisk = plugins.MinMaxScale(
+			activationDisk = scheduler.MinMaxScale(
 				float64(f.DiskLeftGB),
 				s.Options.DiskFreeLowerBound,
 				s.Options.DiskFreeUpperBound,

@@ -3,7 +3,7 @@
 
 package http
 
-import "github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+import "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 
 // Host object from the Nova scheduler pipeline.
 // See: https://github.com/sapcc/nova/blob/stable/xena-m3/nova/scheduler/host_manager.py class HostState

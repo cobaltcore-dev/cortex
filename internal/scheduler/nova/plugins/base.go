@@ -6,7 +6,8 @@ package plugins
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 )
 
 // Interface to which step options must conform.
@@ -26,7 +27,7 @@ type BaseStep[Opts StepOpts] struct {
 	// Options to pass via yaml to this step.
 	conf.JsonOpts[Opts]
 	// The activation function to use.
-	ActivationFunction
+	scheduler.ActivationFunction
 	// Database connection.
 	DB db.DB
 }

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package nova
 
 import (
 	"log/slog"
@@ -10,8 +10,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
@@ -215,9 +215,9 @@ func TestPipeline_RunSteps(t *testing.T) {
 
 func TestNewPipeline(t *testing.T) {
 	config := conf.SchedulerConfig{
-		Plugins: []conf.SchedulerStepConfig{
+		Nova: conf.NovaSchedulerConfig{Plugins: []conf.NovaSchedulerStepConfig{
 			{Name: "mock_pipeline_step", Options: conf.RawOpts{}},
-		},
+		}},
 	}
 	database := db.DB{}  // Mock or initialize as needed
 	monitor := Monitor{} // Replace with an actual mock implementation if available

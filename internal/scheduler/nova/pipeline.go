@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package scheduler
+package nova
 
 import (
 	"log/slog"
@@ -15,11 +15,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/kvm"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/vmware"
 )
 
 // Configuration of steps supported by the scheduler.
@@ -40,7 +41,7 @@ var SupportedSteps = []plugins.Step{
 type pipeline struct {
 	// The activation function to use when combining the
 	// results of the scheduler steps.
-	plugins.ActivationFunction
+	scheduler.ActivationFunction
 	// The parallelizable order in which scheduler steps are executed.
 	executionOrder [][]plugins.Step
 	// The order in which scheduler steps are applied, by their step name.
@@ -68,7 +69,7 @@ func NewPipeline(
 	// Load all steps from the configuration.
 	steps := []plugins.Step{}
 	applicationOrder := []string{}
-	for _, stepConfig := range config.Plugins {
+	for _, stepConfig := range config.Nova.Plugins {
 		step, ok := supportedStepsByName[stepConfig.Name]
 		if !ok {
 			panic("unknown pipeline step: " + stepConfig.Name)
@@ -209,7 +210,7 @@ func (p *pipeline) Run(request api.Request) ([]string, error) {
 	// Publish telemetry information about the scheduling to an mqtt broker.
 	// In this way, other services can connect and record the scheduler
 	// behavior over a longer time, or react to the scheduling decision.
-	go p.mqttClient.Publish("cortex/scheduler/pipeline/finished", map[string]any{
+	go p.mqttClient.Publish("cortex/scheduler/nova/pipeline/finished", map[string]any{
 		"time":    time.Now().Unix(),
 		"request": request,
 		"order":   p.applicationOrder,
