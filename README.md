@@ -8,64 +8,32 @@
 
 # Cortex
 
-Cortex is an intelligent service for initial placement and scheduling of compute workloads within an [OpenStack](https://www.openstack.org/) cloud environment. It is designed to improve resource usage in a data center by making smart(er) decisions about where to place VMs, with future support planned for storage and network workloads.
+Cortex is an advanced initial placement and scheduling service for compute, storage, and network workloads within OpenStack cloud environments.  
 
-## Background
-
-Efficient and balanced resource utilization is key for cloud infrastructure providers to maintain operational performance and cost-effectiveness. In a dynamic cloud environment where workloads are constantly being created, moved, and deleted, a smart placement can help avoid resource bottlenecks and ensure high availability.
-
-OpenStack provides core services for managing compute, storage, and network resources in a cloud environment ([learn more](https://docs.openstack.org/de/security-guide/introduction/introduction-to-openstack.html)). Cortex extends the scheduling logic of these services by adding a layer of intelligence that can make more informed decisions about where to place workloads based on the current state of the data center.
+**Idea**: Chainable filter and weigher pipeline, leveraging heuristic-based decision-making to optimize placement and scheduling.
 
 ## Features
 
-- **Data sync:** Flexible framework to sync metrics and placement information of a data center.
-- **Knowledge extraction**: Logic to extract simple or advanced knowledge ("features") from the synced data.
-- **Smart scheduling:** Fast and scalable scheduling pipeline for VMs based on the extracted knowledge.
+- **Unified Placement and Scheduling**: Combines initial placement and scheduling (re-balancing) within a single, efficient framework.
+
+- **Minimal Resource Footprint**: Designed to operate with low resource consumption, optimizing performance.
+
+- **High Scalability**: Validated in large-scale, production environments with compute workload up to 50,000 VMs and 2,000 hypervisors.
+
+- **Straightforward Integration**: Connects the initial placement component to the respective message queue and uses OpenStack APIs for scheduling.
+
+- **Extensible Architecture**: Chainable concept for filters and weighers, allowing flexible customization.
+
+- **Knowledge Database**: Stores and retrieves enriched environmental data, enabling intelligent decision-making.
 
 ## Documentation
 
-Read the full documentation at [docs/readme.md](docs/readme.md).
+- **Users** can find more information on the ideas and concepts behind cortex in [the feature docs](./docs/features.md) and [the architecture docs](./docs/architecture.md).
+- **Developers** can find a guide on how to develop with cortex in [the development docs](./docs/develop.md).
 
 ## Roadmap
 
 See our [roadmap](https://github.com/orgs/cobaltcore-dev/projects/14) and [issue tracker](https://github.com/cobaltcore-dev/cortex/issues) for upcoming features and improvements.
-
-## Quickstart
-
-### 1. Tilt Values Setup
-
-Copy the example secrets values file. This file is used for local development and overrides the Helm chart values provided in [values.yaml](helm/cortex/values.yaml) for your local testing setup.
-```bash
-cp cortex.secrets.example.yaml "${HOME}/cortex.secrets.yaml"
-```
-
-> [!WARNING]
-> It is recommended to put the secrets file somewhere outside of the project directory. In this way, it won't be accidentally committed to the repository.
-
-After copying the file, fill in the necessary values.
-
-Then, tell tilt where to find your secrets file:
-```bash
-export TILT_VALUES_PATH="${HOME}/cortex.secrets.yaml"
-```
-
-### 2. Running Tilt
-
-Run the tilt setup in minikube:
-```bash
-minikube start && tilt up
-```
-
-Point your browser to http://localhost:10350/ - if you did everything correctly, you should see the cortex services spin up in the browser.
-
-### 3. Simulate Nova Requests
-
-To simulate Nova requests to your Cortex instance in Tilt, you can run the following command:
-```bash
-go run commands/fillup/fillup.go
-```
-
-The script will show where random new VMs would be placed.
 
 ## Support, Feedback, Contributing
 
