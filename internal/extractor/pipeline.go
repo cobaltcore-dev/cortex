@@ -107,7 +107,7 @@ func (p *FeatureExtractorPipeline) initDependencyGraph(supportedExtractors []plu
 		extractor := extractorsByName[extractorConfig.Name]
 		extractors = append(extractors, extractor)
 		dependencies := []plugins.FeatureExtractor{}
-		for _, name := range extractorConfig.Features.ExtractorNames {
+		for _, name := range extractorConfig.Extractors {
 			dependency, ok := extractorsByName[name]
 			if !ok {
 				panic("unknown feature extractor: " + name)

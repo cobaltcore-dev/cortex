@@ -29,11 +29,7 @@ type DependencyConfig struct {
 			} `json:"metrics,omitempty"`
 		} `json:"prometheus,omitempty"`
 	}
-	Features FeaturesDependency `json:"features,omitempty"`
-}
-
-type FeaturesDependency struct {
-	ExtractorNames []string `json:"extractors,omitempty"`
+	Extractors []string `json:"extractors,omitempty"`
 }
 
 // Validate if the dependencies are satisfied in the given config.
@@ -80,7 +76,7 @@ func (deps *DependencyConfig) validate(c config) error {
 	for _, extractor := range c.ExtractorConfig.Plugins {
 		confedExtractors[extractor.Name] = true
 	}
-	for _, extractor := range deps.Features.ExtractorNames {
+	for _, extractor := range deps.Extractors {
 		if !confedExtractors[extractor] {
 			return fmt.Errorf(
 				"feature extractor dependency %s not satisfied, got %v",
