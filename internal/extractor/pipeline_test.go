@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package extractor
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt/containers"
 )
@@ -71,7 +71,7 @@ func TestFeatureExtractorPipeline_Extract_Failure(t *testing.T) {
 
 func TestFeatureExtractorPipeline_InitDependencyGraph(t *testing.T) {
 	// Mock configuration with two extractors and a dependency
-	config := conf.FeaturesConfig{
+	config := conf.ExtractorConfig{
 		Plugins: []conf.FeatureExtractorConfig{
 			{
 				Name:    "extractor1",
@@ -146,7 +146,7 @@ func TestFeatureExtractorPipeline_InitDependencyGraph(t *testing.T) {
 
 func TestFeatureExtractorPipeline_InitTriggerExecutionOrder(t *testing.T) {
 	// Mock configuration with two extractors and triggers
-	config := conf.FeaturesConfig{
+	config := conf.ExtractorConfig{
 		Plugins: []conf.FeatureExtractorConfig{
 			{
 				Name:    "extractor1",

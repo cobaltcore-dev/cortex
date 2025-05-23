@@ -54,7 +54,7 @@ func TestNewConfig(t *testing.T) {
       }
     }
   },
-  "features": {
+  "extractor": {
     "plugins": [
       {
         "name": "vrops_hostsystem_resolver"
@@ -132,10 +132,10 @@ func TestNewConfig(t *testing.T) {
 		t.Errorf("Expected 2 OpenStack types, got %d", len(syncConfig.OpenStack.Nova.Types))
 	}
 
-	// Test FeaturesConfig
-	featuresConfig := config.GetFeaturesConfig()
-	if len(featuresConfig.Plugins) != 3 {
-		t.Errorf("Expected 3 extractors, got %d", len(featuresConfig.Plugins))
+	// Test ExtractorConfig
+	extractorConfig := config.GetExtractorConfig()
+	if len(extractorConfig.Plugins) != 3 {
+		t.Errorf("Expected 3 extractors, got %d", len(extractorConfig.Plugins))
 	}
 
 	// Test SchedulerConfig

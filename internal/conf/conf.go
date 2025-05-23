@@ -141,7 +141,7 @@ type FeatureExtractorConfig struct {
 }
 
 // Configuration for the features module.
-type FeaturesConfig struct {
+type ExtractorConfig struct {
 	Plugins []FeatureExtractorConfig `json:"plugins"`
 }
 
@@ -237,7 +237,7 @@ type Config interface {
 	GetLoggingConfig() LoggingConfig
 	GetDBConfig() DBConfig
 	GetSyncConfig() SyncConfig
-	GetFeaturesConfig() FeaturesConfig
+	GetExtractorConfig() ExtractorConfig
 	GetSchedulerConfig() SchedulerConfig
 	GetKPIsConfig() KPIsConfig
 	GetMonitoringConfig() MonitoringConfig
@@ -251,7 +251,7 @@ type config struct {
 	LoggingConfig    `json:"logging"`
 	DBConfig         `json:"db"`
 	SyncConfig       `json:"sync"`
-	FeaturesConfig   `json:"features"`
+	ExtractorConfig  `json:"extractor"`
 	SchedulerConfig  `json:"scheduler"`
 	MonitoringConfig `json:"monitoring"`
 	KPIsConfig       `json:"kpis"`
@@ -290,7 +290,7 @@ func newConfigFromBytes(bytes []byte) Config {
 func (c *config) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
 func (c *config) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
-func (c *config) GetFeaturesConfig() FeaturesConfig     { return c.FeaturesConfig }
+func (c *config) GetExtractorConfig() ExtractorConfig   { return c.ExtractorConfig }
 func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
 func (c *config) GetKPIsConfig() KPIsConfig             { return c.KPIsConfig }
 func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"

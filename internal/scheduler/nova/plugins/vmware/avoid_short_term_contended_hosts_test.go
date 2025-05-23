@@ -9,7 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )

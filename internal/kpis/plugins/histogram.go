@@ -3,7 +3,7 @@
 
 package plugins
 
-import "github.com/cobaltcore-dev/cortex/internal/features/plugins"
+import "github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
 
 // Create a histogram from features.
 func Histogram[O plugins.Feature](

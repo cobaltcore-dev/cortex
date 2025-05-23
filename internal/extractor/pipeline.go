@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package features
+package extractor
 
 import (
 	"log/slog"
@@ -10,10 +10,10 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/kvm"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 
 	pahomqtt "github.com/eclipse/paho.mqtt.golang"
@@ -51,7 +51,7 @@ type FeatureExtractorPipeline struct {
 	// Database to store the extracted features.
 	db db.DB
 	// Config to use for the feature extractors.
-	config conf.FeaturesConfig
+	config conf.ExtractorConfig
 	// Monitor to use for tracking the pipeline.
 	monitor Monitor
 	// MQTT client to publish the extracted features.
@@ -59,7 +59,7 @@ type FeatureExtractorPipeline struct {
 }
 
 // Create a new feature extractor pipeline with extractors contained in the configuration.
-func NewPipeline(config conf.FeaturesConfig, database db.DB, m Monitor, mqttClient mqtt.Client) FeatureExtractorPipeline {
+func NewPipeline(config conf.ExtractorConfig, database db.DB, m Monitor, mqttClient mqtt.Client) FeatureExtractorPipeline {
 	return FeatureExtractorPipeline{
 		db:         database,
 		config:     config,

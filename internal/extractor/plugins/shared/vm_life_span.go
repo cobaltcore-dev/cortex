@@ -7,7 +7,7 @@ import (
 	_ "embed"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 )
 

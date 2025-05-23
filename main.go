@@ -14,7 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/commands/checks"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features"
+	"github.com/cobaltcore-dev/cortex/internal/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -48,8 +48,8 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.S
 }
 
 // Periodically extract features from the database.
-func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db db.DB) {
-	monitor := features.NewPipelineMonitor(registry)
+func runExtractor(registry *monitoring.Registry, config conf.ExtractorConfig, db db.DB) {
+	monitor := extractor.NewPipelineMonitor(registry)
 
 	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
@@ -57,9 +57,9 @@ func runExtractor(registry *monitoring.Registry, config conf.FeaturesConfig, db 
 	}
 	defer mqttClient.Disconnect()
 
-	pipeline := features.NewPipeline(config, db, monitor, mqttClient)
+	pipeline := extractor.NewPipeline(config, db, monitor, mqttClient)
 	// Selects the extractors to run based on the config.
-	pipeline.Init(features.SupportedExtractors)
+	pipeline.Init(extractor.SupportedExtractors)
 	go pipeline.ExtractOnTrigger() // blocking
 }
 
@@ -188,7 +188,7 @@ func main() {
 	case "syncer":
 		runSyncer(ctx, registry, config.GetSyncConfig(), database)
 	case "extractor":
-		runExtractor(registry, config.GetFeaturesConfig(), database)
+		runExtractor(registry, config.GetExtractorConfig(), database)
 	case "scheduler-nova":
 		runSchedulerNova(mux, registry, config.GetSchedulerConfig(), database)
 	case "kpis":
