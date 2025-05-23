@@ -25,7 +25,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/sapcc/go-bits/must"
 )
 
@@ -56,24 +56,24 @@ func main() {
 
 	// Get openstack objects from the database. We will use this data to simulate
 	// scheduling requests for new servers and keep track of the datacenter state.
-	var originalServers []openstack.Server
+	var originalServers []nova.Server
 	must.Return(db.Select(&originalServers, `SELECT * FROM openstack_servers`))
-	servers := make(map[string]openstack.Server)
+	servers := make(map[string]nova.Server)
 	for _, server := range originalServers {
 		servers[server.ID] = server
 	}
-	var originalFlavors []openstack.Flavor
+	var originalFlavors []nova.Flavor
 	must.Return(db.Select(&originalFlavors, `SELECT * FROM openstack_flavors`))
-	flavors := make(map[string]openstack.Flavor)
+	flavors := make(map[string]nova.Flavor)
 	for _, flavor := range originalFlavors {
 		flavors[flavor.ID] = flavor
 	}
-	var originalHypervisors []openstack.Hypervisor
+	var originalHypervisors []nova.Hypervisor
 	// We can't schedule on bare-metal hypervisors.
 	must.Return(db.Select(&originalHypervisors, `
 		SELECT * FROM openstack_hypervisors WHERE hypervisor_type != 'ironic'
 	`))
-	hypervisors := map[string]*openstack.Hypervisor{}
+	hypervisors := map[string]*nova.Hypervisor{}
 	for _, hypervisor := range originalHypervisors {
 		hypervisors[hypervisor.ServiceHost] = &hypervisor
 	}

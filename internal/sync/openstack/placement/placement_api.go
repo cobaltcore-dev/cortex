@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package placement
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
 	"github.com/gophercloud/gophercloud/v2/pagination"
@@ -30,7 +31,7 @@ type placementAPI struct {
 	// Monitor to track the api.
 	mon sync.Monitor
 	// Keystone api to authenticate against.
-	keystoneAPI KeystoneAPI
+	keystoneAPI keystone.KeystoneAPI
 	// Placement configuration.
 	conf PlacementConf
 	// Authenticated OpenStack service client to fetch the data.
@@ -40,7 +41,7 @@ type placementAPI struct {
 }
 
 // Create a new OpenStack placement api.
-func newPlacementAPI(mon sync.Monitor, k KeystoneAPI, conf PlacementConf) PlacementAPI {
+func NewPlacementAPI(mon sync.Monitor, k keystone.KeystoneAPI, conf PlacementConf) PlacementAPI {
 	return &placementAPI{mon: mon, keystoneAPI: k, conf: conf, sleepInterval: 50 * time.Millisecond}
 }
 

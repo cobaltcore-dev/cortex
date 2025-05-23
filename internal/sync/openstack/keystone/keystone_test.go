@@ -1,32 +1,13 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package keystone
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/gophercloud/gophercloud/v2"
 )
-
-type mockKeystoneAPI struct {
-	url string
-}
-
-func (m *mockKeystoneAPI) Authenticate(ctx context.Context) error {
-	return nil
-}
-
-func (m *mockKeystoneAPI) Client() *gophercloud.ProviderClient {
-	return &gophercloud.ProviderClient{}
-}
-
-func (m *mockKeystoneAPI) FindEndpoint(availability, serviceType string) (string, error) {
-	return m.url, nil
-}
 
 //nolint:gocritic
 func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, KeystoneConf) {
@@ -52,7 +33,7 @@ func TestNewKeystoneAPI(t *testing.T) {
 		OSProjectDomainName: "default",
 	}
 
-	api := newKeystoneAPI(keystoneConf)
+	api := NewKeystoneAPI(keystoneConf)
 	if api == nil {
 		t.Fatal("expected non-nil api")
 	}
@@ -69,7 +50,7 @@ func TestKeystoneAPI_Authenticate(t *testing.T) {
 	server, keystoneConf := setupKeystoneMockServer(handler)
 	defer server.Close()
 
-	api := newKeystoneAPI(keystoneConf).(*keystoneAPI)
+	api := NewKeystoneAPI(keystoneConf).(*keystoneAPI)
 
 	err := api.Authenticate(t.Context())
 	if err != nil {

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package nova
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
@@ -39,7 +40,7 @@ type novaAPI struct {
 	// Monitor to track the api.
 	mon sync.Monitor
 	// Keystone api to authenticate against.
-	keystoneAPI KeystoneAPI
+	keystoneAPI keystone.KeystoneAPI
 	// Nova configuration.
 	conf NovaConf
 	// Authenticated OpenStack service client to fetch the data.
@@ -47,7 +48,7 @@ type novaAPI struct {
 }
 
 // Create a new OpenStack server syncer.
-func newNovaAPI(mon sync.Monitor, k KeystoneAPI, conf NovaConf) NovaAPI {
+func NewNovaAPI(mon sync.Monitor, k keystone.KeystoneAPI, conf NovaConf) NovaAPI {
 	return &novaAPI{mon: mon, keystoneAPI: k, conf: conf}
 }
 

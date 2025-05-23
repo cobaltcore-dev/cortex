@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 )
 
 // Feature that describes how long a vm was running on a host until it needed
@@ -69,9 +69,9 @@ func (*VMHostResidencyExtractor) GetName() string {
 // Get message topics that trigger a re-execution of this extractor.
 func (VMHostResidencyExtractor) Triggers() []string {
 	return []string{
-		openstack.TriggerNovaServersSynced,
-		openstack.TriggerNovaMigrationsSynced,
-		openstack.TriggerNovaFlavorsSynced,
+		nova.TriggerNovaServersSynced,
+		nova.TriggerNovaMigrationsSynced,
+		nova.TriggerNovaFlavorsSynced,
 	}
 }
 

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package nova
 
 import (
 	"context"
@@ -41,11 +41,11 @@ func TestNovaSyncer_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	syncer := &novaSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
-		api:  &mockNovaAPI{},
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		API:  &mockNovaAPI{},
 	}
 	syncer.Init(t.Context())
 }
@@ -57,12 +57,12 @@ func TestNovaSyncer_Sync(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	syncer := &novaSyncer{
-		db:         testDB,
-		mon:        mon,
-		conf:       NovaConf{Types: []string{"servers", "hypervisors"}},
-		api:        &mockNovaAPI{},
-		mqttClient: &mqtt.MockClient{},
+	syncer := &NovaSyncer{
+		DB:         testDB,
+		Mon:        mon,
+		Conf:       NovaConf{Types: []string{"servers", "hypervisors"}},
+		API:        &mockNovaAPI{},
+		MqttClient: &mqtt.MockClient{},
 	}
 
 	ctx := t.Context()
@@ -80,11 +80,11 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	syncer := &novaSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
-		api:  &mockNovaAPI{},
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
@@ -105,11 +105,11 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	syncer := &novaSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: NovaConf{Types: []string{"servers", "hypervisors"}},
-		api:  &mockNovaAPI{},
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
@@ -130,11 +130,11 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	syncer := &novaSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: NovaConf{Types: []string{"flavors"}},
-		api:  &mockNovaAPI{},
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: NovaConf{Types: []string{"flavors"}},
+		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
@@ -155,11 +155,11 @@ func TestNovaSyncer_SyncMigrations(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	syncer := &novaSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: NovaConf{Types: []string{"migrations"}},
-		api:  &mockNovaAPI{},
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: NovaConf{Types: []string{"migrations"}},
+		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()

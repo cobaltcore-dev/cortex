@@ -9,7 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -42,9 +42,9 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(openstack.Server{}),
-		testDB.AddTable(openstack.Migration{}),
-		testDB.AddTable(openstack.Flavor{}),
+		testDB.AddTable(nova.Server{}),
+		testDB.AddTable(nova.Migration{}),
+		testDB.AddTable(nova.Flavor{}),
 	); err != nil {
 		t.Fatalf("failed to create dependency tables: %v", err)
 	}
@@ -60,16 +60,16 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 	}
 
 	migrations := []any{
-		&openstack.Migration{ID: 1, UUID: "migration1", InstanceUUID: "server1", SourceCompute: "host1", DestCompute: "host2", CreatedAt: "2025-01-03T00:00:00Z", MigrationType: "live-migration"},
-		&openstack.Migration{ID: 2, UUID: "migration2", InstanceUUID: "server2", SourceCompute: "host2", DestCompute: "host3", CreatedAt: "2025-01-04T00:00:00Z", MigrationType: "resize"},
+		&nova.Migration{ID: 1, UUID: "migration1", InstanceUUID: "server1", SourceCompute: "host1", DestCompute: "host2", CreatedAt: "2025-01-03T00:00:00Z", MigrationType: "live-migration"},
+		&nova.Migration{ID: 2, UUID: "migration2", InstanceUUID: "server2", SourceCompute: "host2", DestCompute: "host3", CreatedAt: "2025-01-04T00:00:00Z", MigrationType: "resize"},
 	}
 	if err := testDB.Insert(migrations...); err != nil {
 		t.Fatalf("failed to insert migrations: %v", err)
 	}
 
 	flavors := []any{
-		&openstack.Flavor{ID: "flavor1", Name: "small"},
-		&openstack.Flavor{ID: "flavor2", Name: "medium"},
+		&nova.Flavor{ID: "flavor1", Name: "small"},
+		&nova.Flavor{ID: "flavor2", Name: "medium"},
 	}
 	if err := testDB.Insert(flavors...); err != nil {
 		t.Fatalf("failed to insert flavors: %v", err)

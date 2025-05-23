@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -33,7 +33,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(openstack.Hypervisor{}),
+		testDB.AddTable(nova.Hypervisor{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

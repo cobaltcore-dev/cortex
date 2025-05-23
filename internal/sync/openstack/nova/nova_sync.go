@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package nova
 
 import (
 	"context"
@@ -35,78 +35,78 @@ func (novaSync) Indexes() []db.Index {
 }
 
 // Syncer for OpenStack nova.
-type novaSyncer struct {
+type NovaSyncer struct {
 	// Database to store the nova objects in.
-	db db.DB
+	DB db.DB
 	// Monitor to track the syncer.
-	mon sync.Monitor
+	Mon sync.Monitor
 	// Configuration for the nova syncer.
-	conf NovaConf
+	Conf NovaConf
 	// Nova API client to fetch the data.
-	api NovaAPI
+	API NovaAPI
 	// MQTT client to publish mqtt data.
-	mqttClient mqtt.Client
+	MqttClient mqtt.Client
 }
 
 // Init the OpenStack nova syncer.
-func (s *novaSyncer) Init(ctx context.Context) {
-	s.api.Init(ctx)
-	tables := []*gorp.TableMap{s.db.AddTable(novaSync{})}
+func (s *NovaSyncer) Init(ctx context.Context) {
+	s.API.Init(ctx)
+	tables := []*gorp.TableMap{s.DB.AddTable(novaSync{})}
 	// Only add the tables that are configured in the yaml conf.
-	if slices.Contains(s.conf.Types, "servers") {
-		tables = append(tables, s.db.AddTable(Server{}))
+	if slices.Contains(s.Conf.Types, "servers") {
+		tables = append(tables, s.DB.AddTable(Server{}))
 	}
-	if slices.Contains(s.conf.Types, "hypervisors") {
-		tables = append(tables, s.db.AddTable(Hypervisor{}))
+	if slices.Contains(s.Conf.Types, "hypervisors") {
+		tables = append(tables, s.DB.AddTable(Hypervisor{}))
 	}
-	if slices.Contains(s.conf.Types, "flavors") {
-		tables = append(tables, s.db.AddTable(Flavor{}))
+	if slices.Contains(s.Conf.Types, "flavors") {
+		tables = append(tables, s.DB.AddTable(Flavor{}))
 	}
-	if slices.Contains(s.conf.Types, "migrations") {
-		tables = append(tables, s.db.AddTable(Migration{}))
+	if slices.Contains(s.Conf.Types, "migrations") {
+		tables = append(tables, s.DB.AddTable(Migration{}))
 	}
-	if err := s.db.CreateTable(tables...); err != nil {
+	if err := s.DB.CreateTable(tables...); err != nil {
 		panic(err)
 	}
 }
 
 // Sync the OpenStack nova objects and publish triggers.
-func (s *novaSyncer) Sync(ctx context.Context) error {
+func (s *NovaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
-	if slices.Contains(s.conf.Types, "servers") {
+	if slices.Contains(s.Conf.Types, "servers") {
 		changedServers, err := s.SyncChangedServers(ctx)
 		if err != nil {
 			return err
 		}
 		if len(changedServers) > 0 {
-			go s.mqttClient.Publish(TriggerNovaServersSynced, "")
+			go s.MqttClient.Publish(TriggerNovaServersSynced, "")
 		}
 	}
-	if slices.Contains(s.conf.Types, "hypervisors") {
+	if slices.Contains(s.Conf.Types, "hypervisors") {
 		changedHypervisors, err := s.SyncChangedHypervisors(ctx)
 		if err != nil {
 			return err
 		}
-		go s.mqttClient.Publish(TriggerNovaHypervisorsSynced, "")
+		go s.MqttClient.Publish(TriggerNovaHypervisorsSynced, "")
 		// Publish additional information required for the visualizer.
-		go s.mqttClient.Publish("cortex/sync/openstack/nova/hypervisors", changedHypervisors)
+		go s.MqttClient.Publish("cortex/sync/openstack/nova/hypervisors", changedHypervisors)
 	}
-	if slices.Contains(s.conf.Types, "flavors") {
+	if slices.Contains(s.Conf.Types, "flavors") {
 		changedFlavors, err := s.SyncChangedFlavors(ctx)
 		if err != nil {
 			return err
 		}
 		if len(changedFlavors) > 0 {
-			go s.mqttClient.Publish(TriggerNovaFlavorsSynced, "")
+			go s.MqttClient.Publish(TriggerNovaFlavorsSynced, "")
 		}
 	}
-	if slices.Contains(s.conf.Types, "migrations") {
+	if slices.Contains(s.Conf.Types, "migrations") {
 		changedMigrations, err := s.SyncChangedMigrations(ctx)
 		if err != nil {
 			return err
 		}
 		if len(changedMigrations) > 0 {
-			go s.mqttClient.Publish(TriggerNovaMigrationsSynced, "")
+			go s.MqttClient.Publish(TriggerNovaMigrationsSynced, "")
 		}
 	}
 	return nil
@@ -114,11 +114,11 @@ func (s *novaSyncer) Sync(ctx context.Context) error {
 
 // Check when the last sync run for a specific table was performed.
 // If there was no sync run, return nil.
-func (s *novaSyncer) getLastSyncTime(tableName string) *time.Time {
+func (s *NovaSyncer) getLastSyncTime(tableName string) *time.Time {
 	// Check when the last sync run was performed, if there was one.
 	var lastSyncTime *time.Time
 	var lastSync novaSync
-	if err := s.db.SelectOne(&lastSync, `
+	if err := s.DB.SelectOne(&lastSync, `
 		SELECT * FROM nova_sync WHERE name = :name ORDER BY time DESC LIMIT 1
 	`, map[string]any{"name": tableName}); err == nil {
 		lastSyncTime = &lastSync.Time
@@ -130,17 +130,17 @@ func (s *novaSyncer) getLastSyncTime(tableName string) *time.Time {
 }
 
 // Store a new sync run in the database.
-func (s *novaSyncer) setLastSyncTime(tableName string, time time.Time) {
-	if err := s.db.Insert(&novaSync{Name: tableName, Time: time}); err != nil {
+func (s *NovaSyncer) setLastSyncTime(tableName string, time time.Time) {
+	if err := s.DB.Insert(&novaSync{Name: tableName, Time: time}); err != nil {
 		slog.Error("failed to insert nova sync", "error", err)
 	}
 }
 
 // Upsert nova objects into the database.
-func upsert[O any](s *novaSyncer, objects []O, pk string, getpk func(O) string, tableName string) error {
+func upsert[O any](s *NovaSyncer, objects []O, pk string, getpk func(O) string, tableName string) error {
 	nObjectsInDB := 0
 	q := "SELECT COUNT(*) FROM " + tableName
-	if err := s.db.SelectOne(&nObjectsInDB, q); err != nil {
+	if err := s.DB.SelectOne(&nObjectsInDB, q); err != nil {
 		return err
 	}
 	var existingObjects []O
@@ -155,7 +155,7 @@ func upsert[O any](s *novaSyncer, objects []O, pk string, getpk func(O) string, 
 			q += "'" + getpk(object) + "'"
 		}
 		q += ")"
-		if _, err := s.db.Select(&existingObjects, q); err != nil {
+		if _, err := s.DB.Select(&existingObjects, q); err != nil {
 			return err
 		}
 	}
@@ -163,7 +163,7 @@ func upsert[O any](s *novaSyncer, objects []O, pk string, getpk func(O) string, 
 	for _, object := range existingObjects {
 		existingObjectsByID[getpk(object)] = object
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -184,15 +184,15 @@ func upsert[O any](s *novaSyncer, objects []O, pk string, getpk func(O) string, 
 	// Check how many objects we have in the database.
 	q = "SELECT COUNT(*) FROM " + tableName
 	var count int
-	if err := s.db.SelectOne(&count, q); err != nil {
+	if err := s.DB.SelectOne(&count, q); err != nil {
 		return err
 	}
-	if s.mon.PipelineObjectsGauge != nil {
-		gauge := s.mon.PipelineObjectsGauge.WithLabelValues(tableName)
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(tableName)
 		gauge.Set(float64(count))
 	}
-	if s.mon.PipelineRequestProcessedCounter != nil {
-		counter := s.mon.PipelineRequestProcessedCounter.WithLabelValues(tableName)
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(tableName)
 		counter.Inc()
 	}
 	return nil
@@ -200,11 +200,11 @@ func upsert[O any](s *novaSyncer, objects []O, pk string, getpk func(O) string, 
 
 // Sync the OpenStack servers into the database.
 // Return only new servers that were created since the last sync.
-func (s *novaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
+func (s *NovaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
 	tableName := Server{}.TableName()
 	lastSyncTime := s.getLastSyncTime(tableName)
 	defer s.setLastSyncTime(tableName, time.Now())
-	changedServers, err := s.api.GetChangedServers(ctx, lastSyncTime)
+	changedServers, err := s.API.GetChangedServers(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
 	}
@@ -216,11 +216,11 @@ func (s *novaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
 }
 
 // Sync the OpenStack hypervisors into the database.
-func (s *novaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, error) {
+func (s *NovaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	tableName := Hypervisor{}.TableName()
 	lastSyncTime := s.getLastSyncTime(tableName)
 	defer s.setLastSyncTime(tableName, time.Now())
-	changedHypervisors, err := s.api.GetChangedHypervisors(ctx, lastSyncTime)
+	changedHypervisors, err := s.API.GetChangedHypervisors(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
 	}
@@ -232,11 +232,11 @@ func (s *novaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, 
 }
 
 // Sync the OpenStack flavors into the database.
-func (s *novaSyncer) SyncChangedFlavors(ctx context.Context) ([]Flavor, error) {
+func (s *NovaSyncer) SyncChangedFlavors(ctx context.Context) ([]Flavor, error) {
 	tableName := Flavor{}.TableName()
 	lastSyncTime := s.getLastSyncTime(tableName)
 	defer s.setLastSyncTime(tableName, time.Now())
-	changedFlavors, err := s.api.GetChangedFlavors(ctx, lastSyncTime)
+	changedFlavors, err := s.API.GetChangedFlavors(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
 	}
@@ -248,11 +248,11 @@ func (s *novaSyncer) SyncChangedFlavors(ctx context.Context) ([]Flavor, error) {
 }
 
 // Sync the OpenStack migrations into the database.
-func (s *novaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, error) {
+func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, error) {
 	tableName := Migration{}.TableName()
 	lastSyncTime := s.getLastSyncTime(tableName)
 	defer s.setLastSyncTime(tableName, time.Now())
-	changedMigrations, err := s.api.GetChangedMigrations(ctx, lastSyncTime)
+	changedMigrations, err := s.API.GetChangedMigrations(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
 	}

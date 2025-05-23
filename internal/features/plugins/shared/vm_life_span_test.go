@@ -12,7 +12,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -45,8 +45,8 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(openstack.Server{}),
-		testDB.AddTable(openstack.Flavor{}),
+		testDB.AddTable(nova.Server{}),
+		testDB.AddTable(nova.Flavor{}),
 	); err != nil {
 		t.Fatalf("failed to create dependency tables: %v", err)
 	}
@@ -62,8 +62,8 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 	}
 
 	flavors := []any{
-		&openstack.Flavor{ID: "flavor1", Name: "small"},
-		&openstack.Flavor{ID: "flavor2", Name: "medium"},
+		&nova.Flavor{ID: "flavor1", Name: "small"},
+		&nova.Flavor{ID: "flavor2", Name: "medium"},
 	}
 	if err := testDB.Insert(flavors...); err != nil {
 		t.Fatalf("failed to insert flavors: %v", err)

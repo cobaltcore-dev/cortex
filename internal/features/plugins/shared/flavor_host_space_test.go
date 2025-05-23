@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -36,24 +36,24 @@ func TestFlavorHostSpaceExtractor_Extract(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(openstack.Hypervisor{}),
-		testDB.AddTable(openstack.Flavor{}),
+		testDB.AddTable(nova.Hypervisor{}),
+		testDB.AddTable(nova.Flavor{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the hypervisors and flavors tables
 	hs := []any{
-		&openstack.Hypervisor{ID: 1, Hostname: "hostname1", ServiceHost: "host1", FreeRAMMB: 16000, VCPUs: 16, VCPUsUsed: 4, FreeDiskGB: 200},
-		&openstack.Hypervisor{ID: 2, Hostname: "hostname2", ServiceHost: "host2", FreeRAMMB: 32000, VCPUs: 32, VCPUsUsed: 8, FreeDiskGB: 400},
+		&nova.Hypervisor{ID: 1, Hostname: "hostname1", ServiceHost: "host1", FreeRAMMB: 16000, VCPUs: 16, VCPUsUsed: 4, FreeDiskGB: 200},
+		&nova.Hypervisor{ID: 2, Hostname: "hostname2", ServiceHost: "host2", FreeRAMMB: 32000, VCPUs: 32, VCPUsUsed: 8, FreeDiskGB: 400},
 	}
 	if err := testDB.Insert(hs...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	fs := []any{
-		&openstack.Flavor{ID: "flavor1", RAM: 4000, VCPUs: 4, Disk: 50},
-		&openstack.Flavor{ID: "flavor2", RAM: 8000, VCPUs: 8, Disk: 100},
+		&nova.Flavor{ID: "flavor1", RAM: 4000, VCPUs: 4, Disk: 50},
+		&nova.Flavor{ID: "flavor2", RAM: 8000, VCPUs: 8, Disk: 100},
 	}
 	if err := testDB.Insert(fs...); err != nil {
 		t.Fatalf("expected no error, got %v", err)

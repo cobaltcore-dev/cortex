@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package placement
 
 import (
 	"net/http"
@@ -9,19 +9,21 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
+	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/sync/openstack/keystone"
 )
 
-func setupPlacementMockServer(handler http.HandlerFunc) (*httptest.Server, KeystoneAPI) {
+func setupPlacementMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
 	server := httptest.NewServer(handler)
-	return server, &mockKeystoneAPI{url: server.URL + "/"}
+	return server, &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
 }
 
 func TestNewPlacementAPI(t *testing.T) {
 	mon := sync.Monitor{}
-	k := &mockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneAPI{}
 	conf := PlacementConf{}
 
-	api := newPlacementAPI(mon, k, conf)
+	api := NewPlacementAPI(mon, k, conf)
 	if api == nil {
 		t.Fatal("expected non-nil api")
 	}
@@ -41,7 +43,7 @@ func TestPlacementAPI_GetAllResourceProviders(t *testing.T) {
 	mon := sync.Monitor{}
 	conf := PlacementConf{}
 
-	api := newPlacementAPI(mon, k, conf).(*placementAPI)
+	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
 	api.Init(t.Context())
 
 	ctx := t.Context()
@@ -71,7 +73,7 @@ func TestPlacementAPI_GetAllTraits(t *testing.T) {
 	mon := sync.Monitor{}
 	conf := PlacementConf{}
 
-	api := newPlacementAPI(mon, pc, conf).(*placementAPI)
+	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
 
 	ctx := t.Context()
@@ -102,7 +104,7 @@ func TestPlacementAPI_GetAllTraits_Error(t *testing.T) {
 	mon := sync.Monitor{}
 	conf := PlacementConf{}
 
-	api := newPlacementAPI(mon, pc, conf).(*placementAPI)
+	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
 
 	ctx := t.Context()

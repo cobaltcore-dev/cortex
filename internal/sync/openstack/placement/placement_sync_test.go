@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package placement
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
+	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/sync/openstack/keystone"
 )
 
 type mockPlacementAPI struct{}
@@ -32,14 +33,14 @@ func TestPlacementSyncer_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
-	syncer := &placementSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: conf,
-		api:  newPlacementAPI(mon, pc, conf),
+	syncer := &PlacementSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: conf,
+		API:  NewPlacementAPI(mon, pc, conf),
 	}
 	syncer.Init(t.Context())
 }
@@ -51,17 +52,17 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
-	syncer := &placementSyncer{
-		db:         testDB,
-		mon:        mon,
-		conf:       conf,
-		api:        newPlacementAPI(mon, pc, conf),
-		mqttClient: &mqtt.MockClient{},
+	syncer := &PlacementSyncer{
+		DB:         testDB,
+		Mon:        mon,
+		Conf:       conf,
+		API:        NewPlacementAPI(mon, pc, conf),
+		MqttClient: &mqtt.MockClient{},
 	}
-	syncer.api = &mockPlacementAPI{}
+	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
 	err := syncer.Sync(ctx)
@@ -77,16 +78,16 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
-	syncer := &placementSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: conf,
-		api:  newPlacementAPI(mon, pc, conf),
+	syncer := &PlacementSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: conf,
+		API:  NewPlacementAPI(mon, pc, conf),
 	}
-	syncer.api = &mockPlacementAPI{}
+	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
 	rps, err := syncer.SyncResourceProviders(ctx)
@@ -105,16 +106,16 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	pc := &mockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := PlacementConf{Types: []string{"resource_providers", "traits"}}
 
-	syncer := &placementSyncer{
-		db:   testDB,
-		mon:  mon,
-		conf: conf,
-		api:  newPlacementAPI(mon, pc, conf),
+	syncer := &PlacementSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: conf,
+		API:  NewPlacementAPI(mon, pc, conf),
 	}
-	syncer.api = &mockPlacementAPI{}
+	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
 	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}

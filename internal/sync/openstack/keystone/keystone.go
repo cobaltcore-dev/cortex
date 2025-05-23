@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package keystone
 
 import (
 	"context"
@@ -35,7 +35,7 @@ type keystoneAPI struct {
 }
 
 // Create a new OpenStack keystone API.
-func newKeystoneAPI(keystoneConf KeystoneConf) KeystoneAPI {
+func NewKeystoneAPI(keystoneConf KeystoneConf) KeystoneAPI {
 	return &keystoneAPI{keystoneConf: keystoneConf}
 }
 

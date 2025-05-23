@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 )
 
 // Feature that maps the space left on a compute host after the placement of a flavor.
@@ -58,8 +58,8 @@ func (*FlavorHostSpaceExtractor) GetName() string {
 // Get message topics that trigger a re-execution of this extractor.
 func (FlavorHostSpaceExtractor) Triggers() []string {
 	return []string{
-		openstack.TriggerNovaFlavorsSynced,
-		openstack.TriggerNovaHypervisorsSynced,
+		nova.TriggerNovaFlavorsSynced,
+		nova.TriggerNovaHypervisorsSynced,
 	}
 }
 

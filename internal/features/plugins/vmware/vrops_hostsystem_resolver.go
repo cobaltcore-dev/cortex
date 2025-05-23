@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
 
@@ -47,8 +47,8 @@ type VROpsHostsystemResolver struct {
 // Get message topics that trigger a re-execution of this extractor.
 func (VROpsHostsystemResolver) Triggers() []string {
 	return []string{
-		openstack.TriggerNovaServersSynced,
-		openstack.TriggerNovaHypervisorsSynced,
+		nova.TriggerNovaServersSynced,
+		nova.TriggerNovaHypervisorsSynced,
 		prometheus.TriggerMetricTypeSynced("vrops_vm_metrics"),
 	}
 }

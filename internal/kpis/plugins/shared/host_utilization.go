@@ -10,7 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -51,8 +51,8 @@ func (k *HostUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
-	var hypervisors []openstack.Hypervisor
-	tableName := openstack.Hypervisor{}.TableName()
+	var hypervisors []nova.Hypervisor
+	tableName := nova.Hypervisor{}.TableName()
 	if _, err := k.DB.Select(&hypervisors, "SELECT * FROM "+tableName); err != nil {
 		slog.Error("failed to select hypervisors", "err", err)
 		return
@@ -93,10 +93,10 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)
-	keysFunc := func(hypervisor openstack.Hypervisor) []string {
+	keysFunc := func(hypervisor nova.Hypervisor) []string {
 		return []string{"cpu"}
 	}
-	valueFunc := func(hypervisor openstack.Hypervisor) float64 {
+	valueFunc := func(hypervisor nova.Hypervisor) float64 {
 		if hypervisor.VCPUs == 0 {
 			return 0
 		}
@@ -106,10 +106,10 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourceUsedHist, counts[key], sums[key], hist, key)
 	}
-	keysFunc = func(hypervisor openstack.Hypervisor) []string {
+	keysFunc = func(hypervisor nova.Hypervisor) []string {
 		return []string{"memory"}
 	}
-	valueFunc = func(hypervisor openstack.Hypervisor) float64 {
+	valueFunc = func(hypervisor nova.Hypervisor) float64 {
 		if hypervisor.MemoryMB == 0 {
 			return 0
 		}
@@ -119,10 +119,10 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourceUsedHist, counts[key], sums[key], hist, key)
 	}
-	keysFunc = func(hypervisor openstack.Hypervisor) []string {
+	keysFunc = func(hypervisor nova.Hypervisor) []string {
 		return []string{"disk"}
 	}
-	valueFunc = func(hypervisor openstack.Hypervisor) float64 {
+	valueFunc = func(hypervisor nova.Hypervisor) float64 {
 		if hypervisor.LocalGB == 0 {
 			return 0
 		}

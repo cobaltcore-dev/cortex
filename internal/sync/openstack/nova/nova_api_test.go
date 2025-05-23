@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package nova
 
 import (
 	"encoding/json"
@@ -11,19 +11,21 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
+	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/sync/openstack/keystone"
 )
 
-func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, KeystoneAPI) {
+func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
 	server := httptest.NewServer(handler)
-	return server, &mockKeystoneAPI{url: server.URL + "/"}
+	return server, &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
 }
 
 func TestNewNovaAPI(t *testing.T) {
 	mon := sync.Monitor{}
-	k := &mockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneAPI{}
 	conf := NovaConf{}
 
-	api := newNovaAPI(mon, k, conf)
+	api := NewNovaAPI(mon, k, conf)
 	if api == nil {
 		t.Fatal("expected non-nil api")
 	}
@@ -65,7 +67,7 @@ func TestNovaAPI_GetChangedServers(t *testing.T) {
 		mon := sync.Monitor{}
 		conf := NovaConf{Availability: "public"}
 
-		api := newNovaAPI(mon, k, conf).(*novaAPI)
+		api := NewNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
 
 		ctx := t.Context()
@@ -111,7 +113,7 @@ func TestNovaAPI_GetChangedHypervisors(t *testing.T) {
 		mon := sync.Monitor{}
 		conf := NovaConf{Availability: "public"}
 
-		api := newNovaAPI(mon, k, conf).(*novaAPI)
+		api := NewNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
 
 		ctx := t.Context()
@@ -162,7 +164,7 @@ func TestNovaAPI_GetChangedFlavors(t *testing.T) {
 		mon := sync.Monitor{}
 		conf := NovaConf{Availability: "public"}
 
-		api := newNovaAPI(mon, k, conf).(*novaAPI)
+		api := NewNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
 
 		ctx := t.Context()
@@ -217,7 +219,7 @@ func TestNovaAPI_GetChangedMigrations(t *testing.T) {
 		mon := sync.Monitor{}
 		conf := NovaConf{Availability: "public"}
 
-		api := newNovaAPI(mon, k, conf).(*novaAPI)
+		api := NewNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
 
 		ctx := t.Context()

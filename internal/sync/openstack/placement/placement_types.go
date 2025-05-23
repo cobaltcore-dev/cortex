@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package openstack
+package placement
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"

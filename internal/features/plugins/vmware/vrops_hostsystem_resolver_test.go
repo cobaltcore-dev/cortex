@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
@@ -39,7 +39,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(prometheus.VROpsVMMetric{}),
-		testDB.AddTable(openstack.Server{}),
+		testDB.AddTable(nova.Server{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

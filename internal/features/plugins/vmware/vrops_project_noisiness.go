@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/features/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 )
 
@@ -53,8 +53,8 @@ func (e *VROpsProjectNoisinessExtractor) GetName() string {
 // Get message topics that trigger a re-execution of this extractor.
 func (VROpsProjectNoisinessExtractor) Triggers() []string {
 	return []string{
-		openstack.TriggerNovaServersSynced,
-		openstack.TriggerNovaHypervisorsSynced,
+		nova.TriggerNovaServersSynced,
+		nova.TriggerNovaHypervisorsSynced,
 		prometheus.TriggerMetricAliasSynced("vrops_virtualmachine_cpu_demand_ratio"),
 	}
 }

@@ -14,7 +14,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
-	cortexopenstack "github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
@@ -52,7 +52,7 @@ func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config
 	slog.Info("listing hypervisors")
 	pages := must.Return(hypervisors.List(sc, hypervisors.ListOpts{}).AllPages(ctx))
 	var data = &struct {
-		Hypervisors []cortexopenstack.Hypervisor `json:"hypervisors"`
+		Hypervisors []nova.Hypervisor `json:"hypervisors"`
 	}{}
 	must.Succeed(pages.(hypervisors.HypervisorPage).ExtractInto(data))
 	if len(data.Hypervisors) == 0 {
