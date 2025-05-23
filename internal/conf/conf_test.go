@@ -113,7 +113,7 @@ func TestNewConfig(t *testing.T) {
   "mqtt": {
     "url": "tcp://cortex-mqtt:1883",
     "username": "cortex",
-    "password": "cortex"
+    "password": "secret"
   },
   "api": {
     "port": 8080

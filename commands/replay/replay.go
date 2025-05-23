@@ -24,7 +24,7 @@ func main() {
 	// Parse command-line arguments
 	host := flag.String("h", "tcp://localhost:18830", "The cortex MQTT broker to connect to")
 	username := flag.String("u", "cortex", "The username to use for the MQTT connection")
-	password := flag.String("p", "cortex", "The password to use for the MQTT connection")
+	password := flag.String("p", "secret", "The password to use for the MQTT connection")
 	cortexURL := flag.String("c", "http://localhost:8080", "The Cortex instance to forward to")
 	help := flag.Bool("help", false, "Show this help message")
 	flag.Usage = func() {

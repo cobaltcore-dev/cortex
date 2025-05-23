@@ -97,7 +97,7 @@ conf:
     # Must match rabbitmq settings from the cortex-mqtt chart.
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
-    password: "cortex"
+    password: "secret"
     reconnect:
       maxRetries: 20
       retryIntervalSeconds: 1
