@@ -1,6 +1,15 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
+owner-info:
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex-prometheus"
+  maintainers:
+    - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
+  support-group: "cobaltcore-dev"
+  enabled: true
+
 global:
   prometheus: cortex-prometheus
 
@@ -37,10 +46,3 @@ alerts:
       severity: info
     cortexTooManyDBConnectionAttempts:
       severity: info
-
-owner-info:
-  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/prometheus"
-  maintainers:
-    - "p.matthes@sap.com"
-  support-group: "cobaltcore-dev"
-  enabled: true

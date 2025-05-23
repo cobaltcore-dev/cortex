@@ -5,6 +5,8 @@ owner-info:
   helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex"
   maintainers:
     - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
   support-group: "cobaltcore-dev"
   enabled: true
 

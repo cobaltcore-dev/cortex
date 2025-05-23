@@ -92,22 +92,22 @@ local_resource(
 k8s_resource('cortex-migrations', labels=['Commands'])
 
 ########### RabbitMQ MQTT for Cortex Core Service
-k8s_yaml(synced_helm('./helm/mqtt', name='cortex-mqtt'))
+k8s_yaml(synced_helm('./helm/cortex-mqtt', name='cortex-mqtt'))
 k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
     port_forward(8005, 15675), # Websocket connection
 ], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
-k8s_yaml(synced_helm('./helm/postgres', name='cortex-postgres'))
+k8s_yaml(synced_helm('./helm/cortex-postgres', name='cortex-postgres'))
 k8s_resource('cortex-postgresql', port_forwards=[
     port_forward(5432, 5432),
 ], labels=['Core-Services'])
 
 ########### Monitoring
 # TODO: Make the operator work together with synced_helm
-k8s_yaml(helm('./helm/prometheus-operator', name='cortex-prometheus-operator')) # Operator
-k8s_yaml(synced_helm('./helm/prometheus', name='cortex-prometheus')) # Alerts + ServiceMonitor
+k8s_yaml(helm('./helm/cortex-prometheus-operator', name='cortex-prometheus-operator')) # Operator
+k8s_yaml(synced_helm('./helm/cortex-prometheus', name='cortex-prometheus')) # Alerts + ServiceMonitor
 k8s_resource('cortex-prometheus-operator', labels=['Monitoring'])
 k8s_resource(
     new_name='cortex-prometheus',
