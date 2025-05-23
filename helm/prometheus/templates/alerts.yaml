@@ -96,7 +96,7 @@ spec:
           placement will be less desirable. Thus, no immediate action is needed.
 
     - alert: CortexHighMemoryUsage
-      expr: process_resident_memory_bytes{github_org="cobaltcore-dev",github_repo="cortex"} > 100 * 1024 * 1024
+      expr: process_resident_memory_bytes{github_org="cobaltcore-dev",github_repo="cortex"} > 1000 * 1024 * 1024
       for: 5m
       labels:
         context: memory
@@ -105,7 +105,7 @@ spec:
       annotations:
         summary: "Cortex {{`{{$labels.component}}`}} uses too much memory"
         description: >
-          Cortex should not be using more than 100 MiB of memory. Usually it
+          Cortex should not be using more than 1000 MiB of memory. Usually it
           should use much less, so there may be a memory leak or other changes
           that are causing the memory usage to increase significantly.
 
