@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 owner-info:
-  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/mqtt"
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex-mqtt"
   maintainers:
     - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
   support-group: "cobaltcore-dev"
   enabled: true
 

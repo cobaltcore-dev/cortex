@@ -43,7 +43,7 @@
     {
       "enabled": false,
       "matchFileNames": [
-        "helm/postgres/**"
+        "helm/cortex-postgres/**"
       ]
     },
     {

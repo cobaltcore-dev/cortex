@@ -69,7 +69,7 @@ The script will show where random new VMs would be placed.
 
 [Prometheus](https://prometheus.io/docs/prometheus/latest/getting_started/) is used for monitoring and alerting.
 
-The Tilt setup comes with a [Prometheus operator](https://github.com/prometheus-community/helm-charts/tree/d20c3db997ac3d1b225a8c8b8cd407b5d63fbae9/charts/kube-prometheus-stack) that runs a Prometheus instance for local testing. You can access the Prometheus dashboard by clicking on Prometheus in the Tilt dashboard. If needed, you can modify the alerting rules contained in the [Prometheus Helm chart](helm/cortex/charts/prometheus/), which deploys a `PrometheusRule` Kubernetes resource to specify the alerts to add to the Prometheus instance. Metrics from the services are automatically scraped by the Prometheus instance, and for this purpose, a `ServiceMonitor` Kubernetes resource is deployed to the cluster, instructing the Prometheus operator to scrape metrics from the service.
+The Tilt setup comes with a [Prometheus operator](https://github.com/prometheus-community/helm-charts/tree/d20c3db997ac3d1b225a8c8b8cd407b5d63fbae9/charts/kube-prometheus-stack) that runs a Prometheus instance for local testing. You can access the Prometheus dashboard by clicking on Prometheus in the Tilt dashboard. If needed, you can modify the alerting rules contained in the [Prometheus Helm chart](helm/cortex/charts/cortex-prometheus/), which deploys a `PrometheusRule` Kubernetes resource to specify the alerts to add to the Prometheus instance. Metrics from the services are automatically scraped by the Prometheus instance, and for this purpose, a `ServiceMonitor` Kubernetes resource is deployed to the cluster, instructing the Prometheus operator to scrape metrics from the service.
 
 ## Dashboards
 
