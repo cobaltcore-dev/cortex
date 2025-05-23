@@ -18,8 +18,8 @@ rabbitmq:
   # The username and password to use for the mqtt connection.
   auth:
     username: cortex
-    password: cortex
-    erlangCookie: "cortex"
+    password: secret
+    erlangCookie: "secret"
   plugins: >
     rabbitmq_mqtt
     rabbitmq_web_mqtt
