@@ -20,7 +20,12 @@ func TestVMHostResidencyExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &VMHostResidencyExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	config := conf.FeatureExtractorConfig{
+		Name:           "vm_host_residency_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil,
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
@@ -76,7 +81,12 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VMHostResidencyExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	config := conf.FeatureExtractorConfig{
+		Name:           "vm_host_residency_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil, // No recency for this test
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 

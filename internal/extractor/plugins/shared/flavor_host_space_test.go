@@ -19,7 +19,12 @@ func TestFlavorHostSpaceExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &FlavorHostSpaceExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	config := conf.FeatureExtractorConfig{
+		Name:           "flavor_host_space_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil, // No recency for this test
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -60,7 +65,12 @@ func TestFlavorHostSpaceExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &FlavorHostSpaceExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	config := conf.FeatureExtractorConfig{
+		Name:           "flavor_host_space_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil, // No recency for this test
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {

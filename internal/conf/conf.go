@@ -138,6 +138,8 @@ type FeatureExtractorConfig struct {
 	Options RawOpts `json:"options,omitempty"`
 	// The dependencies this extractor needs.
 	DependencyConfig `json:"dependencies,omitempty"`
+	// Recency that tells how old a feature needs to be to be recalculated
+	RecencySeconds *int `json:"recencySeconds,omitempty"`
 }
 
 // Configuration for the features module.
