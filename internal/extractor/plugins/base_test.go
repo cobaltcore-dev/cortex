@@ -5,6 +5,7 @@ package plugins
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -43,7 +44,7 @@ func TestBaseExtractor_Init(t *testing.T) {
 	config := conf.FeatureExtractorConfig{
 		Name:           "mock_extractor",
 		Options:        opts,
-		RecencySeconds: nil, // No recency for this test
+		RecencySeconds: nil,
 	}
 
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
@@ -62,6 +63,51 @@ func TestBaseExtractor_Init(t *testing.T) {
 
 	if !testDB.TableExists(MockFeature{}) {
 		t.Fatal("expected table to exist")
+	}
+}
+
+func TestBaseExtractor_NeedsUpdate(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	opts := conf.NewRawOpts(`{
+        "option1": "value1",
+        "option2": 2
+    }`)
+
+	recencySeconds := 3600 // One hour
+	config := conf.FeatureExtractorConfig{
+		Name:           "mock_extractor",
+		Options:        opts,
+		RecencySeconds: &recencySeconds,
+	}
+
+	extractor := BaseExtractor[MockOptions, MockFeature]{}
+	err := extractor.Init(testDB, config)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Initially, UpdatedAt should be nil, so NeedsUpdate should return true
+	if !extractor.NeedsUpdate() {
+		t.Error("expected NeedsUpdate to return true when UpdatedAt is nil")
+	}
+
+	// Set UpdatedAt to a time in the past (twice the recencySeconds)
+	pastTime := time.Now().Add(-2 * time.Duration(recencySeconds) * time.Second)
+	extractor.UpdatedAt = &pastTime
+
+	// Now NeedsUpdate should return true because the recency period has passed
+	if !extractor.NeedsUpdate() {
+		t.Error("expected NeedsUpdate to return false when UpdatedAt is set")
+	}
+
+	extractor.MarkAsUpdated()
+	// After marking as updated, UpdatedAt should be set to now, which means NeedsUpdate should return false
+	if extractor.NeedsUpdate() {
+		t.Error("expected NeedsUpdate to return false when UpdatedAt is set")
 	}
 }
 
