@@ -40,8 +40,14 @@ func TestBaseExtractor_Init(t *testing.T) {
         "option2": 2
     }`)
 
+	config := conf.FeatureExtractorConfig{
+		Name:           "mock_extractor",
+		Options:        opts,
+		RecencySeconds: nil, // No recency for this test
+	}
+
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(testDB, opts)
+	err := extractor.Init(testDB, config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

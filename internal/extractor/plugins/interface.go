@@ -12,7 +12,7 @@ import (
 type FeatureExtractor interface {
 	// Configure the feature extractor with a database and options.
 	// This function should also create the needed database structures.
-	Init(db db.DB, opts conf.RawOpts) error
+	Init(db db.DB, conf conf.FeatureExtractorConfig) error
 	// Extract features from the given data.
 	Extract() ([]Feature, error)
 	// Get the name of this feature extractor.

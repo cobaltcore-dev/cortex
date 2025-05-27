@@ -75,9 +75,9 @@ func (m FeatureExtractorMonitor[F]) Triggers() []string {
 }
 
 // Initialize the wrapped feature extractor with the database and options.
-func (m FeatureExtractorMonitor[F]) Init(db db.DB, opts conf.RawOpts) error {
+func (m FeatureExtractorMonitor[F]) Init(db db.DB, conf conf.FeatureExtractorConfig) error {
 	// Configure the wrapped feature extractor.
-	return m.FeatureExtractor.Init(db, opts)
+	return m.FeatureExtractor.Init(db, conf)
 }
 
 // Extract features using the wrapped feature extractor and measure the time it takes.

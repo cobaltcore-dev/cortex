@@ -89,7 +89,7 @@ func (p *FeatureExtractorPipeline) initDependencyGraph(supportedExtractors []plu
 			panic("unknown feature extractor: " + extractorConfig.Name)
 		}
 		wrappedExtractor := monitorFeatureExtractor(extractorFunc, p.monitor)
-		if err := wrappedExtractor.Init(p.db, extractorConfig.Options); err != nil {
+		if err := wrappedExtractor.Init(p.db, extractorConfig); err != nil {
 			panic("failed to initialize feature extractor: " + err.Error())
 		}
 		extractorsByName[extractorConfig.Name] = wrappedExtractor

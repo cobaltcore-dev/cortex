@@ -19,8 +19,19 @@ func TestVROpsHostsystemContentionLongTermExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &VROpsHostsystemContentionLongTermExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+
+	recencySeconds := 1
+	config := conf.FeatureExtractorConfig{
+		Name:           "vrops_hostsystem_contention_long_term_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: &recencySeconds,
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if extractor.RecencySeconds != 1 {
+		t.Errorf("expected RecencySeconds to be 1, got %d", extractor.RecencySeconds)
 	}
 
 	if !testDB.TableExists(VROpsHostsystemContentionLongTerm{}) {
@@ -66,7 +77,12 @@ func TestVROpsHostsystemContentionLongTermExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsHostsystemContentionLongTermExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	config := conf.FeatureExtractorConfig{
+		Name:           "vrops_hostsystem_contention_long_term_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil,
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err = extractor.Extract(); err != nil {

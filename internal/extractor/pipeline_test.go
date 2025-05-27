@@ -19,15 +19,15 @@ import (
 type mockFeatureExtractor struct {
 	name        string
 	triggers    []string
-	initFunc    func(db.DB, conf.RawOpts) error
+	initFunc    func(db.DB, conf.FeatureExtractorConfig) error
 	extractFunc func() ([]plugins.Feature, error)
 }
 
-func (m *mockFeatureExtractor) Init(db db.DB, opts conf.RawOpts) error {
+func (m *mockFeatureExtractor) Init(db db.DB, conf conf.FeatureExtractorConfig) error {
 	if m.initFunc == nil {
 		return nil
 	}
-	return m.initFunc(db, opts)
+	return m.initFunc(db, conf)
 }
 
 func (m *mockFeatureExtractor) Extract() ([]plugins.Feature, error) {

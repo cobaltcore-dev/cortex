@@ -16,15 +16,20 @@ type BaseExtractor[Opts any, Feature db.Table] struct {
 	// Options to pass via yaml to this step.
 	conf.JsonOpts[Opts]
 	// Database connection.
-	DB db.DB
+	DB             db.DB
+	RecencySeconds int
 }
 
 // Init the extractor with the database and options.
-func (e *BaseExtractor[Opts, Feature]) Init(db db.DB, opts conf.RawOpts) error {
-	if err := e.Load(opts); err != nil {
+func (e *BaseExtractor[Opts, Feature]) Init(db db.DB, conf conf.FeatureExtractorConfig) error {
+	if err := e.Load(conf.Options); err != nil {
 		return err
 	}
 	e.DB = db
+	e.RecencySeconds = 0
+	if conf.RecencySeconds != nil {
+		e.RecencySeconds = *conf.RecencySeconds
+	}
 	var f Feature
 	return db.CreateTable(db.AddTable(f))
 }
