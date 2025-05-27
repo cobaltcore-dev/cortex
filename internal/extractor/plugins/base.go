@@ -60,7 +60,11 @@ func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {
 	return output, nil
 }
 
+// Checks if the last update of the extractor is older than the configured recency.
+// If the recency is set to a positive value, it will return true if the last update
+// is older than the configured recency in seconds.
 func (e *BaseExtractor[Opts, F]) NeedsUpdate() bool {
+	// UpdateAt is nil if the extractor has never been run.
 	if e.UpdatedAt == nil {
 		return true
 	}
@@ -70,6 +74,7 @@ func (e *BaseExtractor[Opts, F]) NeedsUpdate() bool {
 	return time.Since(*e.UpdatedAt) > time.Duration(e.RecencySeconds)*time.Second
 }
 
+// Mark the extractor as updated by setting the UpdatedAt field to the current time.
 func (e *BaseExtractor[Opts, F]) MarkAsUpdated() {
 	e.UpdatedAt = new(time.Time)
 	*e.UpdatedAt = time.Now()
