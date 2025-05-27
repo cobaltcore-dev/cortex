@@ -195,10 +195,15 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 			wg.Add(1)
 			go func(extractor plugins.FeatureExtractor) {
 				defer wg.Done()
+				if !extractor.NeedsUpdate() {
+					slog.Info("feature extractor: skipping extraction", "extractor", extractor.GetName())
+					return
+				}
 				if _, err := extractor.Extract(); err != nil {
 					slog.Error("feature extractor: failed to extract features", "error", err)
 					return
 				}
+				extractor.MarkAsUpdated()
 			}(extractor)
 		}
 		wg.Wait()

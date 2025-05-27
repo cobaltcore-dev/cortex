@@ -5,6 +5,7 @@ package plugins
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -18,6 +19,7 @@ type BaseExtractor[Opts any, Feature db.Table] struct {
 	// Database connection.
 	DB             db.DB
 	RecencySeconds int
+	UpdatedAt      *time.Time
 }
 
 // Init the extractor with the database and options.
@@ -56,4 +58,19 @@ func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {
 	var model F
 	slog.Info("features: extracted", model.TableName(), len(output))
 	return output, nil
+}
+
+func (e *BaseExtractor[Opts, F]) NeedsUpdate() bool {
+	if e.UpdatedAt == nil {
+		return true
+	}
+	if e.RecencySeconds <= 0 {
+		return true
+	}
+	return time.Since(*e.UpdatedAt) > time.Duration(e.RecencySeconds)*time.Second
+}
+
+func (e *BaseExtractor[Opts, F]) MarkAsUpdated() {
+	e.UpdatedAt = new(time.Time)
+	*e.UpdatedAt = time.Now()
 }

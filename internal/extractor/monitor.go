@@ -80,6 +80,16 @@ func (m FeatureExtractorMonitor[F]) Init(db db.DB, conf conf.FeatureExtractorCon
 	return m.FeatureExtractor.Init(db, conf)
 }
 
+func (m FeatureExtractorMonitor[F]) NeedsUpdate() bool {
+	// Check if the wrapped feature extractor needs an update.
+	return m.FeatureExtractor.NeedsUpdate()
+}
+
+func (m FeatureExtractorMonitor[F]) MarkAsUpdated() {
+	// Mark the wrapped feature extractor as updated.
+	m.FeatureExtractor.MarkAsUpdated()
+}
+
 // Extract features using the wrapped feature extractor and measure the time it takes.
 func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) FeatureExtractorMonitor[F] {
 	featureExtractorName := f.GetName()

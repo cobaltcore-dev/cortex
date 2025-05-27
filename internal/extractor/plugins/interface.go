@@ -21,6 +21,10 @@ type FeatureExtractor interface {
 	GetName() string
 	// Get message topics that trigger a re-execution of this extractor.
 	Triggers() []string
+	// Check if the extractors last update is older than the configured recency.
+	NeedsUpdate() bool
+	// Update the last update timestamp of the extractor.
+	MarkAsUpdated()
 }
 
 type Feature any

@@ -236,7 +236,6 @@ conf:
                   - hypervisors
                   - servers
       - name: vrops_hostsystem_contention_long_term_extractor
-        recencySeconds: 3600 # 1 hour
         dependencies:
           features:
             extractors:

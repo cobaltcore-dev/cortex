@@ -45,6 +45,15 @@ func (m *mockFeatureExtractor) Triggers() []string {
 	return m.triggers
 }
 
+func (m *mockFeatureExtractor) NeedsUpdate() bool {
+	// For simplicity, we assume it always needs an update.
+	return true
+}
+
+func (m *mockFeatureExtractor) MarkAsUpdated() {
+	// not implemented for mock
+}
+
 func TestFeatureExtractorPipeline_Extract(t *testing.T) {
 	// Test case: All extractors extract successfully
 	pipeline := &FeatureExtractorPipeline{}
