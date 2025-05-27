@@ -28,10 +28,6 @@ func TestFlavorHostSpaceExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if extractor.RecencySeconds != 0 {
-		t.Errorf("expected RecencySeconds to be 0, got %d", extractor.RecencySeconds)
-	}
-
 	if !testDB.TableExists(FlavorHostSpace{}) {
 		t.Error("expected table to be created")
 	}

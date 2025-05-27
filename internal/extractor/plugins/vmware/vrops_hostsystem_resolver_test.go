@@ -30,10 +30,6 @@ func TestVROpsHostsystemResolver_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if extractor.RecencySeconds != 0 {
-		t.Errorf("expected RecencySeconds to be 0, got %d", extractor.RecencySeconds)
-	}
-
 	// Verify the table was created
 	if !testDB.TableExists(ResolvedVROpsHostsystem{}) {
 		t.Error("expected table to be created")

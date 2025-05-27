@@ -30,9 +30,6 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if extractor.RecencySeconds != 0 {
-		t.Errorf("expected RecencySeconds to be 0, got %d", extractor.RecencySeconds)
-	}
 	// Will fail when the table does not exist
 	err := testDB.SelectOne(&VROpsProjectNoisiness{}, "SELECT * FROM feature_vrops_project_noisiness LIMIT 1")
 	if err == nil {

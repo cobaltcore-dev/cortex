@@ -30,10 +30,6 @@ func TestVROpsHostsystemContentionLongTermExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if extractor.RecencySeconds != 1 {
-		t.Errorf("expected RecencySeconds to be 1, got %d", extractor.RecencySeconds)
-	}
-
 	if !testDB.TableExists(VROpsHostsystemContentionLongTerm{}) {
 		t.Error("expected table to be created")
 	}

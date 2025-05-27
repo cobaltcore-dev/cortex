@@ -53,6 +53,10 @@ func TestBaseExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	if extractor.RecencySeconds != 0 {
+		t.Errorf("expected RecencySeconds to be 0, got %d", extractor.RecencySeconds)
+	}
+
 	if extractor.Options.Option1 != "value1" {
 		t.Errorf("expected Option1 to be 'value1', got %s", extractor.Options.Option1)
 	}
@@ -63,6 +67,29 @@ func TestBaseExtractor_Init(t *testing.T) {
 
 	if !testDB.TableExists(MockFeature{}) {
 		t.Fatal("expected table to exist")
+	}
+}
+
+func TestBaseExtractor_InitWithRecency(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	opts := conf.NewRawOpts("{}")
+	recencySeconds := 3600 // One hour
+	config := conf.FeatureExtractorConfig{
+		Name:           "mock_extractor",
+		Options:        opts,
+		RecencySeconds: &recencySeconds,
+	}
+	extractor := BaseExtractor[MockOptions, MockFeature]{}
+	err := extractor.Init(testDB, config)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if extractor.RecencySeconds != recencySeconds {
+		t.Errorf("expected RecencySeconds to be %d, got %d", recencySeconds, extractor.RecencySeconds)
 	}
 }
 

@@ -32,10 +32,6 @@ func TestVMLifeSpanExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
-	if extractor.RecencySeconds != 0 {
-		t.Errorf("expected RecencySeconds to be 0, got %d", extractor.RecencySeconds)
-	}
-
 	if !testDB.TableExists(VMLifeSpan{}) {
 		t.Error("expected table to be created")
 	}
