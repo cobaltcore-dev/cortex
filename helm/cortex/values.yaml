@@ -213,6 +213,7 @@ conf:
     plugins:
       # VMware-specific extractors.
       - name: vrops_hostsystem_resolver
+        recencySeconds: 3600 # 1 hour
         dependencies:
           sync:
             prometheus:
@@ -225,6 +226,7 @@ conf:
                   - hypervisors
                   - servers
       - name: vrops_project_noisiness_extractor
+        recencySeconds: 21600 # 6 hours
         dependencies:
           sync:
             prometheus:
@@ -270,6 +272,7 @@ conf:
 
       # Shared extractors.
       - name: flavor_host_space_extractor
+        recencySeconds: 60 # 1 minute
         dependencies:
           sync:
             openstack:
@@ -278,6 +281,7 @@ conf:
                   - flavors
                   - hypervisors
       - name: vm_host_residency_extractor
+        recencySeconds: 60 # 1 minute
         dependencies:
           sync:
             openstack:
@@ -287,6 +291,7 @@ conf:
                   - servers
                   - migrations
       - name: vm_life_span_extractor
+        recencySeconds: 60 # 1 minute
         dependencies:
           sync:
             openstack:

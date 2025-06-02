@@ -89,7 +89,7 @@ func (p *FeatureExtractorPipeline) initDependencyGraph(supportedExtractors []plu
 			panic("unknown feature extractor: " + extractorConfig.Name)
 		}
 		wrappedExtractor := monitorFeatureExtractor(extractorFunc, p.monitor)
-		if err := wrappedExtractor.Init(p.db, extractorConfig.Options); err != nil {
+		if err := wrappedExtractor.Init(p.db, extractorConfig); err != nil {
 			panic("failed to initialize feature extractor: " + err.Error())
 		}
 		extractorsByName[extractorConfig.Name] = wrappedExtractor
@@ -193,13 +193,18 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 		var wg sync.WaitGroup
 		for _, extractor := range extractors {
 			wg.Add(1)
-			go func(extractor plugins.FeatureExtractor) {
+			go func() {
 				defer wg.Done()
+				if !extractor.NeedsUpdate() {
+					slog.Info("feature extractor: skipping extraction", "extractor", extractor.GetName(), "nextExecution", extractor.NextPossibleExecution())
+					return
+				}
 				if _, err := extractor.Extract(); err != nil {
 					slog.Error("feature extractor: failed to extract features", "error", err)
 					return
 				}
-			}(extractor)
+				extractor.MarkAsUpdated()
+			}()
 		}
 		wg.Wait()
 	}

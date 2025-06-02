@@ -4,6 +4,8 @@
 package plugins
 
 import (
+	"time"
+
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 )
@@ -12,7 +14,7 @@ import (
 type FeatureExtractor interface {
 	// Configure the feature extractor with a database and options.
 	// This function should also create the needed database structures.
-	Init(db db.DB, opts conf.RawOpts) error
+	Init(db db.DB, conf conf.FeatureExtractorConfig) error
 	// Extract features from the given data.
 	Extract() ([]Feature, error)
 	// Get the name of this feature extractor.
@@ -21,6 +23,12 @@ type FeatureExtractor interface {
 	GetName() string
 	// Get message topics that trigger a re-execution of this extractor.
 	Triggers() []string
+	// Check if the extractors last update is older than the configured recency.
+	NeedsUpdate() bool
+	// Update the last update timestamp of the extractor.
+	MarkAsUpdated()
+	// Earliest time when this extractor can be executed again.
+	NextPossibleExecution() time.Time
 }
 
 type Feature any

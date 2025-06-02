@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -19,15 +20,15 @@ import (
 type mockFeatureExtractor struct {
 	name        string
 	triggers    []string
-	initFunc    func(db.DB, conf.RawOpts) error
+	initFunc    func(db.DB, conf.FeatureExtractorConfig) error
 	extractFunc func() ([]plugins.Feature, error)
 }
 
-func (m *mockFeatureExtractor) Init(db db.DB, opts conf.RawOpts) error {
+func (m *mockFeatureExtractor) Init(db db.DB, conf conf.FeatureExtractorConfig) error {
 	if m.initFunc == nil {
 		return nil
 	}
-	return m.initFunc(db, opts)
+	return m.initFunc(db, conf)
 }
 
 func (m *mockFeatureExtractor) Extract() ([]plugins.Feature, error) {
@@ -43,6 +44,19 @@ func (m *mockFeatureExtractor) GetName() string {
 
 func (m *mockFeatureExtractor) Triggers() []string {
 	return m.triggers
+}
+
+func (m *mockFeatureExtractor) NeedsUpdate() bool {
+	// For simplicity, we assume it always needs an update.
+	return true
+}
+
+func (m *mockFeatureExtractor) MarkAsUpdated() {
+	// not implemented for mock
+}
+
+func (m *mockFeatureExtractor) NextPossibleExecution() time.Time {
+	return time.Time{}
 }
 
 func TestFeatureExtractorPipeline_Extract(t *testing.T) {

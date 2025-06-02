@@ -20,9 +20,16 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+
+	config := conf.FeatureExtractorConfig{
+		Name:           "vrops_project_noisiness_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil,
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+
 	// Will fail when the table does not exist
 	err := testDB.SelectOne(&VROpsProjectNoisiness{}, "SELECT * FROM feature_vrops_project_noisiness LIMIT 1")
 	if err == nil {
@@ -78,7 +85,14 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VROpsProjectNoisinessExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+
+	config := conf.FeatureExtractorConfig{
+		Name:           "vrops_project_noisines_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil,
+	}
+
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {

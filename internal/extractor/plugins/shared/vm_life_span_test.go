@@ -23,7 +23,12 @@ func TestVMLifeSpanExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &VMLifeSpanExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	config := conf.FeatureExtractorConfig{
+		Name:           "vm_life_span_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil, // No recency for this test
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
@@ -70,7 +75,12 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 	}
 
 	extractor := &VMLifeSpanExtractor{}
-	if err := extractor.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	config := conf.FeatureExtractorConfig{
+		Name:           "vm_life_span_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil, // No recency for this test
+	}
+	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
