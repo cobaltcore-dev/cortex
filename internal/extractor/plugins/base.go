@@ -76,6 +76,16 @@ func (e *BaseExtractor[Opts, F]) NeedsUpdate() bool {
 
 // Mark the extractor as updated by setting the UpdatedAt field to the current time.
 func (e *BaseExtractor[Opts, F]) MarkAsUpdated() {
-	e.UpdatedAt = new(time.Time)
-	*e.UpdatedAt = time.Now()
+	time := time.Now()
+	e.UpdatedAt = &time
+}
+
+func (e *BaseExtractor[Opts, F]) NextPossibleExecution() time.Time {
+	if e.RecencySeconds <= 0 {
+		return time.Time{}
+	}
+	if e.UpdatedAt == nil {
+		return time.Now()
+	}
+	return e.UpdatedAt.Add(time.Duration(e.RecencySeconds) * time.Second)
 }

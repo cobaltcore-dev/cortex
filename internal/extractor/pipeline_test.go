@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -52,6 +53,10 @@ func (m *mockFeatureExtractor) NeedsUpdate() bool {
 
 func (m *mockFeatureExtractor) MarkAsUpdated() {
 	// not implemented for mock
+}
+
+func (m *mockFeatureExtractor) NextPossibleExecution() time.Time {
+	return time.Time{}
 }
 
 func TestFeatureExtractorPipeline_Extract(t *testing.T) {

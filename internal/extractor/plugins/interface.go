@@ -4,6 +4,8 @@
 package plugins
 
 import (
+	"time"
+
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 )
@@ -25,6 +27,8 @@ type FeatureExtractor interface {
 	NeedsUpdate() bool
 	// Update the last update timestamp of the extractor.
 	MarkAsUpdated()
+	// Earliest time when this extractor can be executed again.
+	NextPossibleExecution() time.Time
 }
 
 type Feature any

@@ -193,10 +193,10 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 		var wg sync.WaitGroup
 		for _, extractor := range extractors {
 			wg.Add(1)
-			go func(extractor plugins.FeatureExtractor) {
+			go func() {
 				defer wg.Done()
 				if !extractor.NeedsUpdate() {
-					slog.Info("feature extractor: skipping extraction", "extractor", extractor.GetName())
+					slog.Info("feature extractor: skipping extraction", "extractor", extractor.GetName(), "nextExecution", extractor.NextPossibleExecution())
 					return
 				}
 				if _, err := extractor.Extract(); err != nil {
@@ -204,7 +204,7 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 					return
 				}
 				extractor.MarkAsUpdated()
-			}(extractor)
+			}()
 		}
 		wg.Wait()
 	}

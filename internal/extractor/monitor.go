@@ -5,6 +5,7 @@ package extractor
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -88,6 +89,11 @@ func (m FeatureExtractorMonitor[F]) NeedsUpdate() bool {
 func (m FeatureExtractorMonitor[F]) MarkAsUpdated() {
 	// Mark the wrapped feature extractor as updated.
 	m.FeatureExtractor.MarkAsUpdated()
+}
+
+func (m FeatureExtractorMonitor[F]) NextPossibleExecution() time.Time {
+	// Return the next update timestamp of the wrapped feature extractor.
+	return m.FeatureExtractor.NextPossibleExecution()
 }
 
 // Extract features using the wrapped feature extractor and measure the time it takes.
