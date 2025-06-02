@@ -17,4 +17,4 @@ dependencies:
   # RabbitMQ is a message broker, see: https://artifacthub.io/packages/helm/bitnami/rabbitmq
   - name: rabbitmq
     repository: oci://registry-1.docker.io/bitnamicharts
-    version: 16.0.2
+    version: 16.0.4
