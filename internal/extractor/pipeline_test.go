@@ -59,7 +59,7 @@ func (m *mockFeatureExtractor) NextPossibleExecution() time.Time {
 	return time.Time{}
 }
 
-func (m *mockFeatureExtractor) Skip() {
+func (m *mockFeatureExtractor) NotifySkip() {
 	// not implemented for mock
 }
 

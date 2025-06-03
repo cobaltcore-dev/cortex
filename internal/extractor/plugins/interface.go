@@ -30,7 +30,7 @@ type FeatureExtractor interface {
 	// Earliest time when this extractor can be executed again.
 	NextPossibleExecution() time.Time
 	// Skip the extractor if it is not needed.
-	Skip()
+	NotifySkip()
 }
 
 type Feature any
