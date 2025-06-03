@@ -22,6 +22,8 @@ type Monitor struct {
 	stepFeatureCounter *prometheus.GaugeVec
 	// A histogram to measure how long the pipeline takes to run in total.
 	pipelineRunTimer prometheus.Histogram
+	// A counter to measure how many steps are skipped.
+	stepSkipCounter *prometheus.GaugeVec
 }
 
 // Create a new feature extraction monitor and register the
@@ -41,15 +43,22 @@ func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
 		Help:    "Duration of feature pipeline run",
 		Buckets: prometheus.DefBuckets,
 	})
+	stepSkipCounter := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "cortex_feature_pipeline_step_skipped",
+		Help: "Number of times a feature pipeline step was skipped",
+	}, []string{"step"})
+
 	registry.MustRegister(
 		stepRunTimer,
 		stepFeatureCounter,
 		pipelineRunTimer,
+		stepSkipCounter,
 	)
 	return Monitor{
 		stepRunTimer:       stepRunTimer,
 		stepFeatureCounter: stepFeatureCounter,
 		pipelineRunTimer:   pipelineRunTimer,
+		stepSkipCounter:    stepSkipCounter,
 	}
 }
 
@@ -61,6 +70,8 @@ type FeatureExtractorMonitor[F plugins.FeatureExtractor] struct {
 	runTimer prometheus.Observer
 	// A counter to measure how many features are extracted by the step.
 	featureCounter prometheus.Gauge
+	// A counter to measure how often an extractor is skipped.
+	skipCounter prometheus.Gauge
 }
 
 // Get the name of the wrapped feature extractor.
@@ -96,6 +107,15 @@ func (m FeatureExtractorMonitor[F]) NextPossibleExecution() time.Time {
 	return m.FeatureExtractor.NextPossibleExecution()
 }
 
+func (m FeatureExtractorMonitor[F]) Skip() {
+	// If the extractor is skipped, increment the skip counter if it exists.
+	if m.skipCounter != nil {
+		m.skipCounter.Inc()
+	}
+	m.FeatureExtractor.Skip()
+	slog.Info("features: skipping", "extractor", m.GetName())
+}
+
 // Extract features using the wrapped feature extractor and measure the time it takes.
 func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) FeatureExtractorMonitor[F] {
 	featureExtractorName := f.GetName()
@@ -107,10 +127,17 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) Feature
 	if m.stepFeatureCounter != nil {
 		featureCounter = m.stepFeatureCounter.WithLabelValues(featureExtractorName)
 	}
+
+	var skipCounter prometheus.Gauge
+	if m.stepSkipCounter != nil {
+		skipCounter = m.stepSkipCounter.WithLabelValues(featureExtractorName)
+	}
+
 	return FeatureExtractorMonitor[F]{
 		FeatureExtractor: f,
 		runTimer:         runTimer,
 		featureCounter:   featureCounter,
+		skipCounter:      skipCounter,
 	}
 }
 
@@ -128,5 +155,6 @@ func (m FeatureExtractorMonitor[F]) Extract() ([]plugins.Feature, error) {
 	if m.featureCounter != nil {
 		m.featureCounter.Set(float64(len(features)))
 	}
+
 	return features, nil
 }

@@ -59,6 +59,10 @@ func (m *mockFeatureExtractor) NextPossibleExecution() time.Time {
 	return time.Time{}
 }
 
+func (m *mockFeatureExtractor) Skip() {
+	// not implemented for mock
+}
+
 func TestFeatureExtractorPipeline_Extract(t *testing.T) {
 	// Test case: All extractors extract successfully
 	pipeline := &FeatureExtractorPipeline{}
