@@ -89,3 +89,7 @@ func (e *BaseExtractor[Opts, F]) NextPossibleExecution() time.Time {
 	}
 	return e.UpdatedAt.Add(time.Duration(e.RecencySeconds) * time.Second)
 }
+
+func (e *BaseExtractor[Opts, F]) NotifySkip() {
+	// Currently only needed for the feature extractor monitor, to count skips.
+}
