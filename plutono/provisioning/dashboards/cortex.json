@@ -2478,13 +2478,75 @@
       "type": "stat"
     },
     {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 182
+      },
+      "id": 103,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum by (step) (cortex_feature_pipeline_step_skipped{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Skipped extractors",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
       "datasource": "prometheus-openstack",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 182
+        "y": 190
       },
       "id": 29,
       "panels": [],
@@ -2516,7 +2578,7 @@
         "h": 12,
         "w": 6,
         "x": 0,
-        "y": 183
+        "y": 191
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2592,7 +2654,7 @@
         "h": 12,
         "w": 6,
         "x": 6,
-        "y": 183
+        "y": 191
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2668,7 +2730,7 @@
         "h": 12,
         "w": 4,
         "x": 12,
-        "y": 183
+        "y": 191
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2744,7 +2806,7 @@
         "h": 12,
         "w": 4,
         "x": 16,
-        "y": 183
+        "y": 191
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2820,7 +2882,7 @@
         "h": 12,
         "w": 4,
         "x": 20,
-        "y": 183
+        "y": 191
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2896,7 +2958,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 195
+        "y": 203
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2963,7 +3025,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 207
+        "y": 215
       },
       "hiddenSeries": false,
       "id": 89,
@@ -3060,7 +3122,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 219
+        "y": 227
       },
       "hiddenSeries": false,
       "id": 26,
@@ -3168,7 +3230,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 231
+        "y": 239
       },
       "hiddenSeries": false,
       "id": 37,
@@ -3265,7 +3327,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 231
+        "y": 239
       },
       "hiddenSeries": false,
       "id": 40,
@@ -3377,7 +3439,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 231
+        "y": 239
       },
       "hiddenSeries": false,
       "id": 33,
@@ -3489,7 +3551,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 231
+        "y": 239
       },
       "hiddenSeries": false,
       "id": 42,
@@ -3617,7 +3679,7 @@
         "h": 31,
         "w": 12,
         "x": 0,
-        "y": 242
+        "y": 250
       },
       "id": 45,
       "options": {
@@ -3687,7 +3749,7 @@
         "h": 31,
         "w": 12,
         "x": 12,
-        "y": 242
+        "y": 250
       },
       "id": 46,
       "options": {
@@ -3730,7 +3792,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 273
+        "y": 281
       },
       "id": 101,
       "panels": [],
@@ -3753,7 +3815,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 274
+        "y": 282
       },
       "hiddenSeries": false,
       "id": 99,
@@ -3861,7 +3923,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 274
+        "y": 282
       },
       "hiddenSeries": false,
       "id": 97,
