@@ -2554,7 +2554,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 190
+        "y": 200
       },
       "id": 29,
       "panels": [],
@@ -2586,7 +2586,7 @@
         "h": 12,
         "w": 6,
         "x": 0,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2662,7 +2662,7 @@
         "h": 12,
         "w": 6,
         "x": 6,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2738,7 +2738,7 @@
         "h": 12,
         "w": 4,
         "x": 12,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2814,7 +2814,7 @@
         "h": 12,
         "w": 4,
         "x": 16,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2890,7 +2890,7 @@
         "h": 12,
         "w": 4,
         "x": 20,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2966,7 +2966,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 203
+        "y": 213
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -3033,7 +3033,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 215
+        "y": 225
       },
       "hiddenSeries": false,
       "id": 89,
@@ -3130,7 +3130,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 227
+        "y": 237
       },
       "hiddenSeries": false,
       "id": 26,
@@ -3238,7 +3238,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 239
+        "y": 249
       },
       "hiddenSeries": false,
       "id": 37,
@@ -3335,7 +3335,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 239
+        "y": 249
       },
       "hiddenSeries": false,
       "id": 40,
@@ -3447,7 +3447,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 239
+        "y": 249
       },
       "hiddenSeries": false,
       "id": 33,
@@ -3559,7 +3559,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 239
+        "y": 249
       },
       "hiddenSeries": false,
       "id": 42,
@@ -3687,7 +3687,7 @@
         "h": 31,
         "w": 12,
         "x": 0,
-        "y": 250
+        "y": 260
       },
       "id": 45,
       "options": {
@@ -3757,7 +3757,7 @@
         "h": 31,
         "w": 12,
         "x": 12,
-        "y": 250
+        "y": 260
       },
       "id": 46,
       "options": {
@@ -3800,7 +3800,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 281
+        "y": 291
       },
       "id": 101,
       "panels": [],
@@ -3823,7 +3823,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 282
+        "y": 292
       },
       "hiddenSeries": false,
       "id": 99,
@@ -3854,7 +3854,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(cortex_db_connection_attempts_total[5m])",
+          "expr": "sum by (service) (rate(cortex_db_connection_attempts_total[5m]))",
           "interval": "",
           "legendFormat": "{{service}}",
           "queryType": "randomWalk",
@@ -3931,7 +3931,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 282
+        "y": 292
       },
       "hiddenSeries": false,
       "id": 97,
@@ -3962,7 +3962,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(cortex_mqtt_connection_attempts_total[5m])",
+          "expr": "sum by (service) (rate(cortex_mqtt_connection_attempts_total[5m]))",
           "interval": "",
           "legendFormat": "{{service}}",
           "queryType": "randomWalk",
