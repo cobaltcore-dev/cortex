@@ -210,6 +210,8 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 				// we want to try again later, to avoid missing features.
 				if len(features) > 0 {
 					extractor.MarkAsUpdated()
+				} else {
+					slog.Warn("feature extractor extracted no features", "extractor", extractor.GetName())
 				}
 			}()
 		}
