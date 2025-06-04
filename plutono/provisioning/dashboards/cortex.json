@@ -3854,7 +3854,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(cortex_db_connection_attempts_total[5m])",
+          "expr": "sum by (service) (rate(cortex_db_connection_attempts_total[5m]))",
           "interval": "",
           "legendFormat": "{{service}}",
           "queryType": "randomWalk",
@@ -3962,7 +3962,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(cortex_mqtt_connection_attempts_total[5m])",
+          "expr": "sum by (service) (rate(cortex_mqtt_connection_attempts_total[5m]))",
           "interval": "",
           "legendFormat": "{{service}}",
           "queryType": "randomWalk",
