@@ -29,6 +29,8 @@ type FeatureExtractor interface {
 	MarkAsUpdated()
 	// Earliest time when this extractor can be executed again.
 	NextPossibleExecution() time.Time
+	// Skip the extractor if it is not needed.
+	NotifySkip()
 }
 
 type Feature any
