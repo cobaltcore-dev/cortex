@@ -20,6 +20,7 @@ import (
 type mockFeatureExtractor struct {
 	name        string
 	triggers    []string
+	updated     bool
 	initFunc    func(db.DB, conf.FeatureExtractorConfig) error
 	extractFunc func() ([]plugins.Feature, error)
 }
@@ -47,12 +48,11 @@ func (m *mockFeatureExtractor) Triggers() []string {
 }
 
 func (m *mockFeatureExtractor) NeedsUpdate() bool {
-	// For simplicity, we assume it always needs an update.
-	return true
+	return !m.updated
 }
 
 func (m *mockFeatureExtractor) MarkAsUpdated() {
-	// not implemented for mock
+	m.updated = true
 }
 
 func (m *mockFeatureExtractor) NextPossibleExecution() time.Time {
@@ -250,5 +250,40 @@ func TestFeatureExtractorPipeline_ExtractOnTrigger(t *testing.T) {
 	// Ensure that the extractors were triggered
 	if len(extractor1.triggers) == 0 || len(extractor2.triggers) == 0 {
 		t.Fatalf("expected extractors to be triggered, but they were not")
+	}
+}
+
+func TestFeatureExtractorPipeline_ExtractorUpdate(t *testing.T) {
+	testcases := []struct {
+		name     string
+		features []plugins.Feature
+	}{
+		{
+			name:     "features extracted",
+			features: []plugins.Feature{"feature1", "feature2"},
+		},
+		{
+			name:     "no features extracted",
+			features: []plugins.Feature{},
+		},
+	}
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			pipeline := FeatureExtractorPipeline{}
+			extractor := &mockFeatureExtractor{
+				name: "test_extractor",
+				extractFunc: func() ([]plugins.Feature, error) {
+					return tc.features, nil
+				},
+			}
+			pipeline.extract([][]plugins.FeatureExtractor{
+				{extractor},
+			})
+			// features = 0 -> NeedsUpdate() should return true
+			// features > 0 -> NeedsUpdate() should return false
+			if len(tc.features) > 0 == extractor.NeedsUpdate() {
+				t.Errorf("expected extractor to not be marked as updated when no features are extracted")
+			}
+		})
 	}
 }

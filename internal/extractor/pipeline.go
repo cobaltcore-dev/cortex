@@ -200,11 +200,19 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 					extractor.NotifySkip()
 					return
 				}
-				if _, err := extractor.Extract(); err != nil {
+				features, err := extractor.Extract()
+				if err != nil {
 					slog.Error("feature extractor: failed to extract features", "error", err)
 					return
 				}
-				extractor.MarkAsUpdated()
+				// Feature extractors should always calculate features, unless
+				// their underlying data source is not complete yet. In this case,
+				// we want to try again later, to avoid missing features.
+				if len(features) > 0 {
+					extractor.MarkAsUpdated()
+				} else {
+					slog.Warn("feature extractor extracted no features", "extractor", extractor.GetName())
+				}
 			}()
 		}
 		wg.Wait()
