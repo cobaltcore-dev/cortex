@@ -161,6 +161,47 @@ type NovaSchedulerStepConfig struct {
 	DependencyConfig `json:"dependencies,omitempty"`
 	// The validations to use for this step.
 	DisabledValidations NovaSchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
+	// The scope of the step, i.e. which hosts it should be applied to.
+	Scope NovaSchedulerStepScope `json:"scope,omitempty"`
+}
+
+// Scope that defines which hosts a scheduler step should be applied to.
+// In addition, it also defines the traits for which the step should be applied.
+type NovaSchedulerStepScope struct {
+	// Scopes applied to the compute hosts.
+	HostCapabilities NovaSchedulerStepHostCapabilities `json:"hostCapabilities,omitempty"`
+	// Scopes applied to the given nova spec.
+	Spec NovaSchedulerStepSpecScope `json:"spec,omitempty"`
+}
+
+type NovaSchedulerStepHostCapabilities struct {
+	// If given, the scheduler step will only be applied to hosts
+	// that have ONE of the given traits.
+	AnyOfTraitInfixes []string `json:"anyOfTraitInfixes,omitempty"`
+	// If given, the scheduler step will only be applied to hosts
+	// that have ONE of the given hypervisor types.
+	AnyOfHypervisorTypeInfixes []string `json:"anyOfHypervisorTypeInfixes,omitempty"`
+	// If given, the scheduler step will only be applied to hosts
+	// that have ALL of the given traits.
+	AllOfTraitInfixes []string `json:"allOfTraitInfixes,omitempty"`
+
+	// If the selection should be inverted, i.e. the step should be applied to hosts
+	// that do NOT match the aforementioned criteria.
+	InvertSelection bool `json:"invertSelection,omitempty"`
+}
+
+func (s NovaSchedulerStepHostCapabilities) IsUndefined() bool {
+	return len(s.AnyOfTraitInfixes) == 0 && len(s.AnyOfHypervisorTypeInfixes) == 0 && len(s.AllOfTraitInfixes) == 0
+}
+
+type NovaSchedulerStepSpecScope struct {
+	// If given, the scheduler step will only be applied to specs
+	// that contain ALL of the following infixes.
+	AllOfFlavorNameInfixes []string `json:"allOfFlavorNameInfixes,omitempty"`
+}
+
+func (s NovaSchedulerStepSpecScope) IsUndefined() bool {
+	return len(s.AllOfFlavorNameInfixes) == 0
 }
 
 // Config for which validations to disable for a scheduler step.

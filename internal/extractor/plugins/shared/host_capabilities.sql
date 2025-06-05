@@ -5,7 +5,8 @@
 -- this: "TRAIT_1,TRAIT_2,TRAIT_3" in one single string.
 SELECT
     h.service_host AS compute_host,
-    STRING_AGG(t.name, ',') AS traits
+    STRING_AGG(t.name, ',') AS traits,
+    h.hypervisor_type AS hypervisor_type
 FROM openstack_hypervisors AS h
 JOIN openstack_resource_provider_traits AS t
     ON h.id = t.resource_provider_uuid

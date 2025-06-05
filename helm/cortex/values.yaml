@@ -279,7 +279,7 @@ conf:
               nova:
                 types:
                   - hypervisors
-      - name: host_traits_extractor
+      - name: host_capabilities_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
           sync:
@@ -440,15 +440,16 @@ conf:
               extractors:
                 - node_exporter_host_memory_active_extractor
 
-        # Shared scheduler steps.
+        # Bin-packing for HANA vms on VMware HANA hosts.
         - name: shared_flavor_binpacking
+          # Scope this step to VMware hypervisors and HANA hosts only.
+          scope:
+            hostCapabilities:
+              anyOfHypervisorTypeInfixes: ["VMware"]
+              anyOfTraitInfixes: ["HANA_EXCLUSIVE"]
+            spec:
+              allOfFlavorNameInfixes: ["hana"]
           options:
-            # Flavor names to consider for binpacking.
-            # If empty, all flavors are considered.
-            flavors: []
-            # Traits of the hypervisor resource provider to consider
-            # for binpacking. If empty, all traits are considered.
-            traits: [COMPUTE_NODE] # This is an example.
             # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
             cpuEnabled: true
             cpuFreeLowerBound: 512 # vCPUs
@@ -471,7 +472,7 @@ conf:
             features:
               extractors:
                 - host_space_extractor
-                - host_traits_extractor
+                - host_capabilities_extractor # Needed due to the host scope.
 
 # Generic modifiers added on the initial creation of this helm chart.
 

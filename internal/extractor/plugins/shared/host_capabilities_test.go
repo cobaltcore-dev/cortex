@@ -13,15 +13,15 @@ import (
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
-func TestHostTraitsExtractor_Init(t *testing.T) {
+func TestHostCapabilitiesExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	extractor := &HostTraitsExtractor{}
+	extractor := &HostCapabilitiesExtractor{}
 	config := conf.FeatureExtractorConfig{
-		Name:           "host_traits_extractor",
+		Name:           "host_capabilities_extractor",
 		Options:        conf.NewRawOpts("{}"),
 		RecencySeconds: nil, // No recency for this test
 	}
@@ -29,12 +29,12 @@ func TestHostTraitsExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if !testDB.TableExists(HostTraits{}) {
+	if !testDB.TableExists(HostCapabilities{}) {
 		t.Error("expected table to be created")
 	}
 }
 
-func TestHostTraitsExtractor_Extract(t *testing.T) {
+func TestHostCapabilitiesExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -65,9 +65,9 @@ func TestHostTraitsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	extractor := &HostTraitsExtractor{}
+	extractor := &HostCapabilitiesExtractor{}
 	config := conf.FeatureExtractorConfig{
-		Name:           "host_traits_extractor",
+		Name:           "host_capabilities_extractor",
 		Options:        conf.NewRawOpts("{}"),
 		RecencySeconds: nil, // No recency for this test
 	}
@@ -78,9 +78,9 @@ func TestHostTraitsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Verify the data was inserted into the feature_host_traits table
-	var traitsResult []HostTraits
-	_, err := testDB.Select(&traitsResult, "SELECT * FROM feature_host_traits")
+	// Verify the data was inserted into the feature_host_capabilities table
+	var traitsResult []HostCapabilities
+	_, err := testDB.Select(&traitsResult, "SELECT * FROM feature_host_capabilities")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -90,7 +90,7 @@ func TestHostTraitsExtractor_Extract(t *testing.T) {
 	}
 
 	// Compare expected values with actual values in traitsResult
-	expected := []HostTraits{
+	expected := []HostCapabilities{
 		{
 			ComputeHost: "host1",
 			Traits:      "TRAIT_1,TRAIT_2",
