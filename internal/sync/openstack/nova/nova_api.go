@@ -69,7 +69,9 @@ func (api *novaAPI) Init(ctx context.Context) {
 		ProviderClient: provider,
 		Endpoint:       url,
 		Type:           serviceType,
-		Microversion:   "2.53", // Since microversion 2.53, this is a UUID.
+		// Since microversion 2.53, the hypervisor id and service id is a UUID.
+		// We need that to find placement resource providers for hypervisors.
+		Microversion: "2.53",
 	}
 }
 

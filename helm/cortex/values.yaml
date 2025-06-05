@@ -448,7 +448,7 @@ conf:
             flavors: []
             # Traits of the hypervisor resource provider to consider
             # for binpacking. If empty, all traits are considered.
-            traits: []
+            traits: [COMPUTE_NODE] # This is an example.
             # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
             cpuEnabled: true
             cpuFreeLowerBound: 512 # vCPUs

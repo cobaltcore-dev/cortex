@@ -114,6 +114,7 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 		traitsByHost[hostTrait.ComputeHost] = hostTrait.Traits
 	}
 
+	skippedDueToTraits := 0
 	for _, hostSpace := range hostSpaces {
 		// Only modify the weight if the host is in the scenario.
 		if _, ok := result.Activations[hostSpace.ComputeHost]; !ok {
@@ -122,11 +123,13 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 		traits, ok := traitsByHost[hostSpace.ComputeHost]
 		if !ok && len(s.Options.Traits) > 0 {
 			// If the host does not have traits, skip it if we are filtering by traits.
+			skippedDueToTraits++
 			continue
 		}
 		for _, trait := range s.Options.Traits {
 			if !strings.Contains(traits, trait) {
 				// If the host does not have the required trait, skip it.
+				skippedDueToTraits++
 				continue
 			}
 		}
@@ -187,6 +190,13 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 				Hosts[hostSpace.ComputeHost] = diskLeftAfterPlacement
 		}
 		result.Activations[hostSpace.ComputeHost] = activationCPU + activationRAM + activationDisk
+	}
+	if skippedDueToTraits > 0 {
+		traceLog.Info("binpacking: skipped hosts due to trait scope",
+			"skipped", skippedDueToTraits,
+			"traits", s.Options.Traits,
+			"total", len(request.GetHosts()),
+		)
 	}
 	return result, nil
 }
