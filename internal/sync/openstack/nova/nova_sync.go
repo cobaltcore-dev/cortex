@@ -7,7 +7,6 @@ import (
 	"context"
 	"log/slog"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -224,7 +223,7 @@ func (s *NovaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, 
 	if err != nil {
 		return nil, err
 	}
-	err = upsert(s, changedHypervisors, "id", func(h Hypervisor) string { return strconv.Itoa(h.ID) }, tableName)
+	err = upsert(s, changedHypervisors, "id", func(h Hypervisor) string { return h.ID }, tableName)
 	if err != nil {
 		return nil, err
 	}

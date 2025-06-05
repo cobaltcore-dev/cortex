@@ -101,7 +101,7 @@ func TestNovaAPI_GetChangedHypervisors(t *testing.T) {
 			resp := struct {
 				Hypervisors []Hypervisor `json:"hypervisors"`
 			}{
-				Hypervisors: []Hypervisor{{ID: 1, Hostname: "hypervisor1"}},
+				Hypervisors: []Hypervisor{{ID: "1", Hostname: "hypervisor1", CPUInfo: "{}"}},
 			}
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
 				t.Fatalf("failed to write response: %v", err)

@@ -102,7 +102,7 @@ func TestMarshalOpenStackServer(t *testing.T) {
 
 func TestUnmarshalOpenStackHypervisor(t *testing.T) {
 	data := []byte(`{
-        "id": 1,
+        "id": "1",
         "hypervisor_hostname": "test-hypervisor",
         "state": "up",
         "status": "enabled",
@@ -110,7 +110,7 @@ func TestUnmarshalOpenStackHypervisor(t *testing.T) {
         "hypervisor_version": 1005003,
         "host_ip": "192.168.0.1",
         "service": {
-            "id": 2,
+            "id": "2",
             "host": "test-host",
             "disabled_reason": "maintenance"
         }
@@ -122,14 +122,14 @@ func TestUnmarshalOpenStackHypervisor(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if hypervisor.ID != 1 {
-		t.Errorf("expected ID to be %d, got %d", 1, hypervisor.ID)
+	if hypervisor.ID != "1" {
+		t.Errorf("expected ID to be %s, got %s", "1", hypervisor.ID)
 	}
 	if hypervisor.Hostname != "test-hypervisor" {
 		t.Errorf("expected hostname to be %s, got %s", "test-hypervisor", hypervisor.Hostname)
 	}
-	if hypervisor.ServiceID != 2 {
-		t.Errorf("expected ServiceID to be %d, got %d", 2, hypervisor.ServiceID)
+	if hypervisor.ServiceID != "2" {
+		t.Errorf("expected ServiceID to be %s, got %s", "2", hypervisor.ServiceID)
 	}
 	if hypervisor.ServiceHost != "test-host" {
 		t.Errorf("expected ServiceHost to be %s, got %s", "test-host", hypervisor.ServiceHost)
@@ -142,14 +142,14 @@ func TestUnmarshalOpenStackHypervisor(t *testing.T) {
 func TestMarshalOpenStackHypervisor(t *testing.T) {
 	disabledReason := "maintenance"
 	hypervisor := Hypervisor{
-		ID:                    1,
+		ID:                    "1",
 		Hostname:              "test-hypervisor",
 		State:                 "up",
 		Status:                "enabled",
 		HypervisorType:        "QEMU",
 		HypervisorVersion:     1005003,
 		HostIP:                "192.168.0.1",
-		ServiceID:             2,
+		ServiceID:             "2",
 		ServiceHost:           "test-host",
 		ServiceDisabledReason: &disabledReason,
 	}

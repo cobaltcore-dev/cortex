@@ -29,6 +29,7 @@ func (r ResourceProvider) Indexes() []db.Index { return nil }
 
 // Resource provider trait model from the OpenStack placement API.
 type Trait struct {
+	// Corresponds to the hypervisor uuid in the nova hypervisors table.
 	ResourceProviderUUID       string `db:"resource_provider_uuid,primarykey"`
 	Name                       string `db:"name,primarykey"`
 	ResourceProviderGeneration int    `db:"resource_provider_generation"`

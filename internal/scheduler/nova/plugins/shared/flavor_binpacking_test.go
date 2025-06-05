@@ -22,18 +22,21 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 	defer dbEnv.Close()
 
 	// Create dependency tables
-	err := testDB.CreateTable(testDB.AddTable(shared.FlavorHostSpace{}))
+	err := testDB.CreateTable(
+		testDB.AddTable(shared.HostSpace{}),
+		testDB.AddTable(shared.HostTraits{}),
+	)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_flavor_host_space table
 	_, err = testDB.Exec(`
-        INSERT INTO feature_flavor_host_space (flavor_id, compute_host, ram_left_mb, vcpus_left, disk_left_gb)
+        INSERT INTO feature_host_space (compute_host, ram_left_mb, vcpus_left, disk_left_gb, ram_left_pct, vcpus_left_pct, disk_left_pct)
         VALUES
-            ('flavor1', 'host1', 1024, 4, 100),
-            ('flavor1', 'host2', 2048, 2, 200),
-            ('flavor2', 'host1', 512, 1, 50)
+            ('host1', 1024, 1, 100, 50, 25, 50),
+            ('host2', 2048, 2, 200, 100, 12.5, 100),
+            ('host1', 512, 1, 50, 25, 6.25, 25)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -42,18 +45,18 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 	// Create an instance of the step
 	opts := conf.NewRawOpts(`{
         "cpuEnabled": true,
-        "cpuFreeLowerBound": 0,
-        "cpuFreeUpperBound": 4,
+        "cpuFreeLowerBound": 2,
+        "cpuFreeUpperBound": 0,
         "cpuFreeActivationLowerBound": 0.0,
         "cpuFreeActivationUpperBound": 1.0,
         "ramEnabled": true,
-        "ramFreeLowerBound": 0,
-        "ramFreeUpperBound": 2048,
+        "ramFreeLowerBound": 2048,
+        "ramFreeUpperBound": 0,
         "ramFreeActivationLowerBound": 0.0,
         "ramFreeActivationUpperBound": 1.0,
         "diskEnabled": true,
-        "diskFreeLowerBound": 0,
-        "diskFreeUpperBound": 200,
+        "diskFreeLowerBound": 200,
+        "diskFreeUpperBound": 0,
         "diskFreeActivationLowerBound": 0.0,
         "diskFreeActivationUpperBound": 1.0
     }`)
@@ -75,6 +78,10 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								FlavorID: "flavor1",
+								// Fits ideally on host2
+								MemoryMB:   2048,
+								VCPUs:      2,
+								RootDiskGB: 200,
 							},
 						},
 						NInstances: 1,
@@ -83,8 +90,8 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 				Hosts: []string{"host1", "host2"},
 			},
 			expectedWeights: map[string]float64{
-				"host1": 1.0 + 0.5 + 0.5, // CPU: 4/4, RAM: 1024/2048, Disk: 100/200
-				"host2": 0.5 + 1.0 + 1.0, // CPU: 2/4, RAM: 2048/2048, Disk: 200/200
+				"host1": 0.0, // Too big for that host
+				"host2": 3.0, // 2048 - 2048 = 0%, 2 - 2 = 0%, 200 - 200 = 0% --> perfect fit
 			},
 		},
 		{
@@ -94,7 +101,10 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
-								FlavorID: "flavor2",
+								FlavorID:   "flavor2",
+								MemoryMB:   1024,
+								VCPUs:      2,
+								RootDiskGB: 100,
 							},
 						},
 						NInstances: 1,
@@ -103,8 +113,8 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 				Hosts: []string{"host1", "host2"},
 			},
 			expectedWeights: map[string]float64{
-				"host1": 0.25 + 0.25 + 0.25, // CPU: 1/4, RAM: 512/2048, Disk: 50/200
-				"host2": 0.0 + 0.0 + 0.0,    // No matching flavor
+				"host1": 0.0, // Too big for that host
+				"host2": 2.0, // 2048 - 1024 = 50%, 2 - 2 = 0%, 200 - 100 = 50%
 			},
 		},
 		{
@@ -114,7 +124,10 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
-								FlavorID: "flavor1",
+								FlavorID:   "flavor1",
+								MemoryMB:   1024,
+								VCPUs:      2,
+								RootDiskGB: 100,
 							},
 						},
 						NInstances: 2,
@@ -122,6 +135,7 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 				},
 				Hosts: []string{"host1", "host2"},
 			},
+			// Not supported right now.
 			expectedWeights: map[string]float64{
 				"host1": 0.0, // No weight change for multiple VMs
 				"host2": 0.0, // No weight change for multiple VMs

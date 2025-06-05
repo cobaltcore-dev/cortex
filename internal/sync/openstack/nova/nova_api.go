@@ -69,6 +69,7 @@ func (api *novaAPI) Init(ctx context.Context) {
 		ProviderClient: provider,
 		Endpoint:       url,
 		Type:           serviceType,
+		Microversion:   "2.53", // Since microversion 2.53, this is a UUID.
 	}
 }
 

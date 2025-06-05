@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
@@ -19,6 +20,10 @@ type FlavorBinpackingStepOpts struct {
 	// Flavor names to consider for the binpacking.
 	// If this list is empty, all flavors are considered.
 	Flavors []string `json:"flavors"`
+
+	// Traits of the hypervisor resource provider to consider
+	// for binpacking. If empty, all traits are considered.
+	Traits []string `json:"traits"`
 
 	CPUEnabled                  bool    `json:"cpuEnabled"`
 	CPUFreeLowerBound           float64 `json:"cpuFreeLowerBound"` // -> mapped to ActivationLowerBound
@@ -87,57 +92,99 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 		return result, nil
 	}
 
-	var flavorHostSpaces []shared.FlavorHostSpace
-	if _, err := s.DB.Select(&flavorHostSpaces, `SELECT *
-		FROM feature_flavor_host_space
-		WHERE
-			flavor_id = :id AND
-			ram_left_mb >= 0 AND
-			vcpus_left >= 0 AND
-			disk_left_gb >= 0
-	`, map[string]any{"id": spec.Data.Flavor.Data.FlavorID}); err != nil {
+	var hostSpaces []shared.HostSpace
+	if _, err := s.DB.Select(
+		&hostSpaces, "SELECT * FROM "+shared.HostSpace{}.TableName(),
+	); err != nil {
 		return nil, err
 	}
 
-	for _, f := range flavorHostSpaces {
+	var hostTraits []shared.HostTraits
+	if _, err := s.DB.Select(
+		&hostTraits, "SELECT * FROM "+shared.HostTraits{}.TableName(),
+	); err != nil {
+		return nil, err
+	}
+
+	traitsByHost := make(map[string]string, len(hostTraits))
+	for _, hostTrait := range hostTraits {
+		// .Traits is a comma-separated list of traits
+		traitsByHost[hostTrait.ComputeHost] = hostTrait.Traits
+	}
+
+	for _, hostSpace := range hostSpaces {
 		// Only modify the weight if the host is in the scenario.
-		if _, ok := result.Activations[f.ComputeHost]; !ok {
+		if _, ok := result.Activations[hostSpace.ComputeHost]; !ok {
 			continue
 		}
+		traits, ok := traitsByHost[hostSpace.ComputeHost]
+		if !ok && len(s.Options.Traits) > 0 {
+			// If the host does not have traits, skip it if we are filtering by traits.
+			continue
+		}
+		for _, trait := range s.Options.Traits {
+			if !strings.Contains(traits, trait) {
+				// If the host does not have the required trait, skip it.
+				continue
+			}
+		}
+		// Host has the required traits, so we can consider it for binpacking.
+
 		activationCPU := s.NoEffect()
 		if s.Options.CPUEnabled {
+			vcpusLeftAfterPlacement := float64(hostSpace.VCPUsLeft - spec.Data.Flavor.Data.VCPUs)
+			if vcpusLeftAfterPlacement < 0 {
+				// If the host does not have enough vCPUs left, skip it.
+				continue
+			}
 			activationCPU = scheduler.MinMaxScale(
-				float64(f.VCPUsLeft),
+				vcpusLeftAfterPlacement,
 				s.Options.CPUFreeLowerBound,
 				s.Options.CPUFreeUpperBound,
 				s.Options.CPUFreeActivationLowerBound,
 				s.Options.CPUFreeActivationUpperBound,
 			)
-			result.Statistics["cpu free after flavor placement"].Hosts[f.ComputeHost] = float64(f.VCPUsLeft)
+			result.
+				Statistics["cpu free after flavor placement"].
+				Hosts[hostSpace.ComputeHost] = vcpusLeftAfterPlacement
 		}
 		activationRAM := s.NoEffect()
 		if s.Options.RAMEnabled {
+			ramLeftAfterPlacement := float64(hostSpace.RAMLeftMB - spec.Data.Flavor.Data.MemoryMB)
+			if ramLeftAfterPlacement < 0 {
+				// If the host does not have enough RAM left, skip it.
+				continue
+			}
 			activationRAM = scheduler.MinMaxScale(
-				float64(f.RAMLeftMB),
+				ramLeftAfterPlacement,
 				s.Options.RAMFreeLowerBound,
 				s.Options.RAMFreeUpperBound,
 				s.Options.RAMFreeActivationLowerBound,
 				s.Options.RAMFreeActivationUpperBound,
 			)
-			result.Statistics["ram free after flavor placement"].Hosts[f.ComputeHost] = float64(f.RAMLeftMB)
+			result.
+				Statistics["ram free after flavor placement"].
+				Hosts[hostSpace.ComputeHost] = ramLeftAfterPlacement
 		}
 		activationDisk := s.NoEffect()
 		if s.Options.DiskEnabled {
+			diskLeftAfterPlacement := float64(hostSpace.DiskLeftGB - spec.Data.Flavor.Data.RootDiskGB)
+			if diskLeftAfterPlacement < 0 {
+				// If the host does not have enough disk left, skip it.
+				continue
+			}
 			activationDisk = scheduler.MinMaxScale(
-				float64(f.DiskLeftGB),
+				diskLeftAfterPlacement,
 				s.Options.DiskFreeLowerBound,
 				s.Options.DiskFreeUpperBound,
 				s.Options.DiskFreeActivationLowerBound,
 				s.Options.DiskFreeActivationUpperBound,
 			)
-			result.Statistics["disk free after flavor placement"].Hosts[f.ComputeHost] = float64(f.DiskLeftGB)
+			result.
+				Statistics["disk free after flavor placement"].
+				Hosts[hostSpace.ComputeHost] = diskLeftAfterPlacement
 		}
-		result.Activations[f.ComputeHost] = activationCPU + activationRAM + activationDisk
+		result.Activations[hostSpace.ComputeHost] = activationCPU + activationRAM + activationDisk
 	}
 	return result, nil
 }
