@@ -99,6 +99,8 @@ func (s *FlavorBinpackingStep) Run(traceLog *slog.Logger, request api.Request) (
 		return nil, err
 	}
 
+	// Note: we could technically use a LIKE %TRAIT1% OR LIKE %TRAIT2% query here,
+	// but for now we want to keep it simple. This should not return too many hosts.
 	var hostTraits []shared.HostTraits
 	if _, err := s.DB.Select(
 		&hostTraits, "SELECT * FROM "+shared.HostTraits{}.TableName(),

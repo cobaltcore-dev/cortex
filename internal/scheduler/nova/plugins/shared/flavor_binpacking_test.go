@@ -36,14 +36,27 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
         VALUES
             ('host1', 1024, 1, 100, 50, 25, 50),
             ('host2', 2048, 2, 200, 100, 12.5, 100),
-            ('host1', 512, 1, 50, 25, 6.25, 25)
+            ('host3', 4096, 4, 400, 200, 25, 200)
     `)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert mock data into the feature_host_traits table
+	_, err = testDB.Exec(`
+		INSERT INTO feature_host_traits (compute_host, traits)
+		VALUES
+			('host1', 'TRAIT_1,TRAIT_2'),
+			('host2', 'TRAIT_1,TRAIT_2'),
+			('host3', 'TRAIT_1')
+	`)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Create an instance of the step
 	opts := conf.NewRawOpts(`{
+		"traits": ["TRAIT_1", "TRAIT_2"],
         "cpuEnabled": true,
         "cpuFreeLowerBound": 2,
         "cpuFreeUpperBound": 0,
@@ -87,11 +100,12 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 						NInstances: 1,
 					},
 				},
-				Hosts: []string{"host1", "host2"},
+				Hosts: []string{"host1", "host2", "host3"},
 			},
 			expectedWeights: map[string]float64{
 				"host1": 0.0, // Too big for that host
 				"host2": 3.0, // 2048 - 2048 = 0%, 2 - 2 = 0%, 200 - 200 = 0% --> perfect fit
+				"host3": 0.0, // Should be skipped due to traits
 			},
 		},
 		{
@@ -110,11 +124,12 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 						NInstances: 1,
 					},
 				},
-				Hosts: []string{"host1", "host2"},
+				Hosts: []string{"host1", "host2", "host3"},
 			},
 			expectedWeights: map[string]float64{
 				"host1": 0.0, // Too big for that host
 				"host2": 2.0, // 2048 - 1024 = 50%, 2 - 2 = 0%, 200 - 100 = 50%
+				"host3": 0.0, // Should be skipped due to traits
 			},
 		},
 		{
@@ -133,12 +148,13 @@ func TestFlavorBinpackingStep_Run(t *testing.T) {
 						NInstances: 2,
 					},
 				},
-				Hosts: []string{"host1", "host2"},
+				Hosts: []string{"host1", "host2", "host3"},
 			},
 			// Not supported right now.
 			expectedWeights: map[string]float64{
 				"host1": 0.0, // No weight change for multiple VMs
 				"host2": 0.0, // No weight change for multiple VMs
+				"host3": 0.0, // Should be skipped due to traits
 			},
 		},
 	}
