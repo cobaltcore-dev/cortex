@@ -2554,7 +2554,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 190
+        "y": 200
       },
       "id": 29,
       "panels": [],
@@ -2586,7 +2586,7 @@
         "h": 12,
         "w": 6,
         "x": 0,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2662,12 +2662,12 @@
         "h": 12,
         "w": 6,
         "x": 6,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
       "highlightCards": true,
-      "id": 91,
+      "id": 104,
       "interval": null,
       "legend": {
         "show": true
@@ -2677,7 +2677,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"1\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"0\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2688,7 +2688,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Where host at idx=1 came from",
+      "title": "Where host at idx=0 came from",
       "tooltip": {
         "show": true,
         "showHistogram": false
@@ -2738,7 +2738,7 @@
         "h": 12,
         "w": 4,
         "x": 12,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2814,7 +2814,7 @@
         "h": 12,
         "w": 4,
         "x": 16,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2890,7 +2890,7 @@
         "h": 12,
         "w": 4,
         "x": 20,
-        "y": 191
+        "y": 201
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2966,7 +2966,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 203
+        "y": 213
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -3018,6 +3018,136 @@
       "yBucketSize": null
     },
     {
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 19,
+        "w": 24,
+        "x": 0,
+        "y": 225
+      },
+      "id": 91,
+      "interval": null,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_impact_bucket{unit=\"vCPUs\"}[2m])) by (le, step, stat))",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "Step: {{step}} Statistic: {{stat}}",
+          "refId": "A"
+        },
+        {
+          "exemplar": false,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_impact_bucket{unit=\"MB\"}[2m])) by (le, step, stat))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Step: {{step}} Statistic: {{stat}}",
+          "refId": "B"
+        },
+        {
+          "exemplar": false,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_impact_bucket{unit=\"%\"}[2m])) by (le, step, stat))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Step: {{step}} Statistic: {{stat}}",
+          "refId": "C"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Scheduler impact",
+      "type": "stat"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -3033,7 +3163,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 215
+        "y": 244
       },
       "hiddenSeries": false,
       "id": 89,
@@ -3130,7 +3260,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 227
+        "y": 256
       },
       "hiddenSeries": false,
       "id": 26,
@@ -3238,7 +3368,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 239
+        "y": 268
       },
       "hiddenSeries": false,
       "id": 37,
@@ -3335,7 +3465,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 239
+        "y": 268
       },
       "hiddenSeries": false,
       "id": 40,
@@ -3447,7 +3577,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 239
+        "y": 268
       },
       "hiddenSeries": false,
       "id": 33,
@@ -3559,7 +3689,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 239
+        "y": 268
       },
       "hiddenSeries": false,
       "id": 42,
@@ -3687,7 +3817,7 @@
         "h": 31,
         "w": 12,
         "x": 0,
-        "y": 250
+        "y": 279
       },
       "id": 45,
       "options": {
@@ -3757,7 +3887,7 @@
         "h": 31,
         "w": 12,
         "x": 12,
-        "y": 250
+        "y": 279
       },
       "id": 46,
       "options": {
@@ -3800,7 +3930,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 281
+        "y": 310
       },
       "id": 101,
       "panels": [],
@@ -3823,7 +3953,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 282
+        "y": 311
       },
       "hiddenSeries": false,
       "id": 99,
@@ -3931,7 +4061,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 282
+        "y": 311
       },
       "hiddenSeries": false,
       "id": 97,
@@ -4031,7 +4161,7 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},

@@ -4,8 +4,10 @@
 package nova
 
 import (
+	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -29,6 +31,8 @@ type Monitor struct {
 	stepRemovedHostsObserver *prometheus.HistogramVec
 	// Histogram measuring where the host at a given index came from originally.
 	stepReorderingsObserver *prometheus.HistogramVec
+	// A histogram to observe the impact of the step on the hosts.
+	stepImpactObserver *prometheus.HistogramVec
 	// A histogram to measure how long the pipeline takes to run in total.
 	pipelineRunTimer prometheus.Histogram
 	// A histogram to observe the number of hosts going into the scheduler pipeline.
@@ -55,6 +59,11 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		Help:    "Number of hosts removed by scheduler pipeline step",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 	}, []string{"step"})
+	stepImpactObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "cortex_scheduler_nova_pipeline_step_impact",
+		Help:    "Impact of the step on the hosts",
+		Buckets: prometheus.ExponentialBucketsRange(0.01, 1000, 20),
+	}, []string{"step", "stat", "unit"})
 	buckets := []float64{}
 	buckets = append(buckets, prometheus.LinearBuckets(0, 1, 10)...)
 	buckets = append(buckets, prometheus.LinearBuckets(10, 10, 4)...)
@@ -88,6 +97,7 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		stepHostWeight,
 		stepRemovedHostsObserver,
 		stepReorderingsObserver,
+		stepImpactObserver,
 		pipelineRunTimer,
 		hostNumberInObserver,
 		hostNumberOutObserver,
@@ -97,10 +107,11 @@ func NewSchedulerMonitor(registry *monitoring.Registry) Monitor {
 		stepRunTimer:             stepRunTimer,
 		stepHostWeight:           stepHostWeight,
 		stepRemovedHostsObserver: stepRemovedHostsObserver,
+		stepReorderingsObserver:  stepReorderingsObserver,
+		stepImpactObserver:       stepImpactObserver,
 		pipelineRunTimer:         pipelineRunTimer,
 		hostNumberInObserver:     hostNumberInObserver,
 		hostNumberOutObserver:    hostNumberOutObserver,
-		stepReorderingsObserver:  stepReorderingsObserver,
 		requestCounter:           requestCounter,
 	}
 }
@@ -141,6 +152,8 @@ type StepMonitor struct {
 	removedHostsObserver prometheus.Observer
 	// A metric measuring where the host at a given index came from originally.
 	stepReorderingsObserver *prometheus.HistogramVec
+	// A metric measuring the impact of the step on the hosts.
+	stepImpactObserver *prometheus.HistogramVec
 }
 
 // Get the name of the wrapped step.
@@ -170,6 +183,7 @@ func monitorStep(step plugins.Step, m Monitor) *StepMonitor {
 		stepHostWeight:          m.stepHostWeight,
 		removedHostsObserver:    removedHostsObserver,
 		stepReorderingsObserver: m.stepReorderingsObserver,
+		stepImpactObserver:      m.stepImpactObserver,
 	}
 }
 
@@ -274,5 +288,78 @@ func (s *StepMonitor) Run(traceLog *slog.Logger, request api.Request) (*plugins.
 		traceLog.Info(msg, "before", before, "after", after)
 	}
 
+	// Calculate the impact for each recorded stat.
+	for statName, statData := range stepResult.Statistics {
+		if statData.Hosts == nil {
+			continue
+		}
+		impact, err := impact(hostsIn, hostsOut, statData.Hosts, 5)
+		if err != nil {
+			traceLog.Error("scheduler: error calculating impact", "name", stepName, "stat", statName, "error", err)
+			continue
+		}
+		if s.stepImpactObserver != nil {
+			stepImpactObserver := s.stepImpactObserver.WithLabelValues(stepName, statName, statData.Unit)
+			stepImpactObserver.Observe(impact)
+		}
+		traceLog.Info(
+			"scheduler: impact for step",
+			"name", stepName, "stat", statName, "unit", statData.Unit, "impact", impact,
+		)
+	}
+
 	return stepResult, nil
+}
+
+// Calculate the impact of a scheduler step by comparing the before and after states.
+// The impact is calculated as the sum of the absolute differences in the
+// indices of the hosts in the before and after states, multiplied by the
+// absolute difference in the statistics at those indices.
+func impact(before, after []string, stats map[string]float64, topK int) (float64, error) {
+	impact := 0.0
+	for newIdx, host := range after {
+		if newIdx >= topK {
+			break
+		}
+		// Since we are looking at small sets, this is likely faster
+		// than creating the map and using it.
+		oldIdx := slices.Index(before, host)
+		if oldIdx < 0 {
+			// This case should not happen, because the scheduler step doesn't
+			// add new hosts, it only reorders existing ones or filters.
+			return 0, fmt.Errorf("host %s not found in before state", host)
+		}
+		if oldIdx == newIdx {
+			// No impact if the host stayed at the same index.
+			continue
+		}
+		oldStatAtIdx := stats[before[newIdx]]
+		newStatAtIdx := stats[host]
+
+		idxDisplacement := math.Abs(float64(oldIdx - newIdx))
+		statDifference := math.Abs(oldStatAtIdx - newStatAtIdx)
+		subimpact := idxDisplacement * statDifference
+		impact += subimpact
+
+		slog.Debug(
+			"scheduler: impact calculation",
+			"host", host,
+			"oldIdx", oldIdx,
+			"newIdx", newIdx,
+			"idxDisplacement", idxDisplacement,
+			"oldStatAtIdx", oldStatAtIdx,
+			"newStatAtIdx", newStatAtIdx,
+			"statDifference", statDifference,
+			"subimpact", subimpact,
+		)
+	}
+	slog.Debug(
+		"scheduler: total impact",
+		"impact", impact,
+		"hostsBefore", before,
+		"hostsAfter", after,
+		"stats", stats,
+	)
+
+	return impact, nil
 }

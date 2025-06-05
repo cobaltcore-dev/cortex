@@ -5,6 +5,7 @@ package nova
 
 import (
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -155,5 +156,97 @@ func TestStepMonitorRun(t *testing.T) {
 	}
 	if runTimer.Observations[0] <= 0 {
 		t.Errorf("runTimer.Observations[0] = %v, want > 0", runTimer.Observations[0])
+	}
+}
+
+func TestImpact(t *testing.T) {
+	testcases := []struct {
+		name     string
+		before   []string
+		after    []string
+		stats    map[string]float64
+		expected float64
+	}{
+		{
+			name:   "Flip around",
+			before: []string{"h0", "h1", "h2", "h3"},
+			after:  []string{"h3", "h2", "h1", "h0"},
+			// Let's say, these are cpu contention stats
+			stats: map[string]float64{"h0": 30.0, "h1": 20.0, "h2": 10.0, "h3": 0.0},
+			// h0 -> h3: abs(30.0 - 0.0)  * abs(0 - 3) = 90.0
+			// h1 -> h2: abs(20.0 - 10.0) * abs(1 - 2) = 10.0
+			// h2 -> h1: abs(10.0 - 20.0) * abs(2 - 1) = 10.0
+			// h3 -> h0: abs(0.0 - 30.0)  * abs(3 - 0) = 90.0
+			// Total impact % cpu contention shuffled = 200.0
+			expected: 200.0,
+		},
+		{
+			name:     "No Change",
+			before:   []string{"h0", "h1", "h2", "h3"},
+			after:    []string{"h0", "h1", "h2", "h3"},
+			stats:    map[string]float64{"h0": 30.0, "h1": 20.0, "h2": 10.0, "h3": 0.0},
+			expected: 0.0,
+		},
+		{
+			name:   "Partial Reordering",
+			before: []string{"h0", "h1", "h2", "h3"},
+			after:  []string{"h0", "h2", "h1", "h3"},
+			stats:  map[string]float64{"h0": 30.0, "h1": 20.0, "h2": 10.0, "h3": 0.0},
+			// h0 -> h0: abs(30.0 - 30.0) * abs(0 - 0) = 0.0
+			// h1 -> h2: abs(20.0 - 10.0) * abs(1 - 2) = 10.0
+			// h2 -> h1: abs(10.0 - 20.0) * abs(2 - 1) = 10.0
+			// h3 -> h3: abs(0.0 - 0.0) * abs(3 - 3) = 0.0
+			// Total impact	= 20.0
+			expected: 20.0,
+		},
+		{
+			name:   "From far back to front",
+			before: []string{"h0", "h1", "h2", "h3"},
+			after:  []string{"h3", "h0", "h1", "h2"},
+			stats:  map[string]float64{"h0": 30.0, "h1": 20.0, "h2": 10.0, "h3": 0.0},
+			// h0 -> h3: abs(30.0 - 0.0) * abs(0 - 3) = 90.0
+			// h1 -> h0: abs(20.0 - 30.0) * abs(1 - 0) = 10.0
+			// h2 -> h1: abs(10.0 - 20.0) * abs(2 - 1) = 10.0
+			// h3 -> h2: abs(0.0 - 10.0) * abs(3 - 2) = 10.0
+			// Total impact = 120.0
+			expected: 120.0,
+		},
+		{
+			name:   "Top K > 5",
+			before: []string{"h0", "h1", "h2", "h3", "h4", "h5", "h6"},
+			after:  []string{"h0", "h1", "h2", "h3", "h4", "h6", "h5"},
+			stats:  map[string]float64{"h0": 30.0, "h1": 20.0, "h2": 10.0, "h3": 0.0, "h4": 5.0, "h5": 2.0, "h6": 1.0},
+			// h5 -> h6 should be ignored
+			expected: 0.0,
+		},
+		{
+			name:     "Missing Hosts",
+			before:   []string{"h0", "h1", "h2", "h3"},
+			after:    []string{"h0", "h1"},
+			stats:    map[string]float64{"h0": 30.0, "h1": 20.0, "h2": 10.0, "h3": 0.0},
+			expected: 0.0,
+		},
+		{
+			name:     "Empty States",
+			before:   []string{},
+			after:    []string{},
+			stats:    map[string]float64{},
+			expected: 0.0,
+		},
+	}
+
+	opts := &slog.HandlerOptions{Level: slog.LevelDebug}
+	handler := slog.NewTextHandler(os.Stdout, opts)
+	slog.SetDefault(slog.New(handler))
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			impactValue, err := impact(tc.before, tc.after, tc.stats, 5)
+			if err != nil {
+				t.Fatalf("impact() error = %v", err)
+			}
+			if impactValue != tc.expected {
+				t.Errorf("impact() = %v, want %v", impactValue, tc.expected)
+			}
+		})
 	}
 }
