@@ -41,7 +41,7 @@ type Server struct {
 	OSEXTSTSPowerState             int     `json:"OS-EXT-STS:power_state" db:"os_ext_sts_power_state"`
 
 	// From nested JSON
-	FlavorID string `json:"-" db:"flavor_id"`
+	FlavorName string `json:"-" db:"flavor_name"`
 
 	// Note: there are some more fields that are omitted. To include them again, add
 	// custom unmarshalers and marshalers for the struct below.
@@ -60,12 +60,13 @@ func (s *Server) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	var flavor struct {
-		ID string `json:"id"`
+		// Starting in microversion 2.47, "id" was removed...
+		Name string `json:"original_name"`
 	}
 	if err := json.Unmarshal(aux.Flavor, &flavor); err != nil {
 		return err
 	}
-	s.FlavorID = flavor.ID
+	s.FlavorName = flavor.Name
 	return nil
 }
 
@@ -74,15 +75,16 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 	type Alias Server
 	aux := &struct {
 		Flavor struct {
-			ID string `json:"id"`
+			// Starting in microversion 2.47, "id" was removed...
+			Name string `json:"original_name"`
 		} `json:"flavor"`
 		*Alias
 	}{
 		Alias: (*Alias)(s),
 		Flavor: struct {
-			ID string `json:"id"`
+			Name string `json:"original_name"`
 		}{
-			ID: s.FlavorID,
+			Name: s.FlavorName,
 		},
 	}
 	return json.Marshal(aux)
@@ -97,7 +99,7 @@ func (Server) Indexes() []db.Index { return nil }
 // OpenStack hypervisor model as returned by the Nova API under /os-hypervisors/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
 type Hypervisor struct {
-	ID                int    `json:"id" db:"id,primarykey"`
+	ID                string `json:"id" db:"id,primarykey"`
 	Hostname          string `json:"hypervisor_hostname" db:"hostname"`
 	State             string `json:"state" db:"state"`
 	Status            string `json:"status" db:"status"`
@@ -105,7 +107,7 @@ type Hypervisor struct {
 	HypervisorVersion int    `json:"hypervisor_version" db:"hypervisor_version"`
 	HostIP            string `json:"host_ip" db:"host_ip"`
 	// From nested JSON
-	ServiceID             int     `json:"service_id" db:"service_id"`
+	ServiceID             string  `json:"service_id" db:"service_id"`
 	ServiceHost           string  `json:"service_host" db:"service_host"` // Used by the scheduler.
 	ServiceDisabledReason *string `json:"service_disabled_reason" db:"service_disabled_reason"`
 	VCPUs                 int     `json:"vcpus" db:"vcpus"`
@@ -129,6 +131,7 @@ func (h *Hypervisor) UnmarshalJSON(data []byte) error {
 	type Alias Hypervisor
 	aux := &struct {
 		Service json.RawMessage `json:"service"`
+		CPUInfo map[string]any  `json:"cpu_info"`
 		*Alias
 	}{
 		Alias: (*Alias)(h),
@@ -137,7 +140,7 @@ func (h *Hypervisor) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	var service struct {
-		ID             int     `json:"id"`
+		ID             string  `json:"id"`
 		Host           string  `json:"host"`
 		DisabledReason *string `json:"disabled_reason"`
 	}
@@ -147,6 +150,13 @@ func (h *Hypervisor) UnmarshalJSON(data []byte) error {
 	h.ServiceID = service.ID
 	h.ServiceHost = service.Host
 	h.ServiceDisabledReason = service.DisabledReason
+
+	// Convert CPUInfo map to JSON string
+	cpuInfoJSON, err := json.Marshal(aux.CPUInfo)
+	if err != nil {
+		return err
+	}
+	h.CPUInfo = string(cpuInfoJSON)
 	return nil
 }
 
@@ -157,12 +167,13 @@ func (h *Hypervisor) MarshalJSON() ([]byte, error) {
 	type Alias Hypervisor
 	aux := &struct {
 		Service json.RawMessage `json:"service"`
+		CPUInfo map[string]any  `json:"cpu_info"` // Keep CPUInfo as a map[string]any
 		*Alias
 	}{
 		Alias: (*Alias)(h),
 	}
 	var service struct {
-		ID             int     `json:"id"`
+		ID             string  `json:"id"`
 		Host           string  `json:"host"`
 		DisabledReason *string `json:"disabled_reason"`
 	}
@@ -172,6 +183,12 @@ func (h *Hypervisor) MarshalJSON() ([]byte, error) {
 	var err error
 	aux.Service, err = json.Marshal(service)
 	if err != nil {
+		return nil, err
+	}
+	// Ensure CPUInfo is a map[string]any
+	// This is necessary to ensure that the CPUInfo field is stored as a JSON string in the database.
+	aux.CPUInfo = make(map[string]any)
+	if err := json.Unmarshal([]byte(h.CPUInfo), &aux.CPUInfo); err != nil {
 		return nil, err
 	}
 	return json.Marshal(aux)

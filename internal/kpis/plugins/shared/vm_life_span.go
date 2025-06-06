@@ -34,7 +34,7 @@ func (k *VMLifeSpanKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.lifeSpanDesc = prometheus.NewDesc(
 		"cortex_vm_life_span",
 		"Time a VM was alive before it was deleted",
-		[]string{"flavor_name", "flavor_id"},
+		[]string{"flavor_name"},
 		nil,
 	)
 	return nil
@@ -53,7 +53,7 @@ func (k *VMLifeSpanKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
 	keysFunc := func(lifeSpan shared.VMLifeSpan) []string {
-		return []string{lifeSpan.FlavorName + "," + lifeSpan.FlavorID, "all,all"}
+		return []string{lifeSpan.FlavorName, "all"}
 	}
 	valueFunc := func(lifeSpan shared.VMLifeSpan) float64 {
 		return float64(lifeSpan.Duration)
@@ -61,8 +61,8 @@ func (k *VMLifeSpanKPI) Collect(ch chan<- prometheus.Metric) {
 	hists, counts, sums := plugins.Histogram(vmLifeSpans, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
-		if len(labels) != 2 {
-			slog.Warn("vm_life_span: unexpected comma in flavor name or id")
+		if len(labels) != 1 {
+			slog.Warn("vm_life_span: unexpected comma in flavor name")
 			continue
 		}
 		ch <- prometheus.MustNewConstHistogram(k.lifeSpanDesc, counts[key], sums[key], hist, labels...)

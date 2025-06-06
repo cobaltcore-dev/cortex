@@ -197,9 +197,9 @@ conf:
         availability: public
         # Placement objects to sync into the database.
         types:
-          # - resource_providers
+          - resource_providers
           # Needs resource_providers.
-          # - traits
+          - traits
 
   extractor:
     # Configuration of features that should be extracted from the synced data.
@@ -271,15 +271,25 @@ conf:
                 - alias: node_exporter_memory_active_pct
 
       # Shared extractors.
-      - name: flavor_host_space_extractor
+      - name: host_space_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
           sync:
             openstack:
               nova:
                 types:
-                  - flavors
                   - hypervisors
+      - name: host_capabilities_extractor
+        recencySeconds: 60 # 1 minute
+        dependencies:
+          sync:
+            openstack:
+              nova:
+                types:
+                  - hypervisors
+              placement:
+                types:
+                  - traits
       - name: vm_host_residency_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
@@ -430,34 +440,83 @@ conf:
               extractors:
                 - node_exporter_host_memory_active_extractor
 
-        # Shared scheduler steps.
+        # Bin-packing for HANA vms on VMware HANA hosts.
         - name: shared_flavor_binpacking
+          # Scope this step to VMware hypervisors and HANA hosts only.
+          scope:
+            hostSelectors:
+              - subject: hypervisorType
+                contains: "VMware"
+                operation: intersection
+              - subject: trait
+                contains: "HANA_EXCLUSIVE"
+                operation: intersection
+            specSelectors:
+              - subject: flavor
+                contains: "hana"
+                action: continue
           options:
-            # Flavor names to consider for binpacking.
-            # If empty, all flavors are considered.
-            flavors: []
             # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
             cpuEnabled: true
-            cpuFreeLowerBound: 0 # vCPUs
-            cpuFreeUpperBound: 512 # vCPUs
+            cpuFreeLowerBound: 512 # vCPUs
+            cpuFreeUpperBound: 0 # vCPUs
             cpuFreeActivationLowerBound: 0.0
-            cpuFreeActivationUpperBound: -0.5
+            cpuFreeActivationUpperBound: 1.0
             # Min-max scaling for gap-fitting based on memory space left (MB).
             ramEnabled: true
-            ramFreeLowerBound: 0 # MB
-            ramFreeUpperBound: 4000000 # MB
+            ramFreeLowerBound: 4000000 # MB
+            ramFreeUpperBound: 0 # MB
             ramFreeActivationLowerBound: 0.0
-            ramFreeActivationUpperBound: -0.5
+            ramFreeActivationUpperBound: 1.0
             # Min-max scaling for gap-fitting based on disk space left. (GB)
             diskEnabled: false
-            diskFreeLowerBound: 0 # GB
-            diskFreeUpperBound: 1000 # GB
+            diskFreeLowerBound: 1000 # GB
+            diskFreeUpperBound: 0 # GB
             diskFreeActivationLowerBound: 0.0
-            diskFreeActivationUpperBound: -0.25
+            diskFreeActivationUpperBound: 1.0
           dependencies:
             features:
               extractors:
-                - flavor_host_space_extractor
+                - host_space_extractor
+                - host_capabilities_extractor # Needed due to the host scope.
+
+        # Balance general-purpose vms
+        - name: shared_resource_balancing
+          # Scope this step to general-purpose vms on VMware hypervisors.
+          scope:
+            hostSelectors:
+              - subject: hypervisorType
+                contains: "VMware"
+                operation: intersection
+              - subject: trait
+                contains: "HANA_EXCLUSIVE"
+                operation: difference
+            specSelectors:
+              - subject: flavor
+                contains: "hana"
+                action: skip
+          options:
+            # Min-max scaling for resource balancing based on cpu space left (%).
+            cpuEnabled: true
+            cpuFreeLowerBoundPct: 0
+            cpuFreeUpperBoundPct: 100
+            cpuFreeActivationLowerBound: 0.0
+            cpuFreeActivationUpperBound: 1.0
+            ramEnabled: true
+            ramFreeLowerBoundPct: 0
+            ramFreeUpperBoundPct: 100
+            ramFreeActivationLowerBound: 0.0
+            ramFreeActivationUpperBound: 1.0
+            diskEnabled: false
+            diskFreeLowerBoundPct: 0
+            diskFreeUpperBoundPct: 100
+            diskFreeActivationLowerBound: 0.0
+            diskFreeActivationUpperBound: 1.0
+          dependencies:
+            features:
+              extractors:
+                - host_space_extractor
+                - host_capabilities_extractor # Needed due to the host scope.
 
 # Generic modifiers added on the initial creation of this helm chart.
 

@@ -41,11 +41,11 @@ func TestVMLifeSpanKPI_Collect(t *testing.T) {
 	// Insert mock data into the vm_life_span table
 	_, err := testDB.Exec(`
         INSERT INTO feature_vm_life_span (
-            duration, flavor_id, flavor_name, instance_uuid
+            duration, flavor_name, instance_uuid
         )
         VALUES
-            (3600, 'id1', 'flavor1', 'uuid1'),
-            (7200, 'id2', 'flavor2', 'uuid2')
+            (3600, 'flavor1', 'uuid1'),
+            (7200, 'flavor2', 'uuid2')
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

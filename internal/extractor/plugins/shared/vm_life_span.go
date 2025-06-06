@@ -15,8 +15,6 @@ import (
 type VMLifeSpan struct {
 	// Time the vm stayed on the host in seconds.
 	Duration int `db:"duration"`
-	// Flavor id of the virtual machine.
-	FlavorID string `db:"flavor_id"`
 	// Flavor name of the virtual machine.
 	FlavorName string `db:"flavor_name"`
 	// The UUID of the virtual machine.

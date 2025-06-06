@@ -47,7 +47,13 @@ func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config
 		Type:         "compute",
 		Availability: gophercloud.Availability(osConf.Nova.Availability),
 	}))
-	sc := &gophercloud.ServiceClient{ProviderClient: pc, Endpoint: url, Type: "compute"}
+	sc := &gophercloud.ServiceClient{
+		ProviderClient: pc,
+		Endpoint:       url,
+		Type:           "compute",
+		// Since microversion 2.53, the hypervisor id and service id is a UUID.
+		Microversion: "2.53",
+	}
 	slog.Info("authenticated against openstack", "url", url)
 	slog.Info("listing hypervisors")
 	pages := must.Return(hypervisors.List(sc, hypervisors.ListOpts{}).AllPages(ctx))

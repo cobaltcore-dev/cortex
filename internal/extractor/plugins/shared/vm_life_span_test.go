@@ -58,10 +58,10 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 
 	// Insert mock data into the servers and flavors tables
 	if _, err := testDB.Exec(`
-        INSERT INTO openstack_servers (id, flavor_id, created, updated, status)
+        INSERT INTO openstack_servers (id, flavor_name, created, updated, status)
         VALUES
-            ('server1', 'flavor1', '2025-01-01T00:00:00Z', '2025-01-03T00:00:00Z', 'DELETED'),
-            ('server2', 'flavor2', '2025-01-02T00:00:00Z', '2025-01-04T00:00:00Z', 'DELETED')
+            ('server1', 'small', '2025-01-01T00:00:00Z', '2025-01-03T00:00:00Z', 'DELETED'),
+            ('server2', 'medium', '2025-01-02T00:00:00Z', '2025-01-04T00:00:00Z', 'DELETED')
     `); err != nil {
 		t.Fatalf("failed to insert servers: %v", err)
 	}
@@ -94,8 +94,8 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 	}
 
 	expected := map[string]VMLifeSpan{
-		"server1": {Duration: 172800, FlavorID: "flavor1", FlavorName: "small", InstanceUUID: "server1"},
-		"server2": {Duration: 172800, FlavorID: "flavor2", FlavorName: "medium", InstanceUUID: "server2"},
+		"server1": {Duration: 172800, FlavorName: "small", InstanceUUID: "server1"},
+		"server2": {Duration: 172800, FlavorName: "medium", InstanceUUID: "server2"},
 	}
 
 	for _, feature := range features {

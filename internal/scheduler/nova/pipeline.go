@@ -35,6 +35,7 @@ var SupportedSteps = []plugins.Step{
 	&kvm.AvoidOverloadedHostsMemoryStep{},
 	// Shared steps
 	&shared.FlavorBinpackingStep{},
+	&shared.ResourceBalancingStep{},
 }
 
 // Pipeline of scheduler steps.
@@ -74,6 +75,8 @@ func NewPipeline(
 		if !ok {
 			panic("unknown pipeline step: " + stepConfig.Name)
 		}
+		// Scope the step.
+		step = scopeStep(step, stepConfig.Scope)
 		// Monitor the step execution.
 		step = monitorStep(step, monitor)
 		// Validate the step during execution.

@@ -5,7 +5,6 @@ package shared
 
 import (
 	"log/slog"
-	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -63,7 +62,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				100*float64(hypervisor.VCPUsUsed)/float64(hypervisor.VCPUs),
-				strconv.Itoa(hypervisor.ID),
+				hypervisor.ID,
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"cpu",
@@ -74,7 +73,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				100*float64(hypervisor.MemoryMBUsed)/float64(hypervisor.MemoryMB),
-				strconv.Itoa(hypervisor.ID),
+				hypervisor.ID,
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"memory",
@@ -85,7 +84,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				100*float64(hypervisor.LocalGBUsed)/float64(hypervisor.LocalGB),
-				strconv.Itoa(hypervisor.ID),
+				hypervisor.ID,
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"disk",
