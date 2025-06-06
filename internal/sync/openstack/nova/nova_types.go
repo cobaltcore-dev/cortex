@@ -41,7 +41,7 @@ type Server struct {
 	OSEXTSTSPowerState             int     `json:"OS-EXT-STS:power_state" db:"os_ext_sts_power_state"`
 
 	// From nested JSON
-	FlavorID string `json:"-" db:"flavor_id"`
+	FlavorName string `json:"-" db:"flavor_name"`
 
 	// Note: there are some more fields that are omitted. To include them again, add
 	// custom unmarshalers and marshalers for the struct below.
@@ -60,12 +60,13 @@ func (s *Server) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	var flavor struct {
-		ID string `json:"id"`
+		// Starting in microversion 2.47, "id" was removed...
+		Name string `json:"original_name"`
 	}
 	if err := json.Unmarshal(aux.Flavor, &flavor); err != nil {
 		return err
 	}
-	s.FlavorID = flavor.ID
+	s.FlavorName = flavor.Name
 	return nil
 }
 
@@ -74,15 +75,16 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 	type Alias Server
 	aux := &struct {
 		Flavor struct {
-			ID string `json:"id"`
+			// Starting in microversion 2.47, "id" was removed...
+			Name string `json:"original_name"`
 		} `json:"flavor"`
 		*Alias
 	}{
 		Alias: (*Alias)(s),
 		Flavor: struct {
-			ID string `json:"id"`
+			Name string `json:"original_name"`
 		}{
-			ID: s.FlavorID,
+			Name: s.FlavorName,
 		},
 	}
 	return json.Marshal(aux)

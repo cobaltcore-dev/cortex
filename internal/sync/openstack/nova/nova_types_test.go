@@ -36,7 +36,7 @@ func TestUnmarshalOpenStackServer(t *testing.T) {
         "OS-EXT-STS:vm_state": "active",
         "OS-EXT-STS:power_state": 1,
         "flavor": {
-            "id": "flavor1"
+            "original_name": "flavor1"
         }
     }`)
 
@@ -52,8 +52,8 @@ func TestUnmarshalOpenStackServer(t *testing.T) {
 	if server.Name != "test-server" {
 		t.Errorf("expected name to be %s, got %s", "test-server", server.Name)
 	}
-	if server.FlavorID != "flavor1" {
-		t.Errorf("expected FlavorID to be %s, got %s", "flavor1", server.FlavorID)
+	if server.FlavorName != "flavor1" {
+		t.Errorf("expected FlavorID to be %s, got %s", "flavor1", server.FlavorName)
 	}
 }
 
@@ -82,7 +82,7 @@ func TestMarshalOpenStackServer(t *testing.T) {
 		OSEXTSTSTaskState:              nil,
 		OSEXTSTSVmState:                "active",
 		OSEXTSTSPowerState:             1,
-		FlavorID:                       "flavor1",
+		FlavorName:                     "flavor1",
 	}
 
 	data, err := json.Marshal(&server)
@@ -95,7 +95,7 @@ func TestMarshalOpenStackServer(t *testing.T) {
 		t.Error("expected valid JSON, got invalid")
 	}
 	fmt.Println(string(data))
-	if !strings.Contains(string(data), `"flavor":{"id":"flavor1"}`) {
+	if !strings.Contains(string(data), `"flavor":{"original_name":"flavor1"}`) {
 		t.Error("expected JSON to contain 'flavor' with 'id'")
 	}
 }
