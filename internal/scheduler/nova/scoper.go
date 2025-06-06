@@ -48,7 +48,7 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.Request) (*plugins.S
 	}
 
 	// Query hosts in scope.
-	hostsInScope, hostsNotInScope, err := s.queryHostsInScope(request)
+	hostsInScope, hostsNotInScope, err := s.queryHostsInScope(traceLog, request)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.Request) (*plugins.S
 			result.Activations[host] = activationFunction.NoEffect()
 		}
 	}
-	slog.Info(
+	traceLog.Info(
 		"scheduler: scoped step activations",
 		"step", s.GetName(),
 		"hosts not in scope", hostsNotInScope,
@@ -74,7 +74,7 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.Request) (*plugins.S
 		for host := range result.Activations {
 			result.Activations[host] = activationFunction.NoEffect()
 		}
-		slog.Info(
+		traceLog.Info(
 			"scheduler: spec not in scope, resetting activations",
 			"step", s.GetName(),
 		)
@@ -83,70 +83,96 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.Request) (*plugins.S
 	return result, nil
 }
 
-func (s *StepScoper) queryHostsInScope(request api.Request) (
+// Based on the provided host selectors, determine which hosts are in scope
+// and which are not. The hosts in scope are returned in the first map,
+// while the hosts not in scope are returned in the second map.
+func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Request) (
 	hostsInScope map[string]struct{},
 	hostsNotInScope map[string]struct{},
 	err error,
 ) {
-	// If there is no scope, all hosts are in scope.
-	if s.Scope.HostCapabilities.IsUndefined() {
-		hosts := make(map[string]struct{}, len(request.GetHosts()))
-		for _, host := range request.GetHosts() {
-			hosts[host] = struct{}{}
-		}
-		return hosts, nil, nil
+
+	hostsInRequest := request.GetHosts()
+
+	// Initially, all hosts in the request are considered in scope.
+	hostsInScope = make(map[string]struct{})
+	for _, host := range hostsInRequest {
+		hostsInScope[host] = struct{}{}
 	}
+
+	// If there are no host selectors, return all hosts in the request.
+	if len(s.Scope.HostSelectors) == 0 {
+		return hostsInScope, hostsNotInScope, nil
+	}
+
+	// Fetch the host capabilities.
 	var hostCapabilities []shared.HostCapabilities
 	if _, err := s.DB.Select(
 		&hostCapabilities, "SELECT * FROM "+shared.HostCapabilities{}.TableName(),
 	); err != nil {
 		return nil, nil, err
 	}
-	// Filter hosts based on the scope.
-	hostsInScope = make(map[string]struct{})
-	for _, host := range hostCapabilities {
-		// Check if the host matches ALL the traits if given.
-		if len(s.Scope.HostCapabilities.AllOfTraitInfixes) > 0 {
-			for _, trait := range s.Scope.HostCapabilities.AllOfTraitInfixes {
-				// host.Traits is a comma-separated string of traits.
-				if !strings.Contains(host.Traits, trait) {
-					continue
-				}
-			}
-		}
-		// Check if the host matches ANY of the traits if given.
-		if len(s.Scope.HostCapabilities.AnyOfTraitInfixes) > 0 {
-			match := false
-			for _, trait := range s.Scope.HostCapabilities.AnyOfTraitInfixes {
-				// host.Traits is a comma-separated string of traits.
-				if strings.Contains(host.Traits, trait) {
-					match = true
-					break
-				}
-			}
-			if !match {
-				continue
-			}
-		}
-		// Check if the host matches ANY of the hypervisor types if given.
-		if len(s.Scope.HostCapabilities.AnyOfHypervisorTypeInfixes) > 0 {
-			match := false
-			for _, hypervisorType := range s.Scope.HostCapabilities.AnyOfHypervisorTypeInfixes {
-				// host.HypervisorType is a string representing the hypervisor type.
-				if strings.Contains(host.HypervisorType, hypervisorType) {
-					match = true
-					break
-				}
-			}
-			if !match {
-				continue
-			}
-		}
-		// If the host matches all criteria, add it to the scope.
-		hostsInScope[host.ComputeHost] = struct{}{}
+	capabilityByHost := make(map[string]shared.HostCapabilities, len(hostsInRequest))
+	for _, hostCapability := range hostCapabilities {
+		capabilityByHost[hostCapability.ComputeHost] = hostCapability
 	}
 
-	// Check if the selection should be inverted.
+	// Go through each host selector sequentially.
+	for _, selector := range s.Scope.HostSelectors {
+		selectedHosts := make(map[string]struct{})
+		for _, host := range hostsInRequest {
+			// Check if the host matches the selector.
+			capability, ok := capabilityByHost[host]
+			if !ok {
+				// If the host does not have capabilities, skip it.
+				continue
+			}
+
+			matches := false
+			switch strings.ToLower(selector.Subject) {
+			case "trait":
+				matches = strings.Contains(capability.Traits, selector.Infix)
+			case "hypervisortype":
+				matches = strings.Contains(capability.HypervisorType, selector.Infix)
+			default:
+				// If the subject is not recognized, log an error and skip.
+				traceLog.Error("scheduler: unknown host selector subject", "subject", selector.Subject)
+				continue
+			}
+
+			if matches {
+				// If the host matches the selector, add it to the in-scope map.
+				selectedHosts[host] = struct{}{}
+			}
+		}
+
+		// Apply the selected hosts to the in-scope map.
+		switch strings.ToLower(selector.Operation) {
+		case "union":
+			// If the operation is union, simply add the selected hosts to the in-scope map.
+			for host := range selectedHosts {
+				hostsInScope[host] = struct{}{}
+			}
+		case "difference":
+			// If the operation is difference, remove the selected hosts from the in-scope map.
+			for host := range selectedHosts {
+				delete(hostsInScope, host)
+			}
+		case "intersection":
+			// If the operation is intersection, keep only the hosts that are both in the in-scope map and the selected hosts.
+			for host := range hostsInScope {
+				if _, ok := selectedHosts[host]; !ok {
+					delete(hostsInScope, host)
+				}
+			}
+		default:
+			// If the operation is not recognized, log an error and skip.
+			traceLog.Error("scheduler: unknown host selector operation", "operation", selector.Operation)
+			continue
+		}
+	}
+
+	// Check which hosts have been excluded from the scope.
 	hostsNotInScope = make(map[string]struct{})
 	for _, host := range request.GetHosts() {
 		if _, ok := hostsInScope[host]; !ok {
@@ -154,31 +180,33 @@ func (s *StepScoper) queryHostsInScope(request api.Request) (
 			hostsNotInScope[host] = struct{}{}
 		}
 	}
-	if s.Scope.HostCapabilities.InvertSelection {
-		// If the selection is inverted, swap the maps.
-		hostsInScope, hostsNotInScope = hostsNotInScope, hostsInScope
-	}
 
 	return hostsInScope, hostsNotInScope, nil
 }
 
+// Check if the spec is in scope based on the spec selectors.
+// If there are no spec selectors, the spec is considered in scope.
 func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.Request) bool {
 	// If there is no scope, the spec is in scope.
-	if s.Scope.Spec.IsUndefined() {
+	if len(s.Scope.SpecSelectors) == 0 {
 		return true
 	}
-	// Check if the flavor is in scope.
-	flavorName := request.GetSpec().Data.Flavor.Data.Name
-	if len(s.Scope.Spec.AllOfFlavorNameInfixes) > 0 {
-		for _, flavorInfix := range s.Scope.Spec.AllOfFlavorNameInfixes {
+	for _, selector := range s.Scope.SpecSelectors {
+		// Check if the selector matches the spec.
+		matches := false
+		if strings.EqualFold(selector.Subject, "flavor") {
 			// Check if the flavor name contains the infix.
-			if !strings.Contains(flavorName, flavorInfix) {
-				// Skip this step if the flavor does not contain the infix.
-				traceLog.Info("flavor not in scope", "flavor", flavorName, "infix", flavorInfix)
-				return false
-			}
+			matches = strings.Contains(request.GetSpec().Data.Flavor.Data.Name, selector.Infix)
+		} else {
+			// If the subject is not recognized, log an error and skip.
+			traceLog.Error("scheduler: unknown spec selector subject", "subject", selector.Subject)
+			continue
+		}
+		if strings.EqualFold(selector.Action, "skip") && matches {
+			return false
+		} else if strings.EqualFold(selector.Action, "continue") && matches {
+			continue
 		}
 	}
-	// Additional checks can be added here based on the scope.
 	return true
 }

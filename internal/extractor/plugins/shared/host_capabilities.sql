@@ -10,5 +10,4 @@ SELECT
 FROM openstack_hypervisors AS h
 JOIN openstack_resource_provider_traits AS t
     ON h.id = t.resource_provider_uuid
-GROUP BY h.service_host
-ORDER BY h.service_host;
+GROUP BY h.service_host, h.hypervisor_type;

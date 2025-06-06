@@ -444,11 +444,17 @@ conf:
         - name: shared_flavor_binpacking
           # Scope this step to VMware hypervisors and HANA hosts only.
           scope:
-            hostCapabilities:
-              anyOfHypervisorTypeInfixes: ["VMware"]
-              anyOfTraitInfixes: ["HANA_EXCLUSIVE"]
-            spec:
-              allOfFlavorNameInfixes: ["hana"]
+            hostSelectors:
+              - subject: hypervisorType
+                contains: "VMware"
+                operation: intersection
+              - subject: trait
+                contains: "HANA_EXCLUSIVE"
+                operation: intersection
+            specSelectors:
+              - subject: flavor
+                contains: "hana"
+                action: continue
           options:
             # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
             cpuEnabled: true
@@ -466,6 +472,44 @@ conf:
             diskEnabled: false
             diskFreeLowerBound: 1000 # GB
             diskFreeUpperBound: 0 # GB
+            diskFreeActivationLowerBound: 0.0
+            diskFreeActivationUpperBound: 1.0
+          dependencies:
+            features:
+              extractors:
+                - host_space_extractor
+                - host_capabilities_extractor # Needed due to the host scope.
+
+        # Balance general-purpose vms
+        - name: shared_resource_balancing
+          # Scope this step to general-purpose vms on VMware hypervisors.
+          scope:
+            hostSelectors:
+              - subject: hypervisorType
+                contains: "VMware"
+                operation: intersection
+              - subject: trait
+                contains: "HANA_EXCLUSIVE"
+                operation: difference
+            specSelectors:
+              - subject: flavor
+                contains: "hana"
+                action: skip
+          options:
+            # Min-max scaling for resource balancing based on cpu space left (%).
+            cpuEnabled: true
+            cpuFreeLowerBoundPct: 0
+            cpuFreeUpperBoundPct: 100
+            cpuFreeActivationLowerBound: 0.0
+            cpuFreeActivationUpperBound: 1.0
+            ramEnabled: true
+            ramFreeLowerBoundPct: 0
+            ramFreeUpperBoundPct: 100
+            ramFreeActivationLowerBound: 0.0
+            ramFreeActivationUpperBound: 1.0
+            diskEnabled: false
+            diskFreeLowerBoundPct: 0
+            diskFreeUpperBoundPct: 100
             diskFreeActivationLowerBound: 0.0
             diskFreeActivationUpperBound: 1.0
           dependencies:

@@ -168,10 +168,34 @@ type NovaSchedulerStepConfig struct {
 // Scope that defines which hosts a scheduler step should be applied to.
 // In addition, it also defines the traits for which the step should be applied.
 type NovaSchedulerStepScope struct {
-	// Scopes applied to the compute hosts.
-	HostCapabilities NovaSchedulerStepHostCapabilities `json:"hostCapabilities,omitempty"`
-	// Scopes applied to the given nova spec.
-	Spec NovaSchedulerStepSpecScope `json:"spec,omitempty"`
+	// Selectors applied to the compute hosts.
+	HostSelectors []NovaSchedulerStepHostSelector `json:"hostSelectors,omitempty"`
+	// Selectors applied to the given nova spec.
+	SpecSelectors []NovaSchedulerStepSpecSelector `json:"specSelectors,omitempty"`
+}
+
+type NovaSchedulerStepHostSelector struct {
+	// One of: "trait", "hypervisorType"
+	Subject string `json:"subject"`
+	// Infix string that the subject should contain.
+	Infix string `json:"contains,omitempty"`
+	// How the selector should be applied:
+	// Let A be the previous set of hosts, and B the scoped hosts.
+	// - "union" means that the scoped hosts are added to the previous set of hosts.
+	// - "difference" means that the scoped hosts are removed from the previous set of hosts.
+	// - "intersection" means that the scoped hosts are the only ones that remain in the previous set of hosts.
+	Operation string `json:"operation,omitempty"`
+}
+
+type NovaSchedulerStepSpecSelector struct {
+	// One of: "flavor"
+	Subject string `json:"subject"`
+	// Infix string that the subject should contain.
+	Infix string `json:"contains,omitempty"`
+	// What to do if the selector is matched:
+	// - "skip" means that the step is skipped.
+	// - "continue" means that the step is applied.
+	Action string `json:"action,omitempty"`
 }
 
 type NovaSchedulerStepHostCapabilities struct {

@@ -35,6 +35,7 @@ var SupportedSteps = []plugins.Step{
 	&kvm.AvoidOverloadedHostsMemoryStep{},
 	// Shared steps
 	&shared.FlavorBinpackingStep{},
+	&shared.ResourceBalancingStep{},
 }
 
 // Pipeline of scheduler steps.
