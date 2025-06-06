@@ -2,7 +2,6 @@ WITH durations AS (
     SELECT
         migrations.instance_uuid,
         migrations.uuid AS migration_uuid,
-        servers.flavor_id AS flavor_id,
         flavors.name AS flavor_name,
         COALESCE(
             CAST(EXTRACT(EPOCH FROM (
@@ -23,13 +22,12 @@ WITH durations AS (
         ) AS duration
     FROM openstack_migrations AS migrations
     LEFT JOIN openstack_servers AS servers ON servers.id = migrations.instance_uuid
-    LEFT JOIN openstack_flavors AS flavors ON flavors.id = servers.flavor_id
+    LEFT JOIN openstack_flavors AS flavors ON flavors.id = servers.flavor_name
 )
 SELECT
     -- Sometimes the server can be vanished already, set default
     -- values for that case.
     COALESCE(durations.duration, 0) AS duration,
-    COALESCE(durations.flavor_id, 'unknown') AS flavor_id,
     COALESCE(durations.flavor_name, 'unknown') AS flavor_name,
     migrations.instance_uuid AS instance_uuid,
     migrations.uuid AS migration_uuid,

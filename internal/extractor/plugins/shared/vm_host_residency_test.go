@@ -56,7 +56,7 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 
 	// Insert mock data into the servers, migrations, and flavors tables
 	if _, err := testDB.Exec(`
-		INSERT INTO openstack_servers (id, flavor_id, created)
+		INSERT INTO openstack_servers (id, flavor_name, created)
 		VALUES
 			('server1', 'flavor1', '2025-01-01T00:00:00Z'),
 			('server2', 'flavor2', '2025-01-02T00:00:00Z')
@@ -100,8 +100,8 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 	}
 
 	expected := map[string]VMHostResidency{
-		"migration1": {Duration: 172800, FlavorID: "flavor1", FlavorName: "small", InstanceUUID: "server1", MigrationUUID: "migration1", SourceHost: "host1", TargetHost: "host2", Type: "live-migration", Time: 1735862400, ProjectID: "", UserID: ""},
-		"migration2": {Duration: 172800, FlavorID: "flavor2", FlavorName: "medium", InstanceUUID: "server2", MigrationUUID: "migration2", SourceHost: "host2", TargetHost: "host3", Type: "resize", Time: 1735948800, ProjectID: "", UserID: ""},
+		"migration1": {Duration: 172800, FlavorName: "small", InstanceUUID: "server1", MigrationUUID: "migration1", SourceHost: "host1", TargetHost: "host2", Type: "live-migration", Time: 1735862400, ProjectID: "", UserID: ""},
+		"migration2": {Duration: 172800, FlavorName: "medium", InstanceUUID: "server2", MigrationUUID: "migration2", SourceHost: "host2", TargetHost: "host3", Type: "resize", Time: 1735948800, ProjectID: "", UserID: ""},
 	}
 
 	for _, feature := range features {
