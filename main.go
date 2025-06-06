@@ -18,6 +18,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
 	apihttp "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -72,7 +73,7 @@ func runSchedulerNova(mux *http.ServeMux, registry *monitoring.Registry, config 
 	}
 	defer mqttClient.Disconnect()
 	schedulerPipeline := nova.NewPipeline(nova.SupportedSteps, config, db, monitor, mqttClient)
-	apiMonitor := apihttp.NewSchedulerMonitor(registry)
+	apiMonitor := scheduler.NewSchedulerMonitor(registry)
 	api := apihttp.NewAPI(config.API, schedulerPipeline, apiMonitor)
 	api.Init(mux) // non-blocking
 }

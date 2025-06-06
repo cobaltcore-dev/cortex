@@ -51,7 +51,7 @@ func (m *APIMonitor) Callback(w http.ResponseWriter, r *http.Request, pattern st
 // Respond to the request with the given code and error.
 // Also log the time it took to handle the request.
 func (h MonitoredCallback) Respond(code int, err error, text string) {
-	if h.apiMonitor.ApiRequestsTimer != nil {
+	if h.apiMonitor != nil {
 		observer := h.apiMonitor.ApiRequestsTimer.WithLabelValues(
 			h.r.Method,
 			h.pattern,
