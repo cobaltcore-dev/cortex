@@ -20,6 +20,8 @@ UPDATE openstack_servers AS s
 SET flavor_name = f.name
 FROM openstack_flavors AS f
 WHERE s.flavor_id = f.id;
+-- Delete all servers where the flavor name could not be determined.
+DELETE FROM openstack_servers WHERE flavor_name IS NULL;
 -- Remove the flavor_id column as it is no longer needed.
 ALTER TABLE IF EXISTS openstack_servers
     DROP COLUMN IF EXISTS flavor_id;
