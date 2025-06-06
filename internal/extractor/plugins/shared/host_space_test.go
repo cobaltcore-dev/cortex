@@ -50,6 +50,7 @@ func TestHostSpaceExtractor_Extract(t *testing.T) {
 	hs := []any{
 		&nova.Hypervisor{ID: "1", Hostname: "hostname1", ServiceHost: "host1", FreeRAMMB: 16000, MemoryMB: 32000, VCPUs: 16, VCPUsUsed: 4, FreeDiskGB: 200, LocalGB: 400},
 		&nova.Hypervisor{ID: "2", Hostname: "hostname2", ServiceHost: "host2", FreeRAMMB: 32000, MemoryMB: 64000, VCPUs: 32, VCPUsUsed: 8, FreeDiskGB: 400, LocalGB: 800},
+		&nova.Hypervisor{ID: "3", Hostname: "hostname3", ServiceHost: "host3", FreeRAMMB: 32000, MemoryMB: 64000, VCPUs: 32, VCPUsUsed: 8, FreeDiskGB: 400, LocalGB: 800, HypervisorType: "ironic"}, // Should be ignored
 	}
 	if err := testDB.Insert(hs...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
