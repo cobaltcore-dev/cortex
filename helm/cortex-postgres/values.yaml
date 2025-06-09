@@ -20,6 +20,7 @@ postgresql:
     enabled: true
   auth:
     postgresPassword: secret
+    replicationPassword: secret
   service:
     ports:
       postgresql: 5432
