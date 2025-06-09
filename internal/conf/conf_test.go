@@ -110,7 +110,7 @@ func TestNewConfig(t *testing.T) {
       "user": "postgres",
       "password": "secret",
       "database": "postgres"
-    },
+    }
 },
   "monitoring": {
     "port": 2112,
