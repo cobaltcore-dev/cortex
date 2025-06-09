@@ -11,6 +11,10 @@ owner-info:
   enabled: true
 
 postgresql:
+  architecture: replication
+  readReplicas:
+    replicaCount: 2
+
   fullnameOverride: cortex-postgresql
   volumePermissions:
     enabled: true

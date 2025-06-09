@@ -97,12 +97,21 @@ func TestNewConfig(t *testing.T) {
     "format": "text"
   },
   "db": {
-    "host": "cortex-postgresql",
-    "port": 5432,
-    "user": "postgres",
-    "password": "secret",
-    "database": "postgres"
-  },
+    "primary": {
+      "host": "cortex-postgresql-primary",
+      "port": 5432,
+      "user": "postgres",
+      "password": "secret",
+      "database": "postgres"
+    },
+	"readonly": {
+      "host": "cortex-postgresql-readonly",
+      "port": 5432,
+      "user": "postgres",
+      "password": "secret",
+      "database": "postgres"
+    },
+},
   "monitoring": {
     "port": 2112,
     "labels": {
@@ -176,20 +185,36 @@ func TestNewConfig(t *testing.T) {
 
 	// Test DBConfig
 	dbConfig := config.GetDBConfig()
-	if dbConfig.Host == "" {
+	if dbConfig.Primary.Host == "" {
 		t.Errorf("Expected non-empty DB host, got empty string")
 	}
-	if dbConfig.Port == 0 {
+	if dbConfig.Primary.Port == 0 {
 		t.Errorf("Expected non-zero DB port, got 0")
 	}
-	if dbConfig.Database == "" {
+	if dbConfig.Primary.Database == "" {
 		t.Errorf("Expected non-empty DB name, got empty string")
 	}
-	if dbConfig.User == "" {
+	if dbConfig.Primary.User == "" {
 		t.Errorf("Expected non-empty DB user, got empty string")
 	}
-	if dbConfig.Password == "" {
+	if dbConfig.Primary.Password == "" {
 		t.Errorf("Expected non-empty DB password, got empty string")
+	}
+	// Check the read-only DB configuration as well
+	if dbConfig.ReadOnly.Host == "" {
+		t.Errorf("Expected non-empty read-only DB host, got empty string")
+	}
+	if dbConfig.ReadOnly.Port == 0 {
+		t.Errorf("Expected non-zero read-only DB port, got 0")
+	}
+	if dbConfig.ReadOnly.Database == "" {
+		t.Errorf("Expected non-empty read-only DB name, got empty string")
+	}
+	if dbConfig.ReadOnly.User == "" {
+		t.Errorf("Expected non-empty read-only DB user, got empty string")
+	}
+	if dbConfig.ReadOnly.Password == "" {
+		t.Errorf("Expected non-empty read-only DB password, got empty string")
 	}
 
 	// Test MonitoringConfig

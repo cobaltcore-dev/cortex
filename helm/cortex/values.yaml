@@ -108,15 +108,21 @@ conf:
 
   # Connection parameters for the database where data is stored.
   db:
-    host: cortex-postgresql
-    port: 5432
-    user: postgres
-    password: secret
-    database: postgres
-    reconnect:
-      maxRetries: 20
-      retryIntervalSeconds: 1
-      livenessPingIntervalSeconds: 5
+    sharedDBConf: &sharedDBConf
+      port: 5432
+      user: postgres
+      password: secret
+      database: postgres
+      reconnect:
+        maxRetries: 20
+        retryIntervalSeconds: 1
+        livenessPingIntervalSeconds: 5
+    primary:
+      <<: *sharedDBConf
+      host: cortex-postgresql-primary
+    readonly:
+      <<: *sharedDBConf
+      host: cortex-postgresql-read
 
   # Sync plugins config.
   sync:

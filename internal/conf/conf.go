@@ -35,14 +35,19 @@ type DBReconnectConfig struct {
 	MaxRetries int `json:"maxRetries"`
 }
 
-// Database configuration.
-type DBConfig struct {
+type DBConnectionConfig struct {
 	Host      string            `json:"host"`
 	Port      int               `json:"port"`
 	Database  string            `json:"database"`
 	User      string            `json:"user"`
 	Password  string            `json:"password"`
 	Reconnect DBReconnectConfig `json:"reconnect"`
+}
+
+// Database configuration.
+type DBConfig struct {
+	Primary  DBConnectionConfig `json:"primary"`
+	ReadOnly DBConnectionConfig `json:"readonly"`
 }
 
 // Metric configuration for the sync/prometheus module.
