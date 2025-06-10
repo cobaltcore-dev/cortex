@@ -101,6 +101,8 @@ end
 
 Feature extractor plugins can define **dependencies** to syncer plugins or other features. These dependencies are specified through the service config and are validated on service startup. Thus, features that require other features to be present can be calculated in the correct order. In addition, features that are independent of each other can be calculated in parallel.
 
+To avoid burst calculations and unnecessary repeated updates, each feature extractor can be configured with a **recency** value (in seconds). This value defines the minimum age a feature must reach before it is recalculated. If a feature is requested for update but was already updated within its configured recency window, the calculation is skipped. This mechanism is especially important because some features depend on others, and a change in one feature can trigger a cascade of updates. Without a recency limit, the same feature might be recalculated many times in quick succession, leading to inefficient resource usage.
+
 ### Scheduler Plugins
 
 Scheduler plugins use the extracted features from the database to make intelligent scheduling decisions. They can implement different scheduling strategies, such as avoiding contended hosts or noisy neighbors, to improve resource utilization and performance in the data center.
