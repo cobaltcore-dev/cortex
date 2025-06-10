@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -72,7 +73,7 @@ func (k *VMMigrationStatisticsKPI) Collect(ch chan<- prometheus.Metric) {
 	valueFunc := func(residency shared.VMHostResidency) float64 {
 		return float64(residency.Duration)
 	}
-	hists, counts, sums := plugins.Histogram(hostResidencies, buckets, keysFunc, valueFunc)
+	hists, counts, sums := tools.Histogram(hostResidencies, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
 		if len(labels) != 2 {

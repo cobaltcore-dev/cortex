@@ -57,7 +57,7 @@ k8s_resource('cortex-kpis', port_forwards=[
 k8s_resource('cortex-cli', labels=['Commands'])
 local_resource(
     'Run E2E Tests',
-    'kubectl exec -it cortex-cli -- /usr/bin/cortex checks',
+    'kubectl exec -it deploy/cortex-cli -- /usr/bin/cortex checks',
     deps=['./internal/checks'],
     labels=['Commands'],
     trigger_mode=TRIGGER_MODE_MANUAL,

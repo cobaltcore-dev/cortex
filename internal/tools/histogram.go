@@ -1,12 +1,10 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package plugins
-
-import "github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
+package tools
 
 // Create a histogram from features.
-func Histogram[O plugins.Feature](
+func Histogram[O any](
 	features []O,
 	buckets []float64,
 	keysFunc func(O) []string,
