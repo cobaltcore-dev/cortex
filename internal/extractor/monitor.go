@@ -32,7 +32,7 @@ func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_feature_pipeline_step_run_duration_seconds",
 		Help:    "Duration of feature pipeline step run",
-		Buckets: prometheus.DefBuckets,
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
 	}, []string{"step"})
 	stepFeatureCounter := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_feature_pipeline_step_features",
