@@ -144,6 +144,9 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) Feature
 // Run the wrapped feature extractor and measure the time it takes.
 func (m FeatureExtractorMonitor[F]) Extract() ([]plugins.Feature, error) {
 	slog.Info("features: extracting", "extractor", m.GetName())
+
+	// Only measure and record extraction duration if an update is actually needed.
+	// This prevents unnecessary measurements from skewing the average and minimum values of the timing metric.
 	if m.runTimer != nil && m.NeedsUpdate() {
 		timer := prometheus.NewTimer(m.runTimer)
 		defer timer.ObserveDuration()
