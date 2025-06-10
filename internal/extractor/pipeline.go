@@ -33,7 +33,7 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	&shared.HostSpaceExtractor{},
 	&shared.HostCapabilitiesExtractor{},
 	&shared.VMHostResidencyExtractor{},
-	&shared.VMLifeSpanExtractor{},
+	&shared.VMLifeSpanHistogramExtractor{},
 }
 
 // Pipeline that contains multiple feature extractors and executes them.
