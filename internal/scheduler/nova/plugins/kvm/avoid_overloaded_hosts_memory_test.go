@@ -11,7 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
+	"github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/api"
 )
 
 func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package nova
+package manila
 
 import (
 	"log/slog"
@@ -10,10 +10,10 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/api"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/manila/api"
 )
 
 type mockPipelineStep struct {
@@ -38,7 +38,6 @@ func (m *mockPipelineStep) Run(traceLog *slog.Logger, request api.Request) (*plu
 }
 
 func TestPipeline_Run(t *testing.T) {
-	// Create an instance of the pipeline with a mock step
 	pipeline := &pipeline{
 		executionOrder: [][]plugins.Step{
 			{&mockPipelineStep{}},
@@ -82,7 +81,7 @@ func TestPipeline_Run(t *testing.T) {
 	}
 }
 
-func TestPipeline_NormalizeNovaWeights(t *testing.T) {
+func TestPipeline_NormalizeManilaWeights(t *testing.T) {
 	p := &pipeline{}
 
 	tests := []struct {
@@ -107,7 +106,7 @@ func TestPipeline_NormalizeNovaWeights(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := p.normalizeNovaWeights(tt.weights)
+			result := p.normalizeManilaWeights(tt.weights)
 			for host, weight := range tt.expected {
 				if result[host] != weight {
 					t.Errorf("expected weight %f for host %s, got %f", weight, host, result[host])
@@ -215,23 +214,17 @@ func TestPipeline_RunSteps(t *testing.T) {
 
 func TestNewPipeline(t *testing.T) {
 	config := conf.SchedulerConfig{
-		Nova: conf.NovaSchedulerConfig{Plugins: []conf.NovaSchedulerStepConfig{
-			{Name: "mock_pipeline_step", Options: conf.RawOpts{}},
-		}},
+		// TODO: Add manila config to the test
 	}
-	database := db.DB{}  // Mock or initialize as needed
-	monitor := Monitor{} // Replace with an actual mock implementation if available
+	database := db.DB{} // Mock or initialize as needed
 	mqttClient := &mqtt.MockClient{}
 
-	pipeline := NewPipeline([]plugins.Step{&mockPipelineStep{}}, config, database, monitor, mqttClient).(*pipeline)
+	pipeline := NewPipeline([]plugins.Step{&mockPipelineStep{}}, config, database, mqttClient).(*pipeline)
 
 	if len(pipeline.executionOrder) != 1 {
 		t.Fatalf("expected 1 execution order group, got %d", len(pipeline.executionOrder))
 	}
-	if len(pipeline.executionOrder[0]) != 1 {
-		t.Fatalf("expected 1 step in the execution order, got %d", len(pipeline.executionOrder[0]))
-	}
-	if pipeline.executionOrder[0][0].GetName() != "mock_pipeline_step" {
-		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][0].GetName())
+	if len(pipeline.executionOrder[0]) != 0 {
+		t.Fatalf("expected 0 steps in the execution order, got %d", len(pipeline.executionOrder[0]))
 	}
 }

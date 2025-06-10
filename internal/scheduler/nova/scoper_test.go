@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
-	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/api"
+	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/plugins"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"

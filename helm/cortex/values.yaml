@@ -58,6 +58,11 @@ modes:
     args: ["scheduler-nova"]
     replicas: 1
 
+  # External scheduler for Manila.
+  - name: scheduler-manila
+    args: ["scheduler-manila"]
+    replicas: 1
+
   # Service that extracts and exposes KPIs.
   - name: kpis
     args: ["kpis"]

@@ -148,7 +148,7 @@ func main() {
 		}
 
 		// Send the request to the scheduler.
-		url := "http://localhost:8080/scheduler/nova/external"
+		url := "http://localhost:8003/scheduler/nova/external"
 		requestBody := must.Return(json.Marshal(request))
 		ctx := context.Background()
 		req := must.Return(http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(requestBody)))
