@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -101,7 +102,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 		return 100 * float64(hypervisor.VCPUsUsed) / float64(hypervisor.VCPUs)
 	}
-	hists, counts, sums := plugins.Histogram(hypervisors, buckets, keysFunc, valueFunc)
+	hists, counts, sums := tools.Histogram(hypervisors, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourceUsedHist, counts[key], sums[key], hist, key)
 	}
@@ -114,7 +115,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 		return 100 * float64(hypervisor.MemoryMBUsed) / float64(hypervisor.MemoryMB)
 	}
-	hists, counts, sums = plugins.Histogram(hypervisors, buckets, keysFunc, valueFunc)
+	hists, counts, sums = tools.Histogram(hypervisors, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourceUsedHist, counts[key], sums[key], hist, key)
 	}
@@ -127,7 +128,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 		return 100 * float64(hypervisor.LocalGBUsed) / float64(hypervisor.LocalGB)
 	}
-	hists, counts, sums = plugins.Histogram(hypervisors, buckets, keysFunc, valueFunc)
+	hists, counts, sums = tools.Histogram(hypervisors, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourceUsedHist, counts[key], sums[key], hist, key)
 	}

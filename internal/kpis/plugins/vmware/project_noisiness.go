@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -54,7 +55,7 @@ func (k *VMwareProjectNoisinessKPI) Collect(ch chan<- prometheus.Metric) {
 	valueFunc := func(noisiness vmware.VROpsProjectNoisiness) float64 {
 		return float64(noisiness.AvgCPUOfProject)
 	}
-	hists, counts, sums := plugins.Histogram(features, buckets, keysFunc, valueFunc)
+	hists, counts, sums := tools.Histogram(features, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.projectNoisinessDesc, counts[key], sums[key], hist)
 	}

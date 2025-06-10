@@ -300,7 +300,7 @@ conf:
                   - flavors
                   - servers
                   - migrations
-      - name: vm_life_span_extractor
+      - name: vm_life_span_histogram_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
           sync:
@@ -345,7 +345,7 @@ conf:
         dependencies:
           features:
             extractors:
-              - vm_life_span_extractor
+              - vm_life_span_histogram_extractor
 
   scheduler:
     api:
