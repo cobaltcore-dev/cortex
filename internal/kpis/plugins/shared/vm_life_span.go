@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -58,7 +59,7 @@ func (k *VMLifeSpanKPI) Collect(ch chan<- prometheus.Metric) {
 	valueFunc := func(lifeSpan shared.VMLifeSpan) float64 {
 		return float64(lifeSpan.Duration)
 	}
-	hists, counts, sums := plugins.Histogram(vmLifeSpans, buckets, keysFunc, valueFunc)
+	hists, counts, sums := tools.Histogram(vmLifeSpans, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
 		if len(labels) != 1 {

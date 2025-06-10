@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -61,7 +62,7 @@ func (k *VMwareHostContentionKPI) Collect(ch chan<- prometheus.Metric) {
 	valueFunc := func(contention vmware.VROpsHostsystemContentionLongTerm) float64 {
 		return contention.MaxCPUContention
 	}
-	hists, counts, sums := plugins.Histogram(contentions, buckets, keysFunc, valueFunc)
+	hists, counts, sums := tools.Histogram(contentions, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostCPUContentionMax, counts[key], sums[key], hist)
 	}
@@ -71,7 +72,7 @@ func (k *VMwareHostContentionKPI) Collect(ch chan<- prometheus.Metric) {
 	valueFunc = func(contention vmware.VROpsHostsystemContentionLongTerm) float64 {
 		return float64(contention.AvgCPUContention)
 	}
-	hists, counts, sums = plugins.Histogram(contentions, buckets, keysFunc, valueFunc)
+	hists, counts, sums = tools.Histogram(contentions, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostCPUContentionAvg, counts[key], sums[key], hist)
 	}
