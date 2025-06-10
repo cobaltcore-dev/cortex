@@ -25,7 +25,7 @@ func NewSyncMonitor(registry *monitoring.Registry) Monitor {
 	pipelineRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_sync_run_duration_seconds",
 		Help:    "Duration of sync run",
-		Buckets: prometheus.DefBuckets,
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets,
 	}, []string{"datasource"})
 	pipelineObjectsGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_sync_objects",

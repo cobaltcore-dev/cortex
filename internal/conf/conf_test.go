@@ -54,7 +54,7 @@ func TestNewConfig(t *testing.T) {
       }
     }
   },
-  "features": {
+  "extractor": {
     "plugins": [
       {
         "name": "vrops_hostsystem_resolver"
@@ -68,20 +68,22 @@ func TestNewConfig(t *testing.T) {
     ]
   },
   "scheduler": {
-    "plugins": [
-      {
-        "name": "vmware_anti_affinity_noisy_projects",
-        "options": {
-          "avgCPUThreshold": 20
+    "nova": {
+      "plugins": [
+        {
+            "name": "vmware_anti_affinity_noisy_projects",
+            "options": {
+            "avgCPUThreshold": 20
+            }
+        },
+        {
+            "name": "vmware_avoid_long_term_contended_hosts",
+            "options": {
+            "maxCPUContentionThreshold": 50
+            }
         }
-      },
-      {
-        "name": "vmware_avoid_long_term_contended_hosts",
-        "options": {
-          "maxCPUContentionThreshold": 50
-        }
-      }
-    ]
+      ]
+    }
   },
   "kpis": {
     "plugins": [
@@ -111,7 +113,7 @@ func TestNewConfig(t *testing.T) {
   "mqtt": {
     "url": "tcp://cortex-mqtt:1883",
     "username": "cortex",
-    "password": "cortex"
+    "password": "secret"
   },
   "api": {
     "port": 8080
@@ -130,23 +132,23 @@ func TestNewConfig(t *testing.T) {
 		t.Errorf("Expected 2 OpenStack types, got %d", len(syncConfig.OpenStack.Nova.Types))
 	}
 
-	// Test FeaturesConfig
-	featuresConfig := config.GetFeaturesConfig()
-	if len(featuresConfig.Plugins) != 3 {
-		t.Errorf("Expected 3 extractors, got %d", len(featuresConfig.Plugins))
+	// Test ExtractorConfig
+	extractorConfig := config.GetExtractorConfig()
+	if len(extractorConfig.Plugins) != 3 {
+		t.Errorf("Expected 3 extractors, got %d", len(extractorConfig.Plugins))
 	}
 
 	// Test SchedulerConfig
 	schedulerConfig := config.GetSchedulerConfig()
-	if len(schedulerConfig.Plugins) != 2 {
-		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Plugins))
+	if len(schedulerConfig.Nova.Plugins) != 2 {
+		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Nova.Plugins))
 	}
 	var decodedContent map[string]any
 	if err := json.Unmarshal([]byte(content), &decodedContent); err != nil {
 		t.Fatalf("Failed to unmarshal YAML content: %v", err)
 	}
 
-	schedulerSteps := decodedContent["scheduler"].(map[string]any)["plugins"].([]any)
+	schedulerSteps := decodedContent["scheduler"].(map[string]any)["nova"].(map[string]any)["plugins"].([]any)
 	step1Options := schedulerSteps[0].(map[string]any)["options"].(map[string]any)
 	step2Options := schedulerSteps[1].(map[string]any)["options"].(map[string]any)
 

@@ -24,7 +24,7 @@ func main() {
 	// Parse command-line arguments
 	host := flag.String("h", "tcp://localhost:18830", "The cortex MQTT broker to connect to")
 	username := flag.String("u", "cortex", "The username to use for the MQTT connection")
-	password := flag.String("p", "cortex", "The password to use for the MQTT connection")
+	password := flag.String("p", "secret", "The password to use for the MQTT connection")
 	cortexURL := flag.String("c", "http://localhost:8080", "The Cortex instance to forward to")
 	help := flag.Bool("help", false, "Show this help message")
 	flag.Usage = func() {
@@ -51,7 +51,7 @@ func main() {
 	}
 	defer client.Disconnect(1000)
 
-	topic := "cortex/scheduler/pipeline/finished"
+	topic := "cortex/scheduler/nova/pipeline/finished"
 	client.Subscribe(topic, 2, func(client mqtt.Client, msg mqtt.Message) {
 		// Unwrap the "request" from the message
 		var payload map[string]any

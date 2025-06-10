@@ -29,11 +29,7 @@ type DependencyConfig struct {
 			} `json:"metrics,omitempty"`
 		} `json:"prometheus,omitempty"`
 	}
-	Features FeaturesDependency `json:"features,omitempty"`
-}
-
-type FeaturesDependency struct {
-	ExtractorNames []string `json:"extractors,omitempty"`
+	Extractors []string `json:"extractors,omitempty"`
 }
 
 // Validate if the dependencies are satisfied in the given config.
@@ -77,14 +73,14 @@ func (deps *DependencyConfig) validate(c config) error {
 		}
 	}
 	confedExtractors := make(map[string]bool)
-	for _, extractor := range c.FeaturesConfig.Plugins {
+	for _, extractor := range c.ExtractorConfig.Plugins {
 		confedExtractors[extractor.Name] = true
 	}
-	for _, extractor := range deps.Features.ExtractorNames {
+	for _, extractor := range deps.Extractors {
 		if !confedExtractors[extractor] {
 			return fmt.Errorf(
 				"feature extractor dependency %s not satisfied, got %v",
-				extractor, c.FeaturesConfig.Plugins,
+				extractor, c.ExtractorConfig.Plugins,
 			)
 		}
 	}
@@ -93,7 +89,7 @@ func (deps *DependencyConfig) validate(c config) error {
 
 // Check if all dependencies are satisfied.
 func (c *config) Validate() error {
-	for _, extractor := range c.FeaturesConfig.Plugins {
+	for _, extractor := range c.ExtractorConfig.Plugins {
 		if err := extractor.validate(*c); err != nil {
 			return err
 		}
@@ -103,7 +99,7 @@ func (c *config) Validate() error {
 			return err
 		}
 	}
-	for _, step := range c.SchedulerConfig.Plugins {
+	for _, step := range c.Nova.Plugins {
 		if err := step.validate(*c); err != nil {
 			return err
 		}

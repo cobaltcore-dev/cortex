@@ -3,7 +3,7 @@
 
 package api
 
-import "github.com/cobaltcore-dev/cortex/internal/scheduler/api"
+import "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 
 type MockRequest struct {
 	Spec    api.NovaObject[api.NovaSpec]

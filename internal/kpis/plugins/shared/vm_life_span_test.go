@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -33,19 +33,20 @@ func TestVMLifeSpanKPI_Collect(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(shared.VMLifeSpan{}),
+		testDB.AddTable(shared.VMLifeSpanHistogramBucket{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the vm_life_span table
+	// Insert mock data into the table
 	_, err := testDB.Exec(`
-        INSERT INTO feature_vm_life_span (
-            duration, flavor_id, flavor_name, instance_uuid
+        INSERT INTO feature_vm_life_span_histogram_bucket (
+            flavor_name, bucket, value, count, sum
         )
         VALUES
-            (3600, 'id1', 'flavor1', 'uuid1'),
-            (7200, 'id2', 'flavor2', 'uuid2')
+		    ('small', 60, 100, 10, 600),
+		    ('medium', 120, 200, 20, 2400),
+		    ('large', 180, 300, 30, 5400)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

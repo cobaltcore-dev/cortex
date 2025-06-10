@@ -31,7 +31,7 @@ func TestValidConf(t *testing.T) {
       }
     }
   },
-  "features": {
+  "extractor": {
     "plugins": [
       {
         "name": "extractor_1",
@@ -73,9 +73,7 @@ func TestValidConf(t *testing.T) {
       {
         "name": "scheduler_1",
         "dependencies": {
-          "features": {
-            "extractors": ["extractor_1"]
-          }
+          "extractors": ["extractor_1"]
         }
       },
       {
@@ -105,7 +103,7 @@ func TestInvalidConf_MissingNovaDependency(t *testing.T) {
       ]
     }
   },
-  "features": {
+  "extractor": {
     "plugins": [
       {
         "name": "extractor_1",
@@ -206,11 +204,9 @@ func TestInvalidConf_MissingFeatureForKPI(t *testing.T) {
       {
         "name": "vm_life_span_kpi",
         "dependencies": {
-          "features": {
-            "extractors": [
-              "extractor_1"
-            ]
-          }
+          "extractors": [
+            "extractor_1"
+          ]
         }
       }
     ]

@@ -5,12 +5,12 @@ package shared
 
 import (
 	"log/slog"
-	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -51,8 +51,8 @@ func (k *HostUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
-	var hypervisors []openstack.Hypervisor
-	tableName := openstack.Hypervisor{}.TableName()
+	var hypervisors []nova.Hypervisor
+	tableName := nova.Hypervisor{}.TableName()
 	if _, err := k.DB.Select(&hypervisors, "SELECT * FROM "+tableName); err != nil {
 		slog.Error("failed to select hypervisors", "err", err)
 		return
@@ -63,7 +63,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				100*float64(hypervisor.VCPUsUsed)/float64(hypervisor.VCPUs),
-				strconv.Itoa(hypervisor.ID),
+				hypervisor.ID,
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"cpu",
@@ -74,7 +74,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				100*float64(hypervisor.MemoryMBUsed)/float64(hypervisor.MemoryMB),
-				strconv.Itoa(hypervisor.ID),
+				hypervisor.ID,
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"memory",
@@ -85,7 +85,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 				k.hostResourceUsedPerHost,
 				prometheus.GaugeValue,
 				100*float64(hypervisor.LocalGBUsed)/float64(hypervisor.LocalGB),
-				strconv.Itoa(hypervisor.ID),
+				hypervisor.ID,
 				hypervisor.ServiceHost,
 				hypervisor.Hostname,
 				"disk",
@@ -93,42 +93,42 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)
-	keysFunc := func(hypervisor openstack.Hypervisor) []string {
+	keysFunc := func(hypervisor nova.Hypervisor) []string {
 		return []string{"cpu"}
 	}
-	valueFunc := func(hypervisor openstack.Hypervisor) float64 {
+	valueFunc := func(hypervisor nova.Hypervisor) float64 {
 		if hypervisor.VCPUs == 0 {
 			return 0
 		}
 		return 100 * float64(hypervisor.VCPUsUsed) / float64(hypervisor.VCPUs)
 	}
-	hists, counts, sums := plugins.Histogram(hypervisors, buckets, keysFunc, valueFunc)
+	hists, counts, sums := tools.Histogram(hypervisors, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourceUsedHist, counts[key], sums[key], hist, key)
 	}
-	keysFunc = func(hypervisor openstack.Hypervisor) []string {
+	keysFunc = func(hypervisor nova.Hypervisor) []string {
 		return []string{"memory"}
 	}
-	valueFunc = func(hypervisor openstack.Hypervisor) float64 {
+	valueFunc = func(hypervisor nova.Hypervisor) float64 {
 		if hypervisor.MemoryMB == 0 {
 			return 0
 		}
 		return 100 * float64(hypervisor.MemoryMBUsed) / float64(hypervisor.MemoryMB)
 	}
-	hists, counts, sums = plugins.Histogram(hypervisors, buckets, keysFunc, valueFunc)
+	hists, counts, sums = tools.Histogram(hypervisors, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourceUsedHist, counts[key], sums[key], hist, key)
 	}
-	keysFunc = func(hypervisor openstack.Hypervisor) []string {
+	keysFunc = func(hypervisor nova.Hypervisor) []string {
 		return []string{"disk"}
 	}
-	valueFunc = func(hypervisor openstack.Hypervisor) float64 {
+	valueFunc = func(hypervisor nova.Hypervisor) float64 {
 		if hypervisor.LocalGB == 0 {
 			return 0
 		}
 		return 100 * float64(hypervisor.LocalGBUsed) / float64(hypervisor.LocalGB)
 	}
-	hists, counts, sums = plugins.Histogram(hypervisors, buckets, keysFunc, valueFunc)
+	hists, counts, sums = tools.Histogram(hypervisors, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourceUsedHist, counts[key], sums[key], hist, key)
 	}

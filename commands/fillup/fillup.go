@@ -23,9 +23,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/api"
-	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/sapcc/go-bits/must"
 )
 
@@ -56,27 +56,30 @@ func main() {
 
 	// Get openstack objects from the database. We will use this data to simulate
 	// scheduling requests for new servers and keep track of the datacenter state.
-	var originalServers []openstack.Server
+	var originalServers []nova.Server
 	must.Return(db.Select(&originalServers, `SELECT * FROM openstack_servers`))
-	servers := make(map[string]openstack.Server)
+	servers := make(map[string]nova.Server)
 	for _, server := range originalServers {
 		servers[server.ID] = server
 	}
-	var originalFlavors []openstack.Flavor
+	fmt.Println("Found", len(servers), "servers in the database.")
+	var originalFlavors []nova.Flavor
 	must.Return(db.Select(&originalFlavors, `SELECT * FROM openstack_flavors`))
-	flavors := make(map[string]openstack.Flavor)
+	flavors := make(map[string]nova.Flavor)
 	for _, flavor := range originalFlavors {
-		flavors[flavor.ID] = flavor
+		flavors[flavor.Name] = flavor
 	}
-	var originalHypervisors []openstack.Hypervisor
+	fmt.Println("Found", len(flavors), "flavors in the database.")
+	var originalHypervisors []nova.Hypervisor
 	// We can't schedule on bare-metal hypervisors.
 	must.Return(db.Select(&originalHypervisors, `
 		SELECT * FROM openstack_hypervisors WHERE hypervisor_type != 'ironic'
 	`))
-	hypervisors := map[string]*openstack.Hypervisor{}
+	hypervisors := map[string]*nova.Hypervisor{}
 	for _, hypervisor := range originalHypervisors {
 		hypervisors[hypervisor.ServiceHost] = &hypervisor
 	}
+	fmt.Println("Found", len(hypervisors), "hypervisors in the database.")
 	if len(servers) == 0 || len(flavors) == 0 || len(hypervisors) == 0 {
 		fmt.Println("error: this script requires openstack servers, flavors, and hypervisors to be synced")
 		return
@@ -88,8 +91,9 @@ func main() {
 		// The request should be somewhat representative of the existing landscape.
 		//nolint:gosec
 		server := originalServers[rand.Intn(len(originalServers))]
-		flavor := flavors[server.FlavorID]
+		flavor := flavors[server.FlavorName]
 		if flavor.Name == "" {
+			fmt.Println("error: flavor not found for server", server.ID)
 			continue
 		}
 		// Choose all hosts that have enough resources to host the new server.

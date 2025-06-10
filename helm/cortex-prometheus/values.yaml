@@ -1,0 +1,48 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+owner-info:
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex-prometheus"
+  maintainers:
+    - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
+  support-group: "cobaltcore-dev"
+  enabled: true
+
+global:
+  prometheus: cortex-prometheus
+
+alerts:
+  # Labels applied to all alerts.
+  labels:
+    # Labels applied to all alert levels.
+    global:
+      service: cortex
+    # Labels applied to specific alerts.
+    cortexSchedulerDown:
+      severity: warning
+    cortexSyncerDown:
+      severity: info
+    cortexExtractorDown:
+      severity: info
+    cortexHttpRequest400sTooHigh:
+      severity: info
+    cortexHttpRequest500sTooHigh:
+      severity: info
+    cortexHighMemoryUsage:
+      severity: info
+    cortexHighCPUUsage:
+      severity: info
+    cortexLongPipelineRun:
+      severity: info
+    cortexSyncNotSuccessful:
+      severity: info
+    cortexSyncObjectsDroppedToZero:
+      severity: info
+    cortexSyncObjectsTooHigh:
+      severity: info
+    cortexTooManyMQTTConnectionAttempts:
+      severity: info
+    cortexTooManyDBConnectionAttempts:
+      severity: info

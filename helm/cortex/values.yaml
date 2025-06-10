@@ -5,6 +5,8 @@ owner-info:
   helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/cortex"
   maintainers:
     - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
   support-group: "cobaltcore-dev"
   enabled: true
 
@@ -12,7 +14,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-ac04ba7"
+  tag: "sha-849d63b"
 
 migrationsJob:
   # Additional annotations for the created database migrations job.
@@ -51,9 +53,9 @@ modes:
     args: ["extractor"]
     replicas: 1
 
-  # Scheduler exposes the scheduler API and modifies the Nova scheduler weights.
-  - name: scheduler
-    args: ["scheduler"]
+  # External scheduler for Nova.
+  - name: scheduler-nova
+    args: ["scheduler-nova"]
     replicas: 1
 
   # Service that extracts and exposes KPIs.
@@ -95,7 +97,7 @@ conf:
     # Must match rabbitmq settings from the cortex-mqtt chart.
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
-    password: "cortex"
+    password: "secret"
     reconnect:
       maxRetries: 20
       retryIntervalSeconds: 1
@@ -195,11 +197,11 @@ conf:
         availability: public
         # Placement objects to sync into the database.
         types:
-          # - resource_providers
+          - resource_providers
           # Needs resource_providers.
-          # - traits
+          - traits
 
-  features:
+  extractor:
     # Configuration of features that should be extracted from the synced data.
     # Each extractor can specify its own dependencies on other extractors or
     # synced data.
@@ -211,6 +213,7 @@ conf:
     plugins:
       # VMware-specific extractors.
       - name: vrops_hostsystem_resolver
+        recencySeconds: 3600 # 1 hour
         dependencies:
           sync:
             prometheus:
@@ -223,6 +226,7 @@ conf:
                   - hypervisors
                   - servers
       - name: vrops_project_noisiness_extractor
+        recencySeconds: 21600 # 6 hours
         dependencies:
           sync:
             prometheus:
@@ -267,15 +271,27 @@ conf:
                 - alias: node_exporter_memory_active_pct
 
       # Shared extractors.
-      - name: flavor_host_space_extractor
+      - name: host_space_extractor
+        recencySeconds: 60 # 1 minute
         dependencies:
           sync:
             openstack:
               nova:
                 types:
-                  - flavors
                   - hypervisors
+      - name: host_capabilities_extractor
+        recencySeconds: 60 # 1 minute
+        dependencies:
+          sync:
+            openstack:
+              nova:
+                types:
+                  - hypervisors
+              placement:
+                types:
+                  - traits
       - name: vm_host_residency_extractor
+        recencySeconds: 60 # 1 minute
         dependencies:
           sync:
             openstack:
@@ -284,7 +300,8 @@ conf:
                   - flavors
                   - servers
                   - migrations
-      - name: vm_life_span_extractor
+      - name: vm_life_span_histogram_extractor
+        recencySeconds: 60 # 1 minute
         dependencies:
           sync:
             openstack:
@@ -328,128 +345,178 @@ conf:
         dependencies:
           features:
             extractors:
-              - vm_life_span_extractor
+              - vm_life_span_histogram_extractor
 
   scheduler:
     api:
       # Whether request bodies should be logged (debugging feature).
       logRequestBodies: false
-    # Configuration of scheduler steps that modify the Nova scheduler weights.
-    # Each scheduler step can specify its own dependencies on extractors and
-    # synced data.
-    #
-    # The `name` should correspond to a known scheduler plugin.
-    # Note that all scheduler steps will be executed in parallel. However,
-    # the order will be maintained when the weights are applied to the
-    # input Nova weights.
-    plugins:
-      # VMware specific scheduler steps.
-      - name: vmware_anti_affinity_noisy_projects
-        options:
-          # Min-max scaling for avg CPU usage of the project on a host.
-          avgCPUUsageLowerBound: 0 # pct
-          avgCPUUsageUpperBound: 10 # pct
-          avgCPUUsageActivationLowerBound: 0.0
-          avgCPUUsageActivationUpperBound: -1.0
-        dependencies:
-          features:
-            extractors:
-              - vrops_project_noisiness_extractor
-      - name: vmware_avoid_long_term_contended_hosts
-        options:
-          # Min-max scaling for avg CPU contention on the host.
-          avgCPUContentionLowerBound: 0 # pct
-          avgCPUContentionUpperBound: 10 # pct
-          avgCPUContentionActivationLowerBound: 0.0
-          avgCPUContentionActivationUpperBound: -0.75
-          # Min-max scaling for max CPU contention on the host.
-          maxCPUContentionLowerBound: 0 # pct
-          maxCPUContentionUpperBound: 10 # pct
-          maxCPUContentionActivationLowerBound: 0.0
-          maxCPUContentionActivationUpperBound: -0.25
-        dependencies:
-          features:
-            extractors:
-              - vrops_hostsystem_contention_long_term_extractor
-      - name: vmware_avoid_short_term_contended_hosts
-        options:
-          # Min-max scaling for avg CPU contention on the host.
-          avgCPUContentionLowerBound: 0 # pct
-          avgCPUContentionUpperBound: 10 # pct
-          avgCPUContentionActivationLowerBound: 0.0
-          avgCPUContentionActivationUpperBound: -0.75
-          # Min-max scaling for max CPU contention on the host.
-          maxCPUContentionLowerBound: 0 # pct
-          maxCPUContentionUpperBound: 10 # pct
-          maxCPUContentionActivationLowerBound: 0.0
-          maxCPUContentionActivationUpperBound: -0.25
-        dependencies:
-          features:
-            extractors:
-              - vrops_hostsystem_contention_short_term_extractor
+    nova:
+      # Configuration of scheduler steps that modify the Nova scheduler weights.
+      # Each scheduler step can specify its own dependencies on extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known scheduler plugin.
+      # Note that all scheduler steps will be executed in parallel. However,
+      # the order will be maintained when the weights are applied to the
+      # input Nova weights.
+      plugins:
+        # VMware specific scheduler steps.
+        - name: vmware_anti_affinity_noisy_projects
+          options:
+            # Min-max scaling for avg CPU usage of the project on a host.
+            avgCPUUsageLowerBound: 0 # pct
+            avgCPUUsageUpperBound: 10 # pct
+            avgCPUUsageActivationLowerBound: 0.0
+            avgCPUUsageActivationUpperBound: -1.0
+          dependencies:
+            features:
+              extractors:
+                - vrops_project_noisiness_extractor
+        - name: vmware_avoid_long_term_contended_hosts
+          options:
+            # Min-max scaling for avg CPU contention on the host.
+            avgCPUContentionLowerBound: 0 # pct
+            avgCPUContentionUpperBound: 10 # pct
+            avgCPUContentionActivationLowerBound: 0.0
+            avgCPUContentionActivationUpperBound: -0.75
+            # Min-max scaling for max CPU contention on the host.
+            maxCPUContentionLowerBound: 0 # pct
+            maxCPUContentionUpperBound: 10 # pct
+            maxCPUContentionActivationLowerBound: 0.0
+            maxCPUContentionActivationUpperBound: -0.25
+          dependencies:
+            features:
+              extractors:
+                - vrops_hostsystem_contention_long_term_extractor
+        - name: vmware_avoid_short_term_contended_hosts
+          options:
+            # Min-max scaling for avg CPU contention on the host.
+            avgCPUContentionLowerBound: 0 # pct
+            avgCPUContentionUpperBound: 10 # pct
+            avgCPUContentionActivationLowerBound: 0.0
+            avgCPUContentionActivationUpperBound: -0.75
+            # Min-max scaling for max CPU contention on the host.
+            maxCPUContentionLowerBound: 0 # pct
+            maxCPUContentionUpperBound: 10 # pct
+            maxCPUContentionActivationLowerBound: 0.0
+            maxCPUContentionActivationUpperBound: -0.25
+          dependencies:
+            features:
+              extractors:
+                - vrops_hostsystem_contention_short_term_extractor
 
-      # KVM specific scheduler steps.
-      - name: kvm_avoid_overloaded_hosts_cpu
-        options:
-          # Min-max scaling for avg CPU usage on the host.
-          avgCPUUsageLowerBound: 0 # pct
-          avgCPUUsageUpperBound: 10 # pct
-          avgCPUUsageActivationLowerBound: 0.0
-          avgCPUUsageActivationUpperBound: -0.75
-          # Min-max scaling for max CPU usage on the host.
-          maxCPUUsageLowerBound: 0 # pct
-          maxCPUUsageUpperBound: 10 # pct
-          maxCPUUsageActivationLowerBound: 0.0
-          maxCPUUsageActivationUpperBound: -0.25
-        dependencies:
-          features:
-            extractors:
-              - node_exporter_host_cpu_usage_extractor
-      - name: kvm_avoid_overloaded_hosts_memory
-        options:
-          # Min-max scaling for avg memory usage on the host.
-          avgMemoryUsageLowerBound: 0 # pct
-          avgMemoryUsageUpperBound: 10 # pct
-          avgMemoryUsageActivationLowerBound: 0.0
-          avgMemoryUsageActivationUpperBound: -0.75
-          # Min-max scaling for max memory usage on the host.
-          maxMemoryUsageLowerBound: 0 # pct
-          maxMemoryUsageUpperBound: 10 # pct
-          maxMemoryUsageActivationLowerBound: 0.0
-          maxMemoryUsageActivationUpperBound: -0.25
-        dependencies:
-          features:
-            extractors:
-              - node_exporter_host_memory_active_extractor
+        # KVM specific scheduler steps.
+        - name: kvm_avoid_overloaded_hosts_cpu
+          options:
+            # Min-max scaling for avg CPU usage on the host.
+            avgCPUUsageLowerBound: 0 # pct
+            avgCPUUsageUpperBound: 10 # pct
+            avgCPUUsageActivationLowerBound: 0.0
+            avgCPUUsageActivationUpperBound: -0.75
+            # Min-max scaling for max CPU usage on the host.
+            maxCPUUsageLowerBound: 0 # pct
+            maxCPUUsageUpperBound: 10 # pct
+            maxCPUUsageActivationLowerBound: 0.0
+            maxCPUUsageActivationUpperBound: -0.25
+          dependencies:
+            features:
+              extractors:
+                - node_exporter_host_cpu_usage_extractor
+        - name: kvm_avoid_overloaded_hosts_memory
+          options:
+            # Min-max scaling for avg memory usage on the host.
+            avgMemoryUsageLowerBound: 0 # pct
+            avgMemoryUsageUpperBound: 10 # pct
+            avgMemoryUsageActivationLowerBound: 0.0
+            avgMemoryUsageActivationUpperBound: -0.75
+            # Min-max scaling for max memory usage on the host.
+            maxMemoryUsageLowerBound: 0 # pct
+            maxMemoryUsageUpperBound: 10 # pct
+            maxMemoryUsageActivationLowerBound: 0.0
+            maxMemoryUsageActivationUpperBound: -0.25
+          dependencies:
+            features:
+              extractors:
+                - node_exporter_host_memory_active_extractor
 
-      # Shared scheduler steps.
-      - name: shared_flavor_binpacking
-        options:
-          # Flavor names to consider for binpacking.
-          # If empty, all flavors are considered.
-          flavors: []
-          # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
-          cpuEnabled: true
-          cpuFreeLowerBound: 0 # vCPUs
-          cpuFreeUpperBound: 512 # vCPUs
-          cpuFreeActivationLowerBound: 0.0
-          cpuFreeActivationUpperBound: -0.5
-          # Min-max scaling for gap-fitting based on memory space left (MB).
-          ramEnabled: true
-          ramFreeLowerBound: 0 # MB
-          ramFreeUpperBound: 4000000 # MB
-          ramFreeActivationLowerBound: 0.0
-          ramFreeActivationUpperBound: -0.5
-          # Min-max scaling for gap-fitting based on disk space left. (GB)
-          diskEnabled: false
-          diskFreeLowerBound: 0 # GB
-          diskFreeUpperBound: 1000 # GB
-          diskFreeActivationLowerBound: 0.0
-          diskFreeActivationUpperBound: -0.25
-        dependencies:
-          features:
-            extractors:
-              - flavor_host_space_extractor
+        # Bin-packing for HANA vms on VMware HANA hosts.
+        - name: shared_flavor_binpacking
+          # Scope this step to VMware hypervisors and HANA hosts only.
+          scope:
+            hostSelectors:
+              - subject: hypervisorType
+                contains: "VMware"
+                operation: intersection
+              - subject: trait
+                contains: "HANA_EXCLUSIVE"
+                operation: intersection
+            specSelectors:
+              - subject: flavor
+                contains: "hana"
+                action: continue
+          options:
+            # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
+            cpuEnabled: true
+            cpuFreeLowerBound: 512 # vCPUs
+            cpuFreeUpperBound: 0 # vCPUs
+            cpuFreeActivationLowerBound: 0.0
+            cpuFreeActivationUpperBound: 1.0
+            # Min-max scaling for gap-fitting based on memory space left (MB).
+            ramEnabled: true
+            ramFreeLowerBound: 4000000 # MB
+            ramFreeUpperBound: 0 # MB
+            ramFreeActivationLowerBound: 0.0
+            ramFreeActivationUpperBound: 1.0
+            # Min-max scaling for gap-fitting based on disk space left. (GB)
+            diskEnabled: false
+            diskFreeLowerBound: 1000 # GB
+            diskFreeUpperBound: 0 # GB
+            diskFreeActivationLowerBound: 0.0
+            diskFreeActivationUpperBound: 1.0
+          dependencies:
+            features:
+              extractors:
+                - host_space_extractor
+                - host_capabilities_extractor # Needed due to the host scope.
+
+        # Balance general-purpose vms
+        - name: shared_resource_balancing
+          # Scope this step to general-purpose vms on VMware hypervisors.
+          scope:
+            hostSelectors:
+              - subject: hypervisorType
+                contains: "VMware"
+                operation: intersection
+              - subject: trait
+                contains: "HANA_EXCLUSIVE"
+                operation: difference
+            specSelectors:
+              - subject: flavor
+                contains: "hana"
+                action: skip
+          options:
+            # Min-max scaling for resource balancing based on cpu space left (%).
+            cpuEnabled: true
+            cpuFreeLowerBoundPct: 0
+            cpuFreeUpperBoundPct: 100
+            cpuFreeActivationLowerBound: 0.0
+            cpuFreeActivationUpperBound: 1.0
+            ramEnabled: true
+            ramFreeLowerBoundPct: 0
+            ramFreeUpperBoundPct: 100
+            ramFreeActivationLowerBound: 0.0
+            ramFreeActivationUpperBound: 1.0
+            diskEnabled: false
+            diskFreeLowerBoundPct: 0
+            diskFreeUpperBoundPct: 100
+            diskFreeActivationLowerBound: 0.0
+            diskFreeActivationUpperBound: 1.0
+          dependencies:
+            features:
+              extractors:
+                - host_space_extractor
+                - host_capabilities_extractor # Needed due to the host scope.
 
 # Generic modifiers added on the initial creation of this helm chart.
 

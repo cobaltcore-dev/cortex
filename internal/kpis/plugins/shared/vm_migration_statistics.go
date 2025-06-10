@@ -10,8 +10,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -37,7 +38,7 @@ func (k *VMMigrationStatisticsKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.timeUntilMigrationDesc = prometheus.NewDesc(
 		"cortex_vm_time_until_migration",
 		"Time a VM has been on a host before migration",
-		[]string{"type", "flavor_name", "flavor_id"},
+		[]string{"type", "flavor_name"},
 		nil,
 	)
 	k.nMigrations = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -65,17 +66,17 @@ func (k *VMMigrationStatisticsKPI) Collect(ch chan<- prometheus.Metric) {
 	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
 	keysFunc := func(residency shared.VMHostResidency) []string {
 		return []string{
-			residency.Type + "," + residency.FlavorName + "," + residency.FlavorID,
-			"all,all,all",
+			residency.Type + "," + residency.FlavorName,
+			"all,all",
 		}
 	}
 	valueFunc := func(residency shared.VMHostResidency) float64 {
 		return float64(residency.Duration)
 	}
-	hists, counts, sums := plugins.Histogram(hostResidencies, buckets, keysFunc, valueFunc)
+	hists, counts, sums := tools.Histogram(hostResidencies, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
-		if len(labels) != 3 {
+		if len(labels) != 2 {
 			slog.Warn("vm_migration_statistics: unexpected comma in migration type, flavor name or id")
 			continue
 		}

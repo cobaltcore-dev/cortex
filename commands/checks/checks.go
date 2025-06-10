@@ -13,8 +13,8 @@ import (
 	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/api/http"
-	cortexopenstack "github.com/cobaltcore-dev/cortex/internal/sync/openstack"
+	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
@@ -23,11 +23,11 @@ import (
 
 // Run all checks.
 func RunChecks(ctx context.Context, config conf.Config) {
-	checkSchedulerReturnsValidHosts(ctx, config)
+	checkNovaSchedulerReturnsValidHosts(ctx, config)
 }
 
-// Check that the scheduler returns a valid set of hosts.
-func checkSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
+// Check that the nova external scheduler returns a valid set of hosts.
+func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
 	osConf := config.GetSyncConfig().OpenStack
 	slog.Info("authenticating against openstack", "url", osConf.Keystone.URL)
 	authOptions := gophercloud.AuthOptions{
@@ -47,12 +47,18 @@ func checkSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
 		Type:         "compute",
 		Availability: gophercloud.Availability(osConf.Nova.Availability),
 	}))
-	sc := &gophercloud.ServiceClient{ProviderClient: pc, Endpoint: url, Type: "compute"}
+	sc := &gophercloud.ServiceClient{
+		ProviderClient: pc,
+		Endpoint:       url,
+		Type:           "compute",
+		// Since microversion 2.53, the hypervisor id and service id is a UUID.
+		Microversion: "2.53",
+	}
 	slog.Info("authenticated against openstack", "url", url)
 	slog.Info("listing hypervisors")
 	pages := must.Return(hypervisors.List(sc, hypervisors.ListOpts{}).AllPages(ctx))
 	var data = &struct {
-		Hypervisors []cortexopenstack.Hypervisor `json:"hypervisors"`
+		Hypervisors []nova.Hypervisor `json:"hypervisors"`
 	}{}
 	must.Succeed(pages.(hypervisors.HypervisorPage).ExtractInto(data))
 	if len(data.Hypervisors) == 0 {
@@ -74,7 +80,7 @@ func checkSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
 		Weights: weights,
 	}
 	port := strconv.Itoa(config.GetAPIConfig().Port)
-	apiURL := "http://cortex-scheduler:" + port + "/scheduler/nova/external"
+	apiURL := "http://cortex-scheduler-nova:" + port + "/scheduler/nova/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(request))

@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -39,11 +39,11 @@ func TestVMMigrationStatisticsKPI_Collect(t *testing.T) {
 	}
 	_, err := testDB.Exec(`
         INSERT INTO feature_vm_host_residency (
-            duration, flavor_id, flavor_name, instance_uuid, migration_uuid, source_host, target_host, source_node, target_node, user_id, project_id, type, time
+            duration, flavor_name, instance_uuid, migration_uuid, source_host, target_host, source_node, target_node, user_id, project_id, type, time
         )
         VALUES
-            (120, 'flavor1', 'small', 'uuid1', 'migration1', 'host1', 'host2', 'node1', 'node2', 'user1', 'project1', 'live-migration', 1620000000),
-            (300, 'flavor2', 'medium', 'uuid2', 'migration2', 'host3', 'host4', 'node3', 'node4', 'user2', 'project2', 'resize', 1620000300)
+            (120, 'small', 'uuid1', 'migration1', 'host1', 'host2', 'node1', 'node2', 'user1', 'project1', 'live-migration', 1620000000),
+            (300, 'medium', 'uuid2', 'migration2', 'host3', 'host4', 'node3', 'node4', 'user2', 'project2', 'resize', 1620000300)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

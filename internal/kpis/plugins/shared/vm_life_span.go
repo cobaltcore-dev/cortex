@@ -5,11 +5,10 @@ package shared
 
 import (
 	"log/slog"
-	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/features/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -34,7 +33,7 @@ func (k *VMLifeSpanKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.lifeSpanDesc = prometheus.NewDesc(
 		"cortex_vm_life_span",
 		"Time a VM was alive before it was deleted",
-		[]string{"flavor_name", "flavor_id"},
+		[]string{"flavor_name"},
 		nil,
 	)
 	return nil
@@ -45,26 +44,37 @@ func (k *VMLifeSpanKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *VMLifeSpanKPI) Collect(ch chan<- prometheus.Metric) {
-	var vmLifeSpans []shared.VMLifeSpan
-	tableName := shared.VMLifeSpan{}.TableName()
-	if _, err := k.DB.Select(&vmLifeSpans, "SELECT * FROM "+tableName); err != nil {
+	// The buckets are already aggregated in the database, so we can just select them.
+	var buckets []shared.VMLifeSpanHistogramBucket
+	tableName := shared.VMLifeSpanHistogramBucket{}.TableName()
+	if _, err := k.DB.Select(&buckets, "SELECT * FROM "+tableName); err != nil {
 		slog.Error("failed to select vm life spans", "err", err)
 		return
 	}
-	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
-	keysFunc := func(lifeSpan shared.VMLifeSpan) []string {
-		return []string{lifeSpan.FlavorName + "," + lifeSpan.FlavorID, "all,all"}
-	}
-	valueFunc := func(lifeSpan shared.VMLifeSpan) float64 {
-		return float64(lifeSpan.Duration)
-	}
-	hists, counts, sums := plugins.Histogram(vmLifeSpans, buckets, keysFunc, valueFunc)
-	for key, hist := range hists {
-		labels := strings.Split(key, ",")
-		if len(labels) != 2 {
-			slog.Warn("vm_life_span: unexpected comma in flavor name or id")
+	bucketsByFlavor := make(map[string][]shared.VMLifeSpanHistogramBucket)
+	for _, bucket := range buckets {
+		if bucket.FlavorName == "" {
+			slog.Warn("vm_life_span: empty flavor name in bucket", "bucket", bucket)
 			continue
 		}
-		ch <- prometheus.MustNewConstHistogram(k.lifeSpanDesc, counts[key], sums[key], hist, labels...)
+		bucketsByFlavor[bucket.FlavorName] = append(bucketsByFlavor[bucket.FlavorName], bucket)
+	}
+	for flavor, buckets := range bucketsByFlavor {
+		if len(buckets) == 0 {
+			slog.Warn("vm_life_span: no buckets for flavor", "flavor", flavor)
+			continue
+		}
+		var count uint64
+		var sum float64
+		hist := make(map[float64]uint64, len(buckets))
+		for _, bucket := range buckets {
+			hist[bucket.Bucket] = bucket.Value
+			count = bucket.Count // Same for all bucket objects.
+			sum = bucket.Sum     // Same for all bucket objects.
+		}
+		ch <- prometheus.MustNewConstHistogram(
+			k.lifeSpanDesc,
+			count, sum, hist, flavor,
+		)
 	}
 }
