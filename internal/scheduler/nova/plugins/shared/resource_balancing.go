@@ -63,13 +63,13 @@ func (s *ResourceBalancingStep) GetName() string {
 func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
 	result := s.PrepareResult(request)
 	if s.Options.CPUEnabled {
-		result.Statistics["cpu resource usage"] = s.PrepareStats(request, "%")
+		result.Statistics["cpu left"] = s.PrepareStats(request, "%")
 	}
 	if s.Options.RAMEnabled {
-		result.Statistics["ram resource usage"] = s.PrepareStats(request, "%")
+		result.Statistics["ram left"] = s.PrepareStats(request, "%")
 	}
 	if s.Options.DiskEnabled {
-		result.Statistics["disk resource usage"] = s.PrepareStats(request, "%")
+		result.Statistics["disk left"] = s.PrepareStats(request, "%")
 	}
 
 	spec := request.GetSpec()
@@ -97,7 +97,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) 
 				s.Options.CPUFreeActivationUpperBound,
 			)
 			result.
-				Statistics["cpu resource usage"].
+				Statistics["cpu left"].
 				Hosts[hostSpace.ComputeHost] = hostSpace.VCPUsLeftPct
 		}
 		activationRAM := s.NoEffect()
@@ -110,7 +110,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) 
 				s.Options.RAMFreeActivationUpperBound,
 			)
 			result.
-				Statistics["ram resource usage"].
+				Statistics["ram left"].
 				Hosts[hostSpace.ComputeHost] = hostSpace.RAMLeftPct
 		}
 		activationDisk := s.NoEffect()
@@ -123,7 +123,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) 
 				s.Options.DiskFreeActivationUpperBound,
 			)
 			result.
-				Statistics["disk resource usage"].
+				Statistics["disk left"].
 				Hosts[hostSpace.ComputeHost] = hostSpace.DiskLeftPct
 		}
 		result.Activations[hostSpace.ComputeHost] = activationCPU + activationRAM + activationDisk
