@@ -159,9 +159,8 @@ func main() {
 	// Set up the monitoring registry and database connection.
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
-
-	database := db.NewPostgresDB(config.GetDBConfig(), registry, db.NewDBMonitor(registry))
-	defer database.Close()
+	dbMonitor := db.NewDBMonitor(registry)
+	dbConf := config.GetDBConfig()
 
 	// Check if we want to perform one-time tasks like checks or migrations.
 	switch taskName {
@@ -169,13 +168,14 @@ func main() {
 		checks.RunChecks(ctx, config)
 		return
 	case "migrate":
-		migrater := db.NewMigrater(database)
+		jobDB := db.NewPostgresDB(dbConf.Primary, registry, dbMonitor)
+		defer jobDB.Close()
+		migrater := db.NewMigrater(jobDB)
 		migrater.Migrate(true)
 		slog.Info("migrations executed")
 		return
 	}
 
-	go database.CheckLivenessPeriodically()
 	go runMonitoringServer(ctx, registry, monitoringConfig)
 
 	// Run an api server that serves some basic endpoints and can be extended.
@@ -184,18 +184,25 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	var serviceDB db.DB
 	switch taskName {
 	case "syncer":
-		runSyncer(ctx, registry, config.GetSyncConfig(), database)
+		serviceDB = db.NewPostgresDB(dbConf.Primary, registry, dbMonitor)
+		runSyncer(ctx, registry, config.GetSyncConfig(), serviceDB)
 	case "extractor":
-		runExtractor(registry, config.GetExtractorConfig(), database)
+		serviceDB = db.NewPostgresDB(dbConf.Primary, registry, dbMonitor)
+		runExtractor(registry, config.GetExtractorConfig(), serviceDB)
 	case "scheduler-nova":
-		runSchedulerNova(mux, registry, config.GetSchedulerConfig(), database)
+		serviceDB = db.NewPostgresDB(dbConf.ReadOnly, registry, dbMonitor)
+		runSchedulerNova(mux, registry, config.GetSchedulerConfig(), serviceDB)
 	case "kpis":
-		runKPIService(registry, config.GetKPIsConfig(), database)
+		serviceDB = db.NewPostgresDB(dbConf.ReadOnly, registry, dbMonitor)
+		runKPIService(registry, config.GetKPIsConfig(), serviceDB)
 	default:
 		panic("unknown task")
 	}
+	defer serviceDB.Close()
+	go serviceDB.CheckLivenessPeriodically()
 
 	// Run the api server after all other tasks have been started and
 	// all http handlers have been registered to the mux.

@@ -76,9 +76,10 @@ k8s_resource('cortex-mqtt', port_forwards=[
 ########### Postgres DB for Cortex Core Service
 local('sh helm/sync.sh helm/cortex-postgres')
 k8s_yaml(helm('./helm/cortex-postgres', name='cortex-postgres'))
-k8s_resource('cortex-postgresql', port_forwards=[
+k8s_resource('cortex-postgresql-primary', port_forwards=[
     port_forward(5432, 5432),
 ], labels=['Core-Services'])
+k8s_resource('cortex-postgresql-read', labels=['Core-Services'])
 
 ########### Monitoring
 local('sh helm/sync.sh helm/cortex-prometheus-operator')

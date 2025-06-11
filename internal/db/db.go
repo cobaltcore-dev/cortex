@@ -23,7 +23,7 @@ import (
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
 	*gorp.DbMap
-	conf conf.DBConfig
+	conf conf.DBConnectionConfig
 	// Monitor for database related metrics like connection attempts.
 	monitor Monitor
 }
@@ -39,7 +39,7 @@ type Index struct {
 }
 
 // Create a new postgres database and wait until it is connected.
-func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry, monitor Monitor) DB {
+func NewPostgresDB(c conf.DBConnectionConfig, registry *monitoring.Registry, monitor Monitor) DB {
 	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          strip(c.Host),

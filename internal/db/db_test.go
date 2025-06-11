@@ -42,7 +42,7 @@ func TestNewDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to convert port: %v", err)
 	}
-	config := conf.DBConfig{
+	config := conf.DBConnectionConfig{
 		Host:     "localhost",
 		Port:     port,
 		User:     "postgres",
@@ -290,7 +290,7 @@ func TestUnexpectedConnectionLoss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to convert port: %v", err)
 	}
-	config := conf.DBConfig{
+	config := conf.DBConnectionConfig{
 		Host:     "localhost",
 		Port:     port,
 		User:     "postgres",

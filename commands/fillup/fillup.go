@@ -45,7 +45,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	db := db.NewPostgresDB(conf.DBConfig{
+	db := db.NewPostgresDB(conf.DBConnectionConfig{
 		Host:     "localhost",
 		Port:     5432,
 		User:     "postgres",
