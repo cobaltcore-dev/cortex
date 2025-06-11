@@ -45,18 +45,18 @@ k8s_resource('cortex-scheduler-nova', port_forwards=[
     port_forward(8003, 8080),
     port_forward(8004, 2112),
 ], links=[
-    link('localhost:8003/metrics', '/metrics'),
+    link('localhost:8004/metrics', '/metrics'),
 ], labels=['Core-Services'])
 k8s_resource('cortex-scheduler-manila', port_forwards=[
     port_forward(8005, 8080),
     port_forward(8006, 2112),
 ], links=[
-    link('localhost:8003/metrics', '/metrics'),
+    link('localhost:8006/metrics', '/metrics'),
 ], labels=['Core-Services'])
 k8s_resource('cortex-kpis', port_forwards=[
     port_forward(8007, 2112),
 ], links=[
-    link('localhost:8004/metrics', '/metrics'),
+    link('localhost:8007/metrics', '/metrics'),
 ], labels=['Core-Services'])
 
 ########### Cortex Commands
