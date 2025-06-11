@@ -12,7 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/api"
 )
 
 func TestResourceBalancingStep_Run(t *testing.T) {

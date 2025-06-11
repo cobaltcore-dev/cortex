@@ -58,6 +58,11 @@ modes:
     args: ["scheduler-nova"]
     replicas: 1
 
+  # External scheduler for Manila.
+  - name: scheduler-manila
+    args: ["scheduler-manila"]
+    replicas: 1
+
   # Service that extracts and exposes KPIs.
   - name: kpis
     args: ["kpis"]
@@ -200,6 +205,11 @@ conf:
           - resource_providers
           # Needs resource_providers.
           - traits
+      manila:
+        # One of admin, public, or internal
+        availability: public
+        # Manila objects to sync into the database.
+        types: [] # None supported yet.
 
   extractor:
     # Configuration of features that should be extracted from the synced data.

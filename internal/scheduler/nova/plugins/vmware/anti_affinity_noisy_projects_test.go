@@ -12,7 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/api"
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
