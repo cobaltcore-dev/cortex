@@ -14,7 +14,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-ac04ba7"
+  tag: "sha-849d63b"
 
 migrationsJob:
   # Additional annotations for the created database migrations job.
@@ -56,6 +56,11 @@ modes:
   # External scheduler for Nova.
   - name: scheduler-nova
     args: ["scheduler-nova"]
+    replicas: 1
+
+  # External scheduler for Manila.
+  - name: scheduler-manila
+    args: ["scheduler-manila"]
     replicas: 1
 
   # Service that extracts and exposes KPIs.
@@ -200,6 +205,11 @@ conf:
           - resource_providers
           # Needs resource_providers.
           - traits
+      manila:
+        # One of admin, public, or internal
+        availability: public
+        # Manila objects to sync into the database.
+        types: [] # None supported yet.
 
   extractor:
     # Configuration of features that should be extracted from the synced data.
@@ -300,7 +310,7 @@ conf:
                   - flavors
                   - servers
                   - migrations
-      - name: vm_life_span_extractor
+      - name: vm_life_span_histogram_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
           sync:
@@ -345,7 +355,7 @@ conf:
         dependencies:
           features:
             extractors:
-              - vm_life_span_extractor
+              - vm_life_span_histogram_extractor
 
   scheduler:
     api:

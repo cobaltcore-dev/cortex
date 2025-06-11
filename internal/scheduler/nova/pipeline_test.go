@@ -13,7 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/api"
 )
 
 type mockPipelineStep struct {

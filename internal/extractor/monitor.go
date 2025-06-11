@@ -32,7 +32,7 @@ func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_feature_pipeline_step_run_duration_seconds",
 		Help:    "Duration of feature pipeline step run",
-		Buckets: prometheus.DefBuckets,
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
 	}, []string{"step"})
 	stepFeatureCounter := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_feature_pipeline_step_features",
@@ -144,7 +144,10 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) Feature
 // Run the wrapped feature extractor and measure the time it takes.
 func (m FeatureExtractorMonitor[F]) Extract() ([]plugins.Feature, error) {
 	slog.Info("features: extracting", "extractor", m.GetName())
-	if m.runTimer != nil {
+
+	// Only measure and record extraction duration if an update is actually needed.
+	// This prevents unnecessary measurements from skewing the average and minimum values of the timing metric.
+	if m.runTimer != nil && m.NeedsUpdate() {
 		timer := prometheus.NewTimer(m.runTimer)
 		defer timer.ObserveDuration()
 	}

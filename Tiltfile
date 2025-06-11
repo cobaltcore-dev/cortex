@@ -42,22 +42,28 @@ k8s_resource('cortex-extractor', port_forwards=[
     link('localhost:8002/metrics', '/metrics'),
 ], labels=['Core-Services'])
 k8s_resource('cortex-scheduler-nova', port_forwards=[
-    port_forward(8080, 8080),
-    port_forward(8003, 2112),
-], links=[
-    link('localhost:8003/metrics', '/metrics'),
-], labels=['Core-Services'])
-k8s_resource('cortex-kpis', port_forwards=[
+    port_forward(8003, 8080),
     port_forward(8004, 2112),
 ], links=[
     link('localhost:8004/metrics', '/metrics'),
+], labels=['Core-Services'])
+k8s_resource('cortex-scheduler-manila', port_forwards=[
+    port_forward(8005, 8080),
+    port_forward(8006, 2112),
+], links=[
+    link('localhost:8006/metrics', '/metrics'),
+], labels=['Core-Services'])
+k8s_resource('cortex-kpis', port_forwards=[
+    port_forward(8007, 2112),
+], links=[
+    link('localhost:8007/metrics', '/metrics'),
 ], labels=['Core-Services'])
 
 ########### Cortex Commands
 k8s_resource('cortex-cli', labels=['Commands'])
 local_resource(
     'Run E2E Tests',
-    'kubectl exec -it cortex-cli -- /usr/bin/cortex checks',
+    'kubectl exec -it deploy/cortex-cli -- /usr/bin/cortex checks',
     deps=['./internal/checks'],
     labels=['Commands'],
     trigger_mode=TRIGGER_MODE_MANUAL,
@@ -70,7 +76,7 @@ local('sh helm/sync.sh helm/cortex-mqtt')
 k8s_yaml(helm('./helm/cortex-mqtt', name='cortex-mqtt'))
 k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
-    port_forward(8005, 15675), # Websocket connection
+    port_forward(8008, 15675), # Websocket connection
 ], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
@@ -104,9 +110,9 @@ k8s_resource(
 docker_build('cortex-visualizer', 'visualizer')
 k8s_yaml('./visualizer/app.yaml')
 k8s_resource('cortex-visualizer', port_forwards=[
-    port_forward(8006, 80),
+    port_forward(8009, 80),
 ], links=[
-    link('localhost:8006', 'visualizer'),
+    link('localhost:8009', 'visualizer'),
 ], labels=['Monitoring'])
 
 ########### Plutono (Grafana Fork)

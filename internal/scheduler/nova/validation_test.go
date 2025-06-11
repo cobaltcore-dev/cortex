@@ -12,8 +12,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
-	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
+	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/api"
+	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/plugins"
 )
 
 func TestStepValidator_GetName(t *testing.T) {
