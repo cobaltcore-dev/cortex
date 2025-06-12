@@ -282,6 +282,14 @@ conf:
                 - alias: node_exporter_memory_active_pct
 
       # Shared extractors.
+      - name: storage_pool_space_extractor
+        recencySeconds: 60 # 1 minute
+        dependencies:
+          sync:
+            openstack:
+              manila:
+                types:
+                  - storage_pools
       - name: host_space_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
