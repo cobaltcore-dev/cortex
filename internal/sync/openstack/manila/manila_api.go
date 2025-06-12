@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
@@ -21,8 +20,8 @@ import (
 type ManilaAPI interface {
 	// Init the manila API.
 	Init(ctx context.Context)
-	// Get all changed manila storage pools.
-	GetChangedStoragePools(ctx context.Context, changedSince *time.Time) ([]StoragePool, error)
+	// Get all manila storage pools.
+	GetAllStoragePools(ctx context.Context) ([]StoragePool, error)
 }
 
 // API for OpenStack Manila.
@@ -63,12 +62,10 @@ func (api *manilaAPI) Init(ctx context.Context) {
 	api.sc = sc
 }
 
-// Get all Manila storage pools since the timestamp.
-// Note: changedSince has no effect here since the Manila api does not support it.
-// We will fetch all storage pools all the time.
-func (api *manilaAPI) GetChangedStoragePools(ctx context.Context, changedSince *time.Time) ([]StoragePool, error) {
+// Get all Manila storage pools.
+func (api *manilaAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, error) {
 	label := StoragePool{}.TableName()
-	slog.Info("fetching manila data", "label", label, "changedSince", changedSince)
+	slog.Info("fetching manila data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {
@@ -85,6 +82,8 @@ func (api *manilaAPI) GetChangedStoragePools(ctx context.Context, changedSince *
 	var data = &struct {
 		Pools []StoragePool `json:"pools"`
 	}{}
+	// Log the raw body for debugging purposes.
+	slog.Info("raw response body", "body", pages.(schedulerstats.PoolPage).Body)
 	if err := pages.(schedulerstats.PoolPage).ExtractInto(data); err != nil {
 		return nil, err
 	}

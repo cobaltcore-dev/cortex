@@ -209,7 +209,8 @@ conf:
         # One of admin, public, or internal
         availability: public
         # Manila objects to sync into the database.
-        types: [] # None supported yet.
+        types:
+          - storage_pools
 
   extractor:
     # Configuration of features that should be extracted from the synced data.
