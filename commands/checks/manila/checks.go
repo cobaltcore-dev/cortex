@@ -16,7 +16,7 @@ import (
 	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api/http"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/services"
+	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/schedulerstats"
 	"github.com/sapcc/go-bits/must"
 )
 
@@ -52,24 +52,21 @@ func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 	sc.Microversion = "2.65"
 	slog.Info("authenticated against openstack", "url", sc.Endpoint)
 	slog.Info("listing share hosts")
-	lo := services.ListOpts{Binary: "manila-share"}
-	pages := must.Return(services.List(sc, lo).AllPages(ctx))
-	var data = &struct {
-		Services []services.Service `json:"services"`
-	}{}
-	// Log the json body
-	must.Succeed(pages.(services.ServicePage).ExtractInto(data))
-	if len(data.Services) == 0 {
-		panic("no share services found")
+	pages := must.Return(schedulerstats.List(sc, schedulerstats.ListOpts{}).AllPages(ctx))
+	pools := must.Return(schedulerstats.ExtractPools(pages))
+	if len(pools) == 0 {
+		panic("no storage pools found")
 	}
-	slog.Info("found share services", "count", len(data.Services))
+	slog.Info("found storage pools", "count", len(pools))
 
 	var hosts []httpapi.ExternalSchedulerHost
 	weights := make(map[string]float64)
-	for _, h := range data.Services {
-		weights[h.Host] = 1.0
+	for _, pool := range pools {
+		// pool.Name is something like opencloud@alpha#ALPHA_pool
+		// Which is: <host>@<backend>#<pool> in Manila slang.
+		weights[pool.Name] = 1.0
 		hosts = append(hosts, httpapi.ExternalSchedulerHost{
-			ShareHost: h.Host,
+			ShareHost: pool.Name,
 		})
 	}
 	request := httpapi.ExternalSchedulerRequest{
