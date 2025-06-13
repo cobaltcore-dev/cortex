@@ -82,48 +82,39 @@ func TestNovaAPI_GetChangedServers(t *testing.T) {
 }
 
 func TestNovaAPI_GetChangedHypervisors(t *testing.T) {
-	tests := []struct {
-		name string
-		time *time.Time
-	}{
-		{"nil", nil},
-		{"time", &time.Time{}},
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		// changes-since is not supported by the hypervisor api so
+		// the query parameter should not be set.
+		if r.URL.Query().Get("changes-since") != "" {
+			t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
+		}
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := struct {
+			Hypervisors []Hypervisor `json:"hypervisors"`
+		}{
+			Hypervisors: []Hypervisor{{ID: "1", Hostname: "hypervisor1", CPUInfo: "{}"}},
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
 	}
-	for _, tt := range tests {
-		handler := func(w http.ResponseWriter, r *http.Request) {
-			// changes-since is not supported by the hypervisor api so
-			// the query parameter should not be set.
-			if r.URL.Query().Get("changes-since") != "" {
-				t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
-			}
-			w.Header().Add("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			resp := struct {
-				Hypervisors []Hypervisor `json:"hypervisors"`
-			}{
-				Hypervisors: []Hypervisor{{ID: "1", Hostname: "hypervisor1", CPUInfo: "{}"}},
-			}
-			if err := json.NewEncoder(w).Encode(resp); err != nil {
-				t.Fatalf("failed to write response: %v", err)
-			}
-		}
-		server, k := setupNovaMockServer(handler)
-		defer server.Close()
+	server, k := setupNovaMockServer(handler)
+	defer server.Close()
 
-		mon := sync.Monitor{}
-		conf := NovaConf{Availability: "public"}
+	mon := sync.Monitor{}
+	conf := NovaConf{Availability: "public"}
 
-		api := NewNovaAPI(mon, k, conf).(*novaAPI)
-		api.Init(t.Context())
+	api := NewNovaAPI(mon, k, conf).(*novaAPI)
+	api.Init(t.Context())
 
-		ctx := t.Context()
-		hypervisors, err := api.GetChangedHypervisors(ctx, tt.time)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if len(hypervisors) != 1 {
-			t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
-		}
+	ctx := t.Context()
+	hypervisors, err := api.GetAllHypervisors(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(hypervisors) != 1 {
+		t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
 	}
 }
 

@@ -22,7 +22,7 @@ func (m *mockNovaAPI) GetChangedServers(ctx context.Context, t *time.Time) ([]Se
 	return []Server{{ID: "1", Name: "server1"}}, nil
 }
 
-func (m *mockNovaAPI) GetChangedHypervisors(ctx context.Context, t *time.Time) ([]Hypervisor, error) {
+func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	return []Hypervisor{{ID: "1", Hostname: "hypervisor1"}}, nil
 }
 
