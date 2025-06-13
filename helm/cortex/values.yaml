@@ -209,7 +209,8 @@ conf:
         # One of admin, public, or internal
         availability: public
         # Manila objects to sync into the database.
-        types: [] # None supported yet.
+        types:
+          - storage_pools
 
   extractor:
     # Configuration of features that should be extracted from the synced data.
@@ -281,6 +282,14 @@ conf:
                 - alias: node_exporter_memory_active_pct
 
       # Shared extractors.
+      - name: storage_pool_space_extractor
+        recencySeconds: 60 # 1 minute
+        dependencies:
+          sync:
+            openstack:
+              manila:
+                types:
+                  - storage_pools
       - name: host_space_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
