@@ -216,18 +216,17 @@ func (s *NovaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
 
 // Sync the OpenStack hypervisors into the database.
 func (s *NovaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, error) {
-	tableName := Hypervisor{}.TableName()
-	lastSyncTime := s.getLastSyncTime(tableName)
-	defer s.setLastSyncTime(tableName, time.Now())
-	changedHypervisors, err := s.API.GetChangedHypervisors(ctx, lastSyncTime)
+	allHypervisors, err := s.API.GetAllHypervisors(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = upsert(s, changedHypervisors, "id", func(h Hypervisor) string { return h.ID }, tableName)
+	// Since the nova api doesn't support only returning changed
+	// hypervisors, we can just replace all hypervisors in the database.
+	err = db.ReplaceAll(s.DB, allHypervisors...)
 	if err != nil {
 		return nil, err
 	}
-	return changedHypervisors, nil
+	return allHypervisors, nil
 }
 
 // Sync the OpenStack flavors into the database.

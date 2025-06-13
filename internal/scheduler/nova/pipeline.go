@@ -34,7 +34,6 @@ var SupportedSteps = []plugins.Step{
 	&kvm.AvoidOverloadedHostsCPUStep{},
 	&kvm.AvoidOverloadedHostsMemoryStep{},
 	// Shared steps
-	&shared.FlavorBinpackingStep{},
 	&shared.ResourceBalancingStep{},
 }
 

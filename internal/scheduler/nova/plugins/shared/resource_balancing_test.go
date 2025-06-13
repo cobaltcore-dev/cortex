@@ -23,18 +23,18 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 
 	// Create dependency tables
 	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostSpace{}),
+		testDB.AddTable(shared.HostUtilization{}),
 	)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_host_space table
+	// Insert mock data into the feature_host_utilization table
 	_, err = testDB.Exec(`
-        INSERT INTO feature_host_space (compute_host, ram_left_mb, vcpus_left, disk_left_gb, ram_left_pct, vcpus_left_pct, disk_left_pct)
+        INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct)
         VALUES
-            ('host1', 0, 0, 0, 0, 0, 0),
-            ('host2', 0, 0, 0, 100, 100, 100)
+            ('host1', 0, 0, 0),
+            ('host2',100, 100, 100)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -43,20 +43,20 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 	// Create an instance of the step
 	opts := conf.NewRawOpts(`{
         "cpuEnabled": true,
-        "cpuFreeLowerBoundPct": 0.0,
-        "cpuFreeUpperBoundPct": 100.0,
-        "cpuFreeActivationLowerBound": 0.0,
-        "cpuFreeActivationUpperBound": 1.0,
+        "cpuUtilizedLowerBoundPct": 0.0,
+        "cpuUtilizedUpperBoundPct": 100.0,
+        "cpuUtilizedActivationLowerBound": 1.0,
+        "cpuUtilizedActivationUpperBound": 0.0,
         "ramEnabled": true,
-        "ramFreeLowerBoundPct": 0.0,
-        "ramFreeUpperBoundPct": 100.0,
-        "ramFreeActivationLowerBound": 0.0,
-        "ramFreeActivationUpperBound": 1.0,
+        "ramUtilizedLowerBoundPct": 0.0,
+        "ramUtilizedUpperBoundPct": 100.0,
+        "ramUtilizedActivationLowerBound": 1.0,
+        "ramUtilizedActivationUpperBound": 0.0,
         "diskEnabled": true,
-        "diskFreeLowerBoundPct": 0.0,
-        "diskFreeUpperBoundPct": 100.0,
-        "diskFreeActivationLowerBound": 0.0,
-        "diskFreeActivationUpperBound": 1.0
+        "diskUtilizedLowerBoundPct": 0.0,
+        "diskUtilizedUpperBoundPct": 100.0,
+        "diskUtilizedActivationLowerBound": 1.0,
+        "diskUtilizedActivationUpperBound": 0.0
     }`)
 	step := &ResourceBalancingStep{}
 	if err := step.Init(testDB, opts); err != nil {
@@ -79,8 +79,8 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 				Hosts: []string{"host1", "host2", "host3"},
 			},
 			expectedWeights: map[string]float64{
-				"host1": 0.0,
-				"host2": 3.0,
+				"host1": 3.0,
+				"host2": 0.0,
 			},
 		},
 		{

@@ -26,8 +26,8 @@ type NovaAPI interface {
 	Init(ctx context.Context)
 	// Get all changed nova servers since the timestamp.
 	GetChangedServers(ctx context.Context, changedSince *time.Time) ([]Server, error)
-	// Get all changed nova hypervisors since the timestamp.
-	GetChangedHypervisors(ctx context.Context, changedSince *time.Time) ([]Hypervisor, error)
+	// Get all nova hypervisors since the timestamp.
+	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	// Get all changed nova flavors since the timestamp.
 	// Note: This should only include the public flavors.
 	GetChangedFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error)
@@ -108,12 +108,10 @@ func (api *novaAPI) GetChangedServers(ctx context.Context, changedSince *time.Ti
 	return data.Servers, nil
 }
 
-// Get all Nova hypervisors since the timestamp.
-// Note: changedSince has no effect here since the Nova api does not support it.
-// We will fetch all hypervisors all the time.
-func (api *novaAPI) GetChangedHypervisors(ctx context.Context, changedSince *time.Time) ([]Hypervisor, error) {
+// Get all Nova hypervisors.
+func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	label := Hypervisor{}.TableName()
-	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
+	slog.Info("fetching nova data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {
