@@ -18,17 +18,17 @@ import (
 )
 
 type mockPipeline struct {
-	runFunc func(api.Request) ([]string, error)
+	runFunc func(api.ExternalSchedulerRequest) ([]string, error)
 }
 
-func (m *mockPipeline) Run(req api.Request) ([]string, error) {
+func (m *mockPipeline) Run(req api.ExternalSchedulerRequest) ([]string, error) {
 	return m.runFunc(req)
 }
 
 func validRequestBody() []byte {
-	req := ExternalSchedulerRequest{
+	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
-		Hosts: []ExternalSchedulerHost{
+		Hosts: []api.ExternalSchedulerHost{
 			{ShareHost: "host1"},
 			{ShareHost: "host2"},
 		},
@@ -45,9 +45,9 @@ func validRequestBody() []byte {
 }
 
 func missingWeightBody() []byte {
-	req := ExternalSchedulerRequest{
+	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
-		Hosts: []ExternalSchedulerHost{
+		Hosts: []api.ExternalSchedulerHost{
 			{ShareHost: "host1"},
 			{ShareHost: "host2"},
 		},
@@ -63,9 +63,9 @@ func missingWeightBody() []byte {
 }
 
 func unknownWeightBody() []byte {
-	req := ExternalSchedulerRequest{
+	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
-		Hosts: []ExternalSchedulerHost{
+		Hosts: []api.ExternalSchedulerHost{
 			{ShareHost: "host1"},
 		},
 		Weights: map[string]float64{
@@ -82,11 +82,11 @@ func unknownWeightBody() []byte {
 
 func TestManilaExternalScheduler_Success(t *testing.T) {
 	pipeline := &mockPipeline{
-		runFunc: func(req api.Request) ([]string, error) {
+		runFunc: func(req api.ExternalSchedulerRequest) ([]string, error) {
 			return []string{"host2", "host1"}, nil
 		},
 	}
-	api := &httpAPI{
+	a := &httpAPI{
 		Pipeline: pipeline,
 		config:   conf.SchedulerAPIConfig{},
 		monitor:  scheduler.APIMonitor{},
@@ -95,14 +95,14 @@ func TestManilaExternalScheduler_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(validRequestBody()))
 	w := httptest.NewRecorder()
 
-	api.ManilaExternalScheduler(w, req)
+	a.ManilaExternalScheduler(w, req)
 
 	resp := w.Result()
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
-	var out ExternalSchedulerResponse
+	var out api.ExternalSchedulerResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestManilaExternalScheduler_UnknownWeight(t *testing.T) {
 
 func TestManilaExternalScheduler_PipelineError(t *testing.T) {
 	pipeline := &mockPipeline{
-		runFunc: func(req api.Request) ([]string, error) {
+		runFunc: func(req api.ExternalSchedulerRequest) ([]string, error) {
 			return nil, errors.New("pipeline error")
 		},
 	}
@@ -189,7 +189,7 @@ func TestManilaExternalScheduler_PipelineError(t *testing.T) {
 func TestManilaExternalScheduler_BodyReadError(t *testing.T) {
 	api := &httpAPI{
 		Pipeline: &mockPipeline{
-			runFunc: func(req api.Request) ([]string, error) {
+			runFunc: func(req api.ExternalSchedulerRequest) ([]string, error) {
 				return nil, nil // No need to run pipeline for this test
 			},
 		},

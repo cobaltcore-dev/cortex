@@ -45,24 +45,24 @@ type MonitoredCallback struct {
 }
 
 func (m *APIMonitor) Callback(w http.ResponseWriter, r *http.Request, pattern string) MonitoredCallback {
-	return MonitoredCallback{w: w, r: r, pattern: pattern, t: time.Now()}
+	return MonitoredCallback{apiMonitor: m, w: w, r: r, pattern: pattern, t: time.Now()}
 }
 
 // Respond to the request with the given code and error.
 // Also log the time it took to handle the request.
-func (h MonitoredCallback) Respond(code int, err error, text string) {
-	if h.apiMonitor != nil {
-		observer := h.apiMonitor.ApiRequestsTimer.WithLabelValues(
-			h.r.Method,
-			h.pattern,
+func (c MonitoredCallback) Respond(code int, err error, text string) {
+	if c.apiMonitor != nil && c.apiMonitor.ApiRequestsTimer != nil {
+		observer := c.apiMonitor.ApiRequestsTimer.WithLabelValues(
+			c.r.Method,
+			c.pattern,
 			strconv.Itoa(code),
 			text, // Internal error messages should not face the monitor.
 		)
-		observer.Observe(time.Since(h.t).Seconds())
+		observer.Observe(time.Since(c.t).Seconds())
 	}
 	if err != nil {
 		slog.Error("failed to handle request", "error", err)
-		http.Error(h.w, text, code)
+		http.Error(c.w, text, code)
 		return
 	}
 	// If there was no error, nothing else to do.

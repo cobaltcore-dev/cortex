@@ -1,15 +1,28 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package plugins
+package scheduler
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
+
+type mockStep[RequestType PipelineRequest] struct {
+	Name     string
+	InitFunc func(db db.DB, opts conf.RawOpts) error
+	RunFunc  func(traceLog *slog.Logger, request RequestType) (*StepResult, error)
+}
+
+func (m *mockStep[RequestType]) GetName() string                        { return m.Name }
+func (m *mockStep[RequestType]) Init(db db.DB, opts conf.RawOpts) error { return m.InitFunc(db, opts) }
+func (m *mockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+	return m.RunFunc(traceLog, request)
+}
 
 type MockOptions struct {
 	Option1 string `json:"option1"`
@@ -31,7 +44,7 @@ func TestBaseStep_Init(t *testing.T) {
         "option2": 2
     }`)
 
-	step := BaseStep[MockOptions]{}
+	step := BaseStep[mockPipelineRequest, MockOptions]{}
 	err := step.Init(testDB, opts)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

@@ -22,12 +22,12 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	Pipeline api.Pipeline
+	Pipeline scheduler.Pipeline[api.ExternalSchedulerRequest]
 	config   conf.SchedulerAPIConfig
 	monitor  scheduler.APIMonitor
 }
 
-func NewAPI(config conf.SchedulerAPIConfig, pipeline api.Pipeline, m scheduler.APIMonitor) HTTPAPI {
+func NewAPI(config conf.SchedulerAPIConfig, pipeline scheduler.Pipeline[api.ExternalSchedulerRequest], m scheduler.APIMonitor) HTTPAPI {
 	return &httpAPI{
 		Pipeline: pipeline,
 		config:   config,
@@ -42,7 +42,7 @@ func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
 
 // Check if the scheduler can run based on the request data.
 // Note: messages returned here are user-facing and should not contain internal details.
-func (httpAPI *httpAPI) canRunScheduler(requestData ExternalSchedulerRequest) (ok bool, reason string) {
+func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest) (ok bool, reason string) {
 	// Check that all hosts have a weight.
 	for _, host := range requestData.Hosts {
 		if _, ok := requestData.Weights[host.ComputeHost]; !ok {
@@ -91,7 +91,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		r.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
 	}
 
-	var requestData ExternalSchedulerRequest
+	var requestData api.ExternalSchedulerRequest
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		callback.Respond(http.StatusBadRequest, err, "failed to decode request body")
 		return
@@ -109,12 +109,12 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	}
 
 	// Evaluate the pipeline and return the ordered list of hosts.
-	hosts, err := httpAPI.Pipeline.Run(&requestData)
+	hosts, err := httpAPI.Pipeline.Run(requestData)
 	if err != nil {
 		callback.Respond(http.StatusInternalServerError, err, "failed to evaluate pipeline")
 		return
 	}
-	response := ExternalSchedulerResponse{Hosts: hosts}
+	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
 		callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
