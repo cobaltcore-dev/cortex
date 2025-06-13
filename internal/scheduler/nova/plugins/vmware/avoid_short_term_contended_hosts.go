@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the
@@ -43,7 +42,7 @@ func (o AvoidShortTermContendedHostsStepOpts) Validate() error {
 // Step to avoid recently contended hosts by downvoting them.
 type AvoidShortTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AvoidShortTermContendedHostsStepOpts]
+	scheduler.BaseStep[api.ExternalSchedulerRequest, AvoidShortTermContendedHostsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -52,12 +51,12 @@ func (s *AvoidShortTermContendedHostsStep) GetName() string {
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 
-	if !request.GetVMware() {
+	if !request.VMware {
 		// Only run this step for VMware VMs.
 		return result, nil
 	}
@@ -90,8 +89,8 @@ func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request ap
 			s.Options.MaxCPUContentionActivationUpperBound,
 		)
 		result.Activations[host.ComputeHost] = activationAvg + activationMax
-		result.Statistics["avg cpu contention"].Hosts[host.ComputeHost] = host.AvgCPUContention
-		result.Statistics["max cpu contention"].Hosts[host.ComputeHost] = host.MaxCPUContention
+		result.Statistics["avg cpu contention"].Subjects[host.ComputeHost] = host.AvgCPUContention
+		result.Statistics["max cpu contention"].Subjects[host.ComputeHost] = host.MaxCPUContention
 	}
 	return result, nil
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -51,7 +50,7 @@ func (o ResourceBalancingStepOpts) Validate() error {
 // Step to balance VMs on hosts based on the host's available resources.
 type ResourceBalancingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[ResourceBalancingStepOpts]
+	scheduler.BaseStep[api.ExternalSchedulerRequest, ResourceBalancingStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -60,7 +59,7 @@ func (s *ResourceBalancingStep) GetName() string {
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
 	if s.Options.CPUEnabled {
 		result.Statistics["cpu utilized"] = s.PrepareStats(request, "%")
@@ -72,7 +71,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) 
 		result.Statistics["disk utilized"] = s.PrepareStats(request, "%")
 	}
 
-	spec := request.GetSpec()
+	spec := request.Spec
 	if spec.Data.NInstances > 1 {
 		return result, nil
 	}
@@ -98,7 +97,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) 
 			)
 			result.
 				Statistics["cpu utilized"].
-				Hosts[hostUtilization.ComputeHost] = hostUtilization.VCPUsUtilizedPct
+				Subjects[hostUtilization.ComputeHost] = hostUtilization.VCPUsUtilizedPct
 		}
 		activationRAM := s.NoEffect()
 		if s.Options.RAMEnabled {
@@ -111,7 +110,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) 
 			)
 			result.
 				Statistics["ram utilized"].
-				Hosts[hostUtilization.ComputeHost] = hostUtilization.RAMUtilizedPct
+				Subjects[hostUtilization.ComputeHost] = hostUtilization.RAMUtilizedPct
 		}
 		activationDisk := s.NoEffect()
 		if s.Options.DiskEnabled {
@@ -124,7 +123,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.Request) 
 			)
 			result.
 				Statistics["disk utilized"].
-				Hosts[hostUtilization.ComputeHost] = hostUtilization.DiskUtilizedPct
+				Subjects[hostUtilization.ComputeHost] = hostUtilization.DiskUtilizedPct
 		}
 		result.Activations[hostUtilization.ComputeHost] = activationCPU + activationRAM + activationDisk
 	}

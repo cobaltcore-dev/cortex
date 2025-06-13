@@ -13,7 +13,7 @@ import (
 	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
@@ -66,16 +66,16 @@ func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config
 	}
 	slog.Info("found hypervisors", "count", len(data.Hypervisors))
 
-	var hosts []httpapi.ExternalSchedulerHost
+	var hosts []api.ExternalSchedulerHost
 	weights := make(map[string]float64)
 	for _, h := range data.Hypervisors {
 		weights[h.ServiceHost] = 1.0
-		hosts = append(hosts, httpapi.ExternalSchedulerHost{
+		hosts = append(hosts, api.ExternalSchedulerHost{
 			ComputeHost:        h.ServiceHost,
 			HypervisorHostname: h.Hostname,
 		})
 	}
-	request := httpapi.ExternalSchedulerRequest{
+	request := api.ExternalSchedulerRequest{
 		Hosts:   hosts,
 		Weights: weights,
 	}
@@ -99,7 +99,7 @@ func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config
 		)
 		panic("external scheduler API returned non-200 status code")
 	}
-	var resp httpapi.ExternalSchedulerResponse
+	var resp api.ExternalSchedulerResponse
 	must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
 	if len(resp.Hosts) == 0 {
 		panic("no hosts found in response")

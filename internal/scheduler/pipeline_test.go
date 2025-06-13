@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package manila
+package scheduler
 
 import (
 	"log/slog"
@@ -10,10 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/plugins"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/manila/api"
 )
 
 type mockPipelineStep struct {
@@ -28,18 +25,19 @@ func (m *mockPipelineStep) GetName() string {
 	return "mock_pipeline_step"
 }
 
-func (m *mockPipelineStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+func (m *mockPipelineStep) Run(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return &plugins.StepResult{
+	return &StepResult{
 		Activations: map[string]float64{"host1": 0.0, "host2": 1.0},
 	}, nil
 }
 
 func TestPipeline_Run(t *testing.T) {
-	pipeline := &pipeline{
-		executionOrder: [][]plugins.Step{
+	// Create an instance of the pipeline with a mock step
+	pipeline := &pipeline[mockPipelineRequest]{
+		executionOrder: [][]Step[mockPipelineRequest]{
 			{&mockPipelineStep{}},
 		},
 		applicationOrder: []string{
@@ -50,14 +48,14 @@ func TestPipeline_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        testlibAPI.MockRequest
+		request        mockPipelineRequest
 		expectedResult []string
 	}{
 		{
 			name: "Single step pipeline",
-			request: testlibAPI.MockRequest{
-				Hosts:   []string{"host1", "host2", "host3"},
-				Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
+			request: mockPipelineRequest{
+				Subjects: []string{"host1", "host2", "host3"},
+				Weights:  map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 			},
 			expectedResult: []string{"host2", "host1"},
 		},
@@ -65,7 +63,7 @@ func TestPipeline_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := pipeline.Run(&tt.request)
+			result, err := pipeline.Run(tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -81,8 +79,8 @@ func TestPipeline_Run(t *testing.T) {
 	}
 }
 
-func TestPipeline_NormalizeManilaWeights(t *testing.T) {
-	p := &pipeline{}
+func TestPipeline_NormalizeNovaWeights(t *testing.T) {
+	p := &pipeline[mockPipelineRequest]{}
 
 	tests := []struct {
 		name     string
@@ -106,7 +104,7 @@ func TestPipeline_NormalizeManilaWeights(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := p.normalizeManilaWeights(tt.weights)
+			result := p.normalizeInputWeights(tt.weights)
 			for host, weight := range tt.expected {
 				if result[host] != weight {
 					t.Errorf("expected weight %f for host %s, got %f", weight, host, result[host])
@@ -117,7 +115,7 @@ func TestPipeline_NormalizeManilaWeights(t *testing.T) {
 }
 
 func TestPipeline_ApplyStepWeights(t *testing.T) {
-	p := &pipeline{
+	p := &pipeline[mockPipelineRequest]{
 		applicationOrder: []string{"step1", "step2"},
 	}
 
@@ -157,7 +155,7 @@ func TestPipeline_ApplyStepWeights(t *testing.T) {
 }
 
 func TestPipeline_SortHostsByWeights(t *testing.T) {
-	p := &pipeline{}
+	p := &pipeline[mockPipelineRequest]{}
 
 	tests := []struct {
 		name     string
@@ -177,7 +175,7 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := p.sortHostsByWeights(tt.weights)
+			result := p.sortSubjectsByWeights(tt.weights)
 			for i, host := range tt.expected {
 				if result[i] != host {
 					t.Errorf("expected host %s at position %d, got %s", host, i, result[i])
@@ -189,15 +187,15 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 
 func TestPipeline_RunSteps(t *testing.T) {
 	mockStep := &mockPipelineStep{}
-	p := &pipeline{
-		executionOrder: [][]plugins.Step{
+	p := &pipeline[mockPipelineRequest]{
+		executionOrder: [][]Step[mockPipelineRequest]{
 			{mockStep},
 		},
 	}
 
-	request := &testlibAPI.MockRequest{
-		Hosts:   []string{"host1", "host2"},
-		Weights: map[string]float64{"host1": 0.0, "host2": 0.0},
+	request := mockPipelineRequest{
+		Subjects: []string{"host1", "host2"},
+		Weights:  map[string]float64{"host1": 0.0, "host2": 0.0},
 	}
 
 	result := p.runSteps(slog.Default(), request)
@@ -214,17 +212,28 @@ func TestPipeline_RunSteps(t *testing.T) {
 
 func TestNewPipeline(t *testing.T) {
 	config := conf.SchedulerConfig{
-		// TODO: Add manila config to the test
+		Nova: conf.NovaSchedulerConfig{Plugins: []conf.SchedulerStepConfig{
+			{Name: "mock_pipeline_step", Options: conf.RawOpts{}},
+		}},
 	}
-	database := db.DB{} // Mock or initialize as needed
+	database := db.DB{}          // Mock or initialize as needed
+	monitor := PipelineMonitor{} // Replace with an actual mock implementation if available
 	mqttClient := &mqtt.MockClient{}
 
-	pipeline := NewPipeline([]plugins.Step{&mockPipelineStep{}}, config, database, mqttClient).(*pipeline)
+	pipeline := NewPipeline(
+		[]Step[mockPipelineRequest]{&mockPipelineStep{}},
+		[]conf.SchedulerStepConfig{{Name: "mock_pipeline_step", Options: conf.RawOpts{}}},
+		[]StepWrapper[mockPipelineRequest]{},
+		config, database, monitor, mqttClient, "test/topic",
+	).(*pipeline[mockPipelineRequest])
 
 	if len(pipeline.executionOrder) != 1 {
 		t.Fatalf("expected 1 execution order group, got %d", len(pipeline.executionOrder))
 	}
-	if len(pipeline.executionOrder[0]) != 0 {
-		t.Fatalf("expected 0 steps in the execution order, got %d", len(pipeline.executionOrder[0]))
+	if len(pipeline.executionOrder[0]) != 1 {
+		t.Fatalf("expected 1 step in the execution order, got %d", len(pipeline.executionOrder[0]))
+	}
+	if pipeline.executionOrder[0][0].GetName() != "mock_pipeline_step" {
+		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][0].GetName())
 	}
 }

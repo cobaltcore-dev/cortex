@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package nova
+package scheduler
 
 import (
 	"log/slog"
@@ -10,18 +10,14 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/api"
-	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/nova/plugins"
 )
 
 func TestStepValidator_GetName(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
+	mockStep := &mockStep[mockPipelineRequest]{
 		Name: "mock-step",
 	}
 
-	validator := StepValidator{
+	validator := StepValidator[mockPipelineRequest]{
 		Step: mockStep,
 	}
 
@@ -31,7 +27,7 @@ func TestStepValidator_GetName(t *testing.T) {
 }
 
 func TestStepValidator_Init(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
+	mockStep := &mockStep[mockPipelineRequest]{
 		InitFunc: func(db db.DB, opts conf.RawOpts) error {
 			return nil
 		},
@@ -40,7 +36,7 @@ func TestStepValidator_Init(t *testing.T) {
 	testDB := db.DB{}
 	mockOpts := conf.RawOpts{}
 
-	validator := StepValidator{
+	validator := StepValidator[mockPipelineRequest]{
 		Step: mockStep,
 	}
 
@@ -50,9 +46,9 @@ func TestStepValidator_Init(t *testing.T) {
 }
 
 func TestStepValidator_Run_ValidHosts(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-			return &plugins.StepResult{
+	mockStep := &mockStep[mockPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+			return &StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 1.0,
@@ -61,18 +57,18 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 		},
 	}
 
-	request := testlibAPI.MockRequest{
-		Hosts: []string{"host1", "host2"},
+	request := mockPipelineRequest{
+		Subjects: []string{"subject1", "subject2"},
 	}
 
-	validator := StepValidator{
+	validator := StepValidator[mockPipelineRequest]{
 		Step: mockStep,
-		DisabledValidations: conf.NovaSchedulerStepDisabledValidationsConfig{
-			SameHostNumberInOut: false,
+		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
+			SameSubjectNumberInOut: false,
 		},
 	}
 
-	result, err := validator.Run(slog.Default(), &request)
+	result, err := validator.Run(slog.Default(), request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}
@@ -88,9 +84,9 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 }
 
 func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-			return &plugins.StepResult{
+	mockStep := &mockStep[mockPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+			return &StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 				},
@@ -98,18 +94,18 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 		},
 	}
 
-	request := testlibAPI.MockRequest{
-		Hosts: []string{"host1", "host2"},
+	request := mockPipelineRequest{
+		Subjects: []string{"subject1", "subject2"},
 	}
 
-	validator := StepValidator{
+	validator := StepValidator[mockPipelineRequest]{
 		Step: mockStep,
-		DisabledValidations: conf.NovaSchedulerStepDisabledValidationsConfig{
-			SameHostNumberInOut: false,
+		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
+			SameSubjectNumberInOut: false,
 		},
 	}
 
-	result, err := validator.Run(slog.Default(), &request)
+	result, err := validator.Run(slog.Default(), request)
 	if err == nil {
 		t.Errorf("Run() error = nil, want error")
 	}
@@ -118,16 +114,16 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 		t.Errorf("Run() weights = %v, want nil", result.Activations)
 	}
 
-	expectedError := "number of hosts changed during step execution"
+	expectedError := "number of subjects changed during step execution"
 	if err.Error() != expectedError {
 		t.Errorf("Run() error = %v, want %v", err.Error(), expectedError)
 	}
 }
 
 func TestStepValidator_Run_DisabledValidation(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-			return &plugins.StepResult{
+	mockStep := &mockStep[mockPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+			return &StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 				},
@@ -135,18 +131,18 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 		},
 	}
 
-	request := testlibAPI.MockRequest{
-		Hosts: []string{"host1"},
+	request := mockPipelineRequest{
+		Subjects: []string{"subject1"},
 	}
 
-	validator := StepValidator{
+	validator := StepValidator[mockPipelineRequest]{
 		Step: mockStep,
-		DisabledValidations: conf.NovaSchedulerStepDisabledValidationsConfig{
-			SameHostNumberInOut: true, // Validation is disabled
+		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
+			SameSubjectNumberInOut: true, // Validation is disabled
 		},
 	}
 
-	result, err := validator.Run(slog.Default(), &request)
+	result, err := validator.Run(slog.Default(), request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}
@@ -161,16 +157,12 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 }
 
 func TestValidateStep(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{}
-	disabledValidations := conf.NovaSchedulerStepDisabledValidationsConfig{
-		SameHostNumberInOut: true,
+	mockStep := &mockStep[mockPipelineRequest]{}
+	disabledValidations := conf.SchedulerStepDisabledValidationsConfig{
+		SameSubjectNumberInOut: true,
 	}
 
-	validator := validateStep(mockStep, disabledValidations)
-	if validator.Step != mockStep {
-		t.Errorf("validateStep() Step = %v, want %v", validator.Step, mockStep)
-	}
-
+	validator := ValidateStep(mockStep, disabledValidations)
 	if !reflect.DeepEqual(validator.DisabledValidations, disabledValidations) {
 		t.Errorf("validateStep() DisabledValidations = %v, want %v", validator.DisabledValidations, disabledValidations)
 	}

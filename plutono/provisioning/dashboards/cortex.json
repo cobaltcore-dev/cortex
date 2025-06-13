@@ -2312,7 +2312,7 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 19,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 163
       },
@@ -2409,86 +2409,6 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "dark-blue",
-                "value": null
-              },
-              {
-                "color": "dark-blue",
-                "value": 10
-              },
-              {
-                "color": "semi-dark-blue",
-                "value": 100
-              },
-              {
-                "color": "blue",
-                "value": 1000
-              },
-              {
-                "color": "light-blue",
-                "value": 10000
-              },
-              {
-                "color": "super-light-blue",
-                "value": 100000
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 19,
-        "w": 12,
-        "x": 12,
-        "y": 163
-      },
-      "id": 43,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.5.37",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum by (step) (cortex_feature_pipeline_step_features{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}) / count by (step) (cortex_feature_pipeline_step_features{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{datasource}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Extracted features in database",
-      "type": "stat"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
                 "color": "super-light-blue",
                 "value": null
               },
@@ -2548,6 +2468,86 @@
       "type": "stat"
     },
     {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-blue",
+                "value": null
+              },
+              {
+                "color": "dark-blue",
+                "value": 10
+              },
+              {
+                "color": "semi-dark-blue",
+                "value": 100
+              },
+              {
+                "color": "blue",
+                "value": 1000
+              },
+              {
+                "color": "light-blue",
+                "value": 10000
+              },
+              {
+                "color": "super-light-blue",
+                "value": 100000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 12,
+        "x": 12,
+        "y": 182
+      },
+      "id": 43,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum by (step) (cortex_feature_pipeline_step_features{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}) / count by (step) (cortex_feature_pipeline_step_features{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{datasource}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Extracted features in database",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
       "datasource": "prometheus-openstack",
       "gridPos": {
@@ -2584,7 +2584,7 @@
       },
       "gridPos": {
         "h": 12,
-        "w": 6,
+        "w": 12,
         "x": 0,
         "y": 201
       },
@@ -2601,7 +2601,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"0\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2612,7 +2612,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Where host at idx=0 came from",
+      "title": "Nova: from which idx the selected host came from",
       "tooltip": {
         "show": true,
         "showHistogram": false
@@ -2660,8 +2660,8 @@
       },
       "gridPos": {
         "h": 12,
-        "w": 6,
-        "x": 6,
+        "w": 12,
+        "x": 12,
         "y": 201
       },
       "heatmap": {},
@@ -2677,7 +2677,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"0\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2688,7 +2688,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Where host at idx=0 came from",
+      "title": "Manila: from which idx the selected host came from",
       "tooltip": {
         "show": true,
         "showHistogram": false
@@ -2735,236 +2735,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
-        "w": 4,
-        "x": 12,
-        "y": 201
-      },
-      "heatmap": {},
-      "hideZeroBuckets": false,
-      "highlightCards": true,
-      "id": 92,
-      "interval": null,
-      "legend": {
-        "show": true
-      },
-      "pluginVersion": "7.5.35",
-      "reverseYBuckets": false,
-      "targets": [
-        {
-          "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"2\"}[2m]) / 2) by (le)",
-          "format": "heatmap",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{le}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Where host at idx=2 came from",
-      "tooltip": {
-        "show": true,
-        "showHistogram": false
-      },
-      "tooltipDecimals": null,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": 0,
-        "format": "short",
-        "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "auto",
-      "yBucketNumber": null,
-      "yBucketSize": null
-    },
-    {
-      "cards": {
-        "cardPadding": 0,
-        "cardRound": 0
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateTurbo",
-        "exponent": 0.01,
-        "max": null,
-        "min": null,
-        "mode": "spectrum"
-      },
-      "dataFormat": "tsbuckets",
-      "datasource": "prometheus-openstack",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 4,
-        "x": 16,
-        "y": 201
-      },
-      "heatmap": {},
-      "hideZeroBuckets": false,
-      "highlightCards": true,
-      "id": 93,
-      "interval": null,
-      "legend": {
-        "show": true
-      },
-      "pluginVersion": "7.5.35",
-      "reverseYBuckets": false,
-      "targets": [
-        {
-          "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"3\"}[2m]) / 2) by (le)",
-          "format": "heatmap",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{le}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Where host at idx=3 came from",
-      "tooltip": {
-        "show": true,
-        "showHistogram": false
-      },
-      "tooltipDecimals": null,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": 0,
-        "format": "short",
-        "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "auto",
-      "yBucketNumber": null,
-      "yBucketSize": null
-    },
-    {
-      "cards": {
-        "cardPadding": 0,
-        "cardRound": 0
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateTurbo",
-        "exponent": 0.01,
-        "max": null,
-        "min": null,
-        "mode": "spectrum"
-      },
-      "dataFormat": "tsbuckets",
-      "datasource": "prometheus-openstack",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 4,
-        "x": 20,
-        "y": 201
-      },
-      "heatmap": {},
-      "hideZeroBuckets": false,
-      "highlightCards": true,
-      "id": 94,
-      "interval": null,
-      "legend": {
-        "show": true
-      },
-      "pluginVersion": "7.5.35",
-      "reverseYBuckets": false,
-      "targets": [
-        {
-          "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"4\"}[2m]) / 2) by (le)",
-          "format": "heatmap",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{le}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Where host at idx=4 came from",
-      "tooltip": {
-        "show": true,
-        "showHistogram": false
-      },
-      "tooltipDecimals": null,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": 0,
-        "format": "short",
-        "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "auto",
-      "yBucketNumber": null,
-      "yBucketSize": null
-    },
-    {
-      "cards": {
-        "cardPadding": 0,
-        "cardRound": 0
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateTurbo",
-        "exponent": 0.01,
-        "max": null,
-        "min": null,
-        "mode": "spectrum"
-      },
-      "dataFormat": "tsbuckets",
-      "datasource": "prometheus-openstack",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
+        "h": 13,
+        "w": 12,
         "x": 0,
         "y": 213
       },
@@ -2981,7 +2753,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_shift_origin_bucket{outidx=\"0\"}[2m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova\"}[2m])) by (le, step))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -2992,7 +2764,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Selected host origin idx (rate over 2min)",
+      "title": "Nova: selected host origin idx (rate over 2min)",
       "tooltip": {
         "show": true,
         "showHistogram": false
@@ -3018,134 +2790,290 @@
       "yBucketSize": null
     },
     {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
       "datasource": "prometheus-openstack",
       "description": "",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 1,
-          "mappings": [],
-          "noValue": "-",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "decmbytes"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
-          }
-        ]
+        "defaults": {},
+        "overrides": []
       },
       "gridPos": {
-        "h": 19,
-        "w": 24,
-        "x": 0,
-        "y": 225
+        "h": 13,
+        "w": 12,
+        "x": 12,
+        "y": 213
       },
-      "id": 91,
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 105,
       "interval": null,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
+      "legend": {
+        "show": true
       },
       "pluginVersion": "7.5.37",
+      "reverseYBuckets": false,
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_impact_bucket{unit=\"vCPUs\"}[2m])) by (le, step, stat))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila\"}[2m])) by (le, step))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Step: {{step}} Statistic: {{stat}}",
+          "legendFormat": "{{le}}",
           "refId": "A"
-        },
-        {
-          "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_impact_bucket{unit=\"MB\"}[2m])) by (le, step, stat))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "Step: {{step}} Statistic: {{stat}}",
-          "refId": "B"
-        },
-        {
-          "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_impact_bucket{unit=\"%\"}[2m])) by (le, step, stat))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "Step: {{step}} Statistic: {{stat}}",
-          "refId": "C"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Scheduler impact",
-      "type": "stat"
+      "title": "Manila: selected host origin idx (rate over 2min)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "short",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 0,
+        "y": 226
+      },
+      "hiddenSeries": false,
+      "id": 91,
+      "interval": null,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "hideEmpty": false,
+        "hideZero": true,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.37",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"nova\"}[2m])) by (le, step, stat, unit))",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{stat}} {{unit}} ({{step}})",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Nova scheduler impact",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:291",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:292",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 12,
+        "y": 226
+      },
+      "hiddenSeries": false,
+      "id": 106,
+      "interval": null,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "hideEmpty": false,
+        "hideZero": true,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.37",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"manila\"}[2m])) by (le, step, stat, unit))",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{stat}} {{unit}} ({{step}})",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Manila scheduler impact",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:291",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:292",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -3163,7 +3091,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 244
+        "y": 240
       },
       "hiddenSeries": false,
       "id": 89,
@@ -3195,9 +3123,9 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(vmware,rebuild,resize,live) (rate(cortex_scheduler_nova_pipeline_requests_total{}[2m]))",
+          "expr": "sum by(pipeline) (rate(cortex_scheduler_pipeline_requests_total{}[2m]))",
           "interval": "",
-          "legendFormat": "Rebuild: {{rebuild}}, Resize: {{resize}}, Live: {{live}}, VMware: {{vmware}}",
+          "legendFormat": "Pipeline: {{pipeline}}",
           "refId": "A"
         }
       ],
@@ -3260,7 +3188,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 256
+        "y": 252
       },
       "hiddenSeries": false,
       "id": 26,
@@ -3293,9 +3221,9 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_nova_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step, pipeline))",
           "interval": "",
-          "legendFormat": "{{step}}",
+          "legendFormat": "{{pipeline}} {{step}}",
           "refId": "A"
         }
       ],
@@ -3368,7 +3296,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 268
+        "y": 264
       },
       "hiddenSeries": false,
       "id": 37,
@@ -3465,7 +3393,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 268
+        "y": 264
       },
       "hiddenSeries": false,
       "id": 40,
@@ -3577,7 +3505,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 268
+        "y": 264
       },
       "hiddenSeries": false,
       "id": 33,
@@ -3689,7 +3617,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 268
+        "y": 264
       },
       "hiddenSeries": false,
       "id": 42,
@@ -3784,144 +3712,106 @@
       }
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
       "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "continuous-RdYlGr"
-          },
-          "mappings": [],
-          "max": 1,
-          "min": -1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": -1
-              },
-              {
-                "color": "#EAB839",
-                "value": 1
-              }
-            ]
-          }
+          "unit": "short"
         },
         "overrides": []
       },
+      "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
-        "h": 31,
-        "w": 12,
+        "h": 12,
+        "w": 24,
         "x": 0,
-        "y": 279
+        "y": 275
       },
+      "hiddenSeries": false,
       "id": 45,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {
-          "valueSize": 24
-        },
-        "textMode": "value_and_name"
+      "legend": {
+        "avg": false,
+        "current": false,
+        "hideZero": true,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
       },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
       "pluginVersion": "7.5.37",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "bottomk(1, min by (host, step) (rate(cortex_scheduler_nova_pipeline_step_weight_modification[2m])) < 0) by (host)",
+          "expr": "sum by (subject, pipeline, step) (rate(cortex_scheduler_pipeline_step_weight_modification[2m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
-          "legendFormat": "{{step}} on {{host}}",
+          "legendFormat": "{{ pipeline }} {{ subject }} {{ step }}",
           "queryType": "randomWalk",
           "refId": "A"
         }
       ],
-      "title": "Most important avoiding scheduler step by host",
-      "type": "stat"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "continuous-RdYlGr"
-          },
-          "mappings": [],
-          "max": 1,
-          "min": -1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": -1
-              },
-              {
-                "color": "#EAB839",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Weight modifications",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
       },
-      "gridPos": {
-        "h": 31,
-        "w": 12,
-        "x": 12,
-        "y": 279
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
       },
-      "id": 46,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {
-          "valueSize": 24
-        },
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "7.5.37",
-      "targets": [
+      "yaxes": [
         {
-          "exemplar": true,
-          "expr": "topk(1, max by (host, step) (rate(cortex_scheduler_nova_pipeline_step_weight_modification[2m])) > 0) by (host)",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{step}} on {{host}}",
-          "queryType": "randomWalk",
-          "refId": "A"
+          "$$hashKey": "object:556",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:557",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
         }
       ],
-      "title": "Most impactful upvoting scheduler step by host",
-      "type": "stat"
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "collapsed": false,
@@ -3930,7 +3820,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 310
+        "y": 287
       },
       "id": 101,
       "panels": [],
@@ -3953,7 +3843,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 311
+        "y": 288
       },
       "hiddenSeries": false,
       "id": 99,
@@ -4061,7 +3951,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 311
+        "y": 288
       },
       "hiddenSeries": false,
       "id": 97,
@@ -4161,7 +4051,7 @@
     "list": []
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},

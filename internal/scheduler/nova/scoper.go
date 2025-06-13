@@ -12,20 +12,15 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 type StepScoper struct {
 	// The wrapped step to scope.
-	Step plugins.Step
+	Step scheduler.Step[api.ExternalSchedulerRequest]
 	// The scope for this step.
 	Scope conf.NovaSchedulerStepScope
 	// The database to use for querying host capabilities.
 	DB db.DB
-}
-
-func scopeStep[S plugins.Step](step S, scope conf.NovaSchedulerStepScope) *StepScoper {
-	return &StepScoper{Step: step, Scope: scope}
 }
 
 // Get the name of the wrapped step.
@@ -40,8 +35,8 @@ func (s *StepScoper) Init(db db.DB, opts conf.RawOpts) error {
 	return s.Step.Init(db, opts)
 }
 
-// Run the step and scope it.
-func (s *StepScoper) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+// Run the step and sRun(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error)
+func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result, err := s.Step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
@@ -86,18 +81,16 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.Request) (*plugins.S
 // Based on the provided host selectors, determine which hosts are in scope
 // and which are not. The hosts in scope are returned in the first map,
 // while the hosts not in scope are returned in the second map.
-func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Request) (
+func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (
 	hostsInScope map[string]struct{},
 	hostsNotInScope map[string]struct{},
 	err error,
 ) {
 
-	hostsInRequest := request.GetHosts()
-
 	// Initially, all hosts in the request are considered in scope.
 	hostsInScope = make(map[string]struct{})
-	for _, host := range hostsInRequest {
-		hostsInScope[host] = struct{}{}
+	for _, host := range request.Hosts {
+		hostsInScope[host.ComputeHost] = struct{}{}
 	}
 
 	// If there are no host selectors, return all hosts in the request.
@@ -112,7 +105,7 @@ func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Reques
 	); err != nil {
 		return nil, nil, err
 	}
-	capabilityByHost := make(map[string]shared.HostCapabilities, len(hostsInRequest))
+	capabilityByHost := make(map[string]shared.HostCapabilities, len(request.Hosts))
 	for _, hostCapability := range hostCapabilities {
 		capabilityByHost[hostCapability.ComputeHost] = hostCapability
 	}
@@ -120,9 +113,9 @@ func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Reques
 	// Go through each host selector sequentially.
 	for _, selector := range s.Scope.HostSelectors {
 		selectedHosts := make(map[string]struct{})
-		for _, host := range hostsInRequest {
+		for _, host := range request.Hosts {
 			// Check if the host matches the selector.
-			capability, ok := capabilityByHost[host]
+			capability, ok := capabilityByHost[host.ComputeHost]
 			if !ok {
 				// If the host does not have capabilities, skip it.
 				continue
@@ -142,7 +135,7 @@ func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Reques
 
 			if matches {
 				// If the host matches the selector, add it to the in-scope map.
-				selectedHosts[host] = struct{}{}
+				selectedHosts[host.ComputeHost] = struct{}{}
 			}
 		}
 
@@ -174,10 +167,10 @@ func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Reques
 
 	// Check which hosts have been excluded from the scope.
 	hostsNotInScope = make(map[string]struct{})
-	for _, host := range request.GetHosts() {
-		if _, ok := hostsInScope[host]; !ok {
+	for _, host := range request.Hosts {
+		if _, ok := hostsInScope[host.ComputeHost]; !ok {
 			// If the host is not in scope, add it to the not in scope map.
-			hostsNotInScope[host] = struct{}{}
+			hostsNotInScope[host.ComputeHost] = struct{}{}
 		}
 	}
 
@@ -186,7 +179,7 @@ func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Reques
 
 // Check if the spec is in scope based on the spec selectors.
 // If there are no spec selectors, the spec is considered in scope.
-func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.Request) bool {
+func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.ExternalSchedulerRequest) bool {
 	// If there is no scope, the spec is in scope.
 	if len(s.Scope.SpecSelectors) == 0 {
 		return true
@@ -196,7 +189,7 @@ func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.Request) b
 		matches := false
 		if strings.EqualFold(selector.Subject, "flavor") {
 			// Check if the flavor name contains the infix.
-			matches = strings.Contains(request.GetSpec().Data.Flavor.Data.Name, selector.Infix)
+			matches = strings.Contains(request.Spec.Data.Flavor.Data.Name, selector.Infix)
 		} else {
 			// If the subject is not recognized, log an error and skip.
 			traceLog.Error("scheduler: unknown spec selector subject", "subject", selector.Subject)

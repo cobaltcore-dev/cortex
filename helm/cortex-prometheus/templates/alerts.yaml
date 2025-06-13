@@ -140,7 +140,7 @@ spec:
           that are causing the CPU usage to increase significantly.
 
     - alert: CortexLongSchedulerPipelineRun
-      expr: histogram_quantile(0.99, rate(cortex_scheduler_nova_pipeline_run_duration_seconds_bucket[5m])) > 1
+      expr: histogram_quantile(0.99, rate(cortex_scheduler_pipeline_run_duration_seconds_bucket[5m])) > 1
       for: 5m
       labels:
         context: pipeline

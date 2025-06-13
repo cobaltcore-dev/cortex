@@ -10,7 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -22,18 +22,18 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 
 	// Create dependency tables
 	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostUtilization{}),
+		testDB.AddTable(shared.StoragePoolUtilization{}),
 	)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_host_utilization table
+	// Insert mock data into the feature_storage_pool_utilization table
 	_, err = testDB.Exec(`
-        INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct)
+        INSERT INTO feature_storage_pool_utilization (storage_pool_name, capacity_utilized_pct)
         VALUES
-            ('host1', 0, 0, 0),
-            ('host2',100, 100, 100)
+            ('host1', 100),
+            ('host2', 0)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -41,23 +41,12 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 
 	// Create an instance of the step
 	opts := conf.NewRawOpts(`{
-        "cpuEnabled": true,
-        "cpuUtilizedLowerBoundPct": 0.0,
-        "cpuUtilizedUpperBoundPct": 100.0,
-        "cpuUtilizedActivationLowerBound": 1.0,
-        "cpuUtilizedActivationUpperBound": 0.0,
-        "ramEnabled": true,
-        "ramUtilizedLowerBoundPct": 0.0,
-        "ramUtilizedUpperBoundPct": 100.0,
-        "ramUtilizedActivationLowerBound": 1.0,
-        "ramUtilizedActivationUpperBound": 0.0,
-        "diskEnabled": true,
-        "diskUtilizedLowerBoundPct": 0.0,
-        "diskUtilizedUpperBoundPct": 100.0,
-        "diskUtilizedActivationLowerBound": 1.0,
-        "diskUtilizedActivationUpperBound": 0.0
+        "utilizedLowerBoundPct": 0.0,
+        "utilizedUpperBoundPct": 100.0,
+        "utilizedActivationLowerBound": 1.0,
+        "utilizedActivationUpperBound": 0.0
     }`)
-	step := &ResourceBalancingStep{}
+	step := &CapacityBalancingStep{}
 	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -68,41 +57,16 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 		expectedWeights map[string]float64
 	}{
 		{
-			name: "Single VM",
+			name: "Single share",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NInstances: 1,
-					},
-				},
 				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
+					{ShareHost: "host1"},
+					{ShareHost: "host2"},
 				},
 			},
 			expectedWeights: map[string]float64{
-				"host1": 3.0,
-				"host2": 0.0,
-			},
-		},
-		{
-			name: "Multiple VMs",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NInstances: 2,
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			},
-			expectedWeights: map[string]float64{
-				"host1": 0.0, // No weight change for multiple VMs
-				"host2": 0.0, // No weight change for multiple VMs
+				"host1": 0.0, // utilized
+				"host2": 1.0, // empty
 			},
 		},
 	}

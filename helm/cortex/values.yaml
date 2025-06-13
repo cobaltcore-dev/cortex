@@ -282,7 +282,7 @@ conf:
                 - alias: node_exporter_memory_active_pct
 
       # Shared extractors.
-      - name: storage_pool_space_extractor
+      - name: storage_pool_utilization_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
           sync:
@@ -368,6 +368,31 @@ conf:
     api:
       # Whether request bodies should be logged (debugging feature).
       logRequestBodies: false
+
+    manila:
+      # Configuration of scheduler steps that modify the Manila scheduler weights.
+      # Each scheduler step can specify its own dependencies on extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known scheduler plugin.
+      # Note that all scheduler steps will be executed in parallel. However,
+      # the order will be maintained when the weights are applied to the
+      # input weights.
+      plugins:
+        # Bin-packing for Manila storage pools.
+        - name: capacity_balancing
+          options:
+            # Min-max scaling for gap-fitting based on capacity left (pct)
+            # Note the inverted values here -> binpacking instead of balancing.
+            utilizedLowerBoundPct: 100
+            utilizedUpperBoundPct: 0
+            utilizedActivationLowerBound: 0.0
+            utilizedActivationUpperBound: 1.0
+          dependencies:
+            features:
+              extractors:
+                - storage_pool_utilization_extractor
+
     nova:
       # Configuration of scheduler steps that modify the Nova scheduler weights.
       # Each scheduler step can specify its own dependencies on extractors and
