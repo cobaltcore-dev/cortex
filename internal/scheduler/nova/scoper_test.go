@@ -9,14 +9,13 @@ import (
 	"testing"
 
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
-	testlibPlugins "github.com/cobaltcore-dev/cortex/testlib/scheduler/plugins"
+	testlibScheduler "github.com/cobaltcore-dev/cortex/testlib/scheduler"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 func setupTestDBWithHostCapabilities(t *testing.T) db.DB {
@@ -44,10 +43,10 @@ func setupTestDBWithHostCapabilities(t *testing.T) db.DB {
 }
 
 func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
+	mockStep := &testlibScheduler.MockStep[api.ExternalSchedulerRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-			return &plugins.StepResult{
+		RunFunc: func(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
+			return &scheduler.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 2.0,
@@ -71,8 +70,12 @@ func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 		DB: testDB,
 	}
 
-	request := &testlibAPI.MockRequest{
-		Hosts: []string{"host1", "host2", "host3"},
+	request := api.ExternalSchedulerRequest{
+		Hosts: []api.ExternalSchedulerHost{
+			{ComputeHost: "host1"},
+			{ComputeHost: "host2"},
+			{ComputeHost: "host3"},
+		},
 	}
 
 	result, err := scoper.Run(slog.Default(), request)
@@ -91,10 +94,10 @@ func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 }
 
 func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
+	mockStep := &testlibScheduler.MockStep[api.ExternalSchedulerRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-			return &plugins.StepResult{
+		RunFunc: func(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
+			return &scheduler.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 2.0,
@@ -118,8 +121,12 @@ func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 		DB: testDB,
 	}
 
-	request := &testlibAPI.MockRequest{
-		Hosts: []string{"host1", "host2", "host3"},
+	request := api.ExternalSchedulerRequest{
+		Hosts: []api.ExternalSchedulerHost{
+			{ComputeHost: "host1"},
+			{ComputeHost: "host2"},
+			{ComputeHost: "host3"},
+		},
 	}
 
 	result, err := scoper.Run(slog.Default(), request)
@@ -138,10 +145,10 @@ func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 }
 
 func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
+	mockStep := &testlibScheduler.MockStep[api.ExternalSchedulerRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-			return &plugins.StepResult{
+		RunFunc: func(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
+			return &scheduler.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 2.0,
@@ -164,8 +171,11 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 		DB: testDB,
 	}
 
-	request := &testlibAPI.MockRequest{
-		Hosts: []string{"host1", "host2"},
+	request := api.ExternalSchedulerRequest{
+		Hosts: []api.ExternalSchedulerHost{
+			{ComputeHost: "host1"},
+			{ComputeHost: "host2"},
+		},
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
 				Flavor: api.NovaObject[api.NovaFlavor]{
@@ -192,10 +202,10 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 }
 
 func TestStepScoper_Run_NoSelectors_AllInScope(t *testing.T) {
-	mockStep := &testlibPlugins.MockStep{
+	mockStep := &testlibScheduler.MockStep[api.ExternalSchedulerRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
-			return &plugins.StepResult{
+		RunFunc: func(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
+			return &scheduler.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 2.0,
@@ -212,8 +222,11 @@ func TestStepScoper_Run_NoSelectors_AllInScope(t *testing.T) {
 		DB:    testDB,
 	}
 
-	request := &testlibAPI.MockRequest{
-		Hosts: []string{"host1", "host2"},
+	request := api.ExternalSchedulerRequest{
+		Hosts: []api.ExternalSchedulerHost{
+			{ComputeHost: "host1"},
+			{ComputeHost: "host2"},
+		},
 	}
 
 	result, err := scoper.Run(slog.Default(), request)

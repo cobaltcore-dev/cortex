@@ -18,7 +18,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24.3
+          go-version: 1.24.4
       - name: Test quickly without Docker
         run: go test -v ./...
 
@@ -37,7 +37,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24.3
+          go-version: 1.24.4
       - name: Run tests with Docker and calculate coverage
         run: |
           export GITHUB_ACTIONS=1

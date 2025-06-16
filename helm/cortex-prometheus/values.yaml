@@ -20,8 +20,10 @@ alerts:
     global:
       service: cortex
     # Labels applied to specific alerts.
-    cortexSchedulerDown:
+    cortexNovaSchedulerDown:
       severity: warning
+    cortexManilaSchedulerDown:
+      severity: info # New feature.
     cortexSyncerDown:
       severity: info
     cortexExtractorDown:

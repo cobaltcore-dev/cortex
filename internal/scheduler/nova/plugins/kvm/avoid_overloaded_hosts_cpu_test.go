@@ -10,8 +10,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
 func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
@@ -56,14 +56,18 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        api.MockRequest
+		request        api.ExternalSchedulerRequest
 		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Non-vmware vm",
-			request: api.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				VMware: false,
-				Hosts:  []string{"host1", "host2", "host3"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
 			},
 			// Should downvote hosts with high CPU usage
 			downvotedHosts: map[string]struct{}{
@@ -73,18 +77,25 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 		},
 		{
 			name: "VMware vm",
-			request: api.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				VMware: true,
-				Hosts:  []string{"host1", "host2", "host3"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
 			},
 			// Should not do anything for VMware VMs
 			downvotedHosts: map[string]struct{}{},
 		},
 		{
 			name: "No overloaded hosts",
-			request: api.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				VMware: false,
-				Hosts:  []string{"host4", "host5"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host4"},
+					{ComputeHost: "host5"},
+				},
 			},
 			// Should not downvote any hosts
 			downvotedHosts: map[string]struct{}{},
@@ -93,7 +104,7 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := step.Run(slog.Default(), &tt.request)
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

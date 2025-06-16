@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
@@ -51,33 +50,41 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        testlibAPI.MockRequest
+		request        api.ExternalSchedulerRequest
 		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Non-vmware vm",
-			request: testlibAPI.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						ProjectID: "project1",
 					},
 				},
 				VMware: false,
-				Hosts:  []string{"host1", "host2", "host3"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
 			},
 			// Should not do anything
 			downvotedHosts: map[string]struct{}{},
 		},
 		{
 			name: "Noisy project",
-			request: testlibAPI.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						ProjectID: "project1",
 					},
 				},
 				VMware: true,
-				Hosts:  []string{"host1", "host2", "host3"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
 			},
 			downvotedHosts: map[string]struct{}{
 				"host1": {},
@@ -86,27 +93,35 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Non-noisy project",
-			request: testlibAPI.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						ProjectID: "project2",
 					},
 				},
 				VMware: true,
-				Hosts:  []string{"host1", "host2", "host3"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
 			},
 			downvotedHosts: map[string]struct{}{},
 		},
 		{
 			name: "No noisy project data",
-			request: testlibAPI.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						ProjectID: "project3",
 					},
 				},
 				VMware: true,
-				Hosts:  []string{"host1", "host2", "host3"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
 			},
 			downvotedHosts: map[string]struct{}{},
 		},
@@ -114,7 +129,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := step.Run(slog.Default(), &tt.request)
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

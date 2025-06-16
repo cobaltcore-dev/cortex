@@ -10,7 +10,8 @@ import (
 )
 
 type MockKeystoneAPI struct {
-	Url string
+	Url             string
+	EndpointLocator gophercloud.EndpointLocator
 }
 
 func (m *MockKeystoneAPI) Authenticate(ctx context.Context) error {
@@ -18,7 +19,9 @@ func (m *MockKeystoneAPI) Authenticate(ctx context.Context) error {
 }
 
 func (m *MockKeystoneAPI) Client() *gophercloud.ProviderClient {
-	return &gophercloud.ProviderClient{}
+	return &gophercloud.ProviderClient{
+		EndpointLocator: m.EndpointLocator,
+	}
 }
 
 func (m *MockKeystoneAPI) FindEndpoint(availability, serviceType string) (string, error) {

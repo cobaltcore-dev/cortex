@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/manila"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
 	"github.com/prometheus/client_golang/prometheus"
@@ -54,6 +55,13 @@ func NewCombinedSyncer(
 			Mon:        monitor,
 			Conf:       config.Placement,
 			API:        placement.NewPlacementAPI(monitor, keystoneAPI, config.Placement),
+			MqttClient: mqttClient,
+		},
+		&manila.ManilaSyncer{
+			DB:         db,
+			Mon:        monitor,
+			Conf:       config.Manila,
+			API:        manila.NewManilaAPI(monitor, keystoneAPI, config.Manila),
 			MqttClient: mqttClient,
 		},
 	}

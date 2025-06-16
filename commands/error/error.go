@@ -19,7 +19,7 @@ func main() {
 		HereBeDragons: "123",
 	}
 
-	url := "http://localhost:8080/scheduler/nova/external"
+	url := "http://localhost:8003/scheduler/nova/external"
 	slog.Info("sending POST request", "url", url)
 	requestBody, err := json.Marshal(request)
 	if err != nil {

@@ -10,8 +10,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	testlibAPI "github.com/cobaltcore-dev/cortex/testlib/scheduler/api"
 )
 
 func TestAvoidShortTermContendedHostsStep_Run(t *testing.T) {
@@ -57,14 +57,19 @@ func TestAvoidShortTermContendedHostsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		request  testlibAPI.MockRequest
+		request  api.ExternalSchedulerRequest
 		expected map[string]float64
 	}{
 		{
 			name: "Non-vmware vm",
-			request: testlibAPI.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				VMware: false,
-				Hosts:  []string{"host1", "host2", "host3", "host4"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
 			},
 			// Should not do anything
 			expected: map[string]float64{
@@ -76,9 +81,14 @@ func TestAvoidShortTermContendedHostsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Avoid contended hosts",
-			request: testlibAPI.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				VMware: true,
-				Hosts:  []string{"host1", "host2", "host3", "host4"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
 			},
 			expected: map[string]float64{
 				"host1": 0,
@@ -89,9 +99,12 @@ func TestAvoidShortTermContendedHostsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Missing data",
-			request: testlibAPI.MockRequest{
+			request: api.ExternalSchedulerRequest{
 				VMware: true,
-				Hosts:  []string{"host4", "host5"},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host4"},
+					{ComputeHost: "host5"}, // No data for host5
+				},
 			},
 			expected: map[string]float64{
 				"host4": -2,
@@ -102,7 +115,7 @@ func TestAvoidShortTermContendedHostsStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := step.Run(slog.Default(), &tt.request)
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

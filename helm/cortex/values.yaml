@@ -14,7 +14,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-849d63b"
+  tag: "sha-528e174"
 
 migrationsJob:
   # Additional annotations for the created database migrations job.
@@ -56,6 +56,11 @@ modes:
   # External scheduler for Nova.
   - name: scheduler-nova
     args: ["scheduler-nova"]
+    replicas: 1
+
+  # External scheduler for Manila.
+  - name: scheduler-manila
+    args: ["scheduler-manila"]
     replicas: 1
 
   # Service that extracts and exposes KPIs.
@@ -200,6 +205,13 @@ conf:
           - resource_providers
           # Needs resource_providers.
           - traits
+          - inventory_usages
+      manila:
+        # One of admin, public, or internal
+        availability: public
+        # Manila objects to sync into the database.
+        types:
+          - storage_pools
 
   extractor:
     # Configuration of features that should be extracted from the synced data.
@@ -271,7 +283,15 @@ conf:
                 - alias: node_exporter_memory_active_pct
 
       # Shared extractors.
-      - name: host_space_extractor
+      - name: storage_pool_utilization_extractor
+        recencySeconds: 60 # 1 minute
+        dependencies:
+          sync:
+            openstack:
+              manila:
+                types:
+                  - storage_pools
+      - name: host_utilization_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
           sync:
@@ -331,11 +351,9 @@ conf:
       # Shared KPIs.
       - name: host_utilization_kpi
         dependencies:
-          sync:
-            openstack:
-              nova:
-                types:
-                  - hypervisors
+          features:
+            extractors:
+              - host_utilization_extractor
       - name: vm_migration_statistics_kpi
         dependencies:
           features:
@@ -351,6 +369,31 @@ conf:
     api:
       # Whether request bodies should be logged (debugging feature).
       logRequestBodies: false
+
+    manila:
+      # Configuration of scheduler steps that modify the Manila scheduler weights.
+      # Each scheduler step can specify its own dependencies on extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known scheduler plugin.
+      # Note that all scheduler steps will be executed in parallel. However,
+      # the order will be maintained when the weights are applied to the
+      # input weights.
+      plugins:
+        # Bin-packing for Manila storage pools.
+        - name: capacity_balancing
+          options:
+            # Min-max scaling for gap-fitting based on capacity left (pct)
+            # Note the inverted values here -> binpacking instead of balancing.
+            utilizedLowerBoundPct: 100
+            utilizedUpperBoundPct: 0
+            utilizedActivationLowerBound: 0.0
+            utilizedActivationUpperBound: 1.0
+          dependencies:
+            features:
+              extractors:
+                - storage_pool_utilization_extractor
+
     nova:
       # Configuration of scheduler steps that modify the Nova scheduler weights.
       # Each scheduler step can specify its own dependencies on extractors and
@@ -440,46 +483,6 @@ conf:
               extractors:
                 - node_exporter_host_memory_active_extractor
 
-        # Bin-packing for HANA vms on VMware HANA hosts.
-        - name: shared_flavor_binpacking
-          # Scope this step to VMware hypervisors and HANA hosts only.
-          scope:
-            hostSelectors:
-              - subject: hypervisorType
-                contains: "VMware"
-                operation: intersection
-              - subject: trait
-                contains: "HANA_EXCLUSIVE"
-                operation: intersection
-            specSelectors:
-              - subject: flavor
-                contains: "hana"
-                action: continue
-          options:
-            # Min-max scaling for gap-fitting based on cpu space left (vCPUs).
-            cpuEnabled: true
-            cpuFreeLowerBound: 512 # vCPUs
-            cpuFreeUpperBound: 0 # vCPUs
-            cpuFreeActivationLowerBound: 0.0
-            cpuFreeActivationUpperBound: 1.0
-            # Min-max scaling for gap-fitting based on memory space left (MB).
-            ramEnabled: true
-            ramFreeLowerBound: 4000000 # MB
-            ramFreeUpperBound: 0 # MB
-            ramFreeActivationLowerBound: 0.0
-            ramFreeActivationUpperBound: 1.0
-            # Min-max scaling for gap-fitting based on disk space left. (GB)
-            diskEnabled: false
-            diskFreeLowerBound: 1000 # GB
-            diskFreeUpperBound: 0 # GB
-            diskFreeActivationLowerBound: 0.0
-            diskFreeActivationUpperBound: 1.0
-          dependencies:
-            features:
-              extractors:
-                - host_space_extractor
-                - host_capabilities_extractor # Needed due to the host scope.
-
         # Balance general-purpose vms
         - name: shared_resource_balancing
           # Scope this step to general-purpose vms on VMware hypervisors.
@@ -497,25 +500,25 @@ conf:
                 action: skip
           options:
             # Min-max scaling for resource balancing based on cpu space left (%).
-            cpuEnabled: true
-            cpuFreeLowerBoundPct: 0
-            cpuFreeUpperBoundPct: 100
-            cpuFreeActivationLowerBound: 0.0
-            cpuFreeActivationUpperBound: 1.0
+            cpuEnabled: false
+            cpuUtilizedLowerBoundPct: 0
+            cpuUtilizedUpperBoundPct: 100
+            cpuUtilizedActivationLowerBound: 1.0
+            cpuUtilizedActivationUpperBound: 0.0
             ramEnabled: true
-            ramFreeLowerBoundPct: 0
-            ramFreeUpperBoundPct: 100
-            ramFreeActivationLowerBound: 0.0
-            ramFreeActivationUpperBound: 1.0
+            ramUtilizedLowerBoundPct: 0
+            ramUtilizedUpperBoundPct: 100
+            ramUtilizedActivationLowerBound: 1.0
+            ramUtilizedActivationUpperBound: 0.0
             diskEnabled: false
-            diskFreeLowerBoundPct: 0
-            diskFreeUpperBoundPct: 100
-            diskFreeActivationLowerBound: 0.0
-            diskFreeActivationUpperBound: 1.0
+            diskUtilizedLowerBoundPct: 0
+            diskUtilizedUpperBoundPct: 100
+            diskUtilizedActivationLowerBound: 1.0
+            diskUtilizedActivationUpperBound: 0.0
           dependencies:
             features:
               extractors:
-                - host_space_extractor
+                - host_utilization_extractor
                 - host_capabilities_extractor # Needed due to the host scope.
 
 # Generic modifiers added on the initial creation of this helm chart.

@@ -24,7 +24,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/sapcc/go-bits/must"
 )
@@ -97,7 +96,7 @@ func main() {
 			continue
 		}
 		// Choose all hosts that have enough resources to host the new server.
-		var hosts []httpapi.ExternalSchedulerHost
+		var hosts []api.ExternalSchedulerHost
 		weights := make(map[string]float64)
 		for _, hypervisor := range hypervisors {
 			if hypervisor.MemoryMB-hypervisor.MemoryMBUsed < flavor.RAM {
@@ -109,14 +108,14 @@ func main() {
 			if hypervisor.VCPUs-hypervisor.VCPUsUsed < flavor.VCPUs {
 				continue
 			}
-			hosts = append(hosts, httpapi.ExternalSchedulerHost{
+			hosts = append(hosts, api.ExternalSchedulerHost{
 				ComputeHost:        hypervisor.ServiceHost,
 				HypervisorHostname: hypervisor.Hostname,
 			})
 			weights[hypervisor.ServiceHost] = 1.0
 		}
 
-		request := httpapi.ExternalSchedulerRequest{
+		request := api.ExternalSchedulerRequest{
 			Spec: api.NovaObject[api.NovaSpec]{
 				Data: api.NovaSpec{
 					ProjectID:        server.TenantID,
@@ -148,7 +147,7 @@ func main() {
 		}
 
 		// Send the request to the scheduler.
-		url := "http://localhost:8080/scheduler/nova/external"
+		url := "http://localhost:8003/scheduler/nova/external"
 		requestBody := must.Return(json.Marshal(request))
 		ctx := context.Background()
 		req := must.Return(http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(requestBody)))
@@ -159,7 +158,7 @@ func main() {
 		if respRaw.StatusCode != http.StatusOK {
 			return
 		}
-		var resp httpapi.ExternalSchedulerResponse
+		var resp api.ExternalSchedulerResponse
 		must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
 
 		// Update the datacenter state based on the response.

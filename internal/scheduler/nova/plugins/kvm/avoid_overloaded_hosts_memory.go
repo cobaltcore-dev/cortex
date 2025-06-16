@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -43,7 +42,7 @@ func (o AvoidOverloadedHostsMemoryStepOpts) Validate() error {
 // Step to avoid high cpu hosts by downvoting them.
 type AvoidOverloadedHostsMemoryStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AvoidOverloadedHostsMemoryStepOpts]
+	scheduler.BaseStep[api.ExternalSchedulerRequest, AvoidOverloadedHostsMemoryStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -52,11 +51,11 @@ func (s *AvoidOverloadedHostsMemoryStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg memory active"] = s.PrepareStats(request, "%")
 	result.Statistics["max memory active"] = s.PrepareStats(request, "%")
-	if request.GetVMware() {
+	if request.VMware {
 		// Don't run this step for VMware VMs.
 		return result, nil
 	}
@@ -88,8 +87,8 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 			s.Options.MaxMemoryUsageActivationUpperBound,
 		)
 		result.Activations[host.ComputeHost] = activationAvg + activationMax
-		result.Statistics["avg memory active"].Hosts[host.ComputeHost] = host.AvgMemoryActive
-		result.Statistics["max memory active"].Hosts[host.ComputeHost] = host.MaxMemoryActive
+		result.Statistics["avg memory active"].Subjects[host.ComputeHost] = host.AvgMemoryActive
+		result.Statistics["max memory active"].Subjects[host.ComputeHost] = host.MaxMemoryActive
 	}
 	return result, nil
 }

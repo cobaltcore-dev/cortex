@@ -13,7 +13,7 @@ spec:
   groups:
   - name: cortex-alerts
     rules:
-    - alert: CortexSchedulerDown
+    - alert: CortexNovaSchedulerDown
       expr: |
         up{component="cortex-scheduler-nova"} != 1 or
         absent(up{component="cortex-scheduler-nova"})
@@ -21,9 +21,25 @@ spec:
       labels:
         context: liveness
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
-        {{- if .cortexSchedulerDown }}{{ .cortexSchedulerDown | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexNovaSchedulerDown }}{{ .cortexNovaSchedulerDown | toYaml | nindent 8 }}{{- end }}
       annotations:
-        summary: "Cortex scheduler is down"
+        summary: "Cortex external scheduler for Nova is down"
+        description: >
+          The Cortex scheduler is down. Initial placement requests from Nova will
+          not be served. This is no immediate problem, since Nova will continue
+          placing new VMs. However, the placement will be less desirable.
+
+    - alert: CortexManilaSchedulerDown
+      expr: |
+        up{component="cortex-scheduler-manila"} != 1 or
+        absent(up{component="cortex-scheduler-manila"})
+      for: 1m
+      labels:
+        context: liveness
+        {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
+        {{- if .cortexManilaSchedulerDown }}{{ .cortexManilaSchedulerDown | toYaml | nindent 8 }}{{- end }}
+      annotations:
+        summary: "Cortex external scheduler for Manila is down"
         description: >
           The Cortex scheduler is down. Initial placement requests from Nova will
           not be served. This is no immediate problem, since Nova will continue
@@ -124,7 +140,7 @@ spec:
           that are causing the CPU usage to increase significantly.
 
     - alert: CortexLongSchedulerPipelineRun
-      expr: histogram_quantile(0.99, rate(cortex_scheduler_nova_pipeline_run_duration_seconds_bucket[5m])) > 1
+      expr: histogram_quantile(0.99, rate(cortex_scheduler_pipeline_run_duration_seconds_bucket[5m])) > 1
       for: 5m
       labels:
         context: pipeline

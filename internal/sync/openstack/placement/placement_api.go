@@ -5,6 +5,7 @@ package placement
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	gosync "sync"
 	"time"
@@ -24,6 +25,8 @@ type PlacementAPI interface {
 	GetAllResourceProviders(ctx context.Context) ([]ResourceProvider, error)
 	// Fetch all traits for the given resource providers from the placement API.
 	GetAllTraits(ctx context.Context, providers []ResourceProvider) ([]Trait, error)
+	// Fetch all inventories + usages for the given resource providers from the placement API.
+	GetAllInventoryUsages(ctx context.Context, providers []ResourceProvider) ([]InventoryUsage, error)
 }
 
 // API for OpenStack placement.
@@ -165,6 +168,105 @@ func (api *placementAPI) getTraits(ctx context.Context, provider ResourceProvide
 			ResourceProviderUUID:       provider.UUID,
 			Name:                       trait,
 			ResourceProviderGeneration: provider.ResourceProviderGeneration,
+		})
+	}
+	return results, nil
+}
+
+// Resolve the resource inventories and usages for the given resource providers.
+// This function fetches the data for each resource provider in parallel.
+func (api *placementAPI) GetAllInventoryUsages(ctx context.Context, providers []ResourceProvider) ([]InventoryUsage, error) {
+	label := InventoryUsage{}.TableName()
+	slog.Info("fetching placement data", "label", label)
+	if api.mon.PipelineRequestTimer != nil {
+		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
+	resultMutex := gosync.Mutex{}
+	results := []InventoryUsage{}
+	var wg gosync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Channel to communicate errors from goroutines.
+	errChan := make(chan error, len(providers))
+
+	for _, provider := range providers {
+		wg.Add(1)
+		go func(provider ResourceProvider) {
+			defer wg.Done()
+			// Fetch inventory usages for the provider.
+			newResults, err := api.getInventoryUsages(ctx, provider)
+			if err != nil {
+				errChan <- err
+				cancel()
+				return
+			}
+			resultMutex.Lock()
+			results = append(results, newResults...)
+			resultMutex.Unlock()
+		}(provider)
+		time.Sleep(api.sleepInterval) // Don't overload the API.
+	}
+
+	// Wait for all goroutines to finish and close the error channel.
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+	// Return the first error encountered, if any.
+	for err := range errChan {
+		if err != nil {
+			slog.Error("failed to resolve inventory usages", "error", err)
+			return nil, err
+		}
+	}
+	return results, nil
+}
+
+// Resolve the inventory usages for the given resource provider.
+func (api *placementAPI) getInventoryUsages(ctx context.Context, provider ResourceProvider) ([]InventoryUsage, error) {
+	inventoryResult := resourceproviders.GetInventories(ctx, api.sc, provider.UUID)
+	if inventoryResult.Err != nil {
+		return nil, inventoryResult.Err
+	}
+	inventory, err := inventoryResult.Extract()
+	if err != nil {
+		return nil, err
+	}
+	usageResult := resourceproviders.GetUsages(ctx, api.sc, provider.UUID)
+	if usageResult.Err != nil {
+		return nil, usageResult.Err
+	}
+	usage, err := usageResult.Extract()
+	if err != nil {
+		return nil, err
+	}
+
+	usagesByType := make(map[string]int)
+	for usageType, usage := range usage.Usages {
+		usagesByType[usageType] = usage
+	}
+
+	results := []InventoryUsage{}
+	for inventoryType, inventory := range inventory.Inventories {
+		usage, ok := usagesByType[inventoryType]
+		if !ok {
+			return nil, fmt.Errorf("no usage found for inventory type %s", inventoryType)
+		}
+		results = append(results, InventoryUsage{
+			ResourceProviderUUID:       provider.UUID,
+			ResourceProviderGeneration: provider.ResourceProviderGeneration,
+			InventoryClassName:         inventoryType,
+			AllocationRatio:            inventory.AllocationRatio,
+			MaxUnit:                    inventory.MaxUnit,
+			MinUnit:                    inventory.MinUnit,
+			Reserved:                   inventory.Reserved,
+			StepSize:                   inventory.StepSize,
+			Total:                      inventory.Total,
+			Used:                       usage,
 		})
 	}
 	return results, nil

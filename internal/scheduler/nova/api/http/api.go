@@ -10,10 +10,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 )
 
@@ -23,12 +22,12 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	Pipeline api.Pipeline
+	Pipeline scheduler.Pipeline[api.ExternalSchedulerRequest]
 	config   conf.SchedulerAPIConfig
-	monitor  Monitor
+	monitor  scheduler.APIMonitor
 }
 
-func NewAPI(config conf.SchedulerAPIConfig, pipeline api.Pipeline, m Monitor) HTTPAPI {
+func NewAPI(config conf.SchedulerAPIConfig, pipeline scheduler.Pipeline[api.ExternalSchedulerRequest], m scheduler.APIMonitor) HTTPAPI {
 	return &httpAPI{
 		Pipeline: pipeline,
 		config:   config,
@@ -43,7 +42,7 @@ func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
 
 // Check if the scheduler can run based on the request data.
 // Note: messages returned here are user-facing and should not contain internal details.
-func (httpAPI *httpAPI) canRunScheduler(requestData ExternalSchedulerRequest) (ok bool, reason string) {
+func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest) (ok bool, reason string) {
 	// Check that all hosts have a weight.
 	for _, host := range requestData.Hosts {
 		if _, ok := requestData.Weights[host.ComputeHost]; !ok {
@@ -63,52 +62,18 @@ func (httpAPI *httpAPI) canRunScheduler(requestData ExternalSchedulerRequest) (o
 	return true, ""
 }
 
-// Helper to respond to the request with the given code and error.
-// Also adds monitoring for the time it took to handle the request.
-type httpAPIhelper struct {
-	httpAPI *httpAPI
-	w       http.ResponseWriter
-	r       *http.Request
-	pattern string
-	t       time.Time
-}
-
-func (httpAPI *httpAPI) newHelper(w http.ResponseWriter, r *http.Request, pattern string) httpAPIhelper {
-	return httpAPIhelper{httpAPI: httpAPI, w: w, r: r, pattern: pattern, t: time.Now()}
-}
-
-// Respond to the request with the given code and error.
-// Also log the time it took to handle the request.
-func (h httpAPIhelper) respond(code int, err error, text string) {
-	if h.httpAPI.monitor.apiRequestsTimer != nil {
-		observer := h.httpAPI.monitor.apiRequestsTimer.WithLabelValues(
-			h.r.Method,
-			h.pattern,
-			strconv.Itoa(code),
-			text, // Internal error messages should not face the monitor.
-		)
-		observer.Observe(time.Since(h.t).Seconds())
-	}
-	if err != nil {
-		slog.Error("failed to handle request", "error", err)
-		http.Error(h.w, text, code)
-		return
-	}
-	// If there was no error, nothing else to do.
-}
-
 // Handle the POST request from the Nova scheduler.
 // The request contains a spec of the VM to be scheduled, a list of hosts and
 // their status, and a map of weights that were calculated by the Nova weigher
 // pipeline. Some additional flags are also included.
 // The response contains an ordered list of hosts that the VM should be scheduled on.
 func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
-	h := httpAPI.newHelper(w, r, "/scheduler/nova/external")
+	callback := httpAPI.monitor.Callback(w, r, "/scheduler/nova/external")
 
 	// Exit early if the request method is not POST.
 	if r.Method != http.MethodPost {
 		internalErr := fmt.Errorf("invalid request method: %s", r.Method)
-		h.respond(http.StatusMethodNotAllowed, internalErr, "invalid request method")
+		callback.Respond(http.StatusMethodNotAllowed, internalErr, "invalid request method")
 		return
 	}
 
@@ -119,16 +84,16 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	if httpAPI.config.LogRequestBodies {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			h.respond(http.StatusInternalServerError, err, "failed to read request body")
+			callback.Respond(http.StatusInternalServerError, err, "failed to read request body")
 			return
 		}
 		slog.Info("request body", "body", string(body))
 		r.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
 	}
 
-	var requestData ExternalSchedulerRequest
+	var requestData api.ExternalSchedulerRequest
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		h.respond(http.StatusBadRequest, err, "failed to decode request body")
+		callback.Respond(http.StatusBadRequest, err, "failed to decode request body")
 		return
 	}
 	slog.Info(
@@ -139,21 +104,21 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
-		h.respond(http.StatusBadRequest, internalErr, reason)
+		callback.Respond(http.StatusBadRequest, internalErr, reason)
 		return
 	}
 
 	// Evaluate the pipeline and return the ordered list of hosts.
-	hosts, err := httpAPI.Pipeline.Run(&requestData)
+	hosts, err := httpAPI.Pipeline.Run(requestData)
 	if err != nil {
-		h.respond(http.StatusInternalServerError, err, "failed to evaluate pipeline")
+		callback.Respond(http.StatusInternalServerError, err, "failed to evaluate pipeline")
 		return
 	}
-	response := ExternalSchedulerResponse{Hosts: hosts}
+	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
-		h.respond(http.StatusInternalServerError, err, "failed to encode response")
+		callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
 		return
 	}
-	h.respond(http.StatusOK, nil, "Success")
+	callback.Respond(http.StatusOK, nil, "Success")
 }

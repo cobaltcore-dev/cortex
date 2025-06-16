@@ -1,5 +1,5 @@
 -- Resolve hostsystem names from vROps to Nova compute hosts
-SELECT
+SELECT DISTINCT
     m.hostsystem AS vrops_hostsystem,
     s.os_ext_srv_attr_host AS nova_compute_host
 FROM vrops_vm_metrics m

@@ -88,6 +88,8 @@ type SyncOpenStackConfig struct {
 	Nova SyncOpenStackNovaConfig `json:"nova"`
 	// Configuration for the placement service.
 	Placement SyncOpenStackPlacementConfig `json:"placement"`
+	// Configuration for the manila service.
+	Manila SyncOpenStackManilaConfig `json:"manila"`
 }
 
 // Configuration for the keystone authentication.
@@ -125,6 +127,14 @@ type SyncOpenStackPlacementConfig struct {
 	Types []string `json:"types"`
 }
 
+// Configuration for the manila service.
+type SyncOpenStackManilaConfig struct {
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+	// The types of resources to sync.
+	Types []string `json:"types"`
+}
+
 // Configuration for the sync module.
 type SyncConfig struct {
 	Prometheus SyncPrometheusConfig `json:"prometheus"`
@@ -147,12 +157,17 @@ type ExtractorConfig struct {
 	Plugins []FeatureExtractorConfig `json:"plugins"`
 }
 
-type NovaSchedulerConfig struct {
+type ManilaSchedulerConfig struct {
 	// Scheduler step plugins by their name.
-	Plugins []NovaSchedulerStepConfig `json:"plugins"`
+	Plugins []SchedulerStepConfig `json:"plugins"`
 }
 
-type NovaSchedulerStepConfig struct {
+type NovaSchedulerConfig struct {
+	// Scheduler step plugins by their name.
+	Plugins []SchedulerStepConfig `json:"plugins"`
+}
+
+type SchedulerStepConfig struct {
 	// The name of the step.
 	Name string `json:"name"`
 	// Custom options for the step, as a raw yaml map.
@@ -160,9 +175,12 @@ type NovaSchedulerStepConfig struct {
 	// The dependencies this step needs.
 	DependencyConfig `json:"dependencies,omitempty"`
 	// The validations to use for this step.
-	DisabledValidations NovaSchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
+	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
+
+	// Additional nova configuration for the step.
+
 	// The scope of the step, i.e. which hosts it should be applied to.
-	Scope NovaSchedulerStepScope `json:"scope,omitempty"`
+	Scope *NovaSchedulerStepScope `json:"scope,omitempty"`
 }
 
 // Scope that defines which hosts a scheduler step should be applied to.
@@ -229,16 +247,17 @@ func (s NovaSchedulerStepSpecScope) IsUndefined() bool {
 }
 
 // Config for which validations to disable for a scheduler step.
-type NovaSchedulerStepDisabledValidationsConfig struct {
-	// Whether to validate that no hosts are removed or added from the scheduler
-	// step. This should only be disabled for scheduler steps that remove hosts.
+type SchedulerStepDisabledValidationsConfig struct {
+	// Whether to validate that no subjects are removed or added from the scheduler
+	// step. This should only be disabled for scheduler steps that remove subjects.
 	// Thus, if no value is provided, the default is false.
-	SameHostNumberInOut bool `json:"sameHostNumberInOut,omitempty"`
+	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
 }
 
 // Configuration for the scheduler module.
 type SchedulerConfig struct {
-	Nova NovaSchedulerConfig `json:"nova"`
+	Nova   NovaSchedulerConfig   `json:"nova"`
+	Manila ManilaSchedulerConfig `json:"manila"`
 
 	API SchedulerAPIConfig `json:"api"`
 }

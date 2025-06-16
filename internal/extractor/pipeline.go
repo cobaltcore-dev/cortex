@@ -30,7 +30,8 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	&kvm.NodeExporterHostCPUUsageExtractor{},
 	&kvm.NodeExporterHostMemoryActiveExtractor{},
 	// Shared extractors
-	&shared.HostSpaceExtractor{},
+	&shared.StoragePoolUtilizationExtractor{},
+	&shared.HostUtilizationExtractor{},
 	&shared.HostCapabilitiesExtractor{},
 	&shared.VMHostResidencyExtractor{},
 	&shared.VMLifeSpanHistogramExtractor{},
