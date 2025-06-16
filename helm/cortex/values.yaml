@@ -28,10 +28,7 @@ migrationsJob:
 resources:
   limits:
     cpu: 250m
-    memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 512Mi
+    memory: 1024Mi
 
 # Liveness and readiness probes for the cortex services.
 livenessProbe:
