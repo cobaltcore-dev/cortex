@@ -1,21 +1,32 @@
 SELECT
     h.service_host AS compute_host,
+    -- Total allocatable capacity is calculated as (total) * allocation_ratio.
+    CAST(i_memory_mb.total * i_memory_mb.allocation_ratio AS FLOAT)
+        AS total_memory_allocatable_mb,
+    CAST(i_vcpu.total * i_vcpu.allocation_ratio AS FLOAT)
+        AS total_vcpus_allocatable,
+    CAST(i_disk_gb.total * i_disk_gb.allocation_ratio AS FLOAT)
+        AS total_disk_allocatable_gb,
+    -- Utilization is calculated as (used / capacity) * 100.
     CASE
-        WHEN h.memory_mb IS NULL OR h.memory_mb <= 0 THEN 0
-        WHEN (CAST(h.memory_mb_used AS float) / CAST(h.memory_mb AS float)) * 100 < 0 THEN 0
-        ELSE (CAST(h.memory_mb_used AS float) / CAST(h.memory_mb AS float)) * 100
+        WHEN (i_memory_mb.total * i_memory_mb.allocation_ratio) = 0 THEN 0
+        ELSE (i_memory_mb.used / (i_memory_mb.total * i_memory_mb.allocation_ratio)) * 100
     END AS ram_utilized_pct,
     CASE
-        WHEN h.vcpus IS NULL OR h.vcpus <= 0 THEN 0
-        WHEN (CAST(h.vcpus_used AS float) / CAST(h.vcpus AS float)) * 100 < 0 THEN 0
-        ELSE (CAST(h.vcpus_used AS float) / CAST(h.vcpus AS float)) * 100
+        WHEN (i_vcpu.total * i_vcpu.allocation_ratio) = 0 THEN 0
+        ELSE (i_vcpu.used / (i_vcpu.total * i_vcpu.allocation_ratio)) * 100
     END AS vcpus_utilized_pct,
     CASE
-        WHEN h.local_gb IS NULL OR h.local_gb <= 0 THEN 0
-        WHEN (CAST(h.local_gb_used AS float) / CAST(h.local_gb AS float)) * 100 < 0 THEN 0
-        ELSE (CAST(h.local_gb_used AS float) / CAST(h.local_gb AS float)) * 100
+        WHEN (i_disk_gb.total * i_disk_gb.allocation_ratio) = 0 THEN 0
+        ELSE (i_disk_gb.used / (i_disk_gb.total * i_disk_gb.allocation_ratio)) * 100
     END AS disk_utilized_pct
 FROM openstack_hypervisors AS h
--- Ironic hypervisors will report 0 for memory_mb, local_gb, and vcpus.
--- Therefore it doesn't really make sense to include them here.
-WHERE h.hypervisor_type != 'ironic';
+JOIN openstack_resource_provider_inventory_usages AS i_memory_mb
+    ON h.id = i_memory_mb.resource_provider_uuid
+    AND i_memory_mb.inventory_class_name = 'MEMORY_MB'
+JOIN openstack_resource_provider_inventory_usages AS i_vcpu
+    ON h.id = i_vcpu.resource_provider_uuid
+    AND i_vcpu.inventory_class_name = 'VCPU'
+JOIN openstack_resource_provider_inventory_usages AS i_disk_gb
+    ON h.id = i_disk_gb.resource_provider_uuid
+    AND i_disk_gb.inventory_class_name = 'DISK_GB';

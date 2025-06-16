@@ -110,7 +110,7 @@ func (c *config) Validate() error {
 	// If traits (placement) are specified, the resource providers must be synced as well.
 	if len(c.OpenStack.Placement.Types) > 0 {
 		if !slices.Contains(c.OpenStack.Placement.Types, "resource_providers") {
-			return errors.New("resource_providers must be synced if traits are specified")
+			return errors.New("resource_providers must be synced if dependent models are specified")
 		}
 	}
 	// Check the keystone URL.

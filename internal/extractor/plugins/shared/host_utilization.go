@@ -9,6 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
 )
 
 // Feature that maps how many resources are utilized on a compute host.
@@ -21,6 +22,12 @@ type HostUtilization struct {
 	VCPUsUtilizedPct float64 `db:"vcpus_utilized_pct"`
 	// Disk utilized in pct.
 	DiskUtilizedPct float64 `db:"disk_utilized_pct"`
+	// Total memory allocatable (including overcommit) in MB.
+	TotalMemoryAllocatableMB float64 `db:"total_memory_allocatable_mb"`
+	// Total vCPUs allocatable (including overcommit).
+	TotalVCPUsAllocatable float64 `db:"total_vcpus_allocatable"`
+	// Total disk allocatable (including overcommit) in GB.
+	TotalDiskAllocatableGB float64 `db:"total_disk_allocatable_gb"`
 }
 
 // Table under which the feature is stored.
@@ -56,6 +63,7 @@ func (*HostUtilizationExtractor) GetName() string {
 func (HostUtilizationExtractor) Triggers() []string {
 	return []string{
 		nova.TriggerNovaHypervisorsSynced,
+		placement.TriggerPlacementInventoryUsagesSynced,
 	}
 }
 
