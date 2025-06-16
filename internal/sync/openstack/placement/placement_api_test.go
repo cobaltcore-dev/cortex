@@ -114,3 +114,58 @@ func TestPlacementAPI_GetAllTraits_Error(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func TestPlacementAPI_GetAllInventoryUsages(t *testing.T) {
+	handler := http.NewServeMux()
+
+	handler.HandleFunc("/resource_providers", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(`{"resource_providers": [{"uuid": "1", "name": "rp1", "parent_provider_uuid": "pp1", "root_provider_uuid": "rootp1", "resource_provider_generation": 1}]}`))
+		if err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
+	})
+
+	handler.HandleFunc("/resource_providers/1/inventories", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(`{"inventories": {"VCPU": {"allocation_ratio": 16, "max_unit": 8, "min_unit": 1, "reserved": 0, "step_size": 1, "total": 8}}}`))
+		if err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
+	})
+
+	handler.HandleFunc("/resource_providers/1/usages", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(`{"usages": {"VCPU": 4}}`))
+		if err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
+	})
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	mon := sync.Monitor{}
+	conf := PlacementConf{}
+	k := &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
+
+	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
+	api.Init(t.Context())
+
+	ctx := t.Context()
+	providers := []ResourceProvider{{UUID: "1", Name: "rp1", ResourceProviderGeneration: 1}}
+	invUsages, err := api.GetAllInventoryUsages(ctx, providers)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(invUsages) != 1 {
+		t.Fatalf("expected 1 inventory usage, got %d", len(invUsages))
+	}
+	inv := invUsages[0]
+	if inv.InventoryClassName != "VCPU" || inv.Used != 4 || inv.Total != 8 {
+		t.Errorf("unexpected inventory usage: %+v", inv)
+	}
+}

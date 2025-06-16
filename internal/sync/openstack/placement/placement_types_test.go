@@ -22,3 +22,11 @@ func TestTrait_TableName(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, trait.TableName())
 	}
 }
+
+func TestInventoryUsage_TableName(t *testing.T) {
+	inv := InventoryUsage{}
+	expected := "openstack_resource_provider_inventory_usages"
+	if inv.TableName() != expected {
+		t.Errorf("expected %s, got %s", expected, inv.TableName())
+	}
+}

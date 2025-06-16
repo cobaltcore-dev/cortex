@@ -30,10 +30,10 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 
 	// Insert mock data into the feature_host_utilization table
 	_, err = testDB.Exec(`
-        INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct)
+        INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct, total_memory_allocatable_mb, total_vcpus_allocatable, total_disk_allocatable_gb)
         VALUES
-            ('host1', 0, 0, 0),
-            ('host2',100, 100, 100)
+            ('host1', 0, 0, 0, 1000, 100, 100),
+            ('host2',100, 100, 100, 1000, 100, 100)
     `)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

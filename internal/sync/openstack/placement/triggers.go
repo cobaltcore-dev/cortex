@@ -8,3 +8,6 @@ const TriggerPlacementResourceProvidersSynced = "triggers/sync/openstack/placeme
 
 // Trigger executed when new traits are available.
 const TriggerPlacementTraitsSynced = "triggers/sync/openstack/placement/types/traits"
+
+// Trigger executed when new inventory usages are available.
+const TriggerPlacementInventoryUsagesSynced = "triggers/sync/openstack/placement/types/inventory_usages"

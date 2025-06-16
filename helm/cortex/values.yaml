@@ -205,6 +205,7 @@ conf:
           - resource_providers
           # Needs resource_providers.
           - traits
+          - inventory_usages
       manila:
         # One of admin, public, or internal
         availability: public

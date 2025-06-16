@@ -19,8 +19,8 @@ type HostCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}] // No options passed through yaml config
 
-	hostResourcesLeftPerHost *prometheus.Desc
-	hostResourcesLeftHist    *prometheus.Desc
+	hostResourcesUtilizedPerHost *prometheus.Desc
+	hostResourcesUtilizedHist    *prometheus.Desc
 }
 
 func (HostCapacityKPI) GetName() string {
@@ -31,13 +31,13 @@ func (k *HostCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 	if err := k.BaseKPI.Init(db, opts); err != nil {
 		return err
 	}
-	k.hostResourcesLeftPerHost = prometheus.NewDesc(
+	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
 		[]string{"compute_host_name", "resource"},
 		nil,
 	)
-	k.hostResourcesLeftHist = prometheus.NewDesc(
+	k.hostResourcesUtilizedHist = prometheus.NewDesc(
 		"cortex_host_utilization_pct",
 		"Resources utilized on the hosts currently (aggregated as a histogram).",
 		[]string{"resource"},
@@ -47,8 +47,8 @@ func (k *HostCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 }
 
 func (k *HostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
-	ch <- k.hostResourcesLeftPerHost
-	ch <- k.hostResourcesLeftHist
+	ch <- k.hostResourcesUtilizedPerHost
+	ch <- k.hostResourcesUtilizedHist
 }
 
 func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
@@ -60,21 +60,21 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	for _, hs := range hostUtilization {
 		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesLeftPerHost,
+			k.hostResourcesUtilizedPerHost,
 			prometheus.GaugeValue,
 			hs.VCPUsUtilizedPct,
 			hs.ComputeHost,
 			"cpu",
 		)
 		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesLeftPerHost,
+			k.hostResourcesUtilizedPerHost,
 			prometheus.GaugeValue,
 			hs.RAMUtilizedPct,
 			hs.ComputeHost,
 			"memory",
 		)
 		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesLeftPerHost,
+			k.hostResourcesUtilizedPerHost,
 			prometheus.GaugeValue,
 			hs.DiskUtilizedPct,
 			hs.ComputeHost,
@@ -87,20 +87,20 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	valueFunc := func(hs shared.HostUtilization) float64 { return hs.VCPUsUtilizedPct }
 	hists, counts, sums := tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesLeftHist, counts[key], sums[key], hist, key)
+		ch <- prometheus.MustNewConstHistogram(k.hostResourcesUtilizedHist, counts[key], sums[key], hist, key)
 	}
 	// Histogram for Memory
 	keysFunc = func(hs shared.HostUtilization) []string { return []string{"memory"} }
 	valueFunc = func(hs shared.HostUtilization) float64 { return hs.RAMUtilizedPct }
 	hists, counts, sums = tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesLeftHist, counts[key], sums[key], hist, key)
+		ch <- prometheus.MustNewConstHistogram(k.hostResourcesUtilizedHist, counts[key], sums[key], hist, key)
 	}
 	// Histogram for Disk
 	keysFunc = func(hs shared.HostUtilization) []string { return []string{"disk"} }
 	valueFunc = func(hs shared.HostUtilization) float64 { return hs.DiskUtilizedPct }
 	hists, counts, sums = tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesLeftHist, counts[key], sums[key], hist, key)
+		ch <- prometheus.MustNewConstHistogram(k.hostResourcesUtilizedHist, counts[key], sums[key], hist, key)
 	}
 }
