@@ -120,10 +120,11 @@ const usage = `
   -migrate Run database migrations.
 
   modes:
-  -syncer         Sync data from external datasources into the database.
-  -extractor      Extract knowledge from the synced data and store it in the database.
-  -scheduler-nova Serve Nova scheduling requests with a http API.
-  -kpis           Expose KPIs extracted from the database.
+  -syncer    Sync data from external datasources into the database.
+  -extractor Extract knowledge from the synced data and store it in the database.
+  -scheduler-nova   Serve Nova scheduling requests with a http API.
+  -scheduler-manila Serve Manila scheduling requests with a http API.
+  -kpis      Expose KPIs extracted from the database.
 `
 
 func main() {
