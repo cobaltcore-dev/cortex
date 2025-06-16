@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -34,7 +33,7 @@ func (o AntiAffinityNoisyProjectsStepOpts) Validate() error {
 // Step to avoid noisy projects by downvoting the hosts they are running on.
 type AntiAffinityNoisyProjectsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AntiAffinityNoisyProjectsStepOpts]
+	scheduler.BaseStep[api.ExternalSchedulerRequest, AntiAffinityNoisyProjectsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -43,10 +42,10 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")
-	if !request.GetVMware() {
+	if !request.VMware {
 		// Only run this step for VMware VMs.
 		return result, nil
 	}
@@ -57,7 +56,7 @@ func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.R
 		SELECT * FROM feature_vrops_project_noisiness
 		WHERE project = :project_id
 	`, map[string]any{
-		"project_id": request.GetSpec().Data.ProjectID,
+		"project_id": request.Spec.Data.ProjectID,
 	}); err != nil {
 		return nil, err
 	}
@@ -74,7 +73,7 @@ func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.R
 			s.Options.AvgCPUUsageActivationLowerBound,
 			s.Options.AvgCPUUsageActivationUpperBound,
 		)
-		result.Statistics["avg cpu usage of this project"].Hosts[p.ComputeHost] = p.AvgCPUOfProject
+		result.Statistics["avg cpu usage of this project"].Subjects[p.ComputeHost] = p.AvgCPUOfProject
 	}
 	return result, nil
 }

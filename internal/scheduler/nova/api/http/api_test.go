@@ -16,7 +16,7 @@ import (
 // Mock implementation of Pipeline
 type mockPipeline struct{}
 
-func (m *mockPipeline) Run(request api.Request) ([]string, error) {
+func (m *mockPipeline) Run(request api.ExternalSchedulerRequest) ([]string, error) {
 	return []string{"host1"}, nil
 }
 
@@ -27,13 +27,13 @@ func TestCanRunScheduler(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		request ExternalSchedulerRequest
+		request api.ExternalSchedulerRequest
 		wantOk  bool
 	}{
 		{
 			name: "Missing weight for host",
-			request: ExternalSchedulerRequest{
-				Hosts: []ExternalSchedulerHost{
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{},
@@ -42,8 +42,8 @@ func TestCanRunScheduler(t *testing.T) {
 		},
 		{
 			name: "Weight assigned to unknown host",
-			request: ExternalSchedulerRequest{
-				Hosts: []ExternalSchedulerHost{
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -54,8 +54,8 @@ func TestCanRunScheduler(t *testing.T) {
 		},
 		{
 			name: "Valid request",
-			request: ExternalSchedulerRequest{
-				Hosts: []ExternalSchedulerHost{
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				VMware: true,
@@ -87,21 +87,21 @@ func TestHandler(t *testing.T) {
 	tests := []struct {
 		name           string
 		method         string
-		requestBody    ExternalSchedulerRequest
+		requestBody    api.ExternalSchedulerRequest
 		wantStatusCode int
-		wantResponse   ExternalSchedulerResponse
+		wantResponse   api.ExternalSchedulerResponse
 	}{
 		{
 			name:   "Invalid request method",
 			method: http.MethodGet,
-			requestBody: ExternalSchedulerRequest{
+			requestBody: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						ProjectID:  "project1",
 						NInstances: 1,
 					},
 				},
-				Hosts: []ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -113,14 +113,14 @@ func TestHandler(t *testing.T) {
 		{
 			name:   "Invalid request body",
 			method: http.MethodPost,
-			requestBody: ExternalSchedulerRequest{
+			requestBody: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						ProjectID:  "project1",
 						NInstances: 1,
 					},
 				},
-				Hosts: []ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -132,7 +132,7 @@ func TestHandler(t *testing.T) {
 		{
 			name:   "Valid request",
 			method: http.MethodPost,
-			requestBody: ExternalSchedulerRequest{
+			requestBody: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						ProjectID:  "project1",
@@ -140,7 +140,7 @@ func TestHandler(t *testing.T) {
 					},
 				},
 				VMware: true,
-				Hosts: []ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -148,7 +148,7 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			wantStatusCode: http.StatusOK,
-			wantResponse: ExternalSchedulerResponse{
+			wantResponse: api.ExternalSchedulerResponse{
 				Hosts: []string{"host1"},
 			},
 		},
@@ -176,7 +176,7 @@ func TestHandler(t *testing.T) {
 			}
 
 			if tt.wantStatusCode == http.StatusOK {
-				var gotResponse ExternalSchedulerResponse
+				var gotResponse api.ExternalSchedulerResponse
 				if err := json.NewDecoder(rr.Body).Decode(&gotResponse); err != nil {
 					t.Fatalf("failed to decode response: %v", err)
 				}

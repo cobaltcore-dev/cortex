@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -43,7 +42,7 @@ func (o AvoidOverloadedHostsCPUStepOpts) Validate() error {
 // Step to avoid high cpu hosts by downvoting them.
 type AvoidOverloadedHostsCPUStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AvoidOverloadedHostsCPUStepOpts]
+	scheduler.BaseStep[api.ExternalSchedulerRequest, AvoidOverloadedHostsCPUStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -52,12 +51,12 @@ func (s *AvoidOverloadedHostsCPUStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.Request) (*plugins.StepResult, error) {
+func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu usage"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu usage"] = s.PrepareStats(request, "%")
 
-	if request.GetVMware() {
+	if request.VMware {
 		// Don't run this step for VMware VMs.
 		return result, nil
 	}
@@ -89,8 +88,8 @@ func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.Req
 			s.Options.MaxCPUUsageActivationUpperBound,
 		)
 		result.Activations[host.ComputeHost] = activationAvg + activationMax
-		result.Statistics["avg cpu usage"].Hosts[host.ComputeHost] = host.AvgCPUUsage
-		result.Statistics["max cpu usage"].Hosts[host.ComputeHost] = host.MaxCPUUsage
+		result.Statistics["avg cpu usage"].Subjects[host.ComputeHost] = host.AvgCPUUsage
+		result.Statistics["max cpu usage"].Subjects[host.ComputeHost] = host.MaxCPUUsage
 	}
 	return result, nil
 }

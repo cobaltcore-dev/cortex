@@ -13,7 +13,7 @@ import (
 	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	httpapi "github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api/http"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/schedulerstats"
@@ -59,17 +59,17 @@ func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 	}
 	slog.Info("found storage pools", "count", len(pools))
 
-	var hosts []httpapi.ExternalSchedulerHost
+	var hosts []api.ExternalSchedulerHost
 	weights := make(map[string]float64)
 	for _, pool := range pools {
 		// pool.Name is something like opencloud@alpha#ALPHA_pool
 		// Which is: <host>@<backend>#<pool> in Manila slang.
 		weights[pool.Name] = 1.0
-		hosts = append(hosts, httpapi.ExternalSchedulerHost{
+		hosts = append(hosts, api.ExternalSchedulerHost{
 			ShareHost: pool.Name,
 		})
 	}
-	request := httpapi.ExternalSchedulerRequest{
+	request := api.ExternalSchedulerRequest{
 		Hosts:   hosts,
 		Weights: weights,
 	}
@@ -93,7 +93,7 @@ func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 		)
 		panic("external scheduler API returned non-200 status code")
 	}
-	var resp httpapi.ExternalSchedulerResponse
+	var resp api.ExternalSchedulerResponse
 	must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
 	if len(resp.Hosts) == 0 {
 		panic("no share hosts found in response")
