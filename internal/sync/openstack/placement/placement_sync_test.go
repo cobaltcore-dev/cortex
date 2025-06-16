@@ -131,3 +131,35 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 		t.Fatalf("expected 1 trait, got %d", len(traits))
 	}
 }
+
+func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	mon := sync.Monitor{}
+	pc := &testlibKeystone.MockKeystoneAPI{}
+	conf := PlacementConf{Types: []string{"resource_providers", "traits", "inventory_usages"}}
+
+	syncer := &PlacementSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: conf,
+		API:  NewPlacementAPI(mon, pc, conf),
+	}
+	syncer.API = &mockPlacementAPI{}
+
+	ctx := t.Context()
+	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}
+	invUsages, err := syncer.SyncInventoryUsages(ctx, rps)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(invUsages) != 1 {
+		t.Fatalf("expected 1 inventory usage, got %d", len(invUsages))
+	}
+	if invUsages[0].ResourceProviderUUID != "1" || invUsages[0].InventoryClassName != "vcpu" {
+		t.Fatalf("unexpected inventory usage: %+v", invUsages[0])
+	}
+}
