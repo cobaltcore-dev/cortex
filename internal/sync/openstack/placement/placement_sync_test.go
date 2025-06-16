@@ -26,6 +26,10 @@ func (m *mockPlacementAPI) GetAllTraits(ctx context.Context, rps []ResourceProvi
 	return []Trait{{ResourceProviderUUID: "1", Name: "trait1"}}, nil
 }
 
+func (m *mockPlacementAPI) GetAllInventoryUsages(ctx context.Context, providers []ResourceProvider) ([]InventoryUsage, error) {
+	return []InventoryUsage{{ResourceProviderUUID: "1", InventoryClassName: "vcpu"}}, nil
+}
+
 func TestPlacementSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}

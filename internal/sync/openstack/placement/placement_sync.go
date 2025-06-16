@@ -60,6 +60,12 @@ func (s *PlacementSyncer) Sync(ctx context.Context) error {
 			}
 			go s.MqttClient.Publish(TriggerPlacementTraitsSynced, "")
 		}
+		if slices.Contains(s.Conf.Types, "inventory_usages") {
+			if _, err := s.SyncInventoryUsages(ctx, rps); err != nil {
+				return err
+			}
+			go s.MqttClient.Publish(TriggerPlacementInventoryUsagesSynced, "")
+		}
 	}
 	return nil
 }
@@ -104,4 +110,25 @@ func (s *PlacementSyncer) SyncTraits(ctx context.Context, rps []ResourceProvider
 		counter.Inc()
 	}
 	return traits, err
+}
+
+// Sync the OpenStack resource provider inventories and usages into the database.
+func (s *PlacementSyncer) SyncInventoryUsages(ctx context.Context, rps []ResourceProvider) ([]InventoryUsage, error) {
+	label := InventoryUsage{}.TableName()
+	inventoryUsages, err := s.API.GetAllInventoryUsages(ctx, rps)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.ReplaceAll(s.DB, inventoryUsages...); err != nil {
+		return nil, err
+	}
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(inventoryUsages)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return inventoryUsages, err
 }
