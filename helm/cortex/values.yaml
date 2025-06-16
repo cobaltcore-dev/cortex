@@ -28,7 +28,10 @@ migrationsJob:
 resources:
   limits:
     cpu: 250m
-    memory: 1024Mi
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 512Mi
 
 # Liveness and readiness probes for the cortex services.
 livenessProbe:
@@ -66,6 +69,11 @@ modes:
   # Service that extracts and exposes KPIs.
   - name: kpis
     args: ["kpis"]
+    replicas: 1
+
+   # Service that exposes an API for the visualizer.
+  - name: visualizer-api
+    args: ["visualizer"]
     replicas: 1
 
 # Default sso certificate to use for all services.

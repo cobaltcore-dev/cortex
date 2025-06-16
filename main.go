@@ -26,6 +26,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/visualizer"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -113,6 +114,12 @@ func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, con
 	}
 }
 
+func runVisualizerAPIService(mux *http.ServeMux, db db.DB) {
+	// Initialize the visualizer API and register its endpoints.
+	visualizerAPI := visualizer.NewAPI(db)
+	visualizerAPI.Init(mux)
+}
+
 // Message printed if cortex is started with unknown arguments.
 const usage = `
   commands:
@@ -125,6 +132,8 @@ const usage = `
   -scheduler-nova   Serve Nova scheduling requests with a http API.
   -scheduler-manila Serve Manila scheduling requests with a http API.
   -kpis      Expose KPIs extracted from the database.
+  -visualizer	Run the visualizer API to expose the data in the database.
+
 `
 
 func main() {
@@ -213,6 +222,8 @@ func main() {
 		runSchedulerManila(mux, registry, config.GetSchedulerConfig(), database)
 	case "kpis":
 		runKPIService(registry, config.GetKPIsConfig(), database)
+	case "visualizer":
+		runVisualizerAPIService(mux, database)
 	default:
 		panic("unknown task")
 	}
