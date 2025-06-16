@@ -38,6 +38,9 @@ func (s *PlacementSyncer) Init(ctx context.Context) {
 		if slices.Contains(s.Conf.Types, "traits") {
 			tables = append(tables, s.DB.AddTable(Trait{}))
 		}
+		if slices.Contains(s.Conf.Types, "resource_providers") {
+			tables = append(tables, s.DB.AddTable(InventoryUsage{}))
+		}
 	}
 	if err := s.DB.CreateTable(tables...); err != nil {
 		panic(err)
