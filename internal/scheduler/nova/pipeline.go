@@ -18,7 +18,7 @@ type NovaStep = scheduler.Step[api.ExternalSchedulerRequest]
 
 // Configuration of steps supported by the scheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
-var steps = []NovaStep{
+var supportedSteps = []NovaStep{
 	// VMware-specific steps
 	&vmware.AntiAffinityNoisyProjectsStep{},
 	&vmware.AvoidLongTermContendedHostsStep{},
@@ -58,7 +58,7 @@ func NewPipeline(
 	}
 	topicFinished := "cortex/scheduler/nova/pipeline/finished"
 	return scheduler.NewPipeline(
-		steps, config.Nova.Plugins, wrappers, config,
+		supportedSteps, config.Nova.Plugins, wrappers, config,
 		db, monitor, mqttClient, topicFinished,
 	)
 }
