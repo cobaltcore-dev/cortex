@@ -32,5 +32,9 @@ func (api *API) CapacityHandler(w http.ResponseWriter, r *http.Request) {
 	// TODO
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(hostUtilization)
+	if err := json.NewEncoder(w).Encode(hostUtilization); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
