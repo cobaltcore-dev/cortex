@@ -25,6 +25,8 @@ func (api *API) Init(mux *http.ServeMux) {
 }
 
 func (api *API) CapacityHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
 	var hostUtilization []shared.HostUtilization
 	tableName := shared.HostUtilization{}.TableName()
 	if _, err := api.DB.Select(&hostUtilization, "SELECT * FROM "+tableName); err != nil {
