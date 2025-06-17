@@ -31,6 +31,10 @@ JOIN openstack_resource_provider_inventory_usages AS i_vcpu
 JOIN openstack_resource_provider_inventory_usages AS i_disk_gb
     ON h.id = i_disk_gb.resource_provider_uuid
     AND i_disk_gb.inventory_class_name = 'DISK_GB'
-JOIN openstack_aggregates AS a
-    ON h.service_host = a.compute_host
-    AND a.availability_zone IS NOT NULL;
+JOIN LATERAL (
+    SELECT availability_zone
+    FROM openstack_aggregates a
+    WHERE a.compute_host = h.service_host
+      AND a.availability_zone IS NOT NULL
+    LIMIT 1
+) a ON TRUE;
