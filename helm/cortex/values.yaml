@@ -252,18 +252,16 @@ conf:
                   - servers
       - name: vrops_hostsystem_contention_long_term_extractor
         dependencies:
-          features:
-            extractors:
-              - vrops_hostsystem_resolver
+          extractors:
+            - vrops_hostsystem_resolver
           sync:
             prometheus:
               metrics:
                 - alias: vrops_hostsystem_cpu_contention_long_term_percentage
       - name: vrops_hostsystem_contention_short_term_extractor
         dependencies:
-          features:
-            extractors:
-              - vrops_hostsystem_resolver
+          extractors:
+            - vrops_hostsystem_resolver
           sync:
             prometheus:
               metrics:
@@ -341,30 +339,25 @@ conf:
       # VMware-specific KPIs.
       - name: vmware_host_contention_kpi
         dependencies:
-          features:
-            extractors:
-              - vrops_hostsystem_contention_long_term_extractor
+          extractors:
+            - vrops_hostsystem_contention_long_term_extractor
       - name: vmware_project_noisiness_kpi
         dependencies:
-          features:
-            extractors:
-              - vrops_project_noisiness_extractor
+          extractors:
+            - vrops_project_noisiness_extractor
       # Shared KPIs.
       - name: host_utilization_kpi
         dependencies:
-          features:
-            extractors:
-              - host_utilization_extractor
+          extractors:
+            - host_utilization_extractor
       - name: vm_migration_statistics_kpi
         dependencies:
-          features:
-            extractors:
+          extractors:
               - vm_host_residency_extractor
       - name: vm_life_span_kpi
         dependencies:
-          features:
-            extractors:
-              - vm_life_span_histogram_extractor
+          extractors:
+            - vm_life_span_histogram_extractor
 
   scheduler:
     api:
@@ -391,11 +384,17 @@ conf:
             utilizedActivationLowerBound: 0.0
             utilizedActivationUpperBound: 1.0
           dependencies:
-            features:
-              extractors:
-                - storage_pool_utilization_extractor
+            extractors:
+              - storage_pool_utilization_extractor
 
     nova:
+      # Dependencies needed by all the Nova scheduler steps.
+      dependencies:
+        extractors:
+          # Needed for the step scoper which checks stuff like the hypervisor
+          # type and traits as well as the vm flavor in the request spec.
+          - host_capabilities_extractor
+
       # Configuration of scheduler steps that modify the Nova scheduler weights.
       # Each scheduler step can specify its own dependencies on extractors and
       # synced data.
@@ -414,9 +413,8 @@ conf:
             avgCPUUsageActivationLowerBound: 0.0
             avgCPUUsageActivationUpperBound: -1.0
           dependencies:
-            features:
-              extractors:
-                - vrops_project_noisiness_extractor
+            extractors:
+              - vrops_project_noisiness_extractor
         - name: vmware_avoid_long_term_contended_hosts
           options:
             # Min-max scaling for avg CPU contention on the host.
@@ -430,9 +428,8 @@ conf:
             maxCPUContentionActivationLowerBound: 0.0
             maxCPUContentionActivationUpperBound: -0.25
           dependencies:
-            features:
-              extractors:
-                - vrops_hostsystem_contention_long_term_extractor
+            extractors:
+              - vrops_hostsystem_contention_long_term_extractor
         - name: vmware_avoid_short_term_contended_hosts
           options:
             # Min-max scaling for avg CPU contention on the host.
@@ -446,9 +443,8 @@ conf:
             maxCPUContentionActivationLowerBound: 0.0
             maxCPUContentionActivationUpperBound: -0.25
           dependencies:
-            features:
-              extractors:
-                - vrops_hostsystem_contention_short_term_extractor
+            extractors:
+              - vrops_hostsystem_contention_short_term_extractor
 
         # KVM specific scheduler steps.
         - name: kvm_avoid_overloaded_hosts_cpu
@@ -464,9 +460,8 @@ conf:
             maxCPUUsageActivationLowerBound: 0.0
             maxCPUUsageActivationUpperBound: -0.25
           dependencies:
-            features:
-              extractors:
-                - node_exporter_host_cpu_usage_extractor
+            extractors:
+              - node_exporter_host_cpu_usage_extractor
         - name: kvm_avoid_overloaded_hosts_memory
           options:
             # Min-max scaling for avg memory usage on the host.
@@ -480,9 +475,8 @@ conf:
             maxMemoryUsageActivationLowerBound: 0.0
             maxMemoryUsageActivationUpperBound: -0.25
           dependencies:
-            features:
-              extractors:
-                - node_exporter_host_memory_active_extractor
+            extractors:
+              - node_exporter_host_memory_active_extractor
 
         # Balance general-purpose vms
         - name: shared_resource_balancing
@@ -517,10 +511,8 @@ conf:
             diskUtilizedActivationLowerBound: 1.0
             diskUtilizedActivationUpperBound: 0.0
           dependencies:
-            features:
-              extractors:
-                - host_utilization_extractor
-                - host_capabilities_extractor # Needed due to the host scope.
+            extractors:
+              - host_utilization_extractor
 
 # Generic modifiers added on the initial creation of this helm chart.
 

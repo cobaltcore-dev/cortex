@@ -104,6 +104,10 @@ func (c *config) Validate() error {
 			return err
 		}
 	}
+	// Check general dependencies needed by all scheduler steps.
+	if err := c.Nova.validate(*c); err != nil {
+		return err
+	}
 	if c.API.LogRequestBodies {
 		slog.Warn("logging request bodies is enabled (debug feature)")
 	}

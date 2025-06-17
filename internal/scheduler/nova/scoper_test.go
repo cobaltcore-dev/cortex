@@ -4,6 +4,7 @@
 package nova
 
 import (
+	"errors"
 	"log/slog"
 	"reflect"
 	"testing"
@@ -187,17 +188,9 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 		},
 	}
 
-	result, err := scoper.Run(slog.Default(), request)
-	if err != nil {
+	_, err := scoper.Run(slog.Default(), request)
+	if !errors.Is(err, scheduler.ErrStepSkipped) {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	expected := map[string]float64{
-		"host1": 0.0,
-		"host2": 0.0,
-	}
-	if !reflect.DeepEqual(result.Activations, expected) {
-		t.Errorf("activations = %v, want %v", result.Activations, expected)
 	}
 }
 
