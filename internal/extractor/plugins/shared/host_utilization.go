@@ -16,6 +16,8 @@ import (
 type HostUtilization struct {
 	// Name of the OpenStack compute host.
 	ComputeHost string `db:"compute_host"`
+	// Availability zone of the compute host.
+	AvailabilityZone string `db:"availability_zone"`
 	// RAM utilized in pct.
 	RAMUtilizedPct float64 `db:"ram_utilized_pct"`
 	// CPU utilized in pct.
