@@ -4,10 +4,16 @@
 package scheduler
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+)
+
+var (
+	// This error is returned from the step at any time when the step should be skipped.
+	ErrStepSkipped = errors.New("step skipped")
 )
 
 // Interface to which step options must conform.
