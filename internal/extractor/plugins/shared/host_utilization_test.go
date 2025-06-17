@@ -109,8 +109,9 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 
 	availabilityZone := "zone1"
 	as := []any{
-		&nova.Aggregate{Name: "aggregate1", AvailabilityZone: &availabilityZone, ComputeHost: "host1"},
-		&nova.Aggregate{Name: "aggregate2", AvailabilityZone: &availabilityZone, ComputeHost: "host2"},
+		&nova.Aggregate{Name: availabilityZone, AvailabilityZone: &availabilityZone, ComputeHost: "host1"},
+		&nova.Aggregate{Name: availabilityZone, AvailabilityZone: &availabilityZone, ComputeHost: "host2"},
+		&nova.Aggregate{Name: "no_zone", AvailabilityZone: &availabilityZone, ComputeHost: "host2"},
 	}
 	if err := testDB.Insert(as...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
