@@ -165,6 +165,9 @@ type ManilaSchedulerConfig struct {
 type NovaSchedulerConfig struct {
 	// Scheduler step plugins by their name.
 	Plugins []SchedulerStepConfig `json:"plugins"`
+
+	// Dependencies needed by all the Nova scheduler steps.
+	DependencyConfig `json:"dependencies,omitempty"`
 }
 
 type SchedulerStepConfig struct {

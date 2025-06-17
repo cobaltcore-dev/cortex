@@ -222,3 +222,24 @@ func TestInvalidConf_MissingFeatureForKPI(t *testing.T) {
 		t.Fatalf("expected error, got nil")
 	}
 }
+
+func TestInvalidConf_NovaSchedulerDependency(t *testing.T) {
+	content := `
+{
+  "extractor": {
+    "plugins": [
+      {
+        "name": "extractor_1"
+      }
+    ]
+  },
+  "scheduler": {
+    "nova": { "dependencies": { "extractors": ["extractor_2"] } }
+  }
+}
+`
+	conf := newConfigFromBytes([]byte(content))
+	if err := conf.Validate(); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}

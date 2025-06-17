@@ -4,6 +4,7 @@
 package scheduler
 
 import (
+	"errors"
 	"log/slog"
 	"maps"
 	"math"
@@ -105,11 +106,15 @@ func (p *pipeline[RequestType]) runSteps(log *slog.Logger, request RequestType) 
 				defer wg.Done()
 				log.Info("scheduler: running step", "name", step.GetName())
 				result, err := step.Run(log, request)
-				log.Info("scheduler: finished step", "name", step.GetName())
+				if errors.Is(err, ErrStepSkipped) {
+					log.Info("scheduler: step skipped", "name", step.GetName())
+					return
+				}
 				if err != nil {
 					log.Error("scheduler: failed to run step", "error", err)
 					return
 				}
+				log.Info("scheduler: finished step", "name", step.GetName())
 				lock.Lock()
 				defer lock.Unlock()
 				activationsByStep[step.GetName()] = result.Activations
