@@ -54,24 +54,6 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		downvotedHosts map[string]struct{}
 	}{
 		{
-			name: "Non-vmware vm",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project1",
-					},
-				},
-				VMware: false,
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			},
-			// Should not do anything
-			downvotedHosts: map[string]struct{}{},
-		},
-		{
 			name: "Noisy project",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{

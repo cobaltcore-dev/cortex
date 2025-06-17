@@ -403,97 +403,139 @@ conf:
       # the order will be maintained when the weights are applied to the
       # input Nova weights.
       plugins:
-        # VMware specific scheduler steps.
+        # Avoid co-location of noisy projects on the same host.
+        # This step depends on vrops metrics and is thus only
+        # executed for VMware vms.
         - name: vmware_anti_affinity_noisy_projects
+          scope:
+            specSelectors:
+              - subject: vmware
+                type: bool
+                value: true
+                action: continue
           options:
-            # Min-max scaling for avg CPU usage of the project on a host.
             avgCPUUsageLowerBound: 0 # pct
             avgCPUUsageUpperBound: 10 # pct
             avgCPUUsageActivationLowerBound: 0.0
             avgCPUUsageActivationUpperBound: -1.0
           dependencies:
-            extractors:
-              - vrops_project_noisiness_extractor
-        - name: vmware_avoid_long_term_contended_hosts
-          options:
-            # Min-max scaling for avg CPU contention on the host.
-            avgCPUContentionLowerBound: 0 # pct
-            avgCPUContentionUpperBound: 10 # pct
-            avgCPUContentionActivationLowerBound: 0.0
-            avgCPUContentionActivationUpperBound: -0.75
-            # Min-max scaling for max CPU contention on the host.
-            maxCPUContentionLowerBound: 0 # pct
-            maxCPUContentionUpperBound: 10 # pct
-            maxCPUContentionActivationLowerBound: 0.0
-            maxCPUContentionActivationUpperBound: -0.25
-          dependencies:
-            extractors:
-              - vrops_hostsystem_contention_long_term_extractor
-        - name: vmware_avoid_short_term_contended_hosts
-          options:
-            # Min-max scaling for avg CPU contention on the host.
-            avgCPUContentionLowerBound: 0 # pct
-            avgCPUContentionUpperBound: 10 # pct
-            avgCPUContentionActivationLowerBound: 0.0
-            avgCPUContentionActivationUpperBound: -0.75
-            # Min-max scaling for max CPU contention on the host.
-            maxCPUContentionLowerBound: 0 # pct
-            maxCPUContentionUpperBound: 10 # pct
-            maxCPUContentionActivationLowerBound: 0.0
-            maxCPUContentionActivationUpperBound: -0.25
-          dependencies:
-            extractors:
-              - vrops_hostsystem_contention_short_term_extractor
+            extractors: [vrops_project_noisiness_extractor]
 
-        # KVM specific scheduler steps.
-        - name: kvm_avoid_overloaded_hosts_cpu
+        # Avoid placing vms on hosts with a high CPU contention over a longer
+        # period of time. This step depends on vrops metrics and is thus only
+        # executed for VMware vms.
+        - name: vmware_avoid_long_term_contended_hosts
+          scope:
+            specSelectors:
+              - subject: vmware
+                type: bool
+                value: true
+                action: continue
           options:
-            # Min-max scaling for avg CPU usage on the host.
+            avgCPUContentionLowerBound: 0 # pct
+            avgCPUContentionUpperBound: 10 # pct
+            avgCPUContentionActivationLowerBound: 0.0
+            avgCPUContentionActivationUpperBound: -0.75
+            maxCPUContentionLowerBound: 0 # pct
+            maxCPUContentionUpperBound: 10 # pct
+            maxCPUContentionActivationLowerBound: 0.0
+            maxCPUContentionActivationUpperBound: -0.25
+          dependencies:
+            extractors: [vrops_hostsystem_contention_long_term_extractor]
+
+        # Avoid placing vms on hosts with a high CPU contention over a shorter
+        # period of time. This step depends on vrops metrics and is thus only
+        # executed for VMware vms.
+        - name: vmware_avoid_short_term_contended_hosts
+          scope:
+            specSelectors:
+              - subject: vmware
+                type: bool
+                value: true
+                action: continue
+          options:
+            avgCPUContentionLowerBound: 0 # pct
+            avgCPUContentionUpperBound: 10 # pct
+            avgCPUContentionActivationLowerBound: 0.0
+            avgCPUContentionActivationUpperBound: -0.75
+            maxCPUContentionLowerBound: 0 # pct
+            maxCPUContentionUpperBound: 10 # pct
+            maxCPUContentionActivationLowerBound: 0.0
+            maxCPUContentionActivationUpperBound: -0.25
+          dependencies:
+            extractors: [vrops_hostsystem_contention_short_term_extractor]
+
+        # Avoid placing vms on hosts with a high CPU demand ratio.
+        # This step depends on node exporter metrics and is executed
+        # for non-vmware vms (for vmware we use vrops metrics).
+        - name: kvm_avoid_overloaded_hosts_cpu
+          scope:
+            specSelectors:
+              # Only execute this step for non-vmware vms.
+              - subject: vmware
+                type: bool
+                value: false
+                action: continue
+          options:
             avgCPUUsageLowerBound: 0 # pct
             avgCPUUsageUpperBound: 10 # pct
             avgCPUUsageActivationLowerBound: 0.0
             avgCPUUsageActivationUpperBound: -0.75
-            # Min-max scaling for max CPU usage on the host.
             maxCPUUsageLowerBound: 0 # pct
             maxCPUUsageUpperBound: 10 # pct
             maxCPUUsageActivationLowerBound: 0.0
             maxCPUUsageActivationUpperBound: -0.25
           dependencies:
-            extractors:
-              - node_exporter_host_cpu_usage_extractor
+            extractors: [node_exporter_host_cpu_usage_extractor]
+
+        # Avoid placing vms on hosts with a high memory demand ratio.
+        # This step depends on node exporter metrics and is executed
+        # for non-vmware vms (for vmware we use vrops metrics).
         - name: kvm_avoid_overloaded_hosts_memory
+          scope:
+            specSelectors:
+              - subject: vmware
+                type: bool
+                value: false
+                action: continue
           options:
-            # Min-max scaling for avg memory usage on the host.
             avgMemoryUsageLowerBound: 0 # pct
             avgMemoryUsageUpperBound: 10 # pct
             avgMemoryUsageActivationLowerBound: 0.0
             avgMemoryUsageActivationUpperBound: -0.75
-            # Min-max scaling for max memory usage on the host.
             maxMemoryUsageLowerBound: 0 # pct
             maxMemoryUsageUpperBound: 10 # pct
             maxMemoryUsageActivationLowerBound: 0.0
             maxMemoryUsageActivationUpperBound: -0.25
           dependencies:
-            extractors:
-              - node_exporter_host_memory_active_extractor
+            extractors: [node_exporter_host_memory_active_extractor]
 
-        # Balance general-purpose vms
+        # Balance non-hana vmware vms on non-hana hosts.
+        # This step only depends on openstack data and is thus available for
+        # all vms, regardless of the hypervisor. However, in this configuration
+        # we only execute it for VMware vms.
         - name: shared_resource_balancing
-          # Scope this step to general-purpose vms on VMware hypervisors.
           scope:
             hostSelectors:
-              - subject: hypervisorType
-                contains: "VMware"
-                operation: intersection
+              # Note: due to the vmware spec selector, it is expected that
+              # this step is only executed for VMware hosts. However,
+              # we don't want to balance on HANA exclusive hosts.
               - subject: trait
-                contains: "HANA_EXCLUSIVE"
+                type: infix
+                value: "HANA_EXCLUSIVE"
                 operation: difference
             specSelectors:
+              # Don't balance HANA vms.
               - subject: flavor
-                contains: "hana"
+                type: infix
+                value: "hana"
                 action: skip
+              - subject: vmware
+                type: bool
+                value: true
+                action: continue
           options:
-            # Min-max scaling for resource balancing based on cpu space left (%).
+            # In this configuration, we only consider the memory usage.
             cpuEnabled: false
             cpuUtilizedLowerBoundPct: 0
             cpuUtilizedUpperBoundPct: 100
@@ -510,8 +552,7 @@ conf:
             diskUtilizedActivationLowerBound: 1.0
             diskUtilizedActivationUpperBound: 0.0
           dependencies:
-            extractors:
-              - host_utilization_extractor
+            extractors: [host_utilization_extractor]
 
 # Generic modifiers added on the initial creation of this helm chart.
 
