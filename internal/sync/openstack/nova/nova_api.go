@@ -35,7 +35,7 @@ type NovaAPI interface {
 	// Get all changed nova migrations since the timestamp.
 	GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error)
 	// Get all changed aggregates since the timestamp.
-	GetChangedAggregates(ctx context.Context, changedSince *time.Time) ([]Aggregate, error)
+	GetAllAggregates(ctx context.Context) ([]Aggregate, error)
 }
 
 // API for OpenStack Nova.
@@ -230,9 +230,9 @@ func (api *novaAPI) GetChangedMigrations(ctx context.Context, changedSince *time
 	return migrations, nil
 }
 
-func (api *novaAPI) GetChangedAggregates(ctx context.Context, changedSince *time.Time) ([]Aggregate, error) {
+func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	label := Aggregate{}.TableName()
-	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
+	slog.Info("fetching nova data", "label", label)
 
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {

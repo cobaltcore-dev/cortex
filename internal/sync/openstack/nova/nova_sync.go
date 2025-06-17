@@ -112,7 +112,7 @@ func (s *NovaSyncer) Sync(ctx context.Context) error {
 		}
 	}
 	if slices.Contains(s.Conf.Types, "aggregates") {
-		changedAggregates, err := s.SyncChangesAggregates(ctx)
+		changedAggregates, err := s.SyncAllAggregates(ctx)
 		if err != nil {
 			return err
 		}
@@ -273,14 +273,8 @@ func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, er
 	return changedMigrations, nil
 }
 
-func (s *NovaSyncer) SyncChangesAggregates(ctx context.Context) ([]Aggregate, error) {
-	tableName := Aggregate{}.TableName()
-	lastSyncTime := s.getLastSyncTime(tableName)
-
-	defer s.setLastSyncTime(tableName, time.Now())
-
-	// TODO can't pass timestamp to the nova api, so we just fetch all aggregates.
-	changedAggregates, err := s.API.GetChangedAggregates(ctx, lastSyncTime)
+func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) ([]Aggregate, error) {
+	changedAggregates, err := s.API.GetAllAggregates(ctx)
 	if err != nil {
 		return nil, err
 	}

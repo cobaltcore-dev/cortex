@@ -34,7 +34,7 @@ func (m *mockNovaAPI) GetChangedMigrations(ctx context.Context, t *time.Time) ([
 	return []Migration{{ID: 1}}, nil
 }
 
-func (m *mockNovaAPI) GetChangedAggregates(ctx context.Context, t *time.Time) ([]Aggregate, error) {
+func (m *mockNovaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	return []Aggregate{{Name: "aggregate1"}}, nil
 }
 
@@ -193,7 +193,7 @@ func TestNovaSyncer_SyncAggregates(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	aggregates, err := syncer.SyncChangesAggregates(ctx)
+	aggregates, err := syncer.SyncAllAggregates(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
