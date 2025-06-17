@@ -37,7 +37,7 @@ func (s *StepScoper) Init(db db.DB, opts conf.RawOpts) error {
 
 // Run the step and sRun(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error)
 func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
-	// If the spec is not in scope, reset all activations to the no-effect value.
+	// If the spec is not in scope, skip it.
 	if !s.isSpecInScope(traceLog, request) {
 		return nil, scheduler.ErrStepSkipped
 	}
