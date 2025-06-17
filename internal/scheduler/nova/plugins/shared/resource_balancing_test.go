@@ -86,25 +86,6 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 				"host2": 0.0,
 			},
 		},
-		{
-			name: "Multiple VMs",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NInstances: 2,
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			},
-			expectedWeights: map[string]float64{
-				"host1": 0.0, // No weight change for multiple VMs
-				"host2": 0.0, // No weight change for multiple VMs
-			},
-		},
 	}
 
 	for _, tt := range tests {

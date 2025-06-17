@@ -55,10 +55,6 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 	result := s.PrepareResult(request)
 	result.Statistics["avg memory active"] = s.PrepareStats(request, "%")
 	result.Statistics["max memory active"] = s.PrepareStats(request, "%")
-	if request.VMware {
-		// Don't run this step for VMware VMs.
-		return result, nil
-	}
 
 	var hostMemoryActive []kvm.NodeExporterHostMemoryActive
 	if _, err := s.DB.Select(&hostMemoryActive, `

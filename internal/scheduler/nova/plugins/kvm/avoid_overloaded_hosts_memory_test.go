@@ -77,19 +77,6 @@ func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
 			},
 		},
 		{
-			name: "VMware vm",
-			request: api.ExternalSchedulerRequest{
-				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			},
-			// Should not do anything for VMware VMs
-			downvotedHosts: map[string]struct{}{},
-		},
-		{
 			name: "No overloaded hosts",
 			request: api.ExternalSchedulerRequest{
 				VMware: false,
