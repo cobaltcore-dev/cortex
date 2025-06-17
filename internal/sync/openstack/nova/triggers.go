@@ -14,3 +14,6 @@ const TriggerNovaFlavorsSynced = "triggers/sync/openstack/nova/types/flavors"
 
 // Trigger executed when new migrations are available.
 const TriggerNovaMigrationsSynced = "triggers/sync/openstack/nova/types/migrations"
+
+// Trigger executed when new aggregates are available.
+const TriggerNovaAggregatesSynced = "triggers/sync/openstack/nova/types/aggregates"

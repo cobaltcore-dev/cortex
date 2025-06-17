@@ -64,6 +64,9 @@ func (s *NovaSyncer) Init(ctx context.Context) {
 	if slices.Contains(s.Conf.Types, "migrations") {
 		tables = append(tables, s.DB.AddTable(Migration{}))
 	}
+	if slices.Contains(s.Conf.Types, "aggregates") {
+		tables = append(tables, s.DB.AddTable(Aggregate{}))
+	}
 	if err := s.DB.CreateTable(tables...); err != nil {
 		panic(err)
 	}
@@ -106,6 +109,15 @@ func (s *NovaSyncer) Sync(ctx context.Context) error {
 		}
 		if len(changedMigrations) > 0 {
 			go s.MqttClient.Publish(TriggerNovaMigrationsSynced, "")
+		}
+	}
+	if slices.Contains(s.Conf.Types, "aggregates") {
+		changedAggregates, err := s.SyncChangesAggregates(ctx)
+		if err != nil {
+			return err
+		}
+		if len(changedAggregates) > 0 {
+			go s.MqttClient.Publish(TriggerNovaAggregatesSynced, "")
 		}
 	}
 	return nil
@@ -259,4 +271,22 @@ func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, er
 		return nil, err
 	}
 	return changedMigrations, nil
+}
+
+func (s *NovaSyncer) SyncChangesAggregates(ctx context.Context) ([]Aggregate, error) {
+	tableName := Aggregate{}.TableName()
+	lastSyncTime := s.getLastSyncTime(tableName)
+
+	defer s.setLastSyncTime(tableName, time.Now())
+
+	// TODO can't pass timestamp to the nova api, so we just fetch all aggregates.
+	changedAggregates, err := s.API.GetChangedAggregates(ctx, lastSyncTime)
+	if err != nil {
+		return nil, err
+	}
+	err = db.ReplaceAll(s.DB, changedAggregates...)
+	if err != nil {
+		return nil, err
+	}
+	return changedAggregates, nil
 }

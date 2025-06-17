@@ -34,6 +34,10 @@ func (m *mockNovaAPI) GetChangedMigrations(ctx context.Context, t *time.Time) ([
 	return []Migration{{ID: 1}}, nil
 }
 
+func (m *mockNovaAPI) GetChangedAggregates(ctx context.Context, t *time.Time) ([]Aggregate, error) {
+	return []Aggregate{{Name: "aggregate1"}}, nil
+}
+
 func TestNovaSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
@@ -170,5 +174,30 @@ func TestNovaSyncer_SyncMigrations(t *testing.T) {
 	}
 	if len(migrations) != 1 {
 		t.Fatalf("expected 1 migration, got %d", len(migrations))
+	}
+}
+
+func TestNovaSyncer_SyncAggregates(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	mon := sync.Monitor{}
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: NovaConf{Types: []string{"aggregates"}},
+		API:  &mockNovaAPI{},
+	}
+
+	ctx := t.Context()
+	syncer.Init(ctx)
+	aggregates, err := syncer.SyncChangesAggregates(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(aggregates) != 1 {
+		t.Fatalf("expected 1 aggregate, got %d", len(aggregates))
 	}
 }
