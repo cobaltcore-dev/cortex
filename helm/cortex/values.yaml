@@ -68,11 +68,6 @@ modes:
     args: ["kpis"]
     replicas: 1
 
-   # Service that exposes an API for the visualizer.
-  - name: visualizer-api
-    args: ["visualizer"]
-    replicas: 1
-
 # Default sso certificate to use for all services.
 # The sso certificate values of individual services can be overridden.
 sharedSSOCert: &sharedSSOCert
