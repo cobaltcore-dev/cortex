@@ -37,6 +37,11 @@ func (s *StepScoper) Init(db db.DB, opts conf.RawOpts) error {
 
 // Run the step and sRun(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error)
 func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
+	// If the spec is not in scope, reset all activations to the no-effect value.
+	if !s.isSpecInScope(traceLog, request) {
+		return nil, scheduler.ErrStepSkipped
+	}
+
 	result, err := s.Step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
@@ -63,17 +68,6 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerReq
 		"hosts not in scope", hostsNotInScope,
 		"hosts in scope", hostsInScope,
 	)
-
-	// If the spec is not in scope, reset all activations to the no-effect value.
-	if !s.isSpecInScope(traceLog, request) {
-		for host := range result.Activations {
-			result.Activations[host] = activationFunction.NoEffect()
-		}
-		traceLog.Info(
-			"scheduler: spec not in scope, resetting activations",
-			"step", s.GetName(),
-		)
-	}
 
 	return result, nil
 }
