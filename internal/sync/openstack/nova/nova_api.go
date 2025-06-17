@@ -255,10 +255,11 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	}
 
 	// Parse the json data into our custom model.
-	var data = &struct {
+	type AggregatesPage struct {
 		Aggregate []RawAggregate `json:"aggregates"`
-	}{}
+	}
 
+	data := &AggregatesPage{}
 	if err := pages.(aggregates.AggregatesPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
@@ -283,6 +284,5 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 			})
 		}
 	}
-	slog.Info("converted", "label", label, "count", len(aggregates))
 	return aggregates, nil
 }
