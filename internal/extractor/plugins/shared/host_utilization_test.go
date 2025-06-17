@@ -44,6 +44,7 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 	if err := testDB.CreateTable(
 		testDB.AddTable(nova.Hypervisor{}),
 		testDB.AddTable(placement.InventoryUsage{}),
+		testDB.AddTable(nova.Aggregate{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -106,6 +107,15 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	availabilityZone := "zone1"
+	as := []any{
+		&nova.Aggregate{Name: "aggregate1", AvailabilityZone: &availabilityZone, ComputeHost: "host1"},
+		&nova.Aggregate{Name: "aggregate2", AvailabilityZone: &availabilityZone, ComputeHost: "host2"},
+	}
+	if err := testDB.Insert(as...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
 	extractor := &HostUtilizationExtractor{}
 	config := conf.FeatureExtractorConfig{
 		Name:           "host_utilization_extractor",
@@ -140,6 +150,7 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 			TotalVCPUsAllocatable:    100,
 			DiskUtilizedPct:          50,
 			TotalDiskAllocatableGB:   2000,
+			AvailabilityZone:         availabilityZone,
 		},
 		{
 			ComputeHost:              "host2",
@@ -149,6 +160,7 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 			TotalVCPUsAllocatable:    200,
 			DiskUtilizedPct:          25,
 			TotalDiskAllocatableGB:   4000,
+			AvailabilityZone:         availabilityZone,
 		},
 	}
 
