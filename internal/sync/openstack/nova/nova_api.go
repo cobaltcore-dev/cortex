@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
@@ -33,6 +34,8 @@ type NovaAPI interface {
 	GetChangedFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error)
 	// Get all changed nova migrations since the timestamp.
 	GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error)
+	// Get all changed aggregates since the timestamp.
+	GetAllAggregates(ctx context.Context) ([]Aggregate, error)
 }
 
 // API for OpenStack Nova.
@@ -225,4 +228,61 @@ func (api *novaAPI) GetChangedMigrations(ctx context.Context, changedSince *time
 	}
 	slog.Info("fetched", "label", label, "count", len(migrations))
 	return migrations, nil
+}
+
+func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
+	label := Aggregate{}.TableName()
+	slog.Info("fetching nova data", "label", label)
+
+	pages, err := func() (pagination.Page, error) {
+		if api.mon.PipelineRequestTimer != nil {
+			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+			timer := prometheus.NewTimer(hist)
+			defer timer.ObserveDuration()
+		}
+		return aggregates.List(api.sc).AllPages(ctx)
+	}()
+	if err != nil {
+		return nil, err
+	}
+
+	type RawAggregate struct {
+		UUID             string            `json:"uuid"`
+		Name             string            `json:"name"`
+		AvailabilityZone *string           `json:"availability_zone"`
+		Hosts            []string          `json:"hosts"`
+		Metadata         map[string]string `json:"metadata"`
+	}
+
+	// Parse the json data into our custom model.
+	type AggregatesPage struct {
+		Aggregate []RawAggregate `json:"aggregates"`
+	}
+
+	data := &AggregatesPage{}
+	if err := pages.(aggregates.AggregatesPage).ExtractInto(data); err != nil {
+		return nil, err
+	}
+
+	slog.Info("fetched", "label", label, "count", len(data.Aggregate))
+
+	aggregates := []Aggregate{}
+
+	// Convert RawAggregate to Aggregate
+	for _, rawAggregate := range data.Aggregate {
+		for _, host := range rawAggregate.Hosts {
+			properties, err := json.Marshal(rawAggregate.Metadata)
+			if err != nil {
+				properties = []byte{}
+			}
+			aggregates = append(aggregates, Aggregate{
+				UUID:             rawAggregate.UUID,
+				Name:             rawAggregate.Name,
+				AvailabilityZone: rawAggregate.AvailabilityZone,
+				ComputeHost:      host,
+				Properties:       string(properties),
+			})
+		}
+	}
+	return aggregates, nil
 }

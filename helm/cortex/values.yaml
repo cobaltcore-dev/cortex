@@ -197,6 +197,7 @@ conf:
           - servers
           - flavors
           - migrations
+          - aggregates
       placement:
         # One of admin, public, or internal
         availability: public
