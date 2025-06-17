@@ -58,8 +58,8 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 	if _, err := testDB.Exec(`
 		INSERT INTO openstack_servers (id, flavor_name, created)
 		VALUES
-			('server1', 'flavor1', '2025-01-01T00:00:00Z'),
-			('server2', 'flavor2', '2025-01-02T00:00:00Z')
+			('server1', 'small', '2025-01-01T00:00:00Z'),
+			('server2', 'medium', '2025-01-02T00:00:00Z')
 	`); err != nil {
 		t.Fatalf("failed to insert servers: %v", err)
 	}
