@@ -19,8 +19,7 @@ SELECT
     CASE
         WHEN (i_disk_gb.total * i_disk_gb.allocation_ratio) = 0 THEN 0
         ELSE (i_disk_gb.used / (i_disk_gb.total * i_disk_gb.allocation_ratio)) * 100
-    END AS disk_utilized_pct,
-    a.availability_zone
+    END AS disk_utilized_pct
 FROM openstack_hypervisors AS h
 JOIN openstack_resource_provider_inventory_usages AS i_memory_mb
     ON h.id = i_memory_mb.resource_provider_uuid
@@ -30,12 +29,4 @@ JOIN openstack_resource_provider_inventory_usages AS i_vcpu
     AND i_vcpu.inventory_class_name = 'VCPU'
 JOIN openstack_resource_provider_inventory_usages AS i_disk_gb
     ON h.id = i_disk_gb.resource_provider_uuid
-    AND i_disk_gb.inventory_class_name = 'DISK_GB'
--- There can be multiple entries for the same compute_host in the openstack_aggregates table.
--- So we use DISTINCT to ensure we only get unique compute_host and availability_zone pairs.
-JOIN (
-    SELECT DISTINCT compute_host, availability_zone
-    FROM openstack_aggregates
-    WHERE availability_zone IS NOT NULL
-) AS a
-    ON h.service_host = a.compute_host
+    AND i_disk_gb.inventory_class_name = 'DISK_GB';
