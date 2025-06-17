@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -34,7 +35,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "resource"},
+		[]string{"compute_host_name", "resource", "availability_zone"},
 		nil,
 	)
 	k.hostResourcesUtilizedHist = prometheus.NewDesc(
@@ -52,12 +53,32 @@ func (k *HostUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
-	var hostUtilization []shared.HostUtilization
-	tableName := shared.HostUtilization{}.TableName()
-	if _, err := k.DB.Select(&hostUtilization, "SELECT * FROM "+tableName); err != nil {
-		slog.Error("failed to select host spaces", "err", err)
+
+	type HostUtilizationPerAvailabilityZone struct {
+		shared.HostUtilization
+		AvailabilityZone string `db:"availability_zone"`
+	}
+
+	var hostUtilization []HostUtilizationPerAvailabilityZone
+
+	aggregatesTableName := nova.Aggregate{}.TableName()
+	hostUtilizationTableName := shared.HostUtilization{}.TableName()
+
+	query := `
+		SELECT * FROM ` + hostUtilizationTableName + ` AS f
+		JOIN (
+    		SELECT DISTINCT compute_host, availability_zone
+    		FROM ` + aggregatesTableName + `
+    		WHERE availability_zone IS NOT NULL
+		) AS a
+    	ON f.compute_host = a.compute_host;
+	`
+
+	if _, err := k.DB.Select(&hostUtilization, query); err != nil {
+		slog.Error("failed to select host utilization", "err", err)
 		return
 	}
+
 	for _, hs := range hostUtilization {
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -65,6 +86,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.VCPUsUtilizedPct,
 			hs.ComputeHost,
 			"cpu",
+			hs.AvailabilityZone,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -72,6 +94,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.RAMUtilizedPct,
 			hs.ComputeHost,
 			"memory",
+			hs.AvailabilityZone,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -79,26 +102,27 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.DiskUtilizedPct,
 			hs.ComputeHost,
 			"disk",
+			hs.AvailabilityZone,
 		)
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)
 	// Histogram for CPU
-	keysFunc := func(hs shared.HostUtilization) []string { return []string{"cpu"} }
-	valueFunc := func(hs shared.HostUtilization) float64 { return hs.VCPUsUtilizedPct }
+	keysFunc := func(hs HostUtilizationPerAvailabilityZone) []string { return []string{"cpu"} }
+	valueFunc := func(hs HostUtilizationPerAvailabilityZone) float64 { return hs.VCPUsUtilizedPct }
 	hists, counts, sums := tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourcesUtilizedHist, counts[key], sums[key], hist, key)
 	}
 	// Histogram for Memory
-	keysFunc = func(hs shared.HostUtilization) []string { return []string{"memory"} }
-	valueFunc = func(hs shared.HostUtilization) float64 { return hs.RAMUtilizedPct }
+	keysFunc = func(hs HostUtilizationPerAvailabilityZone) []string { return []string{"memory"} }
+	valueFunc = func(hs HostUtilizationPerAvailabilityZone) float64 { return hs.RAMUtilizedPct }
 	hists, counts, sums = tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourcesUtilizedHist, counts[key], sums[key], hist, key)
 	}
 	// Histogram for Disk
-	keysFunc = func(hs shared.HostUtilization) []string { return []string{"disk"} }
-	valueFunc = func(hs shared.HostUtilization) float64 { return hs.DiskUtilizedPct }
+	keysFunc = func(hs HostUtilizationPerAvailabilityZone) []string { return []string{"disk"} }
+	valueFunc = func(hs HostUtilizationPerAvailabilityZone) float64 { return hs.DiskUtilizedPct }
 	hists, counts, sums = tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.hostResourcesUtilizedHist, counts[key], sums[key], hist, key)
