@@ -15,7 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type HostCapacityKPI struct {
+type HostUtilizationKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}] // No options passed through yaml config
 
@@ -23,11 +23,11 @@ type HostCapacityKPI struct {
 	hostResourcesUtilizedHist    *prometheus.Desc
 }
 
-func (HostCapacityKPI) GetName() string {
+func (HostUtilizationKPI) GetName() string {
 	return "host_utilization_kpi"
 }
 
-func (k *HostCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
+func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	if err := k.BaseKPI.Init(db, opts); err != nil {
 		return err
 	}
@@ -46,12 +46,12 @@ func (k *HostCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 	return nil
 }
 
-func (k *HostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
+func (k *HostUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.hostResourcesUtilizedPerHost
 	ch <- k.hostResourcesUtilizedHist
 }
 
-func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
+func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	var hostUtilization []shared.HostUtilization
 	tableName := shared.HostUtilization{}.TableName()
 	if _, err := k.DB.Select(&hostUtilization, "SELECT * FROM "+tableName); err != nil {

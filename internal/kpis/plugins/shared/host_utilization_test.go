@@ -20,7 +20,7 @@ func TestHostCapacityKPI_Init(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	kpi := &HostCapacityKPI{}
+	kpi := &HostUtilizationKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -48,7 +48,7 @@ func TestHostCapacityKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	kpi := &HostCapacityKPI{}
+	kpi := &HostUtilizationKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
