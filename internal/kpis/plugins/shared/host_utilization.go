@@ -53,7 +53,6 @@ func (k *HostUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
-
 	type HostUtilizationPerAvailabilityZone struct {
 		shared.HostUtilization
 		AvailabilityZone string `db:"availability_zone"`
