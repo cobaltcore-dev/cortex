@@ -56,11 +56,6 @@ func (s *AvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 
-	if !request.VMware {
-		// Only run this step for VMware VMs.
-		return result, nil
-	}
-
 	var highlyContendedHosts []vmware.VROpsHostsystemContentionLongTerm
 	if _, err := s.DB.Select(&highlyContendedHosts, `
 		SELECT * FROM feature_vrops_hostsystem_contention_long_term

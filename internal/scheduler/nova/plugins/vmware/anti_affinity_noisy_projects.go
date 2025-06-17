@@ -45,10 +45,6 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")
-	if !request.VMware {
-		// Only run this step for VMware VMs.
-		return result, nil
-	}
 
 	// Check how noisy the project is on the compute hosts.
 	var projectNoisinessOnHosts []vmware.VROpsProjectNoisiness

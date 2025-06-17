@@ -198,8 +198,10 @@ type NovaSchedulerStepScope struct {
 type NovaSchedulerStepHostSelector struct {
 	// One of: "trait", "hypervisorType"
 	Subject string `json:"subject"`
-	// Infix string that the subject should contain.
-	Infix string `json:"contains,omitempty"`
+	// Selector type, currently only "infix" is supported.
+	Type string `json:"type,omitempty"`
+	// Value of the selector (typed to the given type).
+	Value any `json:"value,omitempty"`
 	// How the selector should be applied:
 	// Let A be the previous set of hosts, and B the scoped hosts.
 	// - "union" means that the scoped hosts are added to the previous set of hosts.
@@ -209,10 +211,12 @@ type NovaSchedulerStepHostSelector struct {
 }
 
 type NovaSchedulerStepSpecSelector struct {
-	// One of: "flavor"
+	// One of: "flavor", "vmware"
 	Subject string `json:"subject"`
-	// Infix string that the subject should contain.
-	Infix string `json:"contains,omitempty"`
+	// Selector type: bool, infix.
+	Type string `json:"type,omitempty"`
+	// Value of the selector (typed to the given type).
+	Value any `json:"value,omitempty"`
 	// What to do if the selector is matched:
 	// - "skip" means that the step is skipped.
 	// - "continue" means that the step is applied.
