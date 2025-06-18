@@ -3761,7 +3761,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (subject, pipeline, step) (rate(cortex_scheduler_pipeline_step_weight_modification[2m]))",
+          "expr": "sum by (pipeline, subject, step) (delta(cortex_scheduler_pipeline_step_weight_modification[2m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
