@@ -1,0 +1,34 @@
+name: Update Helm Image Tag
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-helm-tag:
+    runs-on: ubuntu-latest
+    if: |
+      !contains(github.event.head_commit.message, '[skip ci]')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Get short commit SHA
+        id: vars
+        run: echo "sha=sha-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Update image.tag in values.yaml
+        run: |
+          sed -i 's/^\([ ]*tag:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' helm/cortex/values.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm/cortex/values.yaml
+          git commit -m "Bump cortex image tag in chart to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git push
