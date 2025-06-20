@@ -6,6 +6,7 @@ package shared
 import (
 	"encoding/json"
 	"log/slog"
+	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
@@ -36,7 +37,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model"},
+		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "total"},
 		nil,
 	)
 	k.hostResourcesUtilizedHist = prometheus.NewDesc(
@@ -112,6 +113,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			"cpu",
 			hs.AvailabilityZone,
 			cpuModel,
+			strconv.FormatFloat(hs.TotalVCPUsAllocatable, 'f', 0, 64),
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -121,6 +123,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			"memory",
 			hs.AvailabilityZone,
 			cpuModel,
+			strconv.FormatFloat(hs.TotalMemoryAllocatableMB, 'f', -1, 64)+" MB",
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -130,6 +133,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			"disk",
 			hs.AvailabilityZone,
 			cpuModel,
+			strconv.FormatFloat(hs.TotalDiskAllocatableGB, 'f', -1, 64)+" MB",
 		)
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)
