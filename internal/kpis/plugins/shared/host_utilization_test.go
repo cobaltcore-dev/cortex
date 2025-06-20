@@ -133,6 +133,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		countHosts[computeHostName]++
 	}
 
+	// Since we store cpu, disk and memory utilization for each host we expect 3 metrics per host
 	if countHosts["host1"] != 3 || countHosts["host2"] != 3 {
 		t.Errorf("expected 3 metrics for each host, got %d for host1 and %d for host2", countHosts["host1"], countHosts["host2"])
 	}
