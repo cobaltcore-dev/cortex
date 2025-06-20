@@ -2,7 +2,7 @@ name: Update Helm Image Tag
 
 on:
   workflow_run:
-    workflows: ["Docker Build and Push"] # Replace with the actual workflow name that builds & pushes the Docker image
+    workflows: ["Build and Push Docker Images"]
     types:
       - completed
 
