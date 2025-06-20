@@ -92,7 +92,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, hs := range hostUtilization {
-
 		var cpuInfo CPUInfo
 		cpuModel := ""
 
