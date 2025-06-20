@@ -4,6 +4,7 @@
 package shared
 
 import (
+	"encoding/json"
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
@@ -35,7 +36,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "resource", "availability_zone"},
+		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model"},
 		nil,
 	)
 	k.hostResourcesUtilizedHist = prometheus.NewDesc(
@@ -56,29 +57,54 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostUtilizationPerAvailabilityZone struct {
 		shared.HostUtilization
 		AvailabilityZone string `db:"availability_zone"`
+		CPUInfo          string `db:"cpu_info"` // Hypervisor CPU info
 	}
 
 	var hostUtilization []HostUtilizationPerAvailabilityZone
 
 	aggregatesTableName := nova.Aggregate{}.TableName()
 	hostUtilizationTableName := shared.HostUtilization{}.TableName()
+	hypervisorsTableName := nova.Hypervisor{}.TableName()
 
 	query := `
-		SELECT * FROM ` + hostUtilizationTableName + ` AS f
-		JOIN (
-    		SELECT DISTINCT compute_host, availability_zone
-    		FROM ` + aggregatesTableName + `
-    		WHERE availability_zone IS NOT NULL
-		) AS a
-    	ON f.compute_host = a.compute_host;
-	`
+        SELECT
+            f.*,
+            a.availability_zone,
+            h.cpu_info
+        FROM ` + hostUtilizationTableName + ` AS f
+        JOIN (
+            SELECT DISTINCT compute_host, availability_zone
+            FROM ` + aggregatesTableName + `
+            WHERE availability_zone IS NOT NULL
+        ) AS a
+            ON f.compute_host = a.compute_host
+        JOIN ` + hypervisorsTableName + ` AS h
+            ON f.compute_host = h.service_host;
+    `
 
 	if _, err := k.DB.Select(&hostUtilization, query); err != nil {
 		slog.Error("failed to select host utilization", "err", err)
 		return
 	}
 
+	type CPUInfo struct {
+		Model *string `json:"model,omitempty"`
+	}
+
 	for _, hs := range hostUtilization {
+
+		var cpuInfo CPUInfo
+		cpuModel := ""
+
+		if hs.CPUInfo != "" {
+			err := json.Unmarshal([]byte(hs.CPUInfo), &cpuInfo)
+			// Get the CPU model from the CPU info if available.
+			// If the CPU info is not available or the model is not set, use an empty string.
+			if err == nil && cpuInfo.Model != nil {
+				cpuModel = *cpuInfo.Model
+			}
+		}
+
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
 			prometheus.GaugeValue,
@@ -86,6 +112,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.ComputeHost,
 			"cpu",
 			hs.AvailabilityZone,
+			cpuModel,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -94,6 +121,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.ComputeHost,
 			"memory",
 			hs.AvailabilityZone,
+			cpuModel,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -102,6 +130,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.ComputeHost,
 			"disk",
 			hs.AvailabilityZone,
+			cpuModel,
 		)
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)

@@ -4,6 +4,7 @@
 package shared
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
@@ -13,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 func TestHostUtilizationKPI_Init(t *testing.T) {
@@ -37,27 +39,38 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 	if err := testDB.CreateTable(
 		testDB.AddTable(shared.HostUtilization{}),
 		testDB.AddTable(nova.Aggregate{}),
+		testDB.AddTable(nova.Hypervisor{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the host space table
-	hs := []any{
-		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50, VCPUsUtilizedPct: 50, DiskUtilizedPct: 50, TotalMemoryAllocatableMB: 1000, TotalVCPUsAllocatable: 100, TotalDiskAllocatableGB: 100},
-		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 80, VCPUsUtilizedPct: 75, DiskUtilizedPct: 80, TotalMemoryAllocatableMB: 1000, TotalVCPUsAllocatable: 100, TotalDiskAllocatableGB: 100},
+	// Insert mock data into the hypervisor table
+	hypervisors := []any{
+		&nova.Hypervisor{ID: "1", ServiceHost: "host1", CPUInfo: `{"model": "Test CPU Model"}`},
+		&nova.Hypervisor{ID: "2", ServiceHost: "host2", CPUInfo: `{}`},
 	}
-	if err := testDB.Insert(hs...); err != nil {
+	if err := testDB.Insert(hypervisors...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	// Insert mock data into the host space table
+	hostUtilizations := []any{
+		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50, VCPUsUtilizedPct: 50, DiskUtilizedPct: 50, TotalMemoryAllocatableMB: 1000, TotalVCPUsAllocatable: 100, TotalDiskAllocatableGB: 100},
+		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 80, VCPUsUtilizedPct: 75, DiskUtilizedPct: 80, TotalMemoryAllocatableMB: 1000, TotalVCPUsAllocatable: 100, TotalDiskAllocatableGB: 100},
+	}
+	if err := testDB.Insert(hostUtilizations...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert mock data into the aggregates table
 	availabilityZone1 := "zone1"
 	availabilityZone2 := "zone2"
-	as := []any{
+	aggregates := []any{
 		&nova.Aggregate{Name: "zone1", AvailabilityZone: &availabilityZone1, ComputeHost: "host1"},
 		&nova.Aggregate{Name: "zone2", AvailabilityZone: &availabilityZone2, ComputeHost: "host2"},
 		&nova.Aggregate{Name: "something-else", AvailabilityZone: &availabilityZone2, ComputeHost: "host2"},
 	}
-	if err := testDB.Insert(as...); err != nil {
+	if err := testDB.Insert(aggregates...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -71,8 +84,57 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 	close(ch)
 
 	metricsCount := 0
-	for range ch {
+
+	// Used to track the number of metrics related to each host
+	// (ignoring the histogram metric)
+	countHosts := make(map[string]int)
+
+	countHosts["host1"] = 0
+	countHosts["host2"] = 0
+
+	for metric := range ch {
 		metricsCount++
+
+		desc := metric.Desc()
+		metricName := desc.String()
+
+		// We check if the join of the tables used for the KPI works correctly
+		// That is why we skip metrics that are not related to the host utilization KPI (e.g. the histogram metric)
+		if !strings.Contains(metricName, "cortex_host_utilization_per_host_pct") {
+			continue
+		}
+
+		var m prometheusgo.Metric
+		if err := metric.Write(&m); err != nil {
+			t.Fatalf("failed to write metric: %v", err)
+		}
+
+		labels := make(map[string]string)
+		for _, label := range m.Label {
+			labels[label.GetName()] = label.GetValue()
+		}
+
+		cpuModel := labels["cpu_model"]
+		availabilityZone := labels["availability_zone"]
+		computeHostName := labels["compute_host_name"]
+
+		switch computeHostName {
+		case "host1":
+			if cpuModel != "Test CPU Model" || availabilityZone != "zone1" {
+				t.Errorf("expected host1 to have CPU model 'Test CPU Model' and availability zone 'zone1', got CPU model '%s' and availability zone '%s'", cpuModel, availabilityZone)
+			}
+		case "host2":
+			if cpuModel != "" || availabilityZone != "zone2" {
+				t.Errorf("expected host2 to have empty CPU model and availability zone 'zone2', got CPU model '%s' and availability zone '%s'", cpuModel, availabilityZone)
+			}
+		default:
+			t.Errorf("unexpected compute host name: %s", computeHostName)
+		}
+		countHosts[computeHostName]++
+	}
+
+	if countHosts["host1"] != 3 || countHosts["host2"] != 3 {
+		t.Errorf("expected 3 metrics for each host, got %d for host1 and %d for host2", countHosts["host1"], countHosts["host2"])
 	}
 
 	if metricsCount == 0 {
