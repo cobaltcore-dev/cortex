@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -91,6 +91,14 @@
           "interval": "",
           "legendFormat": "{{service}}",
           "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum by (service) (go_memstats_alloc_bytes{pod=\"cortex-postgresql-0\"} / 1_000_000)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{service}}",
+          "refId": "B"
         }
       ],
       "thresholds": [
@@ -215,6 +223,14 @@
           "intervalFactor": 1,
           "legendFormat": "{{service}}",
           "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum by (service) (rate(process_cpu_seconds_total{pod=\"cortex-postgresql-0\"}[2m]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{service}}",
+          "refId": "B"
         }
       ],
       "thresholds": [
@@ -517,7 +533,7 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},

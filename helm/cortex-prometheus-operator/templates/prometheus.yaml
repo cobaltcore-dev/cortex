@@ -10,7 +10,7 @@ spec:
   serviceMonitorNamespaceSelector: {}
   serviceMonitorSelector:
     matchLabels:
-      name: cortex-prometheus
+      app: cortex
   podMonitorSelector: {}
   enableAdminAPI: true
   resources:
