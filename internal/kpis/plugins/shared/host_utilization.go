@@ -123,7 +123,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			"memory",
 			hs.AvailabilityZone,
 			cpuModel,
-			strconv.FormatFloat(hs.TotalMemoryAllocatableMB, 'f', -1, 64)+" MB",
+			strconv.FormatFloat(hs.TotalMemoryAllocatableMB, 'f', -1, 64),
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -133,7 +133,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			"disk",
 			hs.AvailabilityZone,
 			cpuModel,
-			strconv.FormatFloat(hs.TotalDiskAllocatableGB, 'f', -1, 64)+" MB",
+			strconv.FormatFloat(hs.TotalDiskAllocatableGB, 'f', -1, 64),
 		)
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)
