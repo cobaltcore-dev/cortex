@@ -1,15 +1,16 @@
 name: Update Helm Image Tag
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["Docker Build and Push"] # Replace with the actual workflow name that builds & pushes the Docker image
+    types:
+      - completed
 
 jobs:
   update-helm-tag:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
-    if: |
-      !contains(github.event.head_commit.message, '[skip ci]')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
