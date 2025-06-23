@@ -103,6 +103,7 @@ conf:
     url: "tcp://cortex-mqtt:1883"
     username: "cortex"
     password: "secret"
+    # Configure how Cortex should handle lost connections to the MQTT broker.
     reconnect:
       maxRetries: 20
       retryIntervalSeconds: 1
