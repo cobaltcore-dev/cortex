@@ -87,10 +87,10 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 
 	// Used to track the number of metrics related to each host
 	// (ignoring the histogram metric)
-	countHosts := make(map[string]int)
+	metricsHost := make(map[string][]string)
 
-	countHosts["host1"] = 0
-	countHosts["host2"] = 0
+	metricsHost["host1"] = make([]string, 0)
+	metricsHost["host2"] = make([]string, 0)
 
 	for metric := range ch {
 		metricsCount++
@@ -130,12 +130,21 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		default:
 			t.Errorf("unexpected compute host name: %s", computeHostName)
 		}
-		countHosts[computeHostName]++
+		metricsHost[computeHostName] = append(metricsHost[computeHostName], labels["resource"])
 	}
 
-	// Since we store cpu, disk and memory utilization for each host we expect 3 metrics per host
-	if countHosts["host1"] != 3 || countHosts["host2"] != 3 {
-		t.Errorf("expected 3 metrics for each host, got %d for host1 and %d for host2", countHosts["host1"], countHosts["host2"])
+	for host, resources := range metricsHost {
+		// Since we store cpu, disk and memory utilization for each host we expect 3 metrics per host
+		if len(resources) != 3 {
+			t.Errorf("expected 3 metrics for host %s, got %d", host, len(resources))
+		}
+		joinedResources := strings.Join(resources, ", ")
+
+		if !strings.Contains(joinedResources, "memory") ||
+			!strings.Contains(joinedResources, "disk") ||
+			!strings.Contains(joinedResources, "cpu") {
+			t.Errorf("expected resources for host %s to include memory, disk, and cpu, got %s", host, joinedResources)
+		}
 	}
 
 	if metricsCount == 0 {
