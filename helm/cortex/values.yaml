@@ -13,7 +13,7 @@ owner-info:
 image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
-  # Overrides the image tag whose default is the chart appVersion.xyz
+  # Overrides the image tag whose default is the chart appVersion.
   tag: "sha-e535ec6"
 
 migrationsJob:
