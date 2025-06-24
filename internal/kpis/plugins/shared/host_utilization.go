@@ -37,7 +37,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "total"},
+		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "total", "running_vms"},
 		nil,
 	)
 	k.hostResourcesUtilizedHist = prometheus.NewDesc(
@@ -58,7 +58,8 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostUtilizationPerAvailabilityZone struct {
 		shared.HostUtilization
 		AvailabilityZone string `db:"availability_zone"`
-		CPUInfo          string `db:"cpu_info"` // Hypervisor CPU info
+		CPUInfo          string `db:"cpu_info"`    // Hypervisor CPU info
+		RunningVMs       int    `db:"running_vms"` // Number of running VMs on the host
 	}
 
 	var hostUtilization []HostUtilizationPerAvailabilityZone
@@ -71,7 +72,8 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
         SELECT
             f.*,
             a.availability_zone,
-            h.cpu_info
+            h.cpu_info,
+			h.running_vms
         FROM ` + hostUtilizationTableName + ` AS f
         JOIN (
             SELECT DISTINCT compute_host, availability_zone
@@ -114,6 +116,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.AvailabilityZone,
 			cpuModel,
 			strconv.FormatFloat(hs.TotalVCPUsAllocatable, 'f', 0, 64),
+			strconv.Itoa(hs.RunningVMs),
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -124,6 +127,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.AvailabilityZone,
 			cpuModel,
 			strconv.FormatFloat(hs.TotalMemoryAllocatableMB, 'f', -1, 64),
+			strconv.Itoa(hs.RunningVMs),
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -134,6 +138,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.AvailabilityZone,
 			cpuModel,
 			strconv.FormatFloat(hs.TotalDiskAllocatableGB, 'f', -1, 64),
+			strconv.Itoa(hs.RunningVMs),
 		)
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)

@@ -46,8 +46,8 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 
 	// Insert mock data into the hypervisor table
 	hypervisors := []any{
-		&nova.Hypervisor{ID: "1", ServiceHost: "host1", CPUInfo: `{"model": "Test CPU Model"}`},
-		&nova.Hypervisor{ID: "2", ServiceHost: "host2", CPUInfo: `{}`},
+		&nova.Hypervisor{ID: "1", ServiceHost: "host1", CPUInfo: `{"model": "Test CPU Model"}`, RunningVMs: 10},
+		&nova.Hypervisor{ID: "2", ServiceHost: "host2", CPUInfo: `{}`, RunningVMs: 5},
 	}
 	if err := testDB.Insert(hypervisors...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -117,14 +117,15 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		cpuModel := labels["cpu_model"]
 		availabilityZone := labels["availability_zone"]
 		computeHostName := labels["compute_host_name"]
+		runningVMs := labels["running_vms"]
 
 		switch computeHostName {
 		case "host1":
-			if cpuModel != "Test CPU Model" || availabilityZone != "zone1" {
+			if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || runningVMs != "10" {
 				t.Errorf("expected host1 to have CPU model 'Test CPU Model' and availability zone 'zone1', got CPU model '%s' and availability zone '%s'", cpuModel, availabilityZone)
 			}
 		case "host2":
-			if cpuModel != "" || availabilityZone != "zone2" {
+			if cpuModel != "" || availabilityZone != "zone2" || runningVMs != "5" {
 				t.Errorf("expected host2 to have empty CPU model and availability zone 'zone2', got CPU model '%s' and availability zone '%s'", cpuModel, availabilityZone)
 			}
 		default:
