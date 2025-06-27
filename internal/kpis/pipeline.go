@@ -22,6 +22,7 @@ var SupportedKPIs = []plugins.KPI{
 	&vmware.VMwareProjectNoisinessKPI{},
 	// Shared kpis.
 	&shared.HostUtilizationKPI{},
+	&shared.HostTotalCapacityKPI{},
 	&shared.VMMigrationStatisticsKPI{},
 	&shared.VMLifeSpanKPI{},
 }
