@@ -73,7 +73,6 @@ func (k *HostTotalCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, hs := range hostTotalCapacity {
-
 		ch <- prometheus.MustNewConstMetric(
 			k.hostTotalCapacityPerHost,
 			prometheus.GaugeValue,
@@ -99,5 +98,4 @@ func (k *HostTotalCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.AvailabilityZone,
 		)
 	}
-
 }
