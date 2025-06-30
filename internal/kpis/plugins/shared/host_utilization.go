@@ -71,28 +71,27 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	hypervisorsTableName := nova.Hypervisor{}.TableName()
 
 	query := `
-        SELECT
-            f.*,
-            a.availability_zone,
-            h.cpu_info,
+		SELECT
+			f.*,
+			a.availability_zone,
+			h.cpu_info,
 			h.running_vms,
 			CASE
-                WHEN fhc.traits LIKE '%HANA_EXCLUSIVE%' THEN TRUE
-                ELSE FALSE
-            END AS hana_exclusive
-        FROM ` + hostUtilizationTableName + ` AS f
-        JOIN (
-            SELECT DISTINCT compute_host, availability_zone
-            FROM ` + aggregatesTableName + `
-            WHERE availability_zone IS NOT NULL
-        ) AS a
-            ON f.compute_host = a.compute_host
-        JOIN ` + hypervisorsTableName + ` AS h
-            ON f.compute_host = h.service_host
+				WHEN fhc.traits LIKE '%HANA_EXCLUSIVE%' THEN TRUE
+				ELSE FALSE
+			END AS hana_exclusive
+		FROM ` + hostUtilizationTableName + ` AS f
+		JOIN (
+			SELECT DISTINCT compute_host, availability_zone
+			FROM ` + aggregatesTableName + `
+			WHERE availability_zone IS NOT NULL
+		) AS a
+			ON f.compute_host = a.compute_host
+		JOIN ` + hypervisorsTableName + ` AS h
+			ON f.compute_host = h.service_host
 		LEFT JOIN ` + hostCapabilitiesTableName + ` AS fhc
-            ON f.compute_host = fhc.compute_host;
+			ON f.compute_host = fhc.compute_host;
     `
-	slog.Debug("executing host utilization query", "query", query)
 
 	if _, err := k.DB.Select(&hostUtilization, query); err != nil {
 		slog.Error("failed to select host utilization", "err", err)
