@@ -87,6 +87,9 @@ conf:
     # The log format to use (json, text).
     format: text
 
+  # E2E tests to run when executed with -checks flag.
+  checks: ["nova", "manila"]
+
   # Configuration of metrics exported to the /metrics endpoint.
   monitoring:
     # The port to expose the metrics on.

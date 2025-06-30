@@ -35,6 +35,12 @@ type DBReconnectConfig struct {
 	MaxRetries int `json:"maxRetries"`
 }
 
+// Config for e2e tests.
+type ChecksConfig struct {
+	// The checks to run, in this particular order.
+	Checks []string `json:"checks"`
+}
+
 // Database configuration.
 type DBConfig struct {
 	Host      string            `json:"host"`
@@ -327,6 +333,7 @@ type APIConfig struct {
 
 // Configuration for the cortex service.
 type Config interface {
+	GetChecksConfig() ChecksConfig
 	GetLoggingConfig() LoggingConfig
 	GetDBConfig() DBConfig
 	GetSyncConfig() SyncConfig
@@ -341,6 +348,7 @@ type Config interface {
 }
 
 type config struct {
+	ChecksConfig     `json:"checks"`
 	LoggingConfig    `json:"logging"`
 	DBConfig         `json:"db"`
 	SyncConfig       `json:"sync"`
@@ -380,6 +388,7 @@ func newConfigFromBytes(bytes []byte) Config {
 	return &c
 }
 
+func (c *config) GetChecksConfig() ChecksConfig         { return c.ChecksConfig }
 func (c *config) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
 func (c *config) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
