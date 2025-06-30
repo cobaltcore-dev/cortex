@@ -20,7 +20,7 @@ var checks = map[string]func(context.Context, conf.Config){
 // Run all checks.
 func RunChecks(ctx context.Context, config conf.Config) {
 	logSeparator := "----------------------------------------"
-	for _, name := range config.GetChecksConfig().Checks {
+	for _, name := range config.GetChecks() {
 		slog.Info(logSeparator)
 		slog.Info("running check", "name", name)
 		checks[name](ctx, config)
