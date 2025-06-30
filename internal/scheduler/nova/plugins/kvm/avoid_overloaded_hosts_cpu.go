@@ -56,13 +56,9 @@ func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.Ext
 	result.Statistics["avg cpu usage"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu usage"] = s.PrepareStats(request, "%")
 
-	if request.VMware {
-		// Don't run this step for VMware VMs.
-		return result, nil
-	}
-
 	var hostCPUUsages []kvm.NodeExporterHostCPUUsage
-	if _, err := s.DB.Select(&hostCPUUsages, `
+	group := "scheduler-nova"
+	if _, err := s.DB.SelectTimed(group, &hostCPUUsages, `
 		SELECT * FROM feature_host_cpu_usage
 	`); err != nil {
 		return nil, err

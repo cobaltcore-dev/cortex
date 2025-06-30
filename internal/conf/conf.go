@@ -165,6 +165,9 @@ type ManilaSchedulerConfig struct {
 type NovaSchedulerConfig struct {
 	// Scheduler step plugins by their name.
 	Plugins []SchedulerStepConfig `json:"plugins"`
+
+	// Dependencies needed by all the Nova scheduler steps.
+	DependencyConfig `json:"dependencies,omitempty"`
 }
 
 type SchedulerStepConfig struct {
@@ -195,8 +198,10 @@ type NovaSchedulerStepScope struct {
 type NovaSchedulerStepHostSelector struct {
 	// One of: "trait", "hypervisorType"
 	Subject string `json:"subject"`
-	// Infix string that the subject should contain.
-	Infix string `json:"contains,omitempty"`
+	// Selector type, currently only "infix" is supported.
+	Type string `json:"type,omitempty"`
+	// Value of the selector (typed to the given type).
+	Value any `json:"value,omitempty"`
 	// How the selector should be applied:
 	// Let A be the previous set of hosts, and B the scoped hosts.
 	// - "union" means that the scoped hosts are added to the previous set of hosts.
@@ -206,10 +211,12 @@ type NovaSchedulerStepHostSelector struct {
 }
 
 type NovaSchedulerStepSpecSelector struct {
-	// One of: "flavor"
+	// One of: "flavor", "vmware"
 	Subject string `json:"subject"`
-	// Infix string that the subject should contain.
-	Infix string `json:"contains,omitempty"`
+	// Selector type: bool, infix.
+	Type string `json:"type,omitempty"`
+	// Value of the selector (typed to the given type).
+	Value any `json:"value,omitempty"`
 	// What to do if the selector is matched:
 	// - "skip" means that the step is skipped.
 	// - "continue" means that the step is applied.
@@ -320,6 +327,7 @@ type APIConfig struct {
 
 // Configuration for the cortex service.
 type Config interface {
+	GetChecks() []string
 	GetLoggingConfig() LoggingConfig
 	GetDBConfig() DBConfig
 	GetSyncConfig() SyncConfig
@@ -334,6 +342,9 @@ type Config interface {
 }
 
 type config struct {
+	// The checks to run, in this particular order.
+	Checks []string `json:"checks"`
+
 	LoggingConfig    `json:"logging"`
 	DBConfig         `json:"db"`
 	SyncConfig       `json:"sync"`
@@ -373,6 +384,7 @@ func newConfigFromBytes(bytes []byte) Config {
 	return &c
 }
 
+func (c *config) GetChecks() []string                   { return c.Checks }
 func (c *config) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
 func (c *config) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }

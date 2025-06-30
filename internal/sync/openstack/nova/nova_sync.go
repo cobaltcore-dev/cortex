@@ -64,6 +64,9 @@ func (s *NovaSyncer) Init(ctx context.Context) {
 	if slices.Contains(s.Conf.Types, "migrations") {
 		tables = append(tables, s.DB.AddTable(Migration{}))
 	}
+	if slices.Contains(s.Conf.Types, "aggregates") {
+		tables = append(tables, s.DB.AddTable(Aggregate{}))
+	}
 	if err := s.DB.CreateTable(tables...); err != nil {
 		panic(err)
 	}
@@ -106,6 +109,15 @@ func (s *NovaSyncer) Sync(ctx context.Context) error {
 		}
 		if len(changedMigrations) > 0 {
 			go s.MqttClient.Publish(TriggerNovaMigrationsSynced, "")
+		}
+	}
+	if slices.Contains(s.Conf.Types, "aggregates") {
+		changedAggregates, err := s.SyncAllAggregates(ctx)
+		if err != nil {
+			return err
+		}
+		if len(changedAggregates) > 0 {
+			go s.MqttClient.Publish(TriggerNovaAggregatesSynced, "")
 		}
 	}
 	return nil
@@ -259,4 +271,16 @@ func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, er
 		return nil, err
 	}
 	return changedMigrations, nil
+}
+
+func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) ([]Aggregate, error) {
+	changedAggregates, err := s.API.GetAllAggregates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = db.ReplaceAll(s.DB, changedAggregates...)
+	if err != nil {
+		return nil, err
+	}
+	return changedAggregates, nil
 }

@@ -4,10 +4,11 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: cortex-prometheus
+  name: cortex-core-services
   labels:
-    name: cortex-prometheus
+    name: cortex-core-services
     prometheus: openstack
+    app: cortex
 spec:
   selector:
     matchLabels:
@@ -19,3 +20,21 @@ spec:
     - component
   endpoints:
     - port: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cortex-postgres
+  labels:
+    name: cortex-postgres
+    prometheus: openstack
+    app: cortex
+spec:
+  selector:
+    matchLabels:
+      # Select the postgres service.
+      app.kubernetes.io/instance: cortex-postgres
+  namespaceSelector:
+    any: true
+  endpoints:
+    - port: http-metrics

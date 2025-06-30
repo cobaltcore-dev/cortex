@@ -124,7 +124,6 @@ type NovaRequestContext struct {
 	IsAdmin         bool     `json:"is_admin"`
 	ReadOnly        bool     `json:"read_only"`
 	ShowDeleted     bool     `json:"show_deleted"`
-	AuthToken       string   `json:"auth_token"`
 	RequestID       string   `json:"request_id"`
 	GlobalRequestID string   `json:"global_request_id"`
 	ResourceUUID    string   `json:"resource_uuid"`

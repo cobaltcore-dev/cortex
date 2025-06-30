@@ -4,6 +4,7 @@
 package nova
 
 import (
+	"errors"
 	"log/slog"
 	"reflect"
 	"testing"
@@ -63,7 +64,8 @@ func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 		Scope: conf.NovaSchedulerStepScope{
 			HostSelectors: []conf.NovaSchedulerStepHostSelector{{
 				Subject:   "trait",
-				Infix:     "TRAIT_A",
+				Type:      "infix",
+				Value:     "TRAIT_A",
 				Operation: "intersection",
 			}},
 		},
@@ -114,7 +116,8 @@ func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 		Scope: conf.NovaSchedulerStepScope{
 			HostSelectors: []conf.NovaSchedulerStepHostSelector{{
 				Subject:   "hypervisortype",
-				Infix:     "xen",
+				Type:      "infix",
+				Value:     "xen",
 				Operation: "difference",
 			}},
 		},
@@ -164,7 +167,8 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 		Scope: conf.NovaSchedulerStepScope{
 			SpecSelectors: []conf.NovaSchedulerStepSpecSelector{{
 				Subject: "flavor",
-				Infix:   "special",
+				Type:    "infix",
+				Value:   "special",
 				Action:  "skip",
 			}},
 		},
@@ -187,17 +191,9 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 		},
 	}
 
-	result, err := scoper.Run(slog.Default(), request)
-	if err != nil {
+	_, err := scoper.Run(slog.Default(), request)
+	if !errors.Is(err, scheduler.ErrStepSkipped) {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	expected := map[string]float64{
-		"host1": 0.0,
-		"host2": 0.0,
-	}
-	if !reflect.DeepEqual(result.Activations, expected) {
-		t.Errorf("activations = %v, want %v", result.Activations, expected)
 	}
 }
 

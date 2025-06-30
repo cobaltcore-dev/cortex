@@ -6,7 +6,6 @@ package checks
 import (
 	"context"
 	"log/slog"
-	"slices"
 
 	"github.com/cobaltcore-dev/cortex/commands/checks/manila"
 	"github.com/cobaltcore-dev/cortex/commands/checks/nova"
@@ -21,12 +20,7 @@ var checks = map[string]func(context.Context, conf.Config){
 // Run all checks.
 func RunChecks(ctx context.Context, config conf.Config) {
 	logSeparator := "----------------------------------------"
-	sortedChecks := make([]string, 0, len(checks))
-	for name := range checks {
-		sortedChecks = append(sortedChecks, name)
-	}
-	slices.Sort(sortedChecks) // In alphabetical order for consistent output
-	for _, name := range sortedChecks {
+	for _, name := range config.GetChecks() {
 		slog.Info(logSeparator)
 		slog.Info("running check", "name", name)
 		checks[name](ctx, config)

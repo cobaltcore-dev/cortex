@@ -50,7 +50,7 @@ func TestNewDB(t *testing.T) {
 		Database: "postgres",
 	}
 
-	db := NewPostgresDB(config, nil, Monitor{})
+	db := NewPostgresDB(t.Context(), config, nil, Monitor{})
 	db.Close()
 }
 
@@ -106,7 +106,7 @@ func TestDB_Close(t *testing.T) {
 	db.Close()
 	defer dbEnv.Close()
 
-	if err := db.Db.Ping(); err == nil {
+	if err := db.Db.PingContext(t.Context()); err == nil {
 		t.Fatal("expected error, got nil")
 	}
 }
@@ -306,7 +306,8 @@ func TestUnexpectedConnectionLoss(t *testing.T) {
 	registry := &monitoring.Registry{Registry: prometheus.NewRegistry()}
 	monitor := NewDBMonitor(registry)
 
-	db := NewPostgresDB(config, nil, monitor)
+	ctx := t.Context()
+	db := NewPostgresDB(ctx, config, nil, monitor)
 	defer db.Close()
 
 	defer func() {
@@ -314,7 +315,7 @@ func TestUnexpectedConnectionLoss(t *testing.T) {
 			t.Errorf("expected panic, but code did not panic")
 		}
 
-		if err := db.Db.Ping(); err == nil {
+		if err := db.Db.PingContext(ctx); err == nil {
 			t.Errorf("expected error, got nil")
 		}
 
@@ -328,5 +329,5 @@ func TestUnexpectedConnectionLoss(t *testing.T) {
 		}
 	}()
 	container.Close()
-	db.CheckLivenessPeriodically()
+	db.CheckLivenessPeriodically(ctx)
 }

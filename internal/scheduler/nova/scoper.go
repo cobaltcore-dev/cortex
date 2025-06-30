@@ -37,6 +37,11 @@ func (s *StepScoper) Init(db db.DB, opts conf.RawOpts) error {
 
 // Run the step and sRun(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error)
 func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
+	// If the spec is not in scope, skip it.
+	if !s.isSpecInScope(traceLog, request) {
+		return nil, scheduler.ErrStepSkipped
+	}
+
 	result, err := s.Step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
@@ -63,17 +68,6 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerReq
 		"hosts not in scope", hostsNotInScope,
 		"hosts in scope", hostsInScope,
 	)
-
-	// If the spec is not in scope, reset all activations to the no-effect value.
-	if !s.isSpecInScope(traceLog, request) {
-		for host := range result.Activations {
-			result.Activations[host] = activationFunction.NoEffect()
-		}
-		traceLog.Info(
-			"scheduler: spec not in scope, resetting activations",
-			"step", s.GetName(),
-		)
-	}
 
 	return result, nil
 }
@@ -112,6 +106,11 @@ func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Extern
 
 	// Go through each host selector sequentially.
 	for _, selector := range s.Scope.HostSelectors {
+		// Currently for host selectors we only support infix checking.
+		if strings.ToLower(selector.Type) != "infix" {
+			traceLog.Error("scheduler: unsupported host selector type", "type", selector.Type)
+			continue
+		}
 		selectedHosts := make(map[string]struct{})
 		for _, host := range request.Hosts {
 			// Check if the host matches the selector.
@@ -120,16 +119,21 @@ func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Extern
 				// If the host does not have capabilities, skip it.
 				continue
 			}
-
 			matches := false
-			switch strings.ToLower(selector.Subject) {
-			case "trait":
-				matches = strings.Contains(capability.Traits, selector.Infix)
-			case "hypervisortype":
-				matches = strings.Contains(capability.HypervisorType, selector.Infix)
+			cmp := strings.EqualFold
+			switch {
+			case cmp(selector.Subject, "trait") && cmp(selector.Type, "infix"):
+				// Check if the trait contains the infix.
+				matches = strings.Contains(capability.Traits, selector.Value.(string))
+			case cmp(selector.Subject, "hypervisortype") && cmp(selector.Type, "infix"):
+				// Check if the hypervisor type contains the infix.
+				matches = strings.Contains(capability.HypervisorType, selector.Value.(string))
 			default:
 				// If the subject is not recognized, log an error and skip.
-				traceLog.Error("scheduler: unknown host selector subject", "subject", selector.Subject)
+				traceLog.Error(
+					"scheduler: unknown host selector",
+					"subject", selector.Subject, "type", selector.Type,
+				)
 				continue
 			}
 
@@ -187,10 +191,15 @@ func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.ExternalSc
 	for _, selector := range s.Scope.SpecSelectors {
 		// Check if the selector matches the spec.
 		matches := false
-		if strings.EqualFold(selector.Subject, "flavor") {
+		cmp := strings.EqualFold
+		switch {
+		case cmp(selector.Subject, "flavor") && cmp(selector.Type, "infix"):
 			// Check if the flavor name contains the infix.
-			matches = strings.Contains(request.Spec.Data.Flavor.Data.Name, selector.Infix)
-		} else {
+			matches = strings.Contains(request.Spec.Data.Flavor.Data.Name, selector.Value.(string))
+		case cmp(selector.Subject, "vmware") && cmp(selector.Type, "bool"):
+			// Check if the VMware flag is set.
+			matches = request.VMware == selector.Value.(bool)
+		default:
 			// If the subject is not recognized, log an error and skip.
 			traceLog.Error("scheduler: unknown spec selector subject", "subject", selector.Subject)
 			continue

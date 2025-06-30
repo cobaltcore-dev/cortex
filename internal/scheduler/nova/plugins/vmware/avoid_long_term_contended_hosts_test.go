@@ -61,25 +61,6 @@ func TestAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 		expected map[string]float64
 	}{
 		{
-			name: "Non-vmware vm",
-			request: api.ExternalSchedulerRequest{
-				VMware: false,
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-				},
-			},
-			// Should not do anything
-			expected: map[string]float64{
-				"host1": 0,
-				"host2": 0,
-				"host3": 0,
-				"host4": 0,
-			},
-		},
-		{
 			name: "Avoid contended hosts",
 			request: api.ExternalSchedulerRequest{
 				VMware: true,

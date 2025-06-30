@@ -71,13 +71,10 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.ExternalS
 		result.Statistics["disk utilized"] = s.PrepareStats(request, "%")
 	}
 
-	spec := request.Spec
-	if spec.Data.NInstances > 1 {
-		return result, nil
-	}
 	var hostUtilizations []shared.HostUtilization
-	if _, err := s.DB.Select(
-		&hostUtilizations, "SELECT * FROM "+shared.HostUtilization{}.TableName(),
+	group := "scheduler-nova"
+	if _, err := s.DB.SelectTimed(
+		group, &hostUtilizations, "SELECT * FROM "+shared.HostUtilization{}.TableName(),
 	); err != nil {
 		return nil, err
 	}
