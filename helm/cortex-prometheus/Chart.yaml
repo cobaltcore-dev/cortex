@@ -5,7 +5,7 @@ apiVersion: v2
 name: cortex-prometheus
 description: Prometheus alerts + metrics setup for Cortex.
 type: application
-version: 0.3.0
+version: 0.4.0
 dependencies:
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
