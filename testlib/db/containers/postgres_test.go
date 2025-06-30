@@ -31,7 +31,7 @@ func TestPostgresContainer_Init(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(t.Context()); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -56,7 +56,7 @@ func TestPostgresContainer_Close(t *testing.T) {
 
 	container.Close()
 
-	if err := db.Ping(); err == nil {
+	if err := db.PingContext(t.Context()); err == nil {
 		t.Fatal("expected error, got nil")
 	}
 }

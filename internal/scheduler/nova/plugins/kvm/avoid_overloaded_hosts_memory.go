@@ -57,7 +57,8 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 	result.Statistics["max memory active"] = s.PrepareStats(request, "%")
 
 	var hostMemoryActive []kvm.NodeExporterHostMemoryActive
-	if _, err := s.DB.Select(&hostMemoryActive, `
+	group := "scheduler-nova"
+	if _, err := s.DB.SelectTimed(group, &hostMemoryActive, `
 		SELECT * FROM feature_host_memory_active
 	`); err != nil {
 		return nil, err

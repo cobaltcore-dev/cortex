@@ -28,7 +28,7 @@ func (c *PostgresContainer) Init(t *testing.T) {
 		log.Fatalf("could not construct pool: %s", err)
 	}
 	c.pool = pool
-	if err = pool.Client.Ping(); err != nil {
+	if err = pool.Client.PingWithContext(t.Context()); err != nil {
 		log.Fatalf("could not connect to Docker: %s", err)
 	}
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
