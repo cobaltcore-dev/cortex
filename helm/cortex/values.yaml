@@ -14,7 +14,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-1ae8e06"
+  tag: "sha-9e2df80"
 
 migrationsJob:
   # Additional annotations for the created database migrations job.
