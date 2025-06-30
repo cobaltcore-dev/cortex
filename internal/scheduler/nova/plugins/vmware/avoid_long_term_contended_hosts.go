@@ -57,7 +57,8 @@ func (s *AvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 
 	var highlyContendedHosts []vmware.VROpsHostsystemContentionLongTerm
-	if _, err := s.DB.Select(&highlyContendedHosts, `
+	group := "scheduler-nova"
+	if _, err := s.DB.SelectTimed(group, &highlyContendedHosts, `
 		SELECT * FROM feature_vrops_hostsystem_contention_long_term
 	`); err != nil {
 		return nil, err

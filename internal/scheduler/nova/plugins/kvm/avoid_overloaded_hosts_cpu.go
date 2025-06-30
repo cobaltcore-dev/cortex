@@ -57,7 +57,8 @@ func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.Ext
 	result.Statistics["max cpu usage"] = s.PrepareStats(request, "%")
 
 	var hostCPUUsages []kvm.NodeExporterHostCPUUsage
-	if _, err := s.DB.Select(&hostCPUUsages, `
+	group := "scheduler-nova"
+	if _, err := s.DB.SelectTimed(group, &hostCPUUsages, `
 		SELECT * FROM feature_host_cpu_usage
 	`); err != nil {
 		return nil, err

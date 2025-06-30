@@ -72,8 +72,9 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.ExternalS
 	}
 
 	var hostUtilizations []shared.HostUtilization
-	if _, err := s.DB.Select(
-		&hostUtilizations, "SELECT * FROM "+shared.HostUtilization{}.TableName(),
+	group := "scheduler-nova"
+	if _, err := s.DB.SelectTimed(
+		group, &hostUtilizations, "SELECT * FROM "+shared.HostUtilization{}.TableName(),
 	); err != nil {
 		return nil, err
 	}

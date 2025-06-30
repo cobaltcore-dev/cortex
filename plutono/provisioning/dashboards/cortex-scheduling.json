@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 3,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -669,7 +669,7 @@
         "current": false,
         "max": true,
         "min": true,
-        "rightSide": true,
+        "rightSide": false,
         "show": true,
         "total": false,
         "values": true
@@ -764,10 +764,118 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
+      "hiddenSeries": false,
+      "id": 107,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": false,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.37",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_db_select_duration_seconds_bucket{group=~\"scheduler-.+\"}[2m])) by (le, group, query))",
+          "interval": "",
+          "legendFormat": "{{group}} {{query}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "$$hashKey": "object:1853",
+          "colorMode": "critical",
+          "fill": true,
+          "line": false,
+          "op": "gt",
+          "value": 1,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Time needed to run select queries for scheduler",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:438",
+          "format": "s",
+          "label": null,
+          "logBase": 1,
+          "max": "1.5",
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:439",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 64
+        "y": 76
       },
       "hiddenSeries": false,
       "id": 37,
@@ -864,7 +972,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 64
+        "y": 76
       },
       "hiddenSeries": false,
       "id": 40,
@@ -976,7 +1084,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 64
+        "y": 76
       },
       "hiddenSeries": false,
       "id": 33,
@@ -1088,7 +1196,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 64
+        "y": 76
       },
       "hiddenSeries": false,
       "id": 42,
@@ -1200,7 +1308,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 75
+        "y": 87
       },
       "hiddenSeries": false,
       "id": 45,

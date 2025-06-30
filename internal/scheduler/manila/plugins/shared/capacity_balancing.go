@@ -46,8 +46,9 @@ func (s *CapacityBalancingStep) Run(traceLog *slog.Logger, request api.ExternalS
 	result.Statistics["capacity utilized"] = s.PrepareStats(request, "%")
 
 	var storagePoolUtilizations []shared.StoragePoolUtilization
-	if _, err := s.DB.Select(
-		&storagePoolUtilizations, "SELECT * FROM "+shared.StoragePoolUtilization{}.TableName(),
+	group := "scheduler-manila"
+	if _, err := s.DB.SelectTimed(
+		group, &storagePoolUtilizations, "SELECT * FROM "+shared.StoragePoolUtilization{}.TableName(),
 	); err != nil {
 		return nil, err
 	}

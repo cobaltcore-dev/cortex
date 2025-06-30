@@ -6,6 +6,7 @@ package db
 import (
 	"database/sql"
 	"log/slog"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/dlmiddlecote/sqlstats"
 	"github.com/go-gorp/gorp"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 )
@@ -107,6 +109,18 @@ func (d *DB) CheckLivenessPeriodically() {
 		sleepTime := time.Duration(d.conf.Reconnect.LivenessPingIntervalSeconds) * time.Second
 		time.Sleep(jobloop.DefaultJitter(sleepTime))
 	}
+}
+
+// Executes a select query while monitoring its execution time.
+func (d *DB) SelectTimed(group string, i any, query string, args ...any) ([]any, error) {
+	if d.monitor.selectTimer != nil {
+		// URL-ify the query for the metrics.
+		queryURL := url.QueryEscape(query)
+		observer := d.monitor.selectTimer.WithLabelValues(group, queryURL)
+		timer := prometheus.NewTimer(observer)
+		defer timer.ObserveDuration()
+	}
+	return d.Select(i, query, args...)
 }
 
 // Adds missing functionality to gorp.DbMap which creates one table.
