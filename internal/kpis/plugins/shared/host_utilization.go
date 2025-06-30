@@ -37,7 +37,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "total", "running_vms"},
+		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "total", "running_vms", "hana_exclusive"},
 		nil,
 	)
 	k.hostResourcesUtilizedHist = prometheus.NewDesc(
@@ -58,14 +58,16 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostUtilizationPerAvailabilityZone struct {
 		shared.HostUtilization
 		AvailabilityZone string `db:"availability_zone"`
-		CPUInfo          string `db:"cpu_info"`    // Hypervisor CPU info
-		RunningVMs       int    `db:"running_vms"` // Number of running VMs on the host
+		CPUInfo          string `db:"cpu_info"`       // Hypervisor CPU info
+		RunningVMs       int    `db:"running_vms"`    // Number of running VMs on the host
+		HanaExclusive    bool   `db:"hana_exclusive"` // Whether the host is HANA exclusive
 	}
 
 	var hostUtilization []HostUtilizationPerAvailabilityZone
 
 	aggregatesTableName := nova.Aggregate{}.TableName()
 	hostUtilizationTableName := shared.HostUtilization{}.TableName()
+	hostCapabilitiesTableName := shared.HostCapabilities{}.TableName()
 	hypervisorsTableName := nova.Hypervisor{}.TableName()
 
 	query := `
@@ -73,7 +75,11 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
             f.*,
             a.availability_zone,
             h.cpu_info,
-			h.running_vms
+			h.running_vms,
+			CASE
+                WHEN fhc.traits LIKE '%HANA_EXCLUSIVE%' THEN TRUE
+                ELSE FALSE
+            END AS hana_exclusive
         FROM ` + hostUtilizationTableName + ` AS f
         JOIN (
             SELECT DISTINCT compute_host, availability_zone
@@ -82,8 +88,11 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
         ) AS a
             ON f.compute_host = a.compute_host
         JOIN ` + hypervisorsTableName + ` AS h
-            ON f.compute_host = h.service_host;
+            ON f.compute_host = h.service_host
+		LEFT JOIN ` + hostCapabilitiesTableName + ` AS fhc
+            ON f.compute_host = fhc.compute_host;
     `
+	slog.Debug("executing host utilization query", "query", query)
 
 	if _, err := k.DB.Select(&hostUtilization, query); err != nil {
 		slog.Error("failed to select host utilization", "err", err)
@@ -117,6 +126,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			cpuModel,
 			strconv.FormatFloat(hs.TotalVCPUsAllocatable, 'f', 0, 64),
 			strconv.Itoa(hs.RunningVMs),
+			strconv.FormatBool(hs.HanaExclusive),
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -128,6 +138,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			cpuModel,
 			strconv.FormatFloat(hs.TotalMemoryAllocatableMB, 'f', -1, 64),
 			strconv.Itoa(hs.RunningVMs),
+			strconv.FormatBool(hs.HanaExclusive),
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -139,6 +150,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			cpuModel,
 			strconv.FormatFloat(hs.TotalDiskAllocatableGB, 'f', -1, 64),
 			strconv.Itoa(hs.RunningVMs),
+			strconv.FormatBool(hs.HanaExclusive),
 		)
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)

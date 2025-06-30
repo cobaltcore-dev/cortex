@@ -364,6 +364,7 @@ conf:
         dependencies:
           extractors:
             - host_utilization_extractor
+            - host_capabilities_extractor
           sync:
             openstack:
               nova:
