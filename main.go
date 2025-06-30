@@ -178,7 +178,8 @@ func main() {
 	monitoringConfig := config.GetMonitoringConfig()
 	registry := monitoring.NewRegistry(monitoringConfig)
 
-	database := db.NewPostgresDB(config.GetDBConfig(), registry, db.NewDBMonitor(registry))
+	dbMonitor := db.NewDBMonitor(registry)
+	database := db.NewPostgresDB(ctx, config.GetDBConfig(), registry, dbMonitor)
 	defer database.Close()
 
 	// Check if we want to perform one-time tasks like checks or migrations.
@@ -193,7 +194,7 @@ func main() {
 		return
 	}
 
-	go database.CheckLivenessPeriodically()
+	go database.CheckLivenessPeriodically(ctx)
 	go runMonitoringServer(ctx, registry, monitoringConfig)
 
 	// Run an api server that serves some basic endpoints and can be extended.

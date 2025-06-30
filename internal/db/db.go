@@ -4,6 +4,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"log/slog"
 	"net/url"
@@ -41,7 +42,13 @@ type Index struct {
 }
 
 // Create a new postgres database and wait until it is connected.
-func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry, monitor Monitor) DB {
+func NewPostgresDB(
+	ctx context.Context,
+	c conf.DBConfig,
+	registry *monitoring.Registry,
+	monitor Monitor,
+) DB {
+
 	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          strip(c.Host),
@@ -64,7 +71,7 @@ func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry, monitor Monit
 	// If the wait time exceeds 10 seconds, we will panic.
 	maxRetries := 10
 	for i := range maxRetries {
-		err := db.Ping()
+		err := db.PingContext(ctx)
 		if err == nil {
 			break
 		}
@@ -86,10 +93,10 @@ func NewPostgresDB(c conf.DBConfig, registry *monitoring.Registry, monitor Monit
 }
 
 // Check periodically if the database is alive. If not, panic.
-func (d *DB) CheckLivenessPeriodically() {
+func (d *DB) CheckLivenessPeriodically(ctx context.Context) {
 	var failures int
 	for {
-		if err := d.Db.Ping(); err != nil {
+		if err := d.Db.PingContext(ctx); err != nil {
 			if failures >= d.conf.Reconnect.MaxRetries {
 				slog.Error("database is unreachable, giving up", "error", err)
 				panic(err)
