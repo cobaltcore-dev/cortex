@@ -105,7 +105,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	ch := make(chan prometheus.Metric, 10)
+	ch := make(chan prometheus.Metric, 100)
 	kpi.Collect(ch)
 	close(ch)
 
