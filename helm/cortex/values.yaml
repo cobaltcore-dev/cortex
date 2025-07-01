@@ -350,16 +350,6 @@ conf:
           extractors:
             - vrops_project_noisiness_extractor
       # Shared KPIs.
-      - name: host_total_capacity_kpi
-        dependencies:
-          extractors:
-            - host_utilization_extractor
-          sync:
-            openstack:
-              nova:
-                types:
-                  - hypervisors
-                  - aggregates
       - name: host_utilization_kpi
         dependencies:
           extractors:

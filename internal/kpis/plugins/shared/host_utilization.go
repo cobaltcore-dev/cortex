@@ -24,6 +24,7 @@ type HostUtilizationKPI struct {
 
 	hostResourcesUtilizedPerHost *prometheus.Desc
 	hostResourcesUtilizedHist    *prometheus.Desc
+	hostTotalCapacityPerHost     *prometheus.Desc
 }
 
 func (HostUtilizationKPI) GetName() string {
@@ -46,12 +47,19 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 		[]string{"resource"},
 		nil,
 	)
+	k.hostTotalCapacityPerHost = prometheus.NewDesc(
+		"cortex_host_total_capacity_per_host",
+		"Total resources available on the hosts currently (individually by host).",
+		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "traits"},
+		nil,
+	)
 	return nil
 }
 
 func (k *HostUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.hostResourcesUtilizedPerHost
 	ch <- k.hostResourcesUtilizedHist
+	ch <- k.hostTotalCapacityPerHost
 }
 
 func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
@@ -148,7 +156,39 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			strconv.Itoa(hs.RunningVMs),
 			hs.Traits,
 		)
+
+		ch <- prometheus.MustNewConstMetric(
+			k.hostTotalCapacityPerHost,
+			prometheus.GaugeValue,
+			hs.TotalVCPUsAllocatable,
+			hs.ComputeHost,
+			"cpu",
+			hs.AvailabilityZone,
+			hs.CPUInfo,
+			hs.Traits,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			k.hostTotalCapacityPerHost,
+			prometheus.GaugeValue,
+			hs.TotalDiskAllocatableGB,
+			hs.ComputeHost,
+			"disk",
+			hs.AvailabilityZone,
+			hs.CPUInfo,
+			hs.Traits,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			k.hostTotalCapacityPerHost,
+			prometheus.GaugeValue,
+			hs.TotalMemoryAllocatableMB,
+			hs.ComputeHost,
+			"memory",
+			hs.AvailabilityZone,
+			hs.CPUInfo,
+			hs.Traits,
+		)
 	}
+
 	buckets := prometheus.LinearBuckets(0, 5, 20)
 	// Histogram for CPU
 	keysFunc := func(hs HostUtilizationPerAvailabilityZone) []string { return []string{"cpu"} }

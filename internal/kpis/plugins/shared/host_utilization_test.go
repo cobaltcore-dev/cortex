@@ -63,10 +63,26 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the host space table
+	// Insert mock data into the host utilization table
 	hostUtilizations := []any{
-		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50, VCPUsUtilizedPct: 50, DiskUtilizedPct: 50, TotalMemoryAllocatableMB: 1000, TotalVCPUsAllocatable: 100, TotalDiskAllocatableGB: 100},
-		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 80, VCPUsUtilizedPct: 75, DiskUtilizedPct: 80, TotalMemoryAllocatableMB: 1000, TotalVCPUsAllocatable: 100, TotalDiskAllocatableGB: 100},
+		&shared.HostUtilization{
+			ComputeHost:              "host1",
+			RAMUtilizedPct:           50,
+			VCPUsUtilizedPct:         50,
+			DiskUtilizedPct:          50,
+			TotalMemoryAllocatableMB: 1000,
+			TotalVCPUsAllocatable:    100,
+			TotalDiskAllocatableGB:   100,
+		},
+		&shared.HostUtilization{
+			ComputeHost:              "host2",
+			RAMUtilizedPct:           80,
+			VCPUsUtilizedPct:         75,
+			DiskUtilizedPct:          80,
+			TotalMemoryAllocatableMB: 1000,
+			TotalVCPUsAllocatable:    100,
+			TotalDiskAllocatableGB:   100,
+		},
 	}
 	if err := testDB.Insert(hostUtilizations...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
