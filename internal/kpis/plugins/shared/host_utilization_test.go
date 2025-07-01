@@ -113,10 +113,13 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 
 	// Used to track the number of metrics related to each host
 	// (ignoring the histogram metric)
-	metricsHost := make(map[string][]string)
+	metricsUtilizationLabels := make(map[string][]string)
+	metricsUtilizationLabels["host1"] = make([]string, 0)
+	metricsUtilizationLabels["host2"] = make([]string, 0)
 
-	metricsHost["host1"] = make([]string, 0)
-	metricsHost["host2"] = make([]string, 0)
+	metricsTotalCapacityLabels := make(map[string][]string)
+	metricsTotalCapacityLabels["host1"] = make([]string, 0)
+	metricsTotalCapacityLabels["host2"] = make([]string, 0)
 
 	for metric := range ch {
 		metricsCount++
@@ -126,42 +129,71 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 
 		// We check if the join of the tables used for the KPI works correctly
 		// That is why we skip metrics that are not related to the host utilization KPI (e.g. the histogram metric)
-		if !strings.Contains(metricName, "cortex_host_utilization_per_host_pct") {
-			continue
-		}
-
-		var m prometheusgo.Metric
-		if err := metric.Write(&m); err != nil {
-			t.Fatalf("failed to write metric: %v", err)
-		}
-
-		labels := make(map[string]string)
-		for _, label := range m.Label {
-			labels[label.GetName()] = label.GetValue()
-		}
-
-		cpuModel := labels["cpu_model"]
-		availabilityZone := labels["availability_zone"]
-		computeHostName := labels["compute_host_name"]
-		runningVMs := labels["running_vms"]
-		traits := labels["traits"]
-
-		switch computeHostName {
-		case "host1":
-			if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || runningVMs != "10" || traits != "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT" {
-				t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', running vms '10', hana exclusive 'true', got CPU model '%s', availability zone '%s', running vms '%s', hana exclusive '%s'", cpuModel, availabilityZone, runningVMs, traits)
+		if strings.Contains(metricName, "cortex_host_utilization_per_host_pct") {
+			var m prometheusgo.Metric
+			if err := metric.Write(&m); err != nil {
+				t.Fatalf("failed to write metric: %v", err)
 			}
-		case "host2":
-			if cpuModel != "" || availabilityZone != "zone2" || runningVMs != "5" || traits != "MY_OTHER_TRAIT" {
-				t.Errorf("expected host2 to have no CPU model, availability zone 'zone2', running vms '5', hana exclusive 'false', got CPU model '%s', availability zone '%s', running vms '%s', hana exclusive '%s'", cpuModel, availabilityZone, runningVMs, traits)
+
+			labels := make(map[string]string)
+			for _, label := range m.Label {
+				labels[label.GetName()] = label.GetValue()
 			}
-		default:
-			t.Errorf("unexpected compute host name: %s", computeHostName)
+
+			cpuModel := labels["cpu_model"]
+			availabilityZone := labels["availability_zone"]
+			computeHostName := labels["compute_host_name"]
+			runningVMs := labels["running_vms"]
+			traits := labels["traits"]
+
+			switch computeHostName {
+			case "host1":
+				if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || runningVMs != "10" || traits != "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT" {
+					t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', running vms '10', traits 'MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT', got CPU model '%s', availability zone '%s', running vms '%s', traits '%s'", cpuModel, availabilityZone, runningVMs, traits)
+				}
+			case "host2":
+				if cpuModel != "" || availabilityZone != "zone2" || runningVMs != "5" || traits != "MY_OTHER_TRAIT" {
+					t.Errorf("expected host2 to have no CPU model, availability zone 'zone2', running vms '5', traits 'MY_OTHER_TRAIT', got CPU model '%s', availability zone '%s', running vms '%s', traits '%s'", cpuModel, availabilityZone, runningVMs, traits)
+				}
+			default:
+				t.Errorf("unexpected compute host name: %s", computeHostName)
+			}
+			metricsUtilizationLabels[computeHostName] = append(metricsUtilizationLabels[computeHostName], labels["resource"])
 		}
-		metricsHost[computeHostName] = append(metricsHost[computeHostName], labels["resource"])
+
+		if strings.Contains(metricName, "cortex_host_total_capacity_per_host") {
+			var m prometheusgo.Metric
+			if err := metric.Write(&m); err != nil {
+				t.Fatalf("failed to write metric: %v", err)
+			}
+
+			labels := make(map[string]string)
+			for _, label := range m.Label {
+				labels[label.GetName()] = label.GetValue()
+			}
+
+			cpuModel := labels["cpu_model"]
+			availabilityZone := labels["availability_zone"]
+			computeHostName := labels["compute_host_name"]
+			traits := labels["traits"]
+			switch computeHostName {
+			case "host1":
+				if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || traits != "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT" {
+					t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', traits 'MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT', got CPU model '%s', availability zone '%s', traits '%s'", cpuModel, availabilityZone, traits)
+				}
+			case "host2":
+				if cpuModel != "" || availabilityZone != "zone2" || traits != "MY_OTHER_TRAIT" {
+					t.Errorf("expected host2 to have no CPU model, availability zone 'zone2', traits 'MY_OTHER_TRAIT', got CPU model '%s', availability zone '%s', traits '%s'", cpuModel, availabilityZone, traits)
+				}
+			default:
+				t.Errorf("unexpected compute host name: %s", computeHostName)
+			}
+			metricsTotalCapacityLabels[computeHostName] = append(metricsTotalCapacityLabels[computeHostName], labels["resource"])
+		}
+
 	}
 
-	for host, resources := range metricsHost {
+	for host, resources := range metricsUtilizationLabels {
 		// Since we store cpu, disk and memory utilization for each host we expect 3 metrics per host
 		if len(resources) != 3 {
 			t.Errorf("expected 3 metrics for host %s, got %d", host, len(resources))
@@ -172,6 +204,19 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			!strings.Contains(joinedResources, "disk") ||
 			!strings.Contains(joinedResources, "cpu") {
 			t.Errorf("expected resources for host %s to include memory, disk, and cpu, got %s", host, joinedResources)
+		}
+	}
+
+	for host, resources := range metricsTotalCapacityLabels {
+		// Since we store cpu, disk and memory total capacity for each host we expect 3 metrics per host
+		if len(resources) != 3 {
+			t.Errorf("expected 3 total capacity metrics for host %s, got %d", host, len(resources))
+		}
+		joinedResources := strings.Join(resources, ", ")
+		if !strings.Contains(joinedResources, "memory") ||
+			!strings.Contains(joinedResources, "disk") ||
+			!strings.Contains(joinedResources, "cpu") {
+			t.Errorf("expected total capacity resources for host %s to include memory, disk, and cpu, got %s", host, joinedResources)
 		}
 	}
 
