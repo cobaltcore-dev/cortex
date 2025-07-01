@@ -164,7 +164,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.ComputeHost,
 			"cpu",
 			hs.AvailabilityZone,
-			hs.CPUInfo,
+			cpuModel,
 			hs.Traits,
 		)
 		ch <- prometheus.MustNewConstMetric(
@@ -174,7 +174,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.ComputeHost,
 			"disk",
 			hs.AvailabilityZone,
-			hs.CPUInfo,
+			cpuModel,
 			hs.Traits,
 		)
 		ch <- prometheus.MustNewConstMetric(
@@ -184,7 +184,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			hs.ComputeHost,
 			"memory",
 			hs.AvailabilityZone,
-			hs.CPUInfo,
+			cpuModel,
 			hs.Traits,
 		)
 	}
