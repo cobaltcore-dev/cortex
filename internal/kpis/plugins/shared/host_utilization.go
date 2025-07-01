@@ -60,7 +60,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		AvailabilityZone string `db:"availability_zone"`
 		CPUInfo          string `db:"cpu_info"`    // Hypervisor CPU info
 		RunningVMs       int    `db:"running_vms"` // Number of running VMs on the host
-		Traits           string `db:"traits"`      // Whether the host is HANA exclusive
+		Traits           string `db:"traits"`      // Traits of the host
 	}
 
 	var hostUtilization []HostUtilizationPerAvailabilityZone
