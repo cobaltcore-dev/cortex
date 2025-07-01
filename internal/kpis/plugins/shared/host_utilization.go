@@ -24,6 +24,7 @@ type HostUtilizationKPI struct {
 
 	hostResourcesUtilizedPerHost *prometheus.Desc
 	hostResourcesUtilizedHist    *prometheus.Desc
+	hostTotalCapacityPerHost     *prometheus.Desc
 }
 
 func (HostUtilizationKPI) GetName() string {
@@ -37,7 +38,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "total", "running_vms"},
+		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "total", "running_vms", "traits"},
 		nil,
 	)
 	k.hostResourcesUtilizedHist = prometheus.NewDesc(
@@ -46,12 +47,19 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 		[]string{"resource"},
 		nil,
 	)
+	k.hostTotalCapacityPerHost = prometheus.NewDesc(
+		"cortex_host_total_capacity_per_host",
+		"Total resources available on the hosts currently (individually by host).",
+		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "traits"},
+		nil,
+	)
 	return nil
 }
 
 func (k *HostUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.hostResourcesUtilizedPerHost
 	ch <- k.hostResourcesUtilizedHist
+	ch <- k.hostTotalCapacityPerHost
 }
 
 func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
@@ -60,29 +68,34 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		AvailabilityZone string `db:"availability_zone"`
 		CPUInfo          string `db:"cpu_info"`    // Hypervisor CPU info
 		RunningVMs       int    `db:"running_vms"` // Number of running VMs on the host
+		Traits           string `db:"traits"`      // Traits of the host
 	}
 
 	var hostUtilization []HostUtilizationPerAvailabilityZone
 
 	aggregatesTableName := nova.Aggregate{}.TableName()
 	hostUtilizationTableName := shared.HostUtilization{}.TableName()
+	hostCapabilitiesTableName := shared.HostCapabilities{}.TableName()
 	hypervisorsTableName := nova.Hypervisor{}.TableName()
 
 	query := `
-        SELECT
-            f.*,
-            a.availability_zone,
-            h.cpu_info,
-			h.running_vms
-        FROM ` + hostUtilizationTableName + ` AS f
-        JOIN (
-            SELECT DISTINCT compute_host, availability_zone
-            FROM ` + aggregatesTableName + `
-            WHERE availability_zone IS NOT NULL
-        ) AS a
-            ON f.compute_host = a.compute_host
-        JOIN ` + hypervisorsTableName + ` AS h
-            ON f.compute_host = h.service_host;
+		SELECT
+			f.*,
+			a.availability_zone,
+			h.cpu_info,
+			h.running_vms,
+			fhc.traits
+		FROM ` + hostUtilizationTableName + ` AS f
+		JOIN (
+			SELECT DISTINCT compute_host, availability_zone
+			FROM ` + aggregatesTableName + `
+			WHERE availability_zone IS NOT NULL
+		) AS a
+			ON f.compute_host = a.compute_host
+		JOIN ` + hypervisorsTableName + ` AS h
+			ON f.compute_host = h.service_host
+		LEFT JOIN ` + hostCapabilitiesTableName + ` AS fhc
+			ON f.compute_host = fhc.compute_host;
     `
 
 	if _, err := k.DB.Select(&hostUtilization, query); err != nil {
@@ -117,6 +130,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			cpuModel,
 			strconv.FormatFloat(hs.TotalVCPUsAllocatable, 'f', 0, 64),
 			strconv.Itoa(hs.RunningVMs),
+			hs.Traits,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -128,6 +142,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			cpuModel,
 			strconv.FormatFloat(hs.TotalMemoryAllocatableMB, 'f', -1, 64),
 			strconv.Itoa(hs.RunningVMs),
+			hs.Traits,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -139,8 +154,41 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			cpuModel,
 			strconv.FormatFloat(hs.TotalDiskAllocatableGB, 'f', -1, 64),
 			strconv.Itoa(hs.RunningVMs),
+			hs.Traits,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			k.hostTotalCapacityPerHost,
+			prometheus.GaugeValue,
+			hs.TotalVCPUsAllocatable,
+			hs.ComputeHost,
+			"cpu",
+			hs.AvailabilityZone,
+			cpuModel,
+			hs.Traits,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			k.hostTotalCapacityPerHost,
+			prometheus.GaugeValue,
+			hs.TotalDiskAllocatableGB,
+			hs.ComputeHost,
+			"disk",
+			hs.AvailabilityZone,
+			cpuModel,
+			hs.Traits,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			k.hostTotalCapacityPerHost,
+			prometheus.GaugeValue,
+			hs.TotalMemoryAllocatableMB,
+			hs.ComputeHost,
+			"memory",
+			hs.AvailabilityZone,
+			cpuModel,
+			hs.Traits,
 		)
 	}
+
 	buckets := prometheus.LinearBuckets(0, 5, 20)
 	// Histogram for CPU
 	keysFunc := func(hs HostUtilizationPerAvailabilityZone) []string { return []string{"cpu"} }
