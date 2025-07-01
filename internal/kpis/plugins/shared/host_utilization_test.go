@@ -161,7 +161,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			metricsUtilizationLabels[computeHostName] = append(metricsUtilizationLabels[computeHostName], labels["resource"])
 		}
 
-		if strings.Contains(metricName, "cortex_host_total_capacity_per_host") {
+		if strings.Contains(metricName, "cortex_total_capacity_per_host") {
 			var m prometheusgo.Metric
 			if err := metric.Write(&m); err != nil {
 				t.Fatalf("failed to write metric: %v", err)

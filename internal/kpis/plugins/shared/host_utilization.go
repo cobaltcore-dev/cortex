@@ -48,7 +48,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 		nil,
 	)
 	k.hostTotalCapacityPerHost = prometheus.NewDesc(
-		"cortex_host_total_capacity_per_host",
+		"cortex_total_capacity_per_host",
 		"Total resources available on the hosts currently (individually by host).",
 		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "traits"},
 		nil,
