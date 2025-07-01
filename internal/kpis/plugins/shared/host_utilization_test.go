@@ -190,7 +190,6 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			}
 			metricsTotalCapacityLabels[computeHostName] = append(metricsTotalCapacityLabels[computeHostName], labels["resource"])
 		}
-
 	}
 
 	for host, resources := range metricsUtilizationLabels {
