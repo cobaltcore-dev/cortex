@@ -56,8 +56,8 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 
 	// Insert mock data into the host capabilities table
 	hostCapabilities := []any{
-		&shared.HostCapabilities{ComputeHost: "host1", Traits: "CUSTOM_HANA_EXCLUSIVE_BB"},
-		&shared.HostCapabilities{ComputeHost: "host2", Traits: "NO_HANA_BB"},
+		&shared.HostCapabilities{ComputeHost: "host1", Traits: "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT"},
+		&shared.HostCapabilities{ComputeHost: "host2", Traits: "MY_OTHER_TRAIT"},
 	}
 	if err := testDB.Insert(hostCapabilities...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -128,16 +128,16 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		availabilityZone := labels["availability_zone"]
 		computeHostName := labels["compute_host_name"]
 		runningVMs := labels["running_vms"]
-		hanaExclusive := labels["hana_exclusive"]
+		traits := labels["traits"]
 
 		switch computeHostName {
 		case "host1":
-			if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || runningVMs != "10" || hanaExclusive != "true" {
-				t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', running vms '10', hana exclusive 'true', got CPU model '%s', availability zone '%s', running vms '%s', hana exclusive '%s'", cpuModel, availabilityZone, runningVMs, hanaExclusive)
+			if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || runningVMs != "10" || traits != "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT" {
+				t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', running vms '10', hana exclusive 'true', got CPU model '%s', availability zone '%s', running vms '%s', hana exclusive '%s'", cpuModel, availabilityZone, runningVMs, traits)
 			}
 		case "host2":
-			if cpuModel != "" || availabilityZone != "zone2" || runningVMs != "5" || hanaExclusive != "false" {
-				t.Errorf("expected host2 to have no CPU model, availability zone 'zone2', running vms '5', hana exclusive 'false', got CPU model '%s', availability zone '%s', running vms '%s', hana exclusive '%s'", cpuModel, availabilityZone, runningVMs, hanaExclusive)
+			if cpuModel != "" || availabilityZone != "zone2" || runningVMs != "5" || traits != "MY_OTHER_TRAIT" {
+				t.Errorf("expected host2 to have no CPU model, availability zone 'zone2', running vms '5', hana exclusive 'false', got CPU model '%s', availability zone '%s', running vms '%s', hana exclusive '%s'", cpuModel, availabilityZone, runningVMs, traits)
 			}
 		default:
 			t.Errorf("unexpected compute host name: %s", computeHostName)
