@@ -21,3 +21,32 @@ postgresql:
       postgresql: 5432
   metrics:
     enabled: true
+  primary:
+    # Add a pre-upgrade script and a post-upgrade script to the primary pod.
+    #
+    # In case of a major version upgrade:
+    # - The pre-upgrade script will disable the service and dump the database.
+    # - The post-upgrade script will load the database dump and re-enable the service.
+    extraVolumes:
+      - {name: pre-upgrade-script, configMap: {name: cortex-postgresql-pre-upgrade-script}}
+      - {name: post-upgrade-script, configMap: {name: cortex-postgresql-post-upgrade-script}}
+    extraVolumeMounts:
+      - {name: pre-upgrade-script, mountPath: /opt/pre-upgrade, readOnly: true}
+      - {name: post-upgrade-script, mountPath: /opt/post-upgrade, readOnly: true}
+
+# Job that performs upgrade tasks on the Cortex Postgres StatefulSet.
+#
+# If postgres needs a major version upgrade, this job will scale down the
+# StatefulSet, wait for the pod to terminate, run upgrade commands, and scale
+# it back up.
+upgradeJob:
+  enabled: true
+  image:
+    repository: "bitnami/kubectl"
+    tag: "latest"
+  # Additional annotations for the created database upgrade job.
+  podAnnotations:
+    # If you use linkerd, this will disable injection for the upgrade job.
+    # Otherwise, the linkerd-proxy container will hang around forever and
+    # block the job from completing.
+    "linkerd.io/inject": disabled
