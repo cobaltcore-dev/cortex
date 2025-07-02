@@ -20,6 +20,10 @@ ORDER BY table_schema, table_name;"
 # Create a PostgreSQL dump of the database and save it to the persistent directory.
 PGPASSWORD=$pg_password pg_dumpall -U postgres \
   | gzip > /bitnami/postgresql/pre-upgrade-dump.gz
-# Wipe the current PostgreSQL data directory to ensure a clean upgrade.
-echo "Wiping the current PostgreSQL data directory..."
-rm -rf /bitnami/postgresql/data/
+# Rename the current PostgreSQL data directory to ensure it is preserved
+# in case of issues after the upgrade.
+backup_dir="/bitnami/postgresql/data.bak.$(date +%Y%m%d%H%M%S)"
+if [ -d /bitnami/postgresql/data ]; then
+  echo "Backing up current PostgreSQL data directory to $backup_dir"
+  mv /bitnami/postgresql/data "$backup_dir"
+fi
