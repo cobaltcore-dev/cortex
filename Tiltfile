@@ -84,7 +84,13 @@ local('sh helm/sync.sh helm/cortex-postgres')
 k8s_yaml(helm('./helm/cortex-postgres', name='cortex-postgres'))
 k8s_resource('cortex-postgresql', port_forwards=[
     port_forward(5432, 5432),
-], labels=['Core-Services'])
+], labels=['Database'])
+# Get the version from the chart.
+cmd = "helm show chart ./helm/cortex-postgres | grep -E '^version:' | awk '{print $2}'"
+chart_version = str(local(cmd)).strip()
+# Use the chart version to name the pre-upgrade job.
+k8s_resource('cortex-postgresql-pre-upgrade-'+chart_version, labels=['Database'])
+k8s_resource('cortex-postgresql-post-upgrade-'+chart_version, labels=['Database'])
 
 ########### Monitoring
 local('sh helm/sync.sh helm/cortex-prometheus-operator')
