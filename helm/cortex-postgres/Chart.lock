@@ -1,9 +1,9 @@
 dependencies:
 - name: postgresql
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.7.15
+  version: 15.5.27
 - name: owner-info
   repository: oci://ghcr.io/sapcc/helm-charts
   version: 1.0.0
-digest: sha256:d2030d29edf68d5b813bff67335253cba60b69f8d350fef8f80255e8ac4e0c9e
-generated: "2025-07-02T12:15:27.653053+02:00"
+digest: sha256:26cb9c33b10bfaec7d04e718c321935eb031c3d0e426902afc12b99541a20ad7
+generated: "2025-04-23T08:52:04.316499+02:00"
