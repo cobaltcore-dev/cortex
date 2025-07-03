@@ -48,3 +48,9 @@ alerts:
       severity: info
     cortexTooManyDBConnectionAttempts:
       severity: info
+    cortexHostCPUUtilizationHigh:
+      severity: info
+    cortexHostMemoryUtilizationHigh:
+      severity: info
+    cortexHostDiskUtilizationHigh:
+      severity: info

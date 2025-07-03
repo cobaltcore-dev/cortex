@@ -232,4 +232,42 @@ spec:
           Cortex is trying to connect to the database too often. This may happen
           when the database is down or the connection parameters are misconfigured.
 
+    - alert: CortexHostCPUUtilizationHigh
+      expr: cortex_host_utilization_per_host_pct{resource="cpu"} > 100
+      for: 5m
+      labels:
+        context: hostutilization
+        {{- if .global }}{{ .global | toYaml | nindent 6 }}{{- end }}
+        {{- if .cortexHostCPUUtilizationHigh }}{{ .cortexHostCPUUtilizationHigh | toYaml | nindent 6 }}{{- end }}
+      annotations:
+        summary: "High CPU utilization on host {{`{{$labels.compute_host_name}}`}}"
+        description: >
+          The CPU utilization on host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} is above 100% for more than 5 minutes.
+
+    - alert: CortexHostMemoryUtilizationHigh
+      expr: cortex_host_utilization_per_host_pct{resource="memory"} > 100
+      for: 5m
+      labels:
+        context: hostutilization
+        {{- if .global }}{{ .global | toYaml | nindent 6 }}{{- end }}
+        {{- if .cortexHostMemoryUtilizationHigh }}{{ .cortexHostMemoryUtilizationHigh | toYaml | nindent 6 }}{{- end }}
+      annotations:
+        summary: "High memory utilization on host {{`{{$labels.compute_host_name}}`}}"
+        description: >
+          The memory utilization on host {{`{{$labels.compute_host_name}}`}} in AZ {{ `{{$labels.availability_zone}}` }} is above 100% for more than 5 minutes.
+
+    - alert: CortexHostDiskUtilizationHigh
+      expr: cortex_host_utilization_per_host_pct{resource="disk"} > 100
+      for: 5m
+      labels:
+        context: hostutilization
+        {{- if .global }}{{ .global | toYaml | nindent 6 }}{{- end }}
+        {{- if .cortexHostDiskUtilizationHigh }}{{ .cortexHostDiskUtilizationHigh | toYaml | nindent 6 }}{{- end }}
+      annotations:
+        summary: "High disk utilization on host {{`{{$labels.compute_host_name}}`}}"
+        description: >
+          The disk utilization on host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} is above 100% for more than 5 minutes.
+
+
+
 {{- end }}
