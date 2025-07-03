@@ -16,7 +16,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
@@ -115,27 +114,54 @@ func (api *novaAPI) GetChangedServers(ctx context.Context, changedSince *time.Ti
 func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	label := Hypervisor{}.TableName()
 	slog.Info("fetching nova data", "label", label)
-	// Fetch all pages.
-	pages, err := func() (pagination.Page, error) {
-		if api.mon.PipelineRequestTimer != nil {
-			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
-			timer := prometheus.NewTimer(hist)
-			defer timer.ObserveDuration()
+	// Note: currently we need to fetch this without gophercloud.
+	// Gophercloud will just assume the request is a single page even when
+	// the response is paginated, returning only the first page.
+	if api.mon.PipelineRequestTimer != nil {
+		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+	initialURL := api.sc.Endpoint + "os-hypervisors/detail"
+	var nextURL = &initialURL
+	var hypervisors []Hypervisor
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return nil, err
 		}
-		return hypervisors.List(api.sc, hypervisors.ListOpts{}).AllPages(ctx)
-	}()
-	if err != nil {
-		return nil, err
+		req.Header.Set("X-Auth-Token", api.sc.Token())
+		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
+		resp, err := api.sc.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			Hypervisors []Hypervisor `json:"hypervisors"`
+			Links       []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"hypervisors_links"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&list)
+		if err != nil {
+			return nil, err
+		}
+		hypervisors = append(hypervisors, list.Hypervisors...)
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
 	}
-	// Parse the json data into our custom model.
-	var data = &struct {
-		Hypervisors []Hypervisor `json:"hypervisors"`
-	}{}
-	if err := pages.(hypervisors.HypervisorPage).ExtractInto(data); err != nil {
-		return nil, err
-	}
-	slog.Info("fetched", "label", label, "count", len(data.Hypervisors))
-	return data.Hypervisors, nil
+	slog.Info("fetched", "label", label, "count", len(hypervisors))
+	return hypervisors, nil
 }
 
 // Get all Nova flavors since the timestamp.
