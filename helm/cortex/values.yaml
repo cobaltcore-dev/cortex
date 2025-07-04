@@ -132,6 +132,20 @@ conf:
       retryIntervalSeconds: 1
       livenessPingIntervalSeconds: 5
 
+  keystone:
+    # Authentication/identity service URL for openstack.
+    url: https://path-to-keystone/v3
+    # Optional, only required if OpenStack is configured with SSO.
+    # Note: the certificate will be used for all other OpenStack services.
+    sso: *sharedSSOCert
+
+    # OpenStack login credentials also used by the OpenStack CLI.
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to
+
   # Sync plugins config.
   sync:
     prometheus:
@@ -196,19 +210,6 @@ conf:
           type: netapp_node_metric
 
     openstack:
-      keystone:
-        # Authentication/identity service URL for openstack.
-        url: https://path-to-keystone/v3
-        # Optional, only required if OpenStack is configured with SSO.
-        # Note: the certificate will be used for all other OpenStack services.
-        sso: *sharedSSOCert
-
-        # OpenStack login credentials also used by the OpenStack CLI.
-        username: openstack-user-with-all-project-read-access
-        password: openstack-user-password
-        projectName: openstack-project-of-user
-        userDomainName: openstack-domain-of-user
-        projectDomainName: openstack-domain-of-project-scoped-to
       nova:
         # One of admin, public, or internal
         availability: public
