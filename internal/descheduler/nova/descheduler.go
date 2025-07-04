@@ -13,6 +13,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/descheduler/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/keystone"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/sapcc/go-bits/jobloop"
 )
 
@@ -27,19 +30,40 @@ type Descheduler struct {
 	steps []Step
 	// Configuration for the descheduler.
 	config conf.DeschedulerConfig
+	// Keystone API for authentication.
+	keystoneAPI keystone.KeystoneAPI
+	// Service client for Nova API.
+	sc *gophercloud.ServiceClient
 }
 
-func NewDescheduler(config conf.DeschedulerConfig, db db.DB) *Descheduler {
+func NewDescheduler(config conf.DeschedulerConfig, keystoneAPI keystone.KeystoneAPI) *Descheduler {
 	// Initialize the descheduler with the provided configuration and database.
 	descheduler := &Descheduler{
-		config: config,
+		config:      config,
+		keystoneAPI: keystoneAPI,
 	}
-	// Initialize the steps based on the configuration.
-	descheduler.Init(context.Background(), db, config)
 	return descheduler
 }
 
 func (d *Descheduler) Init(ctx context.Context, db db.DB, config conf.DeschedulerConfig) {
+	if err := d.keystoneAPI.Authenticate(ctx); err != nil {
+		panic(err)
+	}
+	// Automatically fetch the nova endpoint from the keystone service catalog.
+	provider := d.keystoneAPI.Client()
+	serviceType := "compute"
+	url, err := d.keystoneAPI.FindEndpoint(config.Nova.Availability, serviceType)
+	if err != nil {
+		panic(err)
+	}
+	slog.Info("using nova endpoint", "url", url)
+	d.sc = &gophercloud.ServiceClient{
+		ProviderClient: provider,
+		Endpoint:       url,
+		Type:           serviceType,
+		Microversion:   "2.53",
+	}
+
 	supportedStepsByName := make(map[string]Step)
 	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
@@ -64,8 +88,6 @@ func (d *Descheduler) Init(ctx context.Context, db db.DB, config conf.Deschedule
 			"options", stepConf.Options,
 		)
 	}
-
-	d.config = config
 }
 
 // Execute the descheduler steps in parallel and collect the decisions made by
@@ -100,23 +122,57 @@ func (d *Descheduler) run() map[string][]string {
 
 // Combine the decisions made by each step into a single list of vms to deschedule.
 func (d *Descheduler) deduplicate(decisionsByStep map[string][]string) []string {
-	vmsToDeschedule := []string{}
+	// Remove duplicates by converting to a map and back to a slice.
+	uniqueVms := make(map[string]struct{}, len(decisionsByStep))
 	for _, decisions := range decisionsByStep {
-		vmsToDeschedule = append(vmsToDeschedule, decisions...)
+		for _, vmid := range decisions {
+			uniqueVms[vmid] = struct{}{}
+		}
 	}
+	vmsToDeschedule := make([]string, 0, len(uniqueVms))
+	for vmid := range uniqueVms {
+		vmsToDeschedule = append(vmsToDeschedule, vmid)
+	}
+	slog.Info("descheduler: deduplicated decisions", "vmsToDeschedule", vmsToDeschedule)
 	return vmsToDeschedule
 }
 
 // Execute the virtual machine live-migrations using the Nova API.
 func (d *Descheduler) execute(decisions []string) {
-	for _, decision := range decisions {
-		slog.Info("descheduler: executing decision", "decision", decision)
+	for _, vmid := range decisions {
+		slog.Info("descheduler: live-migrating", "vmid", vmid)
 		if !d.config.Nova.DisableDryRun {
-			slog.Info("descheduler: dry-run enabled, skipping execution", "decision", decision)
+			slog.Info("descheduler: dry-run enabled, skipping execution", "vmid", vmid)
 			continue
 		}
-		slog.Info("descheduler: executing migration for VM", "vmId", decision)
-		// TODO
+		slog.Info("descheduler: executing migration for VM", "vmId", vmid)
+		ctx := context.Background()
+		lmo := servers.LiveMigrateOpts{}
+		result := servers.LiveMigrate(ctx, d.sc, vmid, lmo)
+		if result.Err != nil {
+			slog.Error("descheduler: failed to live-migrate VM", "vmId", vmid, "error", result.Err)
+			continue
+		}
+		// Wait for the migration to complete.
+		slog.Info("descheduler: live-migration started", "vmId", vmid)
+		for {
+			status, err := servers.Get(ctx, d.sc, vmid).Extract()
+			if err != nil {
+				slog.Error("descheduler: failed to get VM status", "vmId", vmid, "error", err)
+				// Consider migration as failed
+				break
+			}
+			if status.Status == "ACTIVE" {
+				slog.Info("descheduler: live-migration completed", "vmId", vmid)
+				break
+			}
+			if status.Status == "ERROR" {
+				slog.Error("descheduler: live-migration failed", "vmId", vmid)
+				break
+			}
+			slog.Info("descheduler: waiting for live-migration to complete", "vmId", vmid, "status", status.Status)
+			time.Sleep(5 * time.Second) // Wait before checking the status again.
+		}
 	}
 }
 

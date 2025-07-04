@@ -107,9 +107,11 @@ func runKPIService(registry *monitoring.Registry, config conf.KPIsConfig, db db.
 }
 
 // Run a descheduler for Nova virtual machines.
-func runDeschedulerNova(ctx context.Context, config conf.DeschedulerConfig, db db.DB) {
-	descheduler := novaDescheduler.NewDescheduler(config, db)
-	descheduler.Init(ctx, db, config)          // non-blocking
+func runDeschedulerNova(ctx context.Context, config conf.Config, db db.DB) {
+	keystoneAPI := keystone.NewKeystoneAPI(config.GetKeystoneConfig())
+	deschedulerConf := config.GetDeschedulerConfig()
+	descheduler := novaDescheduler.NewDescheduler(deschedulerConf, keystoneAPI)
+	descheduler.Init(ctx, db, deschedulerConf) // non-blocking
 	go descheduler.DeschedulePeriodically(ctx) // blocking
 }
 
@@ -227,7 +229,7 @@ func main() {
 	case "kpis":
 		runKPIService(registry, config.GetKPIsConfig(), database)
 	case "descheduler-nova":
-		runDeschedulerNova(ctx, config.GetDeschedulerConfig(), database)
+		runDeschedulerNova(ctx, config, database)
 	default:
 		panic("unknown task")
 	}

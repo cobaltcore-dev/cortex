@@ -262,6 +262,8 @@ type DeschedulerConfig struct {
 
 // Configuration for the nova descheduler.
 type NovaDeschedulerConfig struct {
+	// The availability of the nova service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
 	// The steps to execute in the descheduler.
 	Plugins []DeschedulerStepConfig `json:"plugins"`
 	// If dry-run is disabled (by default its enabled).

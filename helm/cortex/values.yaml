@@ -604,6 +604,7 @@ conf:
   descheduler:
     nova:
       disableDryRun: false
+      availability: public
       # Configuration of the descheduler that runs periodically to de-schedule
       # VMs based on the configured plugins.
       # Each plugin can specify its own dependencies on extractors and synced data.
