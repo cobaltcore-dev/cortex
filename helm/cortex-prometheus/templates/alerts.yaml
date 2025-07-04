@@ -221,7 +221,7 @@ spec:
 
     - alert: CortexTooManyDBConnectionAttempts
       expr: rate(cortex_db_connection_attempts_total[5m]) > 0.1
-      for: 1m
+      for: 5m
       labels:
         context: db
         {{- if .global }}{{ .global | toYaml | nindent 8 }}{{- end }}
@@ -232,41 +232,51 @@ spec:
           Cortex is trying to connect to the database too often. This may happen
           when the database is down or the connection parameters are misconfigured.
 
-    - alert: CortexHostCPUUtilizationHigh
+    - alert: CortexHostCPUUtilizationAbove100Percent
       expr: cortex_host_utilization_per_host_pct{resource="cpu"} > 100
       for: 5m
       labels:
         context: hostutilization
         {{- if .global }}{{ .global | toYaml | nindent 6 }}{{- end }}
-        {{- if .cortexHostCPUUtilizationHigh }}{{ .cortexHostCPUUtilizationHigh | toYaml | nindent 6 }}{{- end }}
+        {{- if .cortexHostCPUUtilizationAbove100Percent }}{{ .cortexHostCPUUtilizationAbove100Percent | toYaml | nindent 6 }}{{- end }}
       annotations:
-        summary: "High CPU utilization on host {{`{{$labels.compute_host_name}}`}}"
+        summary: "CPU utilization on host {{`{{$labels.compute_host_name}}`}} is above 100%"
         description: >
-          The CPU utilization on host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} is above 100% for more than 5 minutes.
+          OpenStack Placement reports CPU utilization above 100% for host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} for over 5 minutes.
+          This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
+          Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
+          This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
 
-    - alert: CortexHostMemoryUtilizationHigh
+
+    - alert: CortexHostMemoryUtilizationAbove100Percent
       expr: cortex_host_utilization_per_host_pct{resource="memory"} > 100
       for: 5m
       labels:
         context: hostutilization
         {{- if .global }}{{ .global | toYaml | nindent 6 }}{{- end }}
-        {{- if .cortexHostMemoryUtilizationHigh }}{{ .cortexHostMemoryUtilizationHigh | toYaml | nindent 6 }}{{- end }}
+        {{- if .cortexHostMemoryUtilizationAbove100Percent }}{{ .cortexHostMemoryUtilizationAbove100Percent | toYaml | nindent 6 }}{{- end }}
       annotations:
-        summary: "High memory utilization on host {{`{{$labels.compute_host_name}}`}}"
+        summary: "Memory utilization on host {{`{{$labels.compute_host_name}}`}} is above 100%"
         description: >
-          The memory utilization on host {{`{{$labels.compute_host_name}}`}} in AZ {{ `{{$labels.availability_zone}}` }} is above 100% for more than 5 minutes.
+          OpenStack Placement reports Memory utilization above 100% for host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} for over 5 minutes.
+          This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
+          Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
+          This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
 
-    - alert: CortexHostDiskUtilizationHigh
+    - alert: CortexHostDiskUtilizationAbove100Percent
       expr: cortex_host_utilization_per_host_pct{resource="disk"} > 100
       for: 5m
       labels:
         context: hostutilization
         {{- if .global }}{{ .global | toYaml | nindent 6 }}{{- end }}
-        {{- if .cortexHostDiskUtilizationHigh }}{{ .cortexHostDiskUtilizationHigh | toYaml | nindent 6 }}{{- end }}
+        {{- if .cortexHostDiskUtilizationAbove100Percent}}{{ .cortexHostDiskUtilizationAbove100Percent| toYaml | nindent 6 }}{{- end }}
       annotations:
-        summary: "High disk utilization on host {{`{{$labels.compute_host_name}}`}}"
+        summary: "Disk utilization on host {{`{{$labels.compute_host_name}}`}} is above 100%."
         description: >
-          The disk utilization on host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} is above 100% for more than 5 minutes.
+          OpenStack Placement reports Disk utilization above 100% for host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} for over 5 minutes.
+          This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
+          Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
+          This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
 
 
 
