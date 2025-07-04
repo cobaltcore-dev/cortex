@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 6,
+  "id": 4,
   "links": [],
   "panels": [
     {
@@ -26,6 +26,173 @@
         "w": 24,
         "x": 0,
         "y": 0
+      },
+      "id": 91,
+      "panels": [],
+      "title": "KPIs: NetApp Storage Pool CPU Usage",
+      "type": "row"
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 89,
+      "interval": null,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum(cortex_netapp_storage_pool_cpu_usage_max_bucket{}) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "NetApp Storage Pool CPU Usage (Maximum over 4 Weeks)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "percent",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": 0
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.01,
+        "max": null,
+        "min": null,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 92,
+      "interval": null,
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "7.5.35",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum(cortex_netapp_storage_pool_cpu_usage_avg_bucket{}) by (le)",
+          "format": "heatmap",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "NetApp Storage Pool CPU Usage (Average over 4 Weeks)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "tooltipDecimals": null,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": 0,
+        "format": "percent",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
       },
       "id": 73,
       "panels": [],
@@ -48,7 +215,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 14
       },
       "hiddenSeries": false,
       "id": 56,
@@ -150,7 +317,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 14
       },
       "hiddenSeries": false,
       "id": 68,
@@ -261,7 +428,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 7
+        "y": 20
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -335,7 +502,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 7
+        "y": 20
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -429,7 +596,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 32
       },
       "id": 67,
       "options": {
@@ -509,7 +676,7 @@
         "h": 18,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 32
       },
       "id": 61,
       "options": {
@@ -560,7 +727,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 44
       },
       "hiddenSeries": false,
       "id": 69,
@@ -653,7 +820,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 50
       },
       "id": 71,
       "panels": [],
@@ -685,7 +852,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 38
+        "y": 51
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -761,7 +928,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 38
+        "y": 51
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -857,7 +1024,7 @@
         "h": 16,
         "w": 12,
         "x": 0,
-        "y": 50
+        "y": 63
       },
       "id": 64,
       "options": {
@@ -937,7 +1104,7 @@
         "h": 16,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 63
       },
       "id": 62,
       "options": {
@@ -979,7 +1146,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 66
+        "y": 79
       },
       "id": 76,
       "panels": [],
@@ -1011,7 +1178,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 67
+        "y": 80
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1087,7 +1254,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 67
+        "y": 80
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1163,7 +1330,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 79
+        "y": 92
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1244,7 +1411,7 @@
         "h": 12,
         "w": 4,
         "x": 12,
-        "y": 79
+        "y": 92
       },
       "id": 79,
       "interval": null,
@@ -1309,7 +1476,7 @@
         "h": 12,
         "w": 4,
         "x": 16,
-        "y": 79
+        "y": 92
       },
       "id": 80,
       "interval": null,
@@ -1374,7 +1541,7 @@
         "h": 12,
         "w": 4,
         "x": 20,
-        "y": 79
+        "y": 92
       },
       "id": 81,
       "interval": null,
@@ -1416,7 +1583,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 91
+        "y": 104
       },
       "id": 84,
       "panels": [],
@@ -1448,7 +1615,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 92
+        "y": 105
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1524,7 +1691,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 92
+        "y": 105
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1582,7 +1749,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 104
+        "y": 117
       },
       "id": 88,
       "panels": [],
@@ -1614,7 +1781,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 105
+        "y": 118
       },
       "heatmap": {},
       "hideZeroBuckets": false,

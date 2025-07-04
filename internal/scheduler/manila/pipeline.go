@@ -9,7 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/plugins/netapp"
 )
 
 type ManilaStep = scheduler.Step[api.ExternalSchedulerRequest]
@@ -17,7 +17,7 @@ type ManilaStep = scheduler.Step[api.ExternalSchedulerRequest]
 // Configuration of steps supported by the scheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
 var supportedSteps = []ManilaStep{
-	&shared.CapacityBalancingStep{},
+	&netapp.CPUUsageBalancingStep{},
 }
 
 // Create a new Manila scheduler pipeline.

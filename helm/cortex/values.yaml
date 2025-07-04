@@ -142,6 +142,11 @@ conf:
           provides: [node_exporter_metric]
           # Optional, only required if Prometheus is configured with SSO.
           sso: *sharedSSOCert
+        - name: netapp_prometheus
+          url: https://path-to-netapp-harvest-exporter
+          provides: [netapp_aggregate_labels_metric, netapp_node_metric]
+          # Optional, only required if Prometheus is configured with SSO.
+          sso: *sharedSSOCert
       # Prometheus metrics to sync into the database.
       # Each metric can be synced from a different Prometheus instance.
       # The `type` parameter should map to a known metric model in the database.
@@ -177,6 +182,13 @@ conf:
               (sum by (node) (node_memory_MemTotal_bytes) / count by (node) (node_memory_MemTotal_bytes))
             )) * 100
           type: node_exporter_metric
+        # NetApp harvest exporter metrics for Manila storage pools.
+        - alias: netapp_aggr_labels
+          query: netapp_aggr_labels{}
+          type: netapp_aggregate_labels_metric
+        - alias: netapp_node_cpu_busy
+          query: netapp_node_cpu_busy{}
+          type: netapp_node_metric
 
     openstack:
       keystone:
@@ -285,6 +297,16 @@ conf:
               metrics:
                 - alias: node_exporter_memory_active_pct
 
+      # NetApp-specific extractors.
+      - name: netapp_storage_pool_cpu_usage_extractor
+        recencySeconds: 60 # 1 minute
+        dependencies:
+          sync:
+            prometheus:
+              metrics:
+                - alias: netapp_node_cpu_busy
+                - alias: netapp_aggr_labels
+
       # Shared extractors.
       - name: storage_pool_utilization_extractor
         recencySeconds: 60 # 1 minute
@@ -349,6 +371,11 @@ conf:
         dependencies:
           extractors:
             - vrops_project_noisiness_extractor
+      # NetApp-specific KPIs.
+      - name: netapp_storage_pool_cpu_usage_kpi
+        dependencies:
+          extractors:
+            - netapp_storage_pool_cpu_usage_extractor
       # Shared KPIs.
       - name: host_utilization_kpi
         dependencies:
@@ -385,18 +412,20 @@ conf:
       # the order will be maintained when the weights are applied to the
       # input weights.
       plugins:
-        # Bin-packing for Manila storage pools.
-        - name: capacity_balancing
+        # Balance cpu utilization of Manila storage pools.
+        - name: netapp_cpu_usage_balancing
           options:
-            # Min-max scaling for gap-fitting based on capacity left (pct)
-            # Note the inverted values here -> binpacking instead of balancing.
-            utilizedLowerBoundPct: 100
-            utilizedUpperBoundPct: 0
-            utilizedActivationLowerBound: 0.0
-            utilizedActivationUpperBound: 1.0
+            # Min-max scaling for gap-fitting based on CPU usage (pct)
+            avgCPUUsageLowerBound: 0 # pct
+            avgCPUUsageUpperBound: 10 # pct
+            avgCPUUsageActivationLowerBound: 0.0
+            avgCPUUsageActivationUpperBound: -0.75
+            maxCPUUsageLowerBound: 0 # pct
+            maxCPUUsageUpperBound: 10 # pct
+            maxCPUUsageActivationLowerBound: 0.0
+            maxCPUUsageActivationUpperBound: -0.25
           dependencies:
-            extractors:
-              - storage_pool_utilization_extractor
+            extractors: [netapp_storage_pool_cpu_usage_extractor]
 
     nova:
       # Dependencies needed by all the Nova scheduler steps.
