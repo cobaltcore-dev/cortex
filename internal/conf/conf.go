@@ -276,6 +276,28 @@ type SchedulerAPIConfig struct {
 	LogRequestBodies bool `json:"logRequestBodies"`
 }
 
+// Configuration for the descheduler module.
+type DeschedulerConfig struct {
+	Nova NovaDeschedulerConfig `json:"nova"`
+}
+
+// Configuration for the nova descheduler.
+type NovaDeschedulerConfig struct {
+	// The steps to execute in the descheduler.
+	Plugins []DeschedulerStepConfig `json:"plugins"`
+	// If dry-run is disabled (by default its enabled).
+	DisableDryRun bool `json:"disableDryRun,omitempty"`
+}
+
+type DeschedulerStepConfig struct {
+	// The name of the step.
+	Name string `json:"name"`
+	// Custom options for the step, as a raw yaml map.
+	Options RawOpts `json:"options,omitempty"`
+	// The dependencies this step needs.
+	DependencyConfig `json:"dependencies,omitempty"`
+}
+
 // Configuration for the kpis module.
 type KPIsConfig struct {
 	// KPI plugins to use.
@@ -333,6 +355,7 @@ type Config interface {
 	GetSyncConfig() SyncConfig
 	GetExtractorConfig() ExtractorConfig
 	GetSchedulerConfig() SchedulerConfig
+	GetDeschedulerConfig() DeschedulerConfig
 	GetKPIsConfig() KPIsConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
@@ -345,15 +368,16 @@ type config struct {
 	// The checks to run, in this particular order.
 	Checks []string `json:"checks"`
 
-	LoggingConfig    `json:"logging"`
-	DBConfig         `json:"db"`
-	SyncConfig       `json:"sync"`
-	ExtractorConfig  `json:"extractor"`
-	SchedulerConfig  `json:"scheduler"`
-	MonitoringConfig `json:"monitoring"`
-	KPIsConfig       `json:"kpis"`
-	MQTTConfig       `json:"mqtt"`
-	APIConfig        `json:"api"`
+	LoggingConfig     `json:"logging"`
+	DBConfig          `json:"db"`
+	SyncConfig        `json:"sync"`
+	ExtractorConfig   `json:"extractor"`
+	SchedulerConfig   `json:"scheduler"`
+	DeschedulerConfig `json:"descheduler"`
+	MonitoringConfig  `json:"monitoring"`
+	KPIsConfig        `json:"kpis"`
+	MQTTConfig        `json:"mqtt"`
+	APIConfig         `json:"api"`
 }
 
 // Create a new configuration from the default config json file.
@@ -384,13 +408,14 @@ func newConfigFromBytes(bytes []byte) Config {
 	return &c
 }
 
-func (c *config) GetChecks() []string                   { return c.Checks }
-func (c *config) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
-func (c *config) GetDBConfig() DBConfig                 { return c.DBConfig }
-func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
-func (c *config) GetExtractorConfig() ExtractorConfig   { return c.ExtractorConfig }
-func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
-func (c *config) GetKPIsConfig() KPIsConfig             { return c.KPIsConfig }
-func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
-func (c *config) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }
-func (c *config) GetAPIConfig() APIConfig               { return c.APIConfig }
+func (c *config) GetChecks() []string                     { return c.Checks }
+func (c *config) GetLoggingConfig() LoggingConfig         { return c.LoggingConfig }
+func (c *config) GetDBConfig() DBConfig                   { return c.DBConfig }
+func (c *config) GetSyncConfig() SyncConfig               { return c.SyncConfig }
+func (c *config) GetExtractorConfig() ExtractorConfig     { return c.ExtractorConfig }
+func (c *config) GetSchedulerConfig() SchedulerConfig     { return c.SchedulerConfig }
+func (c *config) GetDeschedulerConfig() DeschedulerConfig { return c.DeschedulerConfig }
+func (c *config) GetKPIsConfig() KPIsConfig               { return c.KPIsConfig }
+func (c *config) GetMonitoringConfig() MonitoringConfig   { return c.MonitoringConfig }
+func (c *config) GetMQTTConfig() MQTTConfig               { return c.MQTTConfig }
+func (c *config) GetAPIConfig() APIConfig                 { return c.APIConfig }

@@ -99,13 +99,18 @@ func (c *config) Validate() error {
 			return err
 		}
 	}
-	for _, step := range c.Nova.Plugins {
+	for _, step := range c.SchedulerConfig.Nova.Plugins {
+		if err := step.validate(*c); err != nil {
+			return err
+		}
+	}
+	for _, step := range c.DeschedulerConfig.Nova.Plugins {
 		if err := step.validate(*c); err != nil {
 			return err
 		}
 	}
 	// Check general dependencies needed by all scheduler steps.
-	if err := c.Nova.validate(*c); err != nil {
+	if err := c.SchedulerConfig.Nova.validate(*c); err != nil {
 		return err
 	}
 	if c.API.LogRequestBodies {

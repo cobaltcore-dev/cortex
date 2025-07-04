@@ -58,6 +58,11 @@ k8s_resource('cortex-kpis', port_forwards=[
 ], links=[
     link('localhost:8007/metrics', '/metrics'),
 ], labels=['Core-Services'])
+k8s_resource('cortex-descheduler-nova', port_forwards=[
+    port_forward(8008, 2112),
+], links=[
+    link('localhost:8008/metrics', '/metrics'),
+], labels=['Core-Services'])
 
 ########### Cortex Commands
 k8s_resource('cortex-cli', labels=['Commands'])
@@ -76,7 +81,7 @@ local('sh helm/sync.sh helm/cortex-mqtt')
 k8s_yaml(helm('./helm/cortex-mqtt', name='cortex-mqtt'))
 k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
-    port_forward(8008, 15675), # Websocket connection
+    port_forward(8009, 15675), # Websocket connection
 ], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
