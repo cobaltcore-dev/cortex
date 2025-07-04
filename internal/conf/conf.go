@@ -82,33 +82,12 @@ type SyncPrometheusConfig struct {
 
 // Configuration for the sync/openstack module.
 type SyncOpenStackConfig struct {
-	// Configuration for the keystone service.
-	Keystone SyncOpenStackKeystoneConfig `json:"keystone"`
 	// Configuration for the nova service.
 	Nova SyncOpenStackNovaConfig `json:"nova"`
 	// Configuration for the placement service.
 	Placement SyncOpenStackPlacementConfig `json:"placement"`
 	// Configuration for the manila service.
 	Manila SyncOpenStackManilaConfig `json:"manila"`
-}
-
-// Configuration for the keystone authentication.
-type SyncOpenStackKeystoneConfig struct {
-	// The URL of the keystone service.
-	URL string `json:"url"`
-	// The SSO certificate to use. If none is given, we won't
-	// use SSO to connect to the openstack services.
-	SSO SSOConfig `json:"sso,omitempty"`
-	// The OpenStack username (OS_USERNAME in openstack cli).
-	OSUsername string `json:"username"`
-	// The OpenStack password (OS_PASSWORD in openstack cli).
-	OSPassword string `json:"password"`
-	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
-	OSProjectName string `json:"projectName"`
-	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
-	OSUserDomainName string `json:"userDomainName"`
-	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
-	OSProjectDomainName string `json:"projectDomainName"`
 }
 
 // Configuration for the nova service.
@@ -276,6 +255,30 @@ type SchedulerAPIConfig struct {
 	LogRequestBodies bool `json:"logRequestBodies"`
 }
 
+// Configuration for the descheduler module.
+type DeschedulerConfig struct {
+	Nova NovaDeschedulerConfig `json:"nova"`
+}
+
+// Configuration for the nova descheduler.
+type NovaDeschedulerConfig struct {
+	// The availability of the nova service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+	// The steps to execute in the descheduler.
+	Plugins []DeschedulerStepConfig `json:"plugins"`
+	// If dry-run is disabled (by default its enabled).
+	DisableDryRun bool `json:"disableDryRun,omitempty"`
+}
+
+type DeschedulerStepConfig struct {
+	// The name of the step.
+	Name string `json:"name"`
+	// Custom options for the step, as a raw yaml map.
+	Options RawOpts `json:"options,omitempty"`
+	// The dependencies this step needs.
+	DependencyConfig `json:"dependencies,omitempty"`
+}
+
 // Configuration for the kpis module.
 type KPIsConfig struct {
 	// KPI plugins to use.
@@ -325,6 +328,25 @@ type APIConfig struct {
 	Port int `json:"port"`
 }
 
+// Configuration for the keystone authentication.
+type KeystoneConfig struct {
+	// The URL of the keystone service.
+	URL string `json:"url"`
+	// The SSO certificate to use. If none is given, we won't
+	// use SSO to connect to the openstack services.
+	SSO SSOConfig `json:"sso,omitempty"`
+	// The OpenStack username (OS_USERNAME in openstack cli).
+	OSUsername string `json:"username"`
+	// The OpenStack password (OS_PASSWORD in openstack cli).
+	OSPassword string `json:"password"`
+	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
+	OSProjectName string `json:"projectName"`
+	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
+	OSUserDomainName string `json:"userDomainName"`
+	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
+	OSProjectDomainName string `json:"projectDomainName"`
+}
+
 // Configuration for the cortex service.
 type Config interface {
 	GetChecks() []string
@@ -333,10 +355,12 @@ type Config interface {
 	GetSyncConfig() SyncConfig
 	GetExtractorConfig() ExtractorConfig
 	GetSchedulerConfig() SchedulerConfig
+	GetDeschedulerConfig() DeschedulerConfig
 	GetKPIsConfig() KPIsConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
 	GetAPIConfig() APIConfig
+	GetKeystoneConfig() KeystoneConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
@@ -345,15 +369,17 @@ type config struct {
 	// The checks to run, in this particular order.
 	Checks []string `json:"checks"`
 
-	LoggingConfig    `json:"logging"`
-	DBConfig         `json:"db"`
-	SyncConfig       `json:"sync"`
-	ExtractorConfig  `json:"extractor"`
-	SchedulerConfig  `json:"scheduler"`
-	MonitoringConfig `json:"monitoring"`
-	KPIsConfig       `json:"kpis"`
-	MQTTConfig       `json:"mqtt"`
-	APIConfig        `json:"api"`
+	LoggingConfig     `json:"logging"`
+	DBConfig          `json:"db"`
+	SyncConfig        `json:"sync"`
+	ExtractorConfig   `json:"extractor"`
+	SchedulerConfig   `json:"scheduler"`
+	DeschedulerConfig `json:"descheduler"`
+	MonitoringConfig  `json:"monitoring"`
+	KPIsConfig        `json:"kpis"`
+	MQTTConfig        `json:"mqtt"`
+	APIConfig         `json:"api"`
+	KeystoneConfig    `json:"keystone"`
 }
 
 // Create a new configuration from the default config json file.
@@ -384,13 +410,15 @@ func newConfigFromBytes(bytes []byte) Config {
 	return &c
 }
 
-func (c *config) GetChecks() []string                   { return c.Checks }
-func (c *config) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
-func (c *config) GetDBConfig() DBConfig                 { return c.DBConfig }
-func (c *config) GetSyncConfig() SyncConfig             { return c.SyncConfig }
-func (c *config) GetExtractorConfig() ExtractorConfig   { return c.ExtractorConfig }
-func (c *config) GetSchedulerConfig() SchedulerConfig   { return c.SchedulerConfig }
-func (c *config) GetKPIsConfig() KPIsConfig             { return c.KPIsConfig }
-func (c *config) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
-func (c *config) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }
-func (c *config) GetAPIConfig() APIConfig               { return c.APIConfig }
+func (c *config) GetChecks() []string                     { return c.Checks }
+func (c *config) GetLoggingConfig() LoggingConfig         { return c.LoggingConfig }
+func (c *config) GetDBConfig() DBConfig                   { return c.DBConfig }
+func (c *config) GetSyncConfig() SyncConfig               { return c.SyncConfig }
+func (c *config) GetExtractorConfig() ExtractorConfig     { return c.ExtractorConfig }
+func (c *config) GetSchedulerConfig() SchedulerConfig     { return c.SchedulerConfig }
+func (c *config) GetDeschedulerConfig() DeschedulerConfig { return c.DeschedulerConfig }
+func (c *config) GetKPIsConfig() KPIsConfig               { return c.KPIsConfig }
+func (c *config) GetMonitoringConfig() MonitoringConfig   { return c.MonitoringConfig }
+func (c *config) GetMQTTConfig() MQTTConfig               { return c.MQTTConfig }
+func (c *config) GetAPIConfig() APIConfig                 { return c.APIConfig }
+func (c *config) GetKeystoneConfig() KeystoneConfig       { return c.KeystoneConfig }

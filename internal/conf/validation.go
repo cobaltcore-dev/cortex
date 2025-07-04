@@ -99,13 +99,18 @@ func (c *config) Validate() error {
 			return err
 		}
 	}
-	for _, step := range c.Nova.Plugins {
+	for _, step := range c.SchedulerConfig.Nova.Plugins {
+		if err := step.validate(*c); err != nil {
+			return err
+		}
+	}
+	for _, step := range c.DeschedulerConfig.Nova.Plugins {
 		if err := step.validate(*c); err != nil {
 			return err
 		}
 	}
 	// Check general dependencies needed by all scheduler steps.
-	if err := c.Nova.validate(*c); err != nil {
+	if err := c.SchedulerConfig.Nova.validate(*c); err != nil {
 		return err
 	}
 	if c.API.LogRequestBodies {
@@ -118,15 +123,15 @@ func (c *config) Validate() error {
 		}
 	}
 	// Check the keystone URL.
-	if c.OpenStack.Keystone.URL != "" && !strings.Contains(c.OpenStack.Keystone.URL, "/v3") {
+	if c.KeystoneConfig.URL != "" && !strings.Contains(c.KeystoneConfig.URL, "/v3") {
 		return fmt.Errorf(
 			"expected v3 Keystone URL, but got %s",
-			c.OpenStack.Keystone.URL,
+			c.KeystoneConfig.URL,
 		)
 	}
 	// OpenStack urls should end without a slash.
 	for _, url := range []string{
-		c.OpenStack.Keystone.URL,
+		c.KeystoneConfig.URL,
 	} {
 		if strings.HasSuffix(url, "/") {
 			return fmt.Errorf("openstack url %s should not end with a slash", url)
