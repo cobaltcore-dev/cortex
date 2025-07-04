@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/netapp"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -29,8 +30,9 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	// KVM-specific extractors
 	&kvm.NodeExporterHostCPUUsageExtractor{},
 	&kvm.NodeExporterHostMemoryActiveExtractor{},
+	// NetApp-specific extractors
+	&netapp.StoragePoolCPUUsageExtractor{},
 	// Shared extractors
-	&shared.StoragePoolUtilizationExtractor{},
 	&shared.HostUtilizationExtractor{},
 	&shared.HostCapabilitiesExtractor{},
 	&shared.VMHostResidencyExtractor{},

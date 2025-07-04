@@ -27,9 +27,11 @@ type syncerFunc func(
 
 // List of supported metric types that can be specified in the yaml config.
 var SupportedSyncers = map[string]syncerFunc{
-	"vrops_host_metric":    newSyncerOfType[VROpsHostMetric],
-	"vrops_vm_metric":      newSyncerOfType[VROpsVMMetric],
-	"node_exporter_metric": newSyncerOfType[NodeExporterMetric],
+	"vrops_host_metric":              newSyncerOfType[VROpsHostMetric],
+	"vrops_vm_metric":                newSyncerOfType[VROpsVMMetric],
+	"node_exporter_metric":           newSyncerOfType[NodeExporterMetric],
+	"netapp_aggregate_labels_metric": newSyncerOfType[NetAppAggregateLabelsMetric],
+	"netapp_node_metric":             newSyncerOfType[NetAppNodeMetric],
 }
 
 // Syncer that syncs all configured metrics.

@@ -152,3 +152,75 @@ func (m NodeExporterMetric) With(n string, t time.Time, v float64) PrometheusMet
 	m.Value = v
 	return m
 }
+
+// Metric exported by NetApp harvest exporter.
+// Some additional fields are omitted.
+// See: https://github.com/NetApp/harvest
+type NetAppAggregateLabelsMetric struct {
+	// The name of the metric.
+	Name string `db:"name"`
+
+	// The name of the aggregate as included in the Manila field `pool`.
+	Aggregate string `json:"aggr" db:"aggr"`
+	// One host can host multiple aggregates.
+	Host string `json:"host" db:"host"`
+	// One aggregate can include multiple nodes.
+	Node string `json:"node" db:"node"`
+
+	Filer string `json:"filer" db:"filer"`
+
+	// State (e.g., "online", "offline").
+	State string `json:"state" db:"state"`
+	// Type, such as `ssd_cap`.
+	Type string `json:"type" db:"type"`
+	// If the storage is encrypted.
+	IsEncrypted string `json:"is_encrypted" db:"is_encrypted"`
+
+	// Timestamp of the metric value.
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
+	// The value of the metric (always 1).
+	Value float64 `json:"value" db:"value"`
+}
+
+func (m NetAppAggregateLabelsMetric) TableName() string       { return "netapp_aggregate_labels_metrics" }
+func (m NetAppAggregateLabelsMetric) Indexes() []db.Index     { return nil }
+func (m NetAppAggregateLabelsMetric) GetName() string         { return m.Name }
+func (m NetAppAggregateLabelsMetric) GetTimestamp() time.Time { return m.Timestamp }
+func (m NetAppAggregateLabelsMetric) GetValue() float64       { return m.Value }
+func (m NetAppAggregateLabelsMetric) With(n string, t time.Time, v float64) PrometheusMetric {
+	m.Name = n
+	m.Timestamp = t
+	m.Value = v
+	return m
+}
+
+// Metric exported by NetApp harvest exporter.
+// Some additional fields are omitted.
+// See: https://github.com/NetApp/harvest
+type NetAppNodeMetric struct {
+	// The name of the metric.
+	Name string `db:"name"`
+
+	Filer string `json:"filer" db:"filer"`
+	// One host can host multiple nodes.
+	Host string `json:"host" db:"host"`
+	// One node can include multiple filers.
+	Node string `json:"node" db:"node"`
+
+	// Timestamp of the metric value.
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
+	// The value of the metric.
+	Value float64 `json:"value" db:"value"`
+}
+
+func (m NetAppNodeMetric) TableName() string       { return "netapp_node_metrics" }
+func (m NetAppNodeMetric) Indexes() []db.Index     { return nil }
+func (m NetAppNodeMetric) GetName() string         { return m.Name }
+func (m NetAppNodeMetric) GetTimestamp() time.Time { return m.Timestamp }
+func (m NetAppNodeMetric) GetValue() float64       { return m.Value }
+func (m NetAppNodeMetric) With(n string, t time.Time, v float64) PrometheusMetric {
+	m.Name = n
+	m.Timestamp = t
+	m.Value = v
+	return m
+}

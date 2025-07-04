@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/netapp"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
@@ -20,6 +21,8 @@ var SupportedKPIs = []plugins.KPI{
 	// VMware kpis.
 	&vmware.VMwareHostContentionKPI{},
 	&vmware.VMwareProjectNoisinessKPI{},
+	// NetApp kpis.
+	&netapp.NetAppStoragePoolCPUUsageKPI{},
 	// Shared kpis.
 	&shared.HostUtilizationKPI{},
 	&shared.VMMigrationStatisticsKPI{},
