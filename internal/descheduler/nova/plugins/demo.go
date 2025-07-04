@@ -22,21 +22,15 @@ func (s *DemoStep) GetName() string {
 	return "demo"
 }
 
-// Run the step to de-schedule the VM.
-func (s *DemoStep) Run() (map[string][]string, error) {
-	decisions := make(map[string][]string)
+func (s *DemoStep) Run() ([]string, error) {
 	// Get VMs matching the VMName option.
 	var ids []string
 	q := "SELECT id FROM " + nova.Server{}.TableName()
-	q += " WHERE name = :name"
+	q += " WHERE name = :name AND status = 'ACTIVE'"
 	if _, err := s.DB.Select(&ids, q, map[string]any{
 		"name": s.Options.VMName,
 	}); err != nil {
 		return nil, err
 	}
-	// For each VM, we decide to de-schedule it.
-	for _, id := range ids {
-		decisions[id] = []string{} // No specific target host.
-	}
-	return decisions, nil
+	return ids, nil
 }

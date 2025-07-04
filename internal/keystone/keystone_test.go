@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
-//nolint:gocritic
-func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, KeystoneConf) {
+func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, conf.KeystoneConfig) {
 	server := httptest.NewServer(handler)
-	conf := KeystoneConf{
+	conf := conf.KeystoneConfig{
 		URL:                 server.URL + "/v3",
 		OSUsername:          "testuser",
 		OSUserDomainName:    "default",
@@ -24,7 +25,7 @@ func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, Keysto
 }
 
 func TestNewKeystoneAPI(t *testing.T) {
-	keystoneConf := KeystoneConf{
+	keystoneConf := conf.KeystoneConfig{
 		URL:                 "http://example.com",
 		OSUsername:          "testuser",
 		OSUserDomainName:    "default",

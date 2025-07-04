@@ -16,6 +16,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	novaDescheduler "github.com/cobaltcore-dev/cortex/internal/descheduler/nova"
 	"github.com/cobaltcore-dev/cortex/internal/extractor"
+	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -35,16 +36,18 @@ import (
 )
 
 // Periodically fetch data from the datasources and insert it into the database.
-func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
+func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.Config, db db.DB) {
 	monitor := sync.NewSyncMonitor(registry)
 	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
 	defer mqttClient.Disconnect()
+	syncConfig := config.GetSyncConfig()
+	keystoneAPI := keystone.NewKeystoneAPI(config.GetKeystoneConfig())
 	syncers := []sync.Datasource{
-		prometheus.NewCombinedSyncer(prometheus.SupportedSyncers, config.Prometheus, db, monitor, mqttClient),
-		openstack.NewCombinedSyncer(ctx, config.OpenStack, monitor, db, mqttClient),
+		prometheus.NewCombinedSyncer(prometheus.SupportedSyncers, syncConfig.Prometheus, db, monitor, mqttClient),
+		openstack.NewCombinedSyncer(ctx, keystoneAPI, syncConfig.OpenStack, monitor, db, mqttClient),
 	}
 	pipeline := sync.Pipeline{Syncers: syncers}
 	pipeline.Init(ctx)
@@ -214,7 +217,7 @@ func main() {
 
 	switch taskName {
 	case "syncer":
-		runSyncer(ctx, registry, config.GetSyncConfig(), database)
+		runSyncer(ctx, registry, config, database)
 	case "extractor":
 		runExtractor(registry, config.GetExtractorConfig(), database)
 	case "scheduler-nova":

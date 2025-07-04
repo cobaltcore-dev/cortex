@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 	"sync"
 	"time"
 
@@ -71,9 +70,9 @@ func (d *Descheduler) Init(ctx context.Context, db db.DB, config conf.Deschedule
 
 // Execute the descheduler steps in parallel and collect the decisions made by
 // each step.
-func (d *Descheduler) run() map[string]map[string][]string {
+func (d *Descheduler) run() map[string][]string {
 	var lock sync.Mutex
-	decisionsByStep := map[string]map[string][]string{}
+	decisionsByStep := map[string][]string{}
 	var wg sync.WaitGroup
 	for _, step := range d.steps {
 		wg.Add(1)
@@ -99,50 +98,25 @@ func (d *Descheduler) run() map[string]map[string][]string {
 	return decisionsByStep
 }
 
-// Descheduler steps may make decisions that overlap, meaning that multiple
-// steps may decide to move the same VM to a potentially different set of hosts.
-// This function deduplicates those decisions by intersecting the hosts for each
-// VM ID across all steps.
-func (d *Descheduler) deduplicate(decisionsByStep map[string]map[string][]string) map[string][]string {
-	uniqueDecisions := map[string][]string{}
+// Combine the decisions made by each step into a single list of vms to deschedule.
+func (d *Descheduler) deduplicate(decisionsByStep map[string][]string) []string {
+	vmsToDeschedule := []string{}
 	for _, decisions := range decisionsByStep {
-		for vmId, nextHosts := range decisions {
-			// If this VM ID is not already in the uniqueDecisions map, add it.
-			prevHosts, exists := uniqueDecisions[vmId]
-			if !exists {
-				uniqueDecisions[vmId] = nextHosts
-				continue
-			}
-			// If it exists, intersect the hosts with the existing ones.
-			hostsInBoth := []string{}
-			for _, nextHost := range nextHosts {
-				if !slices.Contains(prevHosts, nextHost) {
-					continue
-				}
-				hostsInBoth = append(hostsInBoth, nextHost)
-			}
-			uniqueDecisions[vmId] = hostsInBoth
-		}
+		vmsToDeschedule = append(vmsToDeschedule, decisions...)
 	}
-
-	return uniqueDecisions
+	return vmsToDeschedule
 }
 
 // Execute the virtual machine live-migrations using the Nova API.
-func (d *Descheduler) execute(decisions map[string][]string) {
-	for stepName, decisionList := range decisions {
-		for _, decision := range decisionList {
-			slog.Info("descheduler: executing decision", "step", stepName, "decision", decision)
-			if !d.config.Nova.DisableDryRun {
-				slog.Info("descheduler: dry-run enabled, skipping execution", "decision", decision)
-				continue
-			}
-			// Here you would call the Nova API to execute the decision.
-			// For example, if the decision is to migrate a VM, you would call:
-			// novaClient.MigrateVM(decision)
-			// This is a placeholder for the actual execution logic.
-			slog.Info("descheduler: executing migration for VM", "vmId", decision)
+func (d *Descheduler) execute(decisions []string) {
+	for _, decision := range decisions {
+		slog.Info("descheduler: executing decision", "decision", decision)
+		if !d.config.Nova.DisableDryRun {
+			slog.Info("descheduler: dry-run enabled, skipping execution", "decision", decision)
+			continue
 		}
+		slog.Info("descheduler: executing migration for VM", "vmId", decision)
+		// TODO
 	}
 }
 

@@ -27,17 +27,18 @@ func RunChecks(ctx context.Context, config conf.Config) {
 
 // Check that the Manila external scheduler returns a valid set of share hosts.
 func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
+	keystoneConf := config.GetKeystoneConfig()
 	osConf := config.GetSyncConfig().OpenStack
-	slog.Info("authenticating against openstack", "url", osConf.Keystone.URL)
+	slog.Info("authenticating against openstack", "url", keystoneConf.URL)
 	authOptions := gophercloud.AuthOptions{
-		IdentityEndpoint: osConf.Keystone.URL,
-		Username:         osConf.Keystone.OSUsername,
-		DomainName:       osConf.Keystone.OSUserDomainName,
-		Password:         osConf.Keystone.OSPassword,
+		IdentityEndpoint: keystoneConf.URL,
+		Username:         keystoneConf.OSUsername,
+		DomainName:       keystoneConf.OSUserDomainName,
+		Password:         keystoneConf.OSPassword,
 		AllowReauth:      true,
 		Scope: &gophercloud.AuthScope{
-			ProjectName: osConf.Keystone.OSProjectName,
-			DomainName:  osConf.Keystone.OSProjectDomainName,
+			ProjectName: keystoneConf.OSProjectName,
+			DomainName:  keystoneConf.OSProjectDomainName,
 		},
 	}
 	pc := must.Return(openstack.NewClient(authOptions.IdentityEndpoint))

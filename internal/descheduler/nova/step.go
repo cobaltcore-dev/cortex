@@ -16,8 +16,8 @@ var (
 )
 
 type Step interface {
-	// Get the VM ids to de-schedule together with potential target hosts.
-	Run() (map[string][]string, error)
+	// Get the VM ids to de-schedule.
+	Run() ([]string, error)
 	// Get the name of this step, used for identification in config, logs, metrics, etc.
 	GetName() string
 	// Configure the step with a database and options.

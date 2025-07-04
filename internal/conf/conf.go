@@ -82,33 +82,12 @@ type SyncPrometheusConfig struct {
 
 // Configuration for the sync/openstack module.
 type SyncOpenStackConfig struct {
-	// Configuration for the keystone service.
-	Keystone SyncOpenStackKeystoneConfig `json:"keystone"`
 	// Configuration for the nova service.
 	Nova SyncOpenStackNovaConfig `json:"nova"`
 	// Configuration for the placement service.
 	Placement SyncOpenStackPlacementConfig `json:"placement"`
 	// Configuration for the manila service.
 	Manila SyncOpenStackManilaConfig `json:"manila"`
-}
-
-// Configuration for the keystone authentication.
-type SyncOpenStackKeystoneConfig struct {
-	// The URL of the keystone service.
-	URL string `json:"url"`
-	// The SSO certificate to use. If none is given, we won't
-	// use SSO to connect to the openstack services.
-	SSO SSOConfig `json:"sso,omitempty"`
-	// The OpenStack username (OS_USERNAME in openstack cli).
-	OSUsername string `json:"username"`
-	// The OpenStack password (OS_PASSWORD in openstack cli).
-	OSPassword string `json:"password"`
-	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
-	OSProjectName string `json:"projectName"`
-	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
-	OSUserDomainName string `json:"userDomainName"`
-	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
-	OSProjectDomainName string `json:"projectDomainName"`
 }
 
 // Configuration for the nova service.
@@ -347,6 +326,25 @@ type APIConfig struct {
 	Port int `json:"port"`
 }
 
+// Configuration for the keystone authentication.
+type KeystoneConfig struct {
+	// The URL of the keystone service.
+	URL string `json:"url"`
+	// The SSO certificate to use. If none is given, we won't
+	// use SSO to connect to the openstack services.
+	SSO SSOConfig `json:"sso,omitempty"`
+	// The OpenStack username (OS_USERNAME in openstack cli).
+	OSUsername string `json:"username"`
+	// The OpenStack password (OS_PASSWORD in openstack cli).
+	OSPassword string `json:"password"`
+	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
+	OSProjectName string `json:"projectName"`
+	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
+	OSUserDomainName string `json:"userDomainName"`
+	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
+	OSProjectDomainName string `json:"projectDomainName"`
+}
+
 // Configuration for the cortex service.
 type Config interface {
 	GetChecks() []string
@@ -360,6 +358,7 @@ type Config interface {
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
 	GetAPIConfig() APIConfig
+	GetKeystoneConfig() KeystoneConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
@@ -378,6 +377,7 @@ type config struct {
 	KPIsConfig        `json:"kpis"`
 	MQTTConfig        `json:"mqtt"`
 	APIConfig         `json:"api"`
+	KeystoneConfig    `json:"keystone"`
 }
 
 // Create a new configuration from the default config json file.
@@ -419,3 +419,4 @@ func (c *config) GetKPIsConfig() KPIsConfig               { return c.KPIsConfig 
 func (c *config) GetMonitoringConfig() MonitoringConfig   { return c.MonitoringConfig }
 func (c *config) GetMQTTConfig() MQTTConfig               { return c.MQTTConfig }
 func (c *config) GetAPIConfig() APIConfig                 { return c.APIConfig }
+func (c *config) GetKeystoneConfig() KeystoneConfig       { return c.KeystoneConfig }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
@@ -83,8 +84,9 @@ func TestNewCombinedSyncer(t *testing.T) {
 	monitor := sync.Monitor{}
 	mqttClient := &mqtt.MockClient{}     // Mock or initialize as needed
 	config := conf.SyncOpenStackConfig{} // Populate with test configuration
+	keystoneAPI := keystone.NewKeystoneAPI(conf.KeystoneConfig{})
 
-	combinedSyncer := NewCombinedSyncer(t.Context(), config, monitor, testDB, mqttClient)
+	combinedSyncer := NewCombinedSyncer(t.Context(), keystoneAPI, config, monitor, testDB, mqttClient)
 
 	if combinedSyncer == nil {
 		t.Fatal("expected NewCombinedSyncer to return a non-nil CombinedSyncer")
