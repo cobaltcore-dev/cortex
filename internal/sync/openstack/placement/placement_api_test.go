@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
-	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/sync/openstack/keystone"
+	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
 )
 
 func setupPlacementMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {

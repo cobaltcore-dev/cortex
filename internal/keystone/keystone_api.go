@@ -13,9 +13,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 )
 
-// Type alias for the OpenStack keystone configuration.
-type KeystoneConf = conf.SyncOpenStackKeystoneConfig
-
 // KeystoneAPI for OpenStack.
 type KeystoneAPI interface {
 	// Authenticate against the OpenStack keystone.
@@ -31,11 +28,11 @@ type keystoneAPI struct {
 	// OpenStack provider client.
 	client *gophercloud.ProviderClient
 	// OpenStack keystone configuration.
-	keystoneConf KeystoneConf
+	keystoneConf conf.KeystoneConfig
 }
 
 // Create a new OpenStack keystone API.
-func NewKeystoneAPI(keystoneConf KeystoneConf) KeystoneAPI {
+func NewKeystoneAPI(keystoneConf conf.KeystoneConfig) KeystoneAPI {
 	return &keystoneAPI{keystoneConf: keystoneConf}
 }
 
