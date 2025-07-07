@@ -7,6 +7,9 @@
 # Don't track us.
 analytics_settings(False)
 
+# The upgrade job may take a long time to run, so it is disabled by default.
+enable_postgres_upgrade = False
+
 if not os.getenv('TILT_VALUES_PATH'):
     fail("TILT_VALUES_PATH is not set.")
 if not os.path.exists(os.getenv('TILT_VALUES_PATH')):
@@ -81,16 +84,18 @@ k8s_resource('cortex-mqtt', port_forwards=[
 
 ########### Postgres DB for Cortex Core Service
 local('sh helm/sync.sh helm/cortex-postgres')
-k8s_yaml(helm('./helm/cortex-postgres', name='cortex-postgres'))
+job_flag = 'upgradeJob.enabled=' + str(enable_postgres_upgrade).lower()
+k8s_yaml(helm('./helm/cortex-postgres', name='cortex-postgres', set=job_flag))
 k8s_resource('cortex-postgresql', port_forwards=[
     port_forward(5432, 5432),
 ], labels=['Database'])
-# Get the version from the chart.
-cmd = "helm show chart ./helm/cortex-postgres | grep -E '^version:' | awk '{print $2}'"
-chart_version = str(local(cmd)).strip()
-# Use the chart version to name the pre-upgrade job.
-k8s_resource('cortex-postgresql-pre-upgrade-'+chart_version, labels=['Database'])
-k8s_resource('cortex-postgresql-post-upgrade-'+chart_version, labels=['Database'])
+if enable_postgres_upgrade:
+    # Get the version from the chart.
+    cmd = "helm show chart ./helm/cortex-postgres | grep -E '^version:' | awk '{print $2}'"
+    chart_version = str(local(cmd)).strip()
+    # Use the chart version to name the pre-upgrade job.
+    k8s_resource('cortex-postgresql-pre-upgrade-'+chart_version, labels=['Database'])
+    k8s_resource('cortex-postgresql-post-upgrade-'+chart_version, labels=['Database'])
 
 ########### Monitoring
 local('sh helm/sync.sh helm/cortex-prometheus-operator')
