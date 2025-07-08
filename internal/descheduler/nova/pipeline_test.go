@@ -16,7 +16,6 @@ import (
 
 // testExecutor allows us to intercept Deschedule calls for testing.
 type testExecutor struct {
-	mockExecutor
 	called chan []string
 	cancel context.CancelFunc
 }
@@ -29,18 +28,30 @@ func (e *testExecutor) Deschedule(ctx context.Context, vmIDs []string) error {
 	return nil
 }
 
+type testCycleDetector struct {
+	mockCycleDetector
+	called chan []string
+}
+
+func (d *testCycleDetector) Filter(ctx context.Context, vmIDs []string) ([]string, error) {
+	d.called <- vmIDs
+	return vmIDs, nil // For simplicity, return the same VMs
+}
+
 func TestPipeline_DeschedulePeriodically(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	descheduleCalled := make(chan []string, 1)
 	exec := &testExecutor{called: descheduleCalled, cancel: cancel}
+	cycleDetector := &testCycleDetector{called: make(chan []string, 1)}
 
 	step := &mockStep{Name: "step1", Decisions: []string{"vm1", "vm2"}}
 	p := &Pipeline{
-		steps:    []Step{step},
-		monitor:  Monitor{},
-		executor: exec,
+		steps:         []Step{step},
+		monitor:       Monitor{},
+		executor:      exec,
+		cycleDetector: cycleDetector,
 	}
 
 	go p.DeschedulePeriodically(ctx)
@@ -52,6 +63,14 @@ func TestPipeline_DeschedulePeriodically(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Deschedule was not called in time")
+	}
+	select {
+	case vms := <-cycleDetector.called:
+		if len(vms) != 2 || (vms[0] != "vm1" && vms[1] != "vm2" && vms[0] != "vm2" && vms[1] != "vm1") {
+			t.Errorf("unexpected vms in cycle detector: %v", vms)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cycle detector was not called in time")
 	}
 }
 
@@ -69,7 +88,7 @@ func TestPipeline_Init(t *testing.T) {
 	supportedSteps := []Step{
 		&mockStep{Name: "step1"},
 	}
-	p := &Pipeline{monitor: Monitor{}, executor: &mockExecutor{}}
+	p := &Pipeline{monitor: Monitor{}, executor: &mockExecutor{}, cycleDetector: &mockCycleDetector{}, novaAPI: &mockNovaAPI{}}
 	p.Init(supportedSteps, t.Context(), testDB, config)
 	if len(p.steps) != 1 {
 		t.Fatalf("expected 1 step, got %d", len(p.steps))
@@ -82,7 +101,7 @@ func TestPipeline_Init(t *testing.T) {
 func TestPipeline_run(t *testing.T) {
 	step1 := &mockStep{Name: "step1", Decisions: []string{"vm1", "vm2"}}
 	step2 := &mockStep{Name: "step2", Decisions: []string{"vm2", "vm3"}}
-	p := &Pipeline{steps: []Step{step1, step2}, monitor: Monitor{}}
+	p := &Pipeline{steps: []Step{step1, step2}, monitor: Monitor{}, cycleDetector: &mockCycleDetector{}}
 
 	results := p.run()
 	if len(results) != 2 {
@@ -101,7 +120,7 @@ func TestPipeline_run(t *testing.T) {
 
 func TestPipeline_run_stepSkipped(t *testing.T) {
 	step := &mockStep{Name: "step1", RunErr: ErrStepSkipped}
-	p := &Pipeline{steps: []Step{step}, monitor: Monitor{}}
+	p := &Pipeline{steps: []Step{step}, monitor: Monitor{}, cycleDetector: &mockCycleDetector{}}
 
 	results := p.run()
 	if len(results) != 0 {
@@ -111,7 +130,7 @@ func TestPipeline_run_stepSkipped(t *testing.T) {
 
 func TestPipeline_run_stepError(t *testing.T) {
 	step := &mockStep{Name: "step1", RunErr: errors.New("fail")}
-	p := &Pipeline{steps: []Step{step}, monitor: Monitor{}}
+	p := &Pipeline{steps: []Step{step}, monitor: Monitor{}, cycleDetector: &mockCycleDetector{}}
 
 	results := p.run()
 	if len(results) != 0 {
@@ -120,7 +139,7 @@ func TestPipeline_run_stepError(t *testing.T) {
 }
 
 func TestPipeline_deduplicate(t *testing.T) {
-	p := &Pipeline{}
+	p := &Pipeline{cycleDetector: &mockCycleDetector{}}
 	decisionsByStep := map[string][]string{
 		"step1": {"vm1", "vm2"},
 		"step2": {"vm2", "vm3"},

@@ -11,13 +11,10 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/sapcc/go-bits/jobloop"
 )
 
 type Executor interface {
-	// Initialize the executor with the Nova service client.
-	Init(ctx context.Context, config conf.DeschedulerConfig)
 	// Deschedule the vm ids provided.
 	Deschedule(ctx context.Context, vmIDs []string) error
 }
@@ -32,14 +29,8 @@ type executor struct {
 }
 
 // Create a new executor for the Nova descheduler.
-func NewExecutor(keystoneAPI keystone.KeystoneAPI, m Monitor, config conf.DeschedulerConfig) Executor {
-	novaAPI := NewNovaAPI(keystoneAPI, config.Nova)
+func NewExecutor(novaAPI NovaAPI, m Monitor, config conf.DeschedulerConfig) Executor {
 	return &executor{novaAPI: novaAPI, monitor: m, config: config}
-}
-
-// Initialize the executor with the Nova service client.
-func (e *executor) Init(ctx context.Context, config conf.DeschedulerConfig) {
-	e.novaAPI.Init(ctx)
 }
 
 type descheduling struct {

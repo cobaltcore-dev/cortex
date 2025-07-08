@@ -29,24 +29,31 @@ type Pipeline struct {
 	steps []Step
 	// Configuration for the descheduler.
 	config conf.DeschedulerConfig
+	// Nova API to use for the descheduler.
+	novaAPI NovaAPI
 	// Executor for the migrations.
 	executor Executor
+	// Cycle detector to avoid cycles in descheduling.
+	cycleDetector CycleDetector
 	// Monitor to use for tracking the pipeline.
 	monitor Monitor
 }
 
 func NewDescheduler(config conf.DeschedulerConfig, m Monitor, keystoneAPI keystone.KeystoneAPI) *Pipeline {
 	// Initialize the descheduler with the provided configuration and database.
+	novaAPI := NewNovaAPI(keystoneAPI, config.Nova)
 	descheduler := &Pipeline{
-		config:   config,
-		executor: NewExecutor(keystoneAPI, m, config),
-		monitor:  m,
+		config:        config,
+		novaAPI:       novaAPI,
+		executor:      NewExecutor(novaAPI, m, config),
+		cycleDetector: NewCycleDetector(novaAPI, config),
+		monitor:       m,
 	}
 	return descheduler
 }
 
 func (p *Pipeline) Init(supported []Step, ctx context.Context, db db.DB, config conf.DeschedulerConfig) {
-	p.executor.Init(ctx, config)
+	p.novaAPI.Init(ctx)
 
 	supportedStepsByName := make(map[string]Step)
 	for _, step := range supported {
@@ -141,14 +148,14 @@ func (p *Pipeline) DeschedulePeriodically(ctx context.Context) {
 			}
 			slog.Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
 			decisions := p.deduplicate(decisionsByStep)
-			if len(decisions) == 0 {
-				slog.Info("descheduler: no unique decisions made in this run")
+			var err error
+			decisions, err = p.cycleDetector.Filter(ctx, decisions)
+			if err != nil {
+				slog.Error("descheduler: failed to filter decisions for cycles", "error", err)
 				time.Sleep(jobloop.DefaultJitter(time.Minute))
 				continue
 			}
-			slog.Info("descheduler: unique decisions made", "decisions", decisions)
-			err := p.executor.Deschedule(ctx, decisions)
-			if err != nil {
+			if err = p.executor.Deschedule(ctx, decisions); err != nil {
 				slog.Error("descheduler: failed to deschedule VMs", "error", err)
 			}
 			time.Sleep(jobloop.DefaultJitter(time.Minute))

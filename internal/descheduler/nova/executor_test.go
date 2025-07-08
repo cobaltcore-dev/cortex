@@ -13,22 +13,8 @@ import (
 
 type mockExecutor struct{}
 
-func (m *mockExecutor) Init(ctx context.Context, config conf.DeschedulerConfig) {}
 func (m *mockExecutor) Deschedule(ctx context.Context, vmIDs []string) error {
 	return nil
-}
-
-func TestExecutor_Init(t *testing.T) {
-	ctx := t.Context()
-	config := conf.DeschedulerConfig{
-		Nova: conf.NovaDeschedulerConfig{
-			DisableDryRun: false,
-		},
-	}
-	executor := &mockExecutor{}
-	executor.Init(ctx, config)
-
-	// Should not panic or error out
 }
 
 func TestExecutor_Deschedule(t *testing.T) {
