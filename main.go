@@ -14,14 +14,16 @@ import (
 	"github.com/cobaltcore-dev/cortex/commands/checks"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	novaDescheduler "github.com/cobaltcore-dev/cortex/internal/descheduler/nova"
 	"github.com/cobaltcore-dev/cortex/internal/extractor"
+	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila"
 	manilaAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api/http"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
+	novaScheduler "github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
 	novaApiHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
@@ -34,16 +36,18 @@ import (
 )
 
 // Periodically fetch data from the datasources and insert it into the database.
-func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.SyncConfig, db db.DB) {
+func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.Config, db db.DB) {
 	monitor := sync.NewSyncMonitor(registry)
 	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
 	defer mqttClient.Disconnect()
+	syncConfig := config.GetSyncConfig()
+	keystoneAPI := keystone.NewKeystoneAPI(config.GetKeystoneConfig())
 	syncers := []sync.Datasource{
-		prometheus.NewCombinedSyncer(prometheus.SupportedSyncers, config.Prometheus, db, monitor, mqttClient),
-		openstack.NewCombinedSyncer(ctx, config.OpenStack, monitor, db, mqttClient),
+		prometheus.NewCombinedSyncer(prometheus.SupportedSyncers, syncConfig.Prometheus, db, monitor, mqttClient),
+		openstack.NewCombinedSyncer(ctx, keystoneAPI, syncConfig.OpenStack, monitor, db, mqttClient),
 	}
 	pipeline := sync.Pipeline{Syncers: syncers}
 	pipeline.Init(ctx)
@@ -74,7 +78,7 @@ func runSchedulerNova(mux *http.ServeMux, registry *monitoring.Registry, config 
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
 	defer mqttClient.Disconnect()
-	schedulerPipeline := nova.NewPipeline(config, db, monitor, mqttClient)
+	schedulerPipeline := novaScheduler.NewPipeline(config, db, monitor, mqttClient)
 	apiMonitor := scheduler.NewSchedulerMonitor(registry)
 	api := novaApiHTTP.NewAPI(config.API, schedulerPipeline, apiMonitor)
 	api.Init(mux) // non-blocking
@@ -102,6 +106,16 @@ func runKPIService(registry *monitoring.Registry, config conf.KPIsConfig, db db.
 	} // non-blocking
 }
 
+// Run a descheduler for Nova virtual machines.
+func runDeschedulerNova(ctx context.Context, registry *monitoring.Registry, config conf.Config, db db.DB) {
+	monitor := novaDescheduler.NewPipelineMonitor(registry)
+	keystoneAPI := keystone.NewKeystoneAPI(config.GetKeystoneConfig())
+	deschedulerConf := config.GetDeschedulerConfig()
+	descheduler := novaDescheduler.NewDescheduler(deschedulerConf, monitor, keystoneAPI)
+	descheduler.Init(novaDescheduler.SupportedSteps, ctx, db, deschedulerConf) // non-blocking
+	go descheduler.DeschedulePeriodically(ctx)                                 // blocking
+}
+
 // Run the prometheus metrics server for monitoring.
 func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, config conf.MonitoringConfig) {
 	mux := http.NewServeMux()
@@ -125,6 +139,7 @@ const usage = `
   -scheduler-nova   Serve Nova scheduling requests with a http API.
   -scheduler-manila Serve Manila scheduling requests with a http API.
   -kpis      Expose KPIs extracted from the database.
+  -descheduler-nova Run a Nova descheduler that periodically de-schedules VMs.
 `
 
 func main() {
@@ -205,7 +220,7 @@ func main() {
 
 	switch taskName {
 	case "syncer":
-		runSyncer(ctx, registry, config.GetSyncConfig(), database)
+		runSyncer(ctx, registry, config, database)
 	case "extractor":
 		runExtractor(registry, config.GetExtractorConfig(), database)
 	case "scheduler-nova":
@@ -214,6 +229,8 @@ func main() {
 		runSchedulerManila(mux, registry, config.GetSchedulerConfig(), database)
 	case "kpis":
 		runKPIService(registry, config.GetKPIsConfig(), database)
+	case "descheduler-nova":
+		runDeschedulerNova(ctx, registry, config, database)
 	default:
 		panic("unknown task")
 	}

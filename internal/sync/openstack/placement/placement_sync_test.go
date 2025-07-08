@@ -10,8 +10,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
-	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/sync/openstack/keystone"
 )
 
 type mockPlacementAPI struct{}

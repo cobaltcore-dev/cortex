@@ -61,6 +61,11 @@ k8s_resource('cortex-kpis', port_forwards=[
 ], links=[
     link('localhost:8007/metrics', '/metrics'),
 ], labels=['Core-Services'])
+k8s_resource('cortex-descheduler-nova', port_forwards=[
+    port_forward(8008, 2112),
+], links=[
+    link('localhost:8008/metrics', '/metrics'),
+], labels=['Core-Services'])
 
 ########### Cortex Commands
 k8s_resource('cortex-cli', labels=['Commands'])

@@ -63,6 +63,11 @@ modes:
     args: ["scheduler-manila"]
     replicas: 1
 
+  # Descheduler for Nova.
+  - name: descheduler-nova
+    args: ["descheduler-nova"]
+    replicas: 1
+
   # Service that extracts and exposes KPIs.
   - name: kpis
     args: ["kpis"]
@@ -126,6 +131,20 @@ conf:
       maxRetries: 20
       retryIntervalSeconds: 1
       livenessPingIntervalSeconds: 5
+
+  keystone:
+    # Authentication/identity service URL for openstack.
+    url: https://path-to-keystone/v3
+    # Optional, only required if OpenStack is configured with SSO.
+    # Note: the certificate will be used for all other OpenStack services.
+    sso: *sharedSSOCert
+
+    # OpenStack login credentials also used by the OpenStack CLI.
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to
 
   # Sync plugins config.
   sync:
@@ -191,19 +210,6 @@ conf:
           type: netapp_node_metric
 
     openstack:
-      keystone:
-        # Authentication/identity service URL for openstack.
-        url: https://path-to-keystone/v3
-        # Optional, only required if OpenStack is configured with SSO.
-        # Note: the certificate will be used for all other OpenStack services.
-        sso: *sharedSSOCert
-
-        # OpenStack login credentials also used by the OpenStack CLI.
-        username: openstack-user-with-all-project-read-access
-        password: openstack-user-password
-        projectName: openstack-project-of-user
-        userDomainName: openstack-domain-of-user
-        projectDomainName: openstack-domain-of-project-scoped-to
       nova:
         # One of admin, public, or internal
         availability: public
@@ -586,6 +592,26 @@ conf:
             diskUtilizedActivationUpperBound: 0.0
           dependencies:
             extractors: [host_utilization_extractor]
+
+  descheduler:
+    nova:
+      disableDryRun: false
+      availability: public
+      # Configuration of the descheduler that runs periodically to de-schedule
+      # VMs based on the configured plugins.
+      # Each plugin can specify its own dependencies on extractors and synced data.
+      #
+      # The `name` should correspond to a known descheduler plugin.
+      plugins:
+        - name: demo
+          options:
+            vmName: "cortex-demo-vm"
+          dependencies:
+            sync:
+              openstack:
+                nova:
+                  types:
+                    - servers
 
 # Generic modifiers added on the initial creation of this helm chart.
 
