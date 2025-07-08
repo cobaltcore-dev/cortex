@@ -79,7 +79,7 @@ local('sh helm/sync.sh helm/cortex-mqtt')
 k8s_yaml(helm('./helm/cortex-mqtt', name='cortex-mqtt'))
 k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
-    port_forward(8008, 15675), # Websocket connection
+    port_forward(9000, 15675), # Websocket connection
 ], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
