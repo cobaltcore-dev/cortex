@@ -321,6 +321,19 @@ conf:
                 - alias: netapp_aggr_labels
 
       # Shared extractors.
+      - name: host_domain_project_extractor
+        recencySeconds: 60 # 1 minute
+        dependencies:
+          sync:
+            openstack:
+              nova:
+                types:
+                  - hypervisors
+                  - servers
+              identity:
+                types:
+                  - domains
+                  - projects
       - name: host_utilization_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
