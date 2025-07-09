@@ -6,6 +6,7 @@ package identity
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -77,12 +78,33 @@ func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var data = &struct {
-		Projects []Project `json:"projects"`
+		Projects []struct {
+			ID       string   `json:"id"`
+			Name     string   `json:"name"`
+			DomainID string   `json:"domain_id"`
+			ParentID string   `json:"parent_id"`
+			IsDomain bool     `json:"is_domain"`
+			Enabled  bool     `json:"enabled"`
+			Tags     []string `json:"tags"`
+		} `json:"projects"`
 	}{}
 	if err := allPages.(projects.ProjectPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
+	var result []Project
+	for _, p := range data.Projects {
+		result = append(result, Project{
+			ID:       p.ID,
+			Name:     p.Name,
+			DomainID: p.DomainID,
+			ParentID: p.ParentID,
+			IsDomain: p.IsDomain,
+			Enabled:  p.Enabled,
+			Tags:     strings.Join(p.Tags, ","),
+		})
+	}
 	slog.Info("fetched identity data", "label", "projects", "count", len(data.Projects))
-	return data.Projects, nil
+	return result, nil
 }

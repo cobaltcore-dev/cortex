@@ -62,11 +62,26 @@ func TestIdentityAPI_GetAllProjects(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := struct {
-			Projects []Project `json:"projects"`
+			Projects []struct {
+				ID       string   `json:"id"`
+				Name     string   `json:"name"`
+				DomainID string   `json:"domain_id"`
+				IsDomain bool     `json:"is_domain"`
+				Enabled  bool     `json:"enabled"`
+				Tags     []string `json:"tags"`
+			} `json:"projects"`
 		}{
-			Projects: []Project{
-				{ID: "1", Name: "project1", DomainID: "domain1"},
-				{ID: "2", Name: "project2", DomainID: "domain2"},
+			Projects: []struct {
+				ID       string   `json:"id"`
+				Name     string   `json:"name"`
+				DomainID string   `json:"domain_id"`
+				IsDomain bool     `json:"is_domain"`
+				Enabled  bool     `json:"enabled"`
+				Tags     []string `json:"tags"`
+			}{
+				{ID: "1", Name: "project1", DomainID: "domain1", IsDomain: false, Enabled: true, Tags: []string{"foo", "bar"}},
+				{ID: "2", Name: "project2", DomainID: "domain2", IsDomain: false, Enabled: true, Tags: []string{}},
+				{ID: "3", Name: "project3", DomainID: "domain3", IsDomain: false, Enabled: true, Tags: []string{"foo"}},
 			},
 		}
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -89,7 +104,17 @@ func TestIdentityAPI_GetAllProjects(t *testing.T) {
 	}
 
 	amountProjects := len(projects)
-	if amountProjects != 2 {
+	if amountProjects != 3 {
 		t.Fatalf("expected 2 projects, got %d", amountProjects)
+	}
+
+	if projects[0].Tags != "foo,bar" {
+		t.Errorf("expected tags to be 'foo,bar', got '%s'", projects[0].Tags)
+	}
+	if projects[1].Tags != "" {
+		t.Errorf("expected tags to be '', got '%s'", projects[1].Tags)
+	}
+	if projects[2].Tags != "foo" {
+		t.Errorf("expected tags to be 'foo', got '%s'", projects[2].Tags)
 	}
 }

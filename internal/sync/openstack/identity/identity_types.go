@@ -14,6 +14,9 @@ type Domain struct {
 	ID      string `json:"id" db:"id,primarykey"`
 	Name    string `json:"name" db:"name"`
 	Enabled bool   `json:"enabled" db:"enabled"`
+
+	// Not all fields are synced to the database
+	// Fields that are omitted: description, links
 }
 
 // Table in which the openstack model is stored.
@@ -26,6 +29,13 @@ type Project struct {
 	ID       string `json:"id" db:"id,primarykey"`
 	Name     string `json:"name" db:"name"`
 	DomainID string `json:"domain_id" db:"domain_id"`
+	ParentID string `json:"parent_id" db:"parent_id"`
+	IsDomain bool   `json:"is_domain" db:"is_domain"`
+	Enabled  bool   `json:"enabled" db:"enabled"`
+	Tags     string `json:"tags" db:"tags"` // Comma-separated tags
+
+	// Not all fields are synced to the database.
+	// Fields that are omited: description, links
 }
 
 // Table in which the openstack model is stored.
