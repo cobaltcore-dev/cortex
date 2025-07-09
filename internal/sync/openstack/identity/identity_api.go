@@ -16,7 +16,9 @@ import (
 
 type IdentityAPI interface {
 	Init(ctx context.Context)
+	// Retrieves all domains from the OpenStack identity service.
 	GetAllDomains(ctx context.Context) ([]Domain, error)
+	// Retrieves all projects from the OpenStack identity service.
 	GetAllProjects(ctx context.Context) ([]Project, error)
 }
 
@@ -30,6 +32,7 @@ type identityAPI struct {
 func NewIdentityAPI(mon sync.Monitor, k keystone.KeystoneAPI, conf IdentityConf) IdentityAPI {
 	return &identityAPI{mon: mon, keystoneAPI: k, conf: conf}
 }
+
 func (api *identityAPI) Init(ctx context.Context) {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
 		panic(err)
@@ -48,6 +51,7 @@ func (api *identityAPI) Init(ctx context.Context) {
 	}
 }
 
+// Get all the domains from the OpenStack identity service.
 func (api *identityAPI) GetAllDomains(ctx context.Context) ([]Domain, error) {
 	slog.Info("fetching identity data", "label", "domains")
 	client := api.sc
@@ -65,6 +69,7 @@ func (api *identityAPI) GetAllDomains(ctx context.Context) ([]Domain, error) {
 	return data.Domains, nil
 }
 
+// Get all the projects from the OpenStack identity service.
 func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 	slog.Info("fetching identity data", "label", "projects")
 	client := api.sc
