@@ -88,6 +88,8 @@ type SyncOpenStackConfig struct {
 	Placement SyncOpenStackPlacementConfig `json:"placement"`
 	// Configuration for the manila service.
 	Manila SyncOpenStackManilaConfig `json:"manila"`
+	// Configuration for the identity service.
+	Identity SyncOpenStackIdentityConfig `json:"identity"`
 }
 
 // Configuration for the nova service.
@@ -108,6 +110,14 @@ type SyncOpenStackPlacementConfig struct {
 
 // Configuration for the manila service.
 type SyncOpenStackManilaConfig struct {
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+	// The types of resources to sync.
+	Types []string `json:"types"`
+}
+
+// Configuration for the identity service.
+type SyncOpenStackIdentityConfig struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
 	// The types of resources to sync.

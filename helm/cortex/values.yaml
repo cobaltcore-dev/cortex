@@ -235,6 +235,13 @@ conf:
         # Manila objects to sync into the database.
         types:
           - storage_pools
+      identity:
+        # One of admin, public, or internal
+        availability: public
+        # Identity objects to sync into the database.
+        types:
+          - domains
+          - projects
 
   extractor:
     # Configuration of features that should be extracted from the synced data.

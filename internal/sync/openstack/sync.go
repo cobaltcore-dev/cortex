@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/manila"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
@@ -63,6 +64,13 @@ func NewCombinedSyncer(
 			Conf:       config.Manila,
 			API:        manila.NewManilaAPI(monitor, keystoneAPI, config.Manila),
 			MqttClient: mqttClient,
+		},
+		&identity.IdentitySyncer{
+			DB:         db,
+			Mon:        monitor,
+			API:        identity.NewIdentityAPI(monitor, keystoneAPI, config.Identity),
+			MqttClient: mqttClient,
+			Conf:       config.Identity,
 		},
 	}
 	return CombinedSyncer{monitor: monitor, syncers: syncers}
