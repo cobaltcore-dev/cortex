@@ -1,9 +1,9 @@
 SELECT
   h.service_host AS compute_host,
-  p.id AS project_id,
-  p.name AS project_name,
-  d.id AS domain_id,
-  d.name AS domain_name,
+  STRING_AGG(DISTINCT p.name, ',') AS project_names,
+  STRING_AGG(DISTINCT p.id, ',') AS project_ids,
+  STRING_AGG(DISTINCT d.name, ',') AS domain_names,
+  STRING_AGG(DISTINCT d.id, ',') AS domain_ids
 FROM
   openstack_servers s
 JOIN
