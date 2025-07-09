@@ -13,10 +13,9 @@ metadata:
     app.kubernetes.io/version: {{ .Chart.AppVersion }}
     helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
   annotations:
-    # Run this job before Helm upgrades are applied.
-    # Note: since we use pre-upgrade here, it is assumed that the configmap
-    # is already present in the cluster and can be mounted.
     "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-upgrade,hook-succeeded
 spec:
   template:
     metadata:
@@ -37,9 +36,10 @@ spec:
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           args: ["migrate"]
           volumeMounts:
-            - name: {{ include "cortex.fullname" $ }}-config-volume
+            # Custom config that can override some values, e.g. conf validation.
+            - name: {{ include "cortex.fullname" $ }}-pre-upgrade-config-volume
               mountPath: /etc/config
       volumes:
-        - name: {{ include "cortex.fullname" $ }}-config-volume
+        - name: {{ include "cortex.fullname" $ }}-pre-upgrade-config-volume
           configMap:
-            name: {{ include "cortex.fullname" $ }}-config
+            name: {{ include "cortex.fullname" $ }}-pre-upgrade-config
