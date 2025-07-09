@@ -35,7 +35,7 @@ type Project struct {
 	Tags     string `json:"tags" db:"tags"` // Comma-separated tags
 
 	// Not all fields are synced to the database.
-	// Fields that are omited: description, links
+	// Fields that are omitted: description, links
 }
 
 // Table in which the openstack model is stored.
