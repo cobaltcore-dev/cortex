@@ -142,7 +142,6 @@ func (p *pipeline[RequestType]) normalizeInputWeights(weights map[string]float64
 
 // Apply the step weights to the input weights.
 func (p *pipeline[RequestType]) applyStepWeights(
-	log *slog.Logger,
 	stepWeights map[string]map[string]float64,
 	inWeights map[string]float64,
 ) map[string]float64 {
@@ -154,7 +153,7 @@ func (p *pipeline[RequestType]) applyStepWeights(
 	for _, stepName := range p.applicationOrder {
 		stepActivations, ok := stepWeights[stepName]
 		if !ok {
-			log.Error("scheduler: missing activations for step", "name", stepName)
+			// This is ok, since steps can be skipped.
 			continue
 		}
 		outWeights = p.Apply(outWeights, stepActivations)
@@ -191,7 +190,7 @@ func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 	traceLog.Info("scheduler: finished pipeline")
 	inWeights := p.normalizeInputWeights(request.GetWeights())
 	traceLog.Info("scheduler: input weights", "weights", inWeights)
-	outWeights := p.applyStepWeights(traceLog, stepWeights, inWeights)
+	outWeights := p.applyStepWeights(stepWeights, inWeights)
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
 	subjects := p.sortSubjectsByWeights(outWeights)
 	traceLog.Info("scheduler: sorted subjects", "subjects", subjects)

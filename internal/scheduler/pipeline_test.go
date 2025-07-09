@@ -144,7 +144,7 @@ func TestPipeline_ApplyStepWeights(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := p.applyStepWeights(slog.Default(), tt.stepWeights, tt.inWeights)
+			result := p.applyStepWeights(tt.stepWeights, tt.inWeights)
 			for host, weight := range tt.expectedResult {
 				if result[host] != weight {
 					t.Errorf("expected weight %f for host %s, got %f", weight, host, result[host])
