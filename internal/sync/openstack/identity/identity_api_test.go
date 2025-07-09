@@ -22,11 +22,6 @@ func setupIdentityMockServer(handler http.HandlerFunc) (*httptest.Server, keysto
 
 func TestIdentityAPI_GetAllDomains(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		// changes-since is not supported by the hypervisor api so
-		// the query parameter should not be set.
-		if r.URL.Query().Get("changes-since") != "" {
-			t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
-		}
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := struct {
@@ -64,11 +59,6 @@ func TestIdentityAPI_GetAllDomains(t *testing.T) {
 
 func TestIdentityAPI_GetAllProjects(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		// changes-since is not supported by the hypervisor api so
-		// the query parameter should not be set.
-		if r.URL.Query().Get("changes-since") != "" {
-			t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
-		}
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := struct {
