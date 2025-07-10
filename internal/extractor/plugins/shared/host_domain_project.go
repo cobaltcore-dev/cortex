@@ -11,7 +11,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
-	"github.com/go-gorp/gorp"
 )
 
 // Feature that maps how many resources are utilized on a compute host.
@@ -60,20 +59,10 @@ func (HostDomainProjectExtractor) Triggers() []string {
 	}
 }
 
-//go:embed host_domain_project_postgres.sql
-var hostDomainProjectPostgresQuery string
-
-//go:embed host_domain_project_sqlite.sql
-var hostDomainProjectSQLiteQuery string
+//go:embed host_domain_project.sql
+var hostDomainProjectQuery string
 
 // Extract the domains and projects on a compute host.
 func (e *HostDomainProjectExtractor) Extract() ([]plugins.Feature, error) {
-	switch e.DB.Dialect.(type) {
-	case gorp.SqliteDialect:
-		return e.ExtractSQL(hostDomainProjectSQLiteQuery)
-	case gorp.PostgresDialect:
-		return e.ExtractSQL(hostDomainProjectPostgresQuery)
-	default:
-		panic("unsupported database dialect for HostDomainProjectExtractor")
-	}
+	return e.ExtractSQL(hostDomainProjectQuery)
 }
