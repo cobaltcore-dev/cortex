@@ -4,6 +4,7 @@
 package shared
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -57,6 +58,10 @@ func compareCSVSet(string1, string2 string) bool {
 }
 
 func TestHostDomainProjectExtractor_Extract(t *testing.T) {
+	if os.Getenv("POSTGRES_CONTAINER") != "1" {
+		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
+	}
+
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
