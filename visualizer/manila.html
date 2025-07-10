@@ -1,0 +1,413 @@
+<!-- Copyright 2025 SAP SE -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cortex Manila Visualizer</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
+    <!-- MQTT library from vendor folder. -->
+    <script src="mqtt.min.js"></script>
+  </head>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+
+      --color-primary: rgb(255, 165, 2);
+      --color-on-primary: rgb(255, 255, 255);
+      --color-secondary: rgb(112, 161, 255);
+      --color-on-secondary: rgb(255, 255, 255);
+      --color-tertiary: rgb(255, 71, 87);
+      --color-on-tertiary: rgb(255, 255, 255);
+      --color-background: rgb(241, 242, 246);
+      --color-on-background: rgb(74, 74, 74);
+      --color-surface: rgb(255, 255, 255);
+      --color-on-surface: rgb(74, 74, 74);
+
+      color: var(--color-text);
+      background: var(--color-background);
+      /* Remove the default margin and padding from the body. */
+      margin: 0;
+    }
+
+    /* Nice animated progress bar on top of the page. */
+    .progress {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 0.5em;
+      background: var(--color-primary);
+      z-index: 1000;
+    }
+    .progress::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 0.5em;
+      background: var(--color-secondary);
+      animation: progress 2s infinite;
+    }
+    @keyframes progress {
+      0% { left: -100%; right: 100%; }
+      100% { left: 100%; right: -100%; }
+    }
+    .progress-text {
+      position: fixed;
+      top: 2em; left: 0; right: 0;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    /* Navbar that shows share information. */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      padding-left: 0.25em;
+      background: var(--color-surface);
+      box-shadow: 0 0 1em rgba(0, 0, 0, 0.1);
+      z-index: 1;
+      div.element {
+        display: inline-block;
+        padding-top: 1em; padding-bottom: 2em;
+        padding-left: 1em; padding-right: 1em;
+        margin: 0;
+        background: var(--color-surface);
+        color: var(--color-on-surface);
+        border-right: 2px solid var(--color-background);
+        font-size: 1em;
+        p.highlight {
+          font-size: 1.25em;
+          font-weight: bold;
+        }
+      }
+    }
+
+    main {
+      /* Space for the share description */
+      padding-top: 9em;
+      padding-left: 0.5em;
+    }
+
+    table {
+      /* Revert the default spacing used by the browser. */
+      border-spacing: 0;
+    }
+
+    /* Table cell showing the weight of a share during scheduling. */
+    td.weight {
+      text-align: center;
+      position: relative;
+      animation: weightAnimation 0.25s ease-in-out;
+      div {
+        border-radius: 0.5em;
+        padding: 0.5em;
+        margin: 0.5em;
+        border: 2px solid var(--color-surface);
+      }
+      /* Backdrop white for the weight cells */
+      ::after {
+        content: '';
+        position: absolute;
+        --m: 0.6em; top: var(--m); bottom: var(--m); left: var(--m); right: var(--m);
+        border-radius: 0.5em;
+        background: var(--color-surface);
+        z-index: -1;
+      }
+    }
+    /* Animation for weights when they first appear */
+    @keyframes weightAnimation {
+      0% { opacity: 0; transform: scale(0.5); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Table cell showing the name of a storage pool. */
+    th.hostname {
+      text-align: center;
+      position: relative;
+      max-width: 100px;
+      div {
+        position: relative;
+        padding: 0.1em;
+        padding-top: 0.5em;
+        padding-bottom: 0.5em;
+        margin: 0.1em;
+        word-break: break-all;
+        font-size: 0.8em;
+        line-height: 1.2;
+      }
+    }
+
+    /* Table cell showing additional information about a storage pool. */
+    th.metainfo {
+      text-align: center;
+      position: relative;
+      div {
+        /* Badge for storage pool down */
+        p.issue {
+          color: var(--color-tertiary);
+          border-radius: 0.5em;
+          font-size: 0.8em;
+        }
+      }
+    }
+
+    /* Table row showing the name of a step in the pipeline. */
+    th.stepname {
+      text-align: left;
+      font-weight: bold;
+      padding-left: 0.75em;
+      padding-top: 0.5em;
+      padding-bottom: 0.25em;
+    }
+
+    /* Highlighted rows in the table. */
+    tr.highlight {
+      background: var(--color-surface);
+      /* tr doesn't support border-radius */
+      clip-path: xywh(0 0 100% 100% round 0.75em);
+    }
+
+    /* Chart showing the capacity usage of a storage pool. */
+    td.chart {
+      position: relative;
+      height: 24em;
+      div.barsbefore, div.barsafter, div.backdrop, div.stats {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        display: flex;
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+        padding-left: 0.5em;
+        padding-right: 0.5em;
+        flex-direction: row;
+        justify-content: center;
+        align-items: flex-end;
+        p {
+          margin-left: 0.1em;
+          margin-right: 0.1em;
+          width: 50%;
+          display: flex;
+          border-radius: 0.2em;
+        }
+      }
+      div.backdrop {
+        p {
+          height: 100%;
+          border-radius: 0.2em;
+          border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+      }
+      div.barsafter {
+        p.capacity { background: var(--color-primary); }
+        p.shares { background: var(--color-primary); }
+      }
+      div.barsbefore {
+        p.capacity { background: var(--color-secondary); }
+        p.shares { background: var(--color-secondary); }
+      }
+      div.stats {
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        p {
+          writing-mode: vertical-lr;
+          text-orientation: mixed;
+          width: 50%;
+          display: flex;
+          font-size: 1em;
+          font-weight: bold;
+          margin-left: 0.1em; margin-right: 0.1em;
+          color: var(--color-on-surface);
+          mix-blend-mode: color-burn;
+          justify-content: center;
+          align-items: center;
+        }
+      }
+    }
+    /* Animation for chart bars */
+    td.chart div.barsafter p,
+    td.chart div.barsbefore p {
+      animation: barAnim 0.25s ease-in-out;
+      overflow: hidden;
+    }
+    @keyframes barAnim {
+      0% { transform: scaleY(0); }
+      100% { transform: scaleY(1); }
+    }
+
+    /* Style for the input and button */
+    .mqtt-url-input {
+      display: flex;
+      justify-content: left;
+      align-items: center;
+      margin: 1em;
+    }
+    .mqtt-url-input input {
+      padding: 0.5em;
+      font-size: 1em;
+      border: 1px solid var(--color-on-background);
+      border-radius: 0.25em;
+      margin-right: 0.5em;
+      min-width: 12em;
+    }
+    .mqtt-url-input button {
+      padding: 0.5em 1em;
+      font-size: 1em;
+      background: var(--color-surface);
+      color: var(--color-on-surface);
+      border: none;
+      border-radius: 0.25em;
+      cursor: pointer;
+    }
+    .mqtt-url-input button:hover {
+      background: var(--color-secondary);
+      color: var(--color-on-secondary);
+    }
+  </style>
+
+  <section id="app">
+    <!-- Display a loading indicator as long as no data has arrived. -->
+    <div class="progress"></div>
+    <div class="progress-text">Waiting for mqtt data to arrive...</div>
+  </section>
+
+  <section class="mqtt-url-input">
+    <input type="text" id="mqtt-url" placeholder="Enter MQTT URL" value="ws://localhost:9000/ws" />
+    <button onclick="reconnect()">Reconnect MQTT</button>
+  </section>
+
+  <script>
+    let state = {
+      pipeline: {},
+    }
+
+    let client
+    async function reconnect() {
+      const url = document.getElementById('mqtt-url').value
+      if (!url) return
+      if (client) client.end()
+      client = mqtt.connect(url, {
+        username: 'cortex',
+        password: 'secret',
+        protocolVersion: 4,
+      })
+      client.on('message', (topic, message) => {
+        if (topic === 'cortex/scheduler/manila/pipeline/finished') {
+          state.pipeline = JSON.parse(message.toString())
+        }
+        redraw()
+      })
+      client.on('connect', () => {
+        console.log('Connected to MQTT broker.')
+        client.subscribe('cortex/scheduler/manila/pipeline/finished')
+      })
+    }
+    reconnect()
+
+    async function redraw () {
+      if (Object.keys(state.pipeline).length === 0) return
+
+      const greyout = 'filter: grayscale(50%); opacity: 0.25'
+
+      const spec = state.pipeline.request.spec
+      const shareType = spec.share_type || {}
+
+      // Function to truncate long pool names for display
+      function truncatePoolName(poolName) {
+        // Extract the meaningful part after the last @ or #
+        const parts = poolName.split(/[@#]/);
+        if (parts.length > 1) {
+          // Take the last part and limit to 25 characters
+          const lastPart = parts[parts.length - 1];
+          return lastPart.length > 25 ? lastPart.substring(0, 22) + '...' : lastPart;
+        }
+        // If no @ or #, just truncate the whole name
+        return poolName.length > 25 ? poolName.substring(0, 22) + '...' : poolName;
+      }
+
+      // Get the pool names from the pipeline weights
+      const poolNames = Object.keys(state.pipeline.out || {}).sort((a, b) => {
+        return state.pipeline.out[b] - state.pipeline.out[a]
+      })
+
+      // Also include the manila input weights, scaled weights, and output weights.
+      steps = {
+        ...state.pipeline.steps,
+        'manila input': state.pipeline.request.weights,
+        'scaled weights': state.pipeline.in,
+        'output weights': state.pipeline.out,
+      }
+      order = ['manila input', 'scaled weights', ...state.pipeline.order, 'output weights']
+      highlights = ['manila input', 'output weights']
+
+      let table = '<table>'
+      // Add weights to the table.
+      for (const stepname of order) {
+        // Add a header with the name of the step.
+        table += `
+          <tr>
+            <th class="stepname" colspan="${poolNames.length + 1}">${stepname}</th>
+          </tr>
+        `
+
+        const weights = steps[stepname]
+        if (weights === undefined) {
+          console.warn(`No weights found for step "${stepname}"`)
+          continue
+        }
+        table += `<tr class="${highlights.includes(stepname) ? 'highlight' : ''}">`
+        for (const poolName of poolNames) {
+          if (weights[poolName] === undefined) {
+            table += '<td class="weight"></td>'
+            continue
+          }
+          const weight = weights[poolName]
+          const norm = Math.min(1, Math.max(0, (weight + 1) / 2))
+          let bg = `rgba(255, 71, 87, ${1 - (norm * 2)})`
+          if (weight >= 0) {
+            bg = `rgba(46, 213, 115, ${(norm * 2) - 1})`
+          }
+          let color = norm > 0.75 || norm < 0.25 ? 'white' : 'black'
+          table += `
+            <td class="weight">
+              <div
+                style="background: ${bg}; color: ${color}"
+              >${weight.toFixed(2)}</div>
+            </td>
+          `
+        }
+        table += '</tr>'
+      }
+      // Add pool names to the table.
+      table += '<tr>'
+      for (const poolName of poolNames) {
+        const hasWeight = state.pipeline.out[poolName] !== undefined
+        const displayName = truncatePoolName(poolName)
+        table += `
+          <th class="hostname" style="${hasWeight ? '' : greyout}" title="${poolName}">
+            <div>${displayName}</div>
+          </th>
+        `
+      }
+      table += '</tr>'
+
+      const nav = `
+        <nav>
+          <div class="element"><p class="highlight">Cortex Manila</p>Scheduled Share:</div>
+          <div class="element"><p class="highlight">Share Type</p>${shareType.name || 'default'}</div>
+          <div class="element"><p class="highlight">Size</p>${spec.size || 1} GB</div>
+          <div class="element"><p class="highlight">Protocol</p>${spec.share_proto || 'NFS'}</div>
+        </nav>
+      `
+
+      document.querySelector('#app').innerHTML = `
+        <main>
+          ${table}
+          ${nav}
+        </main>
+      `
+    }
+  </script>
+</html>

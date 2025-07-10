@@ -128,7 +128,8 @@ k8s_yaml('./visualizer/app.yaml')
 k8s_resource('cortex-visualizer', port_forwards=[
     port_forward(8009, 80),
 ], links=[
-    link('localhost:8009', 'visualizer'),
+    link('localhost:8009/nova.html', 'nova visualizer'),
+    link('localhost:8009/manila.html', 'manila visualizer'),
 ], labels=['Monitoring'])
 
 ########### Plutono (Grafana Fork)

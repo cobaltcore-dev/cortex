@@ -4,7 +4,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Cortex Visualizer</title>
+    <title>Cortex Nova Visualizer</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 
@@ -289,7 +289,7 @@
       if (client) client.end()
       client = mqtt.connect(url, {
         username: 'cortex',
-        password: 'cortex',
+        password: 'secret',
         protocolVersion: 4,
       })
       client.on('message', (topic, message) => {
@@ -352,6 +352,10 @@
         `
 
         const weights = steps[stepname]
+        if (weights === undefined) {
+          console.warn(`No weights found for step "${stepname}"`)
+          continue
+        }
         table += `<tr class="${highlights.includes(stepname) ? 'highlight' : ''}">`
         for (const host of hostnames) {
           if (weights[host] === undefined) {
@@ -442,7 +446,7 @@
 
       const nav = `
         <nav>
-          <div class="element"><p class="highlight">Cortex</p>Scheduled VM:</div>
+          <div class="element"><p class="highlight">Cortex Nova</p>Scheduled VM:</div>
           <div class="element"><p class="highlight">VMware</p>${state.pipeline.request.vmware}</div>
           <div class="element"><p class="highlight">Live Migration</p>${state.pipeline.request.live}</div>
           <div class="element"><p class="highlight">Resize</p>${state.pipeline.request.live}</div>
