@@ -75,17 +75,23 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Message does not contain a 'request' field\n")
 				return
 			}
-			// Forward the request to the local Cortex instance
-			requestBody := must.Return(json.Marshal(request))
-			req := must.Return(http.NewRequestWithContext(context.Background(), http.MethodPost, f.endpoint, bytes.NewBuffer(requestBody)))
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
-			must.Succeed(err)
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				body := must.Return(io.ReadAll(resp.Body))
-				fmt.Fprintf(os.Stderr, "Cortex responded with status %d: %s\n", resp.StatusCode, string(body))
-				return
+			for {
+				// Forward the request to the local Cortex instance
+				requestBody := must.Return(json.Marshal(request))
+				req := must.Return(http.NewRequestWithContext(context.Background(), http.MethodPost, f.endpoint, bytes.NewBuffer(requestBody)))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to forward message to Cortex: %v, retrying...\n", err)
+					continue
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					body := must.Return(io.ReadAll(resp.Body))
+					fmt.Fprintf(os.Stderr, "Cortex responded with status %d: %s\n", resp.StatusCode, string(body))
+					return
+				}
+				break
 			}
 			fmt.Printf("Successfully forwarded message received on topic %s to Cortex.\n", msg.Topic())
 		})
