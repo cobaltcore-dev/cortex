@@ -400,6 +400,7 @@ conf:
           extractors:
             - host_utilization_extractor
             - host_capabilities_extractor
+            - host_domain_project_extractor
           sync:
             openstack:
               nova:
