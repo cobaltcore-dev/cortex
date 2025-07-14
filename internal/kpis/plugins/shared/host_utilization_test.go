@@ -41,6 +41,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		testDB.AddTable(nova.Aggregate{}),
 		testDB.AddTable(nova.Hypervisor{}),
 		testDB.AddTable(shared.HostCapabilities{}),
+		testDB.AddTable(shared.HostDomainProject{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -85,6 +86,24 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		},
 	}
 	if err := testDB.Insert(hostUtilizations...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	hostDomainProject := []any{
+		&shared.HostDomainProject{
+			ComputeHost:  "host1",
+			ProjectNames: "project1,project2",
+			ProjectIDs:   "p1,p2",
+			DomainNames:  "domain1,domain2",
+			DomainIDs:    "d1,d2",
+		},
+		&shared.HostDomainProject{
+			ComputeHost:  "host2",
+			ProjectNames: "project2",
+			ProjectIDs:   "p2",
+		},
+	}
+	if err := testDB.Insert(hostDomainProject...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -145,15 +164,17 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			computeHostName := labels["compute_host_name"]
 			runningVMs := labels["running_vms"]
 			traits := labels["traits"]
+			domains := labels["domains"]
+			projects := labels["projects"]
 
 			switch computeHostName {
 			case "host1":
-				if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || runningVMs != "10" || traits != "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT" {
-					t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', running vms '10', traits 'MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT', got CPU model '%s', availability zone '%s', running vms '%s', traits '%s'", cpuModel, availabilityZone, runningVMs, traits)
+				if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || runningVMs != "10" || traits != "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT" || domains != "domain1,domain2" || projects != "project1,project2" {
+					t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', running vms '10', traits 'MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT', domains 'domain1,domain2', projects 'project1,project2', got CPU model '%s', availability zone '%s', running vms '%s', traits '%s', domains '%s', projects '%s'", cpuModel, availabilityZone, runningVMs, traits, domains, projects)
 				}
 			case "host2":
-				if cpuModel != "" || availabilityZone != "zone2" || runningVMs != "5" || traits != "MY_OTHER_TRAIT" {
-					t.Errorf("expected host2 to have no CPU model, availability zone 'zone2', running vms '5', traits 'MY_OTHER_TRAIT', got CPU model '%s', availability zone '%s', running vms '%s', traits '%s'", cpuModel, availabilityZone, runningVMs, traits)
+				if cpuModel != "" || availabilityZone != "zone2" || runningVMs != "5" || traits != "MY_OTHER_TRAIT" || domains != "" || projects != "project2" {
+					t.Errorf("expected host2 to have no CPU model, availability zone 'zone2', running vms '5', traits 'MY_OTHER_TRAIT', domains '', projects 'project2', got CPU model '%s', availability zone '%s', running vms '%s', traits '%s', domains '%s', projects '%s'", cpuModel, availabilityZone, runningVMs, traits, domains, projects)
 				}
 			default:
 				t.Errorf("unexpected compute host name: %s", computeHostName)
@@ -176,14 +197,17 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			availabilityZone := labels["availability_zone"]
 			computeHostName := labels["compute_host_name"]
 			traits := labels["traits"]
+			domains := labels["domains"]
+			projects := labels["projects"]
+
 			switch computeHostName {
 			case "host1":
-				if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || traits != "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT" {
-					t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', traits 'MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT', got CPU model '%s', availability zone '%s', traits '%s'", cpuModel, availabilityZone, traits)
+				if cpuModel != "Test CPU Model" || availabilityZone != "zone1" || traits != "MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT" || domains != "domain1,domain2" || projects != "project1,project2" {
+					t.Errorf("expected host1 to have CPU model 'Test CPU Model', availability zone 'zone1', traits 'MY_IMPORTANT_TRAIT,MY_OTHER_TRAIT', domains 'domain1,domain2', projects 'project1,project2', got CPU model '%s', availability zone '%s', traits '%s', domains '%s', projects '%s'", cpuModel, availabilityZone, traits, domains, projects)
 				}
 			case "host2":
-				if cpuModel != "" || availabilityZone != "zone2" || traits != "MY_OTHER_TRAIT" {
-					t.Errorf("expected host2 to have no CPU model, availability zone 'zone2', traits 'MY_OTHER_TRAIT', got CPU model '%s', availability zone '%s', traits '%s'", cpuModel, availabilityZone, traits)
+				if cpuModel != "" || availabilityZone != "zone2" || traits != "MY_OTHER_TRAIT" || domains != "" || projects != "project2" {
+					t.Errorf("expected host2 to have CPU model '', availability zone 'zone2', traits 'MY_OTHER_TRAIT', domains '', projects 'project2', got CPU model '%s',	 availability zone '%s', traits '%s', domains '%s', projects '%s'", cpuModel, availabilityZone, traits, domains, projects)
 				}
 			default:
 				t.Errorf("unexpected compute host name: %s", computeHostName)

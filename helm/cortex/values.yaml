@@ -14,7 +14,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-8d841a7"
+  tag: "sha-13b8fdf"
 
 migrationsJob:
   # Additional annotations for the created database migrations job.
@@ -25,10 +25,10 @@ migrationsJob:
     "linkerd.io/inject": disabled
 
 # Resources granted to the cortex services.
-resources:
-  limits:
-    cpu: 250m
-    memory: 1024Mi
+#
+# Note: configure this to your needs, or use something like vpa_butler
+# (https://github.com/sapcc/vpa_butler) to automatically adjust the resources.
+resources: {}
 
 # Liveness and readiness probes for the cortex services.
 livenessProbe:
@@ -61,6 +61,11 @@ modes:
   # External scheduler for Manila.
   - name: scheduler-manila
     args: ["scheduler-manila"]
+    replicas: 1
+
+  # Descheduler for Nova.
+  - name: descheduler-nova
+    args: ["descheduler-nova"]
     replicas: 1
 
   # Service that extracts and exposes KPIs.
@@ -127,6 +132,20 @@ conf:
       retryIntervalSeconds: 1
       livenessPingIntervalSeconds: 5
 
+  keystone:
+    # Authentication/identity service URL for openstack.
+    url: https://path-to-keystone/v3
+    # Optional, only required if OpenStack is configured with SSO.
+    # Note: the certificate will be used for all other OpenStack services.
+    sso: *sharedSSOCert
+
+    # OpenStack login credentials also used by the OpenStack CLI.
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to
+
   # Sync plugins config.
   sync:
     prometheus:
@@ -140,6 +159,11 @@ conf:
         - name: kvm_prometheus
           url: https://path-to-node-exporter
           provides: [node_exporter_metric]
+          # Optional, only required if Prometheus is configured with SSO.
+          sso: *sharedSSOCert
+        - name: netapp_prometheus
+          url: https://path-to-netapp-harvest-exporter
+          provides: [netapp_aggregate_labels_metric, netapp_node_metric]
           # Optional, only required if Prometheus is configured with SSO.
           sso: *sharedSSOCert
       # Prometheus metrics to sync into the database.
@@ -177,21 +201,15 @@ conf:
               (sum by (node) (node_memory_MemTotal_bytes) / count by (node) (node_memory_MemTotal_bytes))
             )) * 100
           type: node_exporter_metric
+        # NetApp harvest exporter metrics for Manila storage pools.
+        - alias: netapp_aggr_labels
+          query: netapp_aggr_labels{}
+          type: netapp_aggregate_labels_metric
+        - alias: netapp_node_cpu_busy
+          query: netapp_node_cpu_busy{}
+          type: netapp_node_metric
 
     openstack:
-      keystone:
-        # Authentication/identity service URL for openstack.
-        url: https://path-to-keystone/v3
-        # Optional, only required if OpenStack is configured with SSO.
-        # Note: the certificate will be used for all other OpenStack services.
-        sso: *sharedSSOCert
-
-        # OpenStack login credentials also used by the OpenStack CLI.
-        username: openstack-user-with-all-project-read-access
-        password: openstack-user-password
-        projectName: openstack-project-of-user
-        userDomainName: openstack-domain-of-user
-        projectDomainName: openstack-domain-of-project-scoped-to
       nova:
         # One of admin, public, or internal
         availability: public
@@ -217,6 +235,13 @@ conf:
         # Manila objects to sync into the database.
         types:
           - storage_pools
+      identity:
+        # One of admin, public, or internal
+        availability: public
+        # Identity objects to sync into the database.
+        types:
+          - domains
+          - projects
 
   extractor:
     # Configuration of features that should be extracted from the synced data.
@@ -285,15 +310,30 @@ conf:
               metrics:
                 - alias: node_exporter_memory_active_pct
 
+      # NetApp-specific extractors.
+      - name: netapp_storage_pool_cpu_usage_extractor
+        recencySeconds: 60 # 1 minute
+        dependencies:
+          sync:
+            prometheus:
+              metrics:
+                - alias: netapp_node_cpu_busy
+                - alias: netapp_aggr_labels
+
       # Shared extractors.
-      - name: storage_pool_utilization_extractor
+      - name: host_domain_project_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
           sync:
             openstack:
-              manila:
+              nova:
                 types:
-                  - storage_pools
+                  - hypervisors
+                  - servers
+              identity:
+                types:
+                  - domains
+                  - projects
       - name: host_utilization_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
@@ -349,12 +389,18 @@ conf:
         dependencies:
           extractors:
             - vrops_project_noisiness_extractor
+      # NetApp-specific KPIs.
+      - name: netapp_storage_pool_cpu_usage_kpi
+        dependencies:
+          extractors:
+            - netapp_storage_pool_cpu_usage_extractor
       # Shared KPIs.
       - name: host_utilization_kpi
         dependencies:
           extractors:
             - host_utilization_extractor
             - host_capabilities_extractor
+            - host_domain_project_extractor
           sync:
             openstack:
               nova:
@@ -385,18 +431,20 @@ conf:
       # the order will be maintained when the weights are applied to the
       # input weights.
       plugins:
-        # Bin-packing for Manila storage pools.
-        - name: capacity_balancing
+        # Balance cpu utilization of Manila storage pools.
+        - name: netapp_cpu_usage_balancing
           options:
-            # Min-max scaling for gap-fitting based on capacity left (pct)
-            # Note the inverted values here -> binpacking instead of balancing.
-            utilizedLowerBoundPct: 100
-            utilizedUpperBoundPct: 0
-            utilizedActivationLowerBound: 0.0
-            utilizedActivationUpperBound: 1.0
+            # Min-max scaling for gap-fitting based on CPU usage (pct)
+            avgCPUUsageLowerBound: 0 # pct
+            avgCPUUsageUpperBound: 10 # pct
+            avgCPUUsageActivationLowerBound: 0.0
+            avgCPUUsageActivationUpperBound: -0.75
+            maxCPUUsageLowerBound: 0 # pct
+            maxCPUUsageUpperBound: 10 # pct
+            maxCPUUsageActivationLowerBound: 0.0
+            maxCPUUsageActivationUpperBound: -0.25
           dependencies:
-            extractors:
-              - storage_pool_utilization_extractor
+            extractors: [netapp_storage_pool_cpu_usage_extractor]
 
     nova:
       # Dependencies needed by all the Nova scheduler steps.
@@ -565,6 +613,26 @@ conf:
             diskUtilizedActivationUpperBound: 0.0
           dependencies:
             extractors: [host_utilization_extractor]
+
+  descheduler:
+    nova:
+      disableDryRun: false
+      availability: public
+      # Configuration of the descheduler that runs periodically to de-schedule
+      # VMs based on the configured plugins.
+      # Each plugin can specify its own dependencies on extractors and synced data.
+      #
+      # The `name` should correspond to a known descheduler plugin.
+      plugins:
+        - name: demo
+          options:
+            vmName: "cortex-demo-vm"
+          dependencies:
+            sync:
+              openstack:
+                nova:
+                  types:
+                    - servers
 
 # Generic modifiers added on the initial creation of this helm chart.
 

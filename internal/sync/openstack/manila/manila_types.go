@@ -139,6 +139,103 @@ func (sp *StoragePool) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Custom marshaler for StoragePool to handle nested JSON.
+func (sp *StoragePool) MarshalJSON() ([]byte, error) {
+	// Helper function to parse JSON string back to original value
+	parseJSONString := func(jsonStr *string) (any, error) {
+		if jsonStr == nil {
+			return nil, nil
+		}
+		var value any
+		if err := json.Unmarshal([]byte(*jsonStr), &value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+
+	// Parse all the JSON string fields back to their original values
+	driverVersion, err := parseJSONString(sp.CapabilitiesDriverVersion)
+	if err != nil {
+		return nil, err
+	}
+	replicationType, err := parseJSONString(sp.CapabilitiesReplicationType)
+	if err != nil {
+		return nil, err
+	}
+	driverHandlesShareServers, err := parseJSONString(sp.CapabilitiesDriverHandlesShareServers)
+	if err != nil {
+		return nil, err
+	}
+	snapshotSupport, err := parseJSONString(sp.CapabilitiesSnapshotSupport)
+	if err != nil {
+		return nil, err
+	}
+	createShareFromSnapshotSupport, err := parseJSONString(sp.CapabilitiesCreateShareFromSnapshotSupport)
+	if err != nil {
+		return nil, err
+	}
+	revertToSnapshotSupport, err := parseJSONString(sp.CapabilitiesRevertToSnapshotSupport)
+	if err != nil {
+		return nil, err
+	}
+	mountSnapshotSupport, err := parseJSONString(sp.CapabilitiesMountSnapshotSupport)
+	if err != nil {
+		return nil, err
+	}
+	dedupe, err := parseJSONString(sp.CapabilitiesDedupe)
+	if err != nil {
+		return nil, err
+	}
+	compression, err := parseJSONString(sp.CapabilitiesCompression)
+	if err != nil {
+		return nil, err
+	}
+	ipv4Support, err := parseJSONString(sp.CapabilitiesIPv4Support)
+	if err != nil {
+		return nil, err
+	}
+	ipv6Support, err := parseJSONString(sp.CapabilitiesIPv6Support)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reconstruct the capabilities object
+	capabilities := map[string]any{
+		"total_capacity_gb":                  sp.CapabilitiesTotalCapacityGB,
+		"free_capacity_gb":                   sp.CapabilitiesFreeCapacityGB,
+		"reserved_percentage":                sp.CapabilitiesReservedPercentage,
+		"pool_name":                          sp.CapabilitiesPoolName,
+		"share_backend_name":                 sp.CapabilitiesShareBackendName,
+		"storage_protocol":                   sp.CapabilitiesStorageProtocol,
+		"vendor_name":                        sp.CapabilitiesVendorName,
+		"replication_domain":                 sp.CapabilitiesReplicationDomain,
+		"sg_consistent_snapshot_support":     sp.CapabilitiesSGConsistentSnapshotSupport,
+		"timestamp":                          sp.CapabilitiesTimestamp,
+		"driver_version":                     driverVersion,
+		"replication_type":                   replicationType,
+		"driver_handles_share_servers":       driverHandlesShareServers,
+		"snapshot_support":                   snapshotSupport,
+		"create_share_from_snapshot_support": createShareFromSnapshotSupport,
+		"revert_to_snapshot_support":         revertToSnapshotSupport,
+		"mount_snapshot_support":             mountSnapshotSupport,
+		"dedupe":                             dedupe,
+		"compression":                        compression,
+		"ipv4_support":                       ipv4Support,
+		"ipv6_support":                       ipv6Support,
+	}
+
+	// Create the final structure with capabilities nested
+	result := map[string]any{
+		"name":         sp.Name,
+		"host":         sp.Host,
+		"backend":      sp.Backend,
+		"pool":         sp.Pool,
+		"capabilities": capabilities,
+	}
+
+	return json.Marshal(result)
+}
+
 // Table in which the openstack model is stored.
 func (StoragePool) TableName() string { return "openstack_storage_pools" }
 

@@ -10,9 +10,10 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/keystone"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/manila"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
@@ -34,13 +35,13 @@ type CombinedSyncer struct {
 // Create a new combined syncer that runs multiple syncers in parallel.
 func NewCombinedSyncer(
 	ctx context.Context,
+	keystoneAPI keystone.KeystoneAPI,
 	config conf.SyncOpenStackConfig,
 	monitor sync.Monitor,
 	db db.DB,
 	mqttClient mqtt.Client,
 ) sync.Datasource {
 
-	keystoneAPI := keystone.NewKeystoneAPI(config.Keystone)
 	slog.Info("loading openstack sub-syncers")
 	syncers := []Syncer{
 		&nova.NovaSyncer{
@@ -63,6 +64,13 @@ func NewCombinedSyncer(
 			Conf:       config.Manila,
 			API:        manila.NewManilaAPI(monitor, keystoneAPI, config.Manila),
 			MqttClient: mqttClient,
+		},
+		&identity.IdentitySyncer{
+			DB:         db,
+			Mon:        monitor,
+			API:        identity.NewIdentityAPI(monitor, keystoneAPI, config.Identity),
+			MqttClient: mqttClient,
+			Conf:       config.Identity,
 		},
 	}
 	return CombinedSyncer{monitor: monitor, syncers: syncers}

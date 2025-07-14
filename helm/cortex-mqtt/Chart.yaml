@@ -5,7 +5,7 @@ apiVersion: v2
 name: cortex-mqtt
 description: MQTT setup for Cortex.
 type: application
-version: 0.0.3
+version: 0.0.4
 appVersion: "0.1.0"
 dependencies:
   # Owner info adds a configmap to the kubernetes cluster with information on
@@ -17,4 +17,4 @@ dependencies:
   # RabbitMQ is a message broker, see: https://artifacthub.io/packages/helm/bitnami/rabbitmq
   - name: rabbitmq
     repository: oci://registry-1.docker.io/bitnamicharts
-    version: 16.0.8
+    version: 16.0.10

@@ -7,6 +7,9 @@
 # Don't track us.
 analytics_settings(False)
 
+# The upgrade job may take a long time to run, so it is disabled by default.
+enable_postgres_upgrade = False
+
 if not os.getenv('TILT_VALUES_PATH'):
     fail("TILT_VALUES_PATH is not set.")
 if not os.path.exists(os.getenv('TILT_VALUES_PATH')):
@@ -58,6 +61,11 @@ k8s_resource('cortex-kpis', port_forwards=[
 ], links=[
     link('localhost:8007/metrics', '/metrics'),
 ], labels=['Core-Services'])
+k8s_resource('cortex-descheduler-nova', port_forwards=[
+    port_forward(8008, 2112),
+], links=[
+    link('localhost:8008/metrics', '/metrics'),
+], labels=['Core-Services'])
 
 ########### Cortex Commands
 k8s_resource('cortex-cli', labels=['Commands'])
@@ -76,21 +84,23 @@ local('sh helm/sync.sh helm/cortex-mqtt')
 k8s_yaml(helm('./helm/cortex-mqtt', name='cortex-mqtt'))
 k8s_resource('cortex-mqtt', port_forwards=[
     port_forward(1883, 1883), # Direct TCP connection
-    port_forward(8008, 15675), # Websocket connection
+    port_forward(9000, 15675), # Websocket connection
 ], labels=['Core-Services'])
 
 ########### Postgres DB for Cortex Core Service
 local('sh helm/sync.sh helm/cortex-postgres')
-k8s_yaml(helm('./helm/cortex-postgres', name='cortex-postgres'))
+job_flag = 'upgradeJob.enabled=' + str(enable_postgres_upgrade).lower()
+k8s_yaml(helm('./helm/cortex-postgres', name='cortex-postgres', set=job_flag))
 k8s_resource('cortex-postgresql', port_forwards=[
     port_forward(5432, 5432),
 ], labels=['Database'])
-# Get the version from the chart.
-cmd = "helm show chart ./helm/cortex-postgres | grep -E '^version:' | awk '{print $2}'"
-chart_version = str(local(cmd)).strip()
-# Use the chart version to name the pre-upgrade job.
-k8s_resource('cortex-postgresql-pre-upgrade-'+chart_version, labels=['Database'])
-k8s_resource('cortex-postgresql-post-upgrade-'+chart_version, labels=['Database'])
+if enable_postgres_upgrade:
+    # Get the version from the chart.
+    cmd = "helm show chart ./helm/cortex-postgres | grep -E '^version:' | awk '{print $2}'"
+    chart_version = str(local(cmd)).strip()
+    # Use the chart version to name the pre-upgrade job.
+    k8s_resource('cortex-postgresql-pre-upgrade-'+chart_version, labels=['Database'])
+    k8s_resource('cortex-postgresql-post-upgrade-'+chart_version, labels=['Database'])
 
 ########### Monitoring
 local('sh helm/sync.sh helm/cortex-prometheus-operator')
@@ -118,7 +128,8 @@ k8s_yaml('./visualizer/app.yaml')
 k8s_resource('cortex-visualizer', port_forwards=[
     port_forward(8009, 80),
 ], links=[
-    link('localhost:8009', 'visualizer'),
+    link('localhost:8009/nova.html', 'nova visualizer'),
+    link('localhost:8009/manila.html', 'manila visualizer'),
 ], labels=['Monitoring'])
 
 ########### Plutono (Grafana Fork)
