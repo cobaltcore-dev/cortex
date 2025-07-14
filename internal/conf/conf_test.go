@@ -41,6 +41,7 @@ func TestNewConfig(t *testing.T) {
         },
         {
           "name": "vrops_hostsystem_cpu_contention_long_term_percentage",
+		  "alias": "my_custom_metric",
           "type": "vrops_host_metric"
         }
       ]

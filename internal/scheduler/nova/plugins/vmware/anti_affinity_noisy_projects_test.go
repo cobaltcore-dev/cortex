@@ -44,7 +44,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
         "avgCPUUsageActivationUpperBound": -0.5
     }`)
 	step := &AntiAffinityNoisyProjectsStep{}
-	if err := step.Init(testDB, opts); err != nil {
+	if err := step.Init("", testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

@@ -389,12 +389,12 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"nova\"}[2m])) by (le, step, stat, unit))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"nova\"}[2m])) by (le, step, alias, stat, unit))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{stat}} {{unit}} ({{step}})",
+          "legendFormat": "{{stat}} {{unit}} ({{step}} {{alias}})",
           "refId": "A"
         }
       ],
@@ -692,9 +692,9 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step, pipeline))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step, alias, pipeline))",
           "interval": "",
-          "legendFormat": "{{pipeline}} {{step}}",
+          "legendFormat": "{{pipeline}} {{step}} ({{alias}})",
           "refId": "A"
         }
       ],
@@ -1340,11 +1340,11 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (pipeline, subject, step) (delta(cortex_scheduler_pipeline_step_weight_modification[2m]))",
+          "expr": "sum by (pipeline, subject, step, alias) (delta(cortex_scheduler_pipeline_step_weight_modification[2m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
-          "legendFormat": "{{ pipeline }} {{ subject }} {{ step }}",
+          "legendFormat": "{{ pipeline }} {{ subject }} {{ step }} ({{ alias }})",
           "queryType": "randomWalk",
           "refId": "A"
         }

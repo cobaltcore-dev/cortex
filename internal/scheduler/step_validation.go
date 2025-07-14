@@ -30,13 +30,18 @@ func (s *StepValidator[RequestType]) GetName() string {
 	return s.Step.GetName()
 }
 
+// Get the alias of the wrapped step.
+func (s *StepValidator[RequestType]) GetAlias() string {
+	return s.Step.GetAlias()
+}
+
 // Initialize the wrapped step with the database and options.
-func (s *StepValidator[RequestType]) Init(db db.DB, opts conf.RawOpts) error {
+func (s *StepValidator[RequestType]) Init(alias string, db db.DB, opts conf.RawOpts) error {
 	slog.Info(
 		"scheduler: init validation for step", "name", s.GetName(),
 		"disabled", s.DisabledValidations,
 	)
-	return s.Step.Init(db, opts)
+	return s.Step.Init(alias, db, opts)
 }
 
 // Validate the wrapped step with the database and options.

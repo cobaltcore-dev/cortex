@@ -142,7 +142,7 @@ th.metainfo div p.issue {
 }
 
 /* Table row showing the name of a step in the pipeline. */
-th.stepname {
+th.stepkey {
   text-align: left;
   font-weight: bold;
   padding-left: 0.75em;

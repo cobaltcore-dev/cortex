@@ -14,12 +14,15 @@ import (
 
 type mockStep[RequestType PipelineRequest] struct {
 	Name     string
-	InitFunc func(db db.DB, opts conf.RawOpts) error
+	InitFunc func(alias string, db db.DB, opts conf.RawOpts) error
 	RunFunc  func(traceLog *slog.Logger, request RequestType) (*StepResult, error)
 }
 
-func (m *mockStep[RequestType]) GetName() string                        { return m.Name }
-func (m *mockStep[RequestType]) Init(db db.DB, opts conf.RawOpts) error { return m.InitFunc(db, opts) }
+func (m *mockStep[RequestType]) GetName() string  { return m.Name }
+func (m *mockStep[RequestType]) GetAlias() string { return m.Name }
+func (m *mockStep[RequestType]) Init(alias string, db db.DB, opts conf.RawOpts) error {
+	return m.InitFunc(alias, db, opts)
+}
 func (m *mockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
 	return m.RunFunc(traceLog, request)
 }
@@ -45,7 +48,7 @@ func TestBaseStep_Init(t *testing.T) {
     }`)
 
 	step := BaseStep[mockPipelineRequest, MockOptions]{}
-	err := step.Init(testDB, opts)
+	err := step.Init("", testDB, opts)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

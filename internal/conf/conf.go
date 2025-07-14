@@ -160,8 +160,13 @@ type NovaSchedulerConfig struct {
 }
 
 type SchedulerStepConfig struct {
-	// The name of the step.
+	// The name of the step implementation.
 	Name string `json:"name"`
+	// The alias of this step, if any.
+	//
+	// The alias can be used to distinguish between different configurations
+	// of the same step, or use a more specific name.
+	Alias string `json:"alias,omitempty"`
 	// Custom options for the step, as a raw yaml map.
 	Options RawOpts `json:"options,omitempty"`
 	// The dependencies this step needs.

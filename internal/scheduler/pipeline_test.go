@@ -17,12 +17,16 @@ type mockPipelineStep struct {
 	err error
 }
 
-func (m *mockPipelineStep) Init(db db.DB, opts conf.RawOpts) error {
+func (m *mockPipelineStep) Init(alias string, db db.DB, opts conf.RawOpts) error {
 	return nil
 }
 
 func (m *mockPipelineStep) GetName() string {
 	return "mock_pipeline_step"
+}
+
+func (m *mockPipelineStep) GetAlias() string {
+	return "mock_pipeline_step_alias"
 }
 
 func (m *mockPipelineStep) Run(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
@@ -41,7 +45,7 @@ func TestPipeline_Run(t *testing.T) {
 			{&mockPipelineStep{}},
 		},
 		applicationOrder: []string{
-			"mock_pipeline_step",
+			"mock_pipeline_step (mock_pipeline_step_alias)",
 		},
 		mqttClient: &mqtt.MockClient{},
 	}
@@ -202,11 +206,11 @@ func TestPipeline_RunSteps(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 step result, got %d", len(result))
 	}
-	if _, ok := result["mock_pipeline_step"]; !ok {
-		t.Fatalf("expected result for step 'mock_pipeline_step'")
+	if _, ok := result["mock_pipeline_step (mock_pipeline_step_alias)"]; !ok {
+		t.Fatalf("expected result for step 'mock_pipeline_step (mock_pipeline_step_alias)'")
 	}
-	if result["mock_pipeline_step"]["host2"] != 1.0 {
-		t.Errorf("expected weight 1.0 for host2, got %f", result["mock_pipeline_step"]["host2"])
+	if result["mock_pipeline_step (mock_pipeline_step_alias)"]["host2"] != 1.0 {
+		t.Errorf("expected weight 1.0 for host2, got %f", result["mock_pipeline_step (mock_pipeline_step_alias)"]["host2"])
 	}
 }
 
