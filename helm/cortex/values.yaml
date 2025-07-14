@@ -14,7 +14,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-13b8fdf"
+  tag: "sha-ea95608"
 
 migrationsJob:
   # Additional annotations for the created database migrations job.
@@ -596,21 +596,41 @@ conf:
                 action: continue
           options:
             # In this configuration, we only consider the memory usage.
-            cpuEnabled: false
-            cpuUtilizedLowerBoundPct: 0
-            cpuUtilizedUpperBoundPct: 100
-            cpuUtilizedActivationLowerBound: 1.0
-            cpuUtilizedActivationUpperBound: 0.0
             ramEnabled: true
             ramUtilizedLowerBoundPct: 0
             ramUtilizedUpperBoundPct: 100
             ramUtilizedActivationLowerBound: 1.0
             ramUtilizedActivationUpperBound: 0.0
-            diskEnabled: false
-            diskUtilizedLowerBoundPct: 0
-            diskUtilizedUpperBoundPct: 100
-            diskUtilizedActivationLowerBound: 1.0
-            diskUtilizedActivationUpperBound: 0.0
+          dependencies:
+            extractors: [host_utilization_extractor]
+
+        # Binpack hana vmware vms on hana hosts.
+        - name: shared_resource_balancing
+          scope:
+            hostSelectors:
+              # Note: due to the vmware spec selector, it is expected that
+              # this step is only executed for VMware hosts.
+              - subject: trait
+                type: infix
+                value: "HANA_EXCLUSIVE"
+                operation: intersection
+            specSelectors:
+              - subject: flavor
+                type: infix
+                value: "hana"
+                action: continue
+              - subject: vmware
+                type: bool
+                value: true
+                action: continue
+          options:
+            # In this configuration, we only consider the memory usage
+            # after the flavor has been placed.
+            ramAfterEnabled: true
+            ramUtilizedAfterLowerBoundPct: 0
+            ramUtilizedAfterUpperBoundPct: 100
+            ramUtilizedAfterActivationLowerBound: 0.0
+            ramUtilizedAfterActivationUpperBound: 1.0
           dependencies:
             extractors: [host_utilization_extractor]
 

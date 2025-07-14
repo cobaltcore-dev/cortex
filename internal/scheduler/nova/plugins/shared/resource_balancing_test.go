@@ -30,35 +30,12 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 
 	// Insert mock data into the feature_host_utilization table
 	_, err = testDB.Exec(`
-        INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct, total_memory_allocatable_mb, total_vcpus_allocatable, total_disk_allocatable_gb)
-        VALUES
-            ('host1', 0, 0, 0, 1000, 100, 100),
-            ('host2',100, 100, 100, 1000, 100, 100)
-    `)
+		INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct, total_memory_allocatable_mb, total_vcpus_allocatable, total_disk_allocatable_gb)
+		VALUES
+			('host1', 0,   0,   0,   1000, 100, 100),
+			('host2', 100, 100, 100, 1000, 100, 100)
+	`)
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Create an instance of the step
-	opts := conf.NewRawOpts(`{
-        "cpuEnabled": true,
-        "cpuUtilizedLowerBoundPct": 0.0,
-        "cpuUtilizedUpperBoundPct": 100.0,
-        "cpuUtilizedActivationLowerBound": 1.0,
-        "cpuUtilizedActivationUpperBound": 0.0,
-        "ramEnabled": true,
-        "ramUtilizedLowerBoundPct": 0.0,
-        "ramUtilizedUpperBoundPct": 100.0,
-        "ramUtilizedActivationLowerBound": 1.0,
-        "ramUtilizedActivationUpperBound": 0.0,
-        "diskEnabled": true,
-        "diskUtilizedLowerBoundPct": 0.0,
-        "diskUtilizedUpperBoundPct": 100.0,
-        "diskUtilizedActivationLowerBound": 1.0,
-        "diskUtilizedActivationUpperBound": 0.0
-    }`)
-	step := &ResourceBalancingStep{}
-	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -66,6 +43,7 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 		name            string
 		request         api.ExternalSchedulerRequest
 		expectedWeights map[string]float64
+		opts            string
 	}{
 		{
 			name: "Single VM",
@@ -85,18 +63,86 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 				"host1": 3.0,
 				"host2": 0.0,
 			},
+			opts: `{
+		"cpuEnabled": true,
+		"cpuUtilizedLowerBoundPct": 0.0,
+		"cpuUtilizedUpperBoundPct": 100.0,
+		"cpuUtilizedActivationLowerBound": 1.0,
+		"cpuUtilizedActivationUpperBound": 0.0,
+		"ramEnabled": true,
+		"ramUtilizedLowerBoundPct": 0.0,
+		"ramUtilizedUpperBoundPct": 100.0,
+		"ramUtilizedActivationLowerBound": 1.0,
+		"ramUtilizedActivationUpperBound": 0.0,
+		"diskEnabled": true,
+		"diskUtilizedLowerBoundPct": 0.0,
+		"diskUtilizedUpperBoundPct": 100.0,
+		"diskUtilizedActivationLowerBound": 1.0,
+		"diskUtilizedActivationUpperBound": 0.0
+	}`,
+		},
+		{
+			name: "CPU/RAM/Disk After Enabled",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								VCPUs:      10,  // 1 tenth
+								MemoryMB:   100, // 1 tenth
+								RootDiskGB: 10,  // 1 tenth
+							},
+							Name:      "Flavor",
+							Namespace: "nova",
+							Version:   "1.2",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedWeights: map[string]float64{
+				"host1": 3.0,
+				"host2": 0.3, // 3 * 0.1 = 0.3
+			},
+			opts: `{
+		"cpuAfterEnabled": true,
+		"cpuUtilizedAfterLowerBoundPct": 0.0,
+		"cpuUtilizedAfterUpperBoundPct": 100.0,
+		"cpuUtilizedAfterActivationLowerBound": 1.0,
+		"cpuUtilizedAfterActivationUpperBound": 0.0,
+		"ramAfterEnabled": true,
+		"ramUtilizedAfterLowerBoundPct": 0.0,
+		"ramUtilizedAfterUpperBoundPct": 100.0,
+		"ramUtilizedAfterActivationLowerBound": 1.0,
+		"ramUtilizedAfterActivationUpperBound": 0.0,
+		"diskAfterEnabled": true,
+		"diskUtilizedAfterLowerBoundPct": 0.0,
+		"diskUtilizedAfterUpperBoundPct": 100.0,
+		"diskUtilizedAfterActivationLowerBound": 1.0,
+		"diskUtilizedAfterActivationUpperBound": 0.0
+	}`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			step := &ResourceBalancingStep{}
+			if err := step.Init(testDB, conf.NewRawOpts(tt.opts)); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 			for host, expectedWeight := range tt.expectedWeights {
 				if weight, ok := result.Activations[host]; ok {
-					if weight != expectedWeight {
+					// round the weight to avoid floating point precision issues
+					if weight-expectedWeight > 0.0001 || weight-expectedWeight < -0.0001 {
 						t.Errorf("expected weight for host %s to be %f, got %f", host, expectedWeight, weight)
 					}
 				} else {
