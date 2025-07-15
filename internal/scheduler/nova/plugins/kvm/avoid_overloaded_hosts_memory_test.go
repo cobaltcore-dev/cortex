@@ -51,7 +51,7 @@ func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
         "maxMemoryUsageActivationUpperBound": -0.5
     }`)
 	step := &AvoidOverloadedHostsMemoryStep{}
-	if err := step.Init(testDB, opts); err != nil {
+	if err := step.Init("", testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

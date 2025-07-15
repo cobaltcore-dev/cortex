@@ -14,7 +14,7 @@ image:
   repository: ghcr.io/cobaltcore-dev/cortex
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "sha-ea95608"
+  tag: "sha-1acb832"
 
 migrationsJob:
   # Additional annotations for the created database migrations job.
@@ -575,6 +575,7 @@ conf:
         # all vms, regardless of the hypervisor. However, in this configuration
         # we only execute it for VMware vms.
         - name: shared_resource_balancing
+          alias: general_purpose_balancing
           scope:
             hostSelectors:
               # Note: due to the vmware spec selector, it is expected that
@@ -606,6 +607,7 @@ conf:
 
         # Binpack hana vmware vms on hana hosts.
         - name: shared_resource_balancing
+          alias: hana_binpacking
           scope:
             hostSelectors:
               # Note: due to the vmware spec selector, it is expected that

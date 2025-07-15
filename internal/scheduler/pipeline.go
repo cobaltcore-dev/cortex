@@ -42,6 +42,19 @@ type pipeline[RequestType PipelineRequest] struct {
 
 type StepWrapper[RequestType PipelineRequest] func(Step[RequestType], conf.SchedulerStepConfig) Step[RequestType]
 
+// Get a unique key for the step, combining its name and alias.
+func getStepKey[RequestType PipelineRequest](step Step[RequestType]) string {
+	name := step.GetName()
+	alias := step.GetAlias()
+	key := ""
+	if alias == "" {
+		key = name
+	} else {
+		key = name + " (" + alias + ")"
+	}
+	return key
+}
+
 // Create a new pipeline with steps contained in the configuration.
 func NewPipeline[RequestType PipelineRequest](
 	supportedSteps []Step[RequestType],
@@ -71,14 +84,15 @@ func NewPipeline[RequestType PipelineRequest](
 		for _, wrapper := range stepWrappers {
 			step = wrapper(step, stepConfig)
 		}
-		if err := step.Init(database, stepConfig.Options); err != nil {
+		if err := step.Init(stepConfig.Alias, database, stepConfig.Options); err != nil {
 			panic("failed to initialize pipeline step: " + err.Error())
 		}
 		steps = append(steps, step)
-		applicationOrder = append(applicationOrder, stepConfig.Name)
+		applicationOrder = append(applicationOrder, getStepKey(step))
 		slog.Info(
 			"scheduler: added step",
 			"name", stepConfig.Name,
+			"alias", stepConfig.Alias,
 			"options", stepConfig.Options,
 		)
 	}
@@ -104,20 +118,22 @@ func (p *pipeline[RequestType]) runSteps(log *slog.Logger, request RequestType) 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				log.Info("scheduler: running step", "name", step.GetName())
+				name := step.GetName()
+				alias := step.GetAlias()
+				log.Info("scheduler: running step", "name", name, "alias", alias)
 				result, err := step.Run(log, request)
 				if errors.Is(err, ErrStepSkipped) {
-					log.Info("scheduler: step skipped", "name", step.GetName())
+					log.Info("scheduler: step skipped", "name", name, "alias", alias)
 					return
 				}
 				if err != nil {
 					log.Error("scheduler: failed to run step", "error", err)
 					return
 				}
-				log.Info("scheduler: finished step", "name", step.GetName())
+				log.Info("scheduler: finished step", "name", name, "alias", alias)
 				lock.Lock()
 				defer lock.Unlock()
-				activationsByStep[step.GetName()] = result.Activations
+				activationsByStep[getStepKey(step)] = result.Activations
 			}()
 		}
 		wg.Wait()
@@ -150,8 +166,8 @@ func (p *pipeline[RequestType]) applyStepWeights(
 	maps.Copy(outWeights, inWeights)
 
 	// Apply all activations in the strict order defined by the configuration.
-	for _, stepName := range p.applicationOrder {
-		stepActivations, ok := stepWeights[stepName]
+	for _, stepKey := range p.applicationOrder {
+		stepActivations, ok := stepWeights[stepKey]
 		if !ok {
 			// This is ok, since steps can be skipped.
 			continue

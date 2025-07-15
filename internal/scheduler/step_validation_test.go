@@ -28,7 +28,7 @@ func TestStepValidator_GetName(t *testing.T) {
 
 func TestStepValidator_Init(t *testing.T) {
 	mockStep := &mockStep[mockPipelineRequest]{
-		InitFunc: func(db db.DB, opts conf.RawOpts) error {
+		InitFunc: func(alias string, db db.DB, opts conf.RawOpts) error {
 			return nil
 		},
 	}
@@ -40,7 +40,7 @@ func TestStepValidator_Init(t *testing.T) {
 		Step: mockStep,
 	}
 
-	if err := validator.Init(testDB, mockOpts); err != nil {
+	if err := validator.Init("", testDB, mockOpts); err != nil {
 		t.Errorf("Init() error = %v, want nil", err)
 	}
 }

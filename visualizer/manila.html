@@ -107,20 +107,20 @@
 
       let table = '<table>'
       // Add weights to the table.
-      for (const stepname of order) {
+      for (const stepkey of order) {
         // Add a header with the name of the step.
         table += `
           <tr>
-            <th class="stepname" colspan="${poolNames.length + 1}">${stepname}</th>
+            <th class="stepkey" colspan="${poolNames.length + 1}">${stepkey}</th>
           </tr>
         `
 
-        const weights = steps[stepname]
+        const weights = steps[stepkey]
         if (weights === undefined) {
-          console.warn(`No weights found for step "${stepname}"`)
+          console.warn(`No weights found for step "${stepkey}"`)
           continue
         }
-        table += `<tr class="${highlights.includes(stepname) ? 'highlight' : ''}">`
+        table += `<tr class="${highlights.includes(stepkey) ? 'highlight' : ''}">`
         for (const poolName of poolNames) {
           if (weights[poolName] === undefined) {
             table += '<td class="weight"></td>'
