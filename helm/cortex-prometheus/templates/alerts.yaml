@@ -279,7 +279,7 @@ spec:
           This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
 
     - alert: CortexDeschedulerPipelineErroring
-      expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds{error="true"}[2m]) > 0
+      expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{error="true"}[2m]) > 0
       for: 5m
       labels:
         context: descheduler
