@@ -342,6 +342,8 @@ conf:
               nova:
                 types:
                   - hypervisors
+        # Publish the features to mqtt, so that they can be used by the visualizer.
+        mqttTopic: "cortex/extraction/host_utilization_extractor"
       - name: host_capabilities_extractor
         recencySeconds: 60 # 1 minute
         dependencies:
