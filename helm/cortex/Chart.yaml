@@ -5,7 +5,7 @@ apiVersion: v2
 name: cortex
 description: A Helm chart for deploying Cortex.
 type: application
-version: 0.23.3
+version: 0.23.4
 appVersion: 0.1.0
 dependencies:
   # Owner info adds a configmap to the kubernetes cluster with information on
