@@ -227,12 +227,16 @@ func TestNewPipeline(t *testing.T) {
 	database := db.DB{}          // Mock or initialize as needed
 	monitor := PipelineMonitor{} // Replace with an actual mock implementation if available
 	mqttClient := &mqtt.MockClient{}
+	supportedSteps := map[string]func() Step[mockPipelineRequest]{
+		"mock_pipeline_step": func() Step[mockPipelineRequest] {
+			return &mockPipelineStep{
+				name: "mock_pipeline_step",
+			}
+		},
+	}
 
 	pipeline := NewPipeline(
-		[]Step[mockPipelineRequest]{&mockPipelineStep{
-			name:  "mock_pipeline_step",
-			alias: "", // Set by Init
-		}},
+		supportedSteps,
 		[]conf.SchedulerStepConfig{{Name: "mock_pipeline_step", Options: conf.RawOpts{}}},
 		[]StepWrapper[mockPipelineRequest]{},
 		database, monitor, mqttClient, "test/topic",
@@ -253,12 +257,17 @@ func TestNewPipeline_SameStepMultipleAliases(t *testing.T) {
 	database := db.DB{}          // Mock or initialize as needed
 	monitor := PipelineMonitor{} // Replace with an actual mock implementation if available
 	mqttClient := &mqtt.MockClient{}
+	supportedSteps := map[string]func() Step[mockPipelineRequest]{
+		"mock_pipeline_step": func() Step[mockPipelineRequest] {
+			return &mockPipelineStep{
+				name:  "mock_pipeline_step",
+				alias: "", // Set by Init
+			}
+		},
+	}
 
 	pipeline := NewPipeline(
-		[]Step[mockPipelineRequest]{&mockPipelineStep{
-			name:  "mock_pipeline_step",
-			alias: "", // Set by Init
-		}},
+		supportedSteps,
 		[]conf.SchedulerStepConfig{
 			{Name: "mock_pipeline_step", Alias: "mock_step_1", Options: conf.RawOpts{}},
 			{Name: "mock_pipeline_step", Alias: "mock_step_2", Options: conf.RawOpts{}},

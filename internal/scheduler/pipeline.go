@@ -57,7 +57,7 @@ func getStepKey[RequestType PipelineRequest](step Step[RequestType]) string {
 
 // Create a new pipeline with steps contained in the configuration.
 func NewPipeline[RequestType PipelineRequest](
-	supportedSteps []Step[RequestType],
+	supportedSteps map[string]func() Step[RequestType],
 	confedSteps []conf.SchedulerStepConfig,
 	stepWrappers []StepWrapper[RequestType],
 	database db.DB,
@@ -65,20 +65,15 @@ func NewPipeline[RequestType PipelineRequest](
 	mqttClient mqtt.Client,
 	mqttTopic string,
 ) Pipeline[RequestType] {
-
-	supportedStepsByName := make(map[string]Step[RequestType])
-	for _, step := range supportedSteps {
-		supportedStepsByName[step.GetName()] = step
-	}
-
 	// Load all steps from the configuration.
 	steps := []Step[RequestType]{}
 	applicationOrder := []string{}
 	for _, stepConfig := range confedSteps {
-		step, ok := supportedStepsByName[stepConfig.Name]
+		makeStep, ok := supportedSteps[stepConfig.Name]
 		if !ok {
 			panic("unknown pipeline step: " + stepConfig.Name)
 		}
+		step := makeStep()
 		// Apply the step wrappers to the step.
 		for _, wrapper := range stepWrappers {
 			step = wrapper(step, stepConfig)
