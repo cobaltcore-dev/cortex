@@ -18,16 +18,16 @@ type NovaStep = scheduler.Step[api.ExternalSchedulerRequest]
 
 // Configuration of steps supported by the scheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = []NovaStep{
+var supportedSteps = map[string]func() NovaStep{
 	// VMware-specific steps
-	&vmware.AntiAffinityNoisyProjectsStep{},
-	&vmware.AvoidLongTermContendedHostsStep{},
-	&vmware.AvoidShortTermContendedHostsStep{},
+	(&vmware.AntiAffinityNoisyProjectsStep{}).GetName():    func() NovaStep { return &vmware.AntiAffinityNoisyProjectsStep{} },
+	(&vmware.AvoidLongTermContendedHostsStep{}).GetName():  func() NovaStep { return &vmware.AvoidLongTermContendedHostsStep{} },
+	(&vmware.AvoidShortTermContendedHostsStep{}).GetName(): func() NovaStep { return &vmware.AvoidShortTermContendedHostsStep{} },
 	// KVM-specific steps
-	&kvm.AvoidOverloadedHostsCPUStep{},
-	&kvm.AvoidOverloadedHostsMemoryStep{},
+	(&kvm.AvoidOverloadedHostsCPUStep{}).GetName():    func() NovaStep { return &kvm.AvoidOverloadedHostsCPUStep{} },
+	(&kvm.AvoidOverloadedHostsMemoryStep{}).GetName(): func() NovaStep { return &kvm.AvoidOverloadedHostsMemoryStep{} },
 	// Shared steps
-	&shared.ResourceBalancingStep{},
+	(&shared.ResourceBalancingStep{}).GetName(): func() NovaStep { return &shared.ResourceBalancingStep{} },
 }
 
 // Create a new Nova scheduler pipeline.
@@ -58,7 +58,7 @@ func NewPipeline(
 	}
 	topicFinished := "cortex/scheduler/nova/pipeline/finished"
 	return scheduler.NewPipeline(
-		supportedSteps, config.Nova.Plugins, wrappers, config,
+		supportedSteps, config.Nova.Plugins, wrappers,
 		db, monitor, mqttClient, topicFinished,
 	)
 }

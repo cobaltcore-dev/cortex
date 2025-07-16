@@ -224,12 +224,12 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova\"}[2m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova\"}[2m])) by (le, step, alias))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{ step }} {{ alias }}",
           "refId": "A"
         }
       ],
@@ -300,12 +300,12 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila\"}[2m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila\"}[2m])) by (le, step, alias))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{ step }} {{ alias }}",
           "refId": "A"
         }
       ],

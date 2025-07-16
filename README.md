@@ -4,13 +4,13 @@
 # SPDX-License-Identifier: Apache-2.0
 -->
 
+Cortex
+======
 [![REUSE status](https://api.reuse.software/badge/github.com/cobaltcore-dev/cortex)](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex)
-
-# Cortex
+<a href="https://github.com/cobaltcore-dev/cortex"><img align="left" width="170" height="170" src="./docs/assets/Cortex_Logo_black_space_square_bg_rd@2x.png"></a>
 
 Cortex is an intelligent service for initial placement and scheduling of compute workloads within an [OpenStack](https://www.openstack.org/) cloud environment. It is designed to improve resource usage in a data center by making smart(er) decisions about where to place VMs, with future support planned for storage and network workloads.
 
-## Background
 
 Efficient and balanced resource utilization is key for cloud infrastructure providers to maintain operational performance and cost-effectiveness. In a dynamic cloud environment where workloads are constantly being created, moved, and deleted, a smart placement can help avoid resource bottlenecks and ensure high availability.
 

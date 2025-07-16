@@ -54,3 +54,5 @@ alerts:
       severity: info
     cortexHostDiskUtilizationAbove100Percent:
       severity: info
+    cortexDeschedulerPipelineErroring:
+      severity: info
