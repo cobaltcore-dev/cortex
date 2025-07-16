@@ -60,7 +60,6 @@ func NewPipeline[RequestType PipelineRequest](
 	supportedSteps []Step[RequestType],
 	confedSteps []conf.SchedulerStepConfig,
 	stepWrappers []StepWrapper[RequestType],
-	config conf.SchedulerConfig,
 	database db.DB,
 	monitor PipelineMonitor,
 	mqttClient mqtt.Client,

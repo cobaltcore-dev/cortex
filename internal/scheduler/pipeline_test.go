@@ -14,19 +14,22 @@ import (
 )
 
 type mockPipelineStep struct {
-	err error
+	err   error
+	name  string
+	alias string
 }
 
 func (m *mockPipelineStep) Init(alias string, db db.DB, opts conf.RawOpts) error {
+	m.alias = alias
 	return nil
 }
 
 func (m *mockPipelineStep) GetName() string {
-	return "mock_pipeline_step"
+	return m.name
 }
 
 func (m *mockPipelineStep) GetAlias() string {
-	return "mock_pipeline_step_alias"
+	return m.alias
 }
 
 func (m *mockPipelineStep) Run(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
@@ -42,7 +45,10 @@ func TestPipeline_Run(t *testing.T) {
 	// Create an instance of the pipeline with a mock step
 	pipeline := &pipeline[mockPipelineRequest]{
 		executionOrder: [][]Step[mockPipelineRequest]{
-			{&mockPipelineStep{}},
+			{&mockPipelineStep{
+				name:  "mock_pipeline_step",
+				alias: "mock_pipeline_step_alias",
+			}},
 		},
 		applicationOrder: []string{
 			"mock_pipeline_step (mock_pipeline_step_alias)",
@@ -190,7 +196,10 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 }
 
 func TestPipeline_RunSteps(t *testing.T) {
-	mockStep := &mockPipelineStep{}
+	mockStep := &mockPipelineStep{
+		name:  "mock_pipeline_step",
+		alias: "mock_pipeline_step_alias",
+	}
 	p := &pipeline[mockPipelineRequest]{
 		executionOrder: [][]Step[mockPipelineRequest]{
 			{mockStep},
@@ -215,20 +224,18 @@ func TestPipeline_RunSteps(t *testing.T) {
 }
 
 func TestNewPipeline(t *testing.T) {
-	config := conf.SchedulerConfig{
-		Nova: conf.NovaSchedulerConfig{Plugins: []conf.SchedulerStepConfig{
-			{Name: "mock_pipeline_step", Options: conf.RawOpts{}},
-		}},
-	}
 	database := db.DB{}          // Mock or initialize as needed
 	monitor := PipelineMonitor{} // Replace with an actual mock implementation if available
 	mqttClient := &mqtt.MockClient{}
 
 	pipeline := NewPipeline(
-		[]Step[mockPipelineRequest]{&mockPipelineStep{}},
+		[]Step[mockPipelineRequest]{&mockPipelineStep{
+			name:  "mock_pipeline_step",
+			alias: "", // Set by Init
+		}},
 		[]conf.SchedulerStepConfig{{Name: "mock_pipeline_step", Options: conf.RawOpts{}}},
 		[]StepWrapper[mockPipelineRequest]{},
-		config, database, monitor, mqttClient, "test/topic",
+		database, monitor, mqttClient, "test/topic",
 	).(*pipeline[mockPipelineRequest])
 
 	if len(pipeline.executionOrder) != 1 {
@@ -239,5 +246,46 @@ func TestNewPipeline(t *testing.T) {
 	}
 	if pipeline.executionOrder[0][0].GetName() != "mock_pipeline_step" {
 		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][0].GetName())
+	}
+}
+
+func TestNewPipeline_SameStepMultipleAliases(t *testing.T) {
+	database := db.DB{}          // Mock or initialize as needed
+	monitor := PipelineMonitor{} // Replace with an actual mock implementation if available
+	mqttClient := &mqtt.MockClient{}
+
+	pipeline := NewPipeline(
+		[]Step[mockPipelineRequest]{&mockPipelineStep{
+			name:  "mock_pipeline_step",
+			alias: "", // Set by Init
+		}},
+		[]conf.SchedulerStepConfig{
+			{Name: "mock_pipeline_step", Alias: "mock_step_1", Options: conf.RawOpts{}},
+			{Name: "mock_pipeline_step", Alias: "mock_step_2", Options: conf.RawOpts{}},
+		},
+		[]StepWrapper[mockPipelineRequest]{},
+		database, monitor, mqttClient, "test/topic",
+	).(*pipeline[mockPipelineRequest])
+
+	if len(pipeline.executionOrder[0]) != 2 {
+		t.Fatalf("expected 2 steps in the execution order, got %d: %v", len(pipeline.executionOrder[0]), pipeline.executionOrder[0])
+	}
+	if pipeline.executionOrder[0][0].GetName() != "mock_pipeline_step" {
+		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][0].GetName())
+	}
+	if pipeline.executionOrder[0][1].GetName() != "mock_pipeline_step" {
+		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][1].GetName())
+	}
+	if pipeline.executionOrder[0][0].GetAlias() != "mock_step_1" {
+		t.Errorf("expected step alias 'mock_step_1', got '%s'", pipeline.executionOrder[0][0].GetAlias())
+	}
+	if pipeline.executionOrder[0][1].GetAlias() != "mock_step_2" {
+		t.Errorf("expected step alias 'mock_step_2', got '%s'", pipeline.executionOrder[0][1].GetAlias())
+	}
+	if pipeline.applicationOrder[0] != "mock_pipeline_step (mock_step_1)" {
+		t.Errorf("expected application order 'mock_pipeline_step (mock_step_1)', got '%s'", pipeline.applicationOrder[0])
+	}
+	if pipeline.applicationOrder[1] != "mock_pipeline_step (mock_step_2)" {
+		t.Errorf("expected application order 'mock_pipeline_step (mock_step_2)', got '%s'", pipeline.applicationOrder[1])
 	}
 }

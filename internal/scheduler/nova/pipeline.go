@@ -58,7 +58,7 @@ func NewPipeline(
 	}
 	topicFinished := "cortex/scheduler/nova/pipeline/finished"
 	return scheduler.NewPipeline(
-		supportedSteps, config.Nova.Plugins, wrappers, config,
+		supportedSteps, config.Nova.Plugins, wrappers,
 		db, monitor, mqttClient, topicFinished,
 	)
 }

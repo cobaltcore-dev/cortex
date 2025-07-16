@@ -41,7 +41,7 @@ func NewPipeline(
 	}
 	topicFinished := "cortex/scheduler/manila/pipeline/finished"
 	return scheduler.NewPipeline(
-		supportedSteps, config.Manila.Plugins, wrappers, config,
+		supportedSteps, config.Manila.Plugins, wrappers,
 		db, monitor, mqttClient, topicFinished,
 	)
 }
