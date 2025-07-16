@@ -16,8 +16,8 @@ type ManilaStep = scheduler.Step[api.ExternalSchedulerRequest]
 
 // Configuration of steps supported by the scheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = []ManilaStep{
-	&netapp.CPUUsageBalancingStep{},
+var supportedSteps = map[string]func() ManilaStep{
+	(&netapp.CPUUsageBalancingStep{}).GetName(): func() ManilaStep { return &netapp.CPUUsageBalancingStep{} },
 }
 
 // Create a new Manila scheduler pipeline.
@@ -41,7 +41,7 @@ func NewPipeline(
 	}
 	topicFinished := "cortex/scheduler/manila/pipeline/finished"
 	return scheduler.NewPipeline(
-		supportedSteps, config.Manila.Plugins, wrappers, config,
+		supportedSteps, config.Manila.Plugins, wrappers,
 		db, monitor, mqttClient, topicFinished,
 	)
 }
