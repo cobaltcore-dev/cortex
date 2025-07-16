@@ -157,6 +157,13 @@
 
       // Add storage pool capacity statistics to the table.
       table += '<tr>'
+      let maxSpace = 0
+      for (const poolName of poolNames) {
+        const pool = storagePools[poolName]
+        if (pool) {
+          maxSpace = Math.max(maxSpace, pool.capabilities.total_capacity_gb || 0)
+        }
+      }
       for (const poolName of poolNames) {
         const hasWeight = state.pipeline.out[poolName] !== undefined
         const pool = storagePools[poolName]
@@ -170,6 +177,7 @@
         const freeCapacity = pool.capabilities.free_capacity_gb || 0
         const usedCapacity = totalCapacity - freeCapacity
         const reservedPercentage = pool.capabilities.reserved_percentage || 0
+        const scale = totalCapacity / maxSpace
 
         const capacityUsed = totalCapacity === 0 ? 0 : (usedCapacity / totalCapacity)
         const shareSize = spec.size || 1
@@ -179,13 +187,13 @@
         table += `
           <td class="chart" style="${hasWeight ? '' : greyout}">
             <div class="backdrop">
-              <p class="disk"></p>
+              <p class="disk" style="height: ${Math.min(100, scale * 100)}%"></p>
             </div>
             <div class="barsafter">
-              <p class="disk" style="height: ${Math.min(100, capacityUsedAfter * 100)}%"></p>
+              <p class="disk" style="height: ${Math.min(100, capacityUsedAfter * scale * 100)}%"></p>
             </div>
             <div class="barsbefore">
-              <p class="disk" style="height: ${Math.min(100, capacityUsed * 100)}%"></p>
+              <p class="disk" style="height: ${Math.min(100, capacityUsed * scale * 100)}%"></p>
             </div>
             <div class="stats">
               <p>
@@ -195,25 +203,6 @@
               </p>
             </div>
           </td>
-        `
-      }
-      table += '</tr>'
-
-      // Additional information about the storage pools.
-      table += '<tr>'
-      for (const poolName of poolNames) {
-        const hasWeight = state.pipeline.out[poolName] !== undefined
-        const pool = storagePools[poolName]
-        const vendorName = pool?.capabilities.vendor_name || 'Unknown'
-        const backendName = pool?.capabilities.share_backend_name || pool?.backend || 'Unknown'
-
-        table += `
-          <th class="metainfo" style="${hasWeight ? '' : greyout}">
-            <div>
-              <p>${vendorName}</p>
-              <p>${backendName}</p>
-            </div>
-          </th>
         `
       }
       table += '</tr>'

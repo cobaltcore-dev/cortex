@@ -190,6 +190,7 @@ td.chart div.backdrop p {
   height: 100%;
   border-radius: 0.2em;
   border: 1px solid rgba(0, 0, 0, 0.05);
+  background: white;
 }
 td.chart div.stats {
   text-align: center;
@@ -204,8 +205,6 @@ td.chart div.stats p {
   font-size: 1em;
   font-weight: bold;
   margin-left: 0.1em; margin-right: 0.1em;
-  color: var(--color-on-surface);
-  mix-blend-mode: color-burn;
   justify-content: center;
   align-items: center;
 }

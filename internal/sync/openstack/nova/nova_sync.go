@@ -85,13 +85,11 @@ func (s *NovaSyncer) Sync(ctx context.Context) error {
 		}
 	}
 	if slices.Contains(s.Conf.Types, "hypervisors") {
-		changedHypervisors, err := s.SyncChangedHypervisors(ctx)
+		_, err := s.SyncChangedHypervisors(ctx)
 		if err != nil {
 			return err
 		}
 		go s.MqttClient.Publish(TriggerNovaHypervisorsSynced, "")
-		// Publish additional information required for the visualizer.
-		go s.MqttClient.Publish("cortex/sync/openstack/nova/hypervisors", changedHypervisors)
 	}
 	if slices.Contains(s.Conf.Types, "flavors") {
 		changedFlavors, err := s.SyncChangedFlavors(ctx)

@@ -89,15 +89,16 @@ func (p *FeatureExtractorPipeline) initDependencyGraph(supportedExtractors []plu
 	// Load all extractors from the configuration.
 	extractorsByName := make(map[string]plugins.FeatureExtractor)
 	for _, extractorConfig := range p.config.Plugins {
-		extractorFunc, ok := supportedExtractorsByName[extractorConfig.Name]
+		extractor, ok := supportedExtractorsByName[extractorConfig.Name]
 		if !ok {
 			panic("unknown feature extractor: " + extractorConfig.Name)
 		}
-		wrappedExtractor := monitorFeatureExtractor(extractorFunc, p.monitor)
-		if err := wrappedExtractor.Init(p.db, extractorConfig); err != nil {
+		extractor = monitorFeatureExtractor(extractor, p.monitor)
+		extractor = publishTelemetryIfNeeded(extractor, p.mqttClient, extractorConfig.MQTTTopic)
+		if err := extractor.Init(p.db, extractorConfig); err != nil {
 			panic("failed to initialize feature extractor: " + err.Error())
 		}
-		extractorsByName[extractorConfig.Name] = wrappedExtractor
+		extractorsByName[extractorConfig.Name] = extractor
 		slog.Info(
 			"feature extractor: added extractor",
 			"name", extractorConfig.Name,
