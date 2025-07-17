@@ -36,7 +36,7 @@
   <script>
     let state = {
       pipeline: {},
-      hypervisors: {},
+      utilizations: {},
     }
 
     let client
@@ -52,35 +52,38 @@
       client.on('message', (topic, message) => {
         if (topic === 'cortex/scheduler/nova/pipeline/finished') {
           state.pipeline = JSON.parse(message.toString())
+          console.log('Pipeline data received:', state.pipeline)
         }
-        if (topic === 'cortex/sync/openstack/nova/hypervisors') {
-          state.hypervisors = JSON.parse(message.toString())
+        if (topic === 'cortex/extraction/host_utilization_extractor') {
+          state.utilizations = JSON.parse(message.toString())
+          console.log('Utilization data received:', state.utilizations)
         }
         redraw()
       })
       client.on('connect', () => {
         console.log('Connected to MQTT broker.')
         client.subscribe('cortex/scheduler/nova/pipeline/finished')
-        client.subscribe('cortex/sync/openstack/nova/hypervisors')
+        client.subscribe('cortex/extraction/host_utilization_extractor')
       })
     }
     reconnect()
 
     async function redraw () {
       if (Object.keys(state.pipeline).length === 0) return
-      if (Object.keys(state.hypervisors).length === 0) return
 
       const greyout = 'filter: grayscale(50%); opacity: 0.25'
 
       const spec = state.pipeline.request.spec["nova_object.data"]
       const flavor = spec.flavor["nova_object.data"]
 
-      // Get the hypervisors by service host.
-      hypervisors = {}
-      for (const hypervisor of state.hypervisors) {
-        hypervisors[hypervisor.service.host] = hypervisor
+      // Get the utilization by service host.
+      utilizations = {}
+      if (Array.isArray(state.utilizations) && state.utilizations.length > 0) {
+        for (const u of state.utilizations) {
+          utilizations[u.computeHost] = u
+        }
       }
-      const hostnames = Object.keys(hypervisors).sort((a, b) => {
+      const hostnames = Object.keys(utilizations).sort((a, b) => {
         if (state.pipeline.in[a] === undefined) return 1
         if (state.pipeline.in[b] === undefined) return -1
         if (state.pipeline.out[a] === undefined) return 1
@@ -147,56 +150,64 @@
         `
       }
       table += '</tr>'
-      // Add hypervisor statistics to the table.
+
+      // Add utilization statistics to the table.
       table += '<tr>'
+      let maxVCPUs = 0
+      let maxMemMB = 0
+      let maxDiskGB = 0
+      for (const host of hostnames) {
+        const utilization = utilizations[host]
+        if (utilization) {
+          maxVCPUs = Math.max(maxVCPUs, utilization.totalVCPUsAllocatable)
+          maxMemMB = Math.max(maxMemMB, utilization.totalMemoryAllocatableMB)
+          maxDiskGB = Math.max(maxDiskGB, utilization.totalDiskAllocatableGB)
+        }
+      }
       for (const host of hostnames) {
         const hasWeight = state.pipeline.out[host] !== undefined
-        const hypervisor = hypervisors[host]
-        const cpusUsed = hypervisor.vcpus == 0 ? 0 : (hypervisor.vcpus_used / hypervisor.vcpus)
-        const cpusUsedAfter = hypervisor.vcpus == 0 ? 0 :
-          ((hypervisor.vcpus_used + flavor.vcpus) / hypervisor.vcpus)
-        const memUsed = hypervisor.memory_mb == 0 ? 0 : (hypervisor.memory_mb_used / hypervisor.memory_mb)
-        const memUsedAfter = hypervisor.memory_mb == 0 ? 0 :
-          ((hypervisor.memory_mb_used + flavor.memory_mb) / hypervisor.memory_mb)
-        const diskUsed = hypervisor.local_gb == 0 ? 0 : (hypervisor.local_gb_used / hypervisor.local_gb)
-        const diskUsedAfter = hypervisor.local_gb == 0 ? 0 :
-          ((hypervisor.local_gb_used + flavor.disk) / hypervisor.local_gb)
+        const utilization = utilizations[host]
+
+        const cpusUsed = utilization.vcpusUtilizedPct / 100
+        const memUsed = utilization.ramUtilizedPct / 100
+        const diskUsed = utilization.diskUtilizedPct / 100
+        const cpusUsedAfter = (cpusUsed * utilization.totalVCPUsAllocatable + flavor.vcpus) / utilization.totalVCPUsAllocatable
+        const memUsedAfter = (memUsed * utilization.totalMemoryAllocatableMB + flavor.memory_mb) / utilization.totalMemoryAllocatableMB
+        const diskUsedAfter = (diskUsed * utilization.totalDiskAllocatableGB + flavor.disk) / utilization.totalDiskAllocatableGB
+        const cpusUsedScaled = cpusUsed * utilization.totalVCPUsAllocatable / maxVCPUs
+        const memUsedScaled = memUsed * utilization.totalMemoryAllocatableMB / maxMemMB
+        const diskUsedScaled = diskUsed * utilization.totalDiskAllocatableGB / maxDiskGB
+        const cpusUsedAfterScaled = cpusUsedAfter * utilization.totalVCPUsAllocatable / maxVCPUs
+        const memUsedAfterScaled = memUsedAfter * utilization.totalMemoryAllocatableMB / maxMemMB
+        const diskUsedAfterScaled = diskUsedAfter * utilization.totalDiskAllocatableGB
+        const totalVCPUsAllocatableScaled = utilization.totalVCPUsAllocatable / maxVCPUs
+        const totalMemoryAllocatableMBScaled = utilization.totalMemoryAllocatableMB / maxMemMB
+        const totalDiskAllocatableGBScaled = utilization.totalDiskAllocatableGB / maxDiskGB
+
         table += `
           <td class="chart" style="${hasWeight ? '' : greyout}">
-            <div class="backdrop">
-              <p class="cpu"></p>
-              <p class="mem"></p>
-              <p class="disk"></p>
-            </div>
-            <div class="barsafter">
-              <p class="cpu" style="height: ${Math.min(100, cpusUsedAfter * 100)}%"></p>
-              <p class="mem" style="height: ${Math.min(100, memUsedAfter * 100)}%"></p>
-              <p class="disk" style="height: ${Math.min(100, diskUsedAfter * 100)}%"></p>
-            </div>
-            <div class="barsbefore">
-              <p class="cpu" style="height: ${Math.min(100, cpusUsed * 100)}%"></p>
-              <p class="mem" style="height: ${Math.min(100, memUsed * 100)}%"></p>
-              <p class="disk" style="height: ${Math.min(100, diskUsed * 100)}%"></p>
-            </div>
-            <div class="stats">
-              <p>${hypervisor.vcpus_used} / ${hypervisor.vcpus} vCPUs</p>
-              <p>${Math.round(hypervisor.memory_mb_used / 1000)} / ${Math.round(hypervisor.memory_mb / 1000)} GB MEM</p>
-              <p>${hypervisor.local_gb_used} / ${hypervisor.local_gb} GB</p>
+              <div class="backdrop">
+                <p class="cpu" style="height: ${Math.min(100, totalVCPUsAllocatableScaled * 100)}%"></p>
+                <p class="mem" style="height: ${Math.min(100, totalMemoryAllocatableMBScaled * 100)}%"></p>
+                <p class="disk" style="height: ${Math.min(100, totalDiskAllocatableGBScaled * 100)}%"></p>
+              </div>
+              <div class="barsafter">
+                <p class="cpu" style="height: ${Math.min(100, cpusUsedAfterScaled * 100)}%"></p>
+                <p class="mem" style="height: ${Math.min(100, memUsedAfterScaled * 100)}%"></p>
+                <p class="disk" style="height: ${Math.min(100, diskUsedAfterScaled * 100)}%"></p>
+              </div>
+              <div class="barsbefore">
+                <p class="cpu" style="height: ${Math.min(100, cpusUsedScaled * 100)}%"></p>
+                <p class="mem" style="height: ${Math.min(100, memUsedScaled * 100)}%"></p>
+                <p class="disk" style="height: ${Math.min(100, diskUsedScaled * 100)}%"></p>
+              </div>
+              <div class="stats">
+                <p>${Math.round(cpusUsed * utilization.totalVCPUsAllocatable)} / ${utilization.totalVCPUsAllocatable} vCPUs</p>
+                <p>${Math.round(memUsed * utilization.totalMemoryAllocatableMB / 1000)} / ${Math.round(utilization.totalMemoryAllocatableMB / 1000)} GB MEM</p>
+                <p>${Math.round(diskUsed * utilization.totalDiskAllocatableGB)} / ${utilization.totalDiskAllocatableGB} GB DISK</p>
+              </div>
             </div>
           </td>
-        `
-      }
-      table += '</tr>'
-
-      // Additional information about the hypervisor.
-      table += '<tr>'
-      for (const host of hostnames) {
-        const hasWeight = state.pipeline.out[host] !== undefined
-        const isDown = hypervisors[host].state === 'down'
-        table += `
-          <th class="metainfo" style="${hasWeight ? '' : greyout}">
-            <div>${isDown ? '<p class="issue">🚨 DOWN</p>' : ''}</div>
-          </th>
         `
       }
       table += '</tr>'

@@ -139,6 +139,9 @@ type FeatureExtractorConfig struct {
 	DependencyConfig `json:"dependencies,omitempty"`
 	// Recency that tells how old a feature needs to be to be recalculated
 	RecencySeconds *int `json:"recencySeconds,omitempty"`
+	// MQTT topic to publish the features to.
+	// If not set, the extractor will not publish features to MQTT.
+	MQTTTopic string `json:"mqttTopic,omitempty"`
 }
 
 // Configuration for the features module.

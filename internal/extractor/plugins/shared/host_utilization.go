@@ -15,19 +15,19 @@ import (
 // Feature that maps how many resources are utilized on a compute host.
 type HostUtilization struct {
 	// Name of the OpenStack compute host.
-	ComputeHost string `db:"compute_host"`
+	ComputeHost string `db:"compute_host" json:"computeHost"`
 	// RAM utilized in pct.
-	RAMUtilizedPct float64 `db:"ram_utilized_pct"`
+	RAMUtilizedPct float64 `db:"ram_utilized_pct" json:"ramUtilizedPct"`
 	// CPU utilized in pct.
-	VCPUsUtilizedPct float64 `db:"vcpus_utilized_pct"`
+	VCPUsUtilizedPct float64 `db:"vcpus_utilized_pct" json:"vcpusUtilizedPct"`
 	// Disk utilized in pct.
-	DiskUtilizedPct float64 `db:"disk_utilized_pct"`
+	DiskUtilizedPct float64 `db:"disk_utilized_pct" json:"diskUtilizedPct"`
 	// Total memory allocatable (including overcommit) in MB.
-	TotalMemoryAllocatableMB float64 `db:"total_memory_allocatable_mb"`
+	TotalMemoryAllocatableMB float64 `db:"total_memory_allocatable_mb" json:"totalMemoryAllocatableMB"`
 	// Total vCPUs allocatable (including overcommit).
-	TotalVCPUsAllocatable float64 `db:"total_vcpus_allocatable"`
+	TotalVCPUsAllocatable float64 `db:"total_vcpus_allocatable" json:"totalVCPUsAllocatable"`
 	// Total disk allocatable (including overcommit) in GB.
-	TotalDiskAllocatableGB float64 `db:"total_disk_allocatable_gb"`
+	TotalDiskAllocatableGB float64 `db:"total_disk_allocatable_gb" json:"totalDiskAllocatableGB"`
 }
 
 // Table under which the feature is stored.
