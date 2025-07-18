@@ -83,7 +83,11 @@ func TestValidConf(t *testing.T) {
   }
 }
 `
-	conf := newConfigFromBytes([]byte(content))
+	rawConf, err := readRawConfigFromBytes([]byte(content))
+	if err != nil {
+		t.Fatalf("Failed to read config: %v", err)
+	}
+	conf := newConfigFromMaps(rawConf, nil)
 	if err := conf.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +134,11 @@ func TestInvalidConf_MissingNovaDependency(t *testing.T) {
   }
 }
 `
-	conf := newConfigFromBytes([]byte(content))
+	rawConf, err := readRawConfigFromBytes([]byte(content))
+	if err != nil {
+		t.Fatalf("Failed to read config: %v", err)
+	}
+	conf := newConfigFromMaps(rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -150,7 +158,11 @@ func TestInvalidConf_MissingResourceProviders(t *testing.T) {
   }
 }
 `
-	conf := newConfigFromBytes([]byte(content))
+	rawConf, err := readRawConfigFromBytes([]byte(content))
+	if err != nil {
+		t.Fatalf("Failed to read config: %v", err)
+	}
+	conf := newConfigFromMaps(rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -168,7 +180,11 @@ func TestInvalidConf_InvalidServiceAvailability(t *testing.T) {
   }
 }
 `
-	conf := newConfigFromBytes([]byte(content))
+	rawConf, err := readRawConfigFromBytes([]byte(content))
+	if err != nil {
+		t.Fatalf("Failed to read config: %v", err)
+	}
+	conf := newConfigFromMaps(rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -190,7 +206,11 @@ func TestInvalidConf_MissingHost(t *testing.T) {
   }
 }
 `
-	conf := newConfigFromBytes([]byte(content))
+	rawConf, err := readRawConfigFromBytes([]byte(content))
+	if err != nil {
+		t.Fatalf("Failed to read config: %v", err)
+	}
+	conf := newConfigFromMaps(rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -213,7 +233,11 @@ func TestInvalidConf_MissingFeatureForKPI(t *testing.T) {
   }
 }
 `
-	conf := newConfigFromBytes([]byte(content))
+	rawConf, err := readRawConfigFromBytes([]byte(content))
+	if err != nil {
+		t.Fatalf("Failed to read config: %v", err)
+	}
+	conf := newConfigFromMaps(rawConf, nil)
 	if len(conf.GetKPIsConfig().Plugins) == 0 {
 		t.Fatalf("expected plugins, got none")
 	}
@@ -238,7 +262,11 @@ func TestInvalidConf_NovaSchedulerDependency(t *testing.T) {
   }
 }
 `
-	conf := newConfigFromBytes([]byte(content))
+	rawConf, err := readRawConfigFromBytes([]byte(content))
+	if err != nil {
+		t.Fatalf("Failed to read config: %v", err)
+	}
+	conf := newConfigFromMaps(rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}

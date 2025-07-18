@@ -10,6 +10,8 @@ metadata:
   annotations:
     # Roll the service when its configmap changes.
     checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+    # Roll the service when its secret changes.
+    checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
     kubectl.kubernetes.io/default-container: {{ $.Chart.Name }}-{{ .name }}
     checksum/image: "{{ $.Values.image.tag }}"
   labels:
@@ -62,6 +64,9 @@ spec:
           volumeMounts:
             - name: {{ include "cortex.fullname" $ }}-config-volume
               mountPath: /etc/config
+            - name: {{ $.Chart.Name }}-secrets-volume
+              mountPath: /etc/secrets
+              readOnly: true
           {{- with $.Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -69,6 +74,9 @@ spec:
         - name: {{ include "cortex.fullname" $ }}-config-volume
           configMap:
             name: {{ include "cortex.fullname" $ }}-config
+        - name: {{ $.Chart.Name }}-secrets-volume
+          secret:
+            secretName: {{ include "cortex.fullname" $ }}-secrets
       {{- with $.Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
