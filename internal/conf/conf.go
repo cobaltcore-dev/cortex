@@ -41,8 +41,8 @@ type DBConfig struct {
 	Host      string            `json:"host"`
 	Port      int               `json:"port"`
 	Database  string            `json:"database"`
-	User      string            `json:"user" env:"inject"`
-	Password  string            `json:"password" env:"inject"`
+	User      string            `json:"user"`
+	Password  string            `json:"password"`
 	Reconnect DBReconnectConfig `json:"reconnect"`
 }
 
@@ -336,8 +336,8 @@ type MQTTConfig struct {
 	// The URL of the MQTT broker to use for mqtt.
 	URL string `json:"url"`
 	// Credentials for the MQTT broker.
-	Username  string              `json:"username" env:"inject"`
-	Password  string              `json:"password" env:"inject"`
+	Username  string              `json:"username"`
+	Password  string              `json:"password"`
 	Reconnect MQTTReconnectConfig `json:"reconnect"`
 }
 
@@ -355,9 +355,9 @@ type KeystoneConfig struct {
 	// use SSO to connect to the openstack services.
 	SSO SSOConfig `json:"sso,omitempty"`
 	// The OpenStack username (OS_USERNAME in openstack cli).
-	OSUsername string `json:"username" env:"inject"`
+	OSUsername string `json:"username"`
 	// The OpenStack password (OS_PASSWORD in openstack cli).
-	OSPassword string `json:"password" env:"inject"`
+	OSPassword string `json:"password"`
 	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
 	OSProjectName string `json:"projectName"`
 	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
