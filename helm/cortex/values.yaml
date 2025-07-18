@@ -84,7 +84,7 @@ sharedSSOCert: &sharedSSOCert
   # If true, the certificate is not verified.
   selfSigned: false
 
-# Values passed to the service by conf.yaml
+# Values passed to the service through a configmap.
 conf:
   logging:
     # The log level to use (debug, info, warn, error).
@@ -109,8 +109,6 @@ conf:
   mqtt:
     # Must match rabbitmq settings from the cortex-mqtt chart.
     url: "tcp://cortex-mqtt:1883"
-    username: "cortex"
-    password: "secret"
     # Configure how Cortex should handle lost connections to the MQTT broker.
     reconnect:
       maxRetries: 20
@@ -124,8 +122,6 @@ conf:
   db:
     host: cortex-postgresql
     port: 5432
-    user: postgres
-    password: secret
     database: postgres
     reconnect:
       maxRetries: 20
@@ -135,37 +131,10 @@ conf:
   keystone:
     # Authentication/identity service URL for openstack.
     url: https://path-to-keystone/v3
-    # Optional, only required if OpenStack is configured with SSO.
-    # Note: the certificate will be used for all other OpenStack services.
-    sso: *sharedSSOCert
-
-    # OpenStack login credentials also used by the OpenStack CLI.
-    username: openstack-user-with-all-project-read-access
-    password: openstack-user-password
-    projectName: openstack-project-of-user
-    userDomainName: openstack-domain-of-user
-    projectDomainName: openstack-domain-of-project-scoped-to
 
   # Sync plugins config.
   sync:
     prometheus:
-      # Prometheus hosts to consider when syncing the metrics.
-      hosts:
-        - name: vmware_prometheus
-          url: https://path-to-vrops-prometheus
-          provides: [vrops_vm_metric, vrops_host_metric]
-          # Optional, only required if Prometheus is configured with SSO.
-          sso: *sharedSSOCert
-        - name: kvm_prometheus
-          url: https://path-to-node-exporter
-          provides: [node_exporter_metric]
-          # Optional, only required if Prometheus is configured with SSO.
-          sso: *sharedSSOCert
-        - name: netapp_prometheus
-          url: https://path-to-netapp-harvest-exporter
-          provides: [netapp_aggregate_labels_metric, netapp_node_metric]
-          # Optional, only required if Prometheus is configured with SSO.
-          sso: *sharedSSOCert
       # Prometheus metrics to sync into the database.
       # Each metric can be synced from a different Prometheus instance.
       # The `type` parameter should map to a known metric model in the database.
@@ -657,6 +626,47 @@ conf:
                 nova:
                   types:
                     - servers
+
+# Values passed to the service through a kubernetes secret.
+# The keys of these values should correspond to the keys used above in the conf.
+secrets:
+  # MQTT broker connection credentials.
+  mqtt:
+    username: cortex
+    password: secret
+  # Database connection credentials.
+  db:
+    user: postgres
+    password: secret
+  keystone:
+    # OpenStack login credentials also used by the OpenStack CLI.
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    # Optional, only required if OpenStack is configured with SSO.
+    # Note: the certificate will be used for all other OpenStack services.
+    sso: *sharedSSOCert
+  sync:
+    prometheus:
+      # Prometheus hosts to consider when syncing the metrics.
+      hosts:
+        - name: vmware_prometheus
+          url: https://path-to-vrops-prometheus
+          provides: [vrops_vm_metric, vrops_host_metric]
+          # Optional, only required if Prometheus is configured with SSO.
+          sso: *sharedSSOCert
+        - name: kvm_prometheus
+          url: https://path-to-node-exporter
+          provides: [node_exporter_metric]
+          # Optional, only required if Prometheus is configured with SSO.
+          sso: *sharedSSOCert
+        - name: netapp_prometheus
+          url: https://path-to-netapp-harvest-exporter
+          provides: [netapp_aggregate_labels_metric, netapp_node_metric]
+          # Optional, only required if Prometheus is configured with SSO.
+          sso: *sharedSSOCert
 
 # Generic modifiers added on the initial creation of this helm chart.
 

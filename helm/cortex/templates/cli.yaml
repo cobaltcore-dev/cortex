@@ -40,6 +40,9 @@ spec:
           volumeMounts:
             - name: {{ include "cortex.fullname" $ }}-config-volume
               mountPath: /etc/config
+            - name: {{ $.Chart.Name }}-secrets-volume
+              mountPath: /etc/secrets
+              readOnly: true
             {{- with $.Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -47,6 +50,9 @@ spec:
         - name: {{ include "cortex.fullname" $ }}-config-volume
           configMap:
             name: {{ include "cortex.fullname" $ }}-config
+        - name: {{ $.Chart.Name }}-secrets-volume
+          secret:
+            secretName: {{ include "cortex.fullname" $ }}-secrets
         {{- with $.Values.volumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

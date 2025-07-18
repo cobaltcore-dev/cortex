@@ -39,7 +39,13 @@ spec:
             # Custom config that can override some values, e.g. conf validation.
             - name: {{ include "cortex.fullname" $ }}-pre-upgrade-config-volume
               mountPath: /etc/config
+            - name: {{ $.Chart.Name }}-secrets-volume
+              mountPath: /etc/secrets
+              readOnly: true
       volumes:
         - name: {{ include "cortex.fullname" $ }}-pre-upgrade-config-volume
           configMap:
             name: {{ include "cortex.fullname" $ }}-pre-upgrade-config
+        - name: {{ $.Chart.Name }}-secrets-volume
+          secret:
+            secretName: {{ include "cortex.fullname" $ }}-secrets
