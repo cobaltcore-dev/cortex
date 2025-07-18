@@ -1,0 +1,1877 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Plutono --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 547,
+  "iteration": 1751634224421,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 144,
+      "panels": [],
+      "title": "Total Capacity Overview of Current Selection",
+      "type": "row"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 40
+                    },
+                    {
+                      "color": "green",
+                      "value": 70
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "id": 130,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.39",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100))",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Available",
+          "queryType": "randomWalk",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"})\n",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Total",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100)) / sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) * 100",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Capacity",
+          "refId": "C"
+        }
+      ],
+      "title": "CPUs",
+      "type": "stat"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 40
+                    },
+                    {
+                      "color": "green",
+                      "value": 70
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "id": 132,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.39",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100))",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Available",
+          "queryType": "randomWalk",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"})\n",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Total",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100)) / sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) * 100",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Capacity",
+          "refId": "C"
+        }
+      ],
+      "title": "RAM",
+      "type": "stat"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "decgbytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 40
+                    },
+                    {
+                      "color": "green",
+                      "value": 70
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "id": 134,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.39",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100))",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Available",
+          "queryType": "randomWalk",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"})\n",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Total",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100)) / sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) * 100",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Capacity",
+          "refId": "C"
+        }
+      ],
+      "title": "Disk",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 136,
+      "panels": [],
+      "title": "Capacity per Host",
+      "type": "row"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": null,
+            "filterable": false
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "total cpu"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "available cpus (%)"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "gradient-gauge"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "running_vms"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 102
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 15,
+        "x": 0,
+        "y": 9
+      },
+      "id": 114,
+      "options": {
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "7.5.39",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
+          "format": "table",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "available cpus",
+            "binary": {
+              "left": "total",
+              "operator": "*",
+              "reducer": "sum",
+              "right": "Value"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "available cpus (%)",
+            "binary": {
+              "left": "Value",
+              "operator": "*",
+              "reducer": "sum",
+              "right": "100"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "compute_host_name",
+                "cpu_model",
+                "running_vms",
+                "total",
+                "available cpus",
+                "available cpus (%)"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": true,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 15,
+        "y": 9
+      },
+      "hiddenSeries": false,
+      "id": 111,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": false,
+        "total": false,
+        "values": false
+      },
+      "lines": false,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.39",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "$$hashKey": "object:41",
+          "alias": "/.*/",
+          "color": "#73BF69"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / \ncount by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }))",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "$$hashKey": "object:136",
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "CPU Capacity per Host (%)",
+      "tooltip": {
+        "shared": false,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "series",
+        "name": null,
+        "show": false,
+        "values": [
+          "current"
+        ]
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:41",
+          "format": "percent",
+          "label": null,
+          "logBase": 1,
+          "max": "100",
+          "min": "-10",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:42",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": null,
+            "filterable": false
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "total ram"
+              },
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "available (%)"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "gradient-gauge"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "running_vms"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 107
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "available"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 15,
+        "x": 0,
+        "y": 17
+      },
+      "id": 118,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "available (MB)"
+          }
+        ]
+      },
+      "pluginVersion": "7.5.39",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
+          "format": "table",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "title": "RAM",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "available",
+            "binary": {
+              "left": "Value",
+              "operator": "*",
+              "reducer": "sum",
+              "right": "total"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "available (%)",
+            "binary": {
+              "left": "Value",
+              "operator": "*",
+              "reducer": "sum",
+              "right": "100"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "compute_host_name",
+                "cpu_model",
+                "running_vms",
+                "total",
+                "available (%)",
+                "available"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": true,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 15,
+        "y": 17
+      },
+      "hiddenSeries": false,
+      "id": 112,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": false,
+        "total": false,
+        "values": false
+      },
+      "lines": false,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.39",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "$$hashKey": "object:135",
+          "alias": "/.*/",
+          "color": "#73BF69"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / \ncount by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }))",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "RAM Capacity per Host (%)",
+      "tooltip": {
+        "shared": false,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "series",
+        "name": null,
+        "show": false,
+        "values": [
+          "current"
+        ]
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:299",
+          "format": "percent",
+          "label": null,
+          "logBase": 1,
+          "max": "100",
+          "min": "-10",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:300",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": null,
+            "filterable": false
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "total disk"
+              },
+              {
+                "id": "unit",
+                "value": "decgbytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "available (%)"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "gradient-gauge"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "running_vms"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 107
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "available"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decgbytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cpu_model"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": null
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 15,
+        "x": 0,
+        "y": 25
+      },
+      "id": 116,
+      "options": {
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "7.5.39",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
+          "format": "table",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Disk",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "available",
+            "binary": {
+              "left": "total",
+              "operator": "*",
+              "reducer": "sum",
+              "right": "Value"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "available (%)",
+            "binary": {
+              "left": "Value",
+              "operator": "*",
+              "reducer": "sum",
+              "right": "100"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "compute_host_name",
+                "cpu_model",
+                "running_vms",
+                "total",
+                "available (%)",
+                "available"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": true,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 15,
+        "y": 25
+      },
+      "hiddenSeries": false,
+      "id": 110,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": false,
+        "total": false,
+        "values": false
+      },
+      "lines": false,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.39",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "$$hashKey": "object:94",
+          "alias": "/.*/",
+          "color": "#73BF69"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / \ncount by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }))",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Disk Capacity per Host (%)",
+      "tooltip": {
+        "shared": false,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "series",
+        "name": null,
+        "show": false,
+        "values": [
+          "current"
+        ]
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:216",
+          "format": "percent",
+          "label": null,
+          "logBase": 1,
+          "max": "100",
+          "min": "-10",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:217",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "description": "See if the total allocatable cpus changed. This mainly for debugging purposes.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 18,
+        "w": 8,
+        "x": 0,
+        "y": 33
+      },
+      "hiddenSeries": false,
+      "id": 124,
+      "interval": "1h",
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.39",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name) (cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) / \ncount by (compute_host_name) (cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}))",
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": "30d",
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Total CPU Capacity over Time",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:215",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:216",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cards": {
+        "cardPadding": null,
+        "cardRound": null
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateInferno",
+        "exponent": 0.5,
+        "max": 100,
+        "min": 0,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 16,
+        "x": 8,
+        "y": 33
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 120,
+      "interval": "6h",
+      "legend": {
+        "show": false
+      },
+      "maxDataPoints": null,
+      "pluginVersion": "7.5.39",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / \ncount by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }))",
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": "30d",
+      "timeShift": null,
+      "title": "Free CPU Capacity over Time (%)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": null,
+        "format": "short",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "middle",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "description": "See if the total allocatable memory capacity changed. This mainly for debugging purposes.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 18,
+        "w": 8,
+        "x": 0,
+        "y": 51
+      },
+      "hiddenSeries": false,
+      "id": 126,
+      "interval": "1h",
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.39",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name) (cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) / \ncount by (compute_host_name) (cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}))",
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": "30d",
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Total Memory Capacity over Time",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:612",
+          "format": "decmbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:613",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cards": {
+        "cardPadding": null,
+        "cardRound": null
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateInferno",
+        "exponent": 0.5,
+        "max": 100,
+        "min": 0,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 16,
+        "x": 8,
+        "y": 51
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 121,
+      "interval": "6h",
+      "legend": {
+        "show": false
+      },
+      "pluginVersion": "7.5.39",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / \ncount by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }))",
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": "30d",
+      "title": "Free RAM Capacity over Time (%)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": null,
+        "format": "short",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "middle",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
+      "description": "See if the total allocatable disk capacity changed. This mainly for debugging purposes.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 18,
+        "w": 8,
+        "x": 0,
+        "y": 69
+      },
+      "hiddenSeries": false,
+      "id": 128,
+      "interval": "1h",
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.39",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name) (cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) / \ncount by (compute_host_name) (cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}))",
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": "30d",
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Total Disk Capacity over Time",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:765",
+          "format": "decgbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:766",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cards": {
+        "cardPadding": null,
+        "cardRound": null
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateInferno",
+        "exponent": 0.5,
+        "max": 100,
+        "min": 0,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 16,
+        "x": 8,
+        "y": 69
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 122,
+      "interval": "6h",
+      "legend": {
+        "show": false
+      },
+      "pluginVersion": "7.5.39",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sort(sum by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / \ncount by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }))",
+          "interval": "",
+          "legendFormat": "{{compute_host_name}}",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": "30d",
+      "title": "Free Disk Capacity over Time (%)",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": null,
+        "format": "short",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "middle",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "datasource": "prometheus-openstack",
+        "definition": "",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Availability Zone",
+        "multi": false,
+        "name": "availability_zone",
+        "options": [],
+        "query": {
+          "query": "label_values(cortex_host_utilization_per_host_pct, availability_zone)",
+          "refId": "prometheus-openstack-availability_zone-Variable-Query"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "",
+          "value": ""
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "label": "Compute Host Name",
+        "name": "compute_host_name",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "datasource": "prometheus-openstack",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Domains",
+        "multi": false,
+        "name": "domains",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "refresh": 1,
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "datasource": "prometheus-openstack",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Projects",
+        "multi": false,
+        "name": "projects",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "refresh": 1,
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "",
+          "value": ""
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "label": "CPU model",
+        "name": "cpu_model",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ""
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Traits",
+        "multi": false,
+        "name": "traits",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": ""
+          },
+          {
+            "selected": false,
+            "text": "Sapphire Rapids",
+            "value": "CUSTOM_HW_SAPPHIRE_RAPIDS"
+          },
+          {
+            "selected": false,
+            "text": "Hana Exclusive",
+            "value": "CUSTOM_HANA_EXCLUSIVE"
+          },
+          {
+            "selected": false,
+            "text": "Hana Exclusive & Sapphire Rapids",
+            "value": "(CUSTOM_HW_SAPPHIRE_RAPIDS.*CUSTOM_HANA_EXCLUSIVE|CUSTOM_HANA_EXCLUSIVE.*CUSTOM_HW_SAPPHIRE_RAPIDS)"
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Cortex Host Capacity",
+  "uid": "cortex-host-capacity",
+  "version": 20
+}
