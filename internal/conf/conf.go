@@ -6,7 +6,6 @@ package conf
 import (
 	"encoding/json"
 	"io"
-	"log/slog"
 	"os"
 )
 
@@ -461,10 +460,8 @@ func readRawConfigFromBytes(data []byte) (map[string]any, error) {
 func mergeMaps(dst, src map[string]any) map[string]any {
 	result := dst
 	for k, v := range src {
-		slog.Info("Merging config field", "key", k, "value", v) // Debug
 		if v == nil {
 			// If src value is nil, skip override
-			slog.Info("Skipping nil value for key", "key", k) // Debug
 			continue
 		}
 		if dstVal, ok := dst[k]; ok {
@@ -472,14 +469,12 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 			dstMap, dstIsMap := dstVal.(map[string]any)
 			srcMap, srcIsMap := v.(map[string]any)
 			if dstIsMap && srcIsMap {
-				slog.Info("Merging nested maps for key", "key", k) // Debug
 				result[k] = mergeMaps(dstMap, srcMap)
 				continue
 			}
 		}
 		// Otherwise, override
 		result[k] = v
-		slog.Info("Overriding config field", "key", k, "value", v) // Debug
 	}
 	return result
 }
