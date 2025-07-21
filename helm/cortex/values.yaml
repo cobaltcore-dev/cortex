@@ -24,12 +24,6 @@ migrationsJob:
     # block the job from completing.
     "linkerd.io/inject": disabled
 
-# Resources granted to the cortex services.
-#
-# Note: configure this to your needs, or use something like vpa_butler
-# (https://github.com/sapcc/vpa_butler) to automatically adjust the resources.
-resources: {}
-
 # Liveness and readiness probes for the cortex services.
 livenessProbe:
   httpGet:

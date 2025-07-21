@@ -8,12 +8,11 @@ kind: Deployment
 metadata:
   name: {{ $.Chart.Name }}-{{ .name }}
   annotations:
-    # Roll the service when its configmap changes.
+    # Roll the service when its configmap or secret change.
     checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
-    # Roll the service when its secret changes.
     checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
-    kubectl.kubernetes.io/default-container: {{ $.Chart.Name }}-{{ .name }}
     checksum/image: "{{ $.Values.image.tag }}"
+    kubectl.kubernetes.io/default-container: {{ $.Chart.Name }}-{{ .name }}
   labels:
     app: {{ $.Chart.Name }}-{{ .name }}
     {{- include "cortex.labels" $ | nindent 4 }}
@@ -59,8 +58,6 @@ spec:
             {{- toYaml $.Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml $.Values.readinessProbe | nindent 12 }}
-          resources:
-            {{- toYaml $.Values.resources | nindent 12 }}
           volumeMounts:
             - name: {{ include "cortex.fullname" $ }}-config-volume
               mountPath: /etc/config
@@ -92,4 +89,35 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{ if $.Capabilities.APIVersions.Has "autoscaling.k8s.io/v1/VerticalPodAutoscaler" -}}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ $.Chart.Name }}-{{ .name }}-vpa
+  labels:
+    app: {{ $.Chart.Name }}-{{ .name }}
+    {{- include "cortex.labels" $ | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: "Deployment"
+    name: {{ $.Chart.Name }}-{{ .name }}
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 1
+    maxReplicas: 1
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ $.Chart.Name }}-{{ .name }}
+        mode: "Auto"
+        minAllowed:
+          cpu: "10m"
+          memory: "32Mi"
+        maxAllowed:
+          cpu: "2"
+          memory: "4Gi"
+        controlledResources: ["cpu", "memory"]
+        controlledValues: "RequestsAndLimits"
+{{- end }}
 {{- end }}

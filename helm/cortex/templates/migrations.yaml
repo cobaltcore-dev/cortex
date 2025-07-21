@@ -15,7 +15,7 @@ metadata:
   annotations:
     "helm.sh/hook": pre-upgrade
     "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   template:
     metadata:
@@ -49,3 +49,38 @@ spec:
         - name: {{ $.Chart.Name }}-pre-upgrade-secrets-volume
           secret:
             secretName: {{ include "cortex.fullname" $ }}-pre-upgrade-secrets
+{{ if $.Capabilities.APIVersions.Has "autoscaling.k8s.io/v1/VerticalPodAutoscaler" -}}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ $.Chart.Name }}-migrations
+  labels:
+    app: {{ $.Chart.Name }}-migrations
+    {{- include "cortex.labels" $ | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: "Deployment"
+    name: {{ $.Chart.Name }}-migrations
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 1
+    maxReplicas: 1
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ $.Chart.Name }}-migrations
+        mode: "Auto"
+        minAllowed:
+          cpu: "10m"
+          memory: "32Mi"
+        maxAllowed:
+          cpu: "2"
+          memory: "4Gi"
+        controlledResources: ["cpu", "memory"]
+        controlledValues: "RequestsAndLimits"
+{{- end }}
