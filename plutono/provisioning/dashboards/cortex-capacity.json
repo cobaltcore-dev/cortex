@@ -60,7 +60,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "percent"
+                "value": "percentunit"
               },
               {
                 "id": "thresholds",
@@ -73,11 +73,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 40
+                      "value": 0.4
                     },
                     {
                       "color": "green",
-                      "value": 70
+                      "value": 0.7
                     }
                   ]
                 }
@@ -127,18 +127,27 @@
           "interval": "",
           "legendFormat": "Total",
           "refId": "B"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100)) / sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) * 100",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "Capacity",
-          "refId": "C"
         }
       ],
       "title": "CPUs",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Capacity",
+            "binary": {
+              "left": "Available",
+              "operator": "/",
+              "reducer": "sum",
+              "right": "Total"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        }
+      ],
       "type": "stat"
     },
     {
@@ -169,7 +178,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "percent"
+                "value": "percentunit"
               },
               {
                 "id": "thresholds",
@@ -182,11 +191,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 40
+                      "value": 0.4
                     },
                     {
                       "color": "green",
-                      "value": 70
+                      "value": 0.7
                     }
                   ]
                 }
@@ -236,18 +245,27 @@
           "interval": "",
           "legendFormat": "Total",
           "refId": "B"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100)) / sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) * 100",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "Capacity",
-          "refId": "C"
         }
       ],
       "title": "RAM",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Capacity",
+            "binary": {
+              "left": "Available",
+              "operator": "/",
+              "reducer": "sum",
+              "right": "Total"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        }
+      ],
       "type": "stat"
     },
     {
@@ -278,7 +296,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "percent"
+                "value": "percentunit"
               },
               {
                 "id": "thresholds",
@@ -291,11 +309,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 40
+                      "value": 0.4
                     },
                     {
                       "color": "green",
-                      "value": 70
+                      "value": 0.7
                     }
                   ]
                 }
@@ -345,18 +363,27 @@
           "interval": "",
           "legendFormat": "Total",
           "refId": "B"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100)) / sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}) * 100",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "Capacity",
-          "refId": "C"
         }
       ],
       "title": "Disk",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Capacity",
+            "binary": {
+              "left": "Available",
+              "operator": "/",
+              "reducer": "sum",
+              "right": "Total"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        }
+      ],
       "type": "stat"
     },
     {
@@ -1703,6 +1730,11 @@
     "list": [
       {
         "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "qa-de-1a",
+          "value": "qa-de-1a"
+        },
         "datasource": "prometheus-openstack",
         "definition": "",
         "description": null,
@@ -1873,5 +1905,5 @@
   "timezone": "",
   "title": "Cortex Host Capacity",
   "uid": "cortex-host-capacity",
-  "version": 20
+  "version": 1
 }
