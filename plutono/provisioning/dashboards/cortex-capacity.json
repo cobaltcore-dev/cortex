@@ -221,6 +221,18 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Predicted Capacity (in 4 weeks)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
           }
         ]
       },
@@ -510,18 +522,6 @@
               {
                 "id": "custom.width",
                 "value": 102
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Predicted Capacity (in 4 weeks)"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percentunit"
               }
             ]
           }
@@ -1960,5 +1960,5 @@
   "timezone": "",
   "title": "Cortex Host Capacity",
   "uid": "cortex-host-capacity",
-  "version": 1
+  "version": 20
 }
