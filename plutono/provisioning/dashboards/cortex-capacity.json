@@ -93,6 +93,26 @@
               {
                 "id": "unit",
                 "value": "percentunit"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 0.4
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.7
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -231,6 +251,26 @@
               {
                 "id": "unit",
                 "value": "percentunit"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 0.4
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.7
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -369,6 +409,26 @@
               {
                 "id": "unit",
                 "value": "percentunit"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 0.4
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.7
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -1782,7 +1842,7 @@
       "yBucketSize": null
     }
   ],
-  "refresh": "10s",
+  "refresh": "1m",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -1953,7 +2013,7 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
