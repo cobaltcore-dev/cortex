@@ -1730,11 +1730,6 @@
     "list": [
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "qa-de-1a",
-          "value": "qa-de-1a"
-        },
         "datasource": "prometheus-openstack",
         "definition": "",
         "description": null,
