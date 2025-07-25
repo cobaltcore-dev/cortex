@@ -75,7 +75,7 @@ func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 		Weights: weights,
 	}
 	port := strconv.Itoa(config.GetAPIConfig().Port)
-	apiURL := "http://cortex-scheduler-manila:" + port + "/scheduler/manila/external"
+	apiURL := "http://cortex-manila-scheduler:" + port + "/scheduler/manila/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(request))

@@ -1,0 +1,172 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+{{- if .Values.upgradeJob.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.postgresql.fullnameOverride }}-pre-upgrade-{{ .Chart.Version }}
+  annotations:
+    # Run this job before Helm upgrades are applied.
+    # Note: since we use pre-upgrade here, it is assumed that the old postgres
+    # is already present in the cluster.
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      annotations:
+        {{- with $.Values.upgradeJob.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.postgresql.fullnameOverride }}-job-sa
+      restartPolicy: Never
+      containers:
+        - name: kubectl
+          image: "{{ $.Values.upgradeJob.image.repository }}:{{ $.Values.upgradeJob.image.tag }}"
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.fullnameOverride }}
+                  key: postgres-password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Get the /bitnami/postgresql/pre-upgrade.chart file from inside the
+              # {{ .Values.postgresql.fullnameOverride }}-0 pod (if exists) and check if $.Chart.Version
+              # is already deployed, or needs an upgrade.
+              if kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                -n {{ .Release.Namespace }} -- /bin/sh \
+                -c "test -f /bitnami/postgresql/pre-upgrade.chart"; then
+                current_version=$(kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                  -n {{ .Release.Namespace }} -- /bin/sh \
+                  -c "cat /bitnami/postgresql/pre-upgrade.chart")
+                if [ "${current_version}" = "{{ .Chart.Version }}" ]; then
+                  echo "Chart version {{ .Chart.Version }} already deployed, skipping pre-upgrade steps."
+                  exit 0
+                else
+                  echo "Chart version {{ .Chart.Version }} is a new version, proceeding with pre-upgrade steps."
+                fi
+              else
+                echo "No pre-upgrade chart file found, proceeding with pre-upgrade steps."
+              fi
+
+              echo "Making {{ .Values.postgresql.fullnameOverride }} service unavailable by merging selector cortex=currently-upgrading..."
+              kubectl patch service {{ .Values.postgresql.fullnameOverride }} \
+                -n {{ .Release.Namespace }} \
+                --type=merge \
+                -p '{"spec": {"selector": {"cortex": "currently-upgrading"}}}'
+
+              echo "Executing pre-upgrade script in {{ .Values.postgresql.fullnameOverride }}-0 pod..."
+              kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                -n {{ .Release.Namespace }} -- /bin/sh \
+                /opt/pre-upgrade/pre-upgrade.sh ${POSTGRES_PASSWORD}
+              kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                -n {{ .Release.Namespace }} -- /bin/sh \
+                -c "echo '{{ .Chart.Version }}' > /bitnami/postgresql/pre-upgrade.chart"
+
+              echo "Scaling down the {{ .Values.postgresql.fullnameOverride }} StatefulSet to enforce a restart..."
+              kubectl scale statefulset {{ .Values.postgresql.fullnameOverride }} \
+                -n {{ .Release.Namespace }} --replicas=0
+              while [ "$(kubectl get statefulset {{ .Values.postgresql.fullnameOverride }} \
+                -n {{ .Release.Namespace }} -o jsonpath='{.status.replicas}')" != "0" ]; do
+                echo "Waiting for {{ .Values.postgresql.fullnameOverride }} StatefulSet to scale down..."
+                sleep 1
+              done
+
+              echo "Ready to upgrade and execute post-upgrade script."
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.postgresql.fullnameOverride }}-post-upgrade-{{ .Chart.Version }}
+  annotations:
+    # Run this job after Helm upgrades are applied.
+    # Note: since we use post-upgrade here, it is assumed that the new postgres
+    # is already present in the cluster.
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      annotations:
+        {{- with $.Values.upgradeJob.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.postgresql.fullnameOverride }}-job-sa
+      restartPolicy: Never
+      containers:
+        - name: kubectl
+          image: "{{ $.Values.upgradeJob.image.repository }}:{{ $.Values.upgradeJob.image.tag }}"
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.fullnameOverride }}
+                  key: postgres-password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Get the /bitnami/postgresql/post-upgrade.chart file from inside the
+              # {{ .Values.postgresql.fullnameOverride }}-0 pod (if exists) and check if $.Chart.Version
+              # is already deployed, or needs an upgrade.
+              if kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                -n {{ .Release.Namespace }} -- /bin/sh \
+                -c "test -f /bitnami/postgresql/post-upgrade.chart"; then
+                current_version=$(kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                  -n {{ .Release.Namespace }} -- /bin/sh \
+                  -c "cat /bitnami/postgresql/post-upgrade.chart")
+                if [ "${current_version}" = "{{ .Chart.Version }}" ]; then
+                  echo "Chart version {{ .Chart.Version }} already deployed, skipping post-upgrade steps."
+                  exit 0
+                else
+                  echo "Chart version {{ .Chart.Version }} is a new version, proceeding with post-upgrade steps."
+                fi
+              else
+                echo "No post-upgrade chart file found, proceeding with post-upgrade steps."
+              fi
+
+              while [ "$(kubectl get job {{ .Values.postgresql.fullnameOverride }}-pre-upgrade-{{ .Chart.Version }} \
+                -n {{ .Release.Namespace }} -o jsonpath='{.status.succeeded}')" != "1" ]; do
+                echo "Waiting for pre-upgrade job to complete..."
+                sleep 1
+              done
+
+              # Scale up the {{ .Values.postgresql.fullnameOverride }} StatefulSet again.
+              echo "Scaling up the {{ .Values.postgresql.fullnameOverride }} StatefulSet..."
+              kubectl scale statefulset {{ .Values.postgresql.fullnameOverride }} \
+                -n {{ .Release.Namespace }} --replicas=1
+              # Wait until the pod is healthy, by checking the readinessProbe's status.
+              while [ "$(kubectl get pod {{ .Values.postgresql.fullnameOverride }}-0 \
+                -n {{ .Release.Namespace }} \
+                -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" != "True" ]; do
+                echo "Waiting for {{ .Values.postgresql.fullnameOverride }}-0 pod to become ready..."
+                sleep 1
+              done
+
+              echo "Executing post-upgrade script in {{ .Values.postgresql.fullnameOverride }}-0 pod..."
+              kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                -n {{ .Release.Namespace }} -- /bin/sh \
+                /opt/post-upgrade/post-upgrade.sh ${POSTGRES_PASSWORD}
+              kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                -n {{ .Release.Namespace }} -- /bin/sh \
+                -c "echo '{{ .Chart.Version }}' > /bitnami/postgresql/post-upgrade.chart"
+
+              echo "Restoring original {{ .Values.postgresql.fullnameOverride }} service selectors..."
+              # Patch service with selector minus cortex=currently-upgrading
+              kubectl patch service {{ .Values.postgresql.fullnameOverride }} \
+                -n {{ .Release.Namespace }} \
+                --type='json' \
+                -p='[{"op": "remove", "path": "/spec/selector/cortex"}]'
+
+              echo "Successfully upgraded to chart version {{ .Chart.Version }}."
+{{- end }}

@@ -35,18 +35,6 @@
       "groupName": "github.com/sapcc"
     },
     {
-      "enabled": false,
-      "matchPackageNames": [
-        "postgresql"
-      ]
-    },
-    {
-      "enabled": false,
-      "matchFileNames": [
-        "helm/cortex-postgres/**"
-      ]
-    },
-    {
       "matchPackageNames": [
         "!/^github\\.com\\/sapcc\\/.*/",
         "/.*/"

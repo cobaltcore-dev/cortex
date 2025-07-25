@@ -1,0 +1,20 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: cortex-prometheus
+spec:
+  serviceAccountName: cortex-prometheus
+  serviceMonitorSelectorNilUsesHelmValues: false
+  serviceMonitorSelector: {} # Selects all service monitors.
+  serviceMonitorNamespaceSelector: {} # Selects all namespaces.
+  ruleSelector: {} # Selects all prometheus rules.
+  enableAdminAPI: true
+  alerting:
+    alertmanagers:
+    - namespace: default
+      name: alertmanager-operated
+      port: web
+  scrapeInterval: 60s

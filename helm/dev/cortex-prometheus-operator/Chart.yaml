@@ -1,0 +1,13 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+name: cortex-prometheus-operator
+description: Prometheus operator setup for Cortex.
+type: application
+version: 0.2.1
+dependencies:
+  # CRDs of the prometheus operator, such as PrometheusRule, ServiceMonitor, etc.
+  - name: kube-prometheus-stack
+    repository: https://prometheus-community.github.io/helm-charts
+    version: 75.11.0
