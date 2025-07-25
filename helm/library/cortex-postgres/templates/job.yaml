@@ -53,7 +53,11 @@ spec:
                   echo "Chart version {{ .Chart.Version }} is a new version, proceeding with pre-upgrade steps."
                 fi
               else
-                echo "No pre-upgrade chart file found, proceeding with pre-upgrade steps."
+                echo "No pre-upgrade chart file found, making one and skipping pre-upgrade steps."
+                kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                  -n {{ .Release.Namespace }} -- /bin/sh \
+                  -c "echo '{{ .Chart.Version }}' > /bitnami/postgresql/pre-upgrade.chart"
+                exit 0
               fi
 
               echo "Making {{ .Values.postgresql.fullnameOverride }} service unavailable by merging selector cortex=currently-upgrading..."
@@ -132,7 +136,11 @@ spec:
                   echo "Chart version {{ .Chart.Version }} is a new version, proceeding with post-upgrade steps."
                 fi
               else
-                echo "No post-upgrade chart file found, proceeding with post-upgrade steps."
+                echo "No post-upgrade chart file found, making one and skipping post-upgrade steps."
+                kubectl exec {{ .Values.postgresql.fullnameOverride }}-0 -c postgresql \
+                  -n {{ .Release.Namespace }} -- /bin/sh \
+                  -c "echo '{{ .Chart.Version }}' > /bitnami/postgresql/post-upgrade.chart"
+                exit 0
               fi
 
               while [ "$(kubectl get job {{ .Values.postgresql.fullnameOverride }}-pre-upgrade-{{ .Chart.Version }} \
