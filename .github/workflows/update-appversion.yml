@@ -1,0 +1,36 @@
+name: Update Helm AppVersion
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Docker Images"]
+    types:
+      - completed
+
+jobs:
+  update-appversion:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Get short commit SHA
+        id: vars
+        run: echo "sha=sha-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Update appVersion in Chart.yaml
+        run: |
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' helm/library/cortex-core/Chart.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm/library/cortex-core/Chart.yaml
+          git commit -m "Bump helm/library/cortex-core appVersion to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main

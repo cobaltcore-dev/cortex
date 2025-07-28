@@ -1,0 +1,260 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+image:
+  repository: ghcr.io/cobaltcore-dev/cortex
+  pullPolicy: IfNotPresent
+
+# Can be used to override the chart name (e.g. cortex-nova).
+fullnameOverride: ""
+nameOverride: ""
+
+service:
+  extraLabels: {} # Additional labels to add to the service.
+serviceMonitor:
+  extraLabels:
+    # The name of the prometheus instance to use for scraping metrics.
+    prometheus: openstack
+  matchLabels: {} # Additional matchers to select the service for scraping metrics.
+
+migrationsJob:
+  # Additional annotations for the created database migrations job.
+  podAnnotations:
+    # If you use linkerd, this will disable injection for the migrations job.
+    # Otherwise, the linkerd-proxy container will hang around forever and
+    # block the job from completing.
+    "linkerd.io/inject": disabled
+
+# Liveness and readiness probes for the cortex services.
+livenessProbe:
+  httpGet:
+    path: /up
+    port: api
+readinessProbe:
+  httpGet:
+    path: /up
+    port: api
+
+# Modes in which the service should be run.
+# Each mode is translated into a separate service and deployment.
+modes:
+  # The name of the mode will be used for the kubernetes deployments.
+  # The args will be passed to the service as command line arguments, meaning
+  # the passed arg need to be baked into the service binary.
+  - name:
+    args:
+    replicas:
+
+# Values passed to the service through a configmap.
+conf:
+  logging:
+    # The log level to use (debug, info, warn, error).
+    level: debug
+    # The log format to use (json, text).
+    format: text
+
+  # E2E tests to run when executed with -checks flag.
+  checks: []
+
+  # Configuration of metrics exported to the /metrics endpoint.
+  monitoring:
+    # The port to expose the metrics on.
+    port: 2112
+
+    # Custom labels added to the exported metrics.
+    labels:
+      github_org: cobaltcore-dev
+      github_repo: cortex
+
+  # MQTT broker connection parameters.
+  mqtt:
+    # Must match rabbitmq settings from the cortex-mqtt chart.
+    url:
+    # Configure how Cortex should handle lost connections to the MQTT broker.
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
+
+  # The port to use for the api serve mux.
+  api:
+    port: 8080
+
+  # Connection parameters for the database where data is stored.
+  db:
+    host:
+    port: 5432
+    database: postgres
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
+      livenessPingIntervalSeconds: 5
+
+  keystone:
+    # Authentication/identity service URL for openstack.
+    url:
+
+  # Sync plugins config.
+  sync:
+    prometheus:
+      # Prometheus metrics to sync into the database.
+      # Each metric can be synced from a different Prometheus instance.
+      # The `type` parameter should map to a known metric model in the database.
+      metrics:
+        - alias:
+          query:
+          type:
+    openstack:
+      nova:
+        # One of admin, public, or internal
+        availability: public
+        # Nova objects to sync into the database.
+        types: [] # e.g. servers
+      placement:
+        # One of admin, public, or internal
+        availability: public
+        # Placement objects to sync into the database.
+        types: [] # e.g. resource_providers
+      identity:
+        # One of admin, public, or internal
+        availability: public
+        # Identity objects to sync into the database.
+        types: [] # e.g. projects
+      manila:
+        # One of admin, public, or internal
+        availability: public
+        # Manila objects to sync into the database.
+        types: [] # e.g. storage_pools
+
+  extractor:
+    # Configuration of features that should be extracted from the synced data.
+    # Each extractor can specify its own dependencies on other extractors or
+    # synced data.
+    #
+    # The `name` should correspond to a known feature extractor plugin.
+    # Note that the order defined here will also be the order in which the
+    # extractors are executed. If possible, extractors whose dependencies have
+    # been executed will be executed in parallel to speed up the process.
+    plugins:
+      - name:
+        # How recent the last execution should have been.
+        recencySeconds: # 1 hour
+        # Dependencies needed by this extractor.
+        dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
+        # Optionally, you can specify a custom MQTT topic to publish the extracted data to.
+        mqttTopic: # e.g. "cortex/extraction/feature_name"
+
+  kpis:
+    # Configuration of KPIs that should be extracted from the synced data.
+    # Each KPI can specify its own dependencies on other extractors and
+    # synced data.
+    #
+    # The `name` should correspond to a known KPI extractor plugin.
+    plugins:
+      - name:
+        # Dependencies needed by this KPI.
+        dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
+
+  scheduler:
+    api:
+      # Whether request bodies should be logged (debugging feature).
+      logRequestBodies: false
+
+    manila:
+      # Configuration of scheduler steps that modify the Manila scheduler weights.
+      # Each scheduler step can specify its own dependencies on extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known scheduler plugin.
+      # Note that all scheduler steps will be executed in parallel. However,
+      # the order will be maintained when the weights are applied to the
+      # input weights.
+      plugins:
+        - name:
+          # Options for the scheduler step.
+          options:
+          # Dependencies needed by this scheduler step.
+          dependencies: # e.g. {extractors: [my_manila_extractor]}
+
+    nova:
+      # Dependencies needed by all the Nova scheduler steps.
+      dependencies: {}
+
+      # Configuration of scheduler steps that modify the Nova scheduler weights.
+      # Each scheduler step can specify its own dependencies on extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known scheduler plugin.
+      # Note that all scheduler steps will be executed in parallel. However,
+      # the order will be maintained when the weights are applied to the
+      # input Nova weights.
+      plugins:
+        - name:
+          # Options for the scheduler step.
+          options:
+          # Dependencies needed by this scheduler step.
+          dependencies: # e.g. {extractors: [my_nova_extractor]}
+
+  descheduler:
+    nova:
+      # If migrations should be executed.
+      disableDryRun: false
+      # The availability of the Nova endpoint to look for.
+      availability: public
+      # Configuration of the descheduler that runs periodically to de-schedule
+      # VMs based on the configured plugins.
+      # Each plugin can specify its own dependencies on extractors and synced data.
+      #
+      # The `name` should correspond to a known descheduler plugin.
+      plugins:
+        - name:
+          # Options for the descheduler plugin.
+          options:
+          # Dependencies needed by this descheduler plugin.
+          dependencies: # e.g. {extractors: [my_nova_extractor]}
+
+# Values passed to the service through a kubernetes secret.
+# The keys of these values should correspond to the keys used above in the conf.
+secrets:
+  # MQTT broker connection credentials.
+  mqtt:
+    username: cortex
+    password: secret
+  # Database connection credentials.
+  db:
+    user: postgres
+    password: secret
+  keystone:
+    # OpenStack login credentials also used by the OpenStack CLI.
+    projectName:
+    userDomainName:
+    projectDomainName:
+    username:
+    password:
+    # Optional, only required if OpenStack is configured with SSO.
+    # Note: the certificate will be used for all other OpenStack services.
+    sso:
+      # Certificate "public key".
+      cert: ""
+      # Certificate private key.
+      certKey: ""
+      # Whether the certificate is self-signed.
+      # If true, the certificate is not verified.
+      selfSigned: false
+  sync:
+    prometheus:
+      # Prometheus hosts to consider when syncing the metrics.
+      hosts:
+        - name:
+          # Prometheus URL to scrape metrics from.
+          url:
+          # The metric types to scrape from this Prometheus instance.
+          provides: []
+          # Optional, only required if Prometheus is configured with SSO.
+          sso:
+            # Certificate "public key".
+            cert: ""
+            # Certificate private key.
+            certKey: ""
+            # Whether the certificate is self-signed.
+            # If true, the certificate is not verified.
+            selfSigned: false

@@ -94,7 +94,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum by (service) (go_memstats_alloc_bytes{pod=\"cortex-postgresql-0\"} / 1_000_000)",
+          "expr": "sum by (service) (go_memstats_alloc_bytes{pod=~\"cortex-.*-postgresql-0\"} / 1_000_000)",
           "hide": false,
           "interval": "",
           "legendFormat": "{{service}}",
@@ -226,7 +226,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum by (service) (rate(process_cpu_seconds_total{pod=\"cortex-postgresql-0\"}[2m]))",
+          "expr": "sum by (service) (rate(process_cpu_seconds_total{pod=~\"cortex-.*-postgresql-0\"}[2m]))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{service}}",

@@ -1,9 +1,0 @@
-dependencies:
-- name: owner-info
-  repository: oci://ghcr.io/sapcc/helm-charts
-  version: 1.0.0
-- name: rabbitmq
-  repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.0.10
-digest: sha256:a2262d7557131f1cea54d1711a9f5bd923b37addf86a3dcfa377225dbb1d24a8
-generated: "2025-07-04T01:37:34.542051705Z"

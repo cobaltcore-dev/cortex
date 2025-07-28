@@ -1,0 +1,65 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+{{ if $.Capabilities.APIVersions.Has "autoscaling.k8s.io/v1/VerticalPodAutoscaler" -}}
+{{- range .Values.modes }}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ include "cortex.fullname" $ }}-{{ .name }}-vpa
+  labels:
+    app: {{ include "cortex.fullname" $ }}-{{ .name }}
+    {{- include "cortex.labels" $ | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: "Deployment"
+    name: {{ include "cortex.fullname" $ }}-{{ .name }}
+  updatePolicy:
+    updateMode: "Initial"
+    minReplicas: 1
+    maxReplicas: 1
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ include "cortex.fullname" $ }}-{{ .name }}
+        mode: "Auto"
+        minAllowed:
+          cpu: "10m"
+          memory: "32Mi"
+        maxAllowed:
+          cpu: "2"
+          memory: "4Gi"
+        controlledResources: ["cpu", "memory"]
+        controlledValues: "RequestsAndLimits"
+{{- end }}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ include "cortex.fullname" $ }}-cli
+  labels:
+    app: {{ include "cortex.fullname" $ }}-cli
+    {{- include "cortex.labels" $ | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: "Deployment"
+    name: {{ include "cortex.fullname" $ }}-cli
+  updatePolicy:
+    updateMode: "Initial"
+    minReplicas: 1
+    maxReplicas: 1
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ include "cortex.fullname" $ }}-cli
+        mode: "Auto"
+        minAllowed:
+          cpu: "10m"
+          memory: "32Mi"
+        maxAllowed:
+          cpu: "2"
+          memory: "4Gi"
+        controlledResources: ["cpu", "memory"]
+        controlledValues: "RequestsAndLimits"
+{{- end }}

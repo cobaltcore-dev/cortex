@@ -67,7 +67,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "pg_database_size_bytes{pod=\"cortex-postgresql-0\",datname=\"postgres\"}",
+          "expr": "pg_database_size_bytes{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}",
           "interval": "",
           "legendFormat": "{{datname}}",
           "queryType": "randomWalk",
@@ -167,7 +167,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_size_bytes{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_size_bytes{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
@@ -266,7 +266,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(pg_stat_database_active_time_seconds_total{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "rate(pg_stat_database_active_time_seconds_total{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{datname}}",
           "queryType": "randomWalk",
@@ -365,7 +365,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_database_tup_fetched{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_database_tup_fetched{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "Rows Fetched",
           "queryType": "randomWalk",
@@ -373,7 +373,7 @@
         },
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_database_tup_inserted{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_database_tup_inserted{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "hide": false,
           "interval": "",
           "legendFormat": "Rows Inserted",
@@ -381,7 +381,7 @@
         },
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_database_tup_deleted{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_database_tup_deleted{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "hide": false,
           "interval": "",
           "legendFormat": "Rows Deleted",
@@ -481,7 +481,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_idx_scan{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_idx_scan{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
@@ -581,7 +581,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_seq_scan{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_seq_scan{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
@@ -681,7 +681,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_n_tup_del{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_n_tup_del{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
@@ -781,7 +781,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_seq_tup_read{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_seq_tup_read{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
@@ -881,7 +881,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_n_tup_upd{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_n_tup_upd{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
@@ -981,7 +981,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_n_tup_ins{pod=\"cortex-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_n_tup_ins{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
@@ -1082,7 +1082,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "pg_stat_user_tables_n_live_tup{pod=\"cortex-postgresql-0\",datname=\"postgres\"} / (pg_stat_user_tables_n_dead_tup{pod=\"cortex-postgresql-0\",datname=\"postgres\"} + pg_stat_user_tables_n_live_tup{pod=\"cortex-postgresql-0\",datname=\"postgres\"})",
+          "expr": "pg_stat_user_tables_n_live_tup{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"} / (pg_stat_user_tables_n_dead_tup{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"} + pg_stat_user_tables_n_live_tup{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"})",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",

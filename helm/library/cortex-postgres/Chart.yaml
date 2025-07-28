@@ -1,0 +1,13 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+name: cortex-postgres
+description: Postgres setup for Cortex.
+type: application
+version: 0.4.0
+dependencies:
+  - name: postgresql
+    repository: oci://registry-1.docker.io/bitnamicharts
+    # Use a specific version of this chart which contains compliant images.
+    version: 16.7.15

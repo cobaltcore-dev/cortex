@@ -3,6 +3,13 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
+# Pull missing chart.tgz dependencies into a chart directory.
+#
+# This script checks based on the Chart.yaml file, which dependencies are
+# required and checks for each of them, if the corresponding .tgz file
+# exists in the charts directory. If not, it runs `helm pull <chart>
+# -d path/to/chart/charts` to download the missing dependencies.
+#
 # Usage: ./sync.sh path/to/chart
 
 # Exit on error
@@ -15,35 +22,57 @@ if [ -z "$1" ]; then
 fi
 
 CHART_DIR="$1"
-CHART_LOCK_FILE="$CHART_DIR/Chart.lock"
 CHART_YAML_FILE="$CHART_DIR/Chart.yaml"
 CHARTS_DIR="$CHART_DIR/charts"
 
-# Check if Chart.lock exists, if not create it from Chart.yaml
-if [ ! -f "$CHART_LOCK_FILE" ]; then
-  echo "Chart.lock not found. Creating it from Chart.yaml..."
-  helm dependency build "$CHART_DIR"
+# Check if Chart.yaml exists
+if [ ! -f "$CHART_YAML_FILE" ]; then
+  echo "Chart.yaml not found in $CHART_DIR"
+  exit 1
 fi
 
-# Get all required .tgz files from Chart.lock
-REQUIRED_TGZ_FILES=$(grep -oE 'name: [^ ]+' "$CHART_LOCK_FILE" | awk '{print $2}' | xargs -I {} echo "$CHARTS_DIR/{}-*.tgz")
+# Create charts directory if it doesn't exist
+mkdir -p "$CHARTS_DIR"
 
-# Check if all required .tgz files are present and up to date
-ALL_UP_TO_DATE=true
-for TGZ_FILE in $REQUIRED_TGZ_FILES; do
-  if [ ! -f "$TGZ_FILE" ]; then
-    ALL_UP_TO_DATE=false
-    break
+
+# Extract dependencies (name and version) from Chart.yaml using yq
+if ! command -v yq >/dev/null 2>&1; then
+  echo "Error: 'yq' is required but not installed. Please install yq (https://mikefarah.gitbook.io/yq/)"
+  exit 1
+fi
+
+# Get dependencies as comma-separated name,version,repository triples
+DEPS=$(yq e '.dependencies[] | .name + "," + .version + "," + (.repository // "")' "$CHART_YAML_FILE")
+
+if [ -z "$DEPS" ]; then
+  echo "No dependencies found in $CHART_YAML_FILE"
+  exit 0
+fi
+
+# For each dependency, check if the .tgz exists, if not, pull it
+IFS=$'\n'
+for dep in $DEPS; do
+  NAME=$(echo "$dep" | cut -d',' -f1)
+  VERSION=$(echo "$dep" | cut -d',' -f2)
+  REPO=$(echo "$dep" | cut -d',' -f3)
+
+  echo "Checking dependency: $NAME, version: $VERSION, repository: $REPO"
+  # Check if the .tgz file exists
+  TARBALL="$CHARTS_DIR/$NAME-$VERSION.tgz"
+  if [ ! -f "$TARBALL" ]; then
+    echo "Missing $TARBALL, pulling from repository..."
+    if [ -z "$REPO" ]; then
+      echo "No repository specified for $NAME, skipping pull."
+      continue
+    fi
+    # Pull the chart
+    helm pull "$REPO/$NAME" --version "$VERSION" -d "$CHARTS_DIR"
+    if [ $? -ne 0 ]; then
+      echo "Failed to pull $NAME from $REPO"
+      exit 1
+    fi
+    echo "Pulled $NAME version $VERSION successfully."
+  else
+    echo "Dependency $NAME version $VERSION already exists at $TARBALL"
   fi
 done
-
-# Run helm dep up if not all .tgz files are up to date
-if [ "$ALL_UP_TO_DATE" = false ]; then
-  echo "Dependencies are not up to date. Running 'helm dependency update'..."
-  helm dependency update "$CHART_DIR"
-else
-  echo "All dependencies for $CHART_DIR are up to date:"
-  for TGZ_FILE in $REQUIRED_TGZ_FILES; do
-      echo " - $(basename "$TGZ_FILE")"
-  done
-fi

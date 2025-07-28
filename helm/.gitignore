@@ -1,4 +1,5 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-*/charts/**
+# Exclude all Helm chart archives.
+**/*.tgz

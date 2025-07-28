@@ -1,0 +1,215 @@
+groups:
+- name: cortex-manila-alerts
+  rules:
+  - alert: CortexManilaInitialPlacementDown
+    expr: |
+      up{component="cortex-manila-scheduler"} != 1 or
+      absent(up{component="cortex-manila-scheduler"})
+    for: 1m
+    labels:
+      context: liveness
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/down
+    annotations:
+      summary: "Cortex initial placement for Manila is down"
+      description: >
+        The Cortex initial placement is down. Initial placement requests from Manila will
+        not be served. This is no immediate problem, since Manila will continue
+        placing new shares. However, the placement will be less desirable.
+
+  - alert: CortexManilaSyncerDown
+    expr: |
+      up{component="cortex-manila-syncer"} != 1 or
+      absent(up{component="cortex-manila-syncer"})
+    for: 1m
+    labels:
+      context: liveness
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Cortex syncer is down"
+      description: >
+        The Cortex syncer is down. Cortex requires somewhat recent data from
+        it's datasources (OpenStack, Prometheus, etc.) to make accurate
+        scheduling decisions. If this issue persists for a longer time, the
+        data based will slowly drift away from the actual state of the
+        datacenter, which may lead to less desirable placement decisions.
+        This is no immediate problem, since Manila will continue placing new
+        shares.
+
+  - alert: CortexManilaExtractorDown
+    expr: |
+      up{component="cortex-manila-extractor"} != 1 or
+      absent(up{component="cortex-manila-extractor"})
+    for: 1m
+    labels:
+      context: liveness
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "Cortex extractor is down"
+      description: >
+        The Cortex extractor is down. This means that newly available data
+        about the datacenter will not be used to extract scheduling knowledge.
+        This is no immediate problem, since Manila will continue placing new
+        shares. However, the placement will be less desirable.
+
+  - alert: CortexManilaHttpRequest400sTooHigh
+    expr: rate(cortex_scheduler_api_request_duration_seconds_count{component="cortex-manila-scheduler",status=~"4.+"}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "HTTP request 400 errors too high"
+      description: >
+        Cortex is responding to Manila initial placement requests with HTTP 4xx
+        errors. This is expected when the scheduling request cannot be served
+        by Cortex. However, it could also indicate that the Manila request
+        format has changed and Cortex is unable to parse it.
+
+  - alert: CortexManilaHttpRequest500sTooHigh
+    expr: rate(cortex_scheduler_api_request_duration_seconds_count{component="cortex-manila-scheduler",status=~"5.+"}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "HTTP request 500 errors too high"
+      description: >
+        Cortex is responding to Manila initial placement requests with HTTP 5xx
+        errors. This is not expected and indicates that Cortex is having some
+        internal problem. Manila will continue to place new shares, but the
+        placement will be less desirable. Thus, no immediate action is needed.
+
+  - alert: CortexManilaHighMemoryUsage
+    expr: process_resident_memory_bytes{component=~"cortex-manila-.*"} > 1000 * 1024 * 1024
+    for: 5m
+    labels:
+      context: memory
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "Cortex {{`{{$labels.component}}`}} uses too much memory"
+      description: >
+        Cortex should not be using more than 1000 MiB of memory. Usually it
+        should use much less, so there may be a memory leak or other changes
+        that are causing the memory usage to increase significantly.
+
+  - alert: CortexManilaHighCPUUsage
+    expr: rate(process_cpu_seconds_total{component=~"cortex-manila-.*"}[1m]) > 0.5
+    for: 5m
+    labels:
+      context: cpu
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "Cortex {{`{{$labels.component}}`}} uses too much CPU"
+      description: >
+        Cortex should not be using more than 50% of a single CPU core. Usually
+        it should use much less, so there may be a CPU leak or other changes
+        that are causing the CPU usage to increase significantly.
+
+  - alert: CortexManilaSyncNotSuccessful
+    expr: cortex_sync_request_processed_total{component=~"cortex-manila-.*"} - cortex_sync_request_duration_seconds_count{component=~"cortex-manila-.*"} > 0
+    for: 5m
+    labels:
+      context: syncstatus
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "Sync not successful"
+      description: >
+        Cortex experienced an issue syncing data from a datasource. This may
+        happen when the datasource (OpenStack, Prometheus, etc.) is down or
+        the sync module is misconfigured. No immediate action is needed, since
+        the sync module will retry the sync operation and the currently synced
+        data will be kept. However, when this problem persists for a longer
+        time the service will have a less recent view of the datacenter.
+
+  - alert: CortexManilaSyncObjectsDroppedToZero
+    expr: cortex_sync_objects{component=~"cortex-manila-.*"} == 0
+    for: 5m
+    labels:
+      context: syncobjects
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "Cortex is not syncing any new data from {{`{{$labels.datasource}}`}}"
+      description: >
+        Cortex is not syncing any objects from a datasource. This may happen
+        when the datasource (OpenStack, Prometheus, etc.) is down or the sync
+        module is misconfigured. No immediate action is needed, since the sync
+        module will retry the sync operation and the currently synced data will
+        be kept. However, when this problem persists for a longer time the
+        service will have a less recent view of the datacenter.
+
+  - alert: CortexManilaSyncObjectsTooHigh
+    expr: cortex_sync_objects{component=~"cortex-manila-.*"} > 1000000
+    for: 5m
+    labels:
+      context: syncobjects
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "Cortex is syncing unexpectedly many objects from {{`{{$labels.datasource}}`}}"
+      description: >
+        Cortex is syncing more than 1 million objects from a datasource. This
+        may happen when the datasource (OpenStack, Prometheus, etc.) returns
+        unexpectedly many objects, or when the database cannot drop old objects.
+        No immediate action is needed, but should this condition persist for a
+        longer time, the database may fill up and crash.
+
+  - alert: CortexManilaTooManyMQTTConnectionAttempts
+    expr: rate(cortex_mqtt_connection_attempts_total{component=~"cortex-manila-.*"}[5m]) > 0.1
+    for: 1m
+    labels:
+      context: mqtt
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "Cortex is trying to connect to MQTT too often"
+      description: >
+        Cortex is trying to connect to the MQTT broker too often. This may
+        happen when the broker is down or the connection parameters are
+        misconfigured.
+
+  - alert: CortexManilaTooManyDBConnectionAttempts
+    expr: rate(cortex_db_connection_attempts_total{component=~"cortex-manila-.*"}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: db
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "Cortex is trying to connect to the database too often"
+      description: >
+        Cortex is trying to connect to the database too often. This may happen
+        when the database is down or the connection parameters are misconfigured.
