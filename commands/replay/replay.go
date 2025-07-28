@@ -13,20 +13,22 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
 )
 
-// Replay Nova messages retrieved from the telemetry mqtt broker to a local Cortex instance.
-// Use together with: `kubectl port-forward cortex-mqtt-0 18830:1883`
+// Replay messages retrieved from the telemetry mqtt broker to a local Cortex instance.
+// Use together with something like: `kubectl port-forward cortex-mqtt-0 18830:1883`
 func main() {
 	// Parse command-line arguments
-	host := flag.String("h", "tcp://localhost:18830", "The cortex MQTT broker to connect to")
+	source := flag.String("h", "tcp://localhost:18830", "The cortex MQTT broker to connect to")
 	username := flag.String("u", "cortex", "The username to use for the MQTT connection")
 	password := flag.String("p", "secret", "The password to use for the MQTT connection")
-	cortexNovaURL := flag.String("cn", "http://localhost:8003", "The Cortex instance to forward to")
-	cortexManilaURL := flag.String("cm", "http://localhost:8005", "The Cortex instance to forward to")
+	topic := flag.String("t", "cortex/scheduler/nova/pipeline/finished", "The topic to subscribe to")
+	sink := flag.String("s", "http://localhost:8001", "The http endpoint to forward to")
 	help := flag.Bool("help", false, "Show this help message")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options]\n", os.Args[0])
@@ -39,7 +41,7 @@ func main() {
 	}
 
 	opts := mqtt.NewClientOptions()
-	opts.AddBroker(*host)
+	opts.AddBroker(*source)
 	opts.SetUsername(*username)
 	opts.SetPassword(*password)
 	//nolint:gosec // We don't care if the client id is cryptographically secure.
@@ -52,50 +54,36 @@ func main() {
 	}
 	defer client.Disconnect(1000)
 
-	forwards := []struct {
-		topic    string
-		endpoint string
-	}{
-		{
-			topic:    "cortex/scheduler/nova/pipeline/finished",
-			endpoint: *cortexNovaURL + "/scheduler/nova/external",
-		},
-		{
-			topic:    "cortex/scheduler/manila/pipeline/finished",
-			endpoint: *cortexManilaURL + "/scheduler/manila/external",
-		},
-	}
-	for _, f := range forwards {
-		client.Subscribe(f.topic, 2, func(client mqtt.Client, msg mqtt.Message) {
-			// Unwrap the "request" from the message
-			var payload map[string]any
-			must.Succeed(json.Unmarshal(msg.Payload(), &payload))
-			request, ok := payload["request"]
-			if !ok {
-				fmt.Fprintf(os.Stderr, "Message does not contain a 'request' field\n")
+	client.Subscribe(*topic, 2, func(client mqtt.Client, msg mqtt.Message) {
+		// Unwrap the "request" from the message
+		var payload map[string]any
+		must.Succeed(json.Unmarshal(msg.Payload(), &payload))
+		request, ok := payload["request"]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "Message does not contain a 'request' field\n")
+			return
+		}
+		for {
+			// Forward the request to the local Cortex instance
+			requestBody := must.Return(json.Marshal(request))
+			req := must.Return(http.NewRequestWithContext(context.Background(), http.MethodPost, *sink, bytes.NewBuffer(requestBody)))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to forward message to Cortex: %v, retrying...\n", err)
+				time.Sleep(jobloop.DefaultJitter(time.Second)) // wait before retrying
+				continue
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				body := must.Return(io.ReadAll(resp.Body))
+				fmt.Fprintf(os.Stderr, "Cortex responded with status %d: %s\n", resp.StatusCode, string(body))
 				return
 			}
-			for {
-				// Forward the request to the local Cortex instance
-				requestBody := must.Return(json.Marshal(request))
-				req := must.Return(http.NewRequestWithContext(context.Background(), http.MethodPost, f.endpoint, bytes.NewBuffer(requestBody)))
-				req.Header.Set("Content-Type", "application/json")
-				resp, err := http.DefaultClient.Do(req)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to forward message to Cortex: %v, retrying...\n", err)
-					continue
-				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					body := must.Return(io.ReadAll(resp.Body))
-					fmt.Fprintf(os.Stderr, "Cortex responded with status %d: %s\n", resp.StatusCode, string(body))
-					return
-				}
-				break
-			}
-			fmt.Printf("Successfully forwarded message received on topic %s to Cortex.\n", msg.Topic())
-		})
-	}
+			break
+		}
+		fmt.Printf("Successfully forwarded message received on topic %s to Cortex.\n", msg.Topic())
+	})
 
 	// Block the main thread to keep the program running
 	select {}

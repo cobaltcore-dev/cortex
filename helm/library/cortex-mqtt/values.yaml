@@ -1,0 +1,35 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+rabbitmq:
+  # Disable the network policy which otherwise
+  # blocks traffic on port 1883 (tcp mqtt) + 15675 (websocket).
+  networkPolicy:
+    enabled: false
+  # The username and password to use for the mqtt connection.
+  auth:
+    username: cortex
+    password: secret
+    erlangCookie: "secret"
+  plugins: >
+    rabbitmq_mqtt
+    rabbitmq_web_mqtt
+    rabbitmq_management
+    rabbitmq_peer_discovery_k8s
+  # Name under which the rabbitmq resources should be spawned.
+  fullnameOverride: "cortex-mqtt"
+  extraConfiguration: |-
+    mqtt.listeners.tcp.default = 1883
+  extraContainerPorts:
+    - name: mqtt
+      containerPort: 1883
+    - name: websocket
+      containerPort: 15675
+  service:
+    extraPorts:
+      - name: mqtt
+        port: 1883
+        targetPort: 1883
+      - name: websocket
+        port: 15675
+        targetPort: 15675

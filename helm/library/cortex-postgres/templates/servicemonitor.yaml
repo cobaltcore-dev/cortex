@@ -1,0 +1,22 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $.Values.postgresql.fullnameOverride }}
+  labels:
+    name: {{ $.Values.postgresql.fullnameOverride }}
+    {{- if $.Values.serviceMonitor.extraLabels }}
+    {{- toYaml $.Values.serviceMonitor.extraLabels | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- if $.Values.serviceMonitor.matchLabels }}
+      {{- toYaml $.Values.serviceMonitor.matchLabels | nindent 6 }}
+      {{- end }}
+  namespaceSelector:
+    any: true
+  endpoints:
+    - port: http-metrics
