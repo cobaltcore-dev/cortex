@@ -1326,6 +1326,20 @@
       }
     },
     {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 146,
+      "panels": [],
+      "title": "Capacity over Time",
+      "type": "row"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -1342,7 +1356,7 @@
         "h": 18,
         "w": 8,
         "x": 0,
-        "y": 33
+        "y": 34
       },
       "hiddenSeries": false,
       "id": 124,
@@ -1448,7 +1462,7 @@
         "h": 18,
         "w": 16,
         "x": 8,
-        "y": 33
+        "y": 34
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1516,7 +1530,7 @@
         "h": 18,
         "w": 8,
         "x": 0,
-        "y": 51
+        "y": 52
       },
       "hiddenSeries": false,
       "id": 126,
@@ -1622,7 +1636,7 @@
         "h": 18,
         "w": 16,
         "x": 8,
-        "y": 51
+        "y": 52
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1688,7 +1702,7 @@
         "h": 18,
         "w": 8,
         "x": 0,
-        "y": 69
+        "y": 70
       },
       "hiddenSeries": false,
       "id": 128,
@@ -1794,7 +1808,7 @@
         "h": 18,
         "w": 16,
         "x": 8,
-        "y": 69
+        "y": 70
       },
       "heatmap": {},
       "hideZeroBuckets": false,
