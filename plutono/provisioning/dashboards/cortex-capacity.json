@@ -87,7 +87,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Predicted Capacity (in 4 weeks)"
+              "options": "Predicted Capacity (in 1d)"
             },
             "properties": [
               {
@@ -140,11 +140,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"}\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100))",
+          "expr": "sum(\n  (\n    max by (compute_host_name, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, resource, availability_zone)\n    (\n      1 - max by (compute_host_name, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=\"$availability_zone\",\n          compute_host_name=~\".*$compute_host_name.*\",\n          traits=~\".*$traits.*\",\n          projects=~\".*$projects.*\",\n          domains=~\".*$domains.*\",\n          cpu_model=~\".*$cpu_model.*\"\n        } / 100\n      )\n    )\n  )\n)",
           "instant": false,
           "interval": "",
           "legendFormat": "Available",
@@ -153,7 +153,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"})\n",
+          "expr": "sum(\n  max by (compute_host_name) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=\"$availability_zone\",\n      compute_host_name=~\".*$compute_host_name.*\",\n      traits=~\".*$traits.*\",\n      projects=~\".*$projects.*\",\n      domains=~\".*$domains.*\",\n      cpu_model=~\".*$cpu_model.*\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": false,
           "interval": "",
@@ -162,10 +162,10 @@
         },
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n    sum by (compute_host_name, cpu_model) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, cpu_model)\n    sum by (compute_host_name, cpu_model) (\n      1 - cortex_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      } / 100\n    )\n  )[30d:]\n, 10368000) / sum(cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\", cpu_model=~\".*$cpu_model.*\"})",
+          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host_name, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, resource, availability_zone)\n    (\n      1 - max by (compute_host_name, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=\"$availability_zone\",\n          compute_host_name=~\".*$compute_host_name.*\",\n          traits=~\".*$traits.*\",\n          projects=~\".*$projects.*\",\n          domains=~\".*$domains.*\",\n          cpu_model=~\".*$cpu_model.*\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host_name) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=\"$availability_zone\",\n      compute_host_name=~\".*$compute_host_name.*\",\n      traits=~\".*$traits.*\",\n      projects=~\".*$projects.*\",\n      domains=~\".*$domains.*\",\n      cpu_model=~\".*$cpu_model.*\"\n    }\n  )\n)",
           "hide": false,
           "interval": "",
-          "legendFormat": "Predicted Capacity (in 4 weeks)",
+          "legendFormat": "Predicted Capacity (in 1d)",
           "refId": "C"
         }
       ],
@@ -245,7 +245,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Predicted Capacity (in 4 weeks)"
+              "options": "Predicted Capacity (in 1d)"
             },
             "properties": [
               {
@@ -298,11 +298,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100))",
+          "expr": "sum(\n  (\n    max by (compute_host_name, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"memory\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, resource, availability_zone)\n    (\n      1 - max by (compute_host_name, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"memory\",\n          availability_zone=\"$availability_zone\",\n          compute_host_name=~\".*$compute_host_name.*\",\n          traits=~\".*$traits.*\",\n          projects=~\".*$projects.*\",\n          domains=~\".*$domains.*\",\n          cpu_model=~\".*$cpu_model.*\"\n        } / 100\n      )\n    )\n  )\n)",
           "instant": false,
           "interval": "",
           "legendFormat": "Available",
@@ -311,7 +311,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"})\n",
+          "expr": "sum(\n  max by (compute_host_name) (\n    cortex_total_capacity_per_host{\n      resource=\"memory\",\n      availability_zone=\"$availability_zone\",\n      compute_host_name=~\".*$compute_host_name.*\",\n      traits=~\".*$traits.*\",\n      projects=~\".*$projects.*\",\n      domains=~\".*$domains.*\",\n      cpu_model=~\".*$cpu_model.*\"\n    }\n  )\n)",
           "hide": false,
           "instant": false,
           "interval": "",
@@ -320,10 +320,10 @@
         },
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n    sum by (compute_host_name, cpu_model) (\n      cortex_total_capacity_per_host{\n        resource=\"memory\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, cpu_model)\n    sum by (compute_host_name, cpu_model) (\n      1 - cortex_host_utilization_per_host_pct{\n        resource=\"memory\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      } / 100\n    )\n  )[30d:]\n, 10368000) / sum(cortex_total_capacity_per_host{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\", cpu_model=~\".*$cpu_model.*\"})",
+          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host_name, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"memory\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, resource, availability_zone)\n    (\n      1 - max by (compute_host_name, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"memory\",\n          availability_zone=\"$availability_zone\",\n          compute_host_name=~\".*$compute_host_name.*\",\n          traits=~\".*$traits.*\",\n          projects=~\".*$projects.*\",\n          domains=~\".*$domains.*\",\n          cpu_model=~\".*$cpu_model.*\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host_name) (\n    cortex_total_capacity_per_host{\n      resource=\"memory\",\n      availability_zone=\"$availability_zone\",\n      compute_host_name=~\".*$compute_host_name.*\",\n      traits=~\".*$traits.*\",\n      projects=~\".*$projects.*\",\n      domains=~\".*$domains.*\",\n      cpu_model=~\".*$cpu_model.*\"\n    }\n  )\n)",
           "hide": false,
           "interval": "",
-          "legendFormat": "Predicted Capacity (in 4 weeks)",
+          "legendFormat": "Predicted Capacity (in 1d)",
           "refId": "C"
         }
       ],
@@ -403,7 +403,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Predicted Capacity (in 4 weeks)"
+              "options": "Predicted Capacity (in 1d)"
             },
             "properties": [
               {
@@ -456,11 +456,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }\n*\non(compute_host_name, resource, availability_zone) ( 1 - cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"} /100))",
+          "expr": "sum(\n  (\n    max by (compute_host_name, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, resource, availability_zone)\n    (\n      1 - max by (compute_host_name, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=\"$availability_zone\",\n          compute_host_name=~\".*$compute_host_name.*\",\n          traits=~\".*$traits.*\",\n          projects=~\".*$projects.*\",\n          domains=~\".*$domains.*\",\n          cpu_model=~\".*$cpu_model.*\"\n        } / 100\n      )\n    )\n  )\n)",
           "instant": false,
           "interval": "",
           "legendFormat": "Available",
@@ -469,7 +469,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" , cpu_model=~\".*$cpu_model.*\"})\n",
+          "expr": "sum(\n  max by (compute_host_name) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=\"$availability_zone\",\n      compute_host_name=~\".*$compute_host_name.*\",\n      traits=~\".*$traits.*\",\n      projects=~\".*$projects.*\",\n      domains=~\".*$domains.*\",\n      cpu_model=~\".*$cpu_model.*\"\n    }\n  )\n)",
           "hide": false,
           "instant": false,
           "interval": "",
@@ -478,10 +478,10 @@
         },
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n    sum by (compute_host_name, cpu_model) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, cpu_model)\n    sum by (compute_host_name, cpu_model) (\n      1 - cortex_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      } / 100\n    )\n  )[30d:]\n, 10368000) / sum(cortex_total_capacity_per_host{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\", cpu_model=~\".*$cpu_model.*\"})",
+          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host_name, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=\"$availability_zone\",\n        compute_host_name=~\".*$compute_host_name.*\",\n        traits=~\".*$traits.*\",\n        projects=~\".*$projects.*\",\n        domains=~\".*$domains.*\",\n        cpu_model=~\".*$cpu_model.*\"\n      }\n    )\n    *\n    on(compute_host_name, resource, availability_zone)\n    (\n      1 - max by (compute_host_name, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=\"$availability_zone\",\n          compute_host_name=~\".*$compute_host_name.*\",\n          traits=~\".*$traits.*\",\n          projects=~\".*$projects.*\",\n          domains=~\".*$domains.*\",\n          cpu_model=~\".*$cpu_model.*\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host_name) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=\"$availability_zone\",\n      compute_host_name=~\".*$compute_host_name.*\",\n      traits=~\".*$traits.*\",\n      projects=~\".*$projects.*\",\n      domains=~\".*$domains.*\",\n      cpu_model=~\".*$cpu_model.*\"\n    }\n  )\n)",
           "hide": false,
           "interval": "",
-          "legendFormat": "Predicted Capacity (in 4 weeks)",
+          "legendFormat": "Predicted Capacity (in 1d)",
           "refId": "C"
         }
       ],
@@ -598,11 +598,11 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(sum by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
+          "expr": "sort(max by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -700,7 +700,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -877,11 +877,11 @@
           }
         ]
       },
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(sum by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
+          "expr": "sort(max by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"memory\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -978,7 +978,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1153,11 +1153,11 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(sum by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
+          "expr": "sort(max by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / 100)",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -1256,7 +1256,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1326,6 +1326,20 @@
       }
     },
     {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 146,
+      "panels": [],
+      "title": "Capacity over Time",
+      "type": "row"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -1342,7 +1356,7 @@
         "h": 18,
         "w": 8,
         "x": 0,
-        "y": 33
+        "y": 34
       },
       "hiddenSeries": false,
       "id": 124,
@@ -1363,7 +1377,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1448,7 +1462,7 @@
         "h": 18,
         "w": 16,
         "x": 8,
-        "y": 33
+        "y": 34
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1516,7 +1530,7 @@
         "h": 18,
         "w": 8,
         "x": 0,
-        "y": 51
+        "y": 52
       },
       "hiddenSeries": false,
       "id": 126,
@@ -1537,7 +1551,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1622,7 +1636,7 @@
         "h": 18,
         "w": 16,
         "x": 8,
-        "y": 51
+        "y": 52
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1688,7 +1702,7 @@
         "h": 18,
         "w": 8,
         "x": 0,
-        "y": 69
+        "y": 70
       },
       "hiddenSeries": false,
       "id": 128,
@@ -1709,7 +1723,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.39",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1794,7 +1808,7 @@
         "h": 18,
         "w": 16,
         "x": 8,
-        "y": 69
+        "y": 70
       },
       "heatmap": {},
       "hideZeroBuckets": false,
