@@ -148,6 +148,11 @@ cortex-core:
           types:
             - domains
             - projects
+        limes:
+          # Limes objects to sync into the database.
+          types:
+            # Needs projects.
+            - commitments
 
     extractor:
       # Configuration of features that should be extracted from the synced data.

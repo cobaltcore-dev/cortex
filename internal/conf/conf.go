@@ -90,6 +90,8 @@ type SyncOpenStackConfig struct {
 	Manila SyncOpenStackManilaConfig `json:"manila"`
 	// Configuration for the identity service.
 	Identity SyncOpenStackIdentityConfig `json:"identity"`
+	// Configuration for the limes service.
+	Limes SyncOpenStackLimesConfig `json:"limes"`
 }
 
 // Configuration for the nova service.
@@ -118,6 +120,14 @@ type SyncOpenStackManilaConfig struct {
 
 // Configuration for the identity service.
 type SyncOpenStackIdentityConfig struct {
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+	// The types of resources to sync.
+	Types []string `json:"types"`
+}
+
+// Configuration for the limes service.
+type SyncOpenStackLimesConfig struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
 	// The types of resources to sync.

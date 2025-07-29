@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/limes"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/manila"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
@@ -71,6 +72,13 @@ func NewCombinedSyncer(
 			API:        identity.NewIdentityAPI(monitor, keystoneAPI, config.Identity),
 			MqttClient: mqttClient,
 			Conf:       config.Identity,
+		},
+		&limes.LimesSyncer{
+			DB:         db,
+			Mon:        monitor,
+			API:        limes.NewLimesAPI(monitor, keystoneAPI, config.Limes),
+			MqttClient: mqttClient,
+			Conf:       config.Limes,
 		},
 	}
 	return CombinedSyncer{monitor: monitor, syncers: syncers}
