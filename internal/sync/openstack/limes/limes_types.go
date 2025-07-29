@@ -58,10 +58,6 @@ type Commitment struct {
 	// project, but still block capacity and still count towards billing. Not
 	// shown if false.
 	Transferable bool `json:"transferable" db:"transferable"`
-	// TransferStatus and TransferToken are only filled while the commitment is
-	// marked for transfer.
-	TransferStatus string  `json:"transfer_status,omitempty" db:"transfer_status"`
-	TransferToken  *string `json:"transfer_token,omitempty" db:"transfer_token"`
 	// Whether a mail notification should be sent if a created commitment is
 	// confirmed. Can only be set if the commitment contains a confirm_by value.
 	NotifyOnConfirm bool `json:"notify_on_confirm" db:"notify_on_confirm"`
