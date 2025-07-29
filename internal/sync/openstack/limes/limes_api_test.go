@@ -60,6 +60,10 @@ func TestLimesAPI_GetAllCommitments(t *testing.T) {
 	if commitment.ID != 1 || commitment.UUID != "test-uuid" || commitment.ServiceType != "compute" {
 		t.Errorf("unexpected commitment: %+v", commitment)
 	}
+	// Check the project and domain IDs
+	if commitment.ProjectID != "project1" || commitment.DomainID != "domain1" {
+		t.Errorf("expected project ID 'project1' and domain ID 'domain1', got project ID '%s' and domain ID '%s'", commitment.ProjectID, commitment.DomainID)
+	}
 }
 
 func TestLimesAPI_GetAllCommitments_Error(t *testing.T) {

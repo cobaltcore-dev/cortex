@@ -145,5 +145,10 @@ func (api *limesAPI) getCommitments(ctx context.Context, project identity.Projec
 	if err != nil {
 		return nil, err
 	}
+	// Add the project information to each commitment.
+	for i := range list.Commitments {
+		list.Commitments[i].ProjectID = project.ID
+		list.Commitments[i].DomainID = project.DomainID
+	}
 	return list.Commitments, nil
 }
