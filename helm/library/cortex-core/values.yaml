@@ -124,6 +124,11 @@ conf:
         availability: public
         # Manila objects to sync into the database.
         types: [] # e.g. storage_pools
+      limes:
+        # One of admin, public, or internal
+        availability: public
+        # Limes objects to sync into the database.
+        types: [] # e.g. commitments
 
   extractor:
     # Configuration of features that should be extracted from the synced data.
