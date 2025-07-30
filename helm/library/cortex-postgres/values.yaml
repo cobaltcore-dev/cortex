@@ -10,7 +10,7 @@ image:
 
 exporter:
   image:
-    repository: quay.io/prometheuscommunity/postgres-exporter
+    repository: prometheuscommunity/postgres-exporter
     tag: "v0.17.1"
     pullPolicy: IfNotPresent
 
