@@ -7,8 +7,6 @@ metadata:
   name: {{ include "cortex-mqtt.fullname" . }}
   labels:
     {{- include "cortex-mqtt.labels" . | nindent 4 }}
-    # This label will be added to the prometheus metrics.
-    component: {{ include "cortex-mqtt.fullname" . }}
 spec:
   type: ClusterIP
   ports:

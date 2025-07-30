@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cortex-postgres.fullname" . }}
+  annotations:
+    checksum/image: "{{ .Values.image.tag }}"
+    kubectl.kubernetes.io/default-container: {{ include "cortex-postgres.fullname" . }}
+  labels:
+    app: {{ include "cortex-postgres.fullname" . }}
+    {{- include "cortex-postgres.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cortex-postgres.selectorLabels" . | nindent 6 }}
+  serviceName: 'postgresql-svc'
+  template:
+    metadata:
+      labels:
+        app: {{ include "cortex-postgres.fullname" . }}
+        {{- include "cortex-postgres.labels" . | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: {{ include "cortex-postgres.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cortex-postgres.fullname" . }}-secret
+                  key: postgres-password
+          ports:
+            - containerPort: 5432
+              name: postgresql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+        - name: {{ include "cortex-postgres.fullname" . }}-exporter
+          image: "{{ .Values.exporter.image.repository }}:{{ .Values.exporter.image.tag }}"
+          imagePullPolicy: {{ .Values.exporter.image.pullPolicy }}
+          env:
+            - name: DATA_SOURCE_NAME
+              value: "postgresql://postgres:$(POSTGRES_PASSWORD)@localhost:5432/postgres?sslmode=disable"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cortex-postgres.fullname" . }}-secret
+                  key: postgres-password
+          ports:
+            - containerPort: 9187
+              name: http-metrics
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http-metrics
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http-metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests:
+            storage: 4Gi

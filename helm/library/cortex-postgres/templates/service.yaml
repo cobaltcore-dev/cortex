@@ -1,0 +1,24 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cortex-postgres.fullname" . }}
+  labels:
+    {{- include "cortex-postgres.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgresql
+    {{- if .Values.exporter.enabled }}
+    - port: 9187
+      targetPort: 9187
+      protocol: TCP
+      name: http-metrics
+    {{- end }}
+  selector:
+    {{- include "cortex-postgres.selectorLabels" . | nindent 4 }}

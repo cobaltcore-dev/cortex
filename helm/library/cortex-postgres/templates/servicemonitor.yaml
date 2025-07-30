@@ -1,22 +1,19 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
+{{- if .Values.exporter.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ $.Values.postgresql.fullnameOverride }}
+  name: {{ include "cortex-postgres.fullname" . }}
   labels:
-    name: {{ $.Values.postgresql.fullnameOverride }}
-    {{- if $.Values.serviceMonitor.extraLabels }}
-    {{- toYaml $.Values.serviceMonitor.extraLabels | nindent 4 }}
-    {{- end }}
+    name: {{ include "cortex-postgres.fullname" . }}
 spec:
   selector:
     matchLabels:
-      {{- if $.Values.serviceMonitor.matchLabels }}
-      {{- toYaml $.Values.serviceMonitor.matchLabels | nindent 6 }}
-      {{- end }}
+      {{- include "cortex-postgres.selectorLabels" . | nindent 6 }}
   namespaceSelector:
     any: true
   endpoints:
     - port: http-metrics
+{{- end }}

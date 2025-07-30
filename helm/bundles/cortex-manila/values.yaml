@@ -17,22 +17,7 @@ alerts:
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
-  serviceMonitor:
-    extraLabels:
-      # The name of the prometheus instance to use for scraping metrics.
-      prometheus: openstack
-    matchLabels: # See below, this is used to select the postgresql service.
-      app: cortex-manila-postgresql
-  postgresql:
-    fullnameOverride: cortex-manila-postgresql
-    primary:
-      service:
-        labels: # See above, this is used to select by the service monitor.
-          app: cortex-manila-postgresql
-      # Overrride the names of the extra volumes to match the manila chart.
-      extraVolumes:
-        - {name: pre-upgrade-script, configMap: {name: cortex-manila-postgresql-pre-upgrade-script}}
-        - {name: post-upgrade-script, configMap: {name: cortex-manila-postgresql-post-upgrade-script}}
+  fullnameOverride: cortex-manila-postgresql
 
 # Custom configuration for the cortex mqtt chart.
 cortex-mqtt:
