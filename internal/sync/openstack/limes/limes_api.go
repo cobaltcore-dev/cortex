@@ -121,7 +121,7 @@ func (api *limesAPI) GetAllCommitments(ctx context.Context, projects []identity.
 
 // Resolve the commitments for the given project.
 func (api *limesAPI) getCommitments(ctx context.Context, project identity.Project) ([]Commitment, error) {
-	url := api.sc.Endpoint + "/v1" +
+	url := api.sc.Endpoint + "v1" +
 		"/domains/" + project.DomainID +
 		"/projects/" + project.ID +
 		"/commitments"
