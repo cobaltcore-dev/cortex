@@ -33,8 +33,7 @@ cortex-postgres:
 
 # Custom configuration for the cortex mqtt chart.
 cortex-mqtt:
-  rabbitmq:
-    fullnameOverride: cortex-nova-mqtt
+  fullnameOverride: cortex-nova-mqtt
 
 # Custom configuration for the cortex core chart.
 cortex-core:

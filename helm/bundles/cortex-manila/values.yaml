@@ -36,8 +36,7 @@ cortex-postgres:
 
 # Custom configuration for the cortex mqtt chart.
 cortex-mqtt:
-  rabbitmq:
-    fullnameOverride: cortex-manila-mqtt
+  fullnameOverride: cortex-manila-mqtt
 
 # Custom configuration for the cortex core chart.
 cortex-core:

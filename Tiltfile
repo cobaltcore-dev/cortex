@@ -103,7 +103,7 @@ resources = [
             'cortex-nova-mqtt',
             'cortex-manila-mqtt',
         ],
-        [(1883, 'tcp')],
+        [(1883, 'tcp'), (15675, 'ws')],
     ),
     (
         'Database',

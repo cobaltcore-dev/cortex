@@ -1,0 +1,24 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cortex-mqtt.fullname" . }}
+  labels:
+    {{- include "cortex-mqtt.labels" . | nindent 4 }}
+    # This label will be added to the prometheus metrics.
+    component: {{ include "cortex-mqtt.fullname" . }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1883
+      targetPort: 1883
+      protocol: TCP
+      name: mqtt
+    - port: 15675
+      targetPort: 15675
+      protocol: TCP
+      name: websocket
+  selector:
+    {{- include "cortex-mqtt.selectorLabels" . | nindent 4 }}
