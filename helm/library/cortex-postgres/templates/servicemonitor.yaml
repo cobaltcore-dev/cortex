@@ -1,7 +1,6 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if .Values.exporter.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -16,4 +15,3 @@ spec:
     any: true
   endpoints:
     - port: http-metrics
-{{- end }}
