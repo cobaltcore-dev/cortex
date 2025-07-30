@@ -73,11 +73,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 0.4
+                      "value": 0.2
                     },
                     {
                       "color": "green",
-                      "value": 0.7
+                      "value": 0.3
                     }
                   ]
                 }
@@ -105,11 +105,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 0.4
+                      "value": 0.2
                     },
                     {
                       "color": "green",
-                      "value": 0.7
+                      "value": 0.3
                     }
                   ]
                 }
@@ -231,11 +231,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 0.4
+                      "value": 0.2
                     },
                     {
                       "color": "green",
-                      "value": 0.7
+                      "value": 0.3
                     }
                   ]
                 }
@@ -263,11 +263,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 0.4
+                      "value": 0.2
                     },
                     {
                       "color": "green",
-                      "value": 0.7
+                      "value": 0.3
                     }
                   ]
                 }
@@ -389,11 +389,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 0.4
+                      "value": 0.2
                     },
                     {
                       "color": "green",
-                      "value": 0.7
+                      "value": 0.3
                     }
                   ]
                 }
@@ -421,11 +421,11 @@
                     },
                     {
                       "color": "#EAB839",
-                      "value": 0.4
+                      "value": 0.2
                     },
                     {
                       "color": "green",
-                      "value": 0.7
+                      "value": 0.3
                     }
                   ]
                 }
@@ -1273,7 +1273,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(sum by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / \ncount by (compute_host_name, cpu_model, total, running_vms) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }))",
+          "expr": "sort(sum by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }) / \ncount by (compute_host_name) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=\"$availability_zone\", compute_host_name=~\".*$compute_host_name.*\", cpu_model=~\".*$cpu_model.*\", traits=~\".*$traits.*\", projects=~\".*$projects.*\", domains=~\".*$domains.*\" }))",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host_name}}",
