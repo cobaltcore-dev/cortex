@@ -25,12 +25,3 @@ minikube start && tilt up
 ```
 
 Point your browser to http://localhost:10350/ - if you did everything correctly, you should see the cortex services spin up in the browser.
-
-### 3. Simulate Nova Requests
-
-To simulate Nova requests to your Cortex instance in Tilt, you can run the following command:
-```bash
-go run commands/fillup/fillup.go
-```
-
-The script will show where random new VMs would be placed.
