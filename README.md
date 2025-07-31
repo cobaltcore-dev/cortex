@@ -7,20 +7,36 @@
 Cortex
 ======
 [![REUSE status](https://api.reuse.software/badge/github.com/cobaltcore-dev/cortex)](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex)
-<a href="https://github.com/cobaltcore-dev/cortex"><img align="left" width="170" height="170" src="./docs/assets/Cortex_Logo_black_space_square_bg_rd@2x.png"></a>
+<a href="https://github.com/cobaltcore-dev/cortex"><img align="left" width="190" height="190" src="./docs/assets/Cortex_Logo_black_space_square_bg_rd@2x.png"></a>
 
-Cortex is an intelligent service for initial placement and scheduling of compute workloads within a cloud environment. It is designed to improve resource usage in a data center by making smart(er) decisions about where to place VMs, with future support planned for storage and network workloads.
+Cortex is a modular and extensible service for initial placement and scheduling in cloud-native environments covering workloads such as compute, storage, network, and other scheduling domains.  
+It improves resource utilization and operational performance by making smart placement decisions based on the current state of the environment and defined constraints and objectives.
 
+As part of the CobaltCore project, it complements the platform with advanced placement and scheduling capabilities.  
 
-Efficient and balanced resource utilization is key for cloud infrastructure providers to maintain operational performance and cost-effectiveness. In a dynamic cloud environment where workloads are constantly being created, moved, and deleted, a smart placement can help avoid resource bottlenecks and ensure high availability.
-
-OpenStack provides core services for managing compute, storage, and network resources in a cloud environment ([learn more](https://docs.openstack.org/de/security-guide/introduction/introduction-to-openstack.html)). Cortex extends the scheduling logic of these services by adding a layer of intelligence that can make more informed decisions about where to place workloads based on the current state of the data center.
+Learn more about [CobaltCore](https://cobaltcore-dev.github.io/docs/) and the broader [Apeiro Reference Architecture](https://apeirora.eu) ecosystem.
 
 ## Features
 
-- **Data sync:** Flexible framework to sync metrics and placement information of a data center.
-- **Knowledge extraction**: Logic to extract simple or advanced knowledge ("features") from the synced data.
-- **Smart scheduling:** Fast and scalable scheduling pipeline for VMs based on the extracted knowledge.
+- **Modular and extensible design**  
+  Cortex consists of a minimal core framework that can be extended with various plugins to support different data sources and scheduling algorithms. 
+  This provides flexibility and enables adapting Cortex to various environments and requirements.
+
+- **Centralized knowledge database**
+  Cortex provides a holistic knowledge database that stores enriched data from various sources.
+  This enables efficient and consistent access to the infrastructure state for placement and scheduling decisions.
+
+- **Integrated placement and scheduling**  
+  Cortex combines initial placement and continuous scheduling into a single service.
+
+- **Cross-domain support**  
+  Cortex supports a wide range of workloads from various scheduling domains, including compute, storage, and network. 
+  The architecture allows handling the domains either independently or through coordinated multi-domain decisions.
+
+- **Performance and scalability**
+  Cortex is designed for production-scale deployments using algorithmic and heuristic approaches to balance decision quality and execution efficiency.
+  It is battle-tested in large-scale, production cloud computing environments and can handle thousands of placement requests per second.
+
 
 ## Documentation
 
@@ -29,43 +45,6 @@ Read the full documentation at [docs/readme.md](docs/readme.md).
 ## Roadmap
 
 See our [roadmap](https://github.com/orgs/cobaltcore-dev/projects/14) and [issue tracker](https://github.com/cobaltcore-dev/cortex/issues) for upcoming features and improvements.
-
-## Quickstart
-
-### 1. Tilt Values Setup
-
-Copy the example secrets values file. This file is used for local development and overrides the Helm chart values provided in [values.yaml](helm/cortex/values.yaml) for your local testing setup.
-```bash
-cp cortex.secrets.example.yaml "${HOME}/cortex.secrets.yaml"
-```
-
-> [!WARNING]
-> It is recommended to put the secrets file somewhere outside of the project directory. In this way, it won't be accidentally committed to the repository.
-
-After copying the file, fill in the necessary values.
-
-Then, tell tilt where to find your secrets file:
-```bash
-export TILT_VALUES_PATH="${HOME}/cortex.secrets.yaml"
-```
-
-### 2. Running Tilt
-
-Run the tilt setup in minikube:
-```bash
-minikube start && tilt up
-```
-
-Point your browser to http://localhost:10350/ - if you did everything correctly, you should see the cortex services spin up in the browser.
-
-### 3. Simulate Nova Requests
-
-To simulate Nova requests to your Cortex instance in Tilt, you can run the following command:
-```bash
-go run commands/fillup/fillup.go
-```
-
-The script will show where random new VMs would be placed.
 
 ## Support, Feedback, Contributing
 
@@ -81,3 +60,7 @@ We as members, contributors, and leaders pledge to make participation in our com
 ## Licensing
 
 Copyright 2024-2025 SAP SE. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex).
+
+<p align="center">
+  <img alt="Bundesministerium für Wirtschaft und Energie (BMWE)-EU funding logo" src="https://apeirora.eu/assets/img/BMWK-EU.png" width="400"/>
+</p>

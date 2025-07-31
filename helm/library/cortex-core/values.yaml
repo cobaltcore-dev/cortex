@@ -18,12 +18,27 @@ serviceMonitor:
   matchLabels: {} # Additional matchers to select the service for scraping metrics.
 
 migrationsJob:
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "1"
+    limits:
+      memory: "4Gi"
+      cpu: "4"
   # Additional annotations for the created database migrations job.
   podAnnotations:
     # If you use linkerd, this will disable injection for the migrations job.
     # Otherwise, the linkerd-proxy container will hang around forever and
     # block the job from completing.
     "linkerd.io/inject": disabled
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "1"
+  limits:
+    memory: "1Gi"
+    cpu: "4"
 
 # Liveness and readiness probes for the cortex services.
 livenessProbe:
@@ -124,6 +139,11 @@ conf:
         availability: public
         # Manila objects to sync into the database.
         types: [] # e.g. storage_pools
+      limes:
+        # One of admin, public, or internal
+        availability: public
+        # Limes objects to sync into the database.
+        types: [] # e.g. commitments
 
   extractor:
     # Configuration of features that should be extracted from the synced data.

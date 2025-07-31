@@ -17,11 +17,6 @@ enable_postgres_upgrade = False
 
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo(
-    'Bitnami Helm Repo',
-    'https://charts.bitnami.com/bitnami',
-    labels=['Repositories'],
-)
-helm_repo(
     'Prometheus Community Helm Repo',
     'https://prometheus-community.github.io/helm-charts',
     labels=['Repositories'],
@@ -103,7 +98,7 @@ resources = [
             'cortex-nova-mqtt',
             'cortex-manila-mqtt',
         ],
-        [(1883, 'tcp')],
+        [(1883, 'tcp'), (15675, 'ws')],
     ),
     (
         'Database',

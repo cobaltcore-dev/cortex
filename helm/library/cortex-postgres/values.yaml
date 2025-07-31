@@ -1,65 +1,37 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-postgresql:
-  # Note: if the fullnameOverride is set, please ensure that the extraVolumes
-  # and extraVolumeMounts below are updated accordingly.
-  fullnameOverride: cortex-postgresql
-  volumePermissions:
-    enabled: true
-  auth:
-    postgresPassword: secret
-  service:
-    ports:
-      postgresql: 5432
-  metrics:
-    enabled: true
-  primary:
-    resources:
-      requests:
-        cpu: 100m # default value
-        ephemeral-storage: 1Gi
-        memory: 1Gi
-      limits:
-        cpu: 150m # default value
-        ephemeral-storage: 4Gi
-        memory: 4Gi
-    service:
-      extraPorts:
-        - name: http-metrics
-          port: 9187
-          targetPort: 9187
-    # Add a pre-upgrade script and a post-upgrade script to the primary pod.
-    #
-    # In case of a major version upgrade:
-    # - The pre-upgrade script will disable the service and dump the database.
-    # - The post-upgrade script will load the database dump and re-enable the service.
-    extraVolumes:
-      - {name: pre-upgrade-script, configMap: {name: cortex-postgresql-pre-upgrade-script}}
-      - {name: post-upgrade-script, configMap: {name: cortex-postgresql-post-upgrade-script}}
-    extraVolumeMounts:
-      - {name: pre-upgrade-script, mountPath: /opt/pre-upgrade, readOnly: true}
-      - {name: post-upgrade-script, mountPath: /opt/post-upgrade, readOnly: true}
+fullnameOverride: cortex-postgresql
 
-serviceMonitor:
-  extraLabels:
-    # The name of the prometheus instance to use for scraping metrics.
-    prometheus: openstack
-  matchLabels: {}
+image:
+  repository: postgres
+  tag: "17.5-alpine3.22"
+  pullPolicy: IfNotPresent
 
-# Job that performs upgrade tasks on the Cortex Postgres StatefulSet.
-#
-# If postgres needs a major version upgrade, this job will scale down the
-# StatefulSet, wait for the pod to terminate, run upgrade commands, and scale
-# it back up.
-upgradeJob:
-  enabled: true
+storage:
+  size: "4Gi"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "1"
+  limits:
+    memory: "4Gi"
+    cpu: "4"
+
+exporter:
   image:
-    repository: "bitnami/kubectl"
-    tag: "latest"
-  # Additional annotations for the created database upgrade job.
-  podAnnotations:
-    # If you use linkerd, this will disable injection for the upgrade job.
-    # Otherwise, the linkerd-proxy container will hang around forever and
-    # block the job from completing.
-    "linkerd.io/inject": disabled
+    repository: prometheuscommunity/postgres-exporter
+    tag: "v0.17.1"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
+
+auth:
+  password: secret
