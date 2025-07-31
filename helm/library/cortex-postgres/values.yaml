@@ -8,6 +8,9 @@ image:
   tag: "17.5-alpine3.22"
   pullPolicy: IfNotPresent
 
+storage:
+  size: "4Gi"
+
 resources:
   requests:
     memory: "128Mi"
