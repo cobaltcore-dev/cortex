@@ -25,11 +25,11 @@ spec:
       - containerName: {{ include "cortex.fullname" $ }}-{{ .name }}
         mode: "Auto"
         minAllowed:
-          cpu: {{ .Values.resources.requests.cpu }}
-          memory: {{ .Values.resources.requests.memory }}
+          cpu: {{ $.Values.resources.requests.cpu }}
+          memory: {{ $.Values.resources.requests.memory }}
         maxAllowed:
-          cpu: {{ .Values.resources.limits.cpu }}
-          memory: {{ .Values.resources.limits.memory }}
+          cpu: {{ $.Values.resources.limits.cpu }}
+          memory: {{ $.Values.resources.limits.memory }}
         controlledResources: ["cpu", "memory"]
         controlledValues: "RequestsAndLimits"
 {{- end }}
