@@ -1,0 +1,28 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cortex-mqtt.fullname" . }}-config
+  labels:
+    {{- include "cortex-mqtt.labels" . | nindent 4 }}
+data:
+  enabled_plugins: |
+    [rabbitmq_prometheus,rabbitmq_mqtt,rabbitmq_web_mqtt,rabbitmq_peer_discovery_k8s].
+  rabbitmq.conf: |
+    cluster_formation.peer_discovery_backend = k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.k8s.address_type = hostname
+    cluster_formation.node_cleanup.interval = 30
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+
+    queue_master_locator = min-masters
+
+    log.console = true
+    log.console.level = info
+
+    mqtt.listeners.tcp.default = 1883
+
+    {{ .Values.config.extraConfiguration | nindent 4 }}

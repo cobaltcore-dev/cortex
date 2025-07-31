@@ -7,4 +7,3 @@ description: A Helm chart deploying Cortex core services.
 type: application
 version: 0.24.0
 appVersion: "sha-09285f4"
-dependencies: []

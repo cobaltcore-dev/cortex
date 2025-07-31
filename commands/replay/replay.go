@@ -28,7 +28,7 @@ func main() {
 	username := flag.String("u", "cortex", "The username to use for the MQTT connection")
 	password := flag.String("p", "secret", "The password to use for the MQTT connection")
 	topic := flag.String("t", "cortex/scheduler/nova/pipeline/finished", "The topic to subscribe to")
-	sink := flag.String("s", "http://localhost:8001", "The http endpoint to forward to")
+	sink := flag.String("s", "", "The http endpoint to forward to")
 	help := flag.Bool("help", false, "Show this help message")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options]\n", os.Args[0])
@@ -38,6 +38,11 @@ func main() {
 	if *help {
 		flag.Usage()
 		os.Exit(0)
+	}
+	if *sink == "" {
+		fmt.Fprintln(os.Stderr, "Error: The -s option is required to specify the HTTP endpoint to forward messages to.")
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	opts := mqtt.NewClientOptions()

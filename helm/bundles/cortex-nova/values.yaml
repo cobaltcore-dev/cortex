@@ -17,24 +17,11 @@ alerts:
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
-  serviceMonitor:
-    matchLabels: # See below, this is used to select the postgresql service.
-      app: cortex-nova-postgresql
-  postgresql:
-    fullnameOverride: cortex-nova-postgresql
-    primary:
-      service:
-        labels: # See above, this is used to select by the service monitor.
-          app: cortex-nova-postgresql
-      # Overrride the names of the extra volumes to match the nova chart.
-      extraVolumes:
-        - {name: pre-upgrade-script, configMap: {name: cortex-nova-postgresql-pre-upgrade-script}}
-        - {name: post-upgrade-script, configMap: {name: cortex-nova-postgresql-post-upgrade-script}}
+  fullnameOverride: cortex-nova-postgresql
 
 # Custom configuration for the cortex mqtt chart.
 cortex-mqtt:
-  rabbitmq:
-    fullnameOverride: cortex-nova-mqtt
+  fullnameOverride: cortex-nova-mqtt
 
 # Custom configuration for the cortex core chart.
 cortex-core:

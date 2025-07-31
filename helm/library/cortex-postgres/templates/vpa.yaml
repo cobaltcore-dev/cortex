@@ -1,0 +1,43 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+{{ if $.Capabilities.APIVersions.Has "autoscaling.k8s.io/v1/VerticalPodAutoscaler" -}}
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ include "cortex-postgres.fullname" . }}-vpa
+  labels:
+    app: {{ include "cortex-postgres.fullname" . }}
+    {{- include "cortex-postgres.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: "Deployment"
+    name: {{ include "cortex-postgres.fullname" . }}
+  updatePolicy:
+    updateMode: "Initial"
+    minReplicas: 1
+    maxReplicas: 1
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ include "cortex-mqtt.fullname" . }}
+        mode: "Auto"
+        minAllowed:
+          cpu: "100m"
+          memory: "128Mi"
+        maxAllowed:
+          cpu: "4"
+          memory: "4Gi"
+        controlledResources: ["cpu", "memory"]
+        controlledValues: "RequestsAndLimits"
+      - containerName: {{ include "cortex-mqtt.fullname" . }}
+        mode: "Auto"
+        minAllowed:
+          cpu: "100m"
+          memory: "128Mi"
+        maxAllowed:
+          cpu: "4"
+          memory: "4Gi"
+        controlledResources: ["cpu", "memory"]
+        controlledValues: "RequestsAndLimits"
+{{- end }}
