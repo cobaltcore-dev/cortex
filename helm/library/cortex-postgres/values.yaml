@@ -8,11 +8,27 @@ image:
   tag: "17.5-alpine3.22"
   pullPolicy: IfNotPresent
 
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "1"
+  limits:
+    memory: "4Gi"
+    cpu: "4"
+
 exporter:
   image:
     repository: prometheuscommunity/postgres-exporter
     tag: "v0.17.1"
     pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
 
 auth:
   password: secret

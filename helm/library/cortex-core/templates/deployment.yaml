@@ -32,6 +32,13 @@ spec:
           args: {{ .args | toJson }}
           image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory }}
+              cpu: {{ .Values.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.resources.limits.memory }}
+              cpu: {{ .Values.resources.limits.cpu }}
           ports:
             - name: api
               containerPort: {{ $.Values.conf.api.port }}
@@ -57,3 +64,50 @@ spec:
           secret:
             secretName: {{ include "cortex.fullname" $ }}-secrets
 {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cortex.fullname" $ }}-cli
+  labels:
+    app: {{ include "cortex.fullname" $ }}-cli
+    {{- include "cortex.labels" $ | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "cortex.fullname" $ }}-cli
+  template:
+    metadata:
+      labels:
+        app: {{ include "cortex.fullname" $ }}-cli
+        {{- include "cortex.labels" $ | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ include "cortex.fullname" $ }}-cli
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "echo 'Waiting for commands...' && sleep infinity"
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory }}
+              cpu: {{ .Values.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.resources.limits.memory }}
+              cpu: {{ .Values.resources.limits.cpu }}
+          volumeMounts:
+            - name: {{ include "cortex.fullname" $ }}-config-volume
+              mountPath: /etc/config
+            - name: {{ include "cortex.fullname" $ }}-secrets-volume
+              mountPath: /etc/secrets
+              readOnly: true
+      volumes:
+        - name: {{ include "cortex.fullname" $ }}-config-volume
+          configMap:
+            name: {{ include "cortex.fullname" $ }}-config
+        - name: {{ include "cortex.fullname" $ }}-secrets-volume
+          secret:
+            secretName: {{ include "cortex.fullname" $ }}-secrets

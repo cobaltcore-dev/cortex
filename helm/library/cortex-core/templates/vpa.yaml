@@ -25,11 +25,11 @@ spec:
       - containerName: {{ include "cortex.fullname" $ }}-{{ .name }}
         mode: "Auto"
         minAllowed:
-          cpu: "10m"
-          memory: "32Mi"
+          cpu: {{ .Values.resources.requests.cpu }}
+          memory: {{ .Values.resources.requests.memory }}
         maxAllowed:
-          cpu: "2"
-          memory: "4Gi"
+          cpu: {{ .Values.resources.limits.cpu }}
+          memory: {{ .Values.resources.limits.memory }}
         controlledResources: ["cpu", "memory"]
         controlledValues: "RequestsAndLimits"
 {{- end }}
@@ -55,11 +55,11 @@ spec:
       - containerName: {{ include "cortex.fullname" $ }}-cli
         mode: "Auto"
         minAllowed:
-          cpu: "10m"
-          memory: "32Mi"
+          cpu: {{ .Values.resources.requests.cpu }}
+          memory: {{ .Values.resources.requests.memory }}
         maxAllowed:
-          cpu: "2"
-          memory: "4Gi"
+          cpu: {{ .Values.resources.limits.cpu }}
+          memory: {{ .Values.resources.limits.memory }}
         controlledResources: ["cpu", "memory"]
         controlledValues: "RequestsAndLimits"
 {{- end }}

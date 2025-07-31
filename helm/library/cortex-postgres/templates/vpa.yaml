@@ -23,21 +23,21 @@ spec:
       - containerName: {{ include "cortex-mqtt.fullname" . }}
         mode: "Auto"
         minAllowed:
-          cpu: "100m"
-          memory: "128Mi"
+          cpu: {{ .Values.resources.requests.cpu }}
+          memory: {{ .Values.resources.requests.memory }}
         maxAllowed:
-          cpu: "4"
-          memory: "4Gi"
+          cpu: {{ .Values.resources.limits.cpu }}
+          memory: {{ .Values.resources.limits.memory }}
         controlledResources: ["cpu", "memory"]
         controlledValues: "RequestsAndLimits"
-      - containerName: {{ include "cortex-mqtt.fullname" . }}
+      - containerName: {{ include "cortex-mqtt.fullname" . }}-exporter
         mode: "Auto"
         minAllowed:
-          cpu: "100m"
-          memory: "128Mi"
+          cpu: {{ .Values.exporter.resources.requests.cpu }}
+          memory: {{ .Values.exporter.resources.requests.memory }}
         maxAllowed:
-          cpu: "4"
-          memory: "4Gi"
+          cpu: {{ .Values.exporter.resources.limits.cpu }}
+          memory: {{ .Values.exporter.resources.limits.memory }}
         controlledResources: ["cpu", "memory"]
         controlledValues: "RequestsAndLimits"
 {{- end }}

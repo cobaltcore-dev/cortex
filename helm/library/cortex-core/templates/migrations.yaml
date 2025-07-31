@@ -28,11 +28,11 @@ spec:
           args: ["migrate"]
           resources:
             requests:
-              memory: "1Gi"
-              cpu: "1"
+              memory: {{ .Values.migrationsJob.resources.requests.memory }}
+              cpu: {{ .Values.migrationsJob.resources.requests.cpu }}
             limits:
-              memory: "1Gi"
-              cpu: "1"
+              memory: {{ .Values.migrationsJob.resources.limits.memory }}
+              cpu: {{ .Values.migrationsJob.resources.limits.cpu }}
           volumeMounts:
             # Custom config that can override some values, e.g. conf validation.
             - name: {{ include "cortex.fullname" $ }}-pre-upgrade-config-volume

@@ -24,6 +24,13 @@ spec:
         - name: {{ include "cortex-postgres.fullname" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory }}
+              cpu: {{ .Values.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.resources.limits.memory }}
+              cpu: {{ .Values.resources.limits.cpu }}
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
@@ -39,6 +46,13 @@ spec:
         - name: {{ include "cortex-postgres.fullname" . }}-exporter
           image: "{{ .Values.exporter.image.repository }}:{{ .Values.exporter.image.tag }}"
           imagePullPolicy: {{ .Values.exporter.image.pullPolicy }}
+          resources:
+            requests:
+              memory: {{ .Values.exporter.resources.requests.memory }}
+              cpu: {{ .Values.exporter.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.exporter.resources.limits.memory }}
+              cpu: {{ .Values.exporter.resources.limits.cpu }}
           env:
             - name: DATA_SOURCE_NAME
               value: "postgresql://postgres:$(POSTGRES_PASSWORD)@localhost:5432/postgres?sslmode=disable"
@@ -69,4 +83,4 @@ spec:
         accessModes: ['ReadWriteOnce']
         resources:
           requests:
-            storage: 4Gi
+            storage: {{ .Values.storage.size | default "4Gi" }}

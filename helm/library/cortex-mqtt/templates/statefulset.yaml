@@ -54,6 +54,13 @@ spec:
         - name: {{ include "cortex-mqtt.fullname" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory }}
+              cpu: {{ .Values.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.resources.limits.memory }}
+              cpu: {{ .Values.resources.limits.cpu }}
           volumeMounts:
             - name: {{ include "cortex-mqtt.fullname" . }}-config-rw
               mountPath: /etc/rabbitmq
