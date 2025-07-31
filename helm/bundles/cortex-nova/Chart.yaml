@@ -5,12 +5,12 @@ apiVersion: v2
 name: cortex-nova
 description: A Helm chart deploying Cortex for Nova.
 type: application
-version: 0.0.1
+version: 0.0.2
 appVersion: 0.1.0
 dependencies:
   - name: cortex-core
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.24.0
+    version: 0.24.1
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.5.0
