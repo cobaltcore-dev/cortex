@@ -51,7 +51,7 @@ groups:
       context: liveness
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "Cortex extractor is down"
@@ -68,7 +68,7 @@ groups:
       context: api
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "HTTP request 400 errors too high"
@@ -85,7 +85,7 @@ groups:
       context: api
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "HTTP request 500 errors too high"
@@ -102,7 +102,7 @@ groups:
       context: memory
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "Cortex {{`{{$labels.component}}`}} uses too much memory"
@@ -118,7 +118,7 @@ groups:
       context: cpu
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "Cortex {{`{{$labels.component}}`}} uses too much CPU"
@@ -134,7 +134,7 @@ groups:
       context: syncstatus
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "Sync not successful"
@@ -153,7 +153,7 @@ groups:
       context: syncobjects
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "Cortex is not syncing any new data from {{`{{$labels.datasource}}`}}"
@@ -172,7 +172,7 @@ groups:
       context: syncobjects
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "Cortex is syncing unexpectedly many objects from {{`{{$labels.datasource}}`}}"
@@ -190,7 +190,7 @@ groups:
       context: mqtt
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "Cortex is trying to connect to MQTT too often"
@@ -206,7 +206,7 @@ groups:
       context: db
       dashboard: cortex/cortex
       service: cortex
-      severity: info
+      severity: warning
       support_group: workload-management
     annotations:
       summary: "Cortex is trying to connect to the database too often"
