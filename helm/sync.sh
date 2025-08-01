@@ -60,6 +60,11 @@ for dep in $DEPS; do
   # Check if the .tgz file exists
   TARBALL="$CHARTS_DIR/$NAME-$VERSION.tgz"
   if [ ! -f "$TARBALL" ]; then
+    OLD_TARBALLS=$(ls "$CHARTS_DIR/$NAME-"*.tgz 2>/dev/null || true)
+    if [ -n "$OLD_TARBALLS" ]; then
+      echo "Removing old tarballs: $OLD_TARBALLS"
+      rm -f $OLD_TARBALLS
+    fi
     echo "Missing $TARBALL, pulling from repository..."
     if [ -z "$REPO" ]; then
       echo "No repository specified for $NAME, skipping pull."
