@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Configuration of supported kpis.
@@ -27,6 +28,7 @@ var SupportedKPIs = []plugins.KPI{
 	&shared.HostUtilizationKPI{},
 	&shared.VMMigrationStatisticsKPI{},
 	&shared.VMLifeSpanKPI{},
+	&shared.VMCommitmentsKPI{},
 }
 
 // Pipeline that extracts kpis from the database.
@@ -38,6 +40,22 @@ type KPIPipeline struct {
 // Create a new kpi pipeline with kpis contained in the configuration.
 func NewPipeline(config conf.KPIsConfig) KPIPipeline {
 	return KPIPipeline{config: config}
+}
+
+type kpilogger struct {
+	// Wrapped kpi to execute.
+	kpi plugins.KPI
+}
+
+func (l kpilogger) Describe(ch chan<- *prometheus.Desc) {
+	slog.Info("kpi: describing", "name", l.kpi.GetName())
+	l.kpi.Describe(ch)
+}
+
+func (l kpilogger) Collect(ch chan<- prometheus.Metric) {
+	slog.Info("kpi: collecting", "name", l.kpi.GetName())
+	l.kpi.Collect(ch)
+	slog.Info("kpi: collected", "name", l.kpi.GetName())
 }
 
 // Initialize the kpi pipeline with the given database and registry.
@@ -55,7 +73,7 @@ func (p *KPIPipeline) Init(kpis []plugins.KPI, db db.DB, registry *monitoring.Re
 		if err := kpi.Init(db, kpiConf.Options); err != nil {
 			return fmt.Errorf("failed to initialize kpi %s: %w", kpiConf.Name, err)
 		}
-		registry.MustRegister(kpi)
+		registry.MustRegister(kpilogger{kpi: kpi})
 		slog.Info(
 			"kpi: added kpi",
 			"name", kpiConf.Name,
