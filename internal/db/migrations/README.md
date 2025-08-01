@@ -1,3 +1,30 @@
+<!--
+# SPDX-FileCopyrightText: Copyright 2024 SAP SE or an SAP affiliate company and cobaltcore-dev contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+-->
+
+## Adding new DB migrations
+
+Sometimes we may need to make changes to existing tables in the database.
+
+It is recommended to *first* check if the table can be renamed like this:
+
+`my_table` -> `my_table_v2` -> `my_table_v3`
+
+This ensures that the old table will remain available while the old pods are still running and therefore allow for a seamless rolling update. Also, it allows for a rollback in case the new table is not working as expected, and maintains the data in the old table.
+
+If this is not possible, create a new migration file in this directory. Migration files should be named like this:
+
+- `001_example_migration.sql`
+- `002_another_migration.sql`
+- ...
+
+The number ensures the migrations are executed in the correct order. New migrations will be automatically detected and executed by the migrations job.
+
+Example migration file:
+
+```sql
 -- Copyright 2025 SAP SE
 -- SPDX-License-Identifier: Apache-2.0
 
@@ -30,3 +57,4 @@ ALTER TABLE IF EXISTS feature_vm_host_residency
     DROP COLUMN IF EXISTS flavor_id;
 ALTER TABLE IF EXISTS feature_vm_life_span
     DROP COLUMN IF EXISTS flavor_id;
+```
