@@ -189,7 +189,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	var model M
 	tableName := model.TableName()
 	nRows, err := s.DB.SelectInt(
-		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = :name", tableName),
+		"SELECT COUNT(*) FROM "+tableName+" WHERE name = :name",
 		map[string]any{"name": s.MetricConf.Alias},
 	)
 	if err != nil {
@@ -202,13 +202,12 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 		return start, nil
 	}
 	if err := s.DB.SelectOne(
-		&model,
-		fmt.Sprintf(`
-			SELECT name, timestamp FROM %s
-			WHERE name = :name
-			ORDER BY timestamp
-			DESC LIMIT 1
-		`, tableName),
+		&model, `
+		 SELECT name, timestamp FROM `+tableName+`
+		  WHERE name = :name
+		  ORDER BY timestamp
+		   DESC LIMIT 1
+		`,
 		map[string]any{"name": s.MetricConf.Alias},
 	); err != nil {
 		return time.Time{}, fmt.Errorf("failed to get latest timestamp: %w", err)
@@ -240,7 +239,7 @@ func (s *syncer[M]) sync(start time.Time) {
 	)
 	// Drop all metrics that are older than <timeRangeSeconds> from the config file. (Default is 4 weeks)
 	result, err := s.DB.Exec(
-		fmt.Sprintf("DELETE FROM %s WHERE name = :name AND timestamp < :timestamp", tableName),
+		"DELETE FROM "+tableName+" WHERE name = :name AND timestamp < :timestamp",
 		map[string]any{"name": s.MetricConf.Alias, "timestamp": time.Now().Add(-s.SyncTimeRange)},
 	)
 	if err != nil {
@@ -281,7 +280,7 @@ func (s *syncer[M]) countMetrics() {
 	// Count rows for the gauge.
 	var model M
 	if nRows, err := s.DB.SelectInt(
-		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE name = :name", model.TableName()),
+		"SELECT COUNT(*) FROM "+model.TableName()+" WHERE name = :name",
 		map[string]any{"name": s.MetricConf.Alias},
 	); err == nil {
 		slog.Info("counted metrics", "nRows", nRows, "metricAlias", s.MetricConf.Alias)

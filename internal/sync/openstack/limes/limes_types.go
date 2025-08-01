@@ -58,6 +58,9 @@ type Commitment struct {
 	// project, but still block capacity and still count towards billing. Not
 	// shown if false.
 	Transferable bool `json:"transferable" db:"transferable"`
+	// The current status of this commitment. If provided, one of "planned",
+	// "pending", "guaranteed", "confirmed", "superseded", or "expired".
+	Status string `json:"status,omitempty" db:"status"`
 	// Whether a mail notification should be sent if a created commitment is
 	// confirmed. Can only be set if the commitment contains a confirm_by value.
 	NotifyOnConfirm bool `json:"notify_on_confirm" db:"notify_on_confirm"`
@@ -71,7 +74,7 @@ type Commitment struct {
 }
 
 // Table in which the openstack model is stored.
-func (Commitment) TableName() string { return "openstack_limes_commitments" }
+func (Commitment) TableName() string { return "openstack_limes_commitments_v2" }
 
 // Indexes for the resource provider table.
 func (Commitment) Indexes() []db.Index { return nil }

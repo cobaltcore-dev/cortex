@@ -21,7 +21,7 @@ migrationsJob:
   resources:
     requests:
       memory: "512Mi"
-      cpu: "1"
+      cpu: "100m" # Will be increased by the VPA if needed.
     limits:
       memory: "4Gi"
       cpu: "4"
@@ -35,7 +35,7 @@ migrationsJob:
 resources:
   requests:
     memory: "128Mi"
-    cpu: "1"
+    cpu: "10m" # Will be increased by the VPA if needed.
   limits:
     memory: "1Gi"
     cpu: "4"
@@ -118,6 +118,22 @@ conf:
         - alias:
           query:
           type:
+      # Prometheus hosts to consider when syncing the metrics.
+      hosts:
+        - name:
+          # Prometheus URL to scrape metrics from.
+          url:
+          # The metric types to scrape from this Prometheus instance.
+          provides: []
+          # Optional, only required if Prometheus is configured with SSO.
+          sso:
+            # Certificate "public key".
+            cert: ""
+            # Certificate private key.
+            certKey: ""
+            # Whether the certificate is self-signed.
+            # If true, the certificate is not verified.
+            selfSigned: false
     openstack:
       nova:
         # One of admin, public, or internal
@@ -234,6 +250,8 @@ conf:
 
 # Values passed to the service through a kubernetes secret.
 # The keys of these values should correspond to the keys used above in the conf.
+#
+# Note: Please only add values here that MUST be overridden using the "secrets:" key.
 secrets:
   # MQTT broker connection credentials.
   mqtt:
@@ -250,31 +268,3 @@ secrets:
     projectDomainName:
     username:
     password:
-    # Optional, only required if OpenStack is configured with SSO.
-    # Note: the certificate will be used for all other OpenStack services.
-    sso:
-      # Certificate "public key".
-      cert: ""
-      # Certificate private key.
-      certKey: ""
-      # Whether the certificate is self-signed.
-      # If true, the certificate is not verified.
-      selfSigned: false
-  sync:
-    prometheus:
-      # Prometheus hosts to consider when syncing the metrics.
-      hosts:
-        - name:
-          # Prometheus URL to scrape metrics from.
-          url:
-          # The metric types to scrape from this Prometheus instance.
-          provides: []
-          # Optional, only required if Prometheus is configured with SSO.
-          sso:
-            # Certificate "public key".
-            cert: ""
-            # Certificate private key.
-            certKey: ""
-            # Whether the certificate is self-signed.
-            # If true, the certificate is not verified.
-            selfSigned: false

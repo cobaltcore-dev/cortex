@@ -86,7 +86,8 @@ func TestVROpsHostsystemContentionShortTermExtractor_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_vrops_hostsystem_contention table
 	var contentions []VROpsHostsystemContentionShortTerm
-	_, err = testDB.Select(&contentions, "SELECT * FROM feature_vrops_hostsystem_contention_short_term")
+	table := VROpsHostsystemContentionShortTerm{}.TableName()
+	_, err = testDB.Select(&contentions, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

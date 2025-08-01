@@ -80,7 +80,8 @@ func TestHostCapabilitiesExtractor_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_host_capabilities table
 	var traitsResult []HostCapabilities
-	_, err := testDB.Select(&traitsResult, "SELECT * FROM feature_host_capabilities")
+	table := HostCapabilities{}.TableName()
+	_, err := testDB.Select(&traitsResult, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

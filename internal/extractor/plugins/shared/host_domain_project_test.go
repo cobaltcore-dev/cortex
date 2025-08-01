@@ -127,8 +127,8 @@ func TestHostDomainProjectExtractor_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_host_domain_project table
 	var results []HostDomainProject
-
-	if _, err := testDB.Select(&results, "SELECT * FROM feature_host_domain_project"); err != nil {
+	table := HostDomainProject{}.TableName()
+	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

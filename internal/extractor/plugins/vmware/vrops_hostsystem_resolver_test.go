@@ -87,7 +87,8 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_vrops_resolved_hostsystem table
 	var resolvedHostsystems []ResolvedVROpsHostsystem
-	_, err = testDB.Select(&resolvedHostsystems, "SELECT * FROM feature_vrops_resolved_hostsystem")
+	table := ResolvedVROpsHostsystem{}.TableName()
+	_, err = testDB.Select(&resolvedHostsystems, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

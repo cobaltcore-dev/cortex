@@ -100,7 +100,8 @@ func (m *migrater) Migrate(skipOnFresh bool) {
 
 	// Get the migrations that were executed already.
 	var executedFiles []string
-	if _, err := m.db.Select(&executedFiles, "SELECT file_name FROM migrations"); err != nil {
+	table := Migration{}.TableName()
+	if _, err := m.db.Select(&executedFiles, "SELECT file_name FROM "+table); err != nil {
 		panic(err)
 	}
 	migrationsToExecute := []string{}

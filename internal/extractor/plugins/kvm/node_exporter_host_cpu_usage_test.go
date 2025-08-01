@@ -75,7 +75,8 @@ func TestNodeExporterHostCPUUsageExtractor_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_host_cpu_usage table
 	var usages []NodeExporterHostCPUUsage
-	_, err = testDB.Select(&usages, "SELECT * FROM feature_host_cpu_usage")
+	table := NodeExporterHostCPUUsage{}.TableName()
+	_, err = testDB.Select(&usages, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

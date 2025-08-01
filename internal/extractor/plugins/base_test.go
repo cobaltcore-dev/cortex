@@ -166,7 +166,8 @@ func TestBaseExtractor_Extracted(t *testing.T) {
 
 	// Verify the data was replaced in the mock_feature table
 	var features []MockFeature
-	_, err = testDB.Select(&features, "SELECT * FROM mock_feature")
+	table := MockFeature{}.TableName()
+	_, err = testDB.Select(&features, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -222,7 +223,8 @@ func TestBaseExtractor_ExtractSQL(t *testing.T) {
 	extractor := BaseExtractor[MockOptions, MockFeature]{DB: testDB}
 
 	// Define the SQL query to extract features
-	query := "SELECT * FROM mock_feature"
+	table := MockFeature{}.TableName()
+	query := "SELECT * FROM " + table
 
 	// Call the ExtractSQL function
 	extractedFeatures, err := extractor.ExtractSQL(query)

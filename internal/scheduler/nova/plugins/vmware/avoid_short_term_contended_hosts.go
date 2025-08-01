@@ -58,9 +58,10 @@ func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request ap
 
 	var highlyContendedHosts []vmware.VROpsHostsystemContentionShortTerm
 	group := "scheduler-nova"
-	if _, err := s.DB.SelectTimed(group, &highlyContendedHosts, `
-		SELECT * FROM feature_vrops_hostsystem_contention_short_term
-	`); err != nil {
+	table := vmware.VROpsHostsystemContentionShortTerm{}.TableName()
+	if _, err := s.DB.SelectTimed(group, &highlyContendedHosts,
+		"SELECT * FROM "+table,
+	); err != nil {
 		return nil, err
 	}
 
