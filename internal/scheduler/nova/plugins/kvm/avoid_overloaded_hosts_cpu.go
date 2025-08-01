@@ -58,9 +58,10 @@ func (s *AvoidOverloadedHostsCPUStep) Run(traceLog *slog.Logger, request api.Ext
 
 	var hostCPUUsages []kvm.NodeExporterHostCPUUsage
 	group := "scheduler-nova"
-	if _, err := s.DB.SelectTimed(group, &hostCPUUsages, `
-		SELECT * FROM feature_host_cpu_usage
-	`); err != nil {
+	table := kvm.NodeExporterHostCPUUsage{}.TableName()
+	if _, err := s.DB.SelectTimed(
+		group, &hostCPUUsages, "SELECT * FROM "+table,
+	); err != nil {
 		return nil, err
 	}
 

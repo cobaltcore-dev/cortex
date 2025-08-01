@@ -49,8 +49,9 @@ func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.E
 	// Check how noisy the project is on the compute hosts.
 	var projectNoisinessOnHosts []vmware.VROpsProjectNoisiness
 	group := "scheduler-nova"
+	table := vmware.VROpsProjectNoisiness{}.TableName()
 	if _, err := s.DB.SelectTimed(group, &projectNoisinessOnHosts, `
-		SELECT * FROM feature_vrops_project_noisiness
+		SELECT * FROM `+table+`
 		WHERE project = :project_id
 	`, map[string]any{
 		"project_id": request.Spec.Data.ProjectID,

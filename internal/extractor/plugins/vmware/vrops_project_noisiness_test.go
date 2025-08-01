@@ -31,7 +31,8 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 	}
 
 	// Will fail when the table does not exist
-	err := testDB.SelectOne(&VROpsProjectNoisiness{}, "SELECT * FROM feature_vrops_project_noisiness LIMIT 1")
+	table := VROpsProjectNoisiness{}.TableName()
+	err := testDB.SelectOne(&VROpsProjectNoisiness{}, "SELECT * FROM "+table+" LIMIT 1")
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}

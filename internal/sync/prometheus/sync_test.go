@@ -159,7 +159,8 @@ func TestSyncer_sync(t *testing.T) {
 
 	// Verify the metrics were inserted
 	var metrics []VROpsVMMetric
-	if _, err := testDB.Select(&metrics, "SELECT * FROM vrops_vm_metrics"); err != nil {
+	table := VROpsVMMetric{}.TableName()
+	if _, err := testDB.Select(&metrics, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(metrics) != 4*7 {
@@ -202,7 +203,8 @@ func TestSyncer_sync_Failure(t *testing.T) {
 
 	// Verify no metrics were inserted
 	var metrics []VROpsVMMetric
-	if _, err := testDB.Select(&metrics, "SELECT * FROM vrops_vm_metrics"); err != nil {
+	table := VROpsVMMetric{}.TableName()
+	if _, err := testDB.Select(&metrics, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(metrics) != 0 {
@@ -260,7 +262,8 @@ func TestSyncer_DeleteOldMetrics(t *testing.T) {
 
 	// Verify old metrics were deleted
 	var metrics []VROpsVMMetric
-	if _, err := testDB.Select(&metrics, "SELECT name, timestamp, value FROM vrops_vm_metrics"); err != nil {
+	table := VROpsVMMetric{}.TableName()
+	if _, err := testDB.Select(&metrics, "SELECT name, timestamp, value FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -328,7 +331,8 @@ func TestSyncer_BenchmarkMemoryUsage(t *testing.T) {
 
 	// Verify the metrics were inserted
 	var metrics []VROpsVMMetric
-	if _, err := testDB.Select(&metrics, "SELECT * FROM vrops_vm_metrics"); err != nil {
+	table := VROpsVMMetric{}.TableName()
+	if _, err := testDB.Select(&metrics, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(metrics) == 0 {
@@ -500,7 +504,8 @@ func TestSyncer_SyncFunction(t *testing.T) {
 
 	// Verify the metrics were inserted
 	var metrics []VROpsVMMetric
-	if _, err := testDB.Select(&metrics, "SELECT * FROM vrops_vm_metrics"); err != nil {
+	table := VROpsVMMetric{}.TableName()
+	if _, err := testDB.Select(&metrics, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(metrics) == 0 {

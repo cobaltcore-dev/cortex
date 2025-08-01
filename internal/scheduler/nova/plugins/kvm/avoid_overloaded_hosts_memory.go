@@ -58,9 +58,10 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 
 	var hostMemoryActive []kvm.NodeExporterHostMemoryActive
 	group := "scheduler-nova"
-	if _, err := s.DB.SelectTimed(group, &hostMemoryActive, `
-		SELECT * FROM feature_host_memory_active
-	`); err != nil {
+	table := kvm.NodeExporterHostMemoryActive{}.TableName()
+	if _, err := s.DB.SelectTimed(group, &hostMemoryActive,
+		"SELECT * FROM "+table,
+	); err != nil {
 		return nil, err
 	}
 

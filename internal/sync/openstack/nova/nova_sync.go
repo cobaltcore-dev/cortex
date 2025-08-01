@@ -127,8 +127,10 @@ func (s *NovaSyncer) getLastSyncTime(tableName string) *time.Time {
 	// Check when the last sync run was performed, if there was one.
 	var lastSyncTime *time.Time
 	var lastSync novaSync
+	table := novaSync{}.TableName()
 	if err := s.DB.SelectOne(&lastSync, `
-		SELECT * FROM nova_sync WHERE name = :name ORDER BY time DESC LIMIT 1
+		SELECT * FROM `+table+`
+		WHERE name = :name ORDER BY time DESC LIMIT 1
 	`, map[string]any{"name": tableName}); err == nil {
 		lastSyncTime = &lastSync.Time
 		slog.Info("last nova sync run", "time", lastSync.Time, "table", tableName)

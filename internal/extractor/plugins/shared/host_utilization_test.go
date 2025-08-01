@@ -121,7 +121,8 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_host_utilization table
 	var utilizations []HostUtilization
-	_, err := testDB.Select(&utilizations, "SELECT * FROM feature_host_utilization")
+	table := HostUtilization{}.TableName()
+	_, err := testDB.Select(&utilizations, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
