@@ -11,8 +11,7 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # Build and publish the core Cortex image.
-  core:
+  build-and-push:
     permissions:
       contents: read
       packages: write
@@ -61,7 +60,7 @@ jobs:
           tags: ${{ steps.meta_cortex.outputs.tags }}
           labels: ${{ steps.meta_cortex.outputs.labels }}
           build-args: |
-            GIT_TAG=${{ github.ref_name }}
+            GIT_TAG=${{ github.ref_name }}-postgres
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation for Cortex Postgres
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
@@ -70,6 +69,7 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
           subject-digest: ${{ steps.push_cortex_postgres.outputs.digest }}
           push-to-registry: true
+      # Always build and push the cortex image.
       - name: Build and Push Cortex
         id: push_cortex
         uses: docker/build-push-action@v6
