@@ -2,4 +2,4 @@
 
 https://github.com/docker-library/postgres with the most recent stable version of debian.
 
-Current postgres version: `v17`
+Current postgres version: `v17.5`
