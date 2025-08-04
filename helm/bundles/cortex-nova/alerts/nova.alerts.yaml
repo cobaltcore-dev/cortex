@@ -147,7 +147,7 @@ groups:
 
   - alert: CortexNovaSyncObjectsDroppedToZero
     expr: cortex_sync_objects{component=~"cortex-nova-.*"} == 0
-    for: 5m
+    for: 15m
     labels:
       context: syncobjects
       dashboard: cortex/cortex

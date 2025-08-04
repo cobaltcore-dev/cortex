@@ -148,7 +148,7 @@ groups:
 
   - alert: CortexManilaSyncObjectsDroppedToZero
     expr: cortex_sync_objects{component=~"cortex-manila-.*"} == 0
-    for: 5m
+    for: 15m
     labels:
       context: syncobjects
       dashboard: cortex/cortex
