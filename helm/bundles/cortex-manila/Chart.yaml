@@ -10,10 +10,10 @@ appVersion: 0.1.0
 dependencies:
   - name: cortex-core
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.24.2
+    version: 0.24.3
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.5.0
+    version: 0.5.1
   - name: cortex-mqtt
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.1.0
