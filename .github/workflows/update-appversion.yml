@@ -32,7 +32,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add helm/library/cortex-core/Chart.yaml
-          git commit -m "Bump cortex-core chart `appVersion`s to `${{ steps.vars.outputs.sha }}` [skip ci]" || echo "No changes to commit"
+          git commit -m "Bump cortex-core chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
 
       # Only bumped if there are changes in the postgres directory.
@@ -52,5 +52,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add helm/library/cortex-postgres/Chart.yaml
-          git commit -m "Bump cortex-postgres chart `appVersion`s to `${{ steps.vars.outputs.sha }}` [skip ci]" || echo "No changes to commit"
+          git commit -m "Bump cortex-postgres chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
