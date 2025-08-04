@@ -105,7 +105,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex {{`{{$labels.component}}`}} uses too much memory"
+      summary: "Cortex `{{$labels.component}}` uses too much memory"
       description: >
         Cortex should not be using more than 1000 MiB of memory. Usually it
         should use much less, so there may be a memory leak or other changes
@@ -121,7 +121,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex {{`{{$labels.component}}`}} uses too much CPU"
+      summary: "Cortex `{{$labels.component}}` uses too much CPU"
       description: >
         Cortex should not be using more than 50% of a single CPU core. Usually
         it should use much less, so there may be a CPU leak or other changes
@@ -156,7 +156,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex is not syncing any new data from {{`{{$labels.datasource}}`}}"
+      summary: "Cortex is not syncing any new data from `{{$labels.datasource}}`"
       description: >
         Cortex is not syncing any objects from a datasource. This may happen
         when the datasource (OpenStack, Prometheus, etc.) is down or the sync
@@ -175,7 +175,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex is syncing unexpectedly many objects from {{`{{$labels.datasource}}`}}"
+      summary: "Cortex is syncing unexpectedly many objects from `{{$labels.datasource}}`"
       description: >
         Cortex is syncing more than 1 million objects from a datasource. This
         may happen when the datasource (OpenStack, Prometheus, etc.) returns
