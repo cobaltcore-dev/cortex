@@ -37,7 +37,6 @@ jobs:
         uses: tj-actions/changed-files@v46
         with:
           files: |
-            .github/workflows/push-images.yaml
             postgres/**
       - name: Docker Meta (Cortex Postgres)
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
