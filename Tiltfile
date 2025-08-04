@@ -62,6 +62,7 @@ tilt_values = os.getenv('TILT_VALUES_PATH')
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
     'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
 ])
+docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 
 # Package the lib charts locally and sync them to the bundle charts. In this way
 # we can bump the lib charts locally and test them before pushing them to the OCI registry.

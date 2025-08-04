@@ -4,8 +4,7 @@
 fullnameOverride: cortex-postgresql
 
 image:
-  repository: postgres
-  tag: "17.5-alpine3.22"
+  repository: ghcr.io/cobaltcore-dev/cortex-postgres
   pullPolicy: IfNotPresent
 
 storage:

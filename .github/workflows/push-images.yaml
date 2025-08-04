@@ -53,9 +53,37 @@ jobs:
           build-args: |
             GIT_TAG=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
-      - name: Generate Artifact Attestation
+      - name: Generate Artifact Attestation for Cortex
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
           subject-digest: ${{ steps.push_cortex.outputs.digest }}
+          push-to-registry: true
+      # Only build and push the postgres image if there are changes in the
+      # postgres directory.
+      - name: Get all changed postgres/ files
+        id: changed_postgres_files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            postgres/**
+      - name: Build and Push Cortex Postgres
+        if: steps.changed_postgres_files.outputs.all_changed_files != ''
+        id: push_cortex_postgres
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_cortex.outputs.tags }}
+          labels: ${{ steps.meta_cortex.outputs.labels }}
+          build-args: |
+            GIT_TAG=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+      - name: Generate Artifact Attestation for Cortex Postgres
+        if: steps.changed_postgres_files.outputs.all_changed_files != ''
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
+          subject-digest: ${{ steps.push_cortex_postgres.outputs.digest }}
           push-to-registry: true
