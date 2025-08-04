@@ -23,6 +23,13 @@ jobs:
         id: vars
         run: echo "sha=sha-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+      - name: Get all changed postgres/ files
+        id: changed_postgres_files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            postgres/**
+
       # Always bumped
       - name: Update appVersion in cortex-core Chart.yaml
         run: |
@@ -36,12 +43,6 @@ jobs:
           git push origin HEAD:main
 
       # Only bumped if there are changes in the postgres directory.
-      - name: Get all changed postgres/ files
-        id: changed_postgres_files
-        uses: tj-actions/changed-files@v46
-        with:
-          files: |
-            postgres/**
       - name: Update appVersion in cortex-postgres Chart.yaml
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
         run: |
