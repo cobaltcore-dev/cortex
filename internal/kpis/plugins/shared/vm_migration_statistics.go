@@ -54,9 +54,6 @@ func (k *VMMigrationStatisticsKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *VMMigrationStatisticsKPI) Collect(ch chan<- prometheus.Metric) {
-	slog.Info("collecting vm migration statistics")
-	defer slog.Info("finished collecting vm migration statistics")
-
 	var hostResidencies []shared.VMHostResidency
 	tableName := shared.VMHostResidency{}.TableName()
 	if _, err := k.DB.Select(&hostResidencies, "SELECT * FROM "+tableName); err != nil {

@@ -104,7 +104,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex {{`{{$labels.component}}`}} uses too much memory"
+      summary: "Cortex `{{$labels.component}}` uses too much memory"
       description: >
         Cortex should not be using more than 1000 MiB of memory. Usually it
         should use much less, so there may be a memory leak or other changes
@@ -120,7 +120,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex {{`{{$labels.component}}`}} uses too much CPU"
+      summary: "Cortex `{{$labels.component}}` uses too much CPU"
       description: >
         Cortex should not be using more than 50% of a single CPU core. Usually
         it should use much less, so there may be a CPU leak or other changes
@@ -147,7 +147,7 @@ groups:
 
   - alert: CortexNovaSyncObjectsDroppedToZero
     expr: cortex_sync_objects{component=~"cortex-nova-.*"} == 0
-    for: 5m
+    for: 15m
     labels:
       context: syncobjects
       dashboard: cortex/cortex
@@ -155,7 +155,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex is not syncing any new data from {{`{{$labels.datasource}}`}}"
+      summary: "Cortex is not syncing any new data from `{{$labels.datasource}}`"
       description: >
         Cortex is not syncing any objects from a datasource. This may happen
         when the datasource (OpenStack, Prometheus, etc.) is down or the sync
@@ -174,7 +174,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex is syncing unexpectedly many objects from {{`{{$labels.datasource}}`}}"
+      summary: "Cortex is syncing unexpectedly many objects from `{{$labels.datasource}}`"
       description: >
         Cortex is syncing more than 1 million objects from a datasource. This
         may happen when the datasource (OpenStack, Prometheus, etc.) returns
@@ -223,9 +223,9 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "CPU utilization on host {{`{{$labels.compute_host_name}}`}} is above 100%"
+      summary: "CPU utilization on host `{{$labels.compute_host_name}}` is above 100%"
       description: >
-        OpenStack Placement reports CPU utilization above 100% for host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} for over 5 minutes.
+        OpenStack Placement reports CPU utilization above 100% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
         This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
         Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
         This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
@@ -256,9 +256,9 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Memory utilization on host {{`{{$labels.compute_host_name}}`}} is above 100%"
+      summary: "Memory utilization on host `{{$labels.compute_host_name}}` is above 100%"
       description: >
-        OpenStack Placement reports Memory utilization above 100% for host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} for over 5 minutes.
+        OpenStack Placement reports Memory utilization above 100% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
         This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
         Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
         This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
@@ -273,9 +273,9 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Disk utilization on host {{`{{$labels.compute_host_name}}`}} is above 100%."
+      summary: "Disk utilization on host `{{$labels.compute_host_name}}` is above 100%."
       description: >
-        OpenStack Placement reports Disk utilization above 100% for host {{`{{$labels.compute_host_name}}`}} in AZ {{`{{$labels.availability_zone}}`}} for over 5 minutes.
+        OpenStack Placement reports Disk utilization above 100% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
         This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
         Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
         This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.

@@ -29,7 +29,6 @@ type NovaAPI interface {
 	// Get all nova hypervisors since the timestamp.
 	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	// Get all changed nova flavors since the timestamp.
-	// Note: This should only include the public flavors.
 	GetChangedFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error)
 	// Get all changed nova migrations since the timestamp.
 	GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error)
@@ -177,7 +176,7 @@ func (api *novaAPI) GetChangedFlavors(ctx context.Context, changedSince *time.Ti
 		}
 		// It is important to omit the changes-since parameter if it is nil.
 		// Otherwise Nova will return huge amounts of data since the beginning of time.
-		lo := flavors.ListOpts{}
+		lo := flavors.ListOpts{AccessType: flavors.AllAccess} // Also private flavors.
 		if changedSince != nil {
 			lo.ChangesSince = changedSince.Format(time.RFC3339)
 		}

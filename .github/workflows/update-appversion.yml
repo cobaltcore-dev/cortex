@@ -23,14 +23,35 @@ jobs:
         id: vars
         run: echo "sha=sha-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Update appVersion in Chart.yaml
+      - name: Get all changed postgres/ files
+        id: changed_postgres_files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            postgres/**
+
+      # Always bumped
+      - name: Update appVersion in cortex-core Chart.yaml
         run: |
           sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' helm/library/cortex-core/Chart.yaml
-
-      - name: Commit and push changes
+      - name: Commit and push changes for cortex-core
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add helm/library/cortex-core/Chart.yaml
-          git commit -m "Bump helm/library/cortex-core appVersion to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git commit -m "Bump cortex-core chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main
+
+      # Only bumped if there are changes in the postgres directory.
+      - name: Update appVersion in cortex-postgres Chart.yaml
+        if: steps.changed_postgres_files.outputs.all_changed_files != ''
+        run: |
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' helm/library/cortex-postgres/Chart.yaml
+      - name: Commit and push changes for cortex-postgres
+        if: steps.changed_postgres_files.outputs.all_changed_files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm/library/cortex-postgres/Chart.yaml
+          git commit -m "Bump cortex-postgres chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main

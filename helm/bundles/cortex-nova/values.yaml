@@ -300,6 +300,16 @@ cortex-core:
           dependencies:
             extractors:
               - vm_life_span_histogram_extractor
+        - name: vm_commitments_kpi
+          dependencies:
+            sync:
+              openstack:
+                limes:
+                  types:
+                    - commitments
+                nova:
+                  types:
+                    - flavors
 
     scheduler:
       nova:

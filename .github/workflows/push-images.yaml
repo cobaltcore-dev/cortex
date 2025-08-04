@@ -11,8 +11,7 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # Build and publish the core Cortex image.
-  core:
+  build-and-push:
     permissions:
       contents: read
       packages: write
@@ -31,6 +30,46 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Only build and push the postgres image if there are changes in the
+      # postgres directory.
+      - name: Get all changed postgres/ files
+        id: changed_postgres_files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            postgres/**
+      - name: Docker Meta (Cortex Postgres)
+        if: steps.changed_postgres_files.outputs.all_changed_files != ''
+        id: meta_cortex_postgres
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            latest
+      - name: Build and Push Cortex Postgres
+        if: steps.changed_postgres_files.outputs.all_changed_files != ''
+        id: push_cortex_postgres
+        uses: docker/build-push-action@v6
+        with:
+          context: postgres
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_cortex_postgres.outputs.tags }}
+          labels: ${{ steps.meta_cortex_postgres.outputs.labels }}
+          build-args: |
+            GIT_TAG=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+      - name: Generate Artifact Attestation for Cortex Postgres
+        if: steps.changed_postgres_files.outputs.all_changed_files != ''
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
+          subject-digest: ${{ steps.push_cortex_postgres.outputs.digest }}
+          push-to-registry: true
+      # Always build and push the cortex image.
       - name: Docker Meta (Cortex)
         id: meta_cortex
         uses: docker/metadata-action@v5
@@ -53,7 +92,7 @@ jobs:
           build-args: |
             GIT_TAG=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
-      - name: Generate Artifact Attestation
+      - name: Generate Artifact Attestation for Cortex
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}
