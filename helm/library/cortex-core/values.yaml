@@ -37,7 +37,7 @@ resources:
     memory: "128Mi"
     cpu: "10m" # Will be increased by the VPA if needed.
   limits:
-    memory: "1Gi"
+    memory: "6Gi"
     cpu: "4"
 
 # Liveness and readiness probes for the cortex services.

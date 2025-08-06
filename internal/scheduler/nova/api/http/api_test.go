@@ -53,6 +53,29 @@ func TestCanRunScheduler(t *testing.T) {
 			wantOk: false,
 		},
 		{
+			name: "Unsupported baremetal flavor",
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
+				},
+				Weights: map[string]float64{
+					"unknown_host": 1.0,
+				},
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:cpu_arch": "x86_64",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantOk: false,
+		},
+		{
 			name: "Valid request",
 			request: api.ExternalSchedulerRequest{
 				Hosts: []api.ExternalSchedulerHost{
