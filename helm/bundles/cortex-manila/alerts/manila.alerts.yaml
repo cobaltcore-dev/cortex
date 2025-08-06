@@ -96,7 +96,7 @@ groups:
         placement will be less desirable. Thus, no immediate action is needed.
 
   - alert: CortexManilaHighMemoryUsage
-    expr: process_resident_memory_bytes{component=~"cortex-manila-.*"} > 1000 * 1024 * 1024
+    expr: process_resident_memory_bytes{component=~"cortex-manila-.*"} > 6000 * 1024 * 1024
     for: 5m
     labels:
       context: memory
@@ -107,7 +107,7 @@ groups:
     annotations:
       summary: "Cortex `{{$labels.component}}` uses too much memory"
       description: >
-        Cortex should not be using more than 1000 MiB of memory. Usually it
+        Cortex should not be using more than 6000 MiB of memory. Usually it
         should use much less, so there may be a memory leak or other changes
         that are causing the memory usage to increase significantly.
 
@@ -166,7 +166,7 @@ groups:
         service will have a less recent view of the datacenter.
 
   - alert: CortexManilaSyncObjectsTooHigh
-    expr: cortex_sync_objects{component=~"cortex-manila-.*"} > 1000000
+    expr: cortex_sync_objects{component=~"cortex-manila-.*"} > 10000000
     for: 5m
     labels:
       context: syncobjects
