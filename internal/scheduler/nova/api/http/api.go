@@ -59,6 +59,12 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 			return false, "weight assigned to unknown host"
 		}
 	}
+	// Cortex doesn't support baremetal flavors.
+	// See: https://github.com/sapcc/nova/blob/5fcb125/nova/utils.py#L1234
+	extraSpecs := requestData.Spec.Data.Flavor.Data.ExtraSpecs
+	if _, ok := extraSpecs["capabilities:cpu_arch"]; ok {
+		return false, "baremetal flavors are not supported"
+	}
 	return true, ""
 }
 
