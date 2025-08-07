@@ -213,23 +213,6 @@ groups:
         Cortex is trying to connect to the database too often. This may happen
         when the database is down or the connection parameters are misconfigured.
 
-  - alert: CortexNovaHostCPUUtilizationAbove100Percent
-    expr: cortex_host_utilization_per_host_pct{component=~"cortex-nova-.*",resource="cpu"} > 100
-    for: 5m
-    labels:
-      context: hostutilization
-      dashboard: cortex/cortex
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "CPU utilization on host `{{$labels.compute_host_name}}` is above 100%"
-      description: >
-        OpenStack Placement reports CPU utilization above 100% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
-        This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
-        Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
-        This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
-
   - alert: CortexNovaDeschedulerPipelineErroring
     expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{component=~"cortex-nova-.*",error="true"}[2m]) > 0
     for: 5m
@@ -246,6 +229,23 @@ groups:
         This may indicate issues with the descheduling logic or the underlying infrastructure.
         It is recommended to investigate the descheduler logs and the state of the VMs being processed.
 
+  - alert: CortexNovaHostCPUUtilizationAbove100Percent
+    expr: cortex_host_utilization_per_host_pct{component=~"cortex-nova-.*",resource="cpu"} > 100
+    for: 5m
+    labels:
+      context: hostutilization
+      dashboard: cortex/cortex
+      service: cortex
+      severity: info
+      support_group: workload-management
+    annotations:
+      summary: "CPU utilization on host `{{$labels.compute_host_name}}` is above 100%"
+      description: >
+        OpenStack Placement reports CPU utilization above 100% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
+        This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
+        Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
+        This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
+
   - alert: CortexNovaHostMemoryUtilizationAbove100Percent
     expr: cortex_host_utilization_per_host_pct{component=~"cortex-nova-.*",resource="memory"} > 100
     for: 5m
@@ -253,7 +253,7 @@ groups:
       context: hostutilization
       dashboard: cortex/cortex
       service: cortex
-      severity: warning
+      severity: info
       support_group: workload-management
     annotations:
       summary: "Memory utilization on host `{{$labels.compute_host_name}}` is above 100%"
@@ -270,7 +270,7 @@ groups:
       context: hostutilization
       dashboard: cortex/cortex
       service: cortex
-      severity: warning
+      severity: info
       support_group: workload-management
     annotations:
       summary: "Disk utilization on host `{{$labels.compute_host_name}}` is above 100%."
@@ -279,4 +279,3 @@ groups:
         This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
         Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
         This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
-
