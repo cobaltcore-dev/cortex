@@ -166,7 +166,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			"compute_host":      "vwmare-host",
 			"availability_zone": "az1",
 			"enabled":           "true",
-			"disabled_reason":   "",
+			"disabled_reason":   "-",
 			"projects":          "project1,project2",
 			"domains":           "domain1,domain2",
 			"cpu_architecture":  "cascade-lake",
