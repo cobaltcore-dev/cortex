@@ -120,8 +120,8 @@ func TestHandler(t *testing.T) {
 			requestBody: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
-						ProjectID:  "project1",
-						NInstances: 1,
+						ProjectID:    "project1",
+						NumInstances: 1,
 					},
 				},
 				Hosts: []api.ExternalSchedulerHost{
@@ -139,8 +139,8 @@ func TestHandler(t *testing.T) {
 			requestBody: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
-						ProjectID:  "project1",
-						NInstances: 1,
+						ProjectID:    "project1",
+						NumInstances: 1,
 					},
 				},
 				Hosts: []api.ExternalSchedulerHost{
@@ -158,8 +158,8 @@ func TestHandler(t *testing.T) {
 			requestBody: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
-						ProjectID:  "project1",
-						NInstances: 1,
+						ProjectID:    "project1",
+						NumInstances: 1,
 					},
 				},
 				VMware: true,

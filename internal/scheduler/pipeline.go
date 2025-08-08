@@ -112,19 +112,18 @@ func (p *pipeline[RequestType]) runSteps(log *slog.Logger, request RequestType) 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				name := step.GetName()
-				alias := step.GetAlias()
-				log.Info("scheduler: running step", "name", name, "alias", alias)
-				result, err := step.Run(log, request)
+				stepLog := log.With("stepName", step.GetName(), "stepAlias", step.GetAlias())
+				stepLog.Info("scheduler: running step")
+				result, err := step.Run(stepLog, request)
 				if errors.Is(err, ErrStepSkipped) {
-					log.Info("scheduler: step skipped", "name", name, "alias", alias)
+					stepLog.Info("scheduler: step skipped")
 					return
 				}
 				if err != nil {
-					log.Error("scheduler: failed to run step", "error", err)
+					stepLog.Error("scheduler: failed to run step", "error", err)
 					return
 				}
-				log.Info("scheduler: finished step", "name", name, "alias", alias)
+				stepLog.Info("scheduler: finished step")
 				lock.Lock()
 				defer lock.Unlock()
 				activationsByStep[getStepKey(step)] = result.Activations

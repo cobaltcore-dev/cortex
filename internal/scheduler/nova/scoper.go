@@ -69,7 +69,6 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerReq
 	}
 	traceLog.Info(
 		"scheduler: scoped step activations",
-		"step", s.GetName(),
 		"hosts not in scope", hostsNotInScope,
 		"hosts in scope", hostsInScope,
 	)
@@ -192,6 +191,10 @@ func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.ExternalSc
 	// If there is no scope, the spec is in scope.
 	if len(s.Scope.SpecSelectors) == 0 {
 		return true
+	}
+	// Check if the step is only for simulated requests.
+	if !request.IsSimulated() && s.Scope.SimulatedOnly {
+		return false
 	}
 	for _, selector := range s.Scope.SpecSelectors {
 		// Check if the selector matches the spec.

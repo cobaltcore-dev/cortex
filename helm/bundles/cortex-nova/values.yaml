@@ -329,6 +329,54 @@ cortex-core:
         # the order will be maintained when the weights are applied to the
         # input Nova weights.
         plugins:
+          # Filters ported from Nova for commitment calculation, currently confed
+          # to not be active and only calculate for simulated requests.
+          #
+          # See: https://github.com/sapcc/nova for the source of implementation.
+          - name: filter_accelerators
+            scope: {simulatedOnly: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [servers]},
+              placement: {types: [traits] },
+            }}}
+          - name: filter_az
+            scope: {simulatedOnly: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [aggregates]},
+            }}}
+          - name: filter_disabled
+            scope: {simulatedOnly: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [servers]},
+              placement: {types: [traits] },
+            }}}
+          - name: filter_external_customer
+            scope: {simulatedOnly: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            options:
+              domainNamePrefixes: ["iaas-"]
+            dependencies: {sync: { openstack: {
+              nova: {types: [servers]},
+              placement: {types: [traits] },
+            }}}
+          - name: filter_packed_virtqueue
+            scope: {simulatedOnly: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [servers]},
+              placement: {types: [traits] },
+            }}}
+
+          # Weighers below.
+
           # Binpack hana vmware vms on hana hosts.
           - name: shared_resource_balancing
             alias: vmware_hana_binpacking

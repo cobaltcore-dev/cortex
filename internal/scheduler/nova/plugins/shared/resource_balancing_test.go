@@ -50,7 +50,7 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
-						NInstances: 1,
+						NumInstances: 1,
 					},
 				},
 				Hosts: []api.ExternalSchedulerHost{
@@ -86,12 +86,12 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
-						NInstances: 1,
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
-								VCPUs:      10,  // 1 tenth
-								MemoryMB:   100, // 1 tenth
-								RootDiskGB: 10,  // 1 tenth
+								VCPUs:    10,  // 1 tenth
+								MemoryMB: 100, // 1 tenth
+								RootGB:   10,  // 1 tenth
 							},
 							Name:      "Flavor",
 							Namespace: "nova",
