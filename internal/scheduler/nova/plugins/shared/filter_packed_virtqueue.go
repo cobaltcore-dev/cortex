@@ -23,6 +23,11 @@ func (s *FilterPackedVirtqueueStep) GetName() string { return "filter_packed_vir
 // If requested, only get hosts with packed virtqueues.
 func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
+	// Don't run this filter for non-simulated requests yet.
+	if !request.IsSimulated() {
+		traceLog.Debug("skipping filter for non-simulated request")
+		return result, nil
+	}
 	// We don't care about the value.
 	_, reqInSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs["hw:virtio_packed_ring"]
 	_, reqInProps := request.Spec.Data.Image.Data.Properties.Data["hw_virtio_packed_ring"]

@@ -38,6 +38,11 @@ func (s *FilterExternalCustomerStep) GetName() string { return "filter_external_
 // that are not intended for external customers.
 func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
+	// Don't run this filter for non-simulated requests yet.
+	if !request.IsSimulated() {
+		traceLog.Debug("skipping filter for non-simulated request")
+		return result, nil
+	}
 	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
 	if err != nil {
 		return nil, err

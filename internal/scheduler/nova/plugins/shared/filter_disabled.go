@@ -23,6 +23,11 @@ func (s *FilterDisabledStep) GetName() string { return "filter_disabled" }
 // Only get hosts that are not disabled.
 func (s *FilterDisabledStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
+	// Don't run this filter for non-simulated requests yet.
+	if !request.IsSimulated() {
+		traceLog.Debug("skipping filter for non-simulated request")
+		return result, nil
+	}
 	var computeHostsDisabled []string
 	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsDisabled, `
 	    SELECT h.service_host

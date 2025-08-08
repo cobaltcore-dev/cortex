@@ -22,6 +22,11 @@ func (s *FilterAZStep) GetName() string { return "filter_az" }
 // Only get hosts in the requested az.
 func (s *FilterAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
+	// Don't run this filter for non-simulated requests yet.
+	if !request.IsSimulated() {
+		traceLog.Debug("skipping filter for non-simulated request")
+		return result, nil
+	}
 	var computeHostsInAZ []string
 	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsInAZ, `
         SELECT DISTINCT compute_host

@@ -77,8 +77,9 @@ func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config
 		})
 	}
 	request := api.ExternalSchedulerRequest{
-		Hosts:   hosts,
-		Weights: weights,
+		Hosts:     hosts,
+		Weights:   weights,
+		Simulated: true,
 	}
 	port := strconv.Itoa(config.GetAPIConfig().Port)
 	apiURL := "http://cortex-nova-scheduler:" + port + "/scheduler/nova/external"

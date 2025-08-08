@@ -23,6 +23,11 @@ func (s *FilterAcceleratorsStep) GetName() string { return "filter_accelerators"
 // If requested, only get hosts with accelerators.
 func (s *FilterAcceleratorsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
+	// Don't run this filter for non-simulated requests yet.
+	if !request.IsSimulated() {
+		traceLog.Debug("skipping filter for non-simulated request")
+		return result, nil
+	}
 	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if _, ok := extraSpecs["accel:device_profile"]; !ok {
 		traceLog.Debug("no accelerators requested")
