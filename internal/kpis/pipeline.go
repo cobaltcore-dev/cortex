@@ -30,6 +30,7 @@ var SupportedKPIs = []plugins.KPI{
 	&shared.VMMigrationStatisticsKPI{},
 	&shared.VMLifeSpanKPI{},
 	&shared.VMCommitmentsKPI{},
+	&shared.HostRunningVMsKPI{},
 }
 
 // Pipeline that extracts kpis from the database.
