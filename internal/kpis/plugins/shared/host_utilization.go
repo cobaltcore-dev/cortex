@@ -41,14 +41,12 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"resource",
 			"availability_zone",
 			"cpu_architecture",
-			"total",
 			"workload_type",
 			"hypervisor_family",
 			"enabled",
 			"disabled_reason",
 			"projects",
 			"domains",
-			"running_vms",
 		},
 		nil,
 	)
@@ -70,7 +68,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostUtilizationPerAvailabilityZone struct {
 		ComputeHostName  string  `db:"compute_host"`
 		AvailabilityZone string  `db:"availability_zone"`
-		RunningVMs       int     `db:"running_vms"`
 		CPUArchitecture  string  `db:"cpu_architecture"`
 		HypervisorFamily string  `db:"hypervisor_family"`
 		WorkloadType     string  `db:"workload_type"`
@@ -78,20 +75,17 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		DisabledReason   *string `db:"disabled_reason"`
 		ProjectNames     *string `db:"project_names"`
 		DomainNames      *string `db:"domain_names"`
-		shared.HostUtilization
+		RAMUtilizedPct   float64 `db:"ram_utilized_pct"`
+		VCPUsUtilizedPct float64 `db:"vcpus_utilized_pct"`
+		DiskUtilizedPct  float64 `db:"disk_utilized_pct"`
 	}
 
 	var hostUtilization []HostUtilizationPerAvailabilityZone
-
-	hostDetailsTableName := sap.HostDetails{}.TableName()
-	hostUtilizationTableName := shared.HostUtilization{}.TableName()
-	hostDomainProjectTableName := shared.HostDomainProject{}.TableName()
 
 	query := `
 		SELECT
     		hd.compute_host,
     		hd.availability_zone,
-    		hd.running_vms,
     		hd.cpu_architecture,
     		hd.hypervisor_family,
     		hd.workload_type,
@@ -101,14 +95,11 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
     		hdp.domain_names,
     		COALESCE(hu.ram_utilized_pct, 0) AS ram_utilized_pct,
 			COALESCE(hu.vcpus_utilized_pct, 0) AS vcpus_utilized_pct,
-			COALESCE(hu.disk_utilized_pct, 0) AS disk_utilized_pct,
-			COALESCE(hu.total_memory_allocatable_mb, 0) AS total_memory_allocatable_mb,
-			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
-			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
-		FROM ` + hostDetailsTableName + ` AS hd
-		LEFT JOIN ` + hostDomainProjectTableName + ` AS hdp
+			COALESCE(hu.disk_utilized_pct, 0) AS disk_utilized_pct
+		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
+		LEFT JOIN ` + shared.HostDomainProject{}.TableName() + ` AS hdp
 		    ON hdp.compute_host = hd.compute_host
-		LEFT JOIN ` + hostUtilizationTableName + ` AS hu
+		LEFT JOIN ` + shared.HostUtilization{}.TableName() + ` AS hu
 		    ON hu.compute_host = hd.compute_host
 		WHERE hd.hypervisor_type != 'ironic';
     `
@@ -142,15 +133,12 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			"ram",
 			host.AvailabilityZone,
 			host.CPUArchitecture,
-			strconv.FormatFloat(host.TotalMemoryAllocatableMB, 'f', 0, 64),
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
 			disabledReason,
 			projectNames,
-			domainNames,
-			strconv.Itoa(host.RunningVMs),
-		)
+			domainNames)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
 			prometheus.GaugeValue,
@@ -159,14 +147,12 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			"cpu",
 			host.AvailabilityZone,
 			host.CPUArchitecture,
-			strconv.FormatFloat(host.TotalVCPUsAllocatable, 'f', 0, 64),
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
 			disabledReason,
 			projectNames,
 			domainNames,
-			strconv.Itoa(host.RunningVMs),
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -176,14 +162,12 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			"disk",
 			host.AvailabilityZone,
 			host.CPUArchitecture,
-			strconv.FormatFloat(host.TotalDiskAllocatableGB, 'f', 0, 64),
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
 			disabledReason,
 			projectNames,
 			domainNames,
-			strconv.Itoa(host.RunningVMs),
 		)
 	}
 
