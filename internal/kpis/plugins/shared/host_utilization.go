@@ -109,7 +109,7 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, host := range hostUtilization {
-		disabledReason := ""
+		disabledReason := "-"
 		if host.DisabledReason != nil {
 			disabledReason = *host.DisabledReason
 		}
@@ -138,7 +138,8 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			enabled,
 			disabledReason,
 			projectNames,
-			domainNames)
+			domainNames,
+		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
 			prometheus.GaugeValue,
