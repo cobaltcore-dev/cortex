@@ -69,7 +69,6 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerReq
 	}
 	traceLog.Info(
 		"scheduler: scoped step activations",
-		"step", s.GetName(),
 		"hosts not in scope", hostsNotInScope,
 		"hosts in scope", hostsInScope,
 	)
