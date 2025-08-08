@@ -70,7 +70,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
@@ -156,7 +156,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
@@ -242,7 +242,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
@@ -328,7 +328,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
@@ -484,7 +484,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
@@ -643,7 +643,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
@@ -802,7 +802,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
@@ -889,7 +889,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -996,7 +996,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1103,7 +1103,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1208,7 +1208,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1319,7 +1319,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1430,7 +1430,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1796,7 +1796,7 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
@@ -2038,6 +2038,8 @@
         "colorScale": "sqrt",
         "colorScheme": "interpolateViridis",
         "exponent": 0.5,
+        "max": 100,
+        "min": 0,
         "mode": "spectrum"
       },
       "dataFormat": "tsbuckets",
@@ -2060,7 +2062,7 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2108,6 +2110,8 @@
         "colorScale": "sqrt",
         "colorScheme": "interpolateViridis",
         "exponent": 0.5,
+        "max": 100,
+        "min": 0,
         "mode": "spectrum"
       },
       "dataFormat": "tsbuckets",
@@ -2130,7 +2134,7 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2178,6 +2182,8 @@
         "colorScale": "sqrt",
         "colorScheme": "interpolateViridis",
         "exponent": 0.5,
+        "max": 100,
+        "min": 0,
         "mode": "spectrum"
       },
       "dataFormat": "tsbuckets",
@@ -2200,7 +2206,7 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "reverseYBuckets": false,
       "targets": [
         {
