@@ -38,23 +38,9 @@ func (s *FilterExternalCustomerStep) GetName() string { return "filter_external_
 // that are not intended for external customers.
 func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
-	hints := request.Spec.Data.SchedulerHints
-	var domainName string
-	domainNameRaw, ok := hints["external_customer_domain"]
-	if !ok {
-		traceLog.Debug("no external customer domain hint found, skipping filter")
-		return result, nil
-	}
-	switch v := domainNameRaw.(type) {
-	case string:
-		domainName = v
-	case []any:
-		if len(v) >= 1 {
-			domainName = v[0].(string)
-		} else {
-			traceLog.Debug("external customer domain hint is empty, skipping filter")
-			return result, nil
-		}
+	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
+	if err != nil {
+		return nil, err
 	}
 	if slices.Contains(s.Options.CustomerIgnoredDomainNames, domainName) {
 		traceLog.Debug("ignoring external customer domain", "domain", domainName)

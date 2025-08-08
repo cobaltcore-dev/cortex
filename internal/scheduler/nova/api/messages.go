@@ -3,7 +3,11 @@
 
 package api
 
-import "log/slog"
+import (
+	"errors"
+	"fmt"
+	"log/slog"
+)
 
 // Host object from the Nova scheduler pipeline.
 // See: https://github.com/sapcc/nova/blob/stable/xena-m3/nova/scheduler/host_manager.py class HostState
@@ -91,8 +95,7 @@ type NovaSpec struct {
 	NumInstances     int    `json:"num_instances"`
 	IsBfv            bool   `json:"is_bfv"`
 
-	// Hints can be a one-element list or a direct value.
-	// See: https://github.com/sapcc/nova/blob/3e715db/nova/objects/request_spec.py#L382
+	// Consider using GetSchedulerHintStr.
 	SchedulerHints map[string]any `json:"scheduler_hints"`
 
 	IgnoreHosts *[]string `json:"ignore_hosts"`
@@ -110,6 +113,32 @@ type NovaSpec struct {
 	NumaTopology         *NovaObject[NovaNumaTopology]         `json:"numa_topology"`
 	RequestedDestination *NovaObject[NovaRequestedDestination] `json:"requested_destination"`
 	InstanceGroup        *NovaObject[NovaInstanceGroup]        `json:"instance_group"`
+}
+
+// Hints can be a one-element list or a direct value.
+// See: https://github.com/sapcc/nova/blob/3e715db/nova/objects/request_spec.py#L382
+//
+// This function is a convenience to extract the first element
+// from the hints list or return the value directly if it's not a list.
+func (s NovaSpec) GetSchedulerHintStr(key string) (string, error) {
+	if s.SchedulerHints == nil {
+		return "", errors.New("scheduler hints are not set")
+	}
+	raw, ok := s.SchedulerHints[key]
+	if !ok {
+		return "", fmt.Errorf("scheduler hint %q not found", key)
+	}
+	switch v := raw.(type) {
+	case []any:
+		if len(v) > 0 {
+			if str, ok := v[0].(string); ok {
+				return str, nil
+			}
+		}
+	case string:
+		return v, nil
+	}
+	return "", errors.New("unknown scheduler hint type")
 }
 
 type NovaInstanceGroup struct {
