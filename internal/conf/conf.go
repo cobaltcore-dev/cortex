@@ -266,6 +266,10 @@ type SchedulerStepDisabledValidationsConfig struct {
 	// step. This should only be disabled for scheduler steps that remove subjects.
 	// Thus, if no value is provided, the default is false.
 	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
+	// Whether to validate that, after running the step, there are remaining subjects.
+	// This should only be disabled for scheduler steps that are expected to
+	// remove all subjects.
+	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
 }
 
 // Configuration for the scheduler module.

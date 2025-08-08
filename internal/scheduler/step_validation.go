@@ -61,7 +61,13 @@ func (s *StepValidator[RequestType]) Run(traceLog *slog.Logger, request RequestT
 	// If not disabled, validate that the number of subjects stayed the same.
 	if !s.DisabledValidations.SameSubjectNumberInOut {
 		if len(result.Activations) != len(request.GetSubjects()) {
-			return nil, errors.New("number of subjects changed during step execution")
+			return nil, errors.New("safety: number of subjects changed during step execution")
+		}
+	}
+	// If not disabled, validate that some subjects remain.
+	if !s.DisabledValidations.SomeSubjectsRemain {
+		if len(result.Activations) == 0 {
+			return nil, errors.New("safety: no subjects remain after step execution")
 		}
 	}
 	return result, nil
