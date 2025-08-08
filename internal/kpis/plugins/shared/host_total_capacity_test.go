@@ -46,7 +46,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 	externalCustomerReason := "external customer"
 	hypervisors := []any{
 		&sap.HostDetails{
-			ComputeHost:      "nova-compute-bb01",
+			ComputeHost:      "vwmare-host",
 			AvailabilityZone: "az1",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "vcenter",
@@ -57,7 +57,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			DisabledReason:   nil,
 		},
 		&sap.HostDetails{
-			ComputeHost:      "node001-bb02",
+			ComputeHost:      "kvm-host",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "qemu",
@@ -68,7 +68,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			DisabledReason:   &externalCustomerReason,
 		},
 		&sap.HostDetails{
-			ComputeHost:      "node002-ironic-bb02",
+			ComputeHost:      "ironic-host",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "ironic",
@@ -86,7 +86,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 
 	hostUtilizations := []any{
 		&shared.HostUtilization{
-			ComputeHost:      "nova-compute-bb01",
+			ComputeHost:      "vwmare-host",
 			RAMUtilizedPct:   50,
 			VCPUsUtilizedPct: 50,
 			DiskUtilizedPct:  50,
@@ -96,7 +96,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			TotalDiskAllocatableGB:   100,
 		},
 		&shared.HostUtilization{
-			ComputeHost:      "node001-bb02",
+			ComputeHost:      "kvm-host",
 			RAMUtilizedPct:   80,
 			VCPUsUtilizedPct: 75,
 			DiskUtilizedPct:  80,
@@ -106,7 +106,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			TotalDiskAllocatableGB:   1000,
 		},
 		&shared.HostUtilization{
-			ComputeHost:              "node002-bb02",
+			ComputeHost:              "ironic-host",
 			RAMUtilizedPct:           0,
 			VCPUsUtilizedPct:         0,
 			DiskUtilizedPct:          0,
@@ -122,14 +122,14 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 
 	hostDomainProject := []any{
 		&shared.HostDomainProject{
-			ComputeHost:  "nova-compute-bb01",
+			ComputeHost:  "vwmare-host",
 			ProjectNames: "project1,project2",
 			ProjectIDs:   "p1,p2",
 			DomainNames:  "domain1,domain2",
 			DomainIDs:    "d1,d2",
 		},
 		&shared.HostDomainProject{
-			ComputeHost:  "node001-bb02",
+			ComputeHost:  "kvm-host",
 			ProjectNames: "project2",
 			ProjectIDs:   "p2",
 		},
@@ -152,23 +152,23 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 	// Used to track if for each host a "ram", "cpu", and "disk" metric is present
 	// (ignoring the histogram metric)
 	metricsUtilizationResourceLabels := make(map[string][]string)
-	metricsUtilizationResourceLabels["nova-compute-bb01"] = make([]string, 0)
-	metricsUtilizationResourceLabels["node001-bb02"] = make([]string, 0)
-	metricsUtilizationResourceLabels["node002-ironic-bb02"] = make([]string, 0)
+	metricsUtilizationResourceLabels["vwmare-host"] = make([]string, 0)
+	metricsUtilizationResourceLabels["kvm-host"] = make([]string, 0)
+	metricsUtilizationResourceLabels["ironic-host"] = make([]string, 0)
 
 	// Expected resource labels for each host
 	expectedMetricUtilizationResourceLabels := map[string][]string{
-		"nova-compute-bb01":   {"ram", "cpu", "disk"},
-		"node001-bb02":        {"ram", "cpu", "disk"},
-		"node002-ironic-bb02": {}, // Ironic host are filtered out
+		"vwmare-host": {"ram", "cpu", "disk"},
+		"kvm-host":    {"ram", "cpu", "disk"},
+		"ironic-host": {}, // Ironic host are filtered out
 	}
 
 	// Used to track for each host the expected labels
 	// Note: Doesn't include the "resource" label since there are multiple resources per host
 	// The resource label is tracked in metricsUtilizationResourceLabels
 	expectedLabels := map[string]map[string]string{
-		"nova-compute-bb01": {
-			"compute_host":      "nova-compute-bb01",
+		"vwmare-host": {
+			"compute_host":      "vwmare-host",
 			"availability_zone": "az1",
 			"enabled":           "true",
 			"projects":          "project1,project2",
@@ -177,8 +177,8 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			"workload_type":     "general-purpose",
 			"hypervisor_family": "vmware",
 		},
-		"node001-bb02": {
-			"compute_host":      "node001-bb02",
+		"kvm-host": {
+			"compute_host":      "kvm-host",
 			"availability_zone": "az2",
 			"enabled":           "false",
 			"projects":          "project2",
