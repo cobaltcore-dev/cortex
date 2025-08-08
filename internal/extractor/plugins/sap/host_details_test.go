@@ -34,6 +34,7 @@ func TestHostDetailsExtractor_Init(t *testing.T) {
 		t.Error("expected table to be created")
 	}
 }
+
 func TestHostDetailsExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
