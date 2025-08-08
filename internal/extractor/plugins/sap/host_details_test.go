@@ -77,7 +77,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		// Ironic host traits (should be ignored)
 		&placement.Trait{ResourceProviderUUID: "uuid3", Name: "TRAIT_IGNORED"},
 		// Disabled KVM host
-		&placement.Trait{ResourceProviderUUID: "uuid4", Name: "CUSTOM_DECOMMISIONING_TRAIT"},
+		&placement.Trait{ResourceProviderUUID: "uuid4", Name: "CUSTOM_DECOMMISSIONING"},
 	}
 
 	if err := testDB.Insert(traits...); err != nil {

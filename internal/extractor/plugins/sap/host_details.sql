@@ -31,13 +31,13 @@ SELECT
         ELSE 'general-purpose'
     END AS workload_type,
     CASE
-        WHEN ht.traits LIKE '%CUSTOM_DECOMMISIONING_TRAIT%' THEN false
+        WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN false
         WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN false
         WHEN ht.state != 'up' THEN false
         ELSE true
     END AS enabled,
     CASE
-        WHEN ht.traits LIKE '%CUSTOM_DECOMMISIONING_TRAIT%' THEN 'decommissioning'
+        WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN 'decommissioning'
         WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN 'external customer'
         WHEN ht.state != 'up' THEN 'not up'
         ELSE NULL
