@@ -35,11 +35,10 @@ func (s *MapAZToPlacementAggregateStep) Run(traceLog *slog.Logger, request api.E
 	}
 	lookupStr := strings.Join(computeHostsInAZ, ",")
 	for host := range result.Activations {
-		if !strings.Contains(lookupStr, host) {
-			// Remove the host from the result if it is not in the requested AZ.
-			delete(result.Activations, host)
+		if strings.Contains(lookupStr, host) {
 			continue
 		}
+		delete(result.Activations, host)
 	}
 	return result, nil
 }
