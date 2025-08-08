@@ -75,7 +75,7 @@ jobs:
             }
       - name: Download coverage file (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: pr-func-coverage
           path: .
