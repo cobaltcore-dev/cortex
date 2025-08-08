@@ -10,32 +10,33 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
 )
 
-type MapAZToPlacementAggregateStep struct {
+type FilterDisabledStep struct {
 	scheduler.BaseStep[api.ExternalSchedulerRequest, scheduler.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *MapAZToPlacementAggregateStep) GetName() string {
-	return "map_az_to_placement_aggregate"
-}
+func (s *FilterDisabledStep) GetName() string { return "filter_disabled" }
 
 // Only get hosts in the requested az.
-func (s *MapAZToPlacementAggregateStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
+func (s *FilterDisabledStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
-	var computeHostsInAZ []string
-	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsInAZ, `
-        SELECT DISTINCT compute_host
-        FROM `+nova.Aggregate{}.TableName()+`
-        WHERE availability_zone = :az`,
+	var computeHostsDisabled []string
+	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsDisabled, `
+	    SELECT h.service_host
+		FROM `+placement.Trait{}.TableName()+` rpt
+		JOIN `+nova.Hypervisor{}.TableName()+` h
+		ON h.id = rpt.resource_provider_uuid
+		WHERE name = 'COMPUTE_STATUS_DISABLED'`,
 		map[string]any{"az": request.Spec.Data.AvailabilityZone},
 	); err != nil {
 		return nil, err
 	}
-	lookupStr := strings.Join(computeHostsInAZ, ",")
+	lookupStr := strings.Join(computeHostsDisabled, ",")
 	for host := range result.Activations {
-		if strings.Contains(lookupStr, host) {
+		if !strings.Contains(lookupStr, host) {
 			continue
 		}
 		delete(result.Activations, host)
