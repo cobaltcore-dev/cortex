@@ -1,0 +1,46 @@
+WITH host_traits AS (
+    SELECT
+        h.service_host,
+        h.hypervisor_type,
+        h.running_vms,
+        h.state,
+        STRING_AGG(t.name, ',') AS traits
+    FROM openstack_hypervisors h
+    JOIN openstack_resource_provider_traits t
+        ON h.id = t.resource_provider_uuid
+    GROUP BY h.service_host, h.hypervisor_type, h.running_vms, h.state
+),
+SELECT
+    ht.service_host AS compute_host,
+    ht.running_vms AS running_vms,
+    COALESCE(haz.availability_zone, 'unknown') AS availability_zone,
+    -- CPU Architecture
+    CASE
+        WHEN ht.traits LIKE '%CUSTOM_HW_SAPPHIRE_RAPIDS%' THEN 'sapphire-rapids'
+        WHEN ht.traits LIKE '%CUSTOM_NUMASIZE_C48_M729%' THEN 'cascade-lake'
+        ELSE 'unknown'
+    END AS cpu_architecture,
+    ht.hypervisor_type,
+    CASE
+        WHEN ht.service_host LIKE 'nova-compute-%' THEN 'vmware'
+        WHEN ht.service_host LIKE 'node%-bb%' THEN 'kvm'
+        ELSE 'unknown'
+    END AS hypervisor_family,
+    CASE
+        WHEN ht.traits LIKE '%CUSTOM_HANA_EXCLUSIVE_HOST%' THEN 'hana'
+        ELSE 'general-purpose'
+    END AS workload_type,
+    CASE
+        WHEN ht.traits LIKE '%CUSTOM_DECOMMISIONING_TRAIT%' THEN false
+        WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN false
+        WHEN ht.state != 'up' THEN false
+        ELSE true
+    END AS enabled,
+    CASE
+        WHEN ht.traits LIKE '%CUSTOM_DECOMMISIONING_TRAIT%' THEN 'decommissioning'
+        WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN 'external customer'
+        WHEN ht.state != 'up' THEN 'not up'
+        ELSE NULL
+    END AS disabled_reason
+FROM host_traits ht
+LEFT JOIN feature_host_az haz ON ht.service_host = haz.compute_host;
