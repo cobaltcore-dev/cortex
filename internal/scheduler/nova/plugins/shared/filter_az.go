@@ -37,6 +37,7 @@ func (s *FilterAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerR
 			continue
 		}
 		delete(result.Activations, host)
+		traceLog.Debug("filtering host outside requested az", "host", host)
 	}
 	return result, nil
 }

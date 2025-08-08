@@ -86,10 +86,11 @@ type NovaSpec struct {
 
 // Nova image metadata for the specified VM.
 type NovaImageMeta struct {
-	Name    string `json:"name"`
-	Size    int    `json:"size"`
-	MinRAM  int    `json:"min_ram"`
-	MinDisk int    `json:"min_disk"`
+	Name       string            `json:"name"`
+	Size       int               `json:"size"`
+	MinRAM     int               `json:"min_ram"`
+	MinDisk    int               `json:"min_disk"`
+	Properties map[string]string `json:"properties"`
 }
 
 // Nova flavor metadata for the specified VM.
