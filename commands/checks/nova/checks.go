@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
@@ -66,45 +67,57 @@ func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config
 		panic("no hypervisors found")
 	}
 	slog.Info("found hypervisors", "count", len(data.Hypervisors))
+	hypervisorTypesToTest := []string{
+		"vmware vcenter server",
+		"qemu", "ch",
+	}
+	for _, hypervisorType := range hypervisorTypesToTest {
+		slog.Info("checking hypervisors of type", "type", hypervisorType)
+		var hosts []api.ExternalSchedulerHost
+		weights := make(map[string]float64)
+		for _, h := range data.Hypervisors {
+			if !strings.EqualFold(h.HypervisorType, hypervisorType) {
+				continue
+			}
+			weights[h.ServiceHost] = 1.0
+			hosts = append(hosts, api.ExternalSchedulerHost{
+				ComputeHost:        h.ServiceHost,
+				HypervisorHostname: h.Hostname,
+			})
+		}
+		request := api.ExternalSchedulerRequest{
+			Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
+				AvailabilityZone: "", // TODO: Get an AZ from placement aggregates.
+			}},
+			Hosts:     hosts,
+			Weights:   weights,
+			Simulated: true,
+		}
+		port := strconv.Itoa(config.GetAPIConfig().Port)
+		apiURL := "http://cortex-nova-scheduler:" + port + "/scheduler/nova/external"
+		slog.Info("sending request to external scheduler", "apiURL", apiURL)
 
-	var hosts []api.ExternalSchedulerHost
-	weights := make(map[string]float64)
-	for _, h := range data.Hypervisors {
-		weights[h.ServiceHost] = 1.0
-		hosts = append(hosts, api.ExternalSchedulerHost{
-			ComputeHost:        h.ServiceHost,
-			HypervisorHostname: h.Hostname,
-		})
+		requestBody := must.Return(json.Marshal(request))
+		buf := bytes.NewBuffer(requestBody)
+		req := must.Return(http.NewRequestWithContext(ctx, http.MethodPost, apiURL, buf))
+		req.Header.Set("Content-Type", "application/json")
+		//nolint:bodyclose // We don't care about the body here.
+		respRaw := must.Return(http.DefaultClient.Do(req))
+		defer respRaw.Body.Close()
+		if respRaw.StatusCode != http.StatusOK {
+			// Log the response body for debugging
+			bodyBytes := must.Return(io.ReadAll(respRaw.Body))
+			slog.Error("external scheduler API returned non-200 status code",
+				"statusCode", respRaw.StatusCode,
+				"responseBody", string(bodyBytes),
+			)
+			panic("external scheduler API returned non-200 status code")
+		}
+		var resp api.ExternalSchedulerResponse
+		must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
+		if len(resp.Hosts) == 0 {
+			panic("no hosts found in response")
+		}
+		slog.Info("check successful, got compute hosts", "count", len(resp.Hosts))
 	}
-	request := api.ExternalSchedulerRequest{
-		Hosts:     hosts,
-		Weights:   weights,
-		Simulated: true,
-	}
-	port := strconv.Itoa(config.GetAPIConfig().Port)
-	apiURL := "http://cortex-nova-scheduler:" + port + "/scheduler/nova/external"
-	slog.Info("sending request to external scheduler", "apiURL", apiURL)
-
-	requestBody := must.Return(json.Marshal(request))
-	buf := bytes.NewBuffer(requestBody)
-	req := must.Return(http.NewRequestWithContext(ctx, http.MethodPost, apiURL, buf))
-	req.Header.Set("Content-Type", "application/json")
-	//nolint:bodyclose // We don't care about the body here.
-	respRaw := must.Return(http.DefaultClient.Do(req))
-	defer respRaw.Body.Close()
-	if respRaw.StatusCode != http.StatusOK {
-		// Log the response body for debugging
-		bodyBytes := must.Return(io.ReadAll(respRaw.Body))
-		slog.Error("external scheduler API returned non-200 status code",
-			"statusCode", respRaw.StatusCode,
-			"responseBody", string(bodyBytes),
-		)
-		panic("external scheduler API returned non-200 status code")
-	}
-	var resp api.ExternalSchedulerResponse
-	must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
-	if len(resp.Hosts) == 0 {
-		panic("no hosts found in response")
-	}
-	slog.Info("check successful, got compute hosts", "count", len(resp.Hosts))
 }

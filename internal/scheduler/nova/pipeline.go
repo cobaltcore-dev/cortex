@@ -27,7 +27,12 @@ var supportedSteps = map[string]func() NovaStep{
 	(&kvm.AvoidOverloadedHostsCPUStep{}).GetName():    func() NovaStep { return &kvm.AvoidOverloadedHostsCPUStep{} },
 	(&kvm.AvoidOverloadedHostsMemoryStep{}).GetName(): func() NovaStep { return &kvm.AvoidOverloadedHostsMemoryStep{} },
 	// Shared steps
-	(&shared.ResourceBalancingStep{}).GetName(): func() NovaStep { return &shared.ResourceBalancingStep{} },
+	(&shared.ResourceBalancingStep{}).GetName():      func() NovaStep { return &shared.ResourceBalancingStep{} },
+	(&shared.FilterAcceleratorsStep{}).GetName():     func() NovaStep { return &shared.FilterAcceleratorsStep{} },
+	(&shared.FilterAZStep{}).GetName():               func() NovaStep { return &shared.FilterAZStep{} },
+	(&shared.FilterDisabledStep{}).GetName():         func() NovaStep { return &shared.FilterDisabledStep{} },
+	(&shared.FilterExternalCustomerStep{}).GetName(): func() NovaStep { return &shared.FilterExternalCustomerStep{} },
+	(&shared.FilterPackedVirtqueueStep{}).GetName():  func() NovaStep { return &shared.FilterPackedVirtqueueStep{} },
 }
 
 // Create a new Nova scheduler pipeline.

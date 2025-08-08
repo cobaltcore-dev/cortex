@@ -200,6 +200,8 @@ type NovaSchedulerStepScope struct {
 	HostSelectors []NovaSchedulerStepHostSelector `json:"hostSelectors,omitempty"`
 	// Selectors applied to the given nova spec.
 	SpecSelectors []NovaSchedulerStepSpecSelector `json:"specSelectors,omitempty"`
+	// If the step should only be run for simulated requests.
+	SimulatedOnly bool `json:"simulatedOnly,omitempty"`
 }
 
 type NovaSchedulerStepHostSelector struct {
