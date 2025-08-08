@@ -1437,7 +1437,7 @@
           "instant": true,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{compute_host_name}}",
+          "legendFormat": "{{compute_host}}",
           "refId": "A"
         }
       ],
@@ -1502,7 +1502,7 @@
           "instant": true,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{compute_host_name}}",
+          "legendFormat": "{{compute_host}}",
           "refId": "A"
         }
       ],
@@ -1567,7 +1567,7 @@
           "instant": true,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{compute_host_name}}",
+          "legendFormat": "{{compute_host}}",
           "refId": "A"
         }
       ],

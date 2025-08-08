@@ -4,17 +4,16 @@
 package shared
 
 import (
-	"encoding/json"
 	"log/slog"
 	"strconv"
 
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/tools"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -24,7 +23,6 @@ type HostUtilizationKPI struct {
 
 	hostResourcesUtilizedPerHost *prometheus.Desc
 	hostResourcesUtilizedHist    *prometheus.Desc
-	hostTotalCapacityPerHost     *prometheus.Desc
 }
 
 func (HostUtilizationKPI) GetName() string {
@@ -38,7 +36,20 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
 		"cortex_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "total", "running_vms", "traits", "projects", "domains"},
+		[]string{
+			"compute_host",
+			"resource",
+			"availability_zone",
+			"cpu_architecture",
+			"total",
+			"workload_type",
+			"hypervisor_family",
+			"enabled",
+			"disabled_reason",
+			"projects",
+			"domains",
+			"running_vms",
+		},
 		nil,
 	)
 	k.hostResourcesUtilizedHist = prometheus.NewDesc(
@@ -47,172 +58,132 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 		[]string{"resource"},
 		nil,
 	)
-	k.hostTotalCapacityPerHost = prometheus.NewDesc(
-		"cortex_total_capacity_per_host",
-		"Total resources available on the hosts currently (individually by host).",
-		[]string{"compute_host_name", "resource", "availability_zone", "cpu_model", "traits", "projects", "domains"},
-		nil,
-	)
 	return nil
 }
 
 func (k *HostUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.hostResourcesUtilizedPerHost
 	ch <- k.hostResourcesUtilizedHist
-	ch <- k.hostTotalCapacityPerHost
 }
 
 func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostUtilizationPerAvailabilityZone struct {
-		shared.HostUtilization
+		ComputeHostName  string  `db:"compute_host"`
 		AvailabilityZone string  `db:"availability_zone"`
-		CPUInfo          string  `db:"cpu_info"`      // Hypervisor CPU info
-		RunningVMs       int     `db:"running_vms"`   // Number of running VMs on the host
-		Traits           string  `db:"traits"`        // Traits of the host
-		DomainNames      *string `db:"domain_names"`  // Comma-separated list of domain names
-		ProjectNames     *string `db:"project_names"` // Comma-separated list of project names
+		RunningVMs       int     `db:"running_vms"`
+		CPUArchitecture  string  `db:"cpu_architecture"`
+		HypervisorFamily string  `db:"hypervisor_family"`
+		WorkloadType     string  `db:"workload_type"`
+		Enabled          bool    `db:"enabled"`
+		DisabledReason   *string `db:"disabled_reason"`
+		ProjectNames     *string `db:"project_names"`
+		DomainNames      *string `db:"domain_names"`
+		shared.HostUtilization
 	}
 
 	var hostUtilization []HostUtilizationPerAvailabilityZone
 
-	aggregatesTableName := nova.Aggregate{}.TableName()
+	hostDetailsTableName := sap.HostDetails{}.TableName()
 	hostUtilizationTableName := shared.HostUtilization{}.TableName()
-	hostCapabilitiesTableName := shared.HostCapabilities{}.TableName()
-	hypervisorsTableName := nova.Hypervisor{}.TableName()
 	hostDomainProjectTableName := shared.HostDomainProject{}.TableName()
 
 	query := `
 		SELECT
-			f.*,
-			a.availability_zone,
-			h.cpu_info,
-			h.running_vms,
-			fhc.traits,
-			hdp.domain_names,
-            hdp.project_names
-		FROM ` + hostUtilizationTableName + ` AS f
-		JOIN (
-			SELECT DISTINCT compute_host, availability_zone
-			FROM ` + aggregatesTableName + `
-			WHERE availability_zone IS NOT NULL
-		) AS a
-			ON f.compute_host = a.compute_host
-		JOIN ` + hypervisorsTableName + ` AS h
-			ON f.compute_host = h.service_host
-		LEFT JOIN ` + hostCapabilitiesTableName + ` AS fhc
-			ON f.compute_host = fhc.compute_host
+    		hd.compute_host,
+    		hd.availability_zone,
+    		hd.running_vms,
+    		hd.cpu_architecture,
+    		hd.hypervisor_family,
+    		hd.workload_type,
+    		hd.enabled,
+    		hd.disabled_reason,
+    		hdp.project_names,
+    		hdp.domain_names,
+    		COALESCE(hu.ram_utilized_pct, 0) AS ram_utilized_pct,
+			COALESCE(hu.vcpus_utilized_pct, 0) AS vcpus_utilized_pct,
+			COALESCE(hu.disk_utilized_pct, 0) AS disk_utilized_pct,
+			COALESCE(hu.total_memory_allocatable_mb, 0) AS total_memory_allocatable_mb,
+			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
+			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
+		FROM ` + hostDetailsTableName + ` AS hd
 		LEFT JOIN ` + hostDomainProjectTableName + ` AS hdp
-            ON f.compute_host = hdp.compute_host;
+		    ON hdp.compute_host = hd.compute_host
+		LEFT JOIN ` + hostUtilizationTableName + ` AS hu
+		    ON hu.compute_host = hd.compute_host
+		WHERE hd.hypervisor_type != 'ironic';
     `
 	if _, err := k.DB.Select(&hostUtilization, query); err != nil {
 		slog.Error("failed to select host utilization", "err", err)
 		return
 	}
 
-	type CPUInfo struct {
-		Model *string `json:"model,omitempty"`
-	}
-
-	for _, hs := range hostUtilization {
-		var cpuInfo CPUInfo
-		cpuModel := ""
-
-		if hs.CPUInfo != "" {
-			err := json.Unmarshal([]byte(hs.CPUInfo), &cpuInfo)
-			// Get the CPU model from the CPU info if available.
-			// If the CPU info is not available or the model is not set, use an empty string.
-			if err == nil && cpuInfo.Model != nil {
-				cpuModel = *cpuInfo.Model
-			}
+	for _, host := range hostUtilization {
+		disabledReason := ""
+		if host.DisabledReason != nil {
+			disabledReason = *host.DisabledReason
 		}
 
 		projectNames := ""
-		if hs.ProjectNames != nil {
-			projectNames = *hs.ProjectNames
+		if host.ProjectNames != nil {
+			projectNames = *host.ProjectNames
 		}
 		domainNames := ""
-		if hs.DomainNames != nil {
-			domainNames = *hs.DomainNames
+		if host.DomainNames != nil {
+			domainNames = *host.DomainNames
 		}
 
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesUtilizedPerHost,
-			prometheus.GaugeValue,
-			hs.VCPUsUtilizedPct,
-			hs.ComputeHost,
-			"cpu",
-			hs.AvailabilityZone,
-			cpuModel,
-			strconv.FormatFloat(hs.TotalVCPUsAllocatable, 'f', 0, 64),
-			strconv.Itoa(hs.RunningVMs),
-			hs.Traits,
-			projectNames,
-			domainNames,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesUtilizedPerHost,
-			prometheus.GaugeValue,
-			hs.RAMUtilizedPct,
-			hs.ComputeHost,
-			"memory",
-			hs.AvailabilityZone,
-			cpuModel,
-			strconv.FormatFloat(hs.TotalMemoryAllocatableMB, 'f', -1, 64),
-			strconv.Itoa(hs.RunningVMs),
-			hs.Traits,
-			projectNames,
-			domainNames,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesUtilizedPerHost,
-			prometheus.GaugeValue,
-			hs.DiskUtilizedPct,
-			hs.ComputeHost,
-			"disk",
-			hs.AvailabilityZone,
-			cpuModel,
-			strconv.FormatFloat(hs.TotalDiskAllocatableGB, 'f', -1, 64),
-			strconv.Itoa(hs.RunningVMs),
-			hs.Traits,
-			projectNames,
-			domainNames,
-		)
+		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(
-			k.hostTotalCapacityPerHost,
+			k.hostResourcesUtilizedPerHost,
 			prometheus.GaugeValue,
-			hs.TotalVCPUsAllocatable,
-			hs.ComputeHost,
+			host.RAMUtilizedPct,
+			host.ComputeHostName,
+			"ram",
+			host.AvailabilityZone,
+			host.CPUArchitecture,
+			strconv.FormatFloat(host.TotalMemoryAllocatableMB, 'f', 0, 64),
+			host.WorkloadType,
+			host.HypervisorFamily,
+			enabled,
+			disabledReason,
+			projectNames,
+			domainNames,
+			strconv.Itoa(host.RunningVMs),
+		)
+		ch <- prometheus.MustNewConstMetric(
+			k.hostResourcesUtilizedPerHost,
+			prometheus.GaugeValue,
+			host.VCPUsUtilizedPct,
+			host.ComputeHostName,
 			"cpu",
-			hs.AvailabilityZone,
-			cpuModel,
-			hs.Traits,
+			host.AvailabilityZone,
+			host.CPUArchitecture,
+			strconv.FormatFloat(host.TotalVCPUsAllocatable, 'f', 0, 64),
+			host.WorkloadType,
+			host.HypervisorFamily,
+			enabled,
+			disabledReason,
 			projectNames,
 			domainNames,
+			strconv.Itoa(host.RunningVMs),
 		)
 		ch <- prometheus.MustNewConstMetric(
-			k.hostTotalCapacityPerHost,
+			k.hostResourcesUtilizedPerHost,
 			prometheus.GaugeValue,
-			hs.TotalDiskAllocatableGB,
-			hs.ComputeHost,
+			host.DiskUtilizedPct,
+			host.ComputeHostName,
 			"disk",
-			hs.AvailabilityZone,
-			cpuModel,
-			hs.Traits,
+			host.AvailabilityZone,
+			host.CPUArchitecture,
+			strconv.FormatFloat(host.TotalDiskAllocatableGB, 'f', 0, 64),
+			host.WorkloadType,
+			host.HypervisorFamily,
+			enabled,
+			disabledReason,
 			projectNames,
 			domainNames,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			k.hostTotalCapacityPerHost,
-			prometheus.GaugeValue,
-			hs.TotalMemoryAllocatableMB,
-			hs.ComputeHost,
-			"memory",
-			hs.AvailabilityZone,
-			cpuModel,
-			hs.Traits,
-			projectNames,
-			domainNames,
+			strconv.Itoa(host.RunningVMs),
 		)
 	}
 

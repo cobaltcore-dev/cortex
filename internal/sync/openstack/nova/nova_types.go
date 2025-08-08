@@ -248,15 +248,15 @@ func (Migration) TableName() string { return "openstack_migrations" }
 func (Migration) Indexes() []db.Index { return nil }
 
 type Aggregate struct {
-	UUID             string  `json:"uuid" db:"uuid,primarykey"`
-	Name             string  `json:"name" db:"name,primarykey"`
+	UUID             string  `json:"uuid" db:"uuid"`
+	Name             string  `json:"name" db:"name"`
 	AvailabilityZone *string `json:"availability_zone" db:"availability_zone"`
-	ComputeHost      string  `json:"compute_host" db:"compute_host,primarykey"` // Host that the aggregate is associated with.
-	Properties       string  `json:"properties" db:"properties"`                // JSON string of properties.
+	ComputeHost      *string `json:"compute_host" db:"compute_host"` // Host that the aggregate is associated with.
+	Properties       string  `json:"properties" db:"properties"`     // JSON string of properties.
 }
 
 // Table in which the openstack model is stored.
-func (Aggregate) TableName() string { return "openstack_aggregates" }
+func (Aggregate) TableName() string { return "openstack_aggregates_v2" }
 
 // Index for the openstack model.
 func (Aggregate) Indexes() []db.Index { return nil }

@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/netapp"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -38,6 +39,9 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	&shared.VMHostResidencyExtractor{},
 	&shared.VMLifeSpanHistogramExtractor{},
 	&shared.HostDomainProjectExtractor{},
+	&shared.HostAZExtractor{},
+	// SAP-specific extractors
+	&sap.HostDetailsExtractor{},
 }
 
 // Pipeline that contains multiple feature extractors and executes them.

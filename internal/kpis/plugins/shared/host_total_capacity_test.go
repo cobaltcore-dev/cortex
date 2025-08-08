@@ -17,19 +17,19 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-func TestHostUtilizationKPI_Init(t *testing.T) {
+func TestHostTotalCapacityKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	kpi := &HostUtilizationKPI{}
+	kpi := &HostTotalCapacityKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestHostUtilizationKPI_Collect(t *testing.T) {
+func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -68,7 +68,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			DisabledReason:   &externalCustomerReason,
 		},
 		&sap.HostDetails{
-			ComputeHost:      "node002-bb02",
+			ComputeHost:      "node002-ironic-bb02",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "ironic",
@@ -106,7 +106,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			TotalDiskAllocatableGB:   1000,
 		},
 		&shared.HostUtilization{
-			ComputeHost:              "node002-ironic-bb02",
+			ComputeHost:              "node002-bb02",
 			RAMUtilizedPct:           0,
 			VCPUsUtilizedPct:         0,
 			DiskUtilizedPct:          0,
@@ -138,7 +138,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	kpi := &HostUtilizationKPI{}
+	kpi := &HostTotalCapacityKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -170,26 +170,20 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		"nova-compute-bb01": {
 			"compute_host":      "nova-compute-bb01",
 			"availability_zone": "az1",
-			"running_vms":       "5",
 			"enabled":           "true",
-			"disabled_reason":   "",
 			"projects":          "project1,project2",
 			"domains":           "domain1,domain2",
 			"cpu_architecture":  "cascade-lake",
-			"total":             "100", // All resources are assumed to be 100 <unit>
 			"workload_type":     "general-purpose",
 			"hypervisor_family": "vmware",
 		},
 		"node001-bb02": {
 			"compute_host":      "node001-bb02",
 			"availability_zone": "az2",
-			"running_vms":       "5",
 			"enabled":           "false",
-			"disabled_reason":   externalCustomerReason,
 			"projects":          "project2",
 			"domains":           "",
 			"cpu_architecture":  "cascade-lake",
-			"total":             "1000", // All resources are assumed to be 1000 <unit>
 			"workload_type":     "hana",
 			"hypervisor_family": "kvm",
 		},
