@@ -8,6 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -42,8 +43,8 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(HostDetails{}),
+		testDB.AddTable(shared.HostAZ{}),
 		testDB.AddTable(nova.Hypervisor{}),
-		testDB.AddTable(nova.Aggregate{}),
 		testDB.AddTable(placement.Trait{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -60,6 +61,11 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		// Host with no special traits
 		&nova.Hypervisor{ID: "uuid4", ServiceHost: "node002-bb03", HypervisorType: "test", RunningVMs: 2, State: "up"},
 	}
+
+	if err := testDB.Insert(hypervisors...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
 	traits := []any{
 		// VMware host traits
 		&placement.Trait{ResourceProviderUUID: "uuid1", Name: "CUSTOM_HW_SAPPHIRE_RAPIDS"},
@@ -72,46 +78,28 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		// Disabled KVM host
 		&placement.Trait{ResourceProviderUUID: "uuid4", Name: "CUSTOM_DECOMMISIONING_TRAIT"},
 	}
+
+	if err := testDB.Insert(traits...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
 	availabilityZone1 := "az1"
 	availabilityZone2 := "az2"
-	computeHost1 := "nova-compute-bb01"
-	computeHost2 := "node001-bb02"
-	computeHost3 := "node002-bb03"
 
-	aggregates := []any{
-		&nova.Aggregate{
-			UUID:             "agg-uuid-1",
-			Name:             "agg1",
-			ComputeHost:      &computeHost2,
-			AvailabilityZone: &availabilityZone1,
-		},
-		&nova.Aggregate{
-			UUID:             "agg-uuid-1",
-			Name:             "agg1",
-			ComputeHost:      &computeHost1,
-			AvailabilityZone: &availabilityZone1,
-		},
-		&nova.Aggregate{
-			UUID:             "agg-uuid-2",
-			Name:             "agg2",
-			ComputeHost:      &computeHost3,
-			AvailabilityZone: &availabilityZone2,
-		},
-	}
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	host_availability_zones := []any{
+		&shared.HostAZ{AvailabilityZone: &availabilityZone1, ComputeHost: "nova-compute-bb01"},
+		&shared.HostAZ{AvailabilityZone: nil, ComputeHost: "node001-bb02"},
+		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node002-bb03"},
+		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "ironic-host-01"},
 	}
 
-	if err := testDB.Insert(hypervisors...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if err := testDB.Insert(traits...); err != nil {
+	if err := testDB.Insert(host_availability_zones...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	extractor := &HostDetailsExtractor{}
 	config := conf.FeatureExtractorConfig{
-		Name:           "host_details_extractor",
+		Name:           "sap_host_details_extractor",
 		Options:        conf.NewRawOpts("{}"),
 		RecencySeconds: nil, // No recency for this test
 	}
@@ -151,7 +139,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		},
 		{
 			ComputeHost:      "node001-bb02",
-			AvailabilityZone: "az1",
+			AvailabilityZone: "unknown",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "qemu",
 			HypervisorFamily: "kvm",
@@ -173,7 +161,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		},
 		{
 			ComputeHost:      "ironic-host-01",
-			AvailabilityZone: "unknown",
+			AvailabilityZone: "az2",
 			CPUArchitecture:  "unknown",
 			HypervisorType:   "ironic",
 			HypervisorFamily: "unknown",
