@@ -16,7 +16,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 5,
-  "iteration": 1754664108037,
+  "iteration": 1754664108041,
   "links": [],
   "panels": [
     {
@@ -70,7 +70,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -156,7 +156,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -242,7 +242,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -328,7 +328,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -484,7 +484,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -643,7 +643,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -802,7 +802,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -889,7 +889,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -996,7 +996,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1103,7 +1103,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1208,7 +1208,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1319,7 +1319,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1430,7 +1430,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1796,11 +1796,11 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\"}) / 100",
+          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -1810,7 +1810,7 @@
         },
         {
           "exemplar": true,
-          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\"}) / 100",
+          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1820,7 +1820,7 @@
         },
         {
           "exemplar": true,
-          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\"}) / 100",
+          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1830,7 +1830,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\" }) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\" })",
+          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" }) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1840,7 +1840,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\"}) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\" })",
+          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1850,7 +1850,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\"}) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\" })",
+          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1860,7 +1860,7 @@
         },
         {
           "exemplar": true,
-          "expr": "max by (compute_host) (cortex_host_running_vms_per_host_pct{availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\"}) ",
+          "expr": "max by (compute_host) (cortex_host_running_vms_per_host_pct{availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) ",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1869,7 +1869,7 @@
           "refId": "RunningVMsQuery"
         }
       ],
-      "title": "CPU",
+      "title": "Hosts",
       "transformations": [
         {
           "id": "seriesToColumns",
@@ -2062,7 +2062,7 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2134,7 +2134,7 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2206,7 +2206,7 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.40",
+      "pluginVersion": "7.5.37",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2396,9 +2396,14 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
+          "selected": true,
+          "tags": [],
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": "prometheus-openstack",
         "definition": "label_values(cortex_host_utilization_per_host_pct, workload_type)",
@@ -2427,9 +2432,14 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
+          "selected": true,
+          "tags": [],
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": "prometheus-openstack",
         "definition": "label_values(cortex_host_utilization_per_host_pct, cpu_architecture)",
