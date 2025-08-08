@@ -50,8 +50,12 @@ func (r ExternalSchedulerRequest) GetWeights() map[string]float64 {
 	return r.Weights
 }
 func (r ExternalSchedulerRequest) GetTraceLogArgs() []slog.Attr {
+	greq := ""
+	if r.Context.GlobalRequestID != nil {
+		greq = *r.Context.GlobalRequestID
+	}
 	return []slog.Attr{
-		slog.String("greq", r.Context.GlobalRequestID),
+		slog.String("greq", greq),
 		slog.String("req", r.Context.RequestID),
 		slog.String("user", r.Context.UserID),
 		slog.String("project", r.Context.ProjectID),
@@ -73,38 +77,112 @@ type NovaObject[V any] struct {
 	Changes   []string `json:"nova_object.changes"`
 }
 
-// Spec object from the Nova scheduler pipeline.
+type NovaObjectList[V any] struct {
+	Objects []NovaObject[V] `json:"objects"`
+}
+
+// Spec object from the Nova scheduler pipeline. Fields unused by Nova are omitted.
 // See: https://github.com/sapcc/nova/blob/stable/xena-m3/nova/objects/request_spec.py
 type NovaSpec struct {
-	ProjectID        string                    `json:"project_id"`
-	UserID           string                    `json:"user_id"`
-	AvailabilityZone string                    `json:"availability_zone"`
-	NInstances       int                       `json:"num_instances"`
-	Image            NovaObject[NovaImageMeta] `json:"image"`
-	Flavor           NovaObject[NovaFlavor]    `json:"flavor"`
+	ProjectID        string `json:"project_id"`
+	UserID           string `json:"user_id"`
+	InstanceUUID     string `json:"instance_uuid"`
+	AvailabilityZone string `json:"availability_zone"`
+	NumInstances     int    `json:"num_instances"`
+	IsBfv            bool   `json:"is_bfv"`
+
+	// Hints can be a one-element list or a direct value.
+	// See: https://github.com/sapcc/nova/blob/3e715db/nova/objects/request_spec.py#L382
+	SchedulerHints map[string]any `json:"scheduler_hints"`
+
+	IgnoreHosts *[]string `json:"ignore_hosts"`
+	ForceHosts  *[]string `json:"force_hosts"`
+	ForceNodes  *[]string `json:"force_nodes"`
+
+	Image              NovaObject[NovaImageMeta]          `json:"image"`
+	Flavor             NovaObject[NovaFlavor]             `json:"flavor"`
+	RequestLevelParams NovaObject[NovaRequestLevelParams] `json:"request_level_params"`
+	NetworkMetadata    NovaObject[map[string]any]         `json:"network_metadata"`
+	Limits             NovaObject[map[string]any]         `json:"limits"`
+	RequestedNetworks  NovaObjectList[map[string]any]     `json:"requested_networks"`
+	SecurityGroups     NovaObjectList[map[string]any]     `json:"security_groups"`
+
+	NumaTopology         *NovaObject[NovaNumaTopology]         `json:"numa_topology"`
+	RequestedDestination *NovaObject[NovaRequestedDestination] `json:"requested_destination"`
+	InstanceGroup        *NovaObject[NovaInstanceGroup]        `json:"instance_group"`
+}
+
+type NovaInstanceGroup struct {
+	UserID    string         `json:"user_id"`
+	ProjectID string         `json:"project_id"`
+	UUID      string         `json:"uuid"`
+	Name      string         `json:"name"`
+	Policies  []string       `json:"policies"`
+	Members   []string       `json:"members"`
+	Hosts     []string       `json:"hosts"`
+	Policy    string         `json:"policy"`
+	Rules     map[string]any `json:"_rules"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt *string        `json:"updated_at"`
+	DeletedAt *string        `json:"deleted_at"`
+	Deleted   bool           `json:"deleted"`
 }
 
 // Nova image metadata for the specified VM.
 type NovaImageMeta struct {
-	Name       string            `json:"name"`
-	Size       int               `json:"size"`
-	MinRAM     int               `json:"min_ram"`
-	MinDisk    int               `json:"min_disk"`
-	Properties map[string]string `json:"properties"`
+	ID              string                     `json:"id"`
+	Name            string                     `json:"name"`
+	Status          string                     `json:"status"`
+	Checksum        string                     `json:"checksum"`
+	Owner           string                     `json:"owner"`
+	Size            int                        `json:"size"`
+	ContainerFormat string                     `json:"container_format"`
+	DiskFormat      string                     `json:"disk_format"`
+	CreatedAt       string                     `json:"created_at"`
+	UpdatedAt       string                     `json:"updated_at"`
+	MinRAM          int                        `json:"min_ram"`
+	MinDisk         int                        `json:"min_disk"`
+	Properties      NovaObject[map[string]any] `json:"properties"`
 }
 
 // Nova flavor metadata for the specified VM.
 type NovaFlavor struct {
-	Name            string            `json:"name"`
-	MemoryMB        int               `json:"memory_mb"`
-	VCPUs           int               `json:"vcpus"`
-	RootDiskGB      int               `json:"root_gb"`
-	EphemeralDiskGB int               `json:"ephemeral_gb"`
-	FlavorID        string            `json:"flavorid"`
-	Swap            int               `json:"swap"`
-	RXTXFactor      float64           `json:"rxtx_factor"`
-	VCPUsWeight     float64           `json:"vcpus_weight"`
-	ExtraSpecs      map[string]string `json:"extra_specs"`
+	ID          int               `json:"id"`
+	Name        string            `json:"name"`
+	MemoryMB    int               `json:"memory_mb"`
+	VCPUs       int               `json:"vcpus"`
+	RootGB      int               `json:"root_gb"`
+	EphemeralGB int               `json:"ephemeral_gb"`
+	FlavorID    string            `json:"flavorid"`
+	Swap        int               `json:"swap"`
+	RXTXFactor  float64           `json:"rxtx_factor"`
+	VCPUWeight  int               `json:"vcpu_weight"`
+	Disabled    bool              `json:"disabled"`
+	IsPublic    bool              `json:"is_public"`
+	ExtraSpecs  map[string]string `json:"extra_specs"`
+	Description *string           `json:"description"`
+	CreatedAt   string            `json:"created_at"`
+	UpdatedAt   *string           `json:"updated_at"`
+	DeletedAt   *string           `json:"deleted_at"`
+	Deleted     bool              `json:"deleted"`
+}
+
+// Nova NUMA topology for the specified VM.
+type NovaNumaTopology struct {
+	Cells []NovaObject[map[string]any] `json:"cells"`
+}
+
+type NovaRequestedDestination struct {
+	Host                string    `json:"host"`
+	Node                string    `json:"node"`
+	Aggregates          []string  `json:"aggregates"`
+	ForbiddenAggregates *[]string `json:"forbidden_aggregates"`
+}
+
+type NovaRequestLevelParams struct {
+	RootRequired  []any `json:"root_required"`
+	RootForbidden []any `json:"root_forbidden"`
+	SameSubtree   []any `json:"same_subtree"`
 }
 
 // Nova request context object. For the spec of this object, see:
@@ -118,25 +196,27 @@ type NovaRequestContext struct {
 
 	UserID          string   `json:"user"`
 	ProjectID       string   `json:"project_id"`
-	SystemScope     string   `json:"system_scope"`
-	DomainID        string   `json:"domain"`
+	SystemScope     *string  `json:"system_scope"`
+	Project         string   `json:"project"`
+	DomainID        *string  `json:"domain"`
 	UserDomainID    string   `json:"user_domain"`
 	ProjectDomainID string   `json:"project_domain"`
 	IsAdmin         bool     `json:"is_admin"`
 	ReadOnly        bool     `json:"read_only"`
 	ShowDeleted     bool     `json:"show_deleted"`
 	RequestID       string   `json:"request_id"`
-	GlobalRequestID string   `json:"global_request_id"`
-	ResourceUUID    string   `json:"resource_uuid"`
+	GlobalRequestID *string  `json:"global_request_id"`
+	ResourceUUID    *string  `json:"resource_uuid"`
 	Roles           []string `json:"roles"`
 	UserIdentity    string   `json:"user_identity"`
 	IsAdminProject  bool     `json:"is_admin_project"`
+	ReadDeleted     string   `json:"read_deleted"`
 
 	// Fields added by the Nova scheduler
 
-	RemoteAddress string `json:"remote_address"`
-	Timestamp     string `json:"timestamp"`
-	QuotaClass    string `json:"quota_class"`
-	UserName      string `json:"user_name"`
-	ProjectName   string `json:"project_name"`
+	RemoteAddress string  `json:"remote_address"`
+	Timestamp     string  `json:"timestamp"`
+	QuotaClass    *string `json:"quota_class"`
+	UserName      string  `json:"user_name"`
+	ProjectName   string  `json:"project_name"`
 }
