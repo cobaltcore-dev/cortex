@@ -2269,7 +2269,7 @@
         "hide": 0,
         "includeAll": true,
         "label": "Availability Zone",
-        "multi": true,
+        "multi": false,
         "name": "availability_zone",
         "options": [],
         "query": {
@@ -2376,7 +2376,7 @@
         "hide": 0,
         "includeAll": true,
         "label": "Enabled",
-        "multi": true,
+        "multi": false,
         "name": "enabled",
         "options": [],
         "query": {
