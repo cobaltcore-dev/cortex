@@ -262,7 +262,29 @@ cortex-core:
                   types:
                     - flavors
                     - servers
-
+        - name: host_az_extractor
+          recencySeconds: 60 # 1 minute
+          dependencies:
+            sync:
+              openstack:
+                nova:
+                  types:
+                    - hypervisors
+                    - aggregates
+        # SAP-specific extractors.
+        - name: sap_host_details_extractor
+          recencySeconds: 60 # 1 minute
+          dependencies:
+            extractors:
+              - host_az_extractor
+            sync:
+              openstack:
+                placement:
+                  types:
+                    - traits
+                nova:
+                  types:
+                    - hypervisors
     kpis:
       # Configuration of KPIs that should be extracted from the synced data.
       # Each KPI can specify its own dependencies on other extractors and
@@ -279,19 +301,25 @@ cortex-core:
           dependencies:
             extractors:
               - vrops_project_noisiness_extractor
-        # Shared KPIs.
-        - name: host_utilization_kpi
+        # SAP specific KPIs.
+        - name: sap_host_total_capacity_kpi
           dependencies:
             extractors:
               - host_utilization_extractor
-              - host_capabilities_extractor
               - host_domain_project_extractor
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - hypervisors
-                    - aggregates
+              - sap_host_details_extractor
+        - name: sap_host_utilization_kpi
+          dependencies:
+            extractors:
+              - host_utilization_extractor
+              - host_domain_project_extractor
+              - sap_host_details_extractor
+        - name: sap_host_running_vms_kpi
+          dependencies:
+            extractors:
+              - host_domain_project_extractor
+              - sap_host_details_extractor
+        # Shared KPIs.
         - name: vm_migration_statistics_kpi
           dependencies:
             extractors:
