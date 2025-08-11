@@ -1193,7 +1193,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(cortex_host_utilization_pct_bucket{resource=\"cpu\"}) by (le)",
+          "expr": "sum(cortex_sap_host_utilization_pct_bucket{resource=\"cpu\"}) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -1269,7 +1269,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(cortex_host_utilization_pct_bucket{resource=\"memory\"}) by (le)",
+          "expr": "sum(cortex_sap_host_utilization_pct_bucket{resource=\"memory\"}) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -1345,7 +1345,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(cortex_host_utilization_pct_bucket{resource=\"disk\"}) by (le)",
+          "expr": "sum(cortex_sap_host_utilization_pct_bucket{resource=\"disk\"}) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -1432,12 +1432,12 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sort_desc(topk(20, cortex_host_utilization_per_host_pct{resource=\"cpu\"}))",
+          "expr": "sort_desc(topk(20, cortex_sap_host_utilization_per_host_pct{resource=\"cpu\"}))",
           "format": "time_series",
           "instant": true,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{compute_host_name}}",
+          "legendFormat": "{{compute_host}}",
           "refId": "A"
         }
       ],
@@ -1497,12 +1497,12 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sort_desc(topk(20,cortex_host_utilization_per_host_pct{resource=\"memory\"}))",
+          "expr": "sort_desc(topk(20,cortex_sap_host_utilization_per_host_pct{resource=\"memory\"}))",
           "format": "time_series",
           "instant": true,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{compute_host_name}}",
+          "legendFormat": "{{compute_host}}",
           "refId": "A"
         }
       ],
@@ -1562,12 +1562,12 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sort_desc(topk(20,cortex_host_utilization_per_host_pct{resource=\"disk\"}))",
+          "expr": "sort_desc(topk(20,cortex_sap_host_utilization_per_host_pct{resource=\"disk\"}))",
           "format": "time_series",
           "instant": true,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{compute_host_name}}",
+          "legendFormat": "{{compute_host}}",
           "refId": "A"
         }
       ],

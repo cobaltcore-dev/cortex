@@ -1,0 +1,118 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package sap
+
+import (
+	"log/slog"
+	"strconv"
+
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
+
+	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+type HostRunningVMs struct {
+	ComputeHostName  string  `db:"compute_host"`
+	AvailabilityZone string  `db:"availability_zone"`
+	CPUArchitecture  string  `db:"cpu_architecture"`
+	HypervisorFamily string  `db:"hypervisor_family"`
+	WorkloadType     string  `db:"workload_type"`
+	Enabled          bool    `db:"enabled"`
+	ProjectNames     *string `db:"project_names"`
+	DomainNames      *string `db:"domain_names"`
+	RunningVMs       float64 `db:"running_vms"`
+}
+
+type HostRunningVMsKPI struct {
+	// Common base for all KPIs that provides standard functionality.
+	plugins.BaseKPI[struct{}] // No options passed through yaml config
+
+	hostRunningVMsPerHost *prometheus.Desc
+}
+
+func (HostRunningVMsKPI) GetName() string {
+	return "sap_host_running_vms_kpi"
+}
+
+func (k *HostRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, opts); err != nil {
+		return err
+	}
+	k.hostRunningVMsPerHost = prometheus.NewDesc(
+		"cortex_sap_host_running_vms_per_host_pct",
+		"Resources utilized on the hosts currently (individually by host).",
+		[]string{
+			"compute_host",
+			"availability_zone",
+			"cpu_architecture",
+			"workload_type",
+			"hypervisor_family",
+			"enabled",
+			"projects",
+			"domains",
+		},
+		nil,
+	)
+	return nil
+}
+
+func (k *HostRunningVMsKPI) Describe(ch chan<- *prometheus.Desc) {
+	ch <- k.hostRunningVMsPerHost
+}
+
+func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
+	var hostRunningVMs []HostRunningVMs
+
+	query := `
+		SELECT
+    		hd.compute_host,
+    		hd.availability_zone,
+    		hd.cpu_architecture,
+    		hd.hypervisor_family,
+    		hd.workload_type,
+    		hd.enabled,
+    		hd.running_vms,
+    		hdp.project_names,
+    		hdp.domain_names
+		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
+		LEFT JOIN ` + shared.HostDomainProject{}.TableName() + ` AS hdp
+		    ON hdp.compute_host = hd.compute_host
+		WHERE hd.hypervisor_type != 'ironic';
+    `
+	if _, err := k.DB.Select(&hostRunningVMs, query); err != nil {
+		slog.Error("failed to select host utilization", "err", err)
+		return
+	}
+
+	for _, host := range hostRunningVMs {
+		projectNames := ""
+		if host.ProjectNames != nil {
+			projectNames = *host.ProjectNames
+		}
+		domainNames := ""
+		if host.DomainNames != nil {
+			domainNames = *host.DomainNames
+		}
+
+		enabled := strconv.FormatBool(host.Enabled)
+
+		ch <- prometheus.MustNewConstMetric(
+			k.hostRunningVMsPerHost,
+			prometheus.GaugeValue,
+			host.RunningVMs,
+			host.ComputeHostName,
+			host.AvailabilityZone,
+			host.CPUArchitecture,
+			host.WorkloadType,
+			host.HypervisorFamily,
+			enabled,
+			projectNames,
+			domainNames,
+		)
+	}
+}

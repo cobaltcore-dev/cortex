@@ -295,17 +295,32 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 
 	// Convert RawAggregate to Aggregate
 	for _, rawAggregate := range data.Aggregate {
-		for _, host := range rawAggregate.Hosts {
-			properties, err := json.Marshal(rawAggregate.Metadata)
-			if err != nil {
-				properties = []byte{}
-			}
+		properties, err := json.Marshal(rawAggregate.Metadata)
+		if err != nil {
+			slog.Warn(
+				"failed to marshal aggregate properties",
+				"aggregate", rawAggregate.UUID, "error", err,
+			)
+			properties = []byte{}
+		}
+		if len(rawAggregate.Hosts) == 0 {
+			// If no host is assigned to the aggregate, add it as empty.
 			aggregates = append(aggregates, Aggregate{
 				UUID:             rawAggregate.UUID,
 				Name:             rawAggregate.Name,
 				AvailabilityZone: rawAggregate.AvailabilityZone,
-				ComputeHost:      host,
-				Properties:       string(properties),
+				ComputeHost:      nil,
+				Metadata:         string(properties),
+			})
+		}
+		for _, host := range rawAggregate.Hosts {
+			computeHost := host // Make it safe.
+			aggregates = append(aggregates, Aggregate{
+				UUID:             rawAggregate.UUID,
+				Name:             rawAggregate.Name,
+				AvailabilityZone: rawAggregate.AvailabilityZone,
+				ComputeHost:      &computeHost,
+				Metadata:         string(properties),
 			})
 		}
 	}
