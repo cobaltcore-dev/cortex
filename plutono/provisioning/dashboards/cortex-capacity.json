@@ -15,8 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 5,
-  "iteration": 1754664108041,
+  "id": 4,
+  "iteration": 1754900095282,
   "links": [],
   "panels": [
     {
@@ -362,7 +362,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "instant": true,
           "interval": "",
           "legendFormat": "CPU",
@@ -371,7 +371,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -380,7 +380,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -1989,9 +1989,9 @@
               "workload_type 3": true
             },
             "indexByName": {
+              "Available CPUs": 9,
               "Available Disk": 15,
               "Available RAM": 12,
-              "Available CPUs": 9,
               "Time 1": 1,
               "Time 2": 18,
               "Time 3": 24,
