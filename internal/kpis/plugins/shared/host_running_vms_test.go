@@ -21,7 +21,7 @@ func TestHostRunningVMsKPI_Init(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	kpi := &HostTotalCapacityKPI{}
+	kpi := &HostRunningVMsKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
