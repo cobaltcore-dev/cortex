@@ -252,7 +252,7 @@ type Aggregate struct {
 	Name             string  `json:"name" db:"name"`
 	AvailabilityZone *string `json:"availability_zone" db:"availability_zone"`
 	ComputeHost      *string `json:"compute_host" db:"compute_host"` // Host that the aggregate is associated with.
-	Properties       string  `json:"properties" db:"properties"`     // JSON string of properties.
+	Metadata         string  `json:"metadata" db:"metadata"`         // JSON string of properties.
 }
 
 // Table in which the openstack model is stored.

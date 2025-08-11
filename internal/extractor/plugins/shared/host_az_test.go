@@ -73,13 +73,13 @@ func TestHostAZExtractor_Extract(t *testing.T) {
 
 	aggregates := []any{
 		// Test to find the first aggregate for computeHost1 with availability_zone != null
-		&nova.Aggregate{UUID: "agg1", Name: "something_else", AvailabilityZone: nil, ComputeHost: &computeHost1, Properties: "{}"},
-		&nova.Aggregate{UUID: "agg2", Name: availabilityZone1, AvailabilityZone: &availabilityZone1, ComputeHost: &computeHost1, Properties: "{}"},
+		&nova.Aggregate{UUID: "agg1", Name: "something_else", AvailabilityZone: nil, ComputeHost: &computeHost1, Metadata: "{}"},
+		&nova.Aggregate{UUID: "agg2", Name: availabilityZone1, AvailabilityZone: &availabilityZone1, ComputeHost: &computeHost1, Metadata: "{}"},
 		// Test to check that we get null when there is an aggregate for computeHost2 but without availability_zone
-		&nova.Aggregate{UUID: "agg3", Name: "something_else_again", AvailabilityZone: nil, ComputeHost: &computeHost2, Properties: "{}"},
+		&nova.Aggregate{UUID: "agg3", Name: "something_else_again", AvailabilityZone: nil, ComputeHost: &computeHost2, Metadata: "{}"},
 		// No aggregate for computeHost3
 		// Should find an availability zone for computeHost4
-		&nova.Aggregate{UUID: "agg4", Name: availabilityZone2, AvailabilityZone: &availabilityZone2, ComputeHost: &computeHost4, Properties: "{}"},
+		&nova.Aggregate{UUID: "agg4", Name: availabilityZone2, AvailabilityZone: &availabilityZone2, ComputeHost: &computeHost4, Metadata: "{}"},
 	}
 
 	if err := testDB.Insert(aggregates...); err != nil {

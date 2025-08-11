@@ -310,7 +310,7 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 				Name:             rawAggregate.Name,
 				AvailabilityZone: rawAggregate.AvailabilityZone,
 				ComputeHost:      nil,
-				Properties:       string(properties),
+				Metadata:         string(properties),
 			})
 		}
 		for _, host := range rawAggregate.Hosts {
@@ -320,7 +320,7 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 				Name:             rawAggregate.Name,
 				AvailabilityZone: rawAggregate.AvailabilityZone,
 				ComputeHost:      &computeHost,
-				Properties:       string(properties),
+				Metadata:         string(properties),
 			})
 		}
 	}
