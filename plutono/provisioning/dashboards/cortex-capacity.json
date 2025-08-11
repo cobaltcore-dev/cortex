@@ -1744,7 +1744,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Availble CPUs"
+              "options": "Available CPUs"
             },
             "properties": [
               {
@@ -1910,7 +1910,7 @@
         {
           "id": "calculateField",
           "options": {
-            "alias": "Availble CPUs",
+            "alias": "Available CPUs",
             "binary": {
               "left": "Value #TotalCPUQuery",
               "operator": "*",
@@ -1991,7 +1991,7 @@
             "indexByName": {
               "Available Disk": 15,
               "Available RAM": 12,
-              "Availble CPUs": 9,
+              "Available CPUs": 9,
               "Time 1": 1,
               "Time 2": 18,
               "Time 3": 24,
@@ -2027,7 +2027,7 @@
               "workload_type 3": 29
             },
             "renameByName": {
-              "Availble CPUs": "",
+              "Available CPUs": "",
               "Time 2": "",
               "Time 4": "",
               "Value #A": "Available CPUs (%)",
