@@ -20,6 +20,36 @@
   "links": [],
   "panels": [
     {
+      "datasource": null,
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 195,
+      "options": {
+        "content": "# Capacity Overview by Workload Type & CPU Architecture\n\nThis section displays current resource utilization organized by **workload type** (General Purpose, HANA) and **CPU architecture** (Cascade Lake, Sapphire Rapids). The visualizations show available capacity percentages for CPU, RAM, and Disk resources across your infrastructure.\n\n## Current Filters Applied\nThe displayed data is filtered based on your current selections:\n- **Availability Zone**: Controls which zones are included in the analysis\n- **Hypervisor Family**: Filters by virtualization platform (KVM, VMware)\n- **Host Status**: Option to include or exclude disabled hosts from calculations\n\n## Understanding the Metrics\nEach panel shows the percentage of **available capacity** (not utilization) for the selected resource type. Higher percentages indicate more available resources for new workloads.\n\n---\n\nFor detailed breakdowns and historical trends, explore the **\"Total Over Current Selection\"** section below, where you can:\n- View aggregated totals across your current filter selection\n- Analyze capacity trends over time\n- Examine per-host capacity distribution\n- Apply additional filters for deeper analysis (specific hypervisors, workload types, CPU architectures)",
+        "mode": "markdown"
+      },
+      "pluginVersion": "7.5.40",
+      "targets": [
+        {
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Introduction",
+      "type": "text"
+    },
+    {
       "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
@@ -50,8 +80,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 0,
+        "w": 10,
+        "x": 4,
         "y": 0
       },
       "id": 170,
@@ -70,11 +100,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "instant": true,
           "interval": "",
           "legendFormat": "CPU",
@@ -83,7 +113,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -92,7 +122,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -136,8 +166,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 10,
+        "x": 14,
         "y": 0
       },
       "id": 177,
@@ -156,11 +186,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "instant": true,
           "interval": "",
           "legendFormat": "CPU",
@@ -169,7 +199,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -178,7 +208,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"sapphire-rapids\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -222,8 +252,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 0,
+        "w": 10,
+        "x": 4,
         "y": 8
       },
       "id": 179,
@@ -242,11 +272,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "instant": true,
           "interval": "",
           "legendFormat": "CPU",
@@ -255,7 +285,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -264,7 +294,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"hana\",\n          cpu_architecture=\"cascade-lake\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -308,8 +338,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 10,
+        "x": 14,
         "y": 8
       },
       "id": 178,
@@ -328,11 +358,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "instant": true,
           "interval": "",
           "legendFormat": "CPU",
@@ -341,7 +371,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -350,7 +380,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"hana\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=\"general-purpose\",\n          cpu_architecture=\"hana\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n) / sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"hana\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -484,11 +514,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
           "instant": true,
           "interval": "",
           "legendFormat": "Available",
@@ -497,7 +527,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -506,7 +536,7 @@
         },
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -643,11 +673,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
           "instant": true,
           "interval": "",
           "legendFormat": "Available",
@@ -656,7 +686,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -665,7 +695,7 @@
         },
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -802,11 +832,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
           "instant": true,
           "interval": "",
           "legendFormat": "Available",
@@ -815,7 +845,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -824,7 +854,7 @@
         },
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "predict_linear(\n  sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)[1d:]\n, 86400) / \nsum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -889,7 +919,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -900,7 +930,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"cpu\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
           "interval": "",
           "legendFormat": "Available",
           "queryType": "randomWalk",
@@ -908,7 +938,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "interval": "",
           "legendFormat": "Total",
@@ -996,7 +1026,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1007,7 +1037,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"ram\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
           "interval": "",
           "legendFormat": "Available",
           "queryType": "randomWalk",
@@ -1015,7 +1045,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "interval": "",
           "legendFormat": "Total",
@@ -1103,7 +1133,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1114,7 +1144,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
+          "expr": "sum(\n  (\n    max by (compute_host, resource, availability_zone) (\n      cortex_sap_total_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n    *\n    on(compute_host, resource, availability_zone)\n    (\n      1 - max by (compute_host, resource, availability_zone) (\n        cortex_sap_host_utilization_per_host_pct{\n          resource=\"disk\",\n          availability_zone=~\"$availability_zone\",\n          compute_host=~\"$compute_host\",\n          hypervisor_family=~\"$hypervisor_family\",\n          enabled=~\"$enabled\",\n          workload_type=~\"$workload_type\",\n          cpu_architecture=~\"$cpu_architecture\",\n          enabled=~\"$enabled\"\n        } / 100\n      )\n    )\n  )\n)",
           "interval": "",
           "legendFormat": "Available",
           "queryType": "randomWalk",
@@ -1122,7 +1152,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "interval": "",
           "legendFormat": "Total",
@@ -1208,7 +1238,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1230,7 +1260,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n    sum by (compute_host, enabled) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host}} {{enabled}}",
@@ -1319,7 +1349,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1341,7 +1371,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n    sum by (compute_host, enabled) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host}} {{enabled}}",
@@ -1430,7 +1460,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1452,7 +1482,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n    sum by (compute_host, enabled) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host}} {{enabled}}",
@@ -1796,11 +1826,11 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
+          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_sap_host_utilization_per_host_pct{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -1810,7 +1840,7 @@
         },
         {
           "exemplar": true,
-          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
+          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_sap_host_utilization_per_host_pct{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1820,7 +1850,7 @@
         },
         {
           "exemplar": true,
-          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_host_utilization_per_host_pct{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
+          "expr": "max by (compute_host, total, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (100-cortex_sap_host_utilization_per_host_pct{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / 100",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1830,7 +1860,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" }) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
+          "expr": "sum by (compute_host) (cortex_sap_total_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" }) / \ncount by (compute_host) (cortex_sap_total_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1840,7 +1870,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
+          "expr": "sum by (compute_host) (cortex_sap_total_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / \ncount by (compute_host) (cortex_sap_total_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1850,7 +1880,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum by (compute_host) (cortex_total_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / \ncount by (compute_host) (cortex_total_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
+          "expr": "sum by (compute_host) (cortex_sap_total_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) / \ncount by (compute_host) (cortex_sap_total_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\" })",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1860,7 +1890,7 @@
         },
         {
           "exemplar": true,
-          "expr": "max by (compute_host) (cortex_host_running_vms_per_host_pct{availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) ",
+          "expr": "max by (compute_host) (cortex_sap_host_running_vms_per_host_pct{availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"}) ",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -2062,12 +2092,12 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "reverseYBuckets": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n    sum by (compute_host) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -2134,12 +2164,12 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "reverseYBuckets": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n    sum by (compute_host) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -2206,12 +2236,12 @@
       "legend": {
         "show": false
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.40",
       "reverseYBuckets": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host) (\n      100 - cortex_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n    sum by (compute_host) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host) (\n      100 - cortex_sap_host_utilization_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -2263,7 +2293,7 @@
           ]
         },
         "datasource": "prometheus-openstack",
-        "definition": "label_values(cortex_host_utilization_per_host_pct, availability_zone)",
+        "definition": "label_values(cortex_sap_host_utilization_per_host_pct, availability_zone)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -2273,7 +2303,7 @@
         "name": "availability_zone",
         "options": [],
         "query": {
-          "query": "label_values(cortex_host_utilization_per_host_pct, availability_zone)",
+          "query": "label_values(cortex_sap_host_utilization_per_host_pct, availability_zone)",
           "refId": "prometheus-openstack-availability_zone-Variable-Query"
         },
         "refresh": 1,
@@ -2298,7 +2328,7 @@
           ]
         },
         "datasource": "prometheus-openstack",
-        "definition": "label_values(cortex_host_utilization_per_host_pct, hypervisor_family)",
+        "definition": "label_values(cortex_sap_host_utilization_per_host_pct, hypervisor_family)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -2308,7 +2338,7 @@
         "name": "hypervisor_family",
         "options": [],
         "query": {
-          "query": "label_values(cortex_host_utilization_per_host_pct, hypervisor_family)",
+          "query": "label_values(cortex_sap_host_utilization_per_host_pct, hypervisor_family)",
           "refId": "prometheus-openstack-hypervisor_family-Variable-Query"
         },
         "refresh": 1,
@@ -2334,7 +2364,7 @@
           ]
         },
         "datasource": "prometheus-openstack",
-        "definition": "label_values(cortex_host_utilization_per_host_pct, compute_host)",
+        "definition": "label_values(cortex_sap_host_utilization_per_host_pct, compute_host)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -2344,7 +2374,7 @@
         "name": "compute_host",
         "options": [],
         "query": {
-          "query": "label_values(cortex_host_utilization_per_host_pct, compute_host)",
+          "query": "label_values(cortex_sap_host_utilization_per_host_pct, compute_host)",
           "refId": "prometheus-openstack-compute_host-Variable-Query"
         },
         "refresh": 1,
@@ -2370,7 +2400,7 @@
           ]
         },
         "datasource": "prometheus-openstack",
-        "definition": "label_values(cortex_host_utilization_per_host_pct, enabled)",
+        "definition": "label_values(cortex_sap_host_utilization_per_host_pct, enabled)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -2380,7 +2410,7 @@
         "name": "enabled",
         "options": [],
         "query": {
-          "query": "label_values(cortex_host_utilization_per_host_pct, enabled)",
+          "query": "label_values(cortex_sap_host_utilization_per_host_pct, enabled)",
           "refId": "prometheus-openstack-enabled-Variable-Query"
         },
         "refresh": 1,
@@ -2406,7 +2436,7 @@
           ]
         },
         "datasource": "prometheus-openstack",
-        "definition": "label_values(cortex_host_utilization_per_host_pct, workload_type)",
+        "definition": "label_values(cortex_sap_host_utilization_per_host_pct, workload_type)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -2416,7 +2446,7 @@
         "name": "workload_type",
         "options": [],
         "query": {
-          "query": "label_values(cortex_host_utilization_per_host_pct, workload_type)",
+          "query": "label_values(cortex_sap_host_utilization_per_host_pct, workload_type)",
           "refId": "prometheus-openstack-workload_type-Variable-Query"
         },
         "refresh": 1,
@@ -2442,7 +2472,7 @@
           ]
         },
         "datasource": "prometheus-openstack",
-        "definition": "label_values(cortex_host_utilization_per_host_pct, cpu_architecture)",
+        "definition": "label_values(cortex_sap_host_utilization_per_host_pct, cpu_architecture)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -2452,7 +2482,7 @@
         "name": "cpu_architecture",
         "options": [],
         "query": {
-          "query": "label_values(cortex_host_utilization_per_host_pct, cpu_architecture)",
+          "query": "label_values(cortex_sap_host_utilization_per_host_pct, cpu_architecture)",
           "refId": "prometheus-openstack-cpu_architecture-Variable-Query"
         },
         "refresh": 1,

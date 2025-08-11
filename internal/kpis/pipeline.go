@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/netapp"
+	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
@@ -25,12 +26,13 @@ var SupportedKPIs = []plugins.KPI{
 	// NetApp kpis.
 	&netapp.NetAppStoragePoolCPUUsageKPI{},
 	// Shared kpis.
-	&shared.HostTotalCapacityKPI{},
-	&shared.HostUtilizationKPI{},
 	&shared.VMMigrationStatisticsKPI{},
 	&shared.VMLifeSpanKPI{},
 	&shared.VMCommitmentsKPI{},
-	&shared.HostRunningVMsKPI{},
+	// SAP kpis.
+	&sap.HostTotalCapacityKPI{},
+	&sap.HostUtilizationKPI{},
+	&sap.HostRunningVMsKPI{},
 }
 
 // Pipeline that extracts kpis from the database.

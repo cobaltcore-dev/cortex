@@ -301,24 +301,25 @@ cortex-core:
           dependencies:
             extractors:
               - vrops_project_noisiness_extractor
+        # SAP specific KPIs.
+        - name: sap_host_total_capacity_kpi
+          dependencies:
+            extractors:
+              - host_utilization_extractor
+              - host_domain_project_extractor
+              - sap_host_details_extractor
+        - name: sap_host_utilization_kpi
+          dependencies:
+            extractors:
+              - host_utilization_extractor
+              - host_domain_project_extractor
+              - sap_host_details_extractor
+        - name: sap_host_running_vms_kpi
+          dependencies:
+            extractors:
+              - host_domain_project_extractor
+              - sap_host_details_extractor
         # Shared KPIs.
-        - name: host_running_vms_kpi
-          dependencies:
-            extractors:
-              - host_domain_project_extractor
-              - sap_host_details_extractor
-        - name: host_total_capacity_kpi
-          dependencies:
-            extractors:
-              - host_utilization_extractor
-              - host_domain_project_extractor
-              - sap_host_details_extractor
-        - name: host_utilization_kpi
-          dependencies:
-            extractors:
-              - host_utilization_extractor
-              - host_domain_project_extractor
-              - sap_host_details_extractor
         - name: vm_migration_statistics_kpi
           dependencies:
             extractors:

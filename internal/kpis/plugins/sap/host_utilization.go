@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package shared
+package sap
 
 import (
 	"log/slog"
@@ -26,7 +26,7 @@ type HostUtilizationKPI struct {
 }
 
 func (HostUtilizationKPI) GetName() string {
-	return "host_utilization_kpi"
+	return "sap_host_utilization_kpi"
 }
 
 func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
@@ -34,7 +34,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 		return err
 	}
 	k.hostResourcesUtilizedPerHost = prometheus.NewDesc(
-		"cortex_host_utilization_per_host_pct",
+		"cortex_sap_host_utilization_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
 		[]string{
 			"compute_host",
@@ -51,7 +51,7 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 		nil,
 	)
 	k.hostResourcesUtilizedHist = prometheus.NewDesc(
-		"cortex_host_utilization_pct",
+		"cortex_sap_host_utilization_pct",
 		"Resources utilized on the hosts currently (aggregated as a histogram).",
 		[]string{"resource"},
 		nil,

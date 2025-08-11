@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package shared
+package sap
 
 import (
 	"slices"
@@ -17,19 +17,19 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-func TestHostTotalCapacityKPI_Init(t *testing.T) {
+func TestHostUtilizationKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	kpi := &HostTotalCapacityKPI{}
+	kpi := &HostUtilizationKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestHostTotalCapacityKPI_Collect(t *testing.T) {
+func TestHostUtilizationKPI_Collect(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -51,7 +51,6 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "vcenter",
 			HypervisorFamily: "vmware",
-			RunningVMs:       5,
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
 			DisabledReason:   nil,
@@ -62,7 +61,6 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "qemu",
 			HypervisorFamily: "kvm",
-			RunningVMs:       5,
 			WorkloadType:     "hana",
 			Enabled:          false,
 			DisabledReason:   &externalCustomerReason,
@@ -73,7 +71,6 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "ironic",
 			HypervisorFamily: "kvm",
-			RunningVMs:       5,
 			WorkloadType:     "hana",
 			Enabled:          false,
 			DisabledReason:   &externalCustomerReason,
@@ -86,24 +83,22 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 
 	hostUtilizations := []any{
 		&shared.HostUtilization{
-			ComputeHost:      "vwmare-host",
-			RAMUtilizedPct:   50,
-			VCPUsUtilizedPct: 50,
-			DiskUtilizedPct:  50,
-			// Assuimg 100 <unit> for every resource so we don't have to write an extra expected model for each resource
+			ComputeHost:              "vwmare-host",
+			RAMUtilizedPct:           50,
+			VCPUsUtilizedPct:         50,
+			DiskUtilizedPct:          50,
 			TotalMemoryAllocatableMB: 100,
 			TotalVCPUsAllocatable:    100,
 			TotalDiskAllocatableGB:   100,
 		},
 		&shared.HostUtilization{
-			ComputeHost:      "kvm-host",
-			RAMUtilizedPct:   80,
-			VCPUsUtilizedPct: 75,
-			DiskUtilizedPct:  80,
-			// Assuimg 1000 <unit> for every resource so we don't have to write an extra expected model for each resource
-			TotalMemoryAllocatableMB: 1000,
-			TotalVCPUsAllocatable:    1000,
-			TotalDiskAllocatableGB:   1000,
+			ComputeHost:              "kvm-host",
+			RAMUtilizedPct:           80,
+			VCPUsUtilizedPct:         75,
+			DiskUtilizedPct:          80,
+			TotalMemoryAllocatableMB: 100,
+			TotalVCPUsAllocatable:    100,
+			TotalDiskAllocatableGB:   100,
 		},
 		&shared.HostUtilization{
 			ComputeHost:              "ironic-host",
@@ -138,7 +133,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	kpi := &HostTotalCapacityKPI{}
+	kpi := &HostUtilizationKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -171,6 +166,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			"compute_host":      "vwmare-host",
 			"availability_zone": "az1",
 			"enabled":           "true",
+			"disabled_reason":   "-",
 			"projects":          "project1,project2",
 			"domains":           "domain1,domain2",
 			"cpu_architecture":  "cascade-lake",
@@ -181,6 +177,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			"compute_host":      "kvm-host",
 			"availability_zone": "az2",
 			"enabled":           "false",
+			"disabled_reason":   externalCustomerReason,
 			"projects":          "project2",
 			"domains":           "",
 			"cpu_architecture":  "cascade-lake",
@@ -192,7 +189,7 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 	for metric := range ch {
 		metricName := metric.Desc().String()
 		// Ignore the histogram metric in this test
-		if strings.Contains(metricName, "cortex_host_utilization_pct") {
+		if strings.Contains(metricName, "cortex_sap_host_utilization_pct") {
 			continue
 		}
 

@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package shared
+package sap
 
 import (
 	"log/slog"
@@ -23,7 +23,7 @@ type HostTotalCapacityKPI struct {
 }
 
 func (HostTotalCapacityKPI) GetName() string {
-	return "host_total_capacity_kpi"
+	return "sap_host_total_capacity_kpi"
 }
 
 func (k *HostTotalCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
@@ -31,7 +31,7 @@ func (k *HostTotalCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 		return err
 	}
 	k.hostTotalCapacityPerHost = prometheus.NewDesc(
-		"cortex_total_capacity_per_host",
+		"cortex_sap_total_capacity_per_host",
 		"Total resources available on the hosts currently (individually by host).",
 		[]string{
 			"compute_host",

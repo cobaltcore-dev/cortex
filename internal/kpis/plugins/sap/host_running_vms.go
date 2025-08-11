@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package shared
+package sap
 
 import (
 	"log/slog"
@@ -36,7 +36,7 @@ type HostRunningVMsKPI struct {
 }
 
 func (HostRunningVMsKPI) GetName() string {
-	return "host_running_vms_kpi"
+	return "sap_host_running_vms_kpi"
 }
 
 func (k *HostRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
@@ -44,7 +44,7 @@ func (k *HostRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
 		return err
 	}
 	k.hostRunningVMsPerHost = prometheus.NewDesc(
-		"cortex_host_running_vms_per_host_pct",
+		"cortex_sap_host_running_vms_per_host_pct",
 		"Resources utilized on the hosts currently (individually by host).",
 		[]string{
 			"compute_host",
