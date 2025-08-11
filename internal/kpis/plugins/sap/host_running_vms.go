@@ -66,7 +66,6 @@ func (k *HostRunningVMsKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
-
 	var hostRunningVMs []HostRunningVMs
 
 	query := `
@@ -115,6 +114,5 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 			projectNames,
 			domainNames,
 		)
-
 	}
 }
