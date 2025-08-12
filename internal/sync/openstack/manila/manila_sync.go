@@ -44,7 +44,7 @@ func (s *ManilaSyncer) Init(ctx context.Context) {
 func (s *ManilaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.Conf.Types, "storage_pools") {
-		changedPools, err := s.SyncChangedStoragePools(ctx)
+		changedPools, err := s.SyncAllStoragePools(ctx)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func (s *ManilaSyncer) Sync(ctx context.Context) error {
 }
 
 // Sync the OpenStack resource providers into the database.
-func (s *ManilaSyncer) SyncChangedStoragePools(ctx context.Context) ([]StoragePool, error) {
+func (s *ManilaSyncer) SyncAllStoragePools(ctx context.Context) ([]StoragePool, error) {
 	label := StoragePool{}.TableName()
 	pools, err := s.API.GetAllStoragePools(ctx)
 	if err != nil {

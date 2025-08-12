@@ -43,7 +43,7 @@ func TestStoragePoolCPUUsageExtractor_Extract(t *testing.T) {
 	if err := testDB.CreateTable(
 		testDB.AddTable(manila.StoragePool{}),
 	); err != nil {
-		t.Fatalf("failed to create openstack_storage_pools: %v", err)
+		t.Fatalf("failed to create openstack_manila_storage_pools: %v", err)
 	}
 	if _, err := testDB.Exec(`
         CREATE TABLE netapp_aggregate_labels_metrics (
@@ -65,12 +65,12 @@ func TestStoragePoolCPUUsageExtractor_Extract(t *testing.T) {
 
 	// Insert mock data
 	_, err := testDB.Exec(`
-        INSERT INTO openstack_storage_pools (name, pool) VALUES
+        INSERT INTO openstack_manila_storage_pools (name, pool) VALUES
         ('pool1', 'aggr1'),
         ('pool2', 'aggr2')
     `)
 	if err != nil {
-		t.Fatalf("failed to insert openstack_storage_pools: %v", err)
+		t.Fatalf("failed to insert openstack_manila_storage_pools: %v", err)
 	}
 	_, err = testDB.Exec(`
         INSERT INTO netapp_aggregate_labels_metrics (aggr, node) VALUES
