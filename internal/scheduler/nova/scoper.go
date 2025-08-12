@@ -42,6 +42,10 @@ func (s *StepScoper) Init(alias string, db db.DB, opts conf.RawOpts) error {
 
 // Run the step and sRun(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error)
 func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
+	// Check if the step is only for sandboxed requests.
+	if !request.IsSandboxed() && s.Scope.Sandbox {
+		return nil, scheduler.ErrStepSkipped
+	}
 	// If the spec is not in scope, skip it.
 	if !s.isSpecInScope(traceLog, request) {
 		return nil, scheduler.ErrStepSkipped
@@ -69,7 +73,6 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerReq
 	}
 	traceLog.Info(
 		"scheduler: scoped step activations",
-		"step", s.GetName(),
 		"hosts not in scope", hostsNotInScope,
 		"hosts in scope", hostsInScope,
 	)
