@@ -200,6 +200,10 @@ type NovaSchedulerStepScope struct {
 	HostSelectors []NovaSchedulerStepHostSelector `json:"hostSelectors,omitempty"`
 	// Selectors applied to the given nova spec.
 	SpecSelectors []NovaSchedulerStepSpecSelector `json:"specSelectors,omitempty"`
+	// If the step is currently being sandboxed, which means it doesn't
+	// affect the actual placement, but can be executed with the sandbox
+	// flag activated in the scheduler request.
+	Sandbox bool `json:"sandbox,omitempty"`
 }
 
 type NovaSchedulerStepHostSelector struct {
@@ -266,6 +270,10 @@ type SchedulerStepDisabledValidationsConfig struct {
 	// step. This should only be disabled for scheduler steps that remove subjects.
 	// Thus, if no value is provided, the default is false.
 	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
+	// Whether to validate that, after running the step, there are remaining subjects.
+	// This should only be disabled for scheduler steps that are expected to
+	// remove all subjects.
+	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
 }
 
 // Configuration for the scheduler module.
