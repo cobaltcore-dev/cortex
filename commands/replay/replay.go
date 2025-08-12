@@ -15,6 +15,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
@@ -27,8 +30,9 @@ func main() {
 	source := flag.String("h", "tcp://localhost:18830", "The cortex MQTT broker to connect to")
 	username := flag.String("u", "cortex", "The username to use for the MQTT connection")
 	password := flag.String("p", "secret", "The password to use for the MQTT connection")
-	topic := flag.String("t", "cortex/scheduler/nova/pipeline/finished", "The topic to subscribe to")
+	schedulerType := flag.String("scheduler", "nova", "The scheduler to use (nova/manila)")
 	sink := flag.String("s", "", "The http endpoint to forward to")
+	sandboxed := flag.Bool("sandboxed", false, "Replay the request in sandbox mode (default: false)")
 	help := flag.Bool("help", false, "Show this help message")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options]\n", os.Args[0])
@@ -59,21 +63,21 @@ func main() {
 	}
 	defer client.Disconnect(1000)
 
-	client.Subscribe(*topic, 2, func(client mqtt.Client, msg mqtt.Message) {
-		// Unwrap the "request" from the message
-		var payload map[string]any
-		must.Succeed(json.Unmarshal(msg.Payload(), &payload))
-		request, ok := payload["request"]
-		if !ok {
-			fmt.Fprintf(os.Stderr, "Message does not contain a 'request' field\n")
-			return
+	client.Subscribe(map[string]string{
+		"nova":   nova.TopicFinished,
+		"manila": manila.TopicFinished,
+	}[*schedulerType], 2, func(client mqtt.Client, msg mqtt.Message) {
+		var data struct {
+			Request scheduler.PipelineRequest `json:"request"`
 		}
+		must.Succeed(json.Unmarshal(msg.Payload(), &data))
+		req := data.Request.WithSandboxed(*sandboxed)
 		for {
 			// Forward the request to the local Cortex instance
-			requestBody := must.Return(json.Marshal(request))
-			req := must.Return(http.NewRequestWithContext(context.Background(), http.MethodPost, *sink, bytes.NewBuffer(requestBody)))
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
+			requestBody := must.Return(json.Marshal(req))
+			httpReq := must.Return(http.NewRequestWithContext(context.Background(), http.MethodPost, *sink, bytes.NewBuffer(requestBody)))
+			httpReq.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(httpReq)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to forward message to Cortex: %v, retrying...\n", err)
 				time.Sleep(jobloop.DefaultJitter(time.Second)) // wait before retrying
