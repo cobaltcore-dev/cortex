@@ -59,9 +59,23 @@ func (s *StepValidator[RequestType]) Run(traceLog *slog.Logger, request RequestT
 		return nil, err
 	}
 	// If not disabled, validate that the number of subjects stayed the same.
+	// Note that for some schedulers the same subject (e.g. compute host) may
+	// appear multiple times if there is a substruct (e.g. hypervisor hostname).
+	// Since cortex will only schedule on the subject level and not below,
+	// we need to deduplicate the subjects first before the validation.
 	if !s.DisabledValidations.SameSubjectNumberInOut {
-		if len(result.Activations) != len(request.GetSubjects()) {
-			return nil, errors.New("number of subjects changed during step execution")
+		deduplicated := map[string]struct{}{}
+		for _, subject := range request.GetSubjects() {
+			deduplicated[subject] = struct{}{}
+		}
+		if len(result.Activations) != len(deduplicated) {
+			return nil, errors.New("safety: number of (deduplicated) subjects changed during step execution")
+		}
+	}
+	// If not disabled, validate that some subjects remain.
+	if !s.DisabledValidations.SomeSubjectsRemain {
+		if len(result.Activations) == 0 {
+			return nil, errors.New("safety: no subjects remain after step execution")
 		}
 	}
 	return result, nil
