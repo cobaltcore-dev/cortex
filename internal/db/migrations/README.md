@@ -45,7 +45,7 @@ ALTER TABLE IF EXISTS openstack_servers
 -- Update the flavor_name column with the corresponding flavor names
 UPDATE openstack_servers AS s
 SET flavor_name = f.name
-FROM openstack_flavors AS f
+FROM openstack_flavors_v2 AS f
 WHERE s.flavor_id = f.id;
 -- Delete all servers where the flavor name could not be determined.
 DELETE FROM openstack_servers WHERE flavor_name IS NULL;

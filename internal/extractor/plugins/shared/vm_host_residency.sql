@@ -22,7 +22,7 @@ WITH durations AS (
         ) AS duration
     FROM openstack_migrations AS migrations
     LEFT JOIN openstack_servers AS servers ON servers.id = migrations.instance_uuid
-    LEFT JOIN openstack_flavors AS flavors ON flavors.name = servers.flavor_name
+    LEFT JOIN openstack_flavors_v2 AS flavors ON flavors.name = servers.flavor_name
 )
 SELECT
     -- Sometimes the server can be vanished already, set default
