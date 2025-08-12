@@ -145,12 +145,19 @@ func (c *config) Validate() error {
 	if c.OpenStack.Placement.Availability == "" {
 		c.OpenStack.Placement.Availability = "public"
 	}
+	if c.OpenStack.Cinder.Availability == "" {
+		c.OpenStack.Cinder.Availability = "public"
+	}
 	if !slices.Contains(validAvailabilities, c.OpenStack.Nova.Availability) {
 		return fmt.Errorf("invalid nova availability %s", c.OpenStack.Nova.Availability)
 	}
 	if !slices.Contains(validAvailabilities, c.OpenStack.Placement.Availability) {
 		return fmt.Errorf("invalid placement availability %s", c.OpenStack.Placement.Availability)
 	}
+	if !slices.Contains(validAvailabilities, c.OpenStack.Cinder.Availability) {
+		return fmt.Errorf("invalid cinder availability %s", c.OpenStack.Cinder.Availability)
+	}
+
 	// Check that all confed metric types have a host to sync from.
 	confedMetricTypes := make(map[string]bool)
 	for _, metric := range c.Prometheus.Metrics {
