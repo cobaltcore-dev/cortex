@@ -25,6 +25,18 @@ func (d Domain) TableName() string { return "openstack_domains" }
 // Indexes for the domain table.
 func (d Domain) Indexes() []db.Index { return nil }
 
+// RawProject represents the raw project data as returned by the OpenStack identity API.
+type RawProject struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	DomainID string   `json:"domain_id"`
+	ParentID string   `json:"parent_id"`
+	IsDomain bool     `json:"is_domain"`
+	Enabled  bool     `json:"enabled"`
+	Tags     []string `json:"tags"`
+}
+
+// Project as inserted into the database for efficient handling.
 type Project struct {
 	ID       string `json:"id" db:"id,primarykey"`
 	Name     string `json:"name" db:"name"`

@@ -80,15 +80,7 @@ func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 	}
 
 	var data = &struct {
-		Projects []struct {
-			ID       string   `json:"id"`
-			Name     string   `json:"name"`
-			DomainID string   `json:"domain_id"`
-			ParentID string   `json:"parent_id"`
-			IsDomain bool     `json:"is_domain"`
-			Enabled  bool     `json:"enabled"`
-			Tags     []string `json:"tags"`
-		} `json:"projects"`
+		Projects []RawProject `json:"projects"`
 	}{}
 	if err := allPages.(projects.ProjectPage).ExtractInto(data); err != nil {
 		return nil, err
