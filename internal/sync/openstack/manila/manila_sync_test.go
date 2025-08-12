@@ -63,7 +63,7 @@ func TestManilaSyncer_Sync(t *testing.T) {
 	}
 }
 
-func TestManilaSyncer_SyncChangedStoragePools(t *testing.T) {
+func TestManilaSyncer_SyncAllStoragePools(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -80,7 +80,7 @@ func TestManilaSyncer_SyncChangedStoragePools(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	pools, err := syncer.SyncChangedStoragePools(ctx)
+	pools, err := syncer.SyncAllStoragePools(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
