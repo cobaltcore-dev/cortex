@@ -4,9 +4,10 @@ WITH host_traits AS (
         h.hypervisor_type,
         h.running_vms,
         h.state,
+        h.status,
         STRING_AGG(t.name, ',') AS traits
     FROM openstack_hypervisors h
-    JOIN openstack_resource_provider_traits t
+    LEFT JOIN openstack_resource_provider_traits t
         ON h.id = t.resource_provider_uuid
     GROUP BY h.service_host, h.hypervisor_type, h.running_vms, h.state
 )
@@ -33,12 +34,16 @@ SELECT
     CASE
         WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN false
         WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN false
+        WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN false
+        WHEN ht.status != 'enabled' THEN false
         WHEN ht.state != 'up' THEN false
         ELSE true
     END AS enabled,
     CASE
         WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN 'decommissioning'
         WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN 'external customer'
+        WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN 'disabled trait'
+        WHEN ht.status != 'enabled' THEN 'not enabled'
         WHEN ht.state != 'up' THEN 'not up'
         ELSE NULL
     END AS disabled_reason
