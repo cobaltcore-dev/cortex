@@ -22,6 +22,11 @@ type StepOpts interface {
 	Validate() error
 }
 
+// Empty step opts conforming to the StepOpts interface (validation always succeeds).
+type EmptyStepOpts struct{}
+
+func (EmptyStepOpts) Validate() error { return nil }
+
 // Interface for a scheduler step.
 type Step[RequestType PipelineRequest] interface {
 	// Configure the step with a database and options.

@@ -212,10 +212,57 @@ type Flavor struct {
 	IsPublic    bool    `json:"os-flavor-access:is_public" db:"is_public"`
 	Ephemeral   int     `json:"OS-FLV-EXT-DATA:ephemeral" db:"ephemeral"`
 	Description string  `json:"description" db:"description"`
+
+	// JSON string of extra specifications used when scheduling the flavor.
+	ExtraSpecs string `json:"extra_specs" db:"extra_specs"`
+}
+
+// Custom unmarshaler for OpenStackFlavor to handle nested JSON.
+func (f *Flavor) UnmarshalJSON(data []byte) error {
+	type Alias Flavor
+	aux := &struct {
+		ExtraSpecs map[string]string `json:"extra_specs"`
+		*Alias
+	}{
+		Alias: (*Alias)(f),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	f.ExtraSpecs = ""
+	if len(aux.ExtraSpecs) > 0 {
+		extraSpecsJSON, err := json.Marshal(aux.ExtraSpecs)
+		if err != nil {
+			return err
+		}
+		f.ExtraSpecs = string(extraSpecsJSON)
+	}
+	return nil
+}
+
+// Custom marshaler for OpenStackFlavor to handle nested JSON.
+func (f *Flavor) MarshalJSON() ([]byte, error) {
+	type Alias Flavor
+	aux := &struct {
+		ExtraSpecs map[string]string `json:"extra_specs"`
+		*Alias
+	}{
+		Alias: (*Alias)(f),
+	}
+	if f.ExtraSpecs != "" {
+		var extraSpecs map[string]string
+		if err := json.Unmarshal([]byte(f.ExtraSpecs), &extraSpecs); err != nil {
+			return nil, err
+		}
+		aux.ExtraSpecs = extraSpecs
+	} else {
+		aux.ExtraSpecs = make(map[string]string)
+	}
+	return json.Marshal(aux)
 }
 
 // Table in which the openstack model is stored.
-func (Flavor) TableName() string { return "openstack_flavors" }
+func (Flavor) TableName() string { return "openstack_flavors_v2" }
 
 // Index for the openstack model.
 func (Flavor) Indexes() []db.Index { return nil }
@@ -247,6 +294,16 @@ func (Migration) TableName() string { return "openstack_migrations" }
 // Index for the openstack model.
 func (Migration) Indexes() []db.Index { return nil }
 
+// Raw aggregate as returned by the Nova API under /os-aggregates.
+type RawAggregate struct {
+	UUID             string            `json:"uuid"`
+	Name             string            `json:"name"`
+	AvailabilityZone *string           `json:"availability_zone"`
+	Hosts            []string          `json:"hosts"`
+	Metadata         map[string]string `json:"metadata"`
+}
+
+// Aggregate as converted to be handled efficiently in a database.
 type Aggregate struct {
 	UUID             string  `json:"uuid" db:"uuid"`
 	Name             string  `json:"name" db:"name"`

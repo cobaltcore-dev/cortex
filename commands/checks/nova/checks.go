@@ -9,25 +9,42 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/sapcc/go-bits/must"
 )
 
-// Run all checks.
-func RunChecks(ctx context.Context, config conf.Config) {
-	checkNovaSchedulerReturnsValidHosts(ctx, config)
+const (
+	// The number of requests to send.
+	nRandomRequestsToSend = 50
+)
+
+// Data necessary to generate a somewhat valid nova scheduler request.
+type datacenter struct {
+	hypervisors []nova.Hypervisor
+	flavors     []nova.Flavor
+	aggregates  []nova.RawAggregate
+	projects    []identity.RawProject
+	domains     []identity.Domain
+	azs         []string
 }
 
-// Check that the nova external scheduler returns a valid set of hosts.
-func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
+// Prepare the test by fetching the necessary data from OpenStack.
+func prepare(ctx context.Context, config conf.Config) datacenter {
 	keystoneConf := config.GetKeystoneConfig()
 	osConf := config.GetSyncConfig().OpenStack
 	slog.Info("authenticating against openstack", "url", keystoneConf.URL)
@@ -44,52 +61,211 @@ func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config
 	}
 	pc := must.Return(openstack.NewClient(authOptions.IdentityEndpoint))
 	must.Succeed(openstack.Authenticate(ctx, pc, authOptions))
-	url := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
+	slog.Info("authenticated against openstack", "keystone", keystoneConf.URL)
+
+	slog.Info("locating nova endpoint")
+	novaURL := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "compute",
 		Availability: gophercloud.Availability(osConf.Nova.Availability),
 	}))
-	sc := &gophercloud.ServiceClient{
+	novaSC := &gophercloud.ServiceClient{
 		ProviderClient: pc,
-		Endpoint:       url,
+		Endpoint:       novaURL,
 		Type:           "compute",
-		// Since microversion 2.53, the hypervisor id and service id is a UUID.
-		Microversion: "2.53",
+		// Since 2.53, the hypervisor id and service id is a UUID.
+		// Since 2.61, the extra_specs are returned in the flavor details.
+		Microversion: "2.61",
 	}
-	slog.Info("authenticated against openstack", "url", url)
+	slog.Info("nova endpoint found", "novaURL", novaURL)
+
 	slog.Info("listing hypervisors")
-	pages := must.Return(hypervisors.List(sc, hypervisors.ListOpts{}).AllPages(ctx))
-	var data = &struct {
+	pages := must.Return(hypervisors.List(novaSC, hypervisors.ListOpts{}).AllPages(ctx))
+	var dataHypervisors = &struct {
 		Hypervisors []nova.Hypervisor `json:"hypervisors"`
 	}{}
-	must.Succeed(pages.(hypervisors.HypervisorPage).ExtractInto(data))
-	if len(data.Hypervisors) == 0 {
+	must.Succeed(pages.(hypervisors.HypervisorPage).ExtractInto(dataHypervisors))
+	hypervisors := dataHypervisors.Hypervisors
+	if len(hypervisors) == 0 {
 		panic("no hypervisors found")
 	}
-	slog.Info("found hypervisors", "count", len(data.Hypervisors))
+	slog.Info("found hypervisors", "count", len(hypervisors))
 
+	slog.Info("listing flavors")
+	flo := flavors.ListOpts{AccessType: flavors.AllAccess}
+	pages = must.Return(flavors.ListDetail(novaSC, flo).AllPages(ctx))
+	dataFlavors := &struct {
+		Flavors []nova.Flavor `json:"flavors"`
+	}{}
+	must.Succeed(pages.(flavors.FlavorPage).ExtractInto(dataFlavors))
+	var flavors []nova.Flavor
+	// Filter out bm flavors.
+	for _, f := range dataFlavors.Flavors {
+		// Cortex doesn't support baremetal flavors.
+		// See: https://github.com/sapcc/nova/blob/5fcb125/nova/utils.py#L1234
+		// And: https://github.com/sapcc/nova/pull/570/files
+		if strings.Contains(f.ExtraSpecs, "capabilities:cpu_arch") {
+			continue
+		}
+		flavors = append(flavors, f)
+	}
+	if len(flavors) == 0 {
+		panic("no flavors found")
+	}
+	slog.Info("found non-bm flavors", "count", len(flavors))
+
+	slog.Info("listing aggregates")
+	pages = must.Return(aggregates.List(novaSC).AllPages(ctx))
+	dataAggregates := &struct {
+		Aggregates []nova.RawAggregate `json:"aggregates"`
+	}{}
+	must.Succeed(pages.(aggregates.AggregatesPage).ExtractInto(dataAggregates))
+	aggregates := dataAggregates.Aggregates
+	if len(aggregates) == 0 {
+		panic("no aggregates found")
+	}
+	slog.Info("found aggregates", "count", len(aggregates))
+
+	slog.Info("locating keystone endpoint")
+	keystoneURL := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
+		Type:         "identity",
+		Availability: gophercloud.Availability(osConf.Identity.Availability),
+	}))
+	keystoneSC := &gophercloud.ServiceClient{
+		ProviderClient: pc,
+		Endpoint:       keystoneURL,
+		Type:           "identity",
+	}
+	slog.Info("keystone endpoint found", "keystoneURL", keystoneURL)
+
+	slog.Info("listing projects")
+	pages = must.Return(projects.List(keystoneSC, projects.ListOpts{}).AllPages(ctx))
+	dataProjects := &struct {
+		Projects []identity.RawProject `json:"projects"`
+	}{}
+	must.Succeed(pages.(projects.ProjectPage).ExtractInto(dataProjects))
+	projects := dataProjects.Projects
+	if len(projects) == 0 {
+		panic("no projects found")
+	}
+	slog.Info("found projects", "count", len(projects))
+
+	slog.Info("listing domains")
+	pages = must.Return(domains.List(keystoneSC, nil).AllPages(ctx))
+	dataDomains := &struct {
+		Domains []identity.Domain `json:"domains"`
+	}{}
+	must.Succeed(pages.(domains.DomainPage).ExtractInto(dataDomains))
+	domains := dataDomains.Domains
+	if len(domains) == 0 {
+		panic("no domains found")
+	}
+	slog.Info("found domains", "count", len(domains))
+
+	azs := make(map[string]struct{})
+	for _, a := range aggregates {
+		if a.AvailabilityZone == nil {
+			continue // Skip aggregates without an availability zone.
+		}
+		azs[*a.AvailabilityZone] = struct{}{}
+	}
+	azsSlice := make([]string, 0, len(azs))
+	for az := range azs {
+		azsSlice = append(azsSlice, az)
+	}
+	if len(azsSlice) == 0 {
+		panic("no availability zones found")
+	}
+	slog.Info("found availability zones", "count", len(azsSlice))
+
+	return datacenter{
+		hypervisors: hypervisors,
+		flavors:     flavors,
+		aggregates:  aggregates,
+		projects:    projects,
+		domains:     domains,
+		azs:         azsSlice,
+	}
+}
+
+// Generate external scheduler requests with the given datacenter data.
+func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
+	// Create a new random source with the given seed.
+	//nolint:gosec // We don't care if the random source is cryptographically secure.
+	randSource := rand.New(rand.NewSource(int64(seed)))
+	// Select all hosts for now.
 	var hosts []api.ExternalSchedulerHost
 	weights := make(map[string]float64)
-	for _, h := range data.Hypervisors {
-		weights[h.ServiceHost] = 1.0
+	for _, h := range dc.hypervisors {
+		weights[h.ServiceHost] = 0.0
 		hosts = append(hosts, api.ExternalSchedulerHost{
 			ComputeHost:        h.ServiceHost,
 			HypervisorHostname: h.Hostname,
 		})
 	}
-	request := api.ExternalSchedulerRequest{
-		Hosts:   hosts,
-		Weights: weights,
+	// Get a random az.
+	az := dc.azs[randSource.Intn(len(dc.azs))]
+	slog.Info("using availability zone", "az", az)
+	project := dc.projects[randSource.Intn(len(dc.projects))]
+	slog.Info("using project", "projectID", project.ID, "projectName", project.Name)
+	// Get the domain for the project.
+	domainsByID := make(map[string]identity.Domain)
+	for _, d := range dc.domains {
+		domainsByID[d.ID] = d
 	}
+	domain, ok := domainsByID[project.DomainID]
+	if !ok {
+		panic("project domain not found")
+	}
+	slog.Info("using domain", "domainID", domain.ID, "domainName", domain.Name)
+	// Get a random flavor.
+	flavor := dc.flavors[randSource.Intn(len(dc.flavors))]
+	slog.Info("using flavor", "flavorName", flavor.Name, "flavorID", flavor.ID)
+	// JSON unmarshal the extra specs to a string.
+	var extraSpecs map[string]string
+	if flavor.ExtraSpecs == "" {
+		extraSpecs = make(map[string]string)
+	} else if err := json.Unmarshal([]byte(flavor.ExtraSpecs), &extraSpecs); err != nil {
+		panic(err)
+	}
+	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
+	request := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
+			AvailabilityZone: az,
+			ProjectID:        project.ID,
+			Flavor: api.NovaObject[api.NovaFlavor]{Data: api.NovaFlavor{
+				Name:       flavor.Name,
+				MemoryMB:   flavor.RAM,
+				VCPUs:      flavor.VCPUs,
+				ExtraSpecs: extraSpecs,
+			}},
+			SchedulerHints: map[string]any{
+				"domain_name": []string{domain.Name},
+			},
+		}},
+		Hosts:     hosts,
+		Weights:   weights,
+		Sandboxed: true,
+	}
+	return request
+}
+
+// Check that the nova external scheduler returns a valid set of hosts.
+func checkNovaSchedulerReturnsValidHosts(
+	ctx context.Context,
+	config conf.Config,
+	req api.ExternalSchedulerRequest,
+) []string {
+
 	port := strconv.Itoa(config.GetAPIConfig().Port)
 	apiURL := "http://cortex-nova-scheduler:" + port + "/scheduler/nova/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
 
-	requestBody := must.Return(json.Marshal(request))
+	requestBody := must.Return(json.Marshal(req))
 	buf := bytes.NewBuffer(requestBody)
-	req := must.Return(http.NewRequestWithContext(ctx, http.MethodPost, apiURL, buf))
-	req.Header.Set("Content-Type", "application/json")
+	httpReq := must.Return(http.NewRequestWithContext(ctx, http.MethodPost, apiURL, buf))
+	httpReq.Header.Set("Content-Type", "application/json")
 	//nolint:bodyclose // We don't care about the body here.
-	respRaw := must.Return(http.DefaultClient.Do(req))
+	respRaw := must.Return(http.DefaultClient.Do(httpReq))
 	defer respRaw.Body.Close()
 	if respRaw.StatusCode != http.StatusOK {
 		// Log the response body for debugging
@@ -102,8 +278,27 @@ func checkNovaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config
 	}
 	var resp api.ExternalSchedulerResponse
 	must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
-	if len(resp.Hosts) == 0 {
-		panic("no hosts found in response")
+	return resp.Hosts
+}
+
+// Run all checks.
+func RunChecks(ctx context.Context, config conf.Config) {
+	datacenter := prepare(ctx, config)
+	requestsWithHostsReturned := 0
+	requestsWithNoHostsReturned := 0
+	for i := range nRandomRequestsToSend {
+		request := randomRequest(datacenter, i)
+		hosts := checkNovaSchedulerReturnsValidHosts(ctx, config, request)
+		if len(hosts) > 0 {
+			requestsWithHostsReturned++
+		} else {
+			requestsWithNoHostsReturned++
+		}
 	}
-	slog.Info("check successful, got compute hosts", "count", len(resp.Hosts))
+	// Print a summary.
+	slog.Info(
+		"summary",
+		"requestsWithHostsReturned", requestsWithHostsReturned,
+		"requestsWithNoHostsReturned", requestsWithNoHostsReturned,
+	)
 }

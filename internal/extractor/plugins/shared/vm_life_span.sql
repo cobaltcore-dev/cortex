@@ -4,5 +4,5 @@ SELECT
     )) AS BIGINT) AS duration,
     COALESCE(flavors.name, 'unknown') AS flavor_name
 FROM openstack_servers servers
-LEFT JOIN openstack_flavors flavors ON flavors.name = servers.flavor_name
+LEFT JOIN openstack_flavors_v2 flavors ON flavors.name = servers.flavor_name
 WHERE servers.status = 'DELETED';

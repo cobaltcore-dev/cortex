@@ -114,7 +114,7 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 		t.Errorf("Run() weights = %v, want nil", result.Activations)
 	}
 
-	expectedError := "number of subjects changed during step execution"
+	expectedError := "safety: number of (deduplicated) subjects changed during step execution"
 	if err.Error() != expectedError {
 		t.Errorf("Run() error = %v, want %v", err.Error(), expectedError)
 	}

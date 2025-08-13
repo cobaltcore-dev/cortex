@@ -73,7 +73,7 @@ func TestNovaSpecUnmarshal(t *testing.T) {
 	if spec.Spec.Data.AvailabilityZone != "example-az" {
 		t.Errorf("Expected AvailabilityZone to be 'example-az', got '%s'", spec.Spec.Data.AvailabilityZone)
 	}
-	if spec.Spec.Data.NInstances != 1 {
-		t.Errorf("Expected NInstances to be 1, got %d", spec.Spec.Data.NInstances)
+	if spec.Spec.Data.NumInstances != 1 {
+		t.Errorf("Expected NumInstances to be 1, got %d", spec.Spec.Data.NumInstances)
 	}
 }

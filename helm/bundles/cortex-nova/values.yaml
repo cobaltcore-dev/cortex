@@ -357,6 +357,98 @@ cortex-core:
         # the order will be maintained when the weights are applied to the
         # input Nova weights.
         plugins:
+          # Filters ported from Nova for commitment calculation, currently confed
+          # to not be active and only calculate for simulated requests.
+          #
+          # See: https://github.com/sapcc/nova for the source of implementation.
+
+          # Only get hosts that have sufficient space for the requested flavor.
+          - name: filter_has_enough_capacity
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {extractors: [host_utilization_extractor]}
+
+          # Check if the traits required/forbidden in the flavor extra spec
+          # match the host's assigned traits.
+          - name: filter_has_requested_traits
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {extractors: [host_capabilities_extractor]}
+
+          # If requested, only get hosts with accelerators.
+          - name: filter_has_accelerators
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [servers]},
+              placement: {types: [traits] },
+            }}}
+
+          # Only get hosts in the requested az.
+          - name: filter_correct_az
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {extractors: [host_az_extractor]}
+
+          # Only get hosts that are not disabled.
+          - name: filter_disabled
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [servers]},
+              placement: {types: [traits] },
+            }}}
+
+          # Prefix-match the domain name for external customer domains and
+          # filter out hosts that are not intended for external customers.
+          - name: filter_external_customer
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            options:
+              domainNamePrefixes: ["iaas-"]
+            dependencies: {sync: { openstack: {
+              nova: {types: [servers]},
+              placement: {types: [traits] },
+            }}}
+
+          # If requested, only get hosts with packed virtqueues.
+          - name: filter_packed_virtqueue
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [servers]},
+              placement: {types: [traits] },
+            }}}
+
+          # Lock certain hosts for certain projects, based on the aggregate metadata.
+          # Note that hosts without aggregate tenant filter are still accessible.
+          - name: filter_project_aggregates
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [aggregates]},
+            }}}
+
+          # Check the capabilities of each host and if they match the extra spec
+          # provided in the request spec flavor.
+          - name: filter_compute_capabilities
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+            dependencies: {sync: { openstack: {
+              nova: {types: [hypervisors]},
+            }}}
+
+          # Weighers below.
+
           # Binpack hana vmware vms on hana hosts.
           - name: shared_resource_balancing
             alias: vmware_hana_binpacking
