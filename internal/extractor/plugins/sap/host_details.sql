@@ -9,7 +9,7 @@ WITH host_traits AS (
     FROM openstack_hypervisors h
     LEFT JOIN openstack_resource_provider_traits t
         ON h.id = t.resource_provider_uuid
-    GROUP BY h.service_host, h.hypervisor_type, h.running_vms, h.state
+    GROUP BY h.service_host, h.hypervisor_type, h.running_vms, h.state, h.status
 )
 SELECT
     ht.service_host AS compute_host,
