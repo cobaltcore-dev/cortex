@@ -27,8 +27,21 @@ var supportedSteps = map[string]func() NovaStep{
 	(&kvm.AvoidOverloadedHostsCPUStep{}).GetName():    func() NovaStep { return &kvm.AvoidOverloadedHostsCPUStep{} },
 	(&kvm.AvoidOverloadedHostsMemoryStep{}).GetName(): func() NovaStep { return &kvm.AvoidOverloadedHostsMemoryStep{} },
 	// Shared steps
-	(&shared.ResourceBalancingStep{}).GetName(): func() NovaStep { return &shared.ResourceBalancingStep{} },
+	(&shared.ResourceBalancingStep{}).GetName():         func() NovaStep { return &shared.ResourceBalancingStep{} },
+	(&shared.FilterHasAcceleratorsStep{}).GetName():     func() NovaStep { return &shared.FilterHasAcceleratorsStep{} },
+	(&shared.FilterCorrectAZStep{}).GetName():           func() NovaStep { return &shared.FilterCorrectAZStep{} },
+	(&shared.FilterDisabledStep{}).GetName():            func() NovaStep { return &shared.FilterDisabledStep{} },
+	(&shared.FilterPackedVirtqueueStep{}).GetName():     func() NovaStep { return &shared.FilterPackedVirtqueueStep{} },
+	(&shared.FilterExternalCustomerStep{}).GetName():    func() NovaStep { return &shared.FilterExternalCustomerStep{} },
+	(&shared.FilterProjectAggregatesStep{}).GetName():   func() NovaStep { return &shared.FilterProjectAggregatesStep{} },
+	(&shared.FilterComputeCapabilitiesStep{}).GetName(): func() NovaStep { return &shared.FilterComputeCapabilitiesStep{} },
+	(&shared.FilterHasRequestedTraits{}).GetName():      func() NovaStep { return &shared.FilterHasRequestedTraits{} },
+	(&shared.FilterHasEnoughCapacity{}).GetName():       func() NovaStep { return &shared.FilterHasEnoughCapacity{} },
 }
+
+const (
+	TopicFinished = "cortex/scheduler/nova/pipeline/finished"
+)
 
 // Create a new Nova scheduler pipeline.
 func NewPipeline(
@@ -56,9 +69,8 @@ func NewPipeline(
 			return scheduler.MonitorStep(s, monitor)
 		},
 	}
-	topicFinished := "cortex/scheduler/nova/pipeline/finished"
 	return scheduler.NewPipeline(
 		supportedSteps, config.Nova.Plugins, wrappers,
-		db, monitor, mqttClient, topicFinished,
+		db, monitor, mqttClient, TopicFinished,
 	)
 }

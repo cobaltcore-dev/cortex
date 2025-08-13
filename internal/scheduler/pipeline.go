@@ -112,19 +112,18 @@ func (p *pipeline[RequestType]) runSteps(log *slog.Logger, request RequestType) 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				name := step.GetName()
-				alias := step.GetAlias()
-				log.Info("scheduler: running step", "name", name, "alias", alias)
-				result, err := step.Run(log, request)
+				stepLog := log.With("stepName", step.GetName(), "stepAlias", step.GetAlias())
+				stepLog.Info("scheduler: running step")
+				result, err := step.Run(stepLog, request)
 				if errors.Is(err, ErrStepSkipped) {
-					log.Info("scheduler: step skipped", "name", name, "alias", alias)
+					stepLog.Info("scheduler: step skipped")
 					return
 				}
 				if err != nil {
-					log.Error("scheduler: failed to run step", "error", err)
+					stepLog.Error("scheduler: failed to run step", "error", err)
 					return
 				}
-				log.Info("scheduler: finished step", "name", name, "alias", alias)
+				stepLog.Info("scheduler: finished step")
 				lock.Lock()
 				defer lock.Unlock()
 				activationsByStep[getStepKey(step)] = result.Activations
@@ -181,6 +180,16 @@ func (s *pipeline[RequestType]) sortSubjectsByWeights(weights map[string]float64
 	return subjects
 }
 
+// Telemetry message as will be published to the mqtt broker.
+type TelemetryMessage[RequestType PipelineRequest] struct {
+	Time    int64                         `json:"time"`
+	Request RequestType                   `json:"request"`
+	Order   []string                      `json:"order"`
+	In      map[string]float64            `json:"in"`
+	Steps   map[string]map[string]float64 `json:"steps"`
+	Out     map[string]float64            `json:"out"`
+}
+
 // Evaluate the pipeline and return a list of subjects in order of preference.
 func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 	slogArgs := request.GetTraceLogArgs()
@@ -211,13 +220,13 @@ func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 	// Publish telemetry information about the scheduling to an mqtt broker.
 	// In this way, other services can connect and record the scheduler
 	// behavior over a longer time, or react to the scheduling decision.
-	go p.mqttClient.Publish(p.mqttTopic, map[string]any{
-		"time":    time.Now().Unix(),
-		"request": request,
-		"order":   p.applicationOrder,
-		"in":      inWeights,
-		"steps":   stepWeights,
-		"out":     outWeights,
+	go p.mqttClient.Publish(p.mqttTopic, TelemetryMessage[RequestType]{
+		Time:    time.Now().Unix(),
+		Request: request,
+		Order:   p.applicationOrder,
+		In:      inWeights,
+		Steps:   stepWeights,
+		Out:     outWeights,
 	})
 
 	return subjects, nil

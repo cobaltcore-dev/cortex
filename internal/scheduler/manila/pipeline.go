@@ -20,6 +20,10 @@ var supportedSteps = map[string]func() ManilaStep{
 	(&netapp.CPUUsageBalancingStep{}).GetName(): func() ManilaStep { return &netapp.CPUUsageBalancingStep{} },
 }
 
+const (
+	TopicFinished = "cortex/scheduler/manila/pipeline/finished"
+)
+
 // Create a new Manila scheduler pipeline.
 func NewPipeline(
 	config conf.SchedulerConfig,
@@ -39,9 +43,8 @@ func NewPipeline(
 			return scheduler.MonitorStep(s, monitor)
 		},
 	}
-	topicFinished := "cortex/scheduler/manila/pipeline/finished"
 	return scheduler.NewPipeline(
 		supportedSteps, config.Manila.Plugins, wrappers,
-		db, monitor, mqttClient, topicFinished,
+		db, monitor, mqttClient, TopicFinished,
 	)
 }

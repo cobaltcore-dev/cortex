@@ -72,7 +72,8 @@ func (api *novaAPI) Init(ctx context.Context) {
 		Type:           serviceType,
 		// Since microversion 2.53, the hypervisor id and service id is a UUID.
 		// We need that to find placement resource providers for hypervisors.
-		Microversion: "2.53",
+		// Since 2.61, the extra_specs are returned in the flavor details.
+		Microversion: "2.61",
 	}
 }
 
@@ -269,14 +270,6 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	}()
 	if err != nil {
 		return nil, err
-	}
-
-	type RawAggregate struct {
-		UUID             string            `json:"uuid"`
-		Name             string            `json:"name"`
-		AvailabilityZone *string           `json:"availability_zone"`
-		Hosts            []string          `json:"hosts"`
-		Metadata         map[string]string `json:"metadata"`
 	}
 
 	// Parse the json data into our custom model.

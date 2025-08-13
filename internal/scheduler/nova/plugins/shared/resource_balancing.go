@@ -205,7 +205,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.ExternalS
 		activationAfterDisk := s.NoEffect()
 		if s.Options.DiskAfterEnabled {
 			after := hostUtilization.DiskUtilizedPct -
-				(float64(request.Spec.Data.Flavor.Data.RootDiskGB) /
+				(float64(request.Spec.Data.Flavor.Data.RootGB) /
 					hostUtilization.TotalDiskAllocatableGB * 100)
 			activationAfterDisk = scheduler.MinMaxScale(
 				after,
