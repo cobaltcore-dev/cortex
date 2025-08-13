@@ -31,6 +31,7 @@
   <section class="mqtt-url-input">
     <input type="text" id="mqtt-url" placeholder="Enter MQTT URL" value="ws://localhost:8001/ws" />
     <button onclick="reconnect()">Reconnect MQTT</button>
+    <button onclick="disconnect()">Disconnect MQTT</button>
   </section>
 
   <script>
@@ -40,6 +41,9 @@
     }
 
     let client
+    async function disconnect() {
+      if (client) client.end()
+    }
     async function reconnect() {
       const url = document.getElementById('mqtt-url').value
       if (!url) return

@@ -243,6 +243,7 @@ td.chart div.barsbefore p.disk { background: var(--color-secondary); }
 }
 .mqtt-url-input button {
   padding: 0.5em 1em;
+  margin-right: 0.5em;
   font-size: 1em;
   background: var(--color-surface);
   color: var(--color-on-surface);
