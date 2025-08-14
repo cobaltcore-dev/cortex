@@ -51,6 +51,8 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	exampleServiceDisabledReason := "example reason"
+
 	// Insert mock data into the hypervisors and traits tables
 	hypervisors := []any{
 		// VMware host
@@ -62,9 +64,9 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		// Host with no special traits
 		&nova.Hypervisor{ID: "uuid4", ServiceHost: "node002-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled"},
 		// Host with disabled status, no entry in the resource providers
-		&nova.Hypervisor{ID: "uuid5", ServiceHost: "node003-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "disabled"},
+		&nova.Hypervisor{ID: "uuid5", ServiceHost: "node003-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "disabled", ServiceDisabledReason: &exampleServiceDisabledReason},
 		// Host with disabled trait
-		&nova.Hypervisor{ID: "uuid6", ServiceHost: "node004-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled"},
+		&nova.Hypervisor{ID: "uuid6", ServiceHost: "node004-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled", ServiceDisabledReason: &exampleServiceDisabledReason},
 	}
 
 	if err := testDB.Insert(hypervisors...); err != nil {
@@ -125,12 +127,6 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error from Extract, got %v", err)
 	}
 
-	disabledReasonExternal := "external customer"
-	disabledReasonDecommissioning := "decommissioning"
-	disabledReasonStateNotUp := "not up"
-	disabledReasonStatusDisabled := "not enabled"
-	disabledReasonTraitDisabled := "disabled trait"
-
 	expected := []HostDetails{
 		{
 			ComputeHost:      "nova-compute-bb01",
@@ -140,7 +136,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "vmware",
 			WorkloadType:     "hana",
 			Enabled:          false,
-			DisabledReason:   &disabledReasonExternal,
+			DisabledReason:   &[]string{"external customer"}[0],
 			RunningVMs:       5,
 		},
 		{
@@ -151,7 +147,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &disabledReasonStateNotUp,
+			DisabledReason:   &[]string{"state: not up (--)"}[0],
 			RunningVMs:       3,
 		},
 		{
@@ -162,7 +158,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorType:   "test",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &disabledReasonDecommissioning,
+			DisabledReason:   &[]string{"decommissioning"}[0],
 			RunningVMs:       2,
 		},
 		{
@@ -184,7 +180,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &disabledReasonStatusDisabled,
+			DisabledReason:   &[]string{"status: not enabled (" + exampleServiceDisabledReason + ")"}[0],
 			RunningVMs:       2,
 		},
 		{
@@ -195,7 +191,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &disabledReasonTraitDisabled,
+			DisabledReason:   &[]string{"compute status disabled trait (" + exampleServiceDisabledReason + ")"}[0],
 			RunningVMs:       2,
 		},
 	}

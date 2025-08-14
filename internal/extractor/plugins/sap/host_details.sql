@@ -5,11 +5,12 @@ WITH host_traits AS (
         h.running_vms,
         h.state,
         h.status,
+        h.service_disabled_reason,
         STRING_AGG(t.name, ',') AS traits
     FROM openstack_hypervisors h
     LEFT JOIN openstack_resource_provider_traits t
         ON h.id = t.resource_provider_uuid
-    GROUP BY h.service_host, h.hypervisor_type, h.running_vms, h.state, h.status
+    GROUP BY h.service_host, h.hypervisor_type, h.running_vms, h.state, h.status, h.service_disabled_reason
 )
 SELECT
     ht.service_host AS compute_host,
@@ -42,9 +43,9 @@ SELECT
     CASE
         WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN 'decommissioning'
         WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN 'external customer'
-        WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN 'disabled trait'
-        WHEN ht.status != 'enabled' THEN 'not enabled'
-        WHEN ht.state != 'up' THEN 'not up'
+        WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN 'compute status disabled trait (' || COALESCE(ht.service_disabled_reason, '--') || ')'
+        WHEN ht.status != 'enabled' THEN 'status: not enabled (' || COALESCE(ht.service_disabled_reason, '--') || ')'
+        WHEN ht.state != 'up' THEN 'state: not up (' || COALESCE(ht.service_disabled_reason, '-') || ')'
         ELSE NULL
     END AS disabled_reason
 FROM host_traits ht
