@@ -20,6 +20,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/commands/spawner/defaults"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
@@ -61,6 +62,7 @@ func main() {
 	imageEO := gophercloud.EndpointOpts{Region: region, Type: "image"}
 	networkEO := gophercloud.EndpointOpts{Region: region, Type: "network"}
 	keystoneEO := gophercloud.EndpointOpts{Region: region, Type: "identity"}
+	blockstorageEO := gophercloud.EndpointOpts{Region: region, Type: "volumev3"}
 
 	// Authenticate with the admin project.
 	fmt.Printf("🔄 Resolving openstack endpoints and logging into admin project ...")
@@ -127,6 +129,7 @@ func main() {
 	projectCompute := must.Return(openstack.NewComputeV2(projectProvider, computeEO))
 	projectCompute.Microversion = "2.88" // Needed to correctly fetch hypervisors.
 	projectNetwork := must.Return(openstack.NewNetworkV2(projectProvider, networkEO))
+	projectCinder := must.Return(openstack.NewBlockStorageV3(projectProvider, blockstorageEO))
 	fmt.Printf(" ✅ Done!\n")
 
 	// Delete existing vms.
@@ -365,16 +368,61 @@ func main() {
 				"RAM":   flavor.RAM * 1_000,
 			}))
 
-			so := keypairs.CreateOptsExt{
-				KeyName: keyName,
-				CreateOptsBuilder: servers.CreateOpts{
-					Name:             name,
-					FlavorRef:        flavor.ID,
-					ImageRef:         image.ID,
-					AvailabilityZone: az + ":" + hypervisor.Service.Host,
-					UserData:         []byte(scriptBuilder.String()),
-					Networks:         []servers.Network{{UUID: network.ID}},
-				},
+			// Check if flavor has zero disk - if so, we need to create a volume-backed server
+			var so keypairs.CreateOptsExt
+			if flavor.Disk == 0 {
+				fmt.Printf("💾 Flavor %s has zero disk - creating volume-backed server\n", flavor.Name)
+				// Create a boot volume for zero-disk flavors
+				volumeName := name + "-boot-volume"
+				bootVolume := must.Return(volumes.Create(ctx, projectCinder, volumes.CreateOpts{
+					Size:             20, // 20GB boot volume
+					Name:             volumeName,
+					ImageID:          image.ID,
+					AvailabilityZone: az,
+				}, nil).Extract())
+
+				// Wait for volume to be available
+				for {
+					vol, err := volumes.Get(ctx, projectCinder, bootVolume.ID).Extract()
+					if err != nil {
+						break
+					}
+					if vol.Status == "available" {
+						break
+					}
+				}
+
+				// Create server with block device mapping (volume-backed)
+				so = keypairs.CreateOptsExt{
+					KeyName: keyName,
+					CreateOptsBuilder: servers.CreateOpts{
+						Name:             name,
+						FlavorRef:        flavor.ID,
+						AvailabilityZone: az + ":" + hypervisor.Service.Host,
+						UserData:         []byte(scriptBuilder.String()),
+						Networks:         []servers.Network{{UUID: network.ID}},
+						BlockDevice: []servers.BlockDevice{{
+							UUID:                bootVolume.ID,
+							SourceType:          servers.SourceVolume,
+							DestinationType:     servers.DestinationVolume,
+							BootIndex:           0,
+							DeleteOnTermination: true,
+						}},
+					},
+				}
+			} else {
+				// Create server with direct image reference (traditional way)
+				so = keypairs.CreateOptsExt{
+					KeyName: keyName,
+					CreateOptsBuilder: servers.CreateOpts{
+						Name:             name,
+						FlavorRef:        flavor.ID,
+						ImageRef:         image.ID,
+						AvailabilityZone: az + ":" + hypervisor.Service.Host,
+						UserData:         []byte(scriptBuilder.String()),
+						Networks:         []servers.Network{{UUID: network.ID}},
+					},
+				}
 			}
 			ho := servers.SchedulerHintOpts{}
 			_, err := servers.Create(ctx, projectCompute, so, ho).Extract()
