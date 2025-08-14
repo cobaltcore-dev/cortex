@@ -94,6 +94,8 @@
         ...Object.keys(storagePools)
       ])
       const poolNames = Array.from(allPoolNames).sort((a, b) => {
+        // If both values are equal (e.g. both undefined) compare by the name.
+        if (state.pipeline.out[a] === state.pipeline.out[b]) return a.localeCompare(b)
         if (state.pipeline.out[a] === undefined) return 1
         if (state.pipeline.out[b] === undefined) return -1
         return state.pipeline.out[b] - state.pipeline.out[a]
