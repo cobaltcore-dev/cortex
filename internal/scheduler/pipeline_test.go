@@ -239,7 +239,7 @@ func TestNewPipeline(t *testing.T) {
 		supportedSteps,
 		[]conf.SchedulerStepConfig{{Name: "mock_pipeline_step", Options: conf.RawOpts{}}},
 		[]StepWrapper[mockPipelineRequest]{},
-		database, monitor, mqttClient, "test/topic",
+		database, monitor, mqttClient, "test/topic", nil,
 	).(*pipeline[mockPipelineRequest])
 
 	if len(pipeline.executionOrder) != 1 {
@@ -273,7 +273,7 @@ func TestNewPipeline_SameStepMultipleAliases(t *testing.T) {
 			{Name: "mock_pipeline_step", Alias: "mock_step_2", Options: conf.RawOpts{}},
 		},
 		[]StepWrapper[mockPipelineRequest]{},
-		database, monitor, mqttClient, "test/topic",
+		database, monitor, mqttClient, "test/topic", nil,
 	).(*pipeline[mockPipelineRequest])
 
 	if len(pipeline.executionOrder[0]) != 2 {

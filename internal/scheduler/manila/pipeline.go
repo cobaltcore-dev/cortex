@@ -45,6 +45,6 @@ func NewPipeline(
 	}
 	return scheduler.NewPipeline(
 		supportedSteps, config.Manila.Plugins, wrappers,
-		db, monitor, mqttClient, TopicFinished,
+		db, monitor, mqttClient, TopicFinished, nil,
 	)
 }

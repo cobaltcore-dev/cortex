@@ -4,6 +4,9 @@
 package nova
 
 import (
+	"errors"
+	"log/slog"
+
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -12,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 )
 
 type NovaStep = scheduler.Step[api.ExternalSchedulerRequest]
@@ -43,6 +47,40 @@ const (
 	TopicFinished = "cortex/scheduler/nova/pipeline/finished"
 )
 
+// Modifier for the pipeline request that is executed before the pipeline itself.
+type premodifier struct {
+	database db.DB
+	// Config that applies to the nova pipeline premodifier.
+	config conf.NovaSchedulerConfig
+}
+
+// If configured, modify the request before it is sent to the pipeline.
+func (p *premodifier) ModifyRequest(request *api.ExternalSchedulerRequest) error {
+	if p.config.PreselectAllHosts {
+		// Get all available hypervisors from the database.
+		var hypervisors []nova.Hypervisor
+		if _, err := p.database.Select(
+			&hypervisors, "SELECT * FROM "+nova.Hypervisor{}.TableName(),
+		); err != nil {
+			return err
+		}
+		if len(hypervisors) == 0 {
+			return errors.New("no hypervisors found")
+		}
+		request.Hosts = make([]api.ExternalSchedulerHost, 0, len(hypervisors))
+		request.Weights = make(map[string]float64, len(hypervisors))
+		for _, hypervisor := range hypervisors {
+			request.Hosts = append(request.Hosts, api.ExternalSchedulerHost{
+				ComputeHost:        hypervisor.ServiceHost,
+				HypervisorHostname: hypervisor.Hostname,
+			})
+			request.Weights[hypervisor.ServiceHost] = 0.0
+		}
+		slog.Info("preselecting all hosts for Nova pipeline", "hosts", len(request.Hosts))
+	}
+	return nil
+}
+
 // Create a new Nova scheduler pipeline.
 func NewPipeline(
 	config conf.SchedulerConfig,
@@ -69,8 +107,12 @@ func NewPipeline(
 			return scheduler.MonitorStep(s, monitor)
 		},
 	}
+	premodifier := &premodifier{
+		database: db,
+		config:   config.Nova,
+	}
 	return scheduler.NewPipeline(
 		supportedSteps, config.Nova.Plugins, wrappers,
-		db, monitor, mqttClient, TopicFinished,
+		db, monitor, mqttClient, TopicFinished, premodifier,
 	)
 }
