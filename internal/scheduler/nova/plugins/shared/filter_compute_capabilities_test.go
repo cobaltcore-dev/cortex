@@ -29,14 +29,12 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 	}
 
 	// Insert mock hypervisor data
-	_, err = testDB.Exec(`
-		INSERT INTO openstack_hypervisors (id, hostname, state, status, hypervisor_type, hypervisor_version, host_ip, service_id, service_host, service_disabled_reason, vcpus, memory_mb, local_gb, vcpus_used, memory_mb_used, local_gb_used, free_ram_mb, free_disk_gb, current_workload, running_vms, disk_available_least, cpu_info)
-		VALUES
-			('hv1', 'hypervisor1', 'up', 'enabled', 'QEMU', 2008000, '192.168.1.1', 'svc1', 'host1', NULL, 16, 32768, 1000, 4, 8192, 100, 24576, 900, 0, 2, 900, '{"arch": "x86_64", "model": "Haswell", "features": ["sse", "avx"]}'),
-			('hv2', 'hypervisor2', 'up', 'enabled', 'QEMU', 2008000, '192.168.1.2', 'svc2', 'host2', NULL, 16, 32768, 1000, 4, 8192, 100, 24576, 900, 0, 2, 900, '{"arch": "aarch64", "model": "Cortex-A72", "features": ["neon"]}'),
-			('hv3', 'hypervisor3', 'up', 'enabled', 'VMware', 6007000, '192.168.1.3', 'svc3', 'host3', NULL, 16, 32768, 1000, 4, 8192, 100, 24576, 900, 0, 2, 900, '{}')
-	`)
-	if err != nil {
+	hypervisors := []any{
+		&nova.Hypervisor{ID: "hv1", Hostname: "hypervisor1", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.1", ServiceID: "svc1", ServiceHost: "host1", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: `{"arch": "x86_64", "model": "Haswell", "features": ["sse", "avx"]}`},
+		&nova.Hypervisor{ID: "hv2", Hostname: "hypervisor2", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.2", ServiceID: "svc2", ServiceHost: "host2", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: `{"arch": "aarch64", "model": "Cortex-A72", "features": ["neon"]}`},
+		&nova.Hypervisor{ID: "hv3", Hostname: "hypervisor3", State: "up", Status: "enabled", HypervisorType: "VMware", HypervisorVersion: 6007000, HostIP: "192.168.1.3", ServiceID: "svc3", ServiceHost: "host3", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
+	}
+	if err := testDB.Insert(hypervisors...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
