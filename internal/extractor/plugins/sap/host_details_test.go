@@ -147,7 +147,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &[]string{"state: not up (--)"}[0],
+			DisabledReason:   &[]string{"[state: not up] --"}[0],
 			RunningVMs:       3,
 		},
 		{
@@ -180,7 +180,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &[]string{"status: not enabled (" + exampleServiceDisabledReason + ")"}[0],
+			DisabledReason:   &[]string{"[status: not enabled] " + exampleServiceDisabledReason}[0],
 			RunningVMs:       2,
 		},
 		{
@@ -191,7 +191,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &[]string{"compute status disabled trait (" + exampleServiceDisabledReason + ")"}[0],
+			DisabledReason:   &[]string{"[compute status disabled trait] " + exampleServiceDisabledReason}[0],
 			RunningVMs:       2,
 		},
 	}

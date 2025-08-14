@@ -43,9 +43,9 @@ SELECT
     CASE
         WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN 'decommissioning'
         WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN 'external customer'
-        WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN 'compute status disabled trait (' || COALESCE(ht.service_disabled_reason, '--') || ')'
-        WHEN ht.status != 'enabled' THEN 'status: not enabled (' || COALESCE(ht.service_disabled_reason, '--') || ')'
-        WHEN ht.state != 'up' THEN 'state: not up (' || COALESCE(ht.service_disabled_reason, '-') || ')'
+        WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN '[compute status disabled trait] ' || COALESCE(ht.service_disabled_reason, '--')
+        WHEN ht.status != 'enabled' THEN '[status: not enabled] ' || COALESCE(ht.service_disabled_reason, '--')
+        WHEN ht.state != 'up' THEN '[state: not up] ' || COALESCE(ht.service_disabled_reason, '--')
         ELSE NULL
     END AS disabled_reason
 FROM host_traits ht
