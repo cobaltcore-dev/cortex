@@ -214,8 +214,9 @@ func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.ExternalSc
 		}
 		if strings.EqualFold(selector.Action, "skip") && matches {
 			return false
-		} else if strings.EqualFold(selector.Action, "continue") && matches {
-			continue
+		}
+		if strings.EqualFold(selector.Action, "continue") && !matches {
+			return false
 		}
 	}
 	return true
