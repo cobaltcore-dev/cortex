@@ -28,31 +28,87 @@ func setupTestDBWithHypervisors(t *testing.T) db.DB {
 	}
 
 	// Insert mock hypervisor data
-	_, err = testDB.Exec(`
-		INSERT INTO openstack_hypervisors (
-			id, hostname, state, status, hypervisor_type, hypervisor_version,
-			host_ip, service_id, service_host, service_disabled_reason,
-			vcpus, memory_mb, local_gb, vcpus_used, memory_mb_used, local_gb_used,
-			free_ram_mb, free_disk_gb, current_workload, running_vms,
-			disk_available_least, cpu_info
-		)
-		VALUES
-			('1', 'hypervisor-1.example.com', 'up', 'enabled', 'kvm', 2011,
-			 '192.168.1.10', 'service-1', 'nova-compute-1', NULL,
-			 16, 32768, 1000, 4, 8192, 200,
-			 24576, 800, 2, 5,
-			 750, '{"arch": "x86_64", "model": "Intel"}'),
-			('2', 'hypervisor-2.example.com', 'up', 'enabled', 'vmware', 6070,
-			 '192.168.1.11', 'service-2', 'nova-compute-2', NULL,
-			 32, 65536, 2000, 8, 16384, 400,
-			 49152, 1600, 4, 10,
-			 1500, '{"arch": "x86_64", "model": "AMD"}'),
-			('3', 'hypervisor-3.example.com', 'down', 'disabled', 'kvm', 2011,
-			 '192.168.1.12', 'service-3', 'nova-compute-3', 'maintenance',
-			 24, 49152, 1500, 0, 0, 0,
-			 49152, 1500, 0, 0,
-			 1450, '{"arch": "x86_64", "model": "Intel"}')
-	`)
+	h1Disk := 750
+	h2Disk := 1500
+	h3SDA := "maintenance"
+	h3Disk := 1450
+	hypervisors := []any{
+		&nova.Hypervisor{
+			ID:                    "1",
+			Hostname:              "hypervisor-1.example.com",
+			State:                 "up",
+			Status:                "enabled",
+			HypervisorType:        "kvm",
+			HypervisorVersion:     2011,
+			HostIP:                "192.168.1.10",
+			ServiceID:             "service-1",
+			ServiceHost:           "nova-compute-1",
+			ServiceDisabledReason: nil,
+			VCPUs:                 16,
+			MemoryMB:              32768,
+			LocalGB:               1000,
+			VCPUsUsed:             4,
+			MemoryMBUsed:          8192,
+			LocalGBUsed:           200,
+			FreeRAMMB:             24576,
+			FreeDiskGB:            800,
+			CurrentWorkload:       2,
+			RunningVMs:            5,
+			DiskAvailableLeast:    &h1Disk,
+			CPUInfo:               `{"arch": "x86_64", "model": "Intel"}`,
+		},
+		&nova.Hypervisor{
+			ID:                    "2",
+			Hostname:              "hypervisor-2.example.com",
+			State:                 "up",
+			Status:                "enabled",
+			HypervisorType:        "vmware",
+			HypervisorVersion:     6070,
+			HostIP:                "192.168.1.11",
+			ServiceID:             "service-2",
+			ServiceHost:           "nova-compute-2",
+			ServiceDisabledReason: nil,
+			VCPUs:                 32,
+			MemoryMB:              65536,
+			LocalGB:               2000,
+			VCPUsUsed:             8,
+			MemoryMBUsed:          16384,
+			LocalGBUsed:           400,
+			FreeRAMMB:             49152,
+			FreeDiskGB:            1600,
+			CurrentWorkload:       4,
+			RunningVMs:            10,
+			DiskAvailableLeast:    &h2Disk,
+			CPUInfo:               `{"arch": "x86_64", "model": "AMD"}`,
+		},
+		&nova.Hypervisor{
+			ID:                    "3",
+			Hostname:              "hypervisor-3.example.com",
+			State:                 "down",
+			Status:                "disabled",
+			HypervisorType:        "kvm",
+			HypervisorVersion:     2011,
+			HostIP:                "192.168.1.12",
+			ServiceID:             "service-3",
+			ServiceHost:           "nova-compute-3",
+			ServiceDisabledReason: &h3SDA,
+			VCPUs:                 24,
+			MemoryMB:              49152,
+			LocalGB:               1500,
+			VCPUsUsed:             0,
+			MemoryMBUsed:          0,
+			LocalGBUsed:           0,
+			FreeRAMMB:             49152,
+			FreeDiskGB:            1500,
+			CurrentWorkload:       0,
+			RunningVMs:            0,
+			DiskAvailableLeast:    &h3Disk,
+			CPUInfo:               `{"arch": "x86_64", "model": "Intel"}`,
+		},
+	}
+	if err := testDB.Insert(hypervisors...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 	if err != nil {
 		t.Fatalf("expected no error inserting hypervisor data, got %v", err)
 	}
