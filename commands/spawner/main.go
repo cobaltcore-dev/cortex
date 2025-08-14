@@ -148,10 +148,10 @@ func main() {
 	if len(serversToDelete) > 0 {
 		// Get manual input to delete the vm.
 		fmt.Printf("❓ Delete existing VMs %v? [y/N, default: \033[1;34my\033[0m]: ", serversToDeleteNames)
-		reader := bufio.NewReader(os.Stdin)
-		input := must.Return(reader.ReadString('\n'))
-		input = strings.TrimSpace(input)
-		if input == "y" || input == "" {
+		serverReader := bufio.NewReader(os.Stdin)
+		serverInput := must.Return(serverReader.ReadString('\n'))
+		serverInput = strings.TrimSpace(serverInput)
+		if serverInput == "y" || serverInput == "" {
 			var wg sync.WaitGroup
 			for _, s := range serversToDelete {
 				wg.Add(1)
@@ -184,44 +184,64 @@ func main() {
 		return
 	}
 
-	// List all hypervisors with the given type.
-	fmt.Println("🔄 Looking up hypervisors")
-	withServers := true
-	hlo := hypervisors.ListOpts{WithServers: &withServers}
-	hypervisorPages := must.Return(hypervisors.List(adminNova, hlo).AllPages(ctx))
-	hypervisorsAll := must.Return(hypervisors.ExtractHypervisors(hypervisorPages))
-	hypervisorTypes := []string{}
-	for _, h := range hypervisorsAll {
-		if !slices.Contains(hypervisorTypes, h.HypervisorType) {
-			hypervisorTypes = append(hypervisorTypes, h.HypervisorType)
-		}
+	fmt.Printf("❓ Spawn on specific host [default: \033[1;34mn\033[0m]: ")
+	reader = bufio.NewReader(os.Stdin)
+	input = must.Return(reader.ReadString('\n'))
+	input = strings.TrimSpace(input)
+	if input == "" {
+		input = "n"
 	}
-	hypervisorType := cli.ChooseHypervisorType(hypervisorTypes)
-	var hypervisorsFiltered []hypervisors.Hypervisor
-	for _, h := range hypervisorsAll {
-		if h.Status == "enabled" && h.State == "up" && h.HypervisorType == hypervisorType {
-			hypervisorsFiltered = append(hypervisorsFiltered, h)
-		}
-	}
-	hypervisor := cli.ChooseHypervisor(hypervisorsFiltered)
-
-	// Resolve the availability zones of the hypervisors.
-	fmt.Printf("🔄 Resolving availability zone of host %s\n", hypervisor.Service.Host)
+	var hypervisor *hypervisors.Hypervisor
+	var az = ""
 	aggregatePages := must.Return(aggregates.List(adminNova).AllPages(ctx))
 	aggregatesAll := must.Return(aggregates.ExtractAggregates(aggregatePages))
-	var az = ""
-	for _, a := range aggregatesAll {
-		if a.AvailabilityZone == "" {
-			continue
+	if input == "y" {
+		// List all hypervisors with the given type.
+		fmt.Println("🔄 Looking up hypervisors")
+		withServers := true
+		hlo := hypervisors.ListOpts{WithServers: &withServers}
+		hypervisorPages := must.Return(hypervisors.List(adminNova, hlo).AllPages(ctx))
+		hypervisorsAll := must.Return(hypervisors.ExtractHypervisors(hypervisorPages))
+		hypervisorTypes := []string{}
+		for _, h := range hypervisorsAll {
+			if !slices.Contains(hypervisorTypes, h.HypervisorType) {
+				hypervisorTypes = append(hypervisorTypes, h.HypervisorType)
+			}
 		}
-		if slices.Contains(a.Hosts, hypervisor.Service.Host) {
-			az = a.AvailabilityZone
+		hypervisorType := cli.ChooseHypervisorType(hypervisorTypes)
+		var hypervisorsFiltered []hypervisors.Hypervisor
+		for _, h := range hypervisorsAll {
+			if h.Status == "enabled" && h.State == "up" && h.HypervisorType == hypervisorType {
+				hypervisorsFiltered = append(hypervisorsFiltered, h)
+			}
 		}
-		if az != "" {
-			break
+		h := cli.ChooseHypervisor(hypervisorsFiltered)
+		hypervisor = &h
+		// Resolve the availability zones of the hypervisor.
+		fmt.Printf("🔄 Resolving availability zone of host %s\n", hypervisor.Service.Host)
+		for _, a := range aggregatesAll {
+			if a.AvailabilityZone == "" {
+				continue
+			}
+			if slices.Contains(a.Hosts, hypervisor.Service.Host) {
+				az = a.AvailabilityZone
+			}
+			if az != "" {
+				break
+			}
 		}
+		fmt.Printf("🗺️ Using availability zone '%s'\n", az)
+	} else {
+		// Let the user choose an az.
+		azs := []string{}
+		for _, a := range aggregatesAll {
+			if !slices.Contains(azs, a.AvailabilityZone) && a.AvailabilityZone != "" {
+				azs = append(azs, a.AvailabilityZone)
+			}
+		}
+		az = cli.ChooseAZ(azs)
+		fmt.Printf("🗺️ Using availability zone '%s'\n", az)
 	}
-	fmt.Printf("🗺️ Using availability zone '%s'\n", az)
 
 	// Get flavors.
 	fmt.Println("🔄 Looking up flavors to use")
@@ -368,61 +388,49 @@ func main() {
 				"RAM":   flavor.RAM * 1_000,
 			}))
 
-			// Check if flavor has zero disk - if so, we need to create a volume-backed server
 			var so keypairs.CreateOptsExt
-			if flavor.Disk == 0 {
-				fmt.Printf("💾 Flavor %s has zero disk - creating volume-backed server\n", flavor.Name)
-				// Create a boot volume for zero-disk flavors
-				volumeName := name + "-boot-volume"
-				bootVolume := must.Return(volumes.Create(ctx, projectCinder, volumes.CreateOpts{
-					Size:             20, // 20GB boot volume
-					Name:             volumeName,
-					ImageID:          image.ID,
-					AvailabilityZone: az,
-				}, nil).Extract())
+			fmt.Println("💾 Creating boot volume for server")
+			// Create a boot volume for zero-disk flavors
+			volumeName := name + "-boot-volume"
+			bootVolume := must.Return(volumes.Create(ctx, projectCinder, volumes.CreateOpts{
+				Size:             8, // 8GB boot volume should be sufficient for most OSes
+				Name:             volumeName,
+				ImageID:          image.ID,
+				AvailabilityZone: az,
+			}, nil).Extract())
 
-				// Wait for volume to be available
-				for {
-					vol, err := volumes.Get(ctx, projectCinder, bootVolume.ID).Extract()
-					if err != nil {
-						break
-					}
-					if vol.Status == "available" {
-						break
-					}
+			// Wait for volume to be available
+			for {
+				vol, err := volumes.Get(ctx, projectCinder, bootVolume.ID).Extract()
+				if err != nil {
+					break
 				}
+				if vol.Status == "available" {
+					break
+				}
+			}
 
-				// Create server with block device mapping (volume-backed)
-				so = keypairs.CreateOptsExt{
-					KeyName: keyName,
-					CreateOptsBuilder: servers.CreateOpts{
-						Name:             name,
-						FlavorRef:        flavor.ID,
-						AvailabilityZone: az + ":" + hypervisor.Service.Host,
-						UserData:         []byte(scriptBuilder.String()),
-						Networks:         []servers.Network{{UUID: network.ID}},
-						BlockDevice: []servers.BlockDevice{{
-							UUID:                bootVolume.ID,
-							SourceType:          servers.SourceVolume,
-							DestinationType:     servers.DestinationVolume,
-							BootIndex:           0,
-							DeleteOnTermination: true,
-						}},
-					},
-				}
-			} else {
-				// Create server with direct image reference (traditional way)
-				so = keypairs.CreateOptsExt{
-					KeyName: keyName,
-					CreateOptsBuilder: servers.CreateOpts{
-						Name:             name,
-						FlavorRef:        flavor.ID,
-						ImageRef:         image.ID,
-						AvailabilityZone: az + ":" + hypervisor.Service.Host,
-						UserData:         []byte(scriptBuilder.String()),
-						Networks:         []servers.Network{{UUID: network.ID}},
-					},
-				}
+			// Create server with block device mapping (volume-backed)
+			sco := servers.CreateOpts{
+				Name:             name,
+				FlavorRef:        flavor.ID,
+				UserData:         []byte(scriptBuilder.String()),
+				Networks:         []servers.Network{{UUID: network.ID}},
+				AvailabilityZone: az,
+				BlockDevice: []servers.BlockDevice{{
+					UUID:                bootVolume.ID,
+					SourceType:          servers.SourceVolume,
+					DestinationType:     servers.DestinationVolume,
+					BootIndex:           0,
+					DeleteOnTermination: true, // Remove the boot volume when deleted
+				}},
+			}
+			if hypervisor != nil {
+				sco.AvailabilityZone = az + ":" + hypervisor.Service.Host
+			}
+			so = keypairs.CreateOptsExt{
+				KeyName:           keyName,
+				CreateOptsBuilder: sco,
 			}
 			ho := servers.SchedulerHintOpts{}
 			_, err := servers.Create(ctx, projectCompute, so, ho).Extract()

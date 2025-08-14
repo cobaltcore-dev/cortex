@@ -21,6 +21,7 @@ import (
 )
 
 type CLI interface {
+	ChooseAZ([]string) string
 	ChooseDomain([]domains.Domain) domains.Domain
 	ChooseProject([]projects.Project) projects.Project
 	ChooseFlavor([]flavors.Flavor) flavors.Flavor
@@ -35,6 +36,13 @@ type cli struct {
 
 func NewCLI(d defaults.Defaults) CLI {
 	return &cli{defaults: d}
+}
+
+func (c *cli) ChooseAZ(azs []string) string {
+	f := func(az string) string {
+		return az
+	}
+	return choose(c.defaults, "WS_AVAILABILITY_ZONE", "📂 Availability Zones", azs, f)
 }
 
 func (c *cli) ChooseDomain(ds []domains.Domain) domains.Domain {
@@ -94,6 +102,7 @@ func choose[T any](
 	ts []T,
 	displayname func(T) string,
 ) T {
+
 	sort.Slice(ts, func(i, j int) bool {
 		return displayname(ts[i]) < displayname(ts[j])
 	})
