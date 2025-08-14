@@ -47,7 +47,7 @@ func (d *defaults) SetDefault(key, value string) {
 		must.Succeed(json.NewDecoder(file).Decode(&defaults))
 	}
 	defaults[key] = value
-	newFile := must.Return(os.Create(".defaults.json"))
+	newFile := must.Return(os.Create(d.filename))
 	defer newFile.Close()
 	must.Succeed(json.NewEncoder(newFile).Encode(defaults))
 }

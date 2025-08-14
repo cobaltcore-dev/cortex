@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -93,7 +94,9 @@ func choose[T any](
 	ts []T,
 	displayname func(T) string,
 ) T {
-
+	sort.Slice(ts, func(i, j int) bool {
+		return displayname(ts[i]) < displayname(ts[j])
+	})
 	fmt.Printf("🔍 %s\n", header)
 	for i, t := range ts {
 		fmt.Printf("   - [\033[1;34m%d\033[0m] \033[1;34m%s\033[0m\n", i, displayname(t))

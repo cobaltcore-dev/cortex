@@ -36,7 +36,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	def := defaults.NewDefaults(".spawner.json.out") // .out will be ignored by git
+	def := defaults.NewDefaults("commands/spawner/defaults.json")
 	cli := cli.NewCLI(def)
 
 	// Get the number of vms to spawn from the user.
@@ -348,7 +348,7 @@ func main() {
 	fmt.Printf("🛜 Using keypair %s\n", keyName)
 
 	// Load the script template
-	tmpl, err := template.ParseFiles("script.sh.tpl")
+	tmpl, err := template.ParseFiles("commands/spawner/script.sh.tpl")
 	must.Succeed(err)
 
 	// Spawn new VMs.
@@ -393,9 +393,9 @@ func main() {
 
 	// Write the keypair to a file, so the user can ssh into the vms.
 	fmt.Println("📝 Writing keypair to ssh.pem", keyName)
-	must.Succeed(os.WriteFile("ssh.pem", []byte(keypair.PrivateKey), 0600))
+	must.Succeed(os.WriteFile("commands/spawner/ssh.pem", []byte(keypair.PrivateKey), 0600))
 	fmt.Println("🔑 Add the following ssh key to your ssh agent:")
-	fmt.Println("💲 eval $(ssh-agent -s) && ssh-add ssh.pem")
+	fmt.Println("💲 eval $(ssh-agent -s) && ssh-add commands/spawner/ssh.pem")
 	fmt.Printf("📝 To ssh into your VMs, create a new router that assigns the subnet %s to a floating IP network. Then assign a floating IP to your VM.\n", subnetworkName)
 
 	fmt.Println("🎉 Done!")
