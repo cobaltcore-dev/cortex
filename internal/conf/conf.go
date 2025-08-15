@@ -92,6 +92,8 @@ type SyncOpenStackConfig struct {
 	Identity SyncOpenStackIdentityConfig `json:"identity"`
 	// Configuration for the limes service.
 	Limes SyncOpenStackLimesConfig `json:"limes"`
+	// Configuration for the cinder service.
+	Cinder SyncOpenStackCinderConfig `json:"cinder"`
 }
 
 // Configuration for the nova service.
@@ -112,6 +114,14 @@ type SyncOpenStackPlacementConfig struct {
 
 // Configuration for the manila service.
 type SyncOpenStackManilaConfig struct {
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+	// The types of resources to sync.
+	Types []string `json:"types"`
+}
+
+// Configuration for the cinder service
+type SyncOpenStackCinderConfig struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
 	// The types of resources to sync.
@@ -157,6 +167,11 @@ type FeatureExtractorConfig struct {
 // Configuration for the features module.
 type ExtractorConfig struct {
 	Plugins []FeatureExtractorConfig `json:"plugins"`
+}
+
+type CinderSchedulerConfig struct {
+	// Scheduler step plugins by their name.
+	Plugins []SchedulerStepConfig `json:"plugins"`
 }
 
 type ManilaSchedulerConfig struct {
@@ -285,6 +300,7 @@ type SchedulerStepDisabledValidationsConfig struct {
 type SchedulerConfig struct {
 	Nova   NovaSchedulerConfig   `json:"nova"`
 	Manila ManilaSchedulerConfig `json:"manila"`
+	Cinder CinderSchedulerConfig `json:"cinder"`
 
 	API SchedulerAPIConfig `json:"api"`
 }
