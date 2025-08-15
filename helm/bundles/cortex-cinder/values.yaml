@@ -88,6 +88,12 @@ cortex-core:
           query: netapp_node_cpu_busy
           type: netapp_node_metric
 
+    extractor:
+      plugins: []
+
+    kpis:
+      plugins: []
+
   # Values passed to the service through a kubernetes secret.
   # The keys of these values should correspond to the keys used above in the conf.
   secrets:
