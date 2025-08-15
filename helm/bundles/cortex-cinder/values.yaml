@@ -94,6 +94,10 @@ cortex-core:
     kpis:
       plugins: []
 
+    scheduler:
+      cinder:
+        plugins: []
+
   # Values passed to the service through a kubernetes secret.
   # The keys of these values should correspond to the keys used above in the conf.
   secrets:

@@ -90,4 +90,11 @@ type CinderRequestContext struct {
 	Roles           []string `json:"roles"`
 	UserIdentity    string   `json:"user_identity"`
 	IsAdminProject  bool     `json:"is_admin_project"`
+
+	// Fields added by the Cinder scheduler
+
+	RemoteAddress string  `json:"remote_address"`
+	Timestamp     string  `json:"timestamp"`
+	QuotaClass    *string `json:"quota_class"`
+	ProjectName   string  `json:"project_name"`
 }
