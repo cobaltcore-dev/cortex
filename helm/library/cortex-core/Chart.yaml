@@ -6,4 +6,4 @@ name: cortex-core
 description: A Helm chart deploying Cortex core services.
 type: application
 version: 0.24.7
-appVersion: "sha-9badfac"
+appVersion: "sha-a35fb96"
