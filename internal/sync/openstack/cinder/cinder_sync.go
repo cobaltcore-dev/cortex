@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package manila
+package cinder
 
 import (
 	"context"
@@ -13,22 +13,21 @@ import (
 	"github.com/go-gorp/gorp"
 )
 
-// Syncer for OpenStack manila.
-type ManilaSyncer struct {
+type CinderSyncer struct {
 	// Database to store the manila objects in.
 	DB db.DB
 	// Monitor to track the syncer.
 	Mon sync.Monitor
-	// Configuration for the manila syncer.
-	Conf ManilaConf
-	// Manila API client to fetch the data.
-	API ManilaAPI
+	// Configuration for the cinder syncer.
+	Conf CinderConf
+	// Cinder API client to fetch the data.
+	API CinderAPI
 	// MQTT client to publish mqtt data.
 	MqttClient mqtt.Client
 }
 
-// Init the OpenStack manila syncer.
-func (s *ManilaSyncer) Init(ctx context.Context) {
+// Init the OpenStack cinder syncer.
+func (s *CinderSyncer) Init(ctx context.Context) {
 	s.API.Init(ctx)
 	tables := []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
@@ -40,23 +39,23 @@ func (s *ManilaSyncer) Init(ctx context.Context) {
 	}
 }
 
-// Sync the OpenStack manila objects and publish triggers.
-func (s *ManilaSyncer) Sync(ctx context.Context) error {
+// Sync the OpenStack cinder objects and publish triggers.
+func (s *CinderSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.Conf.Types, "storage_pools") {
 		changedPools, err := s.SyncAllStoragePools(ctx)
 		if err != nil {
 			return err
 		}
-		go s.MqttClient.Publish(TriggerManilaStoragePoolsSynced, "")
+		go s.MqttClient.Publish(TriggerCinderStoragePoolsSynced, "")
 		// Publish additional information required for the visualizer.
-		go s.MqttClient.Publish("cortex/sync/openstack/manila/storage_pools", changedPools)
+		go s.MqttClient.Publish("cortex/sync/openstack/cinder/storage_pools", changedPools)
 	}
 	return nil
 }
 
 // Sync the OpenStack resource providers into the database.
-func (s *ManilaSyncer) SyncAllStoragePools(ctx context.Context) ([]StoragePool, error) {
+func (s *CinderSyncer) SyncAllStoragePools(ctx context.Context) ([]StoragePool, error) {
 	label := StoragePool{}.TableName()
 	pools, err := s.API.GetAllStoragePools(ctx)
 	if err != nil {
