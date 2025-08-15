@@ -45,14 +45,14 @@ func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
 func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest) (ok bool, reason string) {
 	// Check that all hosts have a weight.
 	for _, host := range requestData.Hosts {
-		if _, ok := requestData.Weights[host.ShareHost]; !ok {
+		if _, ok := requestData.Weights[host.VolumeHost]; !ok {
 			return false, "missing weight for host"
 		}
 	}
 	// Check that all weights are assigned to a host in the request.
 	volumeHostNames := make(map[string]bool)
 	for _, host := range requestData.Hosts {
-		volumeHostNames[host.ShareHost] = true
+		volumeHostNames[host.VolumeHost] = true
 	}
 	for volumeHost := range requestData.Weights {
 		if _, ok := volumeHostNames[volumeHost]; !ok {

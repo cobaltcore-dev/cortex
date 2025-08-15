@@ -29,8 +29,8 @@ func validRequestBody() []byte {
 	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
 		Hosts: []api.ExternalSchedulerHost{
-			{ShareHost: "host1"},
-			{ShareHost: "host2"},
+			{VolumeHost: "host1"},
+			{VolumeHost: "host2"},
 		},
 		Weights: map[string]float64{
 			"host1": 1.0,
@@ -48,8 +48,8 @@ func missingWeightBody() []byte {
 	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
 		Hosts: []api.ExternalSchedulerHost{
-			{ShareHost: "host1"},
-			{ShareHost: "host2"},
+			{VolumeHost: "host1"},
+			{VolumeHost: "host2"},
 		},
 		Weights: map[string]float64{
 			"host1": 1.0,
@@ -66,7 +66,7 @@ func unknownWeightBody() []byte {
 	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
 		Hosts: []api.ExternalSchedulerHost{
-			{ShareHost: "host1"},
+			{VolumeHost: "host1"},
 		},
 		Weights: map[string]float64{
 			"host1": 1.0,
