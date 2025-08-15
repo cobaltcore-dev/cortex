@@ -1,0 +1,50 @@
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cortex.fullname" . }}
+rules:
+- apiGroups:
+  - cortex.sap
+  resources:
+  - reservations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cortex.sap
+  resources:
+  - reservations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - cortex.sap
+  resources:
+  - reservations/finalizers
+  verbs:
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cortex.fullname" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "cortex.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "cortex.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "cortex.fullname" . }}

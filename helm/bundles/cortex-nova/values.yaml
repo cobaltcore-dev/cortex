@@ -64,6 +64,10 @@ cortex-core:
       args: ["descheduler-nova"]
       replicas: 1
 
+    - name: reservations-operator
+      args: ["reservations-operator"]
+      replicas: 1
+
   # Values passed to the service through a configmap.
   conf:
     # E2E tests to run when executed with -checks flag.
