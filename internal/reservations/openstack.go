@@ -122,9 +122,6 @@ func (o *openStackClient) GetAllCommitments(ctx context.Context) ([]v1.Commitmen
 			resultMutex.Unlock()
 		}()
 		time.Sleep(50 * time.Millisecond) // Don't overload the API.
-		if len(results) > 0 {
-			break // Just for debugging.
-		}
 	}
 
 	// Wait for all goroutines to finish and close the error channel.

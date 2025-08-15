@@ -6,9 +6,13 @@ package reservations
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -34,6 +38,76 @@ type Operator struct {
 
 func (o *Operator) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	slog.Info("reconciling reservation", "reservation", req.Name)
+	// Fetch the reservation object.
+	var res reservationv1.Reservation
+	if err := o.Client.Get(ctx, req.NamespacedName, &res); err != nil {
+		if k8serrors.IsNotFound(err) {
+			slog.Info("reservation not found, skipping", "reservation", req.Name)
+			return ctrl.Result{}, nil
+		}
+		slog.Error("failed to get reservation", "error", err)
+		return ctrl.Result{}, err
+	}
+	// Currently only compute instances are supported.
+	if !strings.HasPrefix(res.Spec.Commitment.ResourceName, "instances_") {
+		return ctrl.Result{}, nil
+	}
+	if res.Spec.Commitment.ServiceType != "compute" {
+		return ctrl.Result{}, nil
+	}
+	// Currently only single-instance commitments are supported.
+	if res.Spec.Commitment.Amount != 1 {
+		return ctrl.Result{}, nil
+	}
+	// TODO: This should also return the number of placeable flavors.
+	flavorName := strings.TrimPrefix(res.Spec.Commitment.ResourceName, "instances_")
+	externalSchedulerRequest := api.ExternalSchedulerRequest{
+		Sandboxed:         true,
+		PreselectAllHosts: true,
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{Name: flavorName},
+				},
+				NumInstances: 1,
+				ProjectID:    res.Spec.Commitment.ProjectID,
+			},
+		},
+	}
+	httpClient := http.Client{}
+	url := "http://cortex-nova-scheduler:8080/scheduler/nova/external"
+	reqBody, err := json.Marshal(externalSchedulerRequest)
+	if err != nil {
+		slog.Error("failed to marshal external scheduler request", "error", err)
+		return ctrl.Result{}, err
+	}
+	response, err := httpClient.Post(url, "application/json", strings.NewReader(string(reqBody)))
+	if err != nil {
+		slog.Error("failed to send external scheduler request", "error", err)
+		return ctrl.Result{}, err
+	}
+	defer response.Body.Close()
+	var externalSchedulerResponse api.ExternalSchedulerResponse
+	if err := json.NewDecoder(response.Body).Decode(&externalSchedulerResponse); err != nil {
+		slog.Error("failed to decode external scheduler response", "error", err)
+		return ctrl.Result{}, err
+	}
+	if len(externalSchedulerResponse.Hosts) == 0 {
+		slog.Info("no hosts found for reservation", "reservation", req.Name)
+		return ctrl.Result{}, nil
+	}
+	// Update the reservation with the found host (idx 0)
+	host := externalSchedulerResponse.Hosts[0]
+	slog.Info("found host for reservation", "reservation", req.Name, "host", host)
+	res.Status.Reserved = true
+	res.Status.Host = reservationv1.Host{
+		Kind: "compute",
+		Name: host,
+	}
+	if err := o.Client.Status().Update(ctx, &res); err != nil {
+		slog.Error("failed to update reservation status", "error", err)
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
