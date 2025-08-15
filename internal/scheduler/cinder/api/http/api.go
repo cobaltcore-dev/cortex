@@ -50,12 +50,12 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 		}
 	}
 	// Check that all weights are assigned to a host in the request.
-	shareHostNames := make(map[string]bool)
+	volumeHostNames := make(map[string]bool)
 	for _, host := range requestData.Hosts {
-		shareHostNames[host.ShareHost] = true
+		volumeHostNames[host.ShareHost] = true
 	}
-	for shareHost := range requestData.Weights {
-		if _, ok := shareHostNames[shareHost]; !ok {
+	for volumeHost := range requestData.Weights {
+		if _, ok := volumeHostNames[volumeHost]; !ok {
 			return false, "weight assigned to unknown host"
 		}
 	}
@@ -63,9 +63,9 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 }
 
 // Handle the POST request from the Cinder scheduler.
-// The request contains a spec of the share to be scheduled, a list of hosts,
+// The request contains a spec of the volume to be scheduled, a list of hosts,
 // and a map of weights that were calculated by the Cinder weigher pipeline.
-// The response contains an ordered list of hosts that the share should be
+// The response contains an ordered list of hosts that the volume should be
 // scheduled on.
 func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.Request) {
 	c := httpAPI.monitor.Callback(w, r, "/scheduler/cinder/external")
