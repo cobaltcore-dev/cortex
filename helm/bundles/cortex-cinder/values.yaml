@@ -54,7 +54,7 @@ cortex-core:
       args: ["kpis"]
       replicas: 1
 
-    # External scheduler for Manila.
+    # External scheduler for Cinder.
     - name: scheduler
       args: ["scheduler-cinder"]
       replicas: 1
@@ -80,7 +80,7 @@ cortex-core:
         # Each metric can be synced from a different Prometheus instance.
         # The `type` parameter should map to a known metric model in the database.
         metrics:
-          # NetApp harvest exporter metrics for Manila storage pools.
+          # NetApp harvest exporter metrics for Cinder storage pools.
         - alias: netapp_aggr_labels
           query: netapp_aggr_labels
           type: netapp_aggregate_labels_metric

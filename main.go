@@ -138,6 +138,7 @@ const usage = `
   -extractor Extract knowledge from the synced data and store it in the database.
   -scheduler-nova   Serve Nova scheduling requests with a http API.
   -scheduler-manila Serve Manila scheduling requests with a http API.
+  -scheduler-cinder  Serve Cinder scheduling requests with a http API.
   -kpis      Expose KPIs extracted from the database.
   -descheduler-nova Run a Nova descheduler that periodically de-schedules VMs.
 `
