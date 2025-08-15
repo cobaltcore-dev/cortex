@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
@@ -122,9 +121,6 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsDisabled(t *testing.T) {
 
 	premod := &premodifier{
 		database: testDB,
-		config: conf.NovaSchedulerConfig{
-			PreselectAllHosts: false, // Disabled
-		},
 	}
 
 	// Create a request with some existing hosts
@@ -135,6 +131,7 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsDisabled(t *testing.T) {
 		Weights: map[string]float64{
 			"existing-host-1": 1.5,
 		},
+		PreselectAllHosts: false, // Disabled
 	}
 
 	err := premod.ModifyRequest(request)
@@ -164,9 +161,6 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled(t *testing.T) {
 
 	premod := &premodifier{
 		database: testDB,
-		config: conf.NovaSchedulerConfig{
-			PreselectAllHosts: true, // Enabled
-		},
 	}
 
 	// Create a request with some existing hosts (should be replaced)
@@ -177,6 +171,7 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled(t *testing.T) {
 		Weights: map[string]float64{
 			"existing-host-1": 1.5,
 		},
+		PreselectAllHosts: true, // Enabled
 	}
 
 	err := premod.ModifyRequest(request)
@@ -234,15 +229,13 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled_EmptyRequest(t *test
 
 	premod := &premodifier{
 		database: testDB,
-		config: conf.NovaSchedulerConfig{
-			PreselectAllHosts: true,
-		},
 	}
 
 	// Create an empty request
 	request := &api.ExternalSchedulerRequest{
-		Hosts:   []api.ExternalSchedulerHost{},
-		Weights: map[string]float64{},
+		Hosts:             []api.ExternalSchedulerHost{},
+		Weights:           map[string]float64{},
+		PreselectAllHosts: true,
 	}
 
 	err := premod.ModifyRequest(request)
@@ -282,14 +275,12 @@ func TestPremodifier_ModifyRequest_NoHypervisors(t *testing.T) {
 
 	premod := &premodifier{
 		database: testDB,
-		config: conf.NovaSchedulerConfig{
-			PreselectAllHosts: true,
-		},
 	}
 
 	request := &api.ExternalSchedulerRequest{
-		Hosts:   []api.ExternalSchedulerHost{},
-		Weights: map[string]float64{},
+		Hosts:             []api.ExternalSchedulerHost{},
+		Weights:           map[string]float64{},
+		PreselectAllHosts: true,
 	}
 
 	err = premod.ModifyRequest(request)
@@ -309,14 +300,12 @@ func TestPremodifier_ModifyRequest_DatabaseError(t *testing.T) {
 
 	premod := &premodifier{
 		database: testDB,
-		config: conf.NovaSchedulerConfig{
-			PreselectAllHosts: true,
-		},
 	}
 
 	request := &api.ExternalSchedulerRequest{
-		Hosts:   []api.ExternalSchedulerHost{},
-		Weights: map[string]float64{},
+		Hosts:             []api.ExternalSchedulerHost{},
+		Weights:           map[string]float64{},
+		PreselectAllHosts: true,
 	}
 
 	err := premod.ModifyRequest(request)
@@ -333,9 +322,6 @@ func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 
 	premod := &premodifier{
 		database: testDB,
-		config: conf.NovaSchedulerConfig{
-			PreselectAllHosts: true,
-		},
 	}
 
 	// Create a request with various fields set
@@ -363,6 +349,7 @@ func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 		Weights: map[string]float64{
 			"original-host": 2.5,
 		},
+		PreselectAllHosts: true,
 	}
 
 	err := premod.ModifyRequest(originalRequest)

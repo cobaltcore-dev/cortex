@@ -185,11 +185,6 @@ type NovaSchedulerConfig struct {
 
 	// Dependencies needed by all the Nova scheduler steps.
 	DependencyConfig `json:"dependencies,omitempty"`
-
-	// If all available hosts should be selected in the request,
-	// regardless of what nova sends us in the request.
-	// By default, this is false (use the hosts nova gives us).
-	PreselectAllHosts bool `json:"preselectAllHosts,omitempty"`
 }
 
 type SchedulerStepConfig struct {
