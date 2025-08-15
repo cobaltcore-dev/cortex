@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout PR
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get changed rule and alert files
         id: changed
