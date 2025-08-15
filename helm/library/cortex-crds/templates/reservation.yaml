@@ -1,0 +1,127 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: reservations.cortex.sap
+spec:
+  group: cortex.sap
+  names:
+    kind: Reservation
+    listKind: ReservationList
+    plural: reservations
+    singular: reservation
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Reservation is the Schema for the reservations API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ReservationSpec defines the desired state of Reservation.
+            type: object
+            properties:
+              commitment:
+                description: Commitment assigned to this reservation.
+                type: object
+                properties:
+                  id:
+                    description: A unique numerical identifier for this commitment.
+                    type: integer
+                    format: int64
+                  uuid:
+                    description: A unique string identifier for this commitment.
+                    type: string
+                  service_type:
+                    description: The resource service type for which usage is committed.
+                    type: string
+                  resource_name:
+                    description: The resource name for which usage is committed.
+                    type: string
+                  availability_zone:
+                    description: The availability zone in which usage is committed.
+                    type: string
+                  amount:
+                    description: The amount of usage that was committed to.
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  unit:
+                    description: For measured resources, the unit for this resource. The amount value is measured in this unit.
+                    type: string
+                  duration:
+                    description: The requested duration of this commitment, e.g. "1 year, 3 months".
+                    type: string
+                  created_at:
+                    description: UNIX timestamp when this commitment was created.
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  confirm_by:
+                    description: UNIX timestamp when this commitment should be confirmed (optional).
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  confirmed_at:
+                    description: UNIX timestamp when this commitment was confirmed (optional).
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  expires_at:
+                    description: UNIX timestamp when this commitment is set to expire.
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  transferable:
+                    description: Whether the commitment is marked for transfer to a different project.
+                    type: boolean
+                  status:
+                    description: The current status of this commitment (e.g., planned, pending, guaranteed, confirmed, superseded, expired).
+                    type: string
+                  notify_on_confirm:
+                    description: Whether a mail notification should be sent if a created commitment is confirmed.
+                    type: boolean
+                  project_id:
+                    description: The OpenStack project ID this commitment is for.
+                    type: string
+                  domain_id:
+                    description: The OpenStack domain ID this commitment is for.
+                    type: string
+          status:
+            description: ReservationStatus defines the observed state of Reservation.
+            type: object
+            properties:
+              reserved:
+                description: Reserved indicates whether the reservation is currently active.
+                type: boolean
+              host:
+                description: Host indicates the host assigned to this reservation.
+                type: object
+                properties:
+                  kind:
+                    description: Kind of host assigned, e.g. compute
+                    type: string
+                  name:
+                    description: Name of host assigned, e.g. host-1
+                    type: string
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

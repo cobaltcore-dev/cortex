@@ -1,0 +1,12 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+owner-info:
+  enabled: true
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-crds"
+  maintainers:
+    - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
+  support-group: "workload-management"
+  service: "cortex-crds"
