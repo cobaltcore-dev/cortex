@@ -113,7 +113,7 @@ func (sp *StoragePool) UnmarshalJSON(data []byte) error {
 	sp.CapabilitiesVendorName = capabilities.VendorName
 	sp.CapabilitiesVolumeBackendName = capabilities.VolumeBackendName
 
-	//VMware specific fields
+	// VMware specific fields
 	sp.CapabilitiesBackendState = capabilities.BackendState
 	sp.CapabilitiesCustomAttributeCinderAggregateID = capabilities.CustomAttributes.CinderAggregateID
 	sp.CapabilitiesCustomAttributeNetAppFQDN = capabilities.CustomAttributes.NetAppFQDN
@@ -146,7 +146,7 @@ func (sp *StoragePool) MarshalJSON() ([]byte, error) {
 		"vendor_name":                sp.CapabilitiesVendorName,
 		"volume_backend_name":        sp.CapabilitiesVolumeBackendName,
 
-		//VMware specific fields
+		// VMware specific fields
 		"backend_state": sp.CapabilitiesBackendState,
 		"custom_attributes": map[string]any{
 			"cinder_aggregate_id": sp.CapabilitiesCustomAttributeCinderAggregateID,
