@@ -9,6 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/manila"
+	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -42,53 +43,36 @@ func TestStoragePoolCPUUsageExtractor_Extract(t *testing.T) {
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(manila.StoragePool{}),
+		testDB.AddTable(prometheus.NetAppAggregateLabelsMetric{}),
+		testDB.AddTable(prometheus.NetAppNodeMetric{}),
 	); err != nil {
-		t.Fatalf("failed to create openstack_manila_storage_pools: %v", err)
-	}
-	if _, err := testDB.Exec(`
-        CREATE TABLE netapp_aggregate_labels_metrics (
-            aggr TEXT,
-            node TEXT
-        );
-    `); err != nil {
-		t.Fatalf("failed to create netapp_aggregate_labels_metrics: %v", err)
-	}
-	if _, err := testDB.Exec(`
-        CREATE TABLE netapp_node_metrics (
-            node TEXT,
-            name TEXT,
-            value FLOAT
-        );
-    `); err != nil {
-		t.Fatalf("failed to create netapp_node_metrics: %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data
-	_, err := testDB.Exec(`
-        INSERT INTO openstack_manila_storage_pools (name, pool) VALUES
-        ('pool1', 'aggr1'),
-        ('pool2', 'aggr2')
-    `)
-	if err != nil {
-		t.Fatalf("failed to insert openstack_manila_storage_pools: %v", err)
+	manilaStoragePools := []any{
+		&manila.StoragePool{Name: "pool1", Pool: "aggr1"},
+		&manila.StoragePool{Name: "pool2", Pool: "aggr2"},
 	}
-	_, err = testDB.Exec(`
-        INSERT INTO netapp_aggregate_labels_metrics (aggr, node) VALUES
-        ('aggr1', 'node1'),
-        ('aggr2', 'node2')
-    `)
-	if err != nil {
+	if err := testDB.Insert(manilaStoragePools...); err != nil {
+		t.Fatalf("failed to insert manila storage pools: %v", err)
+	}
+
+	netappAggregateLabels := []any{
+		&prometheus.NetAppAggregateLabelsMetric{Aggregate: "aggr1", Node: "node1"},
+		&prometheus.NetAppAggregateLabelsMetric{Aggregate: "aggr2", Node: "node2"},
+	}
+	if err := testDB.Insert(netappAggregateLabels...); err != nil {
 		t.Fatalf("failed to insert netapp_aggregate_labels_metrics: %v", err)
 	}
-	_, err = testDB.Exec(`
-        INSERT INTO netapp_node_metrics (node, name, value) VALUES
-        ('node1', 'netapp_node_cpu_busy', 10.5),
-        ('node1', 'netapp_node_cpu_busy', 20.0),
-        ('node2', 'netapp_node_cpu_busy', 30.0),
-        ('node2', 'netapp_node_cpu_busy', 40.0),
-        ('node2', 'other_metric', 99.0)
-    `)
-	if err != nil {
+
+	netAppNodeMetrics := []any{
+		&prometheus.NetAppNodeMetric{Node: "node1", Name: "netapp_node_cpu_busy", Value: 10.5},
+		&prometheus.NetAppNodeMetric{Node: "node1", Name: "netapp_node_cpu_busy", Value: 20.0},
+		&prometheus.NetAppNodeMetric{Node: "node2", Name: "netapp_node_cpu_busy", Value: 30.0},
+		&prometheus.NetAppNodeMetric{Node: "node2", Name: "netapp_node_cpu_busy", Value: 40.0},
+		&prometheus.NetAppNodeMetric{Node: "node2", Name: "other_metric", Value: 99.0},
+	}
+	if err := testDB.Insert(netAppNodeMetrics...); err != nil {
 		t.Fatalf("failed to insert netapp_node_metrics: %v", err)
 	}
 
