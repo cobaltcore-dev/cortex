@@ -26,17 +26,15 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_vrops_project_noisiness table
-	_, err = testDB.Exec(`
-        INSERT INTO feature_vrops_project_noisiness (project, compute_host, avg_cpu_of_project)
-        VALUES
-            ('project1', 'host1', 25.0),
-            ('project1', 'host2', 30.0),
-            ('project2', 'host3', 15.0)
-    `)
-	if err != nil {
+	vropsProjectNoisiness := []any{
+		&vmware.VROpsProjectNoisiness{Project: "project1", ComputeHost: "host1", AvgCPUOfProject: 25.0},
+		&vmware.VROpsProjectNoisiness{Project: "project1", ComputeHost: "host2", AvgCPUOfProject: 30.0},
+		&vmware.VROpsProjectNoisiness{Project: "project2", ComputeHost: "host3", AvgCPUOfProject: 15.0},
+	}
+	if err := testDB.Insert(vropsProjectNoisiness...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+
 	opts := conf.NewRawOpts(`{
         "avgCPUUsageLowerBound": 20,
         "avgCPUUsageUpperBound": 100,
