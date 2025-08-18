@@ -73,7 +73,8 @@ func TestNodeExporterHostMemoryActiveExtractor_Extract(t *testing.T) {
 
 	// Verify the data was inserted into the feature_host_memory_active table
 	var usages []NodeExporterHostMemoryActive
-	_, err := testDB.Select(&usages, "SELECT * FROM "+NodeExporterHostMemoryActive{}.TableName())
+	table := NodeExporterHostMemoryActive{}.TableName()
+	_, err := testDB.Select(&usages, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
