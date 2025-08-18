@@ -48,36 +48,12 @@ const (
 	TopicFinished = "cortex/scheduler/nova/pipeline/finished"
 )
 
-// Modifier for the pipeline request that is executed before the pipeline itself.
-type premodifier struct {
+// Specific pipeline for nova.
+type novaPipeline struct {
+	// The underlying shared pipeline logic.
+	scheduler.Pipeline[api.ExternalSchedulerRequest]
+	// Database to use for the nova pipeline.
 	database db.DB
-}
-
-// If configured, modify the request before it is sent to the pipeline.
-func (p *premodifier) ModifyRequest(request *api.ExternalSchedulerRequest) error {
-	if request.PreselectAllHosts {
-		// Get all available hypervisors from the database.
-		var hypervisors []nova.Hypervisor
-		if _, err := p.database.Select(
-			&hypervisors, "SELECT * FROM "+nova.Hypervisor{}.TableName(),
-		); err != nil {
-			return err
-		}
-		if len(hypervisors) == 0 {
-			return errors.New("no hypervisors found")
-		}
-		request.Hosts = make([]api.ExternalSchedulerHost, 0, len(hypervisors))
-		request.Weights = make(map[string]float64, len(hypervisors))
-		for _, hypervisor := range hypervisors {
-			request.Hosts = append(request.Hosts, api.ExternalSchedulerHost{
-				ComputeHost:        hypervisor.ServiceHost,
-				HypervisorHostname: hypervisor.Hostname,
-			})
-			request.Weights[hypervisor.ServiceHost] = 0.0
-		}
-		slog.Info("preselecting all hosts for Nova pipeline", "hosts", len(request.Hosts))
-	}
-	return nil
 }
 
 // Create a new Nova scheduler pipeline.
@@ -106,11 +82,45 @@ func NewPipeline(
 			return scheduler.MonitorStep(s, monitor)
 		},
 	}
-	premodifier := &premodifier{
-		database: db,
-	}
-	return scheduler.NewPipeline(
+	pipeline := scheduler.NewPipeline(
 		supportedSteps, config.Nova.Plugins, wrappers,
-		db, monitor, mqttClient, TopicFinished, premodifier,
+		db, monitor, mqttClient, TopicFinished,
 	)
+	return &novaPipeline{pipeline, db}
+}
+
+// If needed, modify the request before sending it off to the pipeline.
+func (p *novaPipeline) modify(request *api.ExternalSchedulerRequest) error {
+	if request.PreselectAllHosts {
+		// Get all available hypervisors from the database.
+		var hypervisors []nova.Hypervisor
+		if _, err := p.database.Select(
+			&hypervisors, "SELECT * FROM "+nova.Hypervisor{}.TableName(),
+		); err != nil {
+			return err
+		}
+		if len(hypervisors) == 0 {
+			return errors.New("no hypervisors found")
+		}
+		request.Hosts = make([]api.ExternalSchedulerHost, 0, len(hypervisors))
+		request.Weights = make(map[string]float64, len(hypervisors))
+		for _, hypervisor := range hypervisors {
+			request.Hosts = append(request.Hosts, api.ExternalSchedulerHost{
+				ComputeHost:        hypervisor.ServiceHost,
+				HypervisorHostname: hypervisor.Hostname,
+			})
+			request.Weights[hypervisor.ServiceHost] = 0.0
+		}
+		slog.Info("preselecting all hosts for Nova pipeline", "hosts", len(request.Hosts))
+	}
+	return nil
+}
+
+// Run the pipeline logic with additional actions for nova.
+func (p *novaPipeline) Run(request api.ExternalSchedulerRequest) ([]string, error) {
+	// Modify the request to use the nova client.
+	if err := p.modify(&request); err != nil {
+		return nil, err
+	}
+	return p.Run(request)
 }

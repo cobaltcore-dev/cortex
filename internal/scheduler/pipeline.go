@@ -43,8 +43,6 @@ type pipeline[RequestType PipelineRequest] struct {
 	mqttClient mqtt.Client
 	// MQTT topic to publish telemetry data on when the pipeline is finished.
 	mqttTopic string
-	// The premodifier to use for the pipeline.
-	premodifier Premodifier[RequestType]
 }
 
 type StepWrapper[RequestType PipelineRequest] func(Step[RequestType], conf.SchedulerStepConfig) Step[RequestType]
@@ -71,7 +69,6 @@ func NewPipeline[RequestType PipelineRequest](
 	monitor PipelineMonitor,
 	mqttClient mqtt.Client,
 	mqttTopic string,
-	premodifier Premodifier[RequestType],
 ) Pipeline[RequestType] {
 	// Load all steps from the configuration.
 	steps := []Step[RequestType]{}
@@ -106,7 +103,6 @@ func NewPipeline[RequestType PipelineRequest](
 		monitor:          monitor,
 		mqttClient:       mqttClient,
 		mqttTopic:        mqttTopic,
-		premodifier:      premodifier,
 	}
 }
 
@@ -201,13 +197,6 @@ type TelemetryMessage[RequestType PipelineRequest] struct {
 
 // Evaluate the pipeline and return a list of subjects in order of preference.
 func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
-	// If a premodifier is configured, execute it on the request before anything else.
-	if p.premodifier != nil {
-		if err := p.premodifier.ModifyRequest(&request); err != nil {
-			return nil, err
-		}
-	}
-
 	slogArgs := request.GetTraceLogArgs()
 	slogArgsAny := make([]any, 0, len(slogArgs))
 	for _, arg := range slogArgs {

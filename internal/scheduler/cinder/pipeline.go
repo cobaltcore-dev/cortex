@@ -42,6 +42,6 @@ func NewPipeline(
 	}
 	return scheduler.NewPipeline(
 		supportedSteps, config.Cinder.Plugins, wrappers,
-		db, monitor, mqttClient, TopicFinished, nil,
+		db, monitor, mqttClient, TopicFinished,
 	)
 }

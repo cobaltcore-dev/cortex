@@ -119,10 +119,6 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsDisabled(t *testing.T) {
 	testDB := setupTestDBWithHypervisors(t)
 	defer testDB.Close()
 
-	premod := &premodifier{
-		database: testDB,
-	}
-
 	// Create a request with some existing hosts
 	request := &api.ExternalSchedulerRequest{
 		Hosts: []api.ExternalSchedulerHost{
@@ -133,8 +129,8 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsDisabled(t *testing.T) {
 		},
 		PreselectAllHosts: false, // Disabled
 	}
-
-	err := premod.ModifyRequest(request)
+	pipeline := &novaPipeline{database: testDB}
+	err := pipeline.modify(request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,10 +155,6 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled(t *testing.T) {
 	testDB := setupTestDBWithHypervisors(t)
 	defer testDB.Close()
 
-	premod := &premodifier{
-		database: testDB,
-	}
-
 	// Create a request with some existing hosts (should be replaced)
 	request := &api.ExternalSchedulerRequest{
 		Hosts: []api.ExternalSchedulerHost{
@@ -174,7 +166,8 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled(t *testing.T) {
 		PreselectAllHosts: true, // Enabled
 	}
 
-	err := premod.ModifyRequest(request)
+	pipeline := &novaPipeline{database: testDB}
+	err := pipeline.modify(request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -227,10 +220,6 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled_EmptyRequest(t *test
 	testDB := setupTestDBWithHypervisors(t)
 	defer testDB.Close()
 
-	premod := &premodifier{
-		database: testDB,
-	}
-
 	// Create an empty request
 	request := &api.ExternalSchedulerRequest{
 		Hosts:             []api.ExternalSchedulerHost{},
@@ -238,8 +227,8 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled_EmptyRequest(t *test
 		PreselectAllHosts: true,
 	}
 
-	err := premod.ModifyRequest(request)
-	if err != nil {
+	pipeline := &novaPipeline{database: testDB}
+	if err := pipeline.modify(request); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -273,17 +262,14 @@ func TestPremodifier_ModifyRequest_NoHypervisors(t *testing.T) {
 		t.Fatalf("expected no error creating hypervisors table, got %v", err)
 	}
 
-	premod := &premodifier{
-		database: testDB,
-	}
-
 	request := &api.ExternalSchedulerRequest{
 		Hosts:             []api.ExternalSchedulerHost{},
 		Weights:           map[string]float64{},
 		PreselectAllHosts: true,
 	}
 
-	err = premod.ModifyRequest(request)
+	pipeline := &novaPipeline{database: testDB}
+	err = pipeline.modify(request)
 	if err == nil {
 		t.Fatal("expected error when no hypervisors found, got nil")
 	}
@@ -298,18 +284,14 @@ func TestPremodifier_ModifyRequest_DatabaseError(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 
-	premod := &premodifier{
-		database: testDB,
-	}
-
 	request := &api.ExternalSchedulerRequest{
 		Hosts:             []api.ExternalSchedulerHost{},
 		Weights:           map[string]float64{},
 		PreselectAllHosts: true,
 	}
 
-	err := premod.ModifyRequest(request)
-	if err == nil {
+	pipeline := &novaPipeline{database: testDB}
+	if err := pipeline.modify(request); err == nil {
 		t.Fatal("expected database error, got nil")
 	}
 	// The exact error message will depend on the database implementation,
@@ -319,10 +301,6 @@ func TestPremodifier_ModifyRequest_DatabaseError(t *testing.T) {
 func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 	testDB := setupTestDBWithHypervisors(t)
 	defer testDB.Close()
-
-	premod := &premodifier{
-		database: testDB,
-	}
 
 	// Create a request with various fields set
 	originalRequest := &api.ExternalSchedulerRequest{
@@ -352,8 +330,8 @@ func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 		PreselectAllHosts: true,
 	}
 
-	err := premod.ModifyRequest(originalRequest)
-	if err != nil {
+	pipeline := &novaPipeline{database: testDB}
+	if err := pipeline.modify(originalRequest); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
