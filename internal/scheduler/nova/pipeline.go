@@ -51,13 +51,11 @@ const (
 // Modifier for the pipeline request that is executed before the pipeline itself.
 type premodifier struct {
 	database db.DB
-	// Config that applies to the nova pipeline premodifier.
-	config conf.NovaSchedulerConfig
 }
 
 // If configured, modify the request before it is sent to the pipeline.
 func (p *premodifier) ModifyRequest(request *api.ExternalSchedulerRequest) error {
-	if p.config.PreselectAllHosts {
+	if request.PreselectAllHosts {
 		// Get all available hypervisors from the database.
 		var hypervisors []nova.Hypervisor
 		if _, err := p.database.Select(
@@ -110,7 +108,6 @@ func NewPipeline(
 	}
 	premodifier := &premodifier{
 		database: db,
-		config:   config.Nova,
 	}
 	return scheduler.NewPipeline(
 		supportedSteps, config.Nova.Plugins, wrappers,
