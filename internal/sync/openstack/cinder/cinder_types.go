@@ -35,16 +35,16 @@ type StoragePool struct {
 	CapabilitiesVolumeBackendName        string  `json:"-" db:"capabilities_volume_backend_name"`
 
 	// VMware specific fields
-	CapabilitiesBackendState                     string `json:"-" db:"capabilities_backend_state"`
-	CapabilitiesCustomAttributeCinderAggregateID string `json:"-" db:"capabilities_custom_attribute_cinder_aggregate_id"`
-	CapabilitiesCustomAttributeNetAppFQDN        string `json:"-" db:"capabilities_custom_attribute_netapp_fqdn"`
-	CapabilitiesPoolDownReason                   string `json:"-" db:"capabilities_pool_down_reason"`
-	CapabilitiesPoolState                        string `json:"-" db:"capabilities_pool_state"`
+	CapabilitiesBackendState                     *string `json:"-" db:"capabilities_backend_state"`
+	CapabilitiesCustomAttributeCinderAggregateID *string `json:"-" db:"capabilities_custom_attribute_cinder_aggregate_id"`
+	CapabilitiesCustomAttributeNetAppFQDN        *string `json:"-" db:"capabilities_custom_attribute_netapp_fqdn"`
+	CapabilitiesPoolDownReason                   *string `json:"-" db:"capabilities_pool_down_reason"`
+	CapabilitiesPoolState                        *string `json:"-" db:"capabilities_pool_state"`
 
 	// NetApp-specific fields for native NetApp pools
-	CapabilitiesNetAppAggregate            string  `json:"-" db:"capabilities_netapp_aggregate"`
-	CapabilitiesNetAppAggregateUsedPercent float64 `json:"-" db:"capabilities_netapp_aggregate_used_percent"`
-	CapabilitiesUtilization                float64 `json:"-" db:"capabilities_utilization"`
+	CapabilitiesNetAppAggregate            *string  `json:"-" db:"capabilities_netapp_aggregate"`
+	CapabilitiesNetAppAggregateUsedPercent *float64 `json:"-" db:"capabilities_netapp_aggregate_used_percent"`
+	CapabilitiesUtilization                *float64 `json:"-" db:"capabilities_utilization"`
 }
 
 // The table name for the storage pool model.
@@ -82,18 +82,19 @@ func (sp *StoragePool) UnmarshalJSON(data []byte) error {
 		VolumeBackendName        string  `json:"volume_backend_name"`
 
 		// VMware specific fields
-		BackendState     string `json:"backend_state"`
+		BackendState     *string `json:"backend_state"`
 		CustomAttributes struct {
-			CinderAggregateID string `json:"cinder_aggregate_id"`
-			NetAppFQDN        string `json:"netapp_fqdn"`
+			CinderState       *string `json:"cinder_state"`
+			CinderAggregateID *string `json:"cinder_aggregate_id"`
+			NetAppFQDN        *string `json:"netapp_fqdn"`
 		} `json:"custom_attributes"`
-		PoolDownReason string `json:"pool_down_reason"`
-		PoolState      string `json:"pool_state"`
+		PoolDownReason *string `json:"pool_down_reason"`
+		PoolState      *string `json:"pool_state"`
 
 		// NetApp-specific fields for native NetApp pools
-		NetAppAggregate            []string `json:"netapp_aggregate"`
-		NetAppAggregateUsedPercent float64  `json:"netapp_aggregate_used_percent"`
-		Utilization                float64  `json:"utilization"`
+		NetAppAggregate            *[]string `json:"netapp_aggregate"`
+		NetAppAggregateUsedPercent *float64  `json:"netapp_aggregate_used_percent"`
+		Utilization                *float64  `json:"utilization"`
 	}
 	if err := json.Unmarshal(aux.Capabilities, &capabilities); err != nil {
 		return err
@@ -121,7 +122,10 @@ func (sp *StoragePool) UnmarshalJSON(data []byte) error {
 	sp.CapabilitiesPoolState = capabilities.PoolState
 
 	// NetApp-specific fields for native NetApp pools
-	sp.CapabilitiesNetAppAggregate = strings.Join(capabilities.NetAppAggregate, ",") // TODO what does it mean when we have multiple aggregates?
+	if capabilities.NetAppAggregate != nil {
+		aggregateStr := strings.Join(*capabilities.NetAppAggregate, ",")
+		sp.CapabilitiesNetAppAggregate = &aggregateStr
+	}
 	sp.CapabilitiesNetAppAggregateUsedPercent = capabilities.NetAppAggregateUsedPercent
 	sp.CapabilitiesUtilization = capabilities.Utilization
 	return nil
@@ -130,9 +134,14 @@ func (sp *StoragePool) UnmarshalJSON(data []byte) error {
 // Custom marshaler for StoragePool to handle nested JSON.
 func (sp *StoragePool) MarshalJSON() ([]byte, error) {
 	// Reconstruct the capabilities object
-	capabilities := map[string]any{
-		"allocated_capacity_gb": sp.CapabilitiesAllocatedCapacityGB,
 
+	var netappAggregate []string
+	if sp.CapabilitiesNetAppAggregate != nil && *sp.CapabilitiesNetAppAggregate != "" {
+		netappAggregate = strings.Split(*sp.CapabilitiesNetAppAggregate, ",")
+	}
+
+	capabilities := map[string]any{
+		"allocated_capacity_gb":      sp.CapabilitiesAllocatedCapacityGB,
 		"driver_version":             sp.CapabilitiesDriverVersion,
 		"free_capacity_gb":           sp.CapabilitiesFreeCapacityGB,
 		"multiattach":                sp.CapabilitiesMultiattach,
@@ -156,7 +165,7 @@ func (sp *StoragePool) MarshalJSON() ([]byte, error) {
 		"pool_state":       sp.CapabilitiesPoolState,
 
 		// NetApp-specific fields for native NetApp pools
-		"netapp_aggregate":              strings.Split(sp.CapabilitiesNetAppAggregate, ","),
+		"netapp_aggregate":              netappAggregate,
 		"netapp_aggregate_used_percent": sp.CapabilitiesNetAppAggregateUsedPercent,
 		"utilization":                   sp.CapabilitiesUtilization,
 	}
