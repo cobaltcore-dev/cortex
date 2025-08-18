@@ -15,10 +15,22 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 3,
-  "iteration": 1755257539023,
+  "id": 1,
+  "iteration": 1755499044047,
   "links": [],
   "panels": [
+    {
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 216,
+      "title": "Introduction",
+      "type": "row"
+    },
     {
       "datasource": null,
       "description": "",
@@ -30,7 +42,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 195,
       "options": {
@@ -56,7 +68,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 15
       },
       "id": 203,
       "panels": [],
@@ -81,7 +93,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 15
+        "y": 16
       },
       "hiddenSeries": false,
       "id": 197,
@@ -472,7 +484,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 16
       },
       "id": 163,
       "options": {
@@ -744,7 +756,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 23
+        "y": 24
       },
       "id": 170,
       "options": {
@@ -847,7 +859,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 28
+        "y": 29
       },
       "id": 210,
       "options": {
@@ -933,7 +945,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 32
       },
       "id": 201,
       "options": {
@@ -987,13 +999,13 @@
       "type": "stat"
     },
     {
-      "collapsed": true,
+      "collapsed": false,
       "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 37
       },
       "id": 207,
       "panels": [],
@@ -1018,7 +1030,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 37
+        "y": 38
       },
       "hiddenSeries": false,
       "id": 200,
@@ -1158,7 +1170,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 37
+        "y": 38
       },
       "id": 179,
       "options": {
@@ -1244,7 +1256,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 45
+        "y": 46
       },
       "id": 208,
       "options": {
@@ -1298,6 +1310,20 @@
       "type": "stat"
     },
     {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 212,
+      "panels": [],
+      "title": "General Purpose / Sapphire Rapids",
+      "type": "row"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -1313,9 +1339,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 10,
-        "x": 14,
-        "y": 50
+        "w": 12,
+        "x": 0,
+        "y": 52
       },
       "hiddenSeries": false,
       "id": 198,
@@ -1453,9 +1479,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 10,
-        "x": 14,
-        "y": 58
+        "w": 12,
+        "x": 12,
+        "y": 52
       },
       "id": 177,
       "options": {
@@ -1509,6 +1535,20 @@
       "type": "stat"
     },
     {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 60
+      },
+      "id": 214,
+      "panels": [],
+      "title": "HANA / Sapphire Rapids",
+      "type": "row"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -1524,9 +1564,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 10,
-        "x": 14,
-        "y": 66
+        "w": 12,
+        "x": 0,
+        "y": 61
       },
       "hiddenSeries": false,
       "id": 199,
@@ -1664,9 +1704,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 10,
-        "x": 14,
-        "y": 74
+        "w": 12,
+        "x": 12,
+        "y": 61
       },
       "id": 178,
       "options": {
@@ -1726,7 +1766,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 82
+        "y": 69
       },
       "id": 165,
       "panels": [],
@@ -1822,7 +1862,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 83
+        "y": 70
       },
       "id": 168,
       "options": {
@@ -1981,7 +2021,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 83
+        "y": 70
       },
       "id": 180,
       "options": {
@@ -2140,7 +2180,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 83
+        "y": 70
       },
       "id": 181,
       "options": {
@@ -2225,7 +2265,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 90
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 183,
@@ -2344,7 +2384,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 90
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 184,
@@ -2463,7 +2503,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 90
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 185,
@@ -2580,7 +2620,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 98
+        "y": 85
       },
       "hiddenSeries": false,
       "id": 187,
@@ -2691,7 +2731,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 98
+        "y": 85
       },
       "hiddenSeries": false,
       "id": 188,
@@ -2802,7 +2842,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 98
+        "y": 85
       },
       "hiddenSeries": false,
       "id": 189,
@@ -3181,7 +3221,7 @@
         "h": 28,
         "w": 24,
         "x": 0,
-        "y": 106
+        "y": 93
       },
       "id": 209,
       "options": {
@@ -3444,7 +3484,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 134
+        "y": 121
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -3516,7 +3556,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 157
+        "y": 144
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -3588,7 +3628,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 180
+        "y": 167
       },
       "heatmap": {},
       "hideZeroBuckets": false,
