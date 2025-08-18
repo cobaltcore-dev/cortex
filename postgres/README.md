@@ -4,4 +4,4 @@ https://github.com/docker-library/postgres with the most recent stable version o
 
 Also contains some minor changes, such as that `gosu` is directly installed over apt.
 
-Current postgres version: `v17.5`
+Current postgres version: `v17.6`
