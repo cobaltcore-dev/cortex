@@ -87,6 +87,9 @@ cortex-core:
         - alias: netapp_node_cpu_busy
           query: netapp_node_cpu_busy
           type: netapp_node_metric
+        - alias: netapp_volume_aggr_labels
+          query: netapp_volume_aggr_labels
+          type: netapp_volume_aggregate_labels_metric
 
       openstack:
         cinder:
@@ -112,4 +115,8 @@ cortex-core:
         hosts:
           - name: netapp_prometheus
             url: "" # e.g. "https://netapp-prometheus:9090"
-            provides: [netapp_aggregate_labels_metric, netapp_node_metric]
+            provides: [
+              netapp_aggregate_labels_metric,
+              netapp_node_metric,
+              netapp_volume_aggregate_labels_metric
+            ]
