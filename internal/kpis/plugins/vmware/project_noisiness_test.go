@@ -38,16 +38,11 @@ func TestVMwareProjectNoisinessKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_vrops_project_noisiness table
-	_, err := testDB.Exec(`
-        INSERT INTO feature_vrops_project_noisiness (
-            project, compute_host, avg_cpu_of_project
-        )
-        VALUES
-            ('project1', 'host1', 10.5),
-            ('project2', 'host2', 15.0)
-    `)
-	if err != nil {
+	vropsProjectNoisiness := []any{
+		&vmware.VROpsProjectNoisiness{Project: "project1", ComputeHost: "host1", AvgCPUOfProject: 10.5},
+		&vmware.VROpsProjectNoisiness{Project: "project2", ComputeHost: "host2", AvgCPUOfProject: 15.0},
+	}
+	if err := testDB.Insert(vropsProjectNoisiness...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
