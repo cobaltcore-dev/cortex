@@ -36,6 +36,7 @@ type StoragePool struct {
 
 	// VMware specific fields
 	CapabilitiesBackendState                     *string `json:"-" db:"capabilities_backend_state"`
+	CapabilitiesCustomAttributeCinderState       *string `json:"-" db:"capabilities_custom_attribute_cinder_state"`
 	CapabilitiesCustomAttributeCinderAggregateID *string `json:"-" db:"capabilities_custom_attribute_cinder_aggregate_id"`
 	CapabilitiesCustomAttributeNetAppFQDN        *string `json:"-" db:"capabilities_custom_attribute_netapp_fqdn"`
 	CapabilitiesPoolDownReason                   *string `json:"-" db:"capabilities_pool_down_reason"`
@@ -118,6 +119,7 @@ func (sp *StoragePool) UnmarshalJSON(data []byte) error {
 	sp.CapabilitiesBackendState = capabilities.BackendState
 	sp.CapabilitiesCustomAttributeCinderAggregateID = capabilities.CustomAttributes.CinderAggregateID
 	sp.CapabilitiesCustomAttributeNetAppFQDN = capabilities.CustomAttributes.NetAppFQDN
+	sp.CapabilitiesCustomAttributeCinderState = capabilities.CustomAttributes.CinderState
 	sp.CapabilitiesPoolDownReason = capabilities.PoolDownReason
 	sp.CapabilitiesPoolState = capabilities.PoolState
 
@@ -158,6 +160,7 @@ func (sp *StoragePool) MarshalJSON() ([]byte, error) {
 		// VMware specific fields
 		"backend_state": sp.CapabilitiesBackendState,
 		"custom_attributes": map[string]any{
+			"cinder_state":        sp.CapabilitiesCustomAttributeCinderState,
 			"cinder_aggregate_id": sp.CapabilitiesCustomAttributeCinderAggregateID,
 			"netapp_fqdn":         sp.CapabilitiesCustomAttributeNetAppFQDN,
 		},
