@@ -144,14 +144,6 @@ type SyncOpenStackLimesConfig struct {
 	Types []string `json:"types"`
 }
 
-// Configuration for the manila service.
-type SyncOpenStackCinderConfig struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
-	// The types of resources to sync.
-	Types []string `json:"types"`
-}
-
 // Configuration for the sync module.
 type SyncConfig struct {
 	Prometheus SyncPrometheusConfig `json:"prometheus"`
