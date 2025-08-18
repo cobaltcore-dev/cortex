@@ -50,25 +50,19 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the metrics table
-	_, err := testDB.Exec(`
-        INSERT INTO vrops_vm_metrics (hostsystem, instance_uuid)
-        VALUES
-            ('hostsystem1', 'uuid1'),
-            ('hostsystem2', 'uuid2')
-    `)
-	if err != nil {
+	vropsVMMetrics := []any{
+		&prometheus.VROpsVMMetric{HostSystem: "hostsystem1", InstanceUUID: "uuid1"},
+		&prometheus.VROpsVMMetric{HostSystem: "hostsystem2", InstanceUUID: "uuid2"},
+	}
+	if err := testDB.Insert(vropsVMMetrics...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the openstack_servers table
-	_, err = testDB.Exec(`
-        INSERT INTO openstack_servers (id, os_ext_srv_attr_host)
-        VALUES
-            ('uuid1', 'service_host1'),
-            ('uuid2', 'service_host2')
-    `)
-	if err != nil {
+	servers := []any{
+		&nova.Server{ID: "uuid1", OSEXTSRVATTRHost: "service_host1"},
+		&nova.Server{ID: "uuid2", OSEXTSRVATTRHost: "service_host2"},
+	}
+	if err := testDB.Insert(servers...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -88,7 +82,7 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	// Verify the data was inserted into the feature_vrops_resolved_hostsystem table
 	var resolvedHostsystems []ResolvedVROpsHostsystem
 	table := ResolvedVROpsHostsystem{}.TableName()
-	_, err = testDB.Select(&resolvedHostsystems, "SELECT * FROM "+table)
+	_, err := testDB.Select(&resolvedHostsystems, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
