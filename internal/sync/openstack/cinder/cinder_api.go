@@ -81,8 +81,6 @@ func (api *cinderAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, er
 	var data = &struct {
 		Pools []StoragePool `json:"pools"`
 	}{}
-	// Log the raw body for debugging purposes.
-	slog.Info("raw response body", "body", pages.(schedulerstats.StoragePoolPage).Body)
 	if err := pages.(schedulerstats.StoragePoolPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
