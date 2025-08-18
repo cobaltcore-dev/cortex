@@ -49,9 +49,9 @@ func TestNodeExporterHostMemoryActiveExtractor_Extract(t *testing.T) {
 	// Insert mock data into the node_exporter_metrics table
 
 	nodeExporterMetrics := []any{
-		&prometheus.NodeExporterMetric{Node: "node1", Name: "node_exporter_cpu_usage_pct", Value: 20.0},
-		&prometheus.NodeExporterMetric{Node: "node2", Name: "node_exporter_cpu_usage_pct", Value: 30.0},
-		&prometheus.NodeExporterMetric{Node: "node1", Name: "node_exporter_cpu_usage_pct", Value: 40.0},
+		&prometheus.NodeExporterMetric{Node: "node1", Name: "node_exporter_memory_active_pct", Value: 20.0},
+		&prometheus.NodeExporterMetric{Node: "node2", Name: "node_exporter_memory_active_pct", Value: 30.0},
+		&prometheus.NodeExporterMetric{Node: "node1", Name: "node_exporter_memory_active_pct", Value: 40.0},
 	}
 
 	if err := testDB.Insert(nodeExporterMetrics...); err != nil {
