@@ -122,5 +122,5 @@ func (p *novaPipeline) Run(request api.ExternalSchedulerRequest) ([]string, erro
 	if err := p.modify(&request); err != nil {
 		return nil, err
 	}
-	return p.Run(request)
+	return p.Pipeline.Run(request)
 }
