@@ -88,6 +88,11 @@ cortex-core:
           query: netapp_node_cpu_busy
           type: netapp_node_metric
 
+      openstack:
+        cinder:
+          types:
+            - storage_pools
+
     extractor:
       plugins: []
 
