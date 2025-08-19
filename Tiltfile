@@ -22,6 +22,10 @@ helm_repo(
     labels=['Repositories'],
 )
 
+########### CRDs
+
+k8s_yaml(helm('./helm/library/cortex-crds', name='cortex-crds'))
+
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
 k8s_yaml(helm('./helm/dev/cortex-prometheus-operator', name='cortex-prometheus-operator')) # Operator
@@ -123,6 +127,7 @@ resources = [
             'cortex-nova-kpis',
             'cortex-nova-scheduler',
             'cortex-nova-descheduler',
+            'cortex-nova-reservations-operator',
         ],
         [(2112, 'metrics'), (8080, 'api')],
     ),

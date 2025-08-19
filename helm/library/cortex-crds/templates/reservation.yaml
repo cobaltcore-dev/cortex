@@ -1,0 +1,142 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: reservations.cortex.sap
+spec:
+  group: cortex.sap
+  names:
+    kind: Reservation
+    listKind: ReservationList
+    plural: reservations
+    singular: reservation
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    additionalPrinterColumns:
+    - name: Resource
+      type: string
+      jsonPath: .spec.kind
+    - name: Service
+      type: string
+      jsonPath: .status.allocation.kind
+    - name: Host
+      type: string
+      jsonPath: .status.allocation.compute.host
+    - name: State
+      type: string
+      jsonPath: .status.phase
+    - name: Error
+      type: string
+      jsonPath: .status.error
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
+    schema:
+      openAPIV3Schema:
+        description: Reservation is the Schema for the reservations API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ReservationSpec defines the desired state of Reservation.
+            type: object
+            required:
+            - kind
+            - projectID
+            - domainID
+            properties:
+              kind:
+                description: The kind of reservation.
+                type: string
+                enum:
+                - instance
+              projectID:
+                description: The project ID to reserve the instance for.
+                type: string
+              domainID:
+                description: The domain ID to reserve the instance for.
+                type: string
+              instance:
+                description: If reservation kind is instance, this field will contain metadata necessary to determine if the instance reservation can be fulfilled.
+                type: object
+                required:
+                - flavor
+                - memory
+                - vCPUs
+                - disk
+                properties:
+                  flavor:
+                    description: The name of the flavor to reserve.
+                    type: string
+                  memory:
+                    description: The memory to reserve (e.g., "1Gi", "512Mi").
+                    type: string
+                    pattern: '^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$'
+                  vCPUs:
+                    description: The number of vCPUs to reserve (e.g., "2", "500m").
+                    type: string
+                    pattern: '^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$'
+                  disk:
+                    description: The disk space to reserve (e.g., "10Gi", "500Mi").
+                    type: string
+                    pattern: '^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$'
+                  extraSpecs:
+                    description: Extra specifications for the instance.
+                    type: object
+                    additionalProperties:
+                      type: string
+          status:
+            description: ReservationStatus defines the observed state of Reservation.
+            type: object
+            properties:
+              error:
+                description: If the reservation could not be fulfilled, this field will contain the error message.
+                type: string
+              phase:
+                description: The current phase of the reservation.
+                type: string
+                enum:
+                - pending
+                - allocated
+                - active
+                - failed
+              allocation:
+                description: Allocation for the reservation.
+                type: object
+                required:
+                - kind
+                properties:
+                  kind:
+                    description: The kind of allocation.
+                    type: string
+                    enum:
+                    - compute
+                  compute:
+                    description: If the allocation kind is compute, this field will contain the compute host name of the compute node that was allocated.
+                    type: object
+                    required:
+                    - host
+                    properties:
+                      host:
+                        description: The name of the compute host that was allocated.
+                        type: string
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

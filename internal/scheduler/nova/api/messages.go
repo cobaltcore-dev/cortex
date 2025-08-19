@@ -199,10 +199,10 @@ type NovaImageMeta struct {
 type NovaFlavor struct {
 	ID          int               `json:"id"`
 	Name        string            `json:"name"`
-	MemoryMB    int               `json:"memory_mb"`
-	VCPUs       int               `json:"vcpus"`
-	RootGB      int               `json:"root_gb"`
-	EphemeralGB int               `json:"ephemeral_gb"`
+	MemoryMB    uint64            `json:"memory_mb"`
+	VCPUs       uint64            `json:"vcpus"`
+	RootGB      uint64            `json:"root_gb"`
+	EphemeralGB uint64            `json:"ephemeral_gb"`
 	FlavorID    string            `json:"flavorid"`
 	Swap        int               `json:"swap"`
 	RXTXFactor  float64           `json:"rxtx_factor"`
