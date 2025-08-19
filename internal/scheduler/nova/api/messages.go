@@ -48,6 +48,11 @@ type ExternalSchedulerRequest struct {
 	// actually being scheduled, and that sandboxed scheduler steps should be
 	// executed for additional validation.
 	Sandboxed bool `json:"sandboxed"`
+
+	// If all available hosts should be selected in the request,
+	// regardless of what nova sends us in the request.
+	// By default, this is false (use the hosts nova gives us).
+	PreselectAllHosts bool `json:"preselectAllHosts"`
 }
 
 // Conform to the PipelineRequest interface.

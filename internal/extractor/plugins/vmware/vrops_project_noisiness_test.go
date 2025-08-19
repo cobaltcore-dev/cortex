@@ -53,42 +53,36 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the metrics table
-	if _, err := testDB.Exec(`
-	INSERT INTO vrops_vm_metrics (name, project, value, instance_uuid)
-	VALUES
-		('vrops_virtualmachine_cpu_demand_ratio', 'project1', 50, 'uuid1'),
-		('vrops_virtualmachine_cpu_demand_ratio', 'project1', 60, 'uuid2'),
-		('vrops_virtualmachine_cpu_demand_ratio', 'project2', 70, 'uuid3')
-	`); err != nil {
+	vropsVMMetrics := []any{
+		&prometheus.VROpsVMMetric{Name: "vrops_virtualmachine_cpu_demand_ratio", Project: "project1", Value: 50, InstanceUUID: "uuid1"},
+		&prometheus.VROpsVMMetric{Name: "vrops_virtualmachine_cpu_demand_ratio", Project: "project1", Value: 60, InstanceUUID: "uuid2"},
+		&prometheus.VROpsVMMetric{Name: "vrops_virtualmachine_cpu_demand_ratio", Project: "project2", Value: 70, InstanceUUID: "uuid3"},
+	}
+	if err := testDB.Insert(vropsVMMetrics...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the openstack_servers table
-	if _, err := testDB.Exec(`
-	INSERT INTO openstack_servers (id, tenant_id, os_ext_srv_attr_hypervisor_hostname)
-	VALUES
-		('uuid1', 'project1', 'host1'),
-		('uuid2', 'project1', 'host2'),
-		('uuid3', 'project2', 'host1')
-	`); err != nil {
+	servers := []any{
+		&nova.Server{ID: "uuid1", TenantID: "project1", OSEXTSRVATTRHypervisorHostname: "host1"},
+		&nova.Server{ID: "uuid2", TenantID: "project1", OSEXTSRVATTRHypervisorHostname: "host2"},
+		&nova.Server{ID: "uuid3", TenantID: "project2", OSEXTSRVATTRHypervisorHostname: "host1"},
+	}
+	if err := testDB.Insert(servers...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the openstack_hypervisors table
-	if _, err := testDB.Exec(`
-	INSERT INTO openstack_hypervisors (id, hostname, service_host)
-	VALUES
-		(1, 'host1', 'service_host1'),
-		(2, 'host2', 'service_host2')
-	`); err != nil {
+	hypervisors := []any{
+		&nova.Hypervisor{ID: "1", Hostname: "host1", ServiceHost: "service_host1"},
+		&nova.Hypervisor{ID: "2", Hostname: "host2", ServiceHost: "service_host2"},
+	}
+	if err := testDB.Insert(hypervisors...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	extractor := &VROpsProjectNoisinessExtractor{}
 
 	config := conf.FeatureExtractorConfig{
-		Name:           "vrops_project_noisines_extractor",
+		Name:           "vrops_project_noisiness_extractor",
 		Options:        conf.NewRawOpts("{}"),
 		RecencySeconds: nil,
 	}

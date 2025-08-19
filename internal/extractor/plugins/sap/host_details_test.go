@@ -51,16 +51,22 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	exampleServiceDisabledReason := "example reason"
+
 	// Insert mock data into the hypervisors and traits tables
 	hypervisors := []any{
 		// VMware host
-		&nova.Hypervisor{ID: "uuid1", ServiceHost: "nova-compute-bb01", HypervisorType: "vcenter", RunningVMs: 5, State: "up"},
+		&nova.Hypervisor{ID: "uuid1", ServiceHost: "nova-compute-bb01", HypervisorType: "vcenter", RunningVMs: 5, State: "up", Status: "enabled"},
 		// KVM host
-		&nova.Hypervisor{ID: "uuid2", ServiceHost: "node001-bb02", HypervisorType: "qemu", RunningVMs: 3, State: "down"},
+		&nova.Hypervisor{ID: "uuid2", ServiceHost: "node001-bb02", HypervisorType: "qemu", RunningVMs: 3, State: "down", Status: "enabled"},
 		// Ironic host (should be skipped)
-		&nova.Hypervisor{ID: "uuid3", ServiceHost: "ironic-host-01", HypervisorType: "ironic", RunningVMs: 0, State: "up"},
+		&nova.Hypervisor{ID: "uuid3", ServiceHost: "ironic-host-01", HypervisorType: "ironic", RunningVMs: 0, State: "up", Status: "enabled"},
 		// Host with no special traits
-		&nova.Hypervisor{ID: "uuid4", ServiceHost: "node002-bb03", HypervisorType: "test", RunningVMs: 2, State: "up"},
+		&nova.Hypervisor{ID: "uuid4", ServiceHost: "node002-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled"},
+		// Host with disabled status, no entry in the resource providers
+		&nova.Hypervisor{ID: "uuid5", ServiceHost: "node003-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "disabled", ServiceDisabledReason: &exampleServiceDisabledReason},
+		// Host with disabled trait
+		&nova.Hypervisor{ID: "uuid6", ServiceHost: "node004-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled", ServiceDisabledReason: &exampleServiceDisabledReason},
 	}
 
 	if err := testDB.Insert(hypervisors...); err != nil {
@@ -74,10 +80,12 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		&placement.Trait{ResourceProviderUUID: "uuid1", Name: "CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED"},
 		// KVM host traits
 		&placement.Trait{ResourceProviderUUID: "uuid2", Name: "CUSTOM_NUMASIZE_C48_M729"},
-		// Ironic host traits (should be ignored)
+		// Ironic host traits
 		&placement.Trait{ResourceProviderUUID: "uuid3", Name: "TRAIT_IGNORED"},
 		// Disabled KVM host
 		&placement.Trait{ResourceProviderUUID: "uuid4", Name: "CUSTOM_DECOMMISSIONING"},
+		// Host with disabled trait
+		&placement.Trait{ResourceProviderUUID: "uuid6", Name: "COMPUTE_STATUS_DISABLED"},
 	}
 
 	if err := testDB.Insert(traits...); err != nil {
@@ -87,14 +95,16 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	availabilityZone1 := "az1"
 	availabilityZone2 := "az2"
 
-	host_availability_zones := []any{
+	hostAvailabilityZones := []any{
 		&shared.HostAZ{AvailabilityZone: &availabilityZone1, ComputeHost: "nova-compute-bb01"},
 		&shared.HostAZ{AvailabilityZone: nil, ComputeHost: "node001-bb02"},
 		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node002-bb03"},
 		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "ironic-host-01"},
+		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node003-bb03"},
+		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node004-bb03"},
 	}
 
-	if err := testDB.Insert(host_availability_zones...); err != nil {
+	if err := testDB.Insert(hostAvailabilityZones...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -117,15 +127,6 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error from Extract, got %v", err)
 	}
 
-	// Only non-ironic hosts should be present
-	if len(hostDetails) != 4 {
-		t.Fatalf("expected 4 host details, got %d", len(hostDetails))
-	}
-
-	disabledReasonExternal := "external customer"
-	disabledReasonDecommissioning := "decommissioning"
-	disabledReasonStateNotUp := "not up"
-
 	expected := []HostDetails{
 		{
 			ComputeHost:      "nova-compute-bb01",
@@ -135,7 +136,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "vmware",
 			WorkloadType:     "hana",
 			Enabled:          false,
-			DisabledReason:   &disabledReasonExternal,
+			DisabledReason:   &[]string{"external customer"}[0],
 			RunningVMs:       5,
 		},
 		{
@@ -146,7 +147,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &disabledReasonStateNotUp,
+			DisabledReason:   &[]string{"[state: not up] --"}[0],
 			RunningVMs:       3,
 		},
 		{
@@ -157,7 +158,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorType:   "test",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &disabledReasonDecommissioning,
+			DisabledReason:   &[]string{"decommissioning"}[0],
 			RunningVMs:       2,
 		},
 		{
@@ -170,6 +171,28 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          true,
 			DisabledReason:   nil,
 			RunningVMs:       0,
+		},
+		{
+			ComputeHost:      "node003-bb03",
+			AvailabilityZone: "az2",
+			CPUArchitecture:  "unknown",
+			HypervisorType:   "test",
+			HypervisorFamily: "kvm",
+			WorkloadType:     "general-purpose",
+			Enabled:          false,
+			DisabledReason:   &[]string{"[status: not enabled] " + exampleServiceDisabledReason}[0],
+			RunningVMs:       2,
+		},
+		{
+			ComputeHost:      "node004-bb03",
+			AvailabilityZone: "az2",
+			CPUArchitecture:  "unknown",
+			HypervisorType:   "test",
+			HypervisorFamily: "kvm",
+			WorkloadType:     "general-purpose",
+			Enabled:          false,
+			DisabledReason:   &[]string{"[compute status disabled trait] " + exampleServiceDisabledReason}[0],
+			RunningVMs:       2,
 		},
 	}
 

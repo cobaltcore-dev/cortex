@@ -67,7 +67,7 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 # Package the lib charts locally and sync them to the bundle charts. In this way
 # we can bump the lib charts locally and test them before pushing them to the OCI registry.
 lib_charts = ['cortex-core', 'cortex-postgres', 'cortex-mqtt']
-bundle_charts = ['cortex-nova', 'cortex-manila']
+bundle_charts = ['cortex-nova', 'cortex-manila', 'cortex-cinder']
 for lib_chart in lib_charts:
     watch_file('helm/library/' + lib_chart) # React to lib chart changes.
     local('sh helm/sync.sh helm/library/' + lib_chart)
@@ -81,6 +81,7 @@ for lib_chart in lib_charts:
             # Make sure the gen_tgz is removed from the local directory.
             local('rm -f ' + gen_tgz)
         else:
+            local('mkdir -p helm/bundles/' + bundle_chart + '/charts/')
             local('mv -f ' + gen_tgz + ' helm/bundles/' + bundle_chart + '/charts/')
 # Ensure the bundle charts are up to date.
 for bundle_chart in bundle_charts:
@@ -89,6 +90,7 @@ for bundle_chart in bundle_charts:
 # Deploy the Cortex bundles.
 k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values]))
 k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=[tilt_values]))
+k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=[tilt_values]))
 
 # Note: place resources higher in this list to ensure their local port stays the same.
 # Elements placed lower in the list will have their local port shifted by elements inserted above.
@@ -98,6 +100,7 @@ resources = [
         [
             'cortex-nova-mqtt',
             'cortex-manila-mqtt',
+            'cortex-cinder-mqtt',
         ],
         [(1883, 'tcp'), (15675, 'ws')],
     ),
@@ -106,6 +109,7 @@ resources = [
         [
             'cortex-nova-postgresql',
             'cortex-manila-postgresql',
+            'cortex-cinder-postgresql',
         ],
         [(5432, 'psql')],
     ),
@@ -131,6 +135,18 @@ resources = [
             'cortex-manila-extractor',
             'cortex-manila-kpis',
             'cortex-manila-scheduler',
+        ],
+        [(2112, 'metrics'), (8080, 'api')],
+    ),
+    (
+        'Cortex-Cinder',
+        [
+            'cortex-cinder-migrations',
+            'cortex-cinder-cli',
+            'cortex-cinder-syncer',
+            'cortex-cinder-extractor',
+            'cortex-cinder-kpis',
+            'cortex-cinder-scheduler',
         ],
         [(2112, 'metrics'), (8080, 'api')],
     ),

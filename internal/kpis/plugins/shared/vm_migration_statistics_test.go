@@ -37,15 +37,12 @@ func TestVMMigrationStatisticsKPI_Collect(t *testing.T) {
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	_, err := testDB.Exec(`
-        INSERT INTO feature_vm_host_residency (
-            duration, flavor_name, instance_uuid, migration_uuid, source_host, target_host, source_node, target_node, user_id, project_id, type, time
-        )
-        VALUES
-            (120, 'small', 'uuid1', 'migration1', 'host1', 'host2', 'node1', 'node2', 'user1', 'project1', 'live-migration', 1620000000),
-            (300, 'medium', 'uuid2', 'migration2', 'host3', 'host4', 'node3', 'node4', 'user2', 'project2', 'resize', 1620000300)
-    `)
-	if err != nil {
+
+	vmHostResidency := []any{
+		&shared.VMHostResidency{Duration: 120, FlavorName: "small", InstanceUUID: "uuid1", MigrationUUID: "migration1", SourceHost: "host1", TargetHost: "host2", SourceNode: "node1", TargetNode: "node2", UserID: "user1", ProjectID: "project1", Type: "live-migration", Time: 1620000000},
+		&shared.VMHostResidency{Duration: 300, FlavorName: "medium", InstanceUUID: "uuid2", MigrationUUID: "migration2", SourceHost: "host3", TargetHost: "host4", SourceNode: "node3", TargetNode: "node4", UserID: "user2", ProjectID: "project2", Type: "resize", Time: 1620000300},
+	}
+	if err := testDB.Insert(vmHostResidency...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

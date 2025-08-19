@@ -26,16 +26,13 @@ func TestAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_vrops_hostsystem_contention table
-	_, err = testDB.Exec(`
-        INSERT INTO feature_vrops_hostsystem_contention_long_term (compute_host, avg_cpu_contention, max_cpu_contention)
-        VALUES
-            ('host1', 0.0, 0.0),
-            ('host2', 100.0, 0.0),
-            ('host3', 0.0, 100.0),
-			('host4', 100.0, 100.0)
-    `)
-	if err != nil {
+	vropsHostsystemContentionLongTerm := []any{
+		&vmware.VROpsHostsystemContentionLongTerm{ComputeHost: "host1", AvgCPUContention: 0.0, MaxCPUContention: 0.0},
+		&vmware.VROpsHostsystemContentionLongTerm{ComputeHost: "host2", AvgCPUContention: 100.0, MaxCPUContention: 0.0},
+		&vmware.VROpsHostsystemContentionLongTerm{ComputeHost: "host3", AvgCPUContention: 0.0, MaxCPUContention: 100.0},
+		&vmware.VROpsHostsystemContentionLongTerm{ComputeHost: "host4", AvgCPUContention: 100.0, MaxCPUContention: 100.0},
+	}
+	if err := testDB.Insert(vropsHostsystemContentionLongTerm...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

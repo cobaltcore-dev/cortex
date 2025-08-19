@@ -237,7 +237,7 @@ func (sp *StoragePool) MarshalJSON() ([]byte, error) {
 }
 
 // Table in which the openstack model is stored.
-func (StoragePool) TableName() string { return "openstack_storage_pools" }
+func (StoragePool) TableName() string { return "openstack_manila_storage_pools" }
 
 // Index for the openstack model.
 func (StoragePool) Indexes() []db.Index { return nil }

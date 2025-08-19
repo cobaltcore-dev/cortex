@@ -54,13 +54,11 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 		t.Fatalf("failed to create dependency tables: %v", err)
 	}
 
-	// Insert mock data into the servers, migrations, and flavors tables
-	if _, err := testDB.Exec(`
-		INSERT INTO openstack_servers (id, flavor_name, created)
-		VALUES
-			('server1', 'small', '2025-01-01T00:00:00Z'),
-			('server2', 'medium', '2025-01-02T00:00:00Z')
-	`); err != nil {
+	servers := []any{
+		&nova.Server{ID: "server1", FlavorName: "small", Created: "2025-01-01T00:00:00Z"},
+		&nova.Server{ID: "server2", FlavorName: "medium", Created: "2025-01-02T00:00:00Z"},
+	}
+	if err := testDB.Insert(servers...); err != nil {
 		t.Fatalf("failed to insert servers: %v", err)
 	}
 

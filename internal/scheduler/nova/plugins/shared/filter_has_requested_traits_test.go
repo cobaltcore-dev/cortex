@@ -29,17 +29,15 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 	}
 
 	// Insert mock data into the feature_host_capabilities table
-	_, err = testDB.Exec(`
-		INSERT INTO feature_host_capabilities (compute_host, traits, hypervisor_type)
-		VALUES
-			('host1', 'COMPUTE_ACCELERATORS,COMPUTE_NET_VIRTIO_PACKED,CUSTOM_GPU_NVIDIA', 'QEMU'),
-			('host2', 'COMPUTE_STATUS_ENABLED,COMPUTE_NET_VIRTIO', 'QEMU'),
-			('host3', 'COMPUTE_ACCELERATORS,COMPUTE_STATUS_ENABLED,CUSTOM_STORAGE_SSD', 'VMware'),
-			('host4', 'COMPUTE_NET_VIRTIO_PACKED,CUSTOM_CPU_AVX512', 'QEMU'),
-			('host5', '', 'QEMU'),
-			('host6', 'COMPUTE_ACCELERATORS,CUSTOM_GPU_AMD,CUSTOM_STORAGE_NVME', 'QEMU')
-	`)
-	if err != nil {
+	hostCapabilities := []any{
+		&shared.HostCapabilities{ComputeHost: "host1", Traits: "COMPUTE_ACCELERATORS,COMPUTE_NET_VIRTIO_PACKED,CUSTOM_GPU_NVIDIA", HypervisorType: "QEMU"},
+		&shared.HostCapabilities{ComputeHost: "host2", Traits: "COMPUTE_STATUS_ENABLED,COMPUTE_NET_VIRTIO", HypervisorType: "QEMU"},
+		&shared.HostCapabilities{ComputeHost: "host3", Traits: "COMPUTE_ACCELERATORS,COMPUTE_STATUS_ENABLED,CUSTOM_STORAGE_SSD", HypervisorType: "VMware"},
+		&shared.HostCapabilities{ComputeHost: "host4", Traits: "COMPUTE_NET_VIRTIO_PACKED,CUSTOM_CPU_AVX512", HypervisorType: "QEMU"},
+		&shared.HostCapabilities{ComputeHost: "host5", Traits: "", HypervisorType: "QEMU"},
+		&shared.HostCapabilities{ComputeHost: "host6", Traits: "COMPUTE_ACCELERATORS,CUSTOM_GPU_AMD,CUSTOM_STORAGE_NVME", HypervisorType: "QEMU"},
+	}
+	if err := testDB.Insert(hostCapabilities...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -508,14 +506,12 @@ func TestFilterHasRequestedTraits_TraitParsing(t *testing.T) {
 	}
 
 	// Insert test data with edge cases in trait names
-	_, err = testDB.Exec(`
-		INSERT INTO feature_host_capabilities (compute_host, traits, hypervisor_type)
-		VALUES
-			('host1', 'TRAIT_WITH_UNDERSCORES,TRAIT-WITH-DASHES,TRAIT.WITH.DOTS', 'QEMU'),
-			('host2', 'VERY_LONG_TRAIT_NAME_WITH_MANY_CHARACTERS_AND_NUMBERS_123', 'QEMU'),
-			('host3', 'SHORT,A,B,C', 'QEMU')
-	`)
-	if err != nil {
+	hostCapabilitiesEdgeCases := []any{
+		&shared.HostCapabilities{ComputeHost: "host1", Traits: "TRAIT_WITH_UNDERSCORES,TRAIT-WITH-DASHES,TRAIT.WITH.DOTS", HypervisorType: "QEMU"},
+		&shared.HostCapabilities{ComputeHost: "host2", Traits: "VERY_LONG_TRAIT_NAME_WITH_MANY_CHARACTERS_AND_NUMBERS_123", HypervisorType: "QEMU"},
+		&shared.HostCapabilities{ComputeHost: "host3", Traits: "SHORT,A,B,C", HypervisorType: "QEMU"},
+	}
+	if err := testDB.Insert(hostCapabilitiesEdgeCases...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

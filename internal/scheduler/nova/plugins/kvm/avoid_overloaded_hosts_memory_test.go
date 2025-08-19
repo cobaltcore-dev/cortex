@@ -26,16 +26,12 @@ func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_host_memory_active table
-	_, err = testDB.Exec(`
-        INSERT INTO feature_host_memory_active
-			(compute_host, avg_memory_active, max_memory_active)
-        VALUES
-            ('host1', 15.0, 25.0),
-            ('host2', 5.0, 10.0),
-            ('host3', 20.0, 30.0)
-    `)
-	if err != nil {
+	hostMemoryActive := []any{
+		&kvm.NodeExporterHostMemoryActive{ComputeHost: "host1", AvgMemoryActive: 15.0, MaxMemoryActive: 25.0},
+		&kvm.NodeExporterHostMemoryActive{ComputeHost: "host2", AvgMemoryActive: 5.0, MaxMemoryActive: 10.0},
+		&kvm.NodeExporterHostMemoryActive{ComputeHost: "host3", AvgMemoryActive: 20.0, MaxMemoryActive: 30.0},
+	}
+	if err := testDB.Insert(hostMemoryActive...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
