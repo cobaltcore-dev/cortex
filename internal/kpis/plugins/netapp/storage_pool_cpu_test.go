@@ -38,9 +38,11 @@ func TestNetAppStoragePoolCPUUsageKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the storage pool cpu usage table
-	_, err := testDB.Exec(`INSERT INTO feature_storage_pool_cpu_usage (storage_pool_name, max_cpu_usage_pct, avg_cpu_usage_pct) VALUES ('pool1', 80.5, 60.0), ('pool2', 90.0, 70.0)`)
-	if err != nil {
+	storagePoolCPUUsage := []any{
+		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool1", MaxCPUUsagePct: 80.5, AvgCPUUsagePct: 60.0},
+		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool2", MaxCPUUsagePct: 90.0, AvgCPUUsagePct: 70.0},
+	}
+	if err := testDB.Insert(storagePoolCPUUsage...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

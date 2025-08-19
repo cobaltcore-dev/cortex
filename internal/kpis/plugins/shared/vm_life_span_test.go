@@ -38,17 +38,12 @@ func TestVMLifeSpanKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the table
-	_, err := testDB.Exec(`
-        INSERT INTO feature_vm_life_span_histogram_bucket (
-            flavor_name, bucket, value, count, sum
-        )
-        VALUES
-		    ('small', 60, 100, 10, 600),
-		    ('medium', 120, 200, 20, 2400),
-		    ('large', 180, 300, 30, 5400)
-    `)
-	if err != nil {
+	vmLifeSpan := []any{
+		&shared.VMLifeSpanHistogramBucket{FlavorName: "small", Bucket: 60, Value: 100, Count: 10, Sum: 600},
+		&shared.VMLifeSpanHistogramBucket{FlavorName: "medium", Bucket: 120, Value: 200, Count: 20, Sum: 2400},
+		&shared.VMLifeSpanHistogramBucket{FlavorName: "large", Bucket: 180, Value: 300, Count: 30, Sum: 5400},
+	}
+	if err := testDB.Insert(vmLifeSpan...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

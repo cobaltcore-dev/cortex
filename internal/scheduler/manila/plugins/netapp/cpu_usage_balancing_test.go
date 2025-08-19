@@ -26,16 +26,14 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_storage_pool_cpu_usage table
-	_, err = testDB.Exec(`
-        INSERT INTO feature_storage_pool_cpu_usage (storage_pool_name, avg_cpu_usage_pct, max_cpu_usage_pct)
-        VALUES
-            ('pool1', 0.0, 0.0),
-            ('pool2', 100.0, 0.0),
-            ('pool3', 0.0, 100.0),
-            ('pool4', 100.0, 100.0)
-    `)
-	if err != nil {
+	storagePoolCPUUsage := []any{
+		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool1", AvgCPUUsagePct: 0.0, MaxCPUUsagePct: 0.0},
+		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool2", AvgCPUUsagePct: 100.0, MaxCPUUsagePct: 0.0},
+		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool3", AvgCPUUsagePct: 0.0, MaxCPUUsagePct: 100.0},
+		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool4", AvgCPUUsagePct: 100.0, MaxCPUUsagePct: 100.0},
+	}
+
+	if err := testDB.Insert(storagePoolCPUUsage...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

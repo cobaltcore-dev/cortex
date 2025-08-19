@@ -48,14 +48,13 @@ func TestNodeExporterHostCPUUsageExtractor_Extract(t *testing.T) {
 	}
 
 	// Insert mock data into the node_exporter_metrics table
-	_, err := testDB.Exec(`
-        INSERT INTO node_exporter_metrics (node, name, value)
-        VALUES
-            ('node1', 'node_exporter_cpu_usage_pct', 20.0),
-            ('node2', 'node_exporter_cpu_usage_pct', 30.0),
-            ('node1', 'node_exporter_cpu_usage_pct', 40.0)
-    `)
-	if err != nil {
+	nodeExporterMetrics := []any{
+		&prometheus.NodeExporterMetric{Node: "node1", Name: "node_exporter_cpu_usage_pct", Value: 20.0},
+		&prometheus.NodeExporterMetric{Node: "node2", Name: "node_exporter_cpu_usage_pct", Value: 30.0},
+		&prometheus.NodeExporterMetric{Node: "node1", Name: "node_exporter_cpu_usage_pct", Value: 40.0},
+	}
+
+	if err := testDB.Insert(nodeExporterMetrics...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -69,14 +68,14 @@ func TestNodeExporterHostCPUUsageExtractor_Extract(t *testing.T) {
 	if err := extractor.Init(testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if _, err = extractor.Extract(); err != nil {
+	if _, err := extractor.Extract(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Verify the data was inserted into the feature_host_cpu_usage table
 	var usages []NodeExporterHostCPUUsage
 	table := NodeExporterHostCPUUsage{}.TableName()
-	_, err = testDB.Select(&usages, "SELECT * FROM "+table)
+	_, err := testDB.Select(&usages, "SELECT * FROM "+table)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
