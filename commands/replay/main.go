@@ -17,7 +17,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila"
+	manilaAPI "github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
+	novaAPI "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
@@ -67,11 +69,23 @@ func main() {
 		"nova":   nova.TopicFinished,
 		"manila": manila.TopicFinished,
 	}[*schedulerType], 2, func(client mqtt.Client, msg mqtt.Message) {
-		var data struct {
-			Request scheduler.PipelineRequest `json:"request"`
+		var req scheduler.PipelineRequest
+		switch *schedulerType {
+		case "nova":
+			var data struct {
+				Request novaAPI.ExternalSchedulerRequest `json:"request"`
+			}
+			must.Succeed(json.Unmarshal(msg.Payload(), &data))
+			req = data.Request
+		case "manila":
+			var data struct {
+				Request manilaAPI.ExternalSchedulerRequest `json:"request"`
+			}
+			must.Succeed(json.Unmarshal(msg.Payload(), &data))
+			req = data.Request
 		}
-		must.Succeed(json.Unmarshal(msg.Payload(), &data))
-		req := data.Request.WithSandboxed(*sandboxed)
+
+		req = req.WithSandboxed(*sandboxed)
 		for {
 			// Forward the request to the local Cortex instance
 			requestBody := must.Return(json.Marshal(req))

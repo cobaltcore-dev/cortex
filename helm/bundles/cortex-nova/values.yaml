@@ -362,6 +362,12 @@ cortex-core:
           #
           # See: https://github.com/sapcc/nova for the source of implementation.
 
+          # Filter hosts based on instructions given in the request spec.
+          - name: filter_host_instructions
+            scope: {sandbox: true}
+            disabledValidations:
+              sameSubjectNumberInOut: true
+
           # Only get hosts that have sufficient space for the requested flavor.
           - name: filter_has_enough_capacity
             scope: {sandbox: true}

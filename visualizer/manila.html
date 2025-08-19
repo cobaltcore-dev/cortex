@@ -32,6 +32,7 @@
   <section class="mqtt-url-input">
     <input type="text" id="mqtt-url" placeholder="Enter MQTT URL" value="ws://localhost:8003/ws" />
     <button onclick="reconnect()">Reconnect MQTT</button>
+    <button onclick="disconnect()">Disconnect MQTT</button>
   </section>
 
   <script>
@@ -41,6 +42,9 @@
     }
 
     let client
+    async function disconnect() {
+      if (client) client.end()
+    }
     async function reconnect() {
       const url = document.getElementById('mqtt-url').value
       if (!url) return
@@ -90,6 +94,8 @@
         ...Object.keys(storagePools)
       ])
       const poolNames = Array.from(allPoolNames).sort((a, b) => {
+        // If both values are equal (e.g. both undefined) compare by the name.
+        if (state.pipeline.out[a] === state.pipeline.out[b]) return a.localeCompare(b)
         if (state.pipeline.out[a] === undefined) return 1
         if (state.pipeline.out[b] === undefined) return -1
         return state.pipeline.out[b] - state.pipeline.out[a]

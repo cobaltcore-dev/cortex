@@ -29,17 +29,15 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 	}
 
 	// Insert mock data into the feature_host_utilization table
-	_, err = testDB.Exec(`
-		INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct, total_memory_allocatable_mb, total_vcpus_allocatable, total_disk_allocatable_gb)
-		VALUES
-			('host1', 50.0, 40.0, 30.0, 32768, 16, 1000),  -- High capacity host
-			('host2', 80.0, 70.0, 60.0, 16384, 8, 500),   -- Medium capacity host
-			('host3', 90.0, 85.0, 75.0, 8192, 4, 250),    -- Low capacity host
-			('host4', 20.0, 15.0, 10.0, 65536, 32, 2000), -- Very high capacity host
-			('host5', 95.0, 90.0, 85.0, 4096, 2, 100),    -- Very low capacity host
-			('host6', 0.0, 0.0, 0.0, 0, 0, 0)             -- Zero capacity host (edge case)
-	`)
-	if err != nil {
+	hostUtilizations := []any{
+		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 32768, TotalVCPUsAllocatable: 16, TotalDiskAllocatableGB: 1000}, // High capacity host
+		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 80.0, VCPUsUtilizedPct: 70.0, DiskUtilizedPct: 60.0, TotalMemoryAllocatableMB: 16384, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500},   // Medium capacity host
+		&shared.HostUtilization{ComputeHost: "host3", RAMUtilizedPct: 90.0, VCPUsUtilizedPct: 85.0, DiskUtilizedPct: 75.0, TotalMemoryAllocatableMB: 8192, TotalVCPUsAllocatable: 4, TotalDiskAllocatableGB: 250},    // Low capacity host
+		&shared.HostUtilization{ComputeHost: "host4", RAMUtilizedPct: 20.0, VCPUsUtilizedPct: 15.0, DiskUtilizedPct: 10.0, TotalMemoryAllocatableMB: 65536, TotalVCPUsAllocatable: 32, TotalDiskAllocatableGB: 2000}, // Very high capacity host
+		&shared.HostUtilization{ComputeHost: "host5", RAMUtilizedPct: 95.0, VCPUsUtilizedPct: 90.0, DiskUtilizedPct: 85.0, TotalMemoryAllocatableMB: 4096, TotalVCPUsAllocatable: 2, TotalDiskAllocatableGB: 100},    // Very low capacity host
+		&shared.HostUtilization{ComputeHost: "host6", RAMUtilizedPct: 0.0, VCPUsUtilizedPct: 0.0, DiskUtilizedPct: 0.0, TotalMemoryAllocatableMB: 0, TotalVCPUsAllocatable: 0, TotalDiskAllocatableGB: 0},            // Zero capacity host (edge case)
+	}
+	if err := testDB.Insert(hostUtilizations...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -422,14 +420,12 @@ func TestFilterHasEnoughCapacity_EdgeCases(t *testing.T) {
 	}
 
 	// Insert edge case data
-	_, err = testDB.Exec(`
-		INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct, total_memory_allocatable_mb, total_vcpus_allocatable, total_disk_allocatable_gb)
-		VALUES
-			('host1', 50.0, 40.0, 30.0, 1.5, 0.5, 0.5),    -- Fractional capacity
-			('host2', 0.0, 0.0, 0.0, 1000000, 1000, 10000), -- Very large capacity
-			('host3', 100.0, 100.0, 100.0, -100, -10, -50)  -- Negative capacity (edge case)
-	`)
-	if err != nil {
+	hostUtilizationsEdgeCases := []any{
+		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 1.5, TotalVCPUsAllocatable: 0.5, TotalDiskAllocatableGB: 0.5},     // Fractional capacity
+		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 0.0, VCPUsUtilizedPct: 0.0, DiskUtilizedPct: 0.0, TotalMemoryAllocatableMB: 1000000, TotalVCPUsAllocatable: 1000, TotalDiskAllocatableGB: 10000}, // Very large capacity
+		&shared.HostUtilization{ComputeHost: "host3", RAMUtilizedPct: 100.0, VCPUsUtilizedPct: 100.0, DiskUtilizedPct: 100.0, TotalMemoryAllocatableMB: -100, TotalVCPUsAllocatable: -10, TotalDiskAllocatableGB: -50}, // Negative capacity (edge case)
+	}
+	if err := testDB.Insert(hostUtilizationsEdgeCases...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -534,15 +530,13 @@ func TestFilterHasEnoughCapacity_ResourceTypes(t *testing.T) {
 	}
 
 	// Insert specialized capacity data for individual resource testing
-	_, err = testDB.Exec(`
-		INSERT INTO feature_host_utilization (compute_host, ram_utilized_pct, vcpus_utilized_pct, disk_utilized_pct, total_memory_allocatable_mb, total_vcpus_allocatable, total_disk_allocatable_gb)
-		VALUES
-			('cpu-rich', 50.0, 40.0, 30.0, 8192, 64, 500),    -- High CPU, medium RAM/disk
-			('ram-rich', 50.0, 40.0, 30.0, 131072, 8, 500),   -- High RAM, medium CPU/disk
-			('disk-rich', 50.0, 40.0, 30.0, 8192, 8, 10000),  -- High disk, medium CPU/RAM
-			('balanced', 50.0, 40.0, 30.0, 16384, 16, 1000)   -- Balanced resources
-	`)
-	if err != nil {
+	hostUtilizationsResourceTypes := []any{
+		&shared.HostUtilization{ComputeHost: "cpu-rich", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 8192, TotalVCPUsAllocatable: 64, TotalDiskAllocatableGB: 500},   // High CPU, medium RAM/disk
+		&shared.HostUtilization{ComputeHost: "ram-rich", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 131072, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500},  // High RAM, medium CPU/disk
+		&shared.HostUtilization{ComputeHost: "disk-rich", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 8192, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 10000}, // High disk, medium CPU/RAM
+		&shared.HostUtilization{ComputeHost: "balanced", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 16384, TotalVCPUsAllocatable: 16, TotalDiskAllocatableGB: 1000}, // Balanced resources
+	}
+	if err := testDB.Insert(hostUtilizationsResourceTypes...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

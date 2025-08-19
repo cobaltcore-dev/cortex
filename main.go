@@ -21,6 +21,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	"github.com/cobaltcore-dev/cortex/internal/scheduler/cinder"
+	cinderAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/cinder/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila"
 	manilaAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api/http"
 	novaScheduler "github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
@@ -84,7 +86,7 @@ func runSchedulerNova(mux *http.ServeMux, registry *monitoring.Registry, config 
 	api.Init(mux) // non-blocking
 }
 
-// Run a webserver that listens for external scheduling requests.
+// Run a webserver that listens for external Manila scheduling requests.
 func runSchedulerManila(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
 	monitor := scheduler.NewPipelineMonitor("manila", registry)
 	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
@@ -95,6 +97,20 @@ func runSchedulerManila(mux *http.ServeMux, registry *monitoring.Registry, confi
 	schedulerPipeline := manila.NewPipeline(config, db, monitor, mqttClient)
 	apiMonitor := scheduler.NewSchedulerMonitor(registry)
 	api := manilaAPIHTTP.NewAPI(config.API, schedulerPipeline, apiMonitor)
+	api.Init(mux) // non-blocking
+}
+
+// Run a webserver that listens for external Cinder scheduling requests.
+func runSchedulerCinder(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
+	monitor := scheduler.NewPipelineMonitor("cinder", registry)
+	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
+	if err := mqttClient.Connect(); err != nil {
+		panic("failed to connect to mqtt broker: " + err.Error())
+	}
+	defer mqttClient.Disconnect()
+	schedulerPipeline := cinder.NewPipeline(config, db, monitor, mqttClient)
+	apiMonitor := scheduler.NewSchedulerMonitor(registry)
+	api := cinderAPIHTTP.NewAPI(config.API, schedulerPipeline, apiMonitor)
 	api.Init(mux) // non-blocking
 }
 
@@ -138,6 +154,7 @@ const usage = `
   -extractor Extract knowledge from the synced data and store it in the database.
   -scheduler-nova   Serve Nova scheduling requests with a http API.
   -scheduler-manila Serve Manila scheduling requests with a http API.
+  -scheduler-cinder Serve Cinder scheduling requests with a http API.
   -kpis      Expose KPIs extracted from the database.
   -descheduler-nova Run a Nova descheduler that periodically de-schedules VMs.
 `
@@ -227,6 +244,8 @@ func main() {
 		runSchedulerNova(mux, registry, config.GetSchedulerConfig(), database)
 	case "scheduler-manila":
 		runSchedulerManila(mux, registry, config.GetSchedulerConfig(), database)
+	case "scheduler-cinder":
+		runSchedulerCinder(mux, registry, config.GetSchedulerConfig(), database)
 	case "kpis":
 		runKPIService(registry, config.GetKPIsConfig(), database)
 	case "descheduler-nova":

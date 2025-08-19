@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/commands/checks/cinder"
 	"github.com/cobaltcore-dev/cortex/commands/checks/manila"
 	"github.com/cobaltcore-dev/cortex/commands/checks/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -15,6 +16,7 @@ import (
 var checks = map[string]func(context.Context, conf.Config){
 	"nova":   nova.RunChecks,
 	"manila": manila.RunChecks,
+	"cinder": cinder.RunChecks,
 }
 
 // Run all checks.

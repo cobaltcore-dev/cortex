@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -29,17 +30,15 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 	}
 
 	// Insert mock aggregate data
-	_, err = testDB.Exec(`
-		INSERT INTO openstack_aggregates_v2 (uuid, name, availability_zone, compute_host, metadata)
-		VALUES
-			('agg1', 'aggregate1', 'az-1', 'host1', '{}'),
-			('agg2', 'aggregate2', 'az-1', 'host2', '{"filter_tenant_id": "project-123"}'),
-			('agg3', 'aggregate3', 'az-1', 'host3', '{"filter_tenant_id": "project-456"}'),
-			('agg4', 'aggregate4', 'az-1', 'host4', '{"filter_tenant_id": "project-123,project-789"}'),
-			('agg5', 'aggregate5', 'az-1', 'host5', '{"other_metadata": "value"}'),
-			('agg6', 'aggregate6', 'az-1', NULL, '{"filter_tenant_id": "project-123"}')
-	`)
-	if err != nil {
+	aggregates := []any{
+		&nova.Aggregate{UUID: "agg1", Name: "aggregate1", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host1"), Metadata: "{}"},
+		&nova.Aggregate{UUID: "agg2", Name: "aggregate2", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host2"), Metadata: `{"filter_tenant_id": "project-123"}`},
+		&nova.Aggregate{UUID: "agg3", Name: "aggregate3", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host3"), Metadata: `{"filter_tenant_id": "project-456"}`},
+		&nova.Aggregate{UUID: "agg4", Name: "aggregate4", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host4"), Metadata: `{"filter_tenant_id": "project-123,project-789"}`},
+		&nova.Aggregate{UUID: "agg5", Name: "aggregate5", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host5"), Metadata: `{"other_metadata": "value"}`},
+		&nova.Aggregate{UUID: "agg6", Name: "aggregate6", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: nil, Metadata: `{"filter_tenant_id": "project-123"}`},
+	}
+	if err := testDB.Insert(aggregates...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

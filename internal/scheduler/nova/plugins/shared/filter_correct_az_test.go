@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -29,16 +30,14 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 	}
 
 	// Insert mock data into the feature_host_az table
-	_, err = testDB.Exec(`
-		INSERT INTO feature_host_az (compute_host, availability_zone)
-		VALUES
-			('host1', 'az-1'),
-			('host2', 'az-1'),
-			('host3', 'az-2'),
-			('host4', 'az-3'),
-			('host5', NULL)
-	`)
-	if err != nil {
+	hostAZs := []any{
+		&shared.HostAZ{ComputeHost: "host1", AvailabilityZone: testlib.Ptr("az-1")},
+		&shared.HostAZ{ComputeHost: "host2", AvailabilityZone: testlib.Ptr("az-1")},
+		&shared.HostAZ{ComputeHost: "host3", AvailabilityZone: testlib.Ptr("az-2")},
+		&shared.HostAZ{ComputeHost: "host4", AvailabilityZone: testlib.Ptr("az-3")},
+		&shared.HostAZ{ComputeHost: "host5", AvailabilityZone: nil},
+	}
+	if err := testDB.Insert(hostAZs...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

@@ -26,14 +26,15 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_host_cpu_usage table
-	_, err = testDB.Exec(`
-        INSERT INTO feature_host_cpu_usage (compute_host, avg_cpu_usage, max_cpu_usage)
-        VALUES
-            ('host1', 15.0, 25.0),
-            ('host2', 5.0, 10.0),
-            ('host3', 20.0, 30.0)
-    `)
+	hostCPUUsage := []any{
+		&kvm.NodeExporterHostCPUUsage{ComputeHost: "host1", AvgCPUUsage: 15.0, MaxCPUUsage: 25.0},
+		&kvm.NodeExporterHostCPUUsage{ComputeHost: "host2", AvgCPUUsage: 5.0, MaxCPUUsage: 10.0},
+		&kvm.NodeExporterHostCPUUsage{ComputeHost: "host3", AvgCPUUsage: 20.0, MaxCPUUsage: 30.0},
+	}
+	if err := testDB.Insert(hostCPUUsage...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

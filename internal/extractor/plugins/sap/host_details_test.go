@@ -95,7 +95,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	availabilityZone1 := "az1"
 	availabilityZone2 := "az2"
 
-	host_availability_zones := []any{
+	hostAvailabilityZones := []any{
 		&shared.HostAZ{AvailabilityZone: &availabilityZone1, ComputeHost: "nova-compute-bb01"},
 		&shared.HostAZ{AvailabilityZone: nil, ComputeHost: "node001-bb02"},
 		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node002-bb03"},
@@ -104,7 +104,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node004-bb03"},
 	}
 
-	if err := testDB.Insert(host_availability_zones...); err != nil {
+	if err := testDB.Insert(hostAvailabilityZones...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

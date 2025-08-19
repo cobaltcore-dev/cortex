@@ -23,6 +23,11 @@ type Pipeline[RequestType PipelineRequest] interface {
 	Run(request RequestType) ([]string, error)
 }
 
+type Premodifier[RequestType PipelineRequest] interface {
+	// Modify the request before it is sent to the pipeline.
+	ModifyRequest(request *RequestType) error
+}
+
 // Pipeline of scheduler steps.
 type pipeline[RequestType PipelineRequest] struct {
 	// The activation function to use when combining the
