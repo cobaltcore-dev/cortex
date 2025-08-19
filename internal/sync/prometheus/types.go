@@ -224,3 +224,45 @@ func (m NetAppNodeMetric) With(n string, t time.Time, v float64) PrometheusMetri
 	m.Value = v
 	return m
 }
+
+// Metric exported by NetApp harvest exporter for volume aggregate labels.
+// Some additional fields are omitted.
+// See: https://github.com/NetApp/harvest
+type NetAppVolumeAggrLabelsMetric struct {
+	// The name of the metric.
+	Name string `db:"name"`
+
+	// The name of the aggregate as included in the Manila field `pool`.
+	Aggregate string `json:"aggr" db:"aggr"`
+	// Application name
+	App string `json:"app" db:"app"`
+	// Filer name
+	Filer string `json:"filer" db:"filer"`
+	// Host name
+	Host string `json:"host" db:"host"`
+	// Node name
+	Node string `json:"node" db:"node"`
+	// UUID
+	UUID string `json:"uuid" db:"uuid"`
+	// Volume name
+	Volume string `json:"volume" db:"volume"`
+
+	// Timestamp of the metric value.
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
+	// The value of the metric (usually 1 for label metrics).
+	Value float64 `json:"value" db:"value"`
+}
+
+func (m NetAppVolumeAggrLabelsMetric) TableName() string {
+	return "netapp_volume_aggregate_labels_metrics"
+}
+func (m NetAppVolumeAggrLabelsMetric) Indexes() []db.Index     { return nil }
+func (m NetAppVolumeAggrLabelsMetric) GetName() string         { return m.Name }
+func (m NetAppVolumeAggrLabelsMetric) GetTimestamp() time.Time { return m.Timestamp }
+func (m NetAppVolumeAggrLabelsMetric) GetValue() float64       { return m.Value }
+func (m NetAppVolumeAggrLabelsMetric) With(n string, t time.Time, v float64) PrometheusMetric {
+	m.Name = n
+	m.Timestamp = t
+	m.Value = v
+	return m
+}

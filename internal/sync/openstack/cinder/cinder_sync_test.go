@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package manila
+package cinder
 
 import (
 	"context"
@@ -13,46 +13,46 @@ import (
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
-type mockManilaAPI struct{}
+type mockCinderAPI struct{}
 
-func (m *mockManilaAPI) Init(ctx context.Context) {}
+func (m *mockCinderAPI) Init(ctx context.Context) {}
 
-func (m *mockManilaAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, error) {
-	return []StoragePool{{Name: "pool1", Host: "host1", Backend: "backend1", Pool: "poolA"}}, nil
+func (m *mockCinderAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, error) {
+	return []StoragePool{{Name: "pool1"}}, nil
 }
 
-func TestManilaSyncer_Init(t *testing.T) {
+func TestCinderSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	conf := ManilaConf{Types: []string{"storage_pools"}}
+	conf := CinderConf{Types: []string{"storage_pools"}}
 
-	syncer := &ManilaSyncer{
+	syncer := &CinderSyncer{
 		DB:   testDB,
 		Mon:  mon,
 		Conf: conf,
-		API:  &mockManilaAPI{},
+		API:  &mockCinderAPI{},
 	}
 	syncer.Init(t.Context())
 }
 
-func TestManilaSyncer_Sync(t *testing.T) {
+func TestCinderSyncer_Sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	conf := ManilaConf{Types: []string{"storage_pools"}}
+	conf := CinderConf{Types: []string{"storage_pools"}}
 
-	syncer := &ManilaSyncer{
+	syncer := &CinderSyncer{
 		DB:         testDB,
 		Mon:        mon,
 		Conf:       conf,
-		API:        &mockManilaAPI{},
+		API:        &mockCinderAPI{},
 		MqttClient: &mqtt.MockClient{},
 	}
 
@@ -63,20 +63,20 @@ func TestManilaSyncer_Sync(t *testing.T) {
 	}
 }
 
-func TestManilaSyncer_SyncAllStoragePools(t *testing.T) {
+func TestCinderSyncer_SyncAllStoragePools(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
 	mon := sync.Monitor{}
-	conf := ManilaConf{Types: []string{"storage_pools"}}
+	conf := CinderConf{Types: []string{"storage_pools"}}
 
-	syncer := &ManilaSyncer{
+	syncer := &CinderSyncer{
 		DB:   testDB,
 		Mon:  mon,
 		Conf: conf,
-		API:  &mockManilaAPI{},
+		API:  &mockCinderAPI{},
 	}
 
 	ctx := t.Context()
