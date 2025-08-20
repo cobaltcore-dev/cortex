@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/go-logr/logr"
 	"github.com/sapcc/go-bits/jobloop"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -227,6 +228,10 @@ func (o *Operator) SyncReservations(ctx context.Context) error {
 }
 
 func RunOperator(ctx context.Context, conf conf.Config) {
+	// Controller-runtime comes with logr instead of slog.
+	// So we need to use our own sink here that wraps slog.Logger.
+	ctrl.SetLogger(logr.Logger{}.WithSink(SlogLogSink{log: slog.Default()}))
+
 	slog.Info("Registering scheme for reservation CRD")
 	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
