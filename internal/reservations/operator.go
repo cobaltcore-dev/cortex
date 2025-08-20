@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/go-logr/logr"
 	"github.com/sapcc/go-bits/jobloop"
@@ -228,7 +229,7 @@ func (o *Operator) SyncReservations(ctx context.Context) error {
 	return nil
 }
 
-func RunOperator(ctx context.Context, conf conf.Config) {
+func RunOperator(ctx context.Context, conf conf.Config, reg *monitoring.Registry) {
 	// Controller-runtime comes with logr instead of slog.
 	// So we need to use our own sink here that wraps slog.Logger.
 	ctrl.SetLogger(logr.Logger{}.WithSink(SlogLogSink{log: slog.Default()}))
@@ -283,6 +284,13 @@ func RunOperator(ctx context.Context, conf conf.Config) {
 	if err != nil {
 		panic("failed to create controller: " + err.Error())
 	}
+
+	monitor := &Monitor{
+		Client: mgr.GetClient(),
+		Config: conf.GetReservationsConfig(),
+	}
+	monitor.Init(reg)
+	slog.Info("initialized reservations monitor")
 
 	slog.Info("starting manager")
 	go func() {

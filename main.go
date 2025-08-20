@@ -252,7 +252,7 @@ func main() {
 	case "descheduler-nova":
 		runDeschedulerNova(ctx, registry, config, database)
 	case "reservations-operator":
-		reservations.RunOperator(ctx, config)
+		reservations.RunOperator(ctx, config, registry)
 	default:
 		panic("unknown task")
 	}
