@@ -2,21 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v2
-name: cortex-nova
-description: A Helm chart deploying Cortex for Nova.
+name: cortex-crds
+description: A Helm chart deploying Cortex CRDs
 type: application
-version: 0.0.8
+version: 0.0.1
 appVersion: 0.1.0
 dependencies:
-  - name: cortex-core
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.24.9
-  - name: cortex-postgres
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.5.3
-  - name: cortex-mqtt
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.1.0
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
   # of issues. See: https://github.com/sapcc/helm-charts/pkgs/container/helm-charts%2Fowner-info

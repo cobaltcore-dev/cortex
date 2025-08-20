@@ -11,6 +11,9 @@ owner-info:
   support-group: "workload-management"
   service: "cortex-nova"
 
+namespace:
+  enabled: true
+
 alerts:
   enabled: true
   prometheus: openstack
@@ -64,6 +67,10 @@ cortex-core:
       args: ["descheduler-nova"]
       replicas: 1
 
+    - name: reservations-operator
+      args: ["reservations-operator"]
+      replicas: 1
+
   # Values passed to the service through a configmap.
   conf:
     # E2E tests to run when executed with -checks flag.
@@ -78,6 +85,21 @@ cortex-core:
     db:
       # Must match postgresql settings from the cortex-postgres chart.
       host: cortex-nova-postgresql
+
+    # Configuration of the reservations operator.
+    reservations:
+      # In which namespace the reservations should be stored.
+      namespace: "cortex-nova"
+      # Which hypervisor types should be handled by the operator.
+      hypervisors:
+        - "QEMU"
+        - "CH"
+        # Not supported:
+        # - "VMware vCenter Server"
+        # - "ironic"
+      endpoints:
+        # The URL of the Nova external scheduler service.
+        novaExternalScheduler: "http://cortex-nova-scheduler:8080/scheduler/nova/external"
 
     sync:
       prometheus:
@@ -373,6 +395,9 @@ cortex-core:
             scope: {sandbox: true}
             disabledValidations:
               sameSubjectNumberInOut: true
+            options:
+              # Where to find the reservations resources for capacity calculation.
+              reservationsNamespace: "cortex-nova"
             dependencies: {extractors: [host_utilization_extractor]}
 
           # Check if the traits required/forbidden in the flavor extra spec

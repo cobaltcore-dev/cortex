@@ -354,6 +354,9 @@ type MonitoringConfig struct {
 
 	// The port to expose the metrics on.
 	Port int `json:"port"`
+
+	// An optional extra port where operator metricsserver metrics are exposed.
+	OperatorPort int `json:"operatorPort,omitempty"`
 }
 
 type MQTTReconnectConfig struct {
@@ -399,6 +402,22 @@ type KeystoneConfig struct {
 	OSProjectDomainName string `json:"projectDomainName"`
 }
 
+// Configuration for the reservations operator.
+type ReservationsConfig struct {
+	// Namespace where the reservations should be stored.
+	Namespace string `json:"namespace"`
+	// The endpoint where to find the nova external scheduler endpoint.
+	Endpoints ReservationsEndpointsConfig `json:"endpoints"`
+	// Hypervisor types that should be managed.
+	Hypervisors []string `json:"hypervisors"`
+}
+
+// Endpoints for the reservations operator.
+type ReservationsEndpointsConfig struct {
+	// The nova external scheduler endpoint.
+	NovaExternalScheduler string `json:"novaExternalScheduler"`
+}
+
 // Configuration for the cortex service.
 type Config interface {
 	GetChecks() []string
@@ -413,6 +432,7 @@ type Config interface {
 	GetMQTTConfig() MQTTConfig
 	GetAPIConfig() APIConfig
 	GetKeystoneConfig() KeystoneConfig
+	GetReservationsConfig() ReservationsConfig
 	// Check if the configuration is valid.
 	Validate() error
 }
@@ -421,17 +441,18 @@ type config struct {
 	// The checks to run, in this particular order.
 	Checks []string `json:"checks"`
 
-	LoggingConfig     `json:"logging"`
-	DBConfig          `json:"db"`
-	SyncConfig        `json:"sync"`
-	ExtractorConfig   `json:"extractor"`
-	SchedulerConfig   `json:"scheduler"`
-	DeschedulerConfig `json:"descheduler"`
-	MonitoringConfig  `json:"monitoring"`
-	KPIsConfig        `json:"kpis"`
-	MQTTConfig        `json:"mqtt"`
-	APIConfig         `json:"api"`
-	KeystoneConfig    `json:"keystone"`
+	LoggingConfig      `json:"logging"`
+	DBConfig           `json:"db"`
+	SyncConfig         `json:"sync"`
+	ExtractorConfig    `json:"extractor"`
+	SchedulerConfig    `json:"scheduler"`
+	DeschedulerConfig  `json:"descheduler"`
+	MonitoringConfig   `json:"monitoring"`
+	KPIsConfig         `json:"kpis"`
+	MQTTConfig         `json:"mqtt"`
+	APIConfig          `json:"api"`
+	KeystoneConfig     `json:"keystone"`
+	ReservationsConfig `json:"reservations"`
 }
 
 // Create a new configuration from the default config json file.
@@ -513,15 +534,16 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 	return result
 }
 
-func (c *config) GetChecks() []string                     { return c.Checks }
-func (c *config) GetLoggingConfig() LoggingConfig         { return c.LoggingConfig }
-func (c *config) GetDBConfig() DBConfig                   { return c.DBConfig }
-func (c *config) GetSyncConfig() SyncConfig               { return c.SyncConfig }
-func (c *config) GetExtractorConfig() ExtractorConfig     { return c.ExtractorConfig }
-func (c *config) GetSchedulerConfig() SchedulerConfig     { return c.SchedulerConfig }
-func (c *config) GetDeschedulerConfig() DeschedulerConfig { return c.DeschedulerConfig }
-func (c *config) GetKPIsConfig() KPIsConfig               { return c.KPIsConfig }
-func (c *config) GetMonitoringConfig() MonitoringConfig   { return c.MonitoringConfig }
-func (c *config) GetMQTTConfig() MQTTConfig               { return c.MQTTConfig }
-func (c *config) GetAPIConfig() APIConfig                 { return c.APIConfig }
-func (c *config) GetKeystoneConfig() KeystoneConfig       { return c.KeystoneConfig }
+func (c *config) GetChecks() []string                       { return c.Checks }
+func (c *config) GetLoggingConfig() LoggingConfig           { return c.LoggingConfig }
+func (c *config) GetDBConfig() DBConfig                     { return c.DBConfig }
+func (c *config) GetSyncConfig() SyncConfig                 { return c.SyncConfig }
+func (c *config) GetExtractorConfig() ExtractorConfig       { return c.ExtractorConfig }
+func (c *config) GetSchedulerConfig() SchedulerConfig       { return c.SchedulerConfig }
+func (c *config) GetDeschedulerConfig() DeschedulerConfig   { return c.DeschedulerConfig }
+func (c *config) GetKPIsConfig() KPIsConfig                 { return c.KPIsConfig }
+func (c *config) GetMonitoringConfig() MonitoringConfig     { return c.MonitoringConfig }
+func (c *config) GetMQTTConfig() MQTTConfig                 { return c.MQTTConfig }
+func (c *config) GetAPIConfig() APIConfig                   { return c.APIConfig }
+func (c *config) GetKeystoneConfig() KeystoneConfig         { return c.KeystoneConfig }
+func (c *config) GetReservationsConfig() ReservationsConfig { return c.ReservationsConfig }

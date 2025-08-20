@@ -27,6 +27,7 @@ spec:
         app: {{ include "cortex.fullname" $ }}-{{ .name }}
         {{- include "cortex.labels" $ | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "cortex.fullname" $ }}
       containers:
         - name: {{ include "cortex.fullname" $ }}-{{ .name }}
           args: {{ .args | toJson }}
@@ -45,6 +46,9 @@ spec:
               protocol: TCP
             - name: metrics
               containerPort: {{ $.Values.conf.monitoring.port }}
+              protocol: TCP
+            - name: op-metrics
+              containerPort: {{ $.Values.conf.monitoring.operatorPort }}
               protocol: TCP
           livenessProbe:
             {{- toYaml $.Values.livenessProbe | nindent 12 }}
@@ -83,6 +87,7 @@ spec:
         app: {{ include "cortex.fullname" $ }}-cli
         {{- include "cortex.labels" $ | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "cortex.fullname" $ }}
       containers:
         - name: {{ include "cortex.fullname" $ }}-cli
           command:

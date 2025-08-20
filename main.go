@@ -20,6 +20,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+	"github.com/cobaltcore-dev/cortex/internal/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/cinder"
 	cinderAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/cinder/api/http"
@@ -250,6 +251,8 @@ func main() {
 		runKPIService(registry, config.GetKPIsConfig(), database)
 	case "descheduler-nova":
 		runDeschedulerNova(ctx, registry, config, database)
+	case "reservations-operator":
+		reservations.RunOperator(ctx, config, registry)
 	default:
 		panic("unknown task")
 	}
