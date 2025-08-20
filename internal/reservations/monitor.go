@@ -36,7 +36,7 @@ func (m *Monitor) Init(r *monitoring.Registry) {
 	m.reservedResources = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_reservations_resources",
 		Help: "Resources reserved by reservations.",
-	}, []string{"status_phase", "status_error", "spec_kind", "allocation_kind", "resource", "host"})
+	}, []string{"status_phase", "status_error", "spec_kind", "allocation_kind", "host", "resource"})
 	r.MustRegister(m)
 }
 
@@ -50,7 +50,7 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	// Fetch all reservations from kubernetes.
 	var reservations v1alpha1.ReservationList
-	if err := m.Client.List(
+	if err := m.List(
 		context.Background(),
 		&reservations,
 		client.InNamespace(m.Config.Namespace),

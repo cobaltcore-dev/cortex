@@ -156,7 +156,7 @@ func TestMonitor_Collect(t *testing.T) {
 			if len(labels) != 3 {
 				t.Errorf("expected 3 labels for reservations count, got %d", len(labels))
 			}
-		case `Desc{fqName: "cortex_reservations_resources", help: "Resources reserved by reservations.", constLabels: {}, variableLabels: {status_phase,status_error,spec_kind,allocation_kind,resource,host}}`:
+		case `Desc{fqName: "cortex_reservations_resources", help: "Resources reserved by reservations.", constLabels: {}, variableLabels: {status_phase,status_error,spec_kind,allocation_kind,host,resource}}`:
 			foundResourceMetric = true
 			// Verify metric has proper labels
 			labels := dto.GetLabel()
