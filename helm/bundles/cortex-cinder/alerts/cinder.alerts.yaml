@@ -18,7 +18,7 @@ groups:
       description: >
         The Cortex initial placement is down. Initial placement requests from Cinder will
         not be served. This is no immediate problem, since Cinder will continue
-        placing new shares. However, the placement will be less desirable.
+        placing new volumes. However, the placement will be less desirable.
 
   - alert: CortexCinderSyncerDown
     expr: |
@@ -40,7 +40,7 @@ groups:
         data based will slowly drift away from the actual state of the
         datacenter, which may lead to less desirable placement decisions.
         This is no immediate problem, since Cinder will continue placing new
-        shares.
+        volumes.
 
   - alert: CortexCinderExtractorDown
     expr: |
@@ -59,4 +59,4 @@ groups:
         The Cortex extractor is down. This means that newly available data
         about the datacenter will not be used to extract scheduling knowledge.
         This is no immediate problem, since Cinder will continue placing new
-        shares. However, the placement will be less desirable.
+        volumes. However, the placement will be less desirable.
