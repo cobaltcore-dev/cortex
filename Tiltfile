@@ -23,7 +23,7 @@ helm_repo(
 )
 
 ########### CRDs
-
+local('sh helm/sync.sh helm/library/cortex-crds')
 k8s_yaml(helm('./helm/library/cortex-crds', name='cortex-crds'))
 
 ########### Dev Dependencies
