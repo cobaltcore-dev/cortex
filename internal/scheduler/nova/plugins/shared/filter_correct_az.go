@@ -22,6 +22,10 @@ func (s *FilterCorrectAZStep) GetName() string { return "filter_correct_az" }
 // Only get hosts in the requested az.
 func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
+	if request.Spec.Data.AvailabilityZone == "" {
+		traceLog.Debug("no availability zone requested, skipping filter_correct_az step")
+		return result, nil
+	}
 	var computeHostsInAZ []string
 	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsInAZ, `
         SELECT DISTINCT compute_host
