@@ -12,6 +12,8 @@ nameOverride: ""
 alerts:
   enabled: true
   prometheus: openstack
+  componentPrefix: cortex
+  namespaceSelector: default
 
 service:
   extraLabels: {} # Additional labels to add to the service.
