@@ -40,7 +40,9 @@ type FilterHasEnoughCapacity struct {
 }
 
 func (s *FilterHasEnoughCapacity) Init(alias string, db db.DB, opts conf.RawOpts) error {
-	s.BaseStep.Init(alias, db, opts)
+	if err := s.BaseStep.Init(alias, db, opts); err != nil {
+		return err
+	}
 	if s.Client != nil {
 		return nil // Already initialized.
 	}
