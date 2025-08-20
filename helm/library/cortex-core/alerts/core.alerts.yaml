@@ -1,0 +1,65 @@
+groups:
+- name: cortex-core-alerts
+  rules:
+  - alert: CortexHighMemoryUsage
+    expr: process_resident_memory_bytes{component=~"cortex-.*"} > 6000 * 1024 * 1024
+    for: 5m
+    labels:
+      context: memory
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` uses too much memory"
+      description: >
+        `{{$labels.component}}` should not be using more than 6000 MiB of memory. Usually it
+        should use much less, so there may be a memory leak or other changes
+        that are causing the memory usage to increase significantly.
+
+  - alert: CortexHighCPUUsage
+    expr: rate(process_cpu_seconds_total{component=~"cortex-.*"}[1m]) > 0.5
+    for: 5m
+    labels:
+      context: cpu
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` uses too much CPU"
+      description: >
+        `{{$labels.component}}` should not be using more than 50% of a single CPU core. Usually
+        it should use much less, so there may be a CPU leak or other changes
+        that are causing the CPU usage to increase significantly.
+
+  - alert: CortexTooManyMQTTConnectionAttempts
+    expr: rate(cortex_mqtt_connection_attempts_total{component=~"cortex-.*"}[5m]) > 0.1
+    for: 1m
+    labels:
+      context: mqtt
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` is trying to connect to MQTT too often"
+      description: >
+        `{{$labels.component}}` is trying to connect to the MQTT broker too often. This may
+        happen when the broker is down or the connection parameters are
+        misconfigured.
+
+  - alert: CortexTooManyDBConnectionAttempts
+    expr: rate(cortex_db_connection_attempts_total{component=~"cortex-.*"}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: db
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` is trying to connect to the database too often"
+      description: >
+        `{{$labels.component}}` is trying to connect to the database too often. This may happen
+        when the database is down or the connection parameters are misconfigured.

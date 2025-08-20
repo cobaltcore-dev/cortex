@@ -1,0 +1,17 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.alerts.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "cortex.fullname" . }}-core-alerts
+  labels:
+    type: alerting-rules
+    prometheus: {{ required ".Values.alerts.prometheus missing" .Values.alerts.prometheus | quote }}
+spec:
+  {{- $files := .Files.Glob "alerts/*.alerts.yaml" }}
+  {{- range $path, $file := $files }}
+  {{ $file | toString | nindent 2 }}
+  {{- end }}
+{{- end }}

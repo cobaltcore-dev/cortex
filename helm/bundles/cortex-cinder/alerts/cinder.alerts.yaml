@@ -95,38 +95,6 @@ groups:
         internal problem. Cinder will continue to place new shares, but the
         placement will be less desirable. Thus, no immediate action is needed.
 
-  - alert: CortexCinderHighMemoryUsage
-    expr: process_resident_memory_bytes{component=~"cortex-cinder-.*"} > 6000 * 1024 * 1024
-    for: 5m
-    labels:
-      context: memory
-      dashboard: cortex/cortex
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Cortex `{{$labels.component}}` uses too much memory"
-      description: >
-        Cortex should not be using more than 6000 MiB of memory. Usually it
-        should use much less, so there may be a memory leak or other changes
-        that are causing the memory usage to increase significantly.
-
-  - alert: CortexCinderHighCPUUsage
-    expr: rate(process_cpu_seconds_total{component=~"cortex-cinder-.*"}[1m]) > 0.5
-    for: 5m
-    labels:
-      context: cpu
-      dashboard: cortex/cortex
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Cortex `{{$labels.component}}` uses too much CPU"
-      description: >
-        Cortex should not be using more than 50% of a single CPU core. Usually
-        it should use much less, so there may be a CPU leak or other changes
-        that are causing the CPU usage to increase significantly.
-
   - alert: CortexCinderSyncNotSuccessful
     expr: cortex_sync_request_processed_total{component=~"cortex-cinder-.*"} - cortex_sync_request_duration_seconds_count{component=~"cortex-cinder-.*"} > 0
     for: 5m
@@ -182,34 +150,3 @@ groups:
         unexpectedly many objects, or when the database cannot drop old objects.
         No immediate action is needed, but should this condition persist for a
         longer time, the database may fill up and crash.
-
-  - alert: CortexCinderTooManyMQTTConnectionAttempts
-    expr: rate(cortex_mqtt_connection_attempts_total{component=~"cortex-cinder-.*"}[5m]) > 0.1
-    for: 1m
-    labels:
-      context: mqtt
-      dashboard: cortex/cortex
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Cortex is trying to connect to MQTT too often"
-      description: >
-        Cortex is trying to connect to the MQTT broker too often. This may
-        happen when the broker is down or the connection parameters are
-        misconfigured.
-
-  - alert: CortexCinderTooManyDBConnectionAttempts
-    expr: rate(cortex_db_connection_attempts_total{component=~"cortex-cinder-.*"}[5m]) > 0.1
-    for: 5m
-    labels:
-      context: db
-      dashboard: cortex/cortex
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Cortex is trying to connect to the database too often"
-      description: >
-        Cortex is trying to connect to the database too often. This may happen
-        when the database is down or the connection parameters are misconfigured.
