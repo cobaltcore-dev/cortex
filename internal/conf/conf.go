@@ -354,6 +354,9 @@ type MonitoringConfig struct {
 
 	// The port to expose the metrics on.
 	Port int `json:"port"`
+
+	// An optional extra port where operator metricsserver metrics are exposed.
+	OperatorPort int `json:"operatorPort,omitempty"`
 }
 
 type MQTTReconnectConfig struct {

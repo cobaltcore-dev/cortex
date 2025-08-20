@@ -75,6 +75,8 @@ conf:
   monitoring:
     # The port to expose the metrics on.
     port: 2112
+    # An extra port where operators can expose their metrics on.
+    operatorPort: 2113
 
     # Custom labels added to the exported metrics.
     labels:

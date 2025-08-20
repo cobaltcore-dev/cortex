@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -251,8 +252,10 @@ func RunOperator(ctx context.Context, conf conf.Config) {
 			},
 		},
 	})
+	monitoringConf := conf.GetMonitoringConfig()
+	operatorMetricsPort := ":" + strconv.Itoa(monitoringConf.OperatorPort)
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Metrics:       metricsserver.Options{BindAddress: ":8081"},
+		Metrics:       metricsserver.Options{BindAddress: operatorMetricsPort},
 		Scheme:        scheme,
 		WebhookServer: webhookServer,
 	})

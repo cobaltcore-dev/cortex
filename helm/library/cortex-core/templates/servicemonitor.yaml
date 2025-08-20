@@ -23,3 +23,4 @@ spec:
     - component
   endpoints:
     - port: metrics
+    - port: op-metrics

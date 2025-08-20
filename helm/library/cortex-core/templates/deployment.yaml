@@ -47,6 +47,9 @@ spec:
             - name: metrics
               containerPort: {{ $.Values.conf.monitoring.port }}
               protocol: TCP
+            - name: op-metrics
+              containerPort: {{ $.Values.conf.monitoring.operatorPort }}
+              protocol: TCP
           livenessProbe:
             {{- toYaml $.Values.livenessProbe | nindent 12 }}
           readinessProbe:

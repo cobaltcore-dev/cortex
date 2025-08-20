@@ -25,6 +25,10 @@ spec:
       targetPort: metrics
       protocol: TCP
       name: metrics
+    - port: {{ $.Values.conf.monitoring.operatorPort }}
+      targetPort: op-metrics
+      protocol: TCP
+      name: op-metrics
   selector:
     app: {{ include "cortex.fullname" $ }}-{{ .name }}
 {{- end }}
