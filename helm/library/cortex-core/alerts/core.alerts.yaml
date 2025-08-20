@@ -1,6 +1,91 @@
 groups:
 - name: cortex-core-alerts
   rules:
+  - alert: CortexHttpRequest400sTooHigh
+    expr: rate(cortex_scheduler_api_request_duration_seconds_count  {component=~"cortex-.*-scheduler",status=~"4.+"}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` HTTP request 400 errors too high"
+      description: >
+        `{{$labels.component}}` is responding to placement requests with HTTP 4xx
+        errors. This is expected when the scheduling request cannot be served
+        by Cortex. However, it could also indicate that the request format has
+        changed and Cortex is unable to parse it.
+
+  - alert: CortexHttpRequest500sTooHigh
+    expr: rate(cortex_scheduler_api_request_duration_seconds_count  {component=~"cortex-.*-scheduler",status=~"5.+"}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "HTTP request 500 errors too high"
+      description: >
+        `{{$labels.component}}` is responding to placement requests with HTTP 5xx errors.
+        This is not expected and indicates that Cortex is having some internal problem.
+        Nova will continue to place new VMs, but the placement will be less desirable.
+        Thus, no immediate action is needed.
+
+  - alert: CortexSyncNotSuccessful
+    expr: cortex_sync_request_processed_total{component=~"cortex-.*"} -   cortex_sync_request_duration_seconds_count{component=~"cortex-.*"} > 0
+    for: 5m
+    labels:
+      context: syncstatus
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Sync not successful"
+      description: >
+        `{{$labels.component}}` experienced an issue syncing data from a datasource. This may
+        happen when the datasource (OpenStack, Prometheus, etc.) is down or
+        the sync module is misconfigured. No immediate action is needed, since
+        the sync module will retry the sync operation and the currently synced
+        data will be kept. However, when this problem persists for a longer
+        time the service will have a less recent view of the datacenter.
+
+  - alert: CortexSyncObjectsDroppedToZero
+    expr: cortex_sync_objects{component=~"cortex-.*", datasource!="openstack_migrations"} == 0
+    for: 60m
+    labels:
+      context: syncobjects
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` is not syncing any new data from `{{$labels.datasource}}`"
+      description: >
+        `{{$labels.component}}` is not syncing any objects from a datasource. This may happen
+        when the datasource (OpenStack, Prometheus, etc.) is down or the sync
+        module is misconfigured. No immediate action is needed, since the sync
+        module will retry the sync operation and the currently synced data will
+        be kept. However, when this problem persists for a longer time the
+        service will have a less recent view of the datacenter.
+
+  - alert: CortexSyncObjectsTooHigh
+    expr: cortex_sync_objects{component=~"cortex-.*"} > 10000000
+    for: 5m
+    labels:
+      context: syncobjects
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` is syncing unexpectedly many  objects from `{{$labels.datasource}}`"
+
+
   - alert: CortexHighMemoryUsage
     expr: process_resident_memory_bytes{component=~"cortex-.*"} > 6000 * 1024 * 1024
     for: 5m
