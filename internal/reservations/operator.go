@@ -20,11 +20,9 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -229,14 +227,8 @@ func (o *Operator) SyncReservations(ctx context.Context) error {
 }
 
 func RunOperator(ctx context.Context, conf conf.Config) {
-	// Set up the kubernetes operator.
-	schemeBuilder := &scheme.Builder{GroupVersion: schema.GroupVersion{
-		Group:   "cortex.sap",
-		Version: "v1alpha1",
-	}}
-	schemeBuilder.Register(&v1alpha1.Reservation{}, &v1alpha1.ReservationList{})
 	slog.Info("Registering scheme for reservation CRD")
-	scheme, err := schemeBuilder.Build()
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		panic("failed to build scheme: " + err.Error())
 	}

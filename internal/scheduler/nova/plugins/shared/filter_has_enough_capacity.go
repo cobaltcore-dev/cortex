@@ -14,10 +14,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/reservations/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
 type FilterHasEnoughCapacityOpts struct {
@@ -46,13 +44,7 @@ func (s *FilterHasEnoughCapacity) Init(alias string, db db.DB, opts conf.RawOpts
 	if s.Client != nil {
 		return nil // Already initialized.
 	}
-	// Add a kubernetes client to the steps to be able to access CRDs.
-	schemeBuilder := &scheme.Builder{GroupVersion: schema.GroupVersion{
-		Group:   "cortex.sap",
-		Version: "v1alpha1",
-	}}
-	schemeBuilder.Register(&v1alpha1.Reservation{}, &v1alpha1.ReservationList{})
-	scheme, err := schemeBuilder.Build()
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		return err
 	}

@@ -1,12 +1,12 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
+// +groupName=cortex.sap
 package v1alpha1
 
 import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // The kind of reservation.
@@ -90,6 +90,7 @@ type ReservationStatus struct {
 }
 
 // Reservation is the Schema for the reservations API.
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type Reservation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -98,28 +99,10 @@ type Reservation struct {
 	Status ReservationStatus `json:"status,omitempty"`
 }
 
-// Conform to the runtime.Object interface.
-func (in *Reservation) DeepCopyObject() runtime.Object {
-	return &Reservation{
-		TypeMeta:   in.TypeMeta,
-		ObjectMeta: in.ObjectMeta,
-		Spec:       in.Spec,
-		Status:     in.Status,
-	}
-}
-
 // ReservationList contains a list of Reservation.
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ReservationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Reservation `json:"items"`
-}
-
-// Conform to the runtime.Object interface.
-func (in *ReservationList) DeepCopyObject() runtime.Object {
-	return &ReservationList{
-		TypeMeta: in.TypeMeta,
-		ListMeta: in.ListMeta,
-		Items:    in.Items,
-	}
 }
