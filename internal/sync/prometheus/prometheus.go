@@ -17,6 +17,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -100,7 +101,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client, err := sync.NewHTTPClient(api.hostConf.SSO)
+	client, err := sso.NewHTTPClient(api.hostConf.SSO)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}

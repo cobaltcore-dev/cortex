@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduler/external/manila"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
@@ -28,7 +29,7 @@ func (m *mockPipeline) Run(req api.ExternalSchedulerRequest) ([]string, error) {
 func validRequestBody() []byte {
 	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []manila.ExternalSchedulerHost{
 			{ShareHost: "host1"},
 			{ShareHost: "host2"},
 		},
@@ -47,7 +48,7 @@ func validRequestBody() []byte {
 func missingWeightBody() []byte {
 	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []manila.ExternalSchedulerHost{
 			{ShareHost: "host1"},
 			{ShareHost: "host2"},
 		},
@@ -65,7 +66,7 @@ func missingWeightBody() []byte {
 func unknownWeightBody() []byte {
 	req := api.ExternalSchedulerRequest{
 		Spec: map[string]any{"foo": "bar"},
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []manila.ExternalSchedulerHost{
 			{ShareHost: "host1"},
 		},
 		Weights: map[string]float64{
@@ -102,7 +103,7 @@ func TestManilaExternalScheduler_Success(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
-	var out api.ExternalSchedulerResponse
+	var out manila.ExternalSchedulerResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}

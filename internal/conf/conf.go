@@ -4,19 +4,9 @@
 package conf
 
 import (
-	"encoding/json"
-	"io"
-	"os"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 )
-
-// Configuration for single-sign-on (SSO).
-type SSOConfig struct {
-	Cert    string `json:"cert,omitempty"`
-	CertKey string `json:"certKey,omitempty"`
-
-	// If the certificate is self-signed, we need to skip verification.
-	SelfSigned bool `json:"selfSigned,omitempty"`
-}
 
 // Configuration for structured logging.
 type LoggingConfig struct {
@@ -69,7 +59,7 @@ type SyncPrometheusHostConfig struct {
 	// The URL of the prometheus host.
 	URL string `json:"url"`
 	// The SSO configuration for this host.
-	SSO SSOConfig `json:"sso,omitempty"`
+	SSO sso.Config `json:"sso,omitempty"`
 	// The types of metrics this host provides.
 	ProvidedMetricTypes []string `json:"provides"`
 }
@@ -383,41 +373,6 @@ type APIConfig struct {
 	Port int `json:"port"`
 }
 
-// Configuration for the keystone authentication.
-type KeystoneConfig struct {
-	// The URL of the keystone service.
-	URL string `json:"url"`
-	// The SSO certificate to use. If none is given, we won't
-	// use SSO to connect to the openstack services.
-	SSO SSOConfig `json:"sso,omitempty"`
-	// The OpenStack username (OS_USERNAME in openstack cli).
-	OSUsername string `json:"username"`
-	// The OpenStack password (OS_PASSWORD in openstack cli).
-	OSPassword string `json:"password"`
-	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
-	OSProjectName string `json:"projectName"`
-	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
-	OSUserDomainName string `json:"userDomainName"`
-	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
-	OSProjectDomainName string `json:"projectDomainName"`
-}
-
-// Configuration for the reservations operator.
-type ReservationsConfig struct {
-	// Namespace where the reservations should be stored.
-	Namespace string `json:"namespace"`
-	// The endpoint where to find the nova external scheduler endpoint.
-	Endpoints ReservationsEndpointsConfig `json:"endpoints"`
-	// Hypervisor types that should be managed.
-	Hypervisors []string `json:"hypervisors"`
-}
-
-// Endpoints for the reservations operator.
-type ReservationsEndpointsConfig struct {
-	// The nova external scheduler endpoint.
-	NovaExternalScheduler string `json:"novaExternalScheduler"`
-}
-
 // Configuration for the cortex service.
 type Config interface {
 	GetChecks() []string
@@ -431,119 +386,37 @@ type Config interface {
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
 	GetAPIConfig() APIConfig
-	GetKeystoneConfig() KeystoneConfig
-	GetReservationsConfig() ReservationsConfig
+	GetKeystoneConfig() keystone.Config
 	// Check if the configuration is valid.
 	Validate() error
 }
 
-type config struct {
+type SharedConfig struct {
 	// The checks to run, in this particular order.
 	Checks []string `json:"checks"`
 
-	LoggingConfig      `json:"logging"`
-	DBConfig           `json:"db"`
-	SyncConfig         `json:"sync"`
-	ExtractorConfig    `json:"extractor"`
-	SchedulerConfig    `json:"scheduler"`
-	DeschedulerConfig  `json:"descheduler"`
-	MonitoringConfig   `json:"monitoring"`
-	KPIsConfig         `json:"kpis"`
-	MQTTConfig         `json:"mqtt"`
-	APIConfig          `json:"api"`
-	KeystoneConfig     `json:"keystone"`
-	ReservationsConfig `json:"reservations"`
+	LoggingConfig     `json:"logging"`
+	DBConfig          `json:"db"`
+	SyncConfig        `json:"sync"`
+	ExtractorConfig   `json:"extractor"`
+	SchedulerConfig   `json:"scheduler"`
+	DeschedulerConfig `json:"descheduler"`
+	MonitoringConfig  `json:"monitoring"`
+	KPIsConfig        `json:"kpis"`
+	MQTTConfig        `json:"mqtt"`
+	APIConfig         `json:"api"`
+	KeystoneConfig    keystone.Config `json:"keystone"`
 }
 
-// Create a new configuration from the default config json file.
-// Also inject environment variables into the configuration.
-func NewConfig() Config {
-	// Note: We need to read the config as a raw map first, to avoid golang
-	// unmarshalling default values for the fields.
-
-	// Read the base config from the configmap (not including secrets).
-	cmConf, err := readRawConfig("/etc/config/conf.json")
-	if err != nil {
-		panic(err)
-	}
-	// Read the secrets config from the kubernetes secret.
-	secretConf, err := readRawConfig("/etc/secrets/secrets.json")
-	if err != nil {
-		panic(err)
-	}
-	return newConfigFromMaps(cmConf, secretConf)
-}
-
-func newConfigFromMaps(base, override map[string]any) Config {
-	// Merge the base config with the override config.
-	mergedConf := mergeMaps(base, override)
-	// Marshal again, and then unmarshal into the config struct.
-	mergedBytes, err := json.Marshal(mergedConf)
-	if err != nil {
-		panic(err)
-	}
-	var c config
-	if err := json.Unmarshal(mergedBytes, &c); err != nil {
-		panic(err)
-	}
-	return &c
-}
-
-// Read the json as a map from the given file path.
-func readRawConfig(filepath string) (map[string]any, error) {
-	file, err := os.Open(filepath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	bytes, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-	return readRawConfigFromBytes(bytes)
-}
-
-func readRawConfigFromBytes(data []byte) (map[string]any, error) {
-	var conf map[string]any
-	if err := json.Unmarshal(data, &conf); err != nil {
-		return nil, err
-	}
-	return conf, nil
-}
-
-// mergeMaps recursively overrides dst with src (in-place)
-func mergeMaps(dst, src map[string]any) map[string]any {
-	result := dst
-	for k, v := range src {
-		if v == nil {
-			// If src value is nil, skip override
-			continue
-		}
-		if dstVal, ok := dst[k]; ok {
-			// If both are maps, merge recursively
-			dstMap, dstIsMap := dstVal.(map[string]any)
-			srcMap, srcIsMap := v.(map[string]any)
-			if dstIsMap && srcIsMap {
-				result[k] = mergeMaps(dstMap, srcMap)
-				continue
-			}
-		}
-		// Otherwise, override
-		result[k] = v
-	}
-	return result
-}
-
-func (c *config) GetChecks() []string                       { return c.Checks }
-func (c *config) GetLoggingConfig() LoggingConfig           { return c.LoggingConfig }
-func (c *config) GetDBConfig() DBConfig                     { return c.DBConfig }
-func (c *config) GetSyncConfig() SyncConfig                 { return c.SyncConfig }
-func (c *config) GetExtractorConfig() ExtractorConfig       { return c.ExtractorConfig }
-func (c *config) GetSchedulerConfig() SchedulerConfig       { return c.SchedulerConfig }
-func (c *config) GetDeschedulerConfig() DeschedulerConfig   { return c.DeschedulerConfig }
-func (c *config) GetKPIsConfig() KPIsConfig                 { return c.KPIsConfig }
-func (c *config) GetMonitoringConfig() MonitoringConfig     { return c.MonitoringConfig }
-func (c *config) GetMQTTConfig() MQTTConfig                 { return c.MQTTConfig }
-func (c *config) GetAPIConfig() APIConfig                   { return c.APIConfig }
-func (c *config) GetKeystoneConfig() KeystoneConfig         { return c.KeystoneConfig }
-func (c *config) GetReservationsConfig() ReservationsConfig { return c.ReservationsConfig }
+func (c *SharedConfig) GetChecks() []string                     { return c.Checks }
+func (c *SharedConfig) GetLoggingConfig() LoggingConfig         { return c.LoggingConfig }
+func (c *SharedConfig) GetDBConfig() DBConfig                   { return c.DBConfig }
+func (c *SharedConfig) GetSyncConfig() SyncConfig               { return c.SyncConfig }
+func (c *SharedConfig) GetExtractorConfig() ExtractorConfig     { return c.ExtractorConfig }
+func (c *SharedConfig) GetSchedulerConfig() SchedulerConfig     { return c.SchedulerConfig }
+func (c *SharedConfig) GetDeschedulerConfig() DeschedulerConfig { return c.DeschedulerConfig }
+func (c *SharedConfig) GetKPIsConfig() KPIsConfig               { return c.KPIsConfig }
+func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig   { return c.MonitoringConfig }
+func (c *SharedConfig) GetMQTTConfig() MQTTConfig               { return c.MQTTConfig }
+func (c *SharedConfig) GetAPIConfig() APIConfig                 { return c.APIConfig }
+func (c *SharedConfig) GetKeystoneConfig() keystone.Config      { return c.KeystoneConfig }

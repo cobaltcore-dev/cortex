@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/kvm"
@@ -64,7 +65,7 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 			name: "Non-vmware vm",
 			request: api.ExternalSchedulerRequest{
 				VMware: false,
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -80,7 +81,7 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
 			name: "No overloaded hosts",
 			request: api.ExternalSchedulerRequest{
 				VMware: false,
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host4"},
 					{ComputeHost: "host5"},
 				},

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
@@ -51,12 +52,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "No project ID - no filtering",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -70,12 +71,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Project matches aggregate filter",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-123",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -89,12 +90,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Project matches different aggregate filter",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-456",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -108,12 +109,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Project matches multiple project filter",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-789",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -127,12 +128,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Project doesn't match any filter",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-nonexistent",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -146,12 +147,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Only hosts without filters",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-123",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host5"},
 				},
@@ -162,12 +163,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Only hosts with matching filters",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-123",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host4"},
 				},
@@ -178,12 +179,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Only hosts with non-matching filters",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-123",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host3"},
 				},
 			},
@@ -193,12 +194,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Host not in database",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-123",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},
@@ -209,12 +210,12 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 		{
 			name: "Empty host list",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project-123",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{},
+				Hosts: []novaapi.ExternalSchedulerHost{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},

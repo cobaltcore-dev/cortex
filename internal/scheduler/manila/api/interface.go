@@ -3,6 +3,8 @@
 
 package api
 
+import "github.com/cobaltcore-dev/cortex/api/scheduler/external/manila"
+
 type Pipeline interface {
 	// Run the scheduling pipeline with the given request.
 	Run(request Request) ([]string, error)
@@ -13,7 +15,7 @@ type Request interface {
 	// Specification of the scheduling request.
 	GetSpec() any
 	// Request context from Manila that contains additional meta information.
-	GetContext() ManilaRequestContext
+	GetContext() manila.ManilaRequestContext
 	// List of hosts to be considered for scheduling.
 	// If the list is nil, all hosts are considered.
 	GetHosts() []string

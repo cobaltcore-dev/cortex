@@ -10,7 +10,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/cinder"
@@ -19,6 +18,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/manila"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

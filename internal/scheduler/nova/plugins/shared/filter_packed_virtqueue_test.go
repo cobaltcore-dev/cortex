@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
@@ -61,18 +62,18 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		{
 			name: "No packed virtqueue requested - no filtering",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:cpu_policy": "dedicated",
 								},
 							},
 						},
-						Image: api.NovaObject[api.NovaImageMeta]{
-							Data: api.NovaImageMeta{
-								Properties: api.NovaObject[map[string]any]{
+						Image: novaapi.NovaObject[novaapi.NovaImageMeta]{
+							Data: novaapi.NovaImageMeta{
+								Properties: novaapi.NovaObject[map[string]any]{
 									Data: map[string]any{
 										"hw_disk_bus": "virtio",
 									},
@@ -81,7 +82,7 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -94,25 +95,25 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		{
 			name: "Packed virtqueue requested in flavor - filter hosts without support",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: api.NovaObject[api.NovaImageMeta]{
-							Data: api.NovaImageMeta{
-								Properties: api.NovaObject[map[string]any]{
+						Image: novaapi.NovaObject[novaapi.NovaImageMeta]{
+							Data: novaapi.NovaImageMeta{
+								Properties: novaapi.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -125,16 +126,16 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		{
 			name: "Packed virtqueue requested in image properties - filter hosts without support",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{},
 							},
 						},
-						Image: api.NovaObject[api.NovaImageMeta]{
-							Data: api.NovaImageMeta{
-								Properties: api.NovaObject[map[string]any]{
+						Image: novaapi.NovaObject[novaapi.NovaImageMeta]{
+							Data: novaapi.NovaImageMeta{
+								Properties: novaapi.NovaObject[map[string]any]{
 									Data: map[string]any{
 										"hw_virtio_packed_ring": "true",
 									},
@@ -143,7 +144,7 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -156,18 +157,18 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		{
 			name: "Packed virtqueue requested in both flavor and image - filter hosts without support",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: api.NovaObject[api.NovaImageMeta]{
-							Data: api.NovaImageMeta{
-								Properties: api.NovaObject[map[string]any]{
+						Image: novaapi.NovaObject[novaapi.NovaImageMeta]{
+							Data: novaapi.NovaImageMeta{
+								Properties: novaapi.NovaObject[map[string]any]{
 									Data: map[string]any{
 										"hw_virtio_packed_ring": "true",
 									},
@@ -176,7 +177,7 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -189,25 +190,25 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		{
 			name: "Packed virtqueue set to false - no filtering",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "false",
 								},
 							},
 						},
-						Image: api.NovaObject[api.NovaImageMeta]{
-							Data: api.NovaImageMeta{
-								Properties: api.NovaObject[map[string]any]{
+						Image: novaapi.NovaObject[novaapi.NovaImageMeta]{
+							Data: novaapi.NovaImageMeta{
+								Properties: novaapi.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -220,25 +221,25 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		{
 			name: "All hosts without packed virtqueue support",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: api.NovaObject[api.NovaImageMeta]{
-							Data: api.NovaImageMeta{
-								Properties: api.NovaObject[map[string]any]{
+						Image: novaapi.NovaObject[novaapi.NovaImageMeta]{
+							Data: novaapi.NovaImageMeta{
+								Properties: novaapi.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host4"},
 				},
@@ -249,25 +250,25 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		{
 			name: "All hosts with packed virtqueue support",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: api.NovaObject[api.NovaImageMeta]{
-							Data: api.NovaImageMeta{
-								Properties: api.NovaObject[map[string]any]{
+						Image: novaapi.NovaObject[novaapi.NovaImageMeta]{
+							Data: novaapi.NovaImageMeta{
+								Properties: novaapi.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -278,25 +279,25 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		{
 			name: "Host not in database",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: api.NovaObject[api.NovaImageMeta]{
-							Data: api.NovaImageMeta{
-								Properties: api.NovaObject[map[string]any]{
+						Image: novaapi.NovaObject[novaapi.NovaImageMeta]{
+							Data: novaapi.NovaImageMeta{
+								Properties: novaapi.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},

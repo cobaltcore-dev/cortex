@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
@@ -50,12 +51,12 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		{
 			name: "Filter hosts in az-1",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -69,12 +70,12 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		{
 			name: "Filter hosts in az-2",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						AvailabilityZone: "az-2",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -87,12 +88,12 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		{
 			name: "Filter hosts in az-3",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						AvailabilityZone: "az-3",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -105,12 +106,12 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		{
 			name: "No hosts in requested AZ",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						AvailabilityZone: "az-nonexistent",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -122,12 +123,12 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		{
 			name: "Empty host list",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{},
+				Hosts: []novaapi.ExternalSchedulerHost{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
@@ -135,12 +136,12 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		{
 			name: "Host not in database",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},

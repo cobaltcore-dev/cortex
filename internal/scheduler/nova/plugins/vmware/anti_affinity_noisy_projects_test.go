@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
@@ -54,13 +55,13 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		{
 			name: "Noisy project",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project1",
 					},
 				},
 				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -74,13 +75,13 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		{
 			name: "Non-noisy project",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project2",
 					},
 				},
 				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -91,13 +92,13 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		{
 			name: "No noisy project data",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						ProjectID: "project3",
 					},
 				},
 				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},

@@ -12,9 +12,9 @@ import (
 	gosync "sync"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 )

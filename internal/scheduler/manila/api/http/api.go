@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduler/external/manila"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
@@ -113,7 +114,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		c.Respond(http.StatusInternalServerError, err, "failed to evaluate pipeline")
 		return
 	}
-	response := api.ExternalSchedulerResponse{Hosts: hosts}
+	response := manila.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
 		c.Respond(http.StatusInternalServerError, err, "failed to encode response")

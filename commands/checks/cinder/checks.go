@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduler/external/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/cinder/api"
 	"github.com/sapcc/go-bits/must"
 )
 
@@ -28,8 +28,8 @@ func checkCinderSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 
 	//
 
-	request := api.ExternalSchedulerRequest{
-		Hosts:     []api.ExternalSchedulerHost{},
+	request := cinder.ExternalSchedulerRequest{
+		Hosts:     []cinder.ExternalSchedulerHost{},
 		Weights:   map[string]float64{},
 		Sandboxed: true,
 	}
@@ -53,7 +53,7 @@ func checkCinderSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 		)
 		panic("external scheduler API returned non-200 status code")
 	}
-	var resp api.ExternalSchedulerResponse
+	var resp cinder.ExternalSchedulerResponse
 	must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
 	if len(resp.Hosts) == 0 {
 		panic("no share hosts found in response")

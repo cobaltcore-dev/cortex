@@ -3,7 +3,11 @@
 
 package conf
 
-import "testing"
+import (
+	"testing"
+
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+)
 
 func TestValidConf(t *testing.T) {
 	content := `
@@ -83,11 +87,11 @@ func TestValidConf(t *testing.T) {
   }
 }
 `
-	rawConf, err := readRawConfigFromBytes([]byte(content))
+	rawConf, err := libconf.ReadRawConfigFromBytes([]byte(content))
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	conf := newConfigFromMaps(rawConf, nil)
+	conf := libconf.NewConfigFromMaps[*SharedConfig](rawConf, nil)
 	if err := conf.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,11 +138,11 @@ func TestInvalidConf_MissingNovaDependency(t *testing.T) {
   }
 }
 `
-	rawConf, err := readRawConfigFromBytes([]byte(content))
+	rawConf, err := libconf.ReadRawConfigFromBytes([]byte(content))
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	conf := newConfigFromMaps(rawConf, nil)
+	conf := libconf.NewConfigFromMaps[*SharedConfig](rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -158,11 +162,11 @@ func TestInvalidConf_MissingResourceProviders(t *testing.T) {
   }
 }
 `
-	rawConf, err := readRawConfigFromBytes([]byte(content))
+	rawConf, err := libconf.ReadRawConfigFromBytes([]byte(content))
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	conf := newConfigFromMaps(rawConf, nil)
+	conf := libconf.NewConfigFromMaps[*SharedConfig](rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -180,11 +184,11 @@ func TestInvalidConf_InvalidServiceAvailability(t *testing.T) {
   }
 }
 `
-	rawConf, err := readRawConfigFromBytes([]byte(content))
+	rawConf, err := libconf.ReadRawConfigFromBytes([]byte(content))
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	conf := newConfigFromMaps(rawConf, nil)
+	conf := libconf.NewConfigFromMaps[*SharedConfig](rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -206,11 +210,11 @@ func TestInvalidConf_MissingHost(t *testing.T) {
   }
 }
 `
-	rawConf, err := readRawConfigFromBytes([]byte(content))
+	rawConf, err := libconf.ReadRawConfigFromBytes([]byte(content))
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	conf := newConfigFromMaps(rawConf, nil)
+	conf := libconf.NewConfigFromMaps[*SharedConfig](rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -233,11 +237,11 @@ func TestInvalidConf_MissingFeatureForKPI(t *testing.T) {
   }
 }
 `
-	rawConf, err := readRawConfigFromBytes([]byte(content))
+	rawConf, err := libconf.ReadRawConfigFromBytes([]byte(content))
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	conf := newConfigFromMaps(rawConf, nil)
+	conf := libconf.NewConfigFromMaps[*SharedConfig](rawConf, nil)
 	if len(conf.GetKPIsConfig().Plugins) == 0 {
 		t.Fatalf("expected plugins, got none")
 	}
@@ -262,11 +266,11 @@ func TestInvalidConf_NovaSchedulerDependency(t *testing.T) {
   }
 }
 `
-	rawConf, err := readRawConfigFromBytes([]byte(content))
+	rawConf, err := libconf.ReadRawConfigFromBytes([]byte(content))
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	conf := newConfigFromMaps(rawConf, nil)
+	conf := libconf.NewConfigFromMaps[*SharedConfig](rawConf, nil)
 	if err := conf.Validate(); err == nil {
 		t.Fatalf("expected error, got nil")
 	}

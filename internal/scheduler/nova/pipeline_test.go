@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
@@ -121,7 +122,7 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsDisabled(t *testing.T) {
 
 	// Create a request with some existing hosts
 	request := &api.ExternalSchedulerRequest{
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []novaapi.ExternalSchedulerHost{
 			{ComputeHost: "existing-host-1", HypervisorHostname: "existing-hypervisor-1"},
 		},
 		Weights: map[string]float64{
@@ -136,7 +137,7 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsDisabled(t *testing.T) {
 	}
 
 	// Request should remain unchanged when PreselectAllHosts is false
-	expectedHosts := []api.ExternalSchedulerHost{
+	expectedHosts := []novaapi.ExternalSchedulerHost{
 		{ComputeHost: "existing-host-1", HypervisorHostname: "existing-hypervisor-1"},
 	}
 	expectedWeights := map[string]float64{
@@ -157,7 +158,7 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled(t *testing.T) {
 
 	// Create a request with some existing hosts (should be replaced)
 	request := &api.ExternalSchedulerRequest{
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []novaapi.ExternalSchedulerHost{
 			{ComputeHost: "existing-host-1", HypervisorHostname: "existing-hypervisor-1"},
 		},
 		Weights: map[string]float64{
@@ -173,7 +174,7 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled(t *testing.T) {
 	}
 
 	// Request should be modified to include all hypervisors from database
-	expectedHosts := []api.ExternalSchedulerHost{
+	expectedHosts := []novaapi.ExternalSchedulerHost{
 		{ComputeHost: "nova-compute-1", HypervisorHostname: "hypervisor-1.example.com"},
 		{ComputeHost: "nova-compute-2", HypervisorHostname: "hypervisor-2.example.com"},
 		{ComputeHost: "nova-compute-3", HypervisorHostname: "hypervisor-3.example.com"},
@@ -222,7 +223,7 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled_EmptyRequest(t *test
 
 	// Create an empty request
 	request := &api.ExternalSchedulerRequest{
-		Hosts:             []api.ExternalSchedulerHost{},
+		Hosts:             []novaapi.ExternalSchedulerHost{},
 		Weights:           map[string]float64{},
 		PreselectAllHosts: true,
 	}
@@ -263,7 +264,7 @@ func TestPremodifier_ModifyRequest_NoHypervisors(t *testing.T) {
 	}
 
 	request := &api.ExternalSchedulerRequest{
-		Hosts:             []api.ExternalSchedulerHost{},
+		Hosts:             []novaapi.ExternalSchedulerHost{},
 		Weights:           map[string]float64{},
 		PreselectAllHosts: true,
 	}
@@ -285,7 +286,7 @@ func TestPremodifier_ModifyRequest_DatabaseError(t *testing.T) {
 	defer testDB.Close()
 
 	request := &api.ExternalSchedulerRequest{
-		Hosts:             []api.ExternalSchedulerHost{},
+		Hosts:             []novaapi.ExternalSchedulerHost{},
 		Weights:           map[string]float64{},
 		PreselectAllHosts: true,
 	}
@@ -304,14 +305,14 @@ func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 
 	// Create a request with various fields set
 	originalRequest := &api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
+		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+			Data: novaapi.NovaSpec{
 				ProjectID:    "test-project",
 				UserID:       "test-user",
 				InstanceUUID: "test-instance-uuid",
 			},
 		},
-		Context: api.NovaRequestContext{
+		Context: novaapi.NovaRequestContext{
 			UserID:    "test-user",
 			ProjectID: "test-project",
 			RequestID: "test-request-id",
@@ -321,7 +322,7 @@ func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 		Live:      true,
 		VMware:    false,
 		Sandboxed: true,
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []novaapi.ExternalSchedulerHost{
 			{ComputeHost: "original-host", HypervisorHostname: "original-hypervisor"},
 		},
 		Weights: map[string]float64{

@@ -1,0 +1,33 @@
+name: Reservations Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Run on Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v5
+        path: reservations
+
+      - name: Get all changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            **/*
+
+      - name: Setup Go
+        if: steps.changed-files.outputs.files != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Running Tests
+        if: steps.changed-files.outputs.files != ''
+        run: |
+          go mod tidy
+          make test

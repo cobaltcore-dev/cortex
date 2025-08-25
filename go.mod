@@ -4,23 +4,31 @@ go 1.24.0
 
 toolchain go1.24.2
 
+replace github.com/cobaltcore-dev/cortex/api => ./api
+
 replace github.com/cobaltcore-dev/cortex/commands => ./commands
+
+replace github.com/cobaltcore-dev/cortex/lib => ./lib
+
+replace github.com/cobaltcore-dev/cortex/reservations => ./reservations
 
 replace github.com/cobaltcore-dev/cortex/testlib => ./testlib
 
 require (
+	github.com/cobaltcore-dev/cortex/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/reservations v0.0.0-00010101000000-000000000000
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/go-gorp/gorp v2.2.0+incompatible
-	github.com/go-logr/logr v1.4.2
-	github.com/gophercloud/gophercloud/v2 v2.7.0
+	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-api-declarations v1.17.3
-	github.com/sapcc/go-bits v0.0.0-20250814121725-04e492184b75
+	github.com/sapcc/go-bits v0.0.0-20250820140623-085431e07de8
 	go.uber.org/automaxprocs v1.6.0
 )
 
@@ -36,6 +44,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
@@ -61,11 +70,11 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/ziutek/mymysql v1.5.4 // indirect
-	golang.org/x/net v0.40.0 // indirect
+	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/term v0.32.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
-	golang.org/x/time v0.9.0 // indirect
+	golang.org/x/term v0.34.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/time v0.12.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -94,13 +103,11 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/common v0.65.0 // indirect
-	github.com/prometheus/procfs v0.16.1 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
-	go.opentelemetry.io/otel/trace v1.35.0 // indirect
+	github.com/prometheus/procfs v0.17.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
+	google.golang.org/protobuf v1.36.7 // indirect
 	k8s.io/apimachinery v0.33.4
 	sigs.k8s.io/controller-runtime v0.21.0
 )

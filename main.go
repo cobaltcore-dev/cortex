@@ -16,11 +16,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	novaDescheduler "github.com/cobaltcore-dev/cortex/internal/descheduler/nova"
 	"github.com/cobaltcore-dev/cortex/internal/extractor"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
-	"github.com/cobaltcore-dev/cortex/internal/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/cinder"
 	cinderAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/cinder/api/http"
@@ -31,6 +29,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -170,7 +170,7 @@ func main() {
 	// uses this to check if the binary was built correctly)
 	bininfo.HandleVersionArgument()
 
-	config := conf.NewConfig()
+	config := libconf.NewConfig[*conf.SharedConfig]()
 	// Set the configured logger.
 	config.GetLoggingConfig().SetDefaultLogger()
 	if err := config.Validate(); err != nil {
@@ -251,8 +251,6 @@ func main() {
 		runKPIService(registry, config.GetKPIsConfig(), database)
 	case "descheduler-nova":
 		runDeschedulerNova(ctx, registry, config, database)
-	case "reservations-operator":
-		reservations.RunOperator(ctx, config, registry)
 	default:
 		panic("unknown task")
 	}

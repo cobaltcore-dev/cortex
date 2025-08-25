@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -102,10 +103,10 @@ func (p *novaPipeline) modify(request *api.ExternalSchedulerRequest) error {
 		if len(hypervisors) == 0 {
 			return errors.New("no hypervisors found")
 		}
-		request.Hosts = make([]api.ExternalSchedulerHost, 0, len(hypervisors))
+		request.Hosts = make([]novaapi.ExternalSchedulerHost, 0, len(hypervisors))
 		request.Weights = make(map[string]float64, len(hypervisors))
 		for _, hypervisor := range hypervisors {
-			request.Hosts = append(request.Hosts, api.ExternalSchedulerHost{
+			request.Hosts = append(request.Hosts, novaapi.ExternalSchedulerHost{
 				ComputeHost:        hypervisor.ServiceHost,
 				HypervisorHostname: hypervisor.Hostname,
 			})

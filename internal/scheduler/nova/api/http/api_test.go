@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 )
 
@@ -33,7 +34,7 @@ func TestCanRunScheduler(t *testing.T) {
 		{
 			name: "Missing weight for host",
 			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{},
@@ -43,7 +44,7 @@ func TestCanRunScheduler(t *testing.T) {
 		{
 			name: "Weight assigned to unknown host",
 			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -55,16 +56,16 @@ func TestCanRunScheduler(t *testing.T) {
 		{
 			name: "Unsupported baremetal flavor",
 			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
 					"unknown_host": 1.0,
 				},
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: nova.NovaObject[nova.NovaSpec]{
+					Data: nova.NovaSpec{
+						Flavor: nova.NovaObject[nova.NovaFlavor]{
+							Data: nova.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"capabilities:cpu_arch": "x86_64",
 								},
@@ -78,7 +79,7 @@ func TestCanRunScheduler(t *testing.T) {
 		{
 			name: "Valid request",
 			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				VMware: true,
@@ -110,21 +111,21 @@ func TestHandler(t *testing.T) {
 	tests := []struct {
 		name           string
 		method         string
-		requestBody    api.ExternalSchedulerRequest
+		requestBody    nova.ExternalSchedulerRequest
 		wantStatusCode int
-		wantResponse   api.ExternalSchedulerResponse
+		wantResponse   nova.ExternalSchedulerResponse
 	}{
 		{
 			name:   "Invalid request method",
 			method: http.MethodGet,
-			requestBody: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+			requestBody: nova.ExternalSchedulerRequest{
+				Spec: nova.NovaObject[nova.NovaSpec]{
+					Data: nova.NovaSpec{
 						ProjectID:    "project1",
 						NumInstances: 1,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -136,14 +137,14 @@ func TestHandler(t *testing.T) {
 		{
 			name:   "Invalid request body",
 			method: http.MethodPost,
-			requestBody: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+			requestBody: nova.ExternalSchedulerRequest{
+				Spec: nova.NovaObject[nova.NovaSpec]{
+					Data: nova.NovaSpec{
 						ProjectID:    "project1",
 						NumInstances: 1,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -155,15 +156,15 @@ func TestHandler(t *testing.T) {
 		{
 			name:   "Valid request",
 			method: http.MethodPost,
-			requestBody: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+			requestBody: nova.ExternalSchedulerRequest{
+				Spec: nova.NovaObject[nova.NovaSpec]{
+					Data: nova.NovaSpec{
 						ProjectID:    "project1",
 						NumInstances: 1,
 					},
 				},
 				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []nova.ExternalSchedulerHost{
 					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
 				},
 				Weights: map[string]float64{
@@ -171,7 +172,7 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			wantStatusCode: http.StatusOK,
-			wantResponse: api.ExternalSchedulerResponse{
+			wantResponse: nova.ExternalSchedulerResponse{
 				Hosts: []string{"host1"},
 			},
 		},
@@ -199,7 +200,7 @@ func TestHandler(t *testing.T) {
 			}
 
 			if tt.wantStatusCode == http.StatusOK {
-				var gotResponse api.ExternalSchedulerResponse
+				var gotResponse nova.ExternalSchedulerResponse
 				if err := json.NewDecoder(rr.Body).Decode(&gotResponse); err != nil {
 					t.Fatalf("failed to decode response: %v", err)
 				}

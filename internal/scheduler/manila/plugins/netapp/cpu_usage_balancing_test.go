@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduler/external/manila"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/netapp"
@@ -61,7 +62,7 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
 		{
 			name: "Avoid contended pools",
 			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []manila.ExternalSchedulerHost{
 					{ShareHost: "pool1"},
 					{ShareHost: "pool2"},
 					{ShareHost: "pool3"},
@@ -78,7 +79,7 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
 		{
 			name: "Missing data",
 			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []manila.ExternalSchedulerHost{
 					{ShareHost: "pool4"},
 					{ShareHost: "pool5"}, // No data for pool5
 				},

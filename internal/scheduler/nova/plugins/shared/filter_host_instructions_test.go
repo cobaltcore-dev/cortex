@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 )
 
@@ -20,13 +21,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "No host instructions - no filtering",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: nil,
 						ForceHosts:  nil,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -39,13 +40,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Ignore single host",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host2"},
 						ForceHosts:  nil,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -58,13 +59,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Ignore multiple hosts",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host1", "host3", "host4"},
 						ForceHosts:  nil,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -77,13 +78,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Ignore all hosts",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host1", "host2", "host3", "host4"},
 						ForceHosts:  nil,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -96,13 +97,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Ignore non-existent host",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host-nonexistent"},
 						ForceHosts:  nil,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -114,13 +115,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Force single host",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: nil,
 						ForceHosts:  &[]string{"host2"},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -133,13 +134,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Force multiple hosts",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: nil,
 						ForceHosts:  &[]string{"host1", "host3"},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -152,13 +153,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Force non-existent host",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: nil,
 						ForceHosts:  &[]string{"host-nonexistent"},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -170,13 +171,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Force and ignore same host - ignore takes precedence",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host2"},
 						ForceHosts:  &[]string{"host2"},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -188,13 +189,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Force and ignore different hosts",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host1"},
 						ForceHosts:  &[]string{"host2", "host3"},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -207,13 +208,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Complex scenario - multiple ignore and force",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host2", "host5"},
 						ForceHosts:  &[]string{"host1", "host3", "host4"},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -228,13 +229,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Empty host list",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host1"},
 						ForceHosts:  &[]string{"host2"},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{},
+				Hosts: []novaapi.ExternalSchedulerHost{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
@@ -242,13 +243,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Empty ignore list",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{},
 						ForceHosts:  nil,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -259,13 +260,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Empty force list",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: nil,
 						ForceHosts:  &[]string{},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -276,13 +277,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Both lists empty",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{},
 						ForceHosts:  &[]string{},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -293,13 +294,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Duplicate hosts in ignore list",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: &[]string{"host1", "host1", "host2"},
 						ForceHosts:  nil,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -311,13 +312,13 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		{
 			name: "Duplicate hosts in force list",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						IgnoreHosts: nil,
 						ForceHosts:  &[]string{"host1", "host1", "host2"},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},

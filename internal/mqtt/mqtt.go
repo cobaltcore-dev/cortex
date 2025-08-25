@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sapcc/go-bits/jobloop"
 )
@@ -36,7 +37,8 @@ type client struct {
 }
 
 func NewClient(monitor Monitor) Client {
-	return NewClientWithConfig(conf.NewConfig().GetMQTTConfig(), monitor)
+	conf := libconf.NewConfig[conf.SharedConfig]()
+	return NewClientWithConfig(conf.GetMQTTConfig(), monitor)
 }
 
 func NewClientWithConfig(conf conf.MQTTConfig, monitor Monitor) Client {

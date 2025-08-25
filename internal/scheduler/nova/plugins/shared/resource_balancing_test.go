@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
@@ -46,12 +47,12 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 		{
 			name: "Single VM",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						NumInstances: 1,
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -82,11 +83,11 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 		{
 			name: "CPU/RAM/Disk After Enabled",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
 						NumInstances: 1,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								VCPUs:    10,  // 1 tenth
 								MemoryMB: 100, // 1 tenth
 								RootGB:   10,  // 1 tenth
@@ -97,7 +98,7 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
 )
 

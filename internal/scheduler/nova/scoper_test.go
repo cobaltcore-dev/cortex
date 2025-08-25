@@ -12,6 +12,7 @@ import (
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibScheduler "github.com/cobaltcore-dev/cortex/testlib/scheduler"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
@@ -73,7 +74,7 @@ func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 	}
 
 	request := api.ExternalSchedulerRequest{
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []novaapi.ExternalSchedulerHost{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 			{ComputeHost: "host3"},
@@ -125,7 +126,7 @@ func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 	}
 
 	request := api.ExternalSchedulerRequest{
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []novaapi.ExternalSchedulerHost{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 			{ComputeHost: "host3"},
@@ -176,14 +177,14 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 	}
 
 	request := api.ExternalSchedulerRequest{
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []novaapi.ExternalSchedulerHost{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 		},
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				Flavor: api.NovaObject[api.NovaFlavor]{
-					Data: api.NovaFlavor{
+		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+			Data: novaapi.NovaSpec{
+				Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+					Data: novaapi.NovaFlavor{
 						Name: "special-flavor",
 					},
 				},
@@ -219,7 +220,7 @@ func TestStepScoper_Run_NoSelectors_AllInScope(t *testing.T) {
 	}
 
 	request := api.ExternalSchedulerRequest{
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []novaapi.ExternalSchedulerHost{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 		},

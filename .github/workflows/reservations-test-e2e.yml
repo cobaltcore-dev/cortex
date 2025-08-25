@@ -1,0 +1,44 @@
+name: Reservations E2E Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-e2e:
+    name: Run on Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v5
+        path: reservations
+
+      - name: Get all changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            **/*
+
+      - name: Setup Go
+        if: steps.changed-files.outputs.files != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install the latest version of kind
+        if: steps.changed-files.outputs.files != ''
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Verify kind installation
+        if: steps.changed-files.outputs.files != ''
+        run: kind version
+
+      - name: Running Test e2e
+        if: steps.changed-files.outputs.files != ''
+        run: |
+          go mod tidy
+          make test-e2e

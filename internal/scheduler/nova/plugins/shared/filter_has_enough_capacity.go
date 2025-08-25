@@ -11,9 +11,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/reservations/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -72,7 +72,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	); err != nil {
 		return nil, err
 	}
-	var reservations v1alpha1.ReservationList
+	var reservations v1alpha1.ComputeReservationList
 	ctx := context.Background()
 	ns := s.Options.ReservationsNamespace
 	if err := s.Client.List(ctx, &reservations, client.InNamespace(ns)); err != nil {
@@ -83,16 +83,13 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	memoryReserved := make(map[string]uint64) // in MB
 	diskReserved := make(map[string]uint64)   // in GB
 	for _, reservation := range reservations.Items {
-		if reservation.Status.Phase != v1alpha1.ReservationStatusPhaseActive {
+		if reservation.Status.Phase != v1alpha1.ComputeReservationStatusPhaseActive {
 			continue // Only consider active reservations.
 		}
-		if reservation.Status.Allocation.Kind != v1alpha1.ReservationStatusAllocationKindCompute {
-			continue // Not a compute reservation, skip it.
-		}
-		if reservation.Spec.Kind != v1alpha1.ReservationSpecKindInstance {
+		if reservation.Spec.Kind != v1alpha1.ComputeReservationSpecKindInstance {
 			continue // Not an instance reservation, skip it.
 		}
-		host := reservation.Status.Allocation.Compute.Host
+		host := reservation.Status.Host
 		instance := reservation.Spec.Instance
 		vcpusReserved[host] += instance.VCPUs.AsDec().UnscaledBig().Uint64()
 		memoryReserved[host] += instance.Memory.AsDec().UnscaledBig().Uint64() / 1000000

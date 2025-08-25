@@ -3,6 +3,8 @@
 
 package api
 
+import "github.com/cobaltcore-dev/cortex/api/scheduler/external/cinder"
+
 type Pipeline interface {
 	// Run the scheduling pipeline with the given request.
 	Run(request Request) ([]string, error)
@@ -13,7 +15,7 @@ type Request interface {
 	// Specification of the scheduling request.
 	GetSpec() any
 	// Request context from Cinder that contains additional meta information.
-	GetContext() CinderRequestContext
+	GetContext() cinder.CinderRequestContext
 	// List of hosts to be considered for scheduling.
 	// If the list is nil, all hosts are considered.
 	GetHosts() []string

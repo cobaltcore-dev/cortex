@@ -9,8 +9,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
@@ -84,7 +84,7 @@ func TestNewCombinedSyncer(t *testing.T) {
 	monitor := sync.Monitor{}
 	mqttClient := &mqtt.MockClient{}     // Mock or initialize as needed
 	config := conf.SyncOpenStackConfig{} // Populate with test configuration
-	keystoneAPI := keystone.NewKeystoneAPI(conf.KeystoneConfig{})
+	keystoneAPI := keystone.NewKeystoneAPI(keystone.Config{})
 
 	combinedSyncer := NewCombinedSyncer(t.Context(), keystoneAPI, config, monitor, testDB, mqttClient)
 

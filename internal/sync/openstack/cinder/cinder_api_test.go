@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 )

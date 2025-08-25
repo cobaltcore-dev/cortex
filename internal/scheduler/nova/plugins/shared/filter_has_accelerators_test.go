@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
@@ -61,10 +62,10 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		{
 			name: "No accelerators requested - no filtering",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:cpu_policy": "dedicated",
 								},
@@ -72,7 +73,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -85,10 +86,10 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		{
 			name: "Accelerators requested - filter hosts without accelerators",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"accel:device_profile": "gpu-profile",
 								},
@@ -96,7 +97,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -109,10 +110,10 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		{
 			name: "Accelerators requested with specific device profile",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"accel:device_profile": "nvidia-v100",
 									"hw:cpu_policy":        "dedicated",
@@ -121,7 +122,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -134,16 +135,16 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		{
 			name: "Empty extra specs - no filtering",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{},
 							},
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -156,10 +157,10 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		{
 			name: "All hosts without accelerators",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"accel:device_profile": "gpu-profile",
 								},
@@ -167,7 +168,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host4"},
 				},
@@ -178,10 +179,10 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		{
 			name: "All hosts with accelerators",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"accel:device_profile": "gpu-profile",
 								},
@@ -189,7 +190,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -200,10 +201,10 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		{
 			name: "Host not in database",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"accel:device_profile": "gpu-profile",
 								},
@@ -211,7 +212,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/vmware"
@@ -61,7 +62,7 @@ func TestAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 			name: "Avoid contended hosts",
 			request: api.ExternalSchedulerRequest{
 				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -79,7 +80,7 @@ func TestAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 			name: "Missing data",
 			request: api.ExternalSchedulerRequest{
 				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []novaapi.ExternalSchedulerHost{
 					{ComputeHost: "host4"},
 					{ComputeHost: "host5"},
 				},

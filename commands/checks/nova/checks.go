@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/scheduler/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/gophercloud/gophercloud/v2"
@@ -188,16 +188,16 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 }
 
 // Generate external scheduler requests with the given datacenter data.
-func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
+func randomRequest(dc datacenter, seed int) novaapi.ExternalSchedulerRequest {
 	// Create a new random source with the given seed.
 	//nolint:gosec // We don't care if the random source is cryptographically secure.
 	randSource := rand.New(rand.NewSource(int64(seed)))
 	// Select all hosts for now.
-	var hosts []api.ExternalSchedulerHost
+	var hosts []novaapi.ExternalSchedulerHost
 	weights := make(map[string]float64)
 	for _, h := range dc.hypervisors {
 		weights[h.ServiceHost] = 0.0
-		hosts = append(hosts, api.ExternalSchedulerHost{
+		hosts = append(hosts, novaapi.ExternalSchedulerHost{
 			ComputeHost:        h.ServiceHost,
 			HypervisorHostname: h.Hostname,
 		})
@@ -228,11 +228,11 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 		panic(err)
 	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
-	request := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
+	request := novaapi.ExternalSchedulerRequest{
+		Spec: novaapi.NovaObject[novaapi.NovaSpec]{Data: novaapi.NovaSpec{
 			AvailabilityZone: az,
 			ProjectID:        project.ID,
-			Flavor: api.NovaObject[api.NovaFlavor]{Data: api.NovaFlavor{
+			Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{Data: novaapi.NovaFlavor{
 				Name:       flavor.Name,
 				MemoryMB:   flavor.RAM,
 				VCPUs:      flavor.VCPUs,
@@ -253,7 +253,7 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 func checkNovaSchedulerReturnsValidHosts(
 	ctx context.Context,
 	config conf.Config,
-	req api.ExternalSchedulerRequest,
+	req novaapi.ExternalSchedulerRequest,
 ) []string {
 
 	port := strconv.Itoa(config.GetAPIConfig().Port)
@@ -276,7 +276,7 @@ func checkNovaSchedulerReturnsValidHosts(
 		)
 		panic("external scheduler API returned non-200 status code")
 	}
-	var resp api.ExternalSchedulerResponse
+	var resp novaapi.ExternalSchedulerResponse
 	must.Succeed(json.NewDecoder(respRaw.Body).Decode(&resp))
 	return resp.Hosts
 }
