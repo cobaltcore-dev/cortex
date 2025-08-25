@@ -9,6 +9,7 @@ on:
       # They will be used
       - '**/cortex-core/templates/alerts.yaml'
       - '**/ci/core-alert-values.yaml'
+      - '**/helm/render-alerts.sh'
 
 jobs:
   lint:
