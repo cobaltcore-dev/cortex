@@ -1,0 +1,3 @@
+alerts:
+  componentPrefix: cortex
+  namespaceSelector: default
