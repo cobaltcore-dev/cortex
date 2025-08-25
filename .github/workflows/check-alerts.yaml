@@ -45,10 +45,10 @@ jobs:
           echo "Found alert files: $all_files"
 
       - name: Check changed rule and alert files via promtool
-        if: steps.changed.outputs.any_changed == 'true'
+        if: steps.alert-files.outputs.files != ''
         uses: peimanja/promtool-github-actions@v0.0.2
         with:
           promtool_actions_subcommand: 'rules'
-          promtool_actions_files: ${{ steps.changed.outputs.all_changed_files }}
+          promtool_actions_files: ${{ steps.alert-files.outputs.files }}
           promtool_actions_version: 'latest'
           promtool_actions_comment: 'false'
