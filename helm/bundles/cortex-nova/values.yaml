@@ -27,7 +27,6 @@ cortex-mqtt:
 cortex-core:
   fullnameOverride: cortex-nova
   alerts:
-    componentPrefix: cortex-nova
     namespaceSelector: cortex-nova
   service:
     extraLabels:

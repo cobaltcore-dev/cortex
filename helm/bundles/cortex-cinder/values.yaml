@@ -27,7 +27,6 @@ cortex-mqtt:
 cortex-core:
   fullnameOverride: cortex-cinder
   alerts:
-    componentPrefix: cortex-cinder
     namespaceSelector: cortex-cinder
   service:
     extraLabels:

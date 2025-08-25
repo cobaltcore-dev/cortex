@@ -12,7 +12,6 @@ nameOverride: ""
 alerts:
   enabled: true
   prometheus: openstack
-  componentPrefix:
   namespaceSelector:
 
 service:
