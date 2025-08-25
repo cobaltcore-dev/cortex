@@ -47,7 +47,7 @@ spec:
           Thus, no immediate action is needed.
 
     - alert: CortexSyncNotSuccessful
-      expr: cortex_sync_request_processed_total{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" } - cortex_sync_request_duration_seconds_count{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" > 0
+      expr: cortex_sync_request_processed_total{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" } - cortex_sync_request_duration_seconds_count{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" } > 0
       for: 5m
       labels:
         context: syncstatus

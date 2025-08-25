@@ -4,7 +4,7 @@ groups:
   - alert: CortexCinderInitialPlacementDown
     expr: |
       up{component="cortex-cinder-scheduler"} != 1 or
-      absent(up{component="cortex-cinder-scheduler"})
+      absent(up{component="cortex-cinder-scheduler")
     for: 1m
     labels:
       context: liveness
