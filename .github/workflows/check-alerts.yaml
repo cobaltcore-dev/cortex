@@ -24,6 +24,12 @@ jobs:
         with:
           version: '3.12.0'
 
+      - name: Install tools
+        run: |
+          # Install yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
       - name: Render alert templates
         run: |
           chmod +x helm/render-alerts.sh

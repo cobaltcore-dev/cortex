@@ -15,11 +15,12 @@ if [ -f "$templates_directory/alerts.yaml" ]; then
     output_dir="$core_chart_directory/rendered"
     mkdir -p "$output_dir"
 
-    # Render only the alerts template
+    # Render the alerts template and extract groups in one go
     helm template test-release "$core_chart_directory" \
         -f "$values_file" \
-        --show-only templates/alerts.yaml \
-        > "$output_dir/alerts.yaml"
+        --show-only templates/alerts.yaml | \
+        yq eval '.spec.groups' - | \
+        yq eval '{"groups": .}' - > "$output_dir/alerts.yaml"
 
     echo "Rendered alerts to $output_dir/alerts.yaml"
 else
