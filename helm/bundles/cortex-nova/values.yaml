@@ -113,6 +113,9 @@ cortex-core:
                 (sum by (node) (node_memory_MemTotal_bytes) / count by (node) (node_memory_MemTotal_bytes))
               )) * 100
             type: node_exporter_metric
+          - alias: kvm_libvirt_domain_steal_time
+            query: rate(kvm_libvirt_domain_steal_time[1m])
+            type: kvm_cpu_steal_time_metric
 
       openstack:
         nova:
@@ -195,6 +198,16 @@ cortex-core:
                   - alias: vrops_hostsystem_cpu_contention_short_term_percentage
 
         # KVM-specific extractors.
+        - name: libvirt_domain_cpu_steal_time_extractor
+          dependencies:
+            sync:
+              prometheus:
+                metrics:
+                  - alias: kvm_libvirt_domain_steal_time
+              openstack:
+                nova:
+                  types:
+                    - servers
         - name: node_exporter_host_cpu_usage_extractor
           dependencies:
             sync:
