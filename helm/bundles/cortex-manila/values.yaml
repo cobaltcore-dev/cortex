@@ -26,6 +26,8 @@ cortex-mqtt:
 # Custom configuration for the cortex core chart.
 cortex-core:
   fullnameOverride: cortex-manila
+  alerts:
+    namespaceSelector: cortex-manila
   service:
     extraLabels:
       app: cortex-manila # See below, used for the service monitor.
