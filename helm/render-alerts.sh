@@ -1,11 +1,19 @@
 #!/bin/bash
 
+# In cortex-core, we use templated alerts to centralize alert definitions and avoid
+# duplicating them across each deployment (nova, cinder, manila, etc.).
+# However, templated alerts cannot be directly validated with promtool for syntax errors
+# or typos in Prometheus queries.
+# This script renders the alert templates with test values and formats the output
+# for promtool validation in GitHub Actions CI.
+
 set -e
 
 echo "Rendering alert templates for CI validation..."
 
 core_chart_directory="helm/library/cortex-core"
 templates_directory="$core_chart_directory/templates"
+# Use CI values file for testing
 values_file="helm/ci/core-alert-values.yaml"
 
 if [ -f "$templates_directory/alerts.yaml" ]; then
