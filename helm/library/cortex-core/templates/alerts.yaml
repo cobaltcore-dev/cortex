@@ -13,7 +13,7 @@ spec:
   - name: cortex-core-alerts
     rules:
     - alert: CortexHttpRequest400sTooHigh
-      expr: rate(cortex_scheduler_api_request_duration_seconds_count {component=~"{{ $componentPrefix }}-scheduler",status=~"4.+", namespace="{{ $namespaceSelector }}"[5m]) > 0.1
+      expr: rate(cortex_scheduler_api_request_duration_seconds_count {component=~"{{ $componentPrefix }}-scheduler",status=~"4.+", namespace="{{ $namespaceSelector }}"}[5m]) > 0.1
       for: 5m
       labels:
         context: api
