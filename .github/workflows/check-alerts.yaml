@@ -5,8 +5,9 @@ on:
     paths:
       - '**/*.rules.yaml'
       - '**/*.alerts.yaml'
-      # Cortex core alerts related files.
-      # They will be used
+      # Cortex core alert template and related files.
+      # These files are monitored for changes to trigger rendering and validation
+      # of cortex-core/templates/alerts.yaml with promtool.
       - '**/cortex-core/templates/alerts.yaml'
       - '**/ci/core-alert-values.yaml'
       - '**/helm/render-alerts.sh'
