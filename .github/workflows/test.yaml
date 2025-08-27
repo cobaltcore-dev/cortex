@@ -114,7 +114,7 @@ jobs:
             let reservationsCoverageReport = '';
             let reservationsCoveragePercentage = 'unknown';
             try {
-              reservationsCoverageReport = fs.readFileSync('reservations_func_coverage.txt', 'utf8');
+              reservationsCoverageReport = fs.readFileSync('reservations/reservations_func_coverage.txt', 'utf8');
               const reservationsLines = reservationsCoverageReport.trim().split('\n');
               const reservationsLastLine = reservationsLines[reservationsLines.length - 1];
               const reservationsCoverageMatch = reservationsLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
