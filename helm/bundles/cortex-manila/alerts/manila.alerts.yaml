@@ -5,7 +5,7 @@ groups:
     expr: |
       up{component="cortex-manila-scheduler"} != 1 or
       absent(up{component="cortex-manila-scheduler"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex
@@ -24,7 +24,7 @@ groups:
     expr: |
       up{component="cortex-manila-syncer"} != 1 or
       absent(up{component="cortex-manila-syncer"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex
@@ -46,7 +46,7 @@ groups:
     expr: |
       up{component="cortex-manila-extractor"} != 1 or
       absent(up{component="cortex-manila-extractor"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex
@@ -185,7 +185,7 @@ groups:
 
   - alert: CortexManilaTooManyMQTTConnectionAttempts
     expr: rate(cortex_mqtt_connection_attempts_total{component=~"cortex-manila-.*"}[5m]) > 0.1
-    for: 1m
+    for: 5m
     labels:
       context: mqtt
       dashboard: cortex/cortex

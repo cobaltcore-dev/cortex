@@ -5,7 +5,7 @@ groups:
     expr: |
       up{component="cortex-cinder-scheduler"} != 1 or
       absent(up{component="cortex-cinder-scheduler"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex
@@ -24,7 +24,7 @@ groups:
     expr: |
       up{component="cortex-cinder-syncer"} != 1 or
       absent(up{component="cortex-cinder-syncer"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex
@@ -46,7 +46,7 @@ groups:
     expr: |
       up{component="cortex-cinder-extractor"} != 1 or
       absent(up{component="cortex-cinder-extractor"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex

@@ -126,7 +126,7 @@ func TestNewConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	config := newConfigFromMaps(rawConfig, nil)
+	config := newConfigFromMaps[*SharedConfig](rawConfig, nil)
 
 	// Test SyncConfig
 	syncConfig := config.GetSyncConfig()
