@@ -169,7 +169,7 @@ func main() {
 	// uses this to check if the binary was built correctly)
 	bininfo.HandleVersionArgument()
 
-	config := conf.NewConfig()
+	config := conf.NewConfig[*conf.SharedConfig]()
 	// Set the configured logger.
 	config.GetLoggingConfig().SetDefaultLogger()
 	if err := config.Validate(); err != nil {
