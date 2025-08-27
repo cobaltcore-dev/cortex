@@ -204,13 +204,13 @@ func (Hypervisor) Indexes() []db.Index { return nil }
 // See: https://docs.openstack.org/api-ref/compute/#list-flavors
 type Flavor struct {
 	ID          string  `json:"id" db:"id,primarykey"`
-	Disk        int     `json:"disk" db:"disk"` // in GB.
-	RAM         int     `json:"ram" db:"ram"`   // in MB.
+	Disk        uint64  `json:"disk" db:"disk"` // in GB.
+	RAM         uint64  `json:"ram" db:"ram"`   // in MB.
 	Name        string  `json:"name" db:"name"`
 	RxTxFactor  float64 `json:"rxtx_factor" db:"rxtx_factor"`
-	VCPUs       int     `json:"vcpus" db:"vcpus"`
+	VCPUs       uint64  `json:"vcpus" db:"vcpus"`
 	IsPublic    bool    `json:"os-flavor-access:is_public" db:"is_public"`
-	Ephemeral   int     `json:"OS-FLV-EXT-DATA:ephemeral" db:"ephemeral"`
+	Ephemeral   uint64  `json:"OS-FLV-EXT-DATA:ephemeral" db:"ephemeral"`
 	Description string  `json:"description" db:"description"`
 
 	// JSON string of extra specifications used when scheduling the flavor.

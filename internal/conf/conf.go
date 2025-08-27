@@ -417,7 +417,7 @@ type Config interface {
 	Validate() error
 }
 
-type config struct {
+type SharedConfig struct {
 	// The checks to run, in this particular order.
 	Checks []string `json:"checks"`
 
@@ -435,8 +435,13 @@ type config struct {
 }
 
 // Create a new configuration from the default config json file.
-// Also inject environment variables into the configuration.
-func NewConfig() Config {
+//
+// This will read two files:
+//   - /etc/config/conf.json
+//   - /etc/secrets/secrets.json
+//
+// The values read from secrets.json will override the values in conf.json
+func NewConfig[C any]() C {
 	// Note: We need to read the config as a raw map first, to avoid golang
 	// unmarshalling default values for the fields.
 
@@ -450,10 +455,10 @@ func NewConfig() Config {
 	if err != nil {
 		panic(err)
 	}
-	return newConfigFromMaps(cmConf, secretConf)
+	return newConfigFromMaps[C](cmConf, secretConf)
 }
 
-func newConfigFromMaps(base, override map[string]any) Config {
+func newConfigFromMaps[C any](base, override map[string]any) C {
 	// Merge the base config with the override config.
 	mergedConf := mergeMaps(base, override)
 	// Marshal again, and then unmarshal into the config struct.
@@ -461,11 +466,11 @@ func newConfigFromMaps(base, override map[string]any) Config {
 	if err != nil {
 		panic(err)
 	}
-	var c config
+	var c C
 	if err := json.Unmarshal(mergedBytes, &c); err != nil {
 		panic(err)
 	}
-	return &c
+	return c
 }
 
 // Read the json as a map from the given file path.
@@ -513,15 +518,15 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 	return result
 }
 
-func (c *config) GetChecks() []string                     { return c.Checks }
-func (c *config) GetLoggingConfig() LoggingConfig         { return c.LoggingConfig }
-func (c *config) GetDBConfig() DBConfig                   { return c.DBConfig }
-func (c *config) GetSyncConfig() SyncConfig               { return c.SyncConfig }
-func (c *config) GetExtractorConfig() ExtractorConfig     { return c.ExtractorConfig }
-func (c *config) GetSchedulerConfig() SchedulerConfig     { return c.SchedulerConfig }
-func (c *config) GetDeschedulerConfig() DeschedulerConfig { return c.DeschedulerConfig }
-func (c *config) GetKPIsConfig() KPIsConfig               { return c.KPIsConfig }
-func (c *config) GetMonitoringConfig() MonitoringConfig   { return c.MonitoringConfig }
-func (c *config) GetMQTTConfig() MQTTConfig               { return c.MQTTConfig }
-func (c *config) GetAPIConfig() APIConfig                 { return c.APIConfig }
-func (c *config) GetKeystoneConfig() KeystoneConfig       { return c.KeystoneConfig }
+func (c *SharedConfig) GetChecks() []string                     { return c.Checks }
+func (c *SharedConfig) GetLoggingConfig() LoggingConfig         { return c.LoggingConfig }
+func (c *SharedConfig) GetDBConfig() DBConfig                   { return c.DBConfig }
+func (c *SharedConfig) GetSyncConfig() SyncConfig               { return c.SyncConfig }
+func (c *SharedConfig) GetExtractorConfig() ExtractorConfig     { return c.ExtractorConfig }
+func (c *SharedConfig) GetSchedulerConfig() SchedulerConfig     { return c.SchedulerConfig }
+func (c *SharedConfig) GetDeschedulerConfig() DeschedulerConfig { return c.DeschedulerConfig }
+func (c *SharedConfig) GetKPIsConfig() KPIsConfig               { return c.KPIsConfig }
+func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig   { return c.MonitoringConfig }
+func (c *SharedConfig) GetMQTTConfig() MQTTConfig               { return c.MQTTConfig }
+func (c *SharedConfig) GetAPIConfig() APIConfig                 { return c.APIConfig }
+func (c *SharedConfig) GetKeystoneConfig() KeystoneConfig       { return c.KeystoneConfig }

@@ -11,6 +11,7 @@ if not os.getenv('TILT_VALUES_PATH'):
     fail("TILT_VALUES_PATH is not set.")
 if not os.path.exists(os.getenv('TILT_VALUES_PATH')):
     fail("TILT_VALUES_PATH "+ os.getenv('TILT_VALUES_PATH') + " does not exist.")
+tilt_values = os.getenv('TILT_VALUES_PATH')
 
 # The upgrade job may take a long time to run, so it is disabled by default.
 enable_postgres_upgrade = False
@@ -21,6 +22,23 @@ helm_repo(
     'https://prometheus-community.github.io/helm-charts',
     labels=['Repositories'],
 )
+
+def kubebuilder_binary_files(path):
+    """
+    Return all usual binary files in a kubebuilder operator path.
+    Can be used to perform selective watching on code paths for docker builds.
+    """
+    return [path + '/cmd', path + '/api', path + '/internal', path + '/go.mod', path + '/go.sum']
+
+########### Reservations Operator & CRDs
+docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
+    dockerfile='Dockerfile.kubebuilder',
+    build_args={'GO_MOD_PATH': 'reservations'},
+    only=kubebuilder_binary_files('reservations') + ['internal/', 'go.mod', 'go.sum'],
+)
+local('sh helm/sync.sh reservations/dist/chart')
+k8s_yaml(helm('reservations/dist/chart', name='cortex-reservations', values=[tilt_values]))
+k8s_resource('reservations-controller-manager', labels=['Reservations'])
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
@@ -58,9 +76,9 @@ k8s_resource('cortex-plutono', port_forwards=[
 ], labels=['Monitoring'])
 
 ########### Cortex Bundles
-tilt_values = os.getenv('TILT_VALUES_PATH')
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
     'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
+    'reservations/api/', # API module of the reservations operator needed for the scheduler.
 ])
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 
