@@ -5,7 +5,7 @@ groups:
     expr: |
       up{component="cortex-nova-scheduler"} != 1 or
       absent(up{component="cortex-nova-scheduler"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex
@@ -24,7 +24,7 @@ groups:
     expr: |
       up{component="cortex-nova-syncer"} != 1 or
       absent(up{component="cortex-nova-syncer"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex
@@ -45,7 +45,7 @@ groups:
     expr: |
       up{component="cortex-nova-extractor"} != 1 or
       absent(up{component="cortex-nova-extractor"})
-    for: 1m
+    for: 5m
     labels:
       context: liveness
       dashboard: cortex/cortex
