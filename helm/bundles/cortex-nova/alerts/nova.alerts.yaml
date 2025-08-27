@@ -59,7 +59,7 @@ groups:
         about the datacenter will not be used to extract scheduling knowledge.
         This is no immediate problem, since Nova will continue placing new VMs.
         However, the placement will be less desirable.
-
+        
   - alert: CortexNovaDeschedulerPipelineErroring
     expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{component=~"cortex-nova-.*",error="true"}[2m]) > 0
     for: 5m
