@@ -38,7 +38,7 @@ spec:
         severity: warning
         support_group: workload-management
       annotations:
-        summary: "HTTP request 500 errors too high"
+        summary: "`{{`{{$labels.component}}`}}` HTTP request 500 errors too high"
         description: >
           `{{`{{$labels.component}}`}}` is responding to placement requests with HTTP 5xx errors.
           This is not expected and indicates that Cortex is having some internal problem.
@@ -55,7 +55,7 @@ spec:
         severity: warning
         support_group: workload-management
       annotations:
-        summary: "Sync not successful"
+        summary: "`{{`{{$labels.component}}`}}` Sync not successful"
         description: >
           `{{`{{$labels.component}}`}}` experienced an issue syncing data from a datasource. This may
           happen when the datasource (OpenStack, Prometheus, etc.) is down or
@@ -93,7 +93,13 @@ spec:
         severity: warning
         support_group: workload-management
       annotations:
-        summary: "`{{`{{$labels.component}}`}}` is syncing unexpectedly many  objects from `{{`{{$labels.datasource}}`}}`"
+        summary: "`{{`{{$labels.component}}`}}` is syncing unexpectedly many objects from `{{$labels.datasource}}`"
+      description: >
+        `{{`{{$labels.component}}`}}` is syncing more than 1 million objects from a datasource. This
+        may happen when the datasource (OpenStack, Prometheus, etc.) returns
+        unexpectedly many objects, or when the database cannot drop old objects.
+        No immediate action is needed, but should this condition persist for a
+        longer time, the database may fill up and crash.
 
     - alert: CortexHighMemoryUsage
       expr: process_resident_memory_bytes{component=~"{{ $componentPrefix }}-.*" } > 6000 * 1024 * 1024
