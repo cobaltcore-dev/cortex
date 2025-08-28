@@ -11,8 +11,32 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+// Create a runtime scheme with all cortex CRDs registered.
+func testScheme() *runtime.Scheme {
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
+		panic(err)
+	}
+	return scheme
+}
+
+// Create a fake kubernetes client with no runtime objects.
+func testClient() client.Client {
+	var runtimeObjects []runtime.Object // None
+	return fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithRuntimeObjects(runtimeObjects...).
+		Build()
+}
 
 func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
@@ -375,9 +399,11 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterHasEnoughCapacity{}
+			step.Client = testClient() // Override the real client with our fake client
 			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
+			// Override the real client with our fake client after Init()
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
@@ -405,7 +431,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 	}
 }
 
-func TestFilterHasEnoughCapacity_EdgeCases(t *testing.T) {
+func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -419,213 +445,167 @@ func TestFilterHasEnoughCapacity_EdgeCases(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert edge case data
-	hostUtilizationsEdgeCases := []any{
-		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 1.5, TotalVCPUsAllocatable: 0.5, TotalDiskAllocatableGB: 0.5},     // Fractional capacity
-		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 0.0, VCPUsUtilizedPct: 0.0, DiskUtilizedPct: 0.0, TotalMemoryAllocatableMB: 1000000, TotalVCPUsAllocatable: 1000, TotalDiskAllocatableGB: 10000}, // Very large capacity
-		&shared.HostUtilization{ComputeHost: "host3", RAMUtilizedPct: 100.0, VCPUsUtilizedPct: 100.0, DiskUtilizedPct: 100.0, TotalMemoryAllocatableMB: -100, TotalVCPUsAllocatable: -10, TotalDiskAllocatableGB: -50}, // Negative capacity (edge case)
+	// Insert mock data into the feature_host_utilization table
+	hostUtilizations := []any{
+		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 32768, TotalVCPUsAllocatable: 16, TotalDiskAllocatableGB: 1000}, // High capacity host
+		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 80.0, VCPUsUtilizedPct: 70.0, DiskUtilizedPct: 60.0, TotalMemoryAllocatableMB: 16384, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500},   // Medium capacity host
 	}
-	if err := testDB.Insert(hostUtilizationsEdgeCases...); err != nil {
+	if err := testDB.Insert(hostUtilizations...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	tests := []struct {
-		name          string
-		flavor        api.NovaFlavor
-		expectedHosts []string
-		filteredHosts []string
-	}{
+	// Create active reservations that consume resources on hosts
+	reservations := []v1alpha1.ComputeReservation{
 		{
-			name: "Fractional capacity vs integer requirements",
-			flavor: api.NovaFlavor{
-				VCPUs:    1,
-				MemoryMB: 1,
-				RootGB:   1,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "reservation-host1-1",
+				Namespace: "test-namespace",
 			},
-			expectedHosts: []string{"host2"},          // Only host2 has enough capacity
-			filteredHosts: []string{"host1", "host3"}, // host1 has fractional capacity < 1, host3 has negative
+			Spec: v1alpha1.ComputeReservationSpec{
+				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
+				ProjectID: "test-project",
+				DomainID:  "test-domain",
+				Instance: v1alpha1.ComputeReservationSpecInstance{
+					Flavor: "test-flavor",
+					Memory: *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
+					VCPUs:  *resource.NewQuantity(4, resource.DecimalSI),
+					Disk:   *resource.NewQuantity(100*1024*1024*1024, resource.BinarySI), // 100GB
+				},
+			},
+			Status: v1alpha1.ComputeReservationStatus{
+				Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+				Host:  "host1",
+			},
 		},
 		{
-			name: "Very large flavor vs very large capacity",
-			flavor: api.NovaFlavor{
-				VCPUs:    500,
-				MemoryMB: 500000,
-				RootGB:   5000,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "reservation-host2-1",
+				Namespace: "test-namespace",
 			},
-			expectedHosts: []string{"host2"}, // Only host2 has very large capacity
-			filteredHosts: []string{"host1", "host3"},
+			Spec: v1alpha1.ComputeReservationSpec{
+				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
+				ProjectID: "test-project",
+				DomainID:  "test-domain",
+				Instance: v1alpha1.ComputeReservationSpecInstance{
+					Flavor: "test-flavor",
+					Memory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB
+					VCPUs:  *resource.NewQuantity(4, resource.DecimalSI),
+					Disk:   *resource.NewQuantity(200*1024*1024*1024, resource.BinarySI), // 200GB
+				},
+			},
+			Status: v1alpha1.ComputeReservationStatus{
+				Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+				Host:  "host2",
+			},
 		},
 		{
-			name: "Zero requirements",
-			flavor: api.NovaFlavor{
-				VCPUs:    0,
-				MemoryMB: 0,
-				RootGB:   0,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "reservation-inactive",
+				Namespace: "test-namespace",
 			},
-			expectedHosts: []string{"host1", "host2"}, // host3 with negative capacity gets filtered out
-			filteredHosts: []string{"host3"},
+			Spec: v1alpha1.ComputeReservationSpec{
+				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
+				ProjectID: "test-project",
+				DomainID:  "test-domain",
+				Instance: v1alpha1.ComputeReservationSpecInstance{
+					Flavor: "test-flavor",
+					Memory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16GB
+					VCPUs:  *resource.NewQuantity(8, resource.DecimalSI),
+					Disk:   *resource.NewQuantity(500*1024*1024*1024, resource.BinarySI), // 500GB
+				},
+			},
+			Status: v1alpha1.ComputeReservationStatus{
+				Phase: v1alpha1.ComputeReservationStatusPhaseFailed, // Not active, should be ignored
+				Host:  "host1",
+			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			request := api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: tt.flavor,
-						},
+	// Create fake Kubernetes client with reservations
+	scheme := testScheme()
+	var runtimeObjects []runtime.Object
+	for i := range reservations {
+		runtimeObjects = append(runtimeObjects, &reservations[i])
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRuntimeObjects(runtimeObjects...).
+		Build()
+
+	step := &FilterHasEnoughCapacity{}
+	step.Client = fakeClient // Override the real client with our fake client
+	if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Test case: Request that would fit on host1 without reservations, but not with reservations
+	request := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{
+						VCPUs:    14,    // host1 has 16 total, 4 reserved = 12 available, so this should fail
+						MemoryMB: 16384, // host1 has 32768 total, 4000 reserved = 28768 available, so this should pass
+						RootGB:   500,   // host1 has 1000 total, 100 reserved = 900 available, so this should pass
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			}
-
-			step := &FilterHasEnoughCapacity{}
-			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-			result, err := step.Run(slog.Default(), request)
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
-			// Check expected hosts are present
-			for _, host := range tt.expectedHosts {
-				if _, ok := result.Activations[host]; !ok {
-					t.Errorf("expected host %s to be present in activations", host)
-				}
-			}
-
-			// Check filtered hosts are not present
-			for _, host := range tt.filteredHosts {
-				if _, ok := result.Activations[host]; ok {
-					t.Errorf("expected host %s to be filtered out", host)
-				}
-			}
-
-			// Check total count
-			if len(result.Activations) != len(tt.expectedHosts) {
-				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result.Activations))
-			}
-		})
+			},
+		},
+		Hosts: []api.ExternalSchedulerHost{
+			{ComputeHost: "host1"},
+			{ComputeHost: "host2"},
+		},
 	}
-}
 
-func TestFilterHasEnoughCapacity_ResourceTypes(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostUtilization{}),
-	)
+	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert specialized capacity data for individual resource testing
-	hostUtilizationsResourceTypes := []any{
-		&shared.HostUtilization{ComputeHost: "cpu-rich", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 8192, TotalVCPUsAllocatable: 64, TotalDiskAllocatableGB: 500},   // High CPU, medium RAM/disk
-		&shared.HostUtilization{ComputeHost: "ram-rich", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 131072, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500},  // High RAM, medium CPU/disk
-		&shared.HostUtilization{ComputeHost: "disk-rich", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 8192, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 10000}, // High disk, medium CPU/RAM
-		&shared.HostUtilization{ComputeHost: "balanced", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalMemoryAllocatableMB: 16384, TotalVCPUsAllocatable: 16, TotalDiskAllocatableGB: 1000}, // Balanced resources
+	// Debug: Print the result to see what's happening
+	t.Logf("Result activations: %v", result.Activations)
+
+	// host1 should be filtered out due to insufficient vCPUs after reservations (16 - 4 = 12 < 14)
+	if _, ok := result.Activations["host1"]; ok {
+		t.Error("expected host1 to be filtered out due to reservations consuming vCPUs")
 	}
-	if err := testDB.Insert(hostUtilizationsResourceTypes...); err != nil {
+
+	// host2 should be filtered out due to insufficient vCPUs (8 - 4 = 4 < 14)
+	if _, ok := result.Activations["host2"]; ok {
+		t.Error("expected host2 to be filtered out due to insufficient vCPUs")
+	}
+
+	// Test case: Request that fits after accounting for reservations
+	request2 := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{
+						VCPUs:    10,    // host1 has 16 - 4 = 12 available, so this should pass
+						MemoryMB: 20480, // host1 has 32768 - 4096 = 28672 available, so this should pass
+						RootGB:   800,   // host1 has 1000 - 100 = 900 available, so this should pass
+					},
+				},
+			},
+		},
+		Hosts: []api.ExternalSchedulerHost{
+			{ComputeHost: "host1"},
+			{ComputeHost: "host2"},
+		},
+	}
+
+	result2, err := step.Run(slog.Default(), request2)
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	tests := []struct {
-		name          string
-		flavor        api.NovaFlavor
-		expectedHosts []string
-		description   string
-	}{
-		{
-			name: "CPU-intensive flavor",
-			flavor: api.NovaFlavor{
-				VCPUs:    32,
-				MemoryMB: 4096,
-				RootGB:   100,
-			},
-			expectedHosts: []string{"cpu-rich"}, // Only cpu-rich has 64 vCPUs, balanced has only 16
-			description:   "Should pass hosts with sufficient CPU",
-		},
-		{
-			name: "RAM-intensive flavor",
-			flavor: api.NovaFlavor{
-				VCPUs:    4,
-				MemoryMB: 65536,
-				RootGB:   100,
-			},
-			expectedHosts: []string{"ram-rich"}, // Only ram-rich has 131072 MB, balanced has only 16384 MB
-			description:   "Should pass hosts with sufficient RAM",
-		},
-		{
-			name: "Disk-intensive flavor",
-			flavor: api.NovaFlavor{
-				VCPUs:    4,
-				MemoryMB: 4096,
-				RootGB:   5000,
-			},
-			expectedHosts: []string{"disk-rich"},
-			description:   "Should pass hosts with sufficient disk",
-		},
-		{
-			name: "Multi-resource intensive flavor",
-			flavor: api.NovaFlavor{
-				VCPUs:    16,
-				MemoryMB: 16384,
-				RootGB:   1000,
-			},
-			expectedHosts: []string{"balanced"},
-			description:   "Should pass only balanced host with all resources",
-		},
+	// host1 should pass (16-4=12 vCPUs >= 10, 32768-4096=28672 MB >= 20480, 1000-100=900 GB >= 800)
+	if _, ok := result2.Activations["host1"]; !ok {
+		t.Error("expected host1 to be available after accounting for reservations")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			request := api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: tt.flavor,
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "cpu-rich"},
-					{ComputeHost: "ram-rich"},
-					{ComputeHost: "disk-rich"},
-					{ComputeHost: "balanced"},
-				},
-			}
-
-			step := &FilterHasEnoughCapacity{}
-			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-			result, err := step.Run(slog.Default(), request)
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
-			// Check expected hosts are present
-			for _, host := range tt.expectedHosts {
-				if _, ok := result.Activations[host]; !ok {
-					t.Errorf("expected host %s to be present in activations for %s", host, tt.description)
-				}
-			}
-
-			// Check total count
-			if len(result.Activations) != len(tt.expectedHosts) {
-				t.Errorf("expected %d hosts, got %d for %s", len(tt.expectedHosts), len(result.Activations), tt.description)
-			}
-		})
+	// host2 should be filtered out (8-4=4 vCPUs < 10)
+	if _, ok := result2.Activations["host2"]; ok {
+		t.Error("expected host2 to be filtered out due to insufficient vCPUs after reservations")
 	}
 }

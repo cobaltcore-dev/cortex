@@ -62,3 +62,21 @@ jobs:
             CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
+      - name: Get all changed reservations Chart.yaml files
+        id: changed-chart-yaml-files-reservations
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            reservations/dist/chart/Chart.yaml
+      - name: Push reservations charts to registry
+        if: steps.changed-chart-yaml-files-reservations.outputs.all_changed_files != ''
+        shell: bash
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-reservations.outputs.all_changed_files }}
+        run: |
+          for CHART_FILE in ${ALL_CHANGED_FILES}; do
+            CHART_DIR=$(dirname $CHART_FILE)
+            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
+            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
+            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
+          done

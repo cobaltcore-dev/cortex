@@ -33,7 +33,7 @@ type DependencyConfig struct {
 }
 
 // Validate if the dependencies are satisfied in the given config.
-func (deps *DependencyConfig) validate(c config) error {
+func (deps *DependencyConfig) validate(c SharedConfig) error {
 	confedNovaObjects := make(map[string]bool)
 	for _, objectType := range c.OpenStack.Nova.Types {
 		confedNovaObjects[objectType] = true
@@ -88,7 +88,7 @@ func (deps *DependencyConfig) validate(c config) error {
 }
 
 // Check if all dependencies are satisfied.
-func (c *config) Validate() error {
+func (c *SharedConfig) Validate() error {
 	for _, extractor := range c.ExtractorConfig.Plugins {
 		if err := extractor.validate(*c); err != nil {
 			return err
