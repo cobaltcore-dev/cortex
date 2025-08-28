@@ -27,7 +27,7 @@ cortex-mqtt:
 cortex-core:
   fullnameOverride: cortex-cinder
   alerts:
-    namespaceSelector: cortex-cinder
+    componentPrefix: cortex-cinder
   service:
     extraLabels:
       app: cortex-cinder # See below, used for the service monitor.

@@ -27,7 +27,7 @@ cortex-mqtt:
 cortex-core:
   fullnameOverride: cortex-manila
   alerts:
-    namespaceSelector: cortex-manila
+    componentPrefix: cortex-manila
   service:
     extraLabels:
       app: cortex-manila # See below, used for the service monitor.

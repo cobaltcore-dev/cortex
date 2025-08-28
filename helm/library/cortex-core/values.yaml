@@ -12,7 +12,7 @@ nameOverride: ""
 alerts:
   enabled: true
   prometheus: openstack
-  namespaceSelector:
+  componentPrefix:
 
 service:
   extraLabels: {} # Additional labels to add to the service.
