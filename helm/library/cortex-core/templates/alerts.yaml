@@ -93,7 +93,7 @@ spec:
         severity: warning
         support_group: workload-management
       annotations:
-        summary: "`{{`{{$labels.component}}`}}` is syncing unexpectedly many objects from `{{$labels.datasource}}`"
+        summary: "`{{`{{$labels.component}}`}}` is syncing unexpectedly many objects from `{{`{{$labels.datasource}}`}}`"
         description: >
           `{{`{{$labels.component}}`}}` is syncing more than 1 million objects from a datasource. This
           may happen when the datasource (OpenStack, Prometheus, etc.) returns
