@@ -94,12 +94,12 @@ spec:
         support_group: workload-management
       annotations:
         summary: "`{{`{{$labels.component}}`}}` is syncing unexpectedly many objects from `{{$labels.datasource}}`"
-      description: >
-        `{{`{{$labels.component}}`}}` is syncing more than 1 million objects from a datasource. This
-        may happen when the datasource (OpenStack, Prometheus, etc.) returns
-        unexpectedly many objects, or when the database cannot drop old objects.
-        No immediate action is needed, but should this condition persist for a
-        longer time, the database may fill up and crash.
+        description: >
+          `{{`{{$labels.component}}`}}` is syncing more than 1 million objects from a datasource. This
+          may happen when the datasource (OpenStack, Prometheus, etc.) returns
+          unexpectedly many objects, or when the database cannot drop old objects.
+          No immediate action is needed, but should this condition persist for a
+          longer time, the database may fill up and crash.
 
     - alert: CortexHighMemoryUsage
       expr: process_resident_memory_bytes{component=~"{{ $componentPrefix }}-.*" } > 6000 * 1024 * 1024

@@ -8,13 +8,12 @@
 # for promtool validation in GitHub Actions CI.
 
 set -e
+set -o pipefail
 
 echo "Rendering alert templates for CI validation..."
 
 core_chart_directory="helm/library/cortex-core"
 templates_directory="$core_chart_directory/templates"
-# Use CI values file for testing
-values_file="helm/ci/core-alert-values.yaml"
 
 if [ -f "$templates_directory/alerts.yaml" ]; then
     echo "Processing cortex-core chart..."
@@ -25,7 +24,6 @@ if [ -f "$templates_directory/alerts.yaml" ]; then
 
     # Render the alerts template and extract groups in one go
     helm template test-release "$core_chart_directory" \
-        -f "$values_file" \
         --show-only templates/alerts.yaml | \
         yq eval '.spec.groups' - | \
         yq eval '{"groups": .}' - > "$output_dir/alerts.yaml"
