@@ -32,11 +32,11 @@ type httpAPI struct {
 }
 
 func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
+	monitor := scheduler.NewPipelineMonitor(registry)
 	pipelines := make(map[string]scheduler.Pipeline[api.ExternalSchedulerRequest])
 	for _, pipelineConf := range config.Nova.Pipelines {
-		monitor := scheduler.NewPipelineMonitor("nova-"+pipelineConf.Name, registry)
 		pipelines[pipelineConf.Name] = novaScheduler.NewPipeline(
-			pipelineConf, db, monitor, mqttClient,
+			pipelineConf, db, monitor.SubPipeline("nova-"+pipelineConf.Name), mqttClient,
 		)
 	}
 	return &httpAPI{

@@ -32,11 +32,11 @@ type httpAPI struct {
 }
 
 func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
+	monitor := scheduler.NewPipelineMonitor(registry)
 	pipelines := make(map[string]scheduler.Pipeline[api.ExternalSchedulerRequest])
 	for _, pipelineConf := range config.Manila.Pipelines {
-		monitor := scheduler.NewPipelineMonitor("manila-"+pipelineConf.Name, registry)
 		pipelines[pipelineConf.Name] = manilaScheduler.NewPipeline(
-			pipelineConf, db, monitor, mqttClient,
+			pipelineConf, db, monitor.SubPipeline("manila-"+pipelineConf.Name), mqttClient,
 		)
 	}
 	return &httpAPI{
