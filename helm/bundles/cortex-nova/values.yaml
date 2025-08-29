@@ -26,6 +26,8 @@ cortex-mqtt:
 # Custom configuration for the cortex core chart.
 cortex-core:
   fullnameOverride: cortex-nova
+  alerts:
+    componentPrefix: cortex-nova
   service:
     extraLabels:
       app: cortex-nova # See below, used for the service monitor.
