@@ -45,8 +45,6 @@ func (k *HostUtilizationKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"hypervisor_family",
 			"enabled",
 			"disabled_reason",
-			"projects",
-			"domains",
 		},
 		nil,
 	)
@@ -73,8 +71,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		WorkloadType     string  `db:"workload_type"`
 		Enabled          bool    `db:"enabled"`
 		DisabledReason   *string `db:"disabled_reason"`
-		ProjectNames     *string `db:"project_names"`
-		DomainNames      *string `db:"domain_names"`
 		RAMUtilizedPct   float64 `db:"ram_utilized_pct"`
 		VCPUsUtilizedPct float64 `db:"vcpus_utilized_pct"`
 		DiskUtilizedPct  float64 `db:"disk_utilized_pct"`
@@ -91,8 +87,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
     		hd.workload_type,
     		hd.enabled,
     		hd.disabled_reason,
-    		hdp.project_names,
-    		hdp.domain_names,
     		COALESCE(hu.ram_utilized_pct, 0) AS ram_utilized_pct,
 			COALESCE(hu.vcpus_utilized_pct, 0) AS vcpus_utilized_pct,
 			COALESCE(hu.disk_utilized_pct, 0) AS disk_utilized_pct
@@ -114,15 +108,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			disabledReason = *host.DisabledReason
 		}
 
-		projectNames := ""
-		if host.ProjectNames != nil {
-			projectNames = *host.ProjectNames
-		}
-		domainNames := ""
-		if host.DomainNames != nil {
-			domainNames = *host.DomainNames
-		}
-
 		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(
@@ -137,8 +122,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			host.HypervisorFamily,
 			enabled,
 			disabledReason,
-			projectNames,
-			domainNames,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -152,8 +135,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			host.HypervisorFamily,
 			enabled,
 			disabledReason,
-			projectNames,
-			domainNames,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesUtilizedPerHost,
@@ -167,8 +148,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			host.HypervisorFamily,
 			enabled,
 			disabledReason,
-			projectNames,
-			domainNames,
 		)
 	}
 

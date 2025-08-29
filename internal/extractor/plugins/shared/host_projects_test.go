@@ -128,7 +128,7 @@ func TestHostDomainProjectExtractor_Extract(t *testing.T) {
 	// Verify the data was inserted into the feature_host_domain_project table
 	var results []HostDomainProject
 	table := HostDomainProject{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
+	if _, err := testDB.Select(&results, "SELECT * FROM "+table+" ORDER BY compute_host, project_id"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -137,40 +137,46 @@ func TestHostDomainProjectExtractor_Extract(t *testing.T) {
 	}
 
 	// Check expected values (order may vary)
-	expected := map[string]HostDomainProject{
-		"host1": {
-			ComputeHost:  "host1",
-			ProjectNames: "project1,project2",
-			ProjectIDs:   "p1,p2",
-			DomainNames:  "domain1,domain2",
-			DomainIDs:    "d1,d2",
+	expectedEntries := []HostDomainProject{
+		{
+			ComputeHost: "host1",
+			ProjectName: "project1",
+			ProjectID:   "p1",
+			DomainName:  "domain1",
+			DomainID:    "d1",
 		},
-		"host2": {
-			ComputeHost:  "host2",
-			ProjectNames: "project2",
-			ProjectIDs:   "p2",
-			DomainNames:  "domain2",
-			DomainIDs:    "d2",
+		{
+			ComputeHost: "host1",
+			ProjectName: "project2",
+			ProjectID:   "p2",
+			DomainName:  "domain2",
+			DomainID:    "d2",
+		},
+		{
+			ComputeHost: "host2",
+			ProjectName: "project2",
+			ProjectID:   "p2",
+			DomainName:  "domain2",
+			DomainID:    "d2",
 		},
 	}
-	for _, r := range results {
-		exp, ok := expected[r.ComputeHost]
-		if !ok {
-			t.Errorf("unexpected compute host: %s", r.ComputeHost)
-			continue
+
+	for idx, expected := range expectedEntries {
+		result := results[idx]
+		if result.ComputeHost != expected.ComputeHost {
+			t.Errorf("expected compute host %q, got %q", expected.ComputeHost, result.ComputeHost)
 		}
-		// Compare as sets (order in STRING_AGG may vary)
-		if !compareCSVSet(r.ProjectNames, exp.ProjectNames) {
-			t.Errorf("expected project names %q, got %q", exp.ProjectNames, r.ProjectNames)
+		if result.ProjectName != expected.ProjectName {
+			t.Errorf("expected project name %q, got %q", expected.ProjectName, result.ProjectName)
 		}
-		if !compareCSVSet(r.ProjectIDs, exp.ProjectIDs) {
-			t.Errorf("expected project ids %q, got %q", exp.ProjectIDs, r.ProjectIDs)
+		if result.ProjectID != expected.ProjectID {
+			t.Errorf("expected project id %q, got %q", expected.ProjectID, result.ProjectID)
 		}
-		if !compareCSVSet(r.DomainNames, exp.DomainNames) {
-			t.Errorf("expected domain names %q, got %q", exp.DomainNames, r.DomainNames)
+		if result.DomainName != expected.DomainName {
+			t.Errorf("expected domain name %q, got %q", expected.DomainName, result.DomainName)
 		}
-		if !compareCSVSet(r.DomainIDs, exp.DomainIDs) {
-			t.Errorf("expected domain ids %q, got %q", exp.DomainIDs, r.DomainIDs)
+		if result.DomainID != expected.DomainID {
+			t.Errorf("expected domain id %q, got %q", expected.DomainID, result.DomainID)
 		}
 	}
 }

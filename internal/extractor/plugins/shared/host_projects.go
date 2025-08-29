@@ -18,18 +18,18 @@ type HostDomainProject struct {
 	// Name of the OpenStack compute host.
 	ComputeHost string `db:"compute_host"`
 	// Names of projects that are running on this compute host.
-	ProjectNames string `db:"project_names"`
+	ProjectName string `db:"project_name"`
 	// IDs of projects that are running on this compute host.
-	ProjectIDs string `db:"project_ids"`
+	ProjectID string `db:"project_id"`
 	// Names of domains that are running on this compute host.
-	DomainNames string `db:"domain_names"`
+	DomainName string `db:"domain_name"`
 	// IDs of domains that are running on this compute host.
-	DomainIDs string `db:"domain_ids"`
+	DomainID string `db:"domain_id"`
 }
 
 // Table under which the feature is stored.
 func (HostDomainProject) TableName() string {
-	return "feature_host_domain_project"
+	return "feature_host_projects"
 }
 
 // Indexes for the feature.
@@ -46,7 +46,7 @@ type HostDomainProjectExtractor struct {
 
 // Name of this feature extractor that is used in the yaml config, for logging etc.
 func (*HostDomainProjectExtractor) GetName() string {
-	return "host_domain_project_extractor"
+	return "host_projects_extractor"
 }
 
 // Get message topics that trigger a re-execution of this extractor.
@@ -59,7 +59,7 @@ func (HostDomainProjectExtractor) Triggers() []string {
 	}
 }
 
-//go:embed host_domain_project.sql
+//go:embed host_projects.sql
 var hostDomainProjectQuery string
 
 // Extract the domains and projects on a compute host.
