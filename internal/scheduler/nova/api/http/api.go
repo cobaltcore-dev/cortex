@@ -35,6 +35,9 @@ func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB
 	monitor := scheduler.NewPipelineMonitor(registry)
 	pipelines := make(map[string]scheduler.Pipeline[api.ExternalSchedulerRequest])
 	for _, pipelineConf := range config.Nova.Pipelines {
+		if _, exists := pipelines[pipelineConf.Name]; exists {
+			panic("duplicate nova pipeline name: " + pipelineConf.Name)
+		}
 		pipelines[pipelineConf.Name] = novaScheduler.NewPipeline(
 			pipelineConf, db, monitor.SubPipeline("nova-"+pipelineConf.Name), mqttClient,
 		)

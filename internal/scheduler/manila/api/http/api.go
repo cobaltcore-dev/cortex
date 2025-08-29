@@ -35,6 +35,9 @@ func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB
 	monitor := scheduler.NewPipelineMonitor(registry)
 	pipelines := make(map[string]scheduler.Pipeline[api.ExternalSchedulerRequest])
 	for _, pipelineConf := range config.Manila.Pipelines {
+		if _, exists := pipelines[pipelineConf.Name]; exists {
+			panic("duplicate manila pipeline name: " + pipelineConf.Name)
+		}
 		pipelines[pipelineConf.Name] = manilaScheduler.NewPipeline(
 			pipelineConf, db, monitor.SubPipeline("manila-"+pipelineConf.Name), mqttClient,
 		)

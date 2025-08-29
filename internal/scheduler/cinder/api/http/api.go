@@ -35,6 +35,9 @@ func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB
 	monitor := scheduler.NewPipelineMonitor(registry)
 	pipelines := make(map[string]scheduler.Pipeline[api.ExternalSchedulerRequest])
 	for _, pipelineConf := range config.Cinder.Pipelines {
+		if _, exists := pipelines[pipelineConf.Name]; exists {
+			panic("duplicate cinder pipeline name: " + pipelineConf.Name)
+		}
 		pipelines[pipelineConf.Name] = cinderScheduler.NewPipeline(
 			pipelineConf, db, monitor.SubPipeline("cinder-"+pipelineConf.Name), mqttClient,
 		)
