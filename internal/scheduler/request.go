@@ -15,13 +15,8 @@ type PipelineRequest interface {
 	// Usually, this will be the request context including the request ID.
 	GetTraceLogArgs() []slog.Attr
 
-	// Whether the request is a sandboxed request. By default, this is false.
-	//
-	// Sandboxed requests can be used to notify cortex that the resource is not
-	// actually being scheduled, and that sandboxed scheduler steps should be
-	// executed for additional validation.
-	IsSandboxed() bool
-
-	// WithSandboxed returns a copy of the request with the sandboxed flag set.
-	WithSandboxed(sandboxed bool) PipelineRequest
+	// Return the selected pipeline.
+	GetPipeline() string
+	// Return a copy of the request with the pipeline name set.
+	WithPipeline(pipeline string) PipelineRequest
 }

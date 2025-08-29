@@ -341,229 +341,350 @@ cortex-core:
 
     scheduler:
       nova:
-        # Dependencies needed by all the Nova scheduler steps.
-        dependencies:
-          extractors:
-            # Needed for the step scoper which checks stuff like the hypervisor
-            # type and traits as well as the vm flavor in the request spec.
-            - host_capabilities_extractor
-
-        # Configuration of scheduler steps that modify the Nova scheduler weights.
-        # Each scheduler step can specify its own dependencies on extractors and
-        # synced data.
-        #
-        # The `name` should correspond to a known scheduler plugin.
-        # Note that all scheduler steps will be executed in parallel. However,
-        # the order will be maintained when the weights are applied to the
-        # input Nova weights.
-        plugins:
-          # Filters ported from Nova for commitment calculation, currently confed
-          # to not be active and only calculate for simulated requests.
-          #
-          # See: https://github.com/sapcc/nova for the source of implementation.
-
-          # Filter hosts based on instructions given in the request spec.
-          - name: filter_host_instructions
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-
-          # Only get hosts that have sufficient space for the requested flavor.
-          - name: filter_has_enough_capacity
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            dependencies: {extractors: [host_utilization_extractor]}
-
-          # Check if the traits required/forbidden in the flavor extra spec
-          # match the host's assigned traits.
-          - name: filter_has_requested_traits
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            dependencies: {extractors: [host_capabilities_extractor]}
-
-          # If requested, only get hosts with accelerators.
-          - name: filter_has_accelerators
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            dependencies: {sync: { openstack: {
-              nova: {types: [servers]},
-              placement: {types: [traits] },
-            }}}
-
-          # Only get hosts in the requested az.
-          - name: filter_correct_az
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            dependencies: {extractors: [host_az_extractor]}
-
-          # Only get hosts that are not disabled.
-          - name: filter_disabled
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            dependencies: {sync: { openstack: {
-              nova: {types: [servers]},
-              placement: {types: [traits] },
-            }}}
-
-          # Prefix-match the domain name for external customer domains and
-          # filter out hosts that are not intended for external customers.
-          - name: filter_external_customer
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            options:
-              domainNamePrefixes: ["iaas-"]
-            dependencies: {sync: { openstack: {
-              nova: {types: [servers]},
-              placement: {types: [traits] },
-            }}}
-
-          # If requested, only get hosts with packed virtqueues.
-          - name: filter_packed_virtqueue
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            dependencies: {sync: { openstack: {
-              nova: {types: [servers]},
-              placement: {types: [traits] },
-            }}}
-
-          # Lock certain hosts for certain projects, based on the aggregate metadata.
-          # Note that hosts without aggregate tenant filter are still accessible.
-          - name: filter_project_aggregates
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            dependencies: {sync: { openstack: {
-              nova: {types: [aggregates]},
-            }}}
-
-          # Check the capabilities of each host and if they match the extra spec
-          # provided in the request spec flavor.
-          - name: filter_compute_capabilities
-            scope: {sandbox: true}
-            disabledValidations:
-              sameSubjectNumberInOut: true
-            dependencies: {sync: { openstack: {
-              nova: {types: [hypervisors]},
-            }}}
-
-          # Weighers below.
-
-          # Binpack hana vmware vms on hana hosts.
-          - name: shared_resource_balancing
-            alias: vmware_hana_binpacking
-            scope:
-              hostSelectors:
-                # Note: due to the vmware spec selector, it is expected that
-                # this step is only executed for VMware hosts.
-                - subject: trait
-                  type: infix
-                  value: "HANA_EXCLUSIVE"
-                  operation: intersection
-              specSelectors:
-                - subject: flavor
-                  type: infix
-                  value: "hana"
-                  action: continue
-                - subject: vmware
-                  type: bool
-                  value: true
-                  action: continue
-            options:
-              # In this configuration, we only consider the memory usage
-              # after the flavor has been placed.
-              ramAfterEnabled: true
-              ramUtilizedAfterLowerBoundPct: 0
-              ramUtilizedAfterUpperBoundPct: 100
-              ramUtilizedAfterActivationLowerBound: 0.0
-              ramUtilizedAfterActivationUpperBound: 1.0
+        pipelines:
+          # Note: there needs to be at least one pipeline with the name "default".
+          - name: default
+            # Dependencies needed by all the Nova scheduler steps.
             dependencies:
-              extractors: [host_utilization_extractor]
+              extractors:
+                # Needed for the step scoper which checks stuff like the hypervisor
+                # type and traits as well as the vm flavor in the request spec.
+                - host_capabilities_extractor
 
-          # Balance non-hana vmware vms on non-hana hosts.
-          # This step only depends on openstack data and is thus available for
-          # all vms, regardless of the hypervisor. However, in this configuration
-          # we only execute it for VMware vms.
-          - name: shared_resource_balancing
-            alias: vmware_general_purpose_balancing
-            scope:
-              hostSelectors:
-                # Note: due to the vmware spec selector, it is expected that
-                # this step is only executed for VMware hosts. However,
-                # we don't want to balance on HANA exclusive hosts.
-                - subject: trait
-                  type: infix
-                  value: "HANA_EXCLUSIVE"
-                  operation: difference
-              specSelectors:
-                # Don't balance HANA vms.
-                - subject: flavor
-                  type: infix
-                  value: "hana"
-                  action: skip
-                - subject: vmware
-                  type: bool
-                  value: true
-                  action: continue
-            options:
-              # In this configuration, we only consider the memory usage.
-              ramEnabled: true
-              ramUtilizedLowerBoundPct: 0
-              ramUtilizedUpperBoundPct: 100
-              ramUtilizedActivationLowerBound: 1.0
-              ramUtilizedActivationUpperBound: 0.0
-            dependencies:
-              extractors: [host_utilization_extractor]
+            # Configuration of scheduler steps that modify the Nova scheduler weights.
+            # Each scheduler step can specify its own dependencies on extractors and
+            # synced data.
+            #
+            # The `name` should correspond to a known scheduler plugin.
+            # Note that all scheduler steps will be executed in parallel. However,
+            # the order will be maintained when the weights are applied to the
+            # input Nova weights.
+            plugins:
+              # Binpack hana vmware vms on hana hosts.
+              - name: shared_resource_balancing
+                alias: vmware_hana_binpacking
+                scope:
+                  hostSelectors:
+                    # Note: due to the vmware spec selector, it is expected that
+                    # this step is only executed for VMware hosts.
+                    - subject: trait
+                      type: infix
+                      value: "HANA_EXCLUSIVE"
+                      operation: intersection
+                  specSelectors:
+                    - subject: flavor
+                      type: infix
+                      value: "hana"
+                      action: continue
+                    - subject: vmware
+                      type: bool
+                      value: true
+                      action: continue
+                options:
+                  # In this configuration, we only consider the memory usage
+                  # after the flavor has been placed.
+                  ramAfterEnabled: true
+                  ramUtilizedAfterLowerBoundPct: 0
+                  ramUtilizedAfterUpperBoundPct: 100
+                  ramUtilizedAfterActivationLowerBound: 0.0
+                  ramUtilizedAfterActivationUpperBound: 1.0
+                dependencies:
+                  extractors: [host_utilization_extractor]
 
-          # Avoid placing vms on hosts with a high CPU contention over a longer
-          # period of time. This step depends on vrops metrics and is thus only
-          # executed for VMware vms.
-          - name: vmware_avoid_long_term_contended_hosts
-            scope:
-              specSelectors:
-                - subject: vmware
-                  type: bool
-                  value: true
-                  action: continue
-            options:
-              avgCPUContentionLowerBound: 0 # pct
-              avgCPUContentionUpperBound: 10 # pct
-              avgCPUContentionActivationLowerBound: 0.0
-              avgCPUContentionActivationUpperBound: -0.75
-              maxCPUContentionLowerBound: 0 # pct
-              maxCPUContentionUpperBound: 10 # pct
-              maxCPUContentionActivationLowerBound: 0.0
-              maxCPUContentionActivationUpperBound: -0.25
-            dependencies:
-              extractors: [vrops_hostsystem_contention_long_term_extractor]
+              # Balance non-hana vmware vms on non-hana hosts.
+              # This step only depends on openstack data and is thus available for
+              # all vms, regardless of the hypervisor. However, in this configuration
+              # we only execute it for VMware vms.
+              - name: shared_resource_balancing
+                alias: vmware_general_purpose_balancing
+                scope:
+                  hostSelectors:
+                    # Note: due to the vmware spec selector, it is expected that
+                    # this step is only executed for VMware hosts. However,
+                    # we don't want to balance on HANA exclusive hosts.
+                    - subject: trait
+                      type: infix
+                      value: "HANA_EXCLUSIVE"
+                      operation: difference
+                  specSelectors:
+                    # Don't balance HANA vms.
+                    - subject: flavor
+                      type: infix
+                      value: "hana"
+                      action: skip
+                    - subject: vmware
+                      type: bool
+                      value: true
+                      action: continue
+                options:
+                  # In this configuration, we only consider the memory usage.
+                  ramEnabled: true
+                  ramUtilizedLowerBoundPct: 0
+                  ramUtilizedUpperBoundPct: 100
+                  ramUtilizedActivationLowerBound: 1.0
+                  ramUtilizedActivationUpperBound: 0.0
+                dependencies:
+                  extractors: [host_utilization_extractor]
 
-          # Avoid placing vms on hosts with a high CPU contention over a shorter
-          # period of time. This step depends on vrops metrics and is thus only
-          # executed for VMware vms.
-          - name: vmware_avoid_short_term_contended_hosts
-            scope:
-              specSelectors:
-                - subject: vmware
-                  type: bool
-                  value: true
-                  action: continue
-            options:
-              avgCPUContentionLowerBound: 0 # pct
-              avgCPUContentionUpperBound: 10 # pct
-              avgCPUContentionActivationLowerBound: 0.0
-              avgCPUContentionActivationUpperBound: -0.75
-              maxCPUContentionLowerBound: 0 # pct
-              maxCPUContentionUpperBound: 10 # pct
-              maxCPUContentionActivationLowerBound: 0.0
-              maxCPUContentionActivationUpperBound: -0.25
+              # Avoid placing vms on hosts with a high CPU contention over a longer
+              # period of time. This step depends on vrops metrics and is thus only
+              # executed for VMware vms.
+              - name: vmware_avoid_long_term_contended_hosts
+                scope:
+                  specSelectors:
+                    - subject: vmware
+                      type: bool
+                      value: true
+                      action: continue
+                options:
+                  avgCPUContentionLowerBound: 0 # pct
+                  avgCPUContentionUpperBound: 10 # pct
+                  avgCPUContentionActivationLowerBound: 0.0
+                  avgCPUContentionActivationUpperBound: -0.75
+                  maxCPUContentionLowerBound: 0 # pct
+                  maxCPUContentionUpperBound: 10 # pct
+                  maxCPUContentionActivationLowerBound: 0.0
+                  maxCPUContentionActivationUpperBound: -0.25
+                dependencies:
+                  extractors: [vrops_hostsystem_contention_long_term_extractor]
+
+              # Avoid placing vms on hosts with a high CPU contention over a shorter
+              # period of time. This step depends on vrops metrics and is thus only
+              # executed for VMware vms.
+              - name: vmware_avoid_short_term_contended_hosts
+                scope:
+                  specSelectors:
+                    - subject: vmware
+                      type: bool
+                      value: true
+                      action: continue
+                options:
+                  avgCPUContentionLowerBound: 0 # pct
+                  avgCPUContentionUpperBound: 10 # pct
+                  avgCPUContentionActivationLowerBound: 0.0
+                  avgCPUContentionActivationUpperBound: -0.75
+                  maxCPUContentionLowerBound: 0 # pct
+                  maxCPUContentionUpperBound: 10 # pct
+                  maxCPUContentionActivationLowerBound: 0.0
+                  maxCPUContentionActivationUpperBound: -0.25
+                dependencies:
+                  extractors: [vrops_hostsystem_contention_short_term_extractor]
+
+          # Pipeline for initial placement of reservations which needs all filters.
+          - name: reservations
+            # This pipeline needs to preselect all hosts to get a valid placement.
+            preselectAllHosts: true
+            # Dependencies needed by all the Nova scheduler steps.
             dependencies:
-              extractors: [vrops_hostsystem_contention_short_term_extractor]
+              extractors:
+                # Needed for the step scoper which checks stuff like the hypervisor
+                # type and traits as well as the vm flavor in the request spec.
+                - host_capabilities_extractor
+
+            # Configuration of scheduler steps that modify the Nova scheduler weights.
+            # Each scheduler step can specify its own dependencies on extractors and
+            # synced data.
+            #
+            # The `name` should correspond to a known scheduler plugin.
+            # Note that all scheduler steps will be executed in parallel. However,
+            # the order will be maintained when the weights are applied to the
+            # input Nova weights.
+            plugins:
+              # Filters ported from Nova for commitment calculation.
+              # See: https://github.com/sapcc/nova for the source of implementation.
+
+              # Filter hosts based on instructions given in the request spec.
+              - name: filter_host_instructions
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+
+              # Only get hosts that have sufficient space for the requested flavor.
+              - name: filter_has_enough_capacity
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                dependencies: {extractors: [host_utilization_extractor]}
+
+              # Check if the traits required/forbidden in the flavor extra spec
+              # match the host's assigned traits.
+              - name: filter_has_requested_traits
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                dependencies: {extractors: [host_capabilities_extractor]}
+
+              # If requested, only get hosts with accelerators.
+              - name: filter_has_accelerators
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                dependencies: {sync: { openstack: {
+                  nova: {types: [servers]},
+                  placement: {types: [traits] },
+                }}}
+
+              # Only get hosts in the requested az.
+              - name: filter_correct_az
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                dependencies: {extractors: [host_az_extractor]}
+
+              # Only get hosts that are not disabled.
+              - name: filter_disabled
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                dependencies: {sync: { openstack: {
+                  nova: {types: [servers]},
+                  placement: {types: [traits] },
+                }}}
+
+              # Prefix-match the domain name for external customer domains and
+              # filter out hosts that are not intended for external customers.
+              - name: filter_external_customer
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                options:
+                  domainNamePrefixes: ["iaas-"]
+                dependencies: {sync: { openstack: {
+                  nova: {types: [servers]},
+                  placement: {types: [traits] },
+                }}}
+
+              # If requested, only get hosts with packed virtqueues.
+              - name: filter_packed_virtqueue
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                dependencies: {sync: { openstack: {
+                  nova: {types: [servers]},
+                  placement: {types: [traits] },
+                }}}
+
+              # Lock certain hosts for certain projects, based on the aggregate metadata.
+              # Note that hosts without aggregate tenant filter are still accessible.
+              - name: filter_project_aggregates
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                dependencies: {sync: { openstack: {
+                  nova: {types: [aggregates]},
+                }}}
+
+              # Check the capabilities of each host and if they match the extra spec
+              # provided in the request spec flavor.
+              - name: filter_compute_capabilities
+                disabledValidations:
+                  sameSubjectNumberInOut: true
+                dependencies: {sync: { openstack: {
+                  nova: {types: [hypervisors]},
+                }}}
+
+              # Weighers below.
+
+              # Binpack hana vmware vms on hana hosts.
+              - name: shared_resource_balancing
+                alias: vmware_hana_binpacking
+                scope:
+                  hostSelectors:
+                    # Note: due to the vmware spec selector, it is expected that
+                    # this step is only executed for VMware hosts.
+                    - subject: trait
+                      type: infix
+                      value: "HANA_EXCLUSIVE"
+                      operation: intersection
+                  specSelectors:
+                    - subject: flavor
+                      type: infix
+                      value: "hana"
+                      action: continue
+                    - subject: vmware
+                      type: bool
+                      value: true
+                      action: continue
+                options:
+                  # In this configuration, we only consider the memory usage
+                  # after the flavor has been placed.
+                  ramAfterEnabled: true
+                  ramUtilizedAfterLowerBoundPct: 0
+                  ramUtilizedAfterUpperBoundPct: 100
+                  ramUtilizedAfterActivationLowerBound: 0.0
+                  ramUtilizedAfterActivationUpperBound: 1.0
+                dependencies:
+                  extractors: [host_utilization_extractor]
+
+              # Balance non-hana vmware vms on non-hana hosts.
+              # This step only depends on openstack data and is thus available for
+              # all vms, regardless of the hypervisor. However, in this configuration
+              # we only execute it for VMware vms.
+              - name: shared_resource_balancing
+                alias: vmware_general_purpose_balancing
+                scope:
+                  hostSelectors:
+                    # Note: due to the vmware spec selector, it is expected that
+                    # this step is only executed for VMware hosts. However,
+                    # we don't want to balance on HANA exclusive hosts.
+                    - subject: trait
+                      type: infix
+                      value: "HANA_EXCLUSIVE"
+                      operation: difference
+                  specSelectors:
+                    # Don't balance HANA vms.
+                    - subject: flavor
+                      type: infix
+                      value: "hana"
+                      action: skip
+                    - subject: vmware
+                      type: bool
+                      value: true
+                      action: continue
+                options:
+                  # In this configuration, we only consider the memory usage.
+                  ramEnabled: true
+                  ramUtilizedLowerBoundPct: 0
+                  ramUtilizedUpperBoundPct: 100
+                  ramUtilizedActivationLowerBound: 1.0
+                  ramUtilizedActivationUpperBound: 0.0
+                dependencies:
+                  extractors: [host_utilization_extractor]
+
+              # Avoid placing vms on hosts with a high CPU contention over a longer
+              # period of time. This step depends on vrops metrics and is thus only
+              # executed for VMware vms.
+              - name: vmware_avoid_long_term_contended_hosts
+                scope:
+                  specSelectors:
+                    - subject: vmware
+                      type: bool
+                      value: true
+                      action: continue
+                options:
+                  avgCPUContentionLowerBound: 0 # pct
+                  avgCPUContentionUpperBound: 10 # pct
+                  avgCPUContentionActivationLowerBound: 0.0
+                  avgCPUContentionActivationUpperBound: -0.75
+                  maxCPUContentionLowerBound: 0 # pct
+                  maxCPUContentionUpperBound: 10 # pct
+                  maxCPUContentionActivationLowerBound: 0.0
+                  maxCPUContentionActivationUpperBound: -0.25
+                dependencies:
+                  extractors: [vrops_hostsystem_contention_long_term_extractor]
+
+              # Avoid placing vms on hosts with a high CPU contention over a shorter
+              # period of time. This step depends on vrops metrics and is thus only
+              # executed for VMware vms.
+              - name: vmware_avoid_short_term_contended_hosts
+                scope:
+                  specSelectors:
+                    - subject: vmware
+                      type: bool
+                      value: true
+                      action: continue
+                options:
+                  avgCPUContentionLowerBound: 0 # pct
+                  avgCPUContentionUpperBound: 10 # pct
+                  avgCPUContentionActivationLowerBound: 0.0
+                  avgCPUContentionActivationUpperBound: -0.75
+                  maxCPUContentionLowerBound: 0 # pct
+                  maxCPUContentionUpperBound: 10 # pct
+                  maxCPUContentionActivationLowerBound: 0.0
+                  maxCPUContentionActivationUpperBound: -0.25
+                dependencies:
+                  extractors: [vrops_hostsystem_contention_short_term_extractor]
 
     descheduler:
       nova:

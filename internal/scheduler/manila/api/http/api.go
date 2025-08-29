@@ -12,7 +12,11 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	manilaScheduler "github.com/cobaltcore-dev/cortex/internal/scheduler/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api"
 )
 
@@ -22,16 +26,23 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	Pipeline scheduler.Pipeline[api.ExternalSchedulerRequest]
-	config   conf.SchedulerAPIConfig
-	monitor  scheduler.APIMonitor
+	pipelines map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]
+	config    conf.SchedulerAPIConfig
+	monitor   scheduler.APIMonitor
 }
 
-func NewAPI(config conf.SchedulerAPIConfig, pipeline scheduler.Pipeline[api.ExternalSchedulerRequest], m scheduler.APIMonitor) HTTPAPI {
+func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
+	pipelines := make(map[string]scheduler.Pipeline[api.ExternalSchedulerRequest])
+	for _, pipelineConf := range config.Manila.Pipelines {
+		monitor := scheduler.NewPipelineMonitor("manila-"+pipelineConf.Name, registry)
+		pipelines[pipelineConf.Name] = manilaScheduler.NewPipeline(
+			pipelineConf, db, monitor, mqttClient,
+		)
+	}
 	return &httpAPI{
-		Pipeline: pipeline,
-		config:   config,
-		monitor:  m,
+		pipelines: pipelines,
+		config:    config.API,
+		monitor:   scheduler.NewSchedulerMonitor(registry),
 	}
 }
 
@@ -107,8 +118,20 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Find the requested pipeline.
+	var pipelineName string
+	if requestData.Pipeline == "" {
+		pipelineName = "default"
+	}
+	pipeline, ok := httpAPI.pipelines[pipelineName]
+	if !ok {
+		internalErr := fmt.Errorf("unknown pipeline: %s", pipelineName)
+		c.Respond(http.StatusBadRequest, internalErr, "unknown pipeline")
+		return
+	}
+
 	// Evaluate the pipeline and return the ordered list of hosts.
-	hosts, err := httpAPI.Pipeline.Run(requestData)
+	hosts, err := pipeline.Run(requestData)
 	if err != nil {
 		c.Respond(http.StatusInternalServerError, err, "failed to evaluate pipeline")
 		return

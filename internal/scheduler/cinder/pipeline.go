@@ -23,7 +23,7 @@ const (
 
 // Create a new Cinder scheduler pipeline.
 func NewPipeline(
-	config conf.SchedulerConfig,
+	config conf.CinderSchedulerPipelineConfig,
 	db db.DB,
 	monitor scheduler.PipelineMonitor,
 	mqttClient mqtt.Client,
@@ -41,7 +41,7 @@ func NewPipeline(
 		},
 	}
 	return scheduler.NewPipeline(
-		supportedSteps, config.Cinder.Plugins, wrappers,
+		supportedSteps, config.Plugins, wrappers,
 		db, monitor, mqttClient, TopicFinished,
 	)
 }
