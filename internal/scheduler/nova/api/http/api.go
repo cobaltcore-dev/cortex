@@ -134,6 +134,8 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	var pipelineName string
 	if requestData.Pipeline == "" {
 		pipelineName = "default"
+	} else {
+		pipelineName = requestData.Pipeline
 	}
 	pipeline, ok := httpAPI.pipelines[pipelineName]
 	if !ok {
