@@ -64,7 +64,7 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation for Cortex Postgres
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
           subject-digest: ${{ steps.push_cortex_postgres.outputs.digest }}
@@ -93,7 +93,7 @@ jobs:
             GIT_TAG=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation for Cortex
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}
           subject-digest: ${{ steps.push_cortex.outputs.digest }}
@@ -134,7 +134,7 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation for Cortex Reservations
         if: steps.changed_reservations_files.outputs.all_changed_files != ''
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-reservations-operator
           subject-digest: ${{ steps.push_cortex_reservations.outputs.digest }}
