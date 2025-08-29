@@ -9,6 +9,11 @@ image:
 fullnameOverride: ""
 nameOverride: ""
 
+alerts:
+  enabled: true
+  prometheus: openstack
+  componentPrefix:
+
 service:
   extraLabels: {} # Additional labels to add to the service.
 serviceMonitor:

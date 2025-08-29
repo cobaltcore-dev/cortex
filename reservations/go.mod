@@ -26,7 +26,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	github.com/sapcc/go-api-declarations v1.17.3 // indirect
+	github.com/sapcc/go-api-declarations v1.17.4 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 )
 
@@ -68,7 +68,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/sapcc/go-bits v0.0.0-20250820140623-085431e07de8
+	github.com/sapcc/go-bits v0.0.0-20250828142518-d29beaf1bcca
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
