@@ -283,9 +283,8 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 				"domain_name": []string{domain.Name},
 			},
 		}},
-		Hosts:     hosts,
-		Weights:   weights,
-		Sandboxed: true,
+		Hosts:   hosts,
+		Weights: weights,
 	}
 	return request
 }

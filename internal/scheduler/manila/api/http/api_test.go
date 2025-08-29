@@ -87,9 +87,11 @@ func TestManilaExternalScheduler_Success(t *testing.T) {
 		},
 	}
 	a := &httpAPI{
-		Pipeline: pipeline,
-		config:   conf.SchedulerAPIConfig{},
-		monitor:  scheduler.APIMonitor{},
+		pipelines: map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]{
+			"default": pipeline,
+		},
+		config:  conf.SchedulerAPIConfig{},
+		monitor: scheduler.APIMonitor{},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(validRequestBody()))
@@ -113,9 +115,9 @@ func TestManilaExternalScheduler_Success(t *testing.T) {
 
 func TestManilaExternalScheduler_InvalidMethod(t *testing.T) {
 	api := &httpAPI{
-		Pipeline: nil,
-		config:   conf.SchedulerAPIConfig{},
-		monitor:  scheduler.APIMonitor{},
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/scheduler/manila/external", http.NoBody)
 	w := httptest.NewRecorder()
@@ -124,9 +126,9 @@ func TestManilaExternalScheduler_InvalidMethod(t *testing.T) {
 
 func TestManilaExternalScheduler_InvalidJSON(t *testing.T) {
 	api := &httpAPI{
-		Pipeline: nil,
-		config:   conf.SchedulerAPIConfig{},
-		monitor:  scheduler.APIMonitor{},
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader([]byte(`{invalid json}`)))
 	w := httptest.NewRecorder()
@@ -135,9 +137,9 @@ func TestManilaExternalScheduler_InvalidJSON(t *testing.T) {
 
 func TestManilaExternalScheduler_MissingWeight(t *testing.T) {
 	api := &httpAPI{
-		Pipeline: nil,
-		config:   conf.SchedulerAPIConfig{},
-		monitor:  scheduler.APIMonitor{},
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(missingWeightBody()))
 	w := httptest.NewRecorder()
@@ -151,9 +153,9 @@ func TestManilaExternalScheduler_MissingWeight(t *testing.T) {
 
 func TestManilaExternalScheduler_UnknownWeight(t *testing.T) {
 	api := &httpAPI{
-		Pipeline: nil,
-		config:   conf.SchedulerAPIConfig{},
-		monitor:  scheduler.APIMonitor{},
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(unknownWeightBody()))
 	w := httptest.NewRecorder()
@@ -172,9 +174,11 @@ func TestManilaExternalScheduler_PipelineError(t *testing.T) {
 		},
 	}
 	api := &httpAPI{
-		Pipeline: pipeline,
-		config:   conf.SchedulerAPIConfig{},
-		monitor:  scheduler.APIMonitor{},
+		pipelines: map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]{
+			"default": pipeline,
+		},
+		config:  conf.SchedulerAPIConfig{},
+		monitor: scheduler.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(validRequestBody()))
 	w := httptest.NewRecorder()
@@ -188,9 +192,11 @@ func TestManilaExternalScheduler_PipelineError(t *testing.T) {
 
 func TestManilaExternalScheduler_BodyReadError(t *testing.T) {
 	api := &httpAPI{
-		Pipeline: &mockPipeline{
-			runFunc: func(req api.ExternalSchedulerRequest) ([]string, error) {
-				return nil, nil // No need to run pipeline for this test
+		pipelines: map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]{
+			"default": &mockPipeline{
+				runFunc: func(req api.ExternalSchedulerRequest) ([]string, error) {
+					return nil, nil // No need to run pipeline for this test
+				},
 			},
 		},
 		config:  conf.SchedulerAPIConfig{LogRequestBodies: true},
@@ -209,9 +215,9 @@ func TestManilaExternalScheduler_BodyReadError(t *testing.T) {
 
 func TestManilaExternalScheduler_EmptyBody(t *testing.T) {
 	api := &httpAPI{
-		Pipeline: nil,
-		config:   conf.SchedulerAPIConfig{},
-		monitor:  scheduler.APIMonitor{},
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", http.NoBody)
 	w := httptest.NewRecorder()

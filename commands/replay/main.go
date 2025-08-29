@@ -34,7 +34,7 @@ func main() {
 	password := flag.String("p", "secret", "The password to use for the MQTT connection")
 	schedulerType := flag.String("scheduler", "nova", "The scheduler to use (nova/manila)")
 	sink := flag.String("s", "", "The http endpoint to forward to")
-	sandboxed := flag.Bool("sandboxed", false, "Replay the request in sandbox mode (default: false)")
+	pipeline := flag.String("pipeline", "default", "The pipeline to use (default: 'default')")
 	help := flag.Bool("help", false, "Show this help message")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options]\n", os.Args[0])
@@ -85,7 +85,7 @@ func main() {
 			req = data.Request
 		}
 
-		req = req.WithSandboxed(*sandboxed)
+		req = req.WithPipeline(*pipeline)
 		for {
 			// Forward the request to the local Cortex instance
 			requestBody := must.Return(json.Marshal(req))

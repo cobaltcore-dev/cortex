@@ -200,40 +200,65 @@ conf:
       # Whether request bodies should be logged (debugging feature).
       logRequestBodies: false
 
+    cinder:
+      pipelines:
+        # Note: there needs to be at least one pipeline with the name "default".
+        - name: default
+          # Configuration of scheduler steps that modify the Cinder scheduler weights.
+          # Each scheduler step can specify its own dependencies on extractors and
+          # synced data.
+          #
+          # The `name` should correspond to a known scheduler plugin.
+          # Note that all scheduler steps will be executed in parallel. However,
+          # the order will be maintained when the weights are applied to the
+          # input weights.
+          plugins:
+            - name:
+              # Options for the scheduler step.
+              options:
+              # Dependencies needed by this scheduler step.
+              dependencies: # e.g. {extractors: [my_cinder_extractor]}
+
     manila:
-      # Configuration of scheduler steps that modify the Manila scheduler weights.
-      # Each scheduler step can specify its own dependencies on extractors and
-      # synced data.
-      #
-      # The `name` should correspond to a known scheduler plugin.
-      # Note that all scheduler steps will be executed in parallel. However,
-      # the order will be maintained when the weights are applied to the
-      # input weights.
-      plugins:
-        - name:
-          # Options for the scheduler step.
-          options:
-          # Dependencies needed by this scheduler step.
-          dependencies: # e.g. {extractors: [my_manila_extractor]}
+      pipelines:
+        # Note: there needs to be at least one pipeline with the name "default".
+        - name: default
+          # Configuration of scheduler steps that modify the Manila scheduler weights.
+          # Each scheduler step can specify its own dependencies on extractors and
+          # synced data.
+          #
+          # The `name` should correspond to a known scheduler plugin.
+          # Note that all scheduler steps will be executed in parallel. However,
+          # the order will be maintained when the weights are applied to the
+          # input weights.
+          plugins:
+            - name:
+              # Options for the scheduler step.
+              options:
+              # Dependencies needed by this scheduler step.
+              dependencies: # e.g. {extractors: [my_manila_extractor]}
 
     nova:
-      # Dependencies needed by all the Nova scheduler steps.
-      dependencies: {}
+      pipelines:
+        # Note: there needs to be at least one pipeline with the name "default".
+        - name: default
+          # Dependencies needed by all the Nova scheduler steps.
+          dependencies: {}
 
-      # Configuration of scheduler steps that modify the Nova scheduler weights.
-      # Each scheduler step can specify its own dependencies on extractors and
-      # synced data.
-      #
-      # The `name` should correspond to a known scheduler plugin.
-      # Note that all scheduler steps will be executed in parallel. However,
-      # the order will be maintained when the weights are applied to the
-      # input Nova weights.
-      plugins:
-        - name:
-          # Options for the scheduler step.
-          options:
-          # Dependencies needed by this scheduler step.
-          dependencies: # e.g. {extractors: [my_nova_extractor]}
+          # Configuration of scheduler steps that modify the Nova scheduler weights.
+          # Each scheduler step can specify its own dependencies on extractors and
+          # synced data.
+          #
+          # The `name` should correspond to a known scheduler plugin.
+          # Note that all scheduler steps will be executed in parallel. However,
+          # the order will be maintained when the weights are applied to the
+          # input Nova weights.
+          plugins:
+            - name:
+              # Options for the scheduler step.
+              options:
+              # Dependencies needed by this scheduler step.
+              dependencies: # e.g. {extractors: [my_nova_extractor]}
 
   descheduler:
     nova:

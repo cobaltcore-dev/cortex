@@ -106,7 +106,15 @@ cortex-core:
 
     scheduler:
       cinder:
-        plugins: []
+        pipelines:
+          # Note: there needs to be at least one pipeline with the name "default".
+          - name: default
+            # Configuration of scheduler steps that modify the Cinder scheduler weights.
+            # Each scheduler step can specify its own dependencies on extractors and
+            # synced data.
+            #
+            # The `name` should correspond to a known scheduler plugin.
+            plugins: []
 
   # Values passed to the service through a kubernetes secret.
   # The keys of these values should correspond to the keys used above in the conf.

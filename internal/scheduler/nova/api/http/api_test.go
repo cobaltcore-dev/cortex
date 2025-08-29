@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 )
 
@@ -22,7 +23,9 @@ func (m *mockPipeline) Run(request api.ExternalSchedulerRequest) ([]string, erro
 
 func TestCanRunScheduler(t *testing.T) {
 	httpAPI := &httpAPI{
-		Pipeline: &mockPipeline{},
+		pipelines: map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]{
+			"default": &mockPipeline{},
+		},
 	}
 
 	tests := []struct {
@@ -104,7 +107,9 @@ func TestHandler(t *testing.T) {
 	mockPipeline := &mockPipeline{}
 
 	httpAPI := &httpAPI{
-		Pipeline: mockPipeline,
+		pipelines: map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]{
+			"default": mockPipeline,
+		},
 	}
 
 	tests := []struct {

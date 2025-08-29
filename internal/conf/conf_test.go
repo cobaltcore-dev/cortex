@@ -70,20 +70,23 @@ func TestNewConfig(t *testing.T) {
   },
   "scheduler": {
     "nova": {
-      "plugins": [
-        {
+      "pipelines": [{
+        "name": "default",
+        "plugins": [
+          {
             "name": "vmware_anti_affinity_noisy_projects",
             "options": {
             "avgCPUThreshold": 20
             }
-        },
-        {
+          },
+          {
             "name": "vmware_avoid_long_term_contended_hosts",
             "options": {
             "maxCPUContentionThreshold": 50
             }
-        }
-      ]
+          }
+        ]
+      }]
     }
   },
   "kpis": {
@@ -145,17 +148,20 @@ func TestNewConfig(t *testing.T) {
 
 	// Test SchedulerConfig
 	schedulerConfig := config.GetSchedulerConfig()
-	if len(schedulerConfig.Nova.Plugins) != 2 {
-		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Nova.Plugins))
+	if len(schedulerConfig.Nova.Pipelines) != 1 {
+		t.Errorf("Expected 1 Nova scheduler pipeline, got %d", len(schedulerConfig.Nova.Pipelines))
+	}
+	if len(schedulerConfig.Nova.Pipelines[0].Plugins) != 2 {
+		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Nova.Pipelines[0].Plugins))
 	}
 	var decodedContent map[string]any
 	if err := json.Unmarshal([]byte(content), &decodedContent); err != nil {
 		t.Fatalf("Failed to unmarshal YAML content: %v", err)
 	}
 
-	schedulerSteps := decodedContent["scheduler"].(map[string]any)["nova"].(map[string]any)["plugins"].([]any)
-	step1Options := schedulerSteps[0].(map[string]any)["options"].(map[string]any)
-	step2Options := schedulerSteps[1].(map[string]any)["options"].(map[string]any)
+	schedulerPipelines := decodedContent["scheduler"].(map[string]any)["nova"].(map[string]any)["pipelines"].([]any)
+	step1Options := schedulerPipelines[0].(map[string]any)["plugins"].([]any)[0].(map[string]any)["options"].(map[string]any)
+	step2Options := schedulerPipelines[0].(map[string]any)["plugins"].([]any)[1].(map[string]any)["options"].(map[string]any)
 
 	if step1Options["avgCPUThreshold"] != 20.0 {
 		t.Errorf("Expected avgCPUThreshold to be 20, got %v", step1Options["avgCPUThreshold"])

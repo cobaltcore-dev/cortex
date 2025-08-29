@@ -29,9 +29,8 @@ func checkCinderSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 	//
 
 	request := api.ExternalSchedulerRequest{
-		Hosts:     []api.ExternalSchedulerHost{},
-		Weights:   map[string]float64{},
-		Sandboxed: true,
+		Hosts:   []api.ExternalSchedulerHost{},
+		Weights: map[string]float64{},
 	}
 	port := strconv.Itoa(config.GetAPIConfig().Port)
 	apiURL := "http://cortex-cinder-scheduler:" + port + "/scheduler/cinder/external"
