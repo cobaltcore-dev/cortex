@@ -2,7 +2,7 @@ module github.com/cobaltcore-dev/cortex
 
 go 1.24.0
 
-toolchain go1.24.2
+toolchain go1.25.0
 
 replace (
 	github.com/cobaltcore-dev/cortex/commands => ./commands
@@ -104,6 +104,6 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.7 // indirect
-	k8s.io/apimachinery v0.33.4
-	sigs.k8s.io/controller-runtime v0.21.0
+	k8s.io/apimachinery v0.34.0
+	sigs.k8s.io/controller-runtime v0.22.0
 )
