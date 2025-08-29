@@ -21,8 +21,8 @@ require (
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-api-declarations v1.17.3
-	github.com/sapcc/go-bits v0.0.0-20250820140623-085431e07de8
+	github.com/sapcc/go-api-declarations v1.17.4
+	github.com/sapcc/go-bits v0.0.0-20250828142518-d29beaf1bcca
 	go.uber.org/automaxprocs v1.6.0
 )
 
