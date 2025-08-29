@@ -9,7 +9,7 @@ replace (
 
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-20250828150700-0bc0388ae94f
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	k8s.io/apimachinery v0.33.4
 	k8s.io/client-go v0.33.0
