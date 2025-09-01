@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
 )
 
 // Feature that maps how many resources are utilized on a compute host.
@@ -53,7 +52,6 @@ func (*HostDomainProjectExtractor) GetName() string {
 func (HostDomainProjectExtractor) Triggers() []string {
 	return []string{
 		nova.TriggerNovaHypervisorsSynced,
-		placement.TriggerPlacementInventoryUsagesSynced,
 		identity.TriggerIdentityDomainsSynced,
 		identity.TriggerIdentityProjectsSynced,
 	}
