@@ -119,22 +119,22 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	}
 
 	var hostDetails []HostDetails
-	_, err := testDB.Select(&hostDetails, "SELECT * FROM "+HostDetails{}.TableName())
+	_, err := testDB.Select(&hostDetails, "SELECT * FROM "+HostDetails{}.TableName()+" ORDER BY compute_host")
 	if err != nil {
 		t.Fatalf("expected no error from Extract, got %v", err)
 	}
 
 	expected := []HostDetails{
 		{
-			ComputeHost:      "nova-compute-bb01",
-			AvailabilityZone: "az1",
-			CPUArchitecture:  "sapphire-rapids",
-			HypervisorType:   "vcenter",
-			HypervisorFamily: "vmware",
-			WorkloadType:     "hana",
-			Enabled:          false,
-			DisabledReason:   testlib.Ptr("external customer"),
-			RunningVMs:       5,
+			ComputeHost:      "ironic-host-01",
+			AvailabilityZone: "az2",
+			CPUArchitecture:  "unknown",
+			HypervisorType:   "ironic",
+			HypervisorFamily: "unknown",
+			WorkloadType:     "general-purpose",
+			Enabled:          true,
+			DisabledReason:   nil,
+			RunningVMs:       0,
 		},
 		{
 			ComputeHost:      "node001-bb02",
@@ -159,17 +159,6 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			RunningVMs:       2,
 		},
 		{
-			ComputeHost:      "ironic-host-01",
-			AvailabilityZone: "az2",
-			CPUArchitecture:  "unknown",
-			HypervisorType:   "ironic",
-			HypervisorFamily: "unknown",
-			WorkloadType:     "general-purpose",
-			Enabled:          true,
-			DisabledReason:   nil,
-			RunningVMs:       0,
-		},
-		{
 			ComputeHost:      "node003-bb03",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "unknown",
@@ -191,24 +180,26 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			DisabledReason:   testlib.Ptr("[compute status disabled trait] example reason"),
 			RunningVMs:       2,
 		},
+		{
+			ComputeHost:      "nova-compute-bb01",
+			AvailabilityZone: "az1",
+			CPUArchitecture:  "sapphire-rapids",
+			HypervisorType:   "vcenter",
+			HypervisorFamily: "vmware",
+			WorkloadType:     "hana",
+			Enabled:          false,
+			DisabledReason:   testlib.Ptr("external customer"),
+			RunningVMs:       5,
+		},
 	}
 
-	// Map the host details by compute host name for easier comparison
-	hostDetailsMap := make(map[string]HostDetails)
-	for _, details := range hostDetails {
-		hostDetailsMap[details.ComputeHost] = details
-	}
 	// Check if the expected details match the extracted ones
-	if len(hostDetailsMap) != len(expected) {
-		t.Fatalf("expected %d host details, got %d", len(expected), len(hostDetailsMap))
+	if len(hostDetails) != len(expected) {
+		t.Fatalf("expected %d host details, got %d", len(expected), len(hostDetails))
 	}
 	// Compare each expected detail with the extracted ones
-	for _, expectedDetail := range expected {
-		details, exists := hostDetailsMap[expectedDetail.ComputeHost]
-		if !exists {
-			t.Errorf("expected host details for %s not found", expectedDetail.ComputeHost)
-			continue
-		}
+	for idx, expectedDetail := range expected {
+		details := hostDetails[idx]
 		if !reflect.DeepEqual(details, expectedDetail) {
 			t.Errorf("expected %v, got %v", expectedDetail, details)
 		}
