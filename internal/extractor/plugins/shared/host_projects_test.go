@@ -5,7 +5,6 @@ package shared
 
 import (
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -34,27 +33,6 @@ func TestHostDomainProjectExtractor_Init(t *testing.T) {
 	if !testDB.TableExists(HostDomainProject{}) {
 		t.Error("expected table to be created")
 	}
-}
-
-// Helper to compare comma-separated string sets (ignores order)
-func compareCSVSet(string1, string2 string) bool {
-	valuesString1 := make(map[string]struct{})
-	valuesString2 := make(map[string]struct{})
-	for v := range strings.SplitSeq(string1, ",") {
-		valuesString1[v] = struct{}{}
-	}
-	for v := range strings.SplitSeq(string2, ",") {
-		valuesString2[v] = struct{}{}
-	}
-	if len(valuesString1) != len(valuesString2) {
-		return false
-	}
-	for k := range valuesString1 {
-		if _, ok := valuesString2[k]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func TestHostDomainProjectExtractor_Extract(t *testing.T) {
@@ -132,10 +110,6 @@ func TestHostDomainProjectExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if len(results) != 2 {
-		t.Errorf("expected 2 rows, got %d", len(results))
-	}
-
 	// Check expected values (order may vary)
 	expectedEntries := []HostDomainProject{
 		{
@@ -159,6 +133,10 @@ func TestHostDomainProjectExtractor_Extract(t *testing.T) {
 			DomainName:  "domain2",
 			DomainID:    "d2",
 		},
+	}
+
+	if len(results) != len(expectedEntries) {
+		t.Errorf("expected %d rows, got %d", len(expectedEntries), len(results))
 	}
 
 	for idx, expected := range expectedEntries {
