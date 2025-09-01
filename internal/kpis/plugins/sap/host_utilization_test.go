@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -43,7 +44,6 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	externalCustomerReason := "external customer"
 	hypervisors := []any{
 		&sap.HostDetails{
 			ComputeHost:      "vwmare-host",
@@ -63,7 +63,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "hana",
 			Enabled:          false,
-			DisabledReason:   &externalCustomerReason,
+			DisabledReason:   testlib.Ptr("external customer"),
 		},
 		&sap.HostDetails{
 			ComputeHost:      "ironic-host",
@@ -73,7 +73,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "hana",
 			Enabled:          false,
-			DisabledReason:   &externalCustomerReason,
+			DisabledReason:   testlib.Ptr("external customer"),
 		},
 	}
 
@@ -177,7 +177,7 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			"compute_host":      "kvm-host",
 			"availability_zone": "az2",
 			"enabled":           "false",
-			"disabled_reason":   externalCustomerReason,
+			"disabled_reason":   "external customer",
 			"projects":          "project2",
 			"domains":           "",
 			"cpu_architecture":  "cascade-lake",
