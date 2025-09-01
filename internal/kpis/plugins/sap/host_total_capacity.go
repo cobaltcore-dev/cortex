@@ -92,7 +92,6 @@ func (k *HostTotalCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, host := range hostTotalCapacity {
-
 		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(

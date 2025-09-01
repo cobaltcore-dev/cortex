@@ -81,7 +81,6 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, host := range hostRunningVMs {
-
 		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(
