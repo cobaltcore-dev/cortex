@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -49,20 +50,17 @@ func TestHostPinnedProjectsExtractor_Extract_FindComputeHostProjectMapping(t *te
 		t.Fatalf("failed to create table: %v", err)
 	}
 
-	computeHost1 := "host-1"
-	computeHost2 := "host-2"
-
 	aggregates := []any{
 		&nova.Aggregate{
 			Name:        "agg1",
 			UUID:        "agg1",
-			ComputeHost: &computeHost1,
+			ComputeHost: testlib.Ptr("host1"),
 			Metadata:    "{\"filter_tenant_id\":\"project_id_1, project_id_2\"}",
 		},
 		&nova.Aggregate{
 			Name:        "agg1",
 			UUID:        "agg1",
-			ComputeHost: &computeHost2,
+			ComputeHost: testlib.Ptr("host2"),
 			Metadata:    "{\"filter_tenant_id\":\"project_id_1, project_id_2\"}",
 		},
 	}
@@ -96,25 +94,25 @@ func TestHostPinnedProjectsExtractor_Extract_FindComputeHostProjectMapping(t *te
 		{
 			AggregateName: "agg1",
 			AggregateUUID: "agg1",
-			ComputeHost:   &computeHost1,
+			ComputeHost:   testlib.Ptr("host1"),
 			ProjectID:     "project_id_1",
 		},
 		{
 			AggregateName: "agg1",
 			AggregateUUID: "agg1",
-			ComputeHost:   &computeHost1,
+			ComputeHost:   testlib.Ptr("host1"),
 			ProjectID:     "project_id_2",
 		},
 		{
 			AggregateName: "agg1",
 			AggregateUUID: "agg1",
-			ComputeHost:   &computeHost2,
+			ComputeHost:   testlib.Ptr("host2"),
 			ProjectID:     "project_id_1",
 		},
 		{
 			AggregateName: "agg1",
 			AggregateUUID: "agg1",
-			ComputeHost:   &computeHost2,
+			ComputeHost:   testlib.Ptr("host2"),
 			ProjectID:     "project_id_2",
 		},
 	}
@@ -144,13 +142,11 @@ func TestHostPinnedProjectsExtractor_Extract_SkipAggregatesWithNoFilterTenant(t 
 		t.Fatalf("failed to create table: %v", err)
 	}
 
-	computeHost1 := "host-1"
-
 	aggregates := []any{
 		&nova.Aggregate{
 			Name:        "ignore-no-filter-tenant",
 			UUID:        "ignore",
-			ComputeHost: &computeHost1,
+			ComputeHost: testlib.Ptr("host1"),
 			Metadata:    "{\"something_different\":\"project_id_1, project_id_2\"}",
 		},
 	}
@@ -199,8 +195,6 @@ func TestHostPinnedProjectsExtractor_Extract_SupportEmptyComputeHost(t *testing.
 		t.Fatalf("failed to create table: %v", err)
 	}
 
-	computeHost1 := "host-1"
-
 	aggregates := []any{
 		// This aggregate doesn't have a compute host so project_3 and 4 should have an empty entry for the compute host
 		&nova.Aggregate{
@@ -213,7 +207,7 @@ func TestHostPinnedProjectsExtractor_Extract_SupportEmptyComputeHost(t *testing.
 		&nova.Aggregate{
 			Name:        "agg3",
 			UUID:        "agg3",
-			ComputeHost: &computeHost1,
+			ComputeHost: testlib.Ptr("host1"),
 			Metadata:    "{\"filter_tenant_id\":\"project_id_3, project_id_4\"}",
 		},
 	}
@@ -259,13 +253,13 @@ func TestHostPinnedProjectsExtractor_Extract_SupportEmptyComputeHost(t *testing.
 		{
 			AggregateName: "agg3",
 			AggregateUUID: "agg3",
-			ComputeHost:   &computeHost1,
+			ComputeHost:   testlib.Ptr("host1"),
 			ProjectID:     "project_id_3",
 		},
 		{
 			AggregateName: "agg3",
 			AggregateUUID: "agg3",
-			ComputeHost:   &computeHost1,
+			ComputeHost:   testlib.Ptr("host1"),
 			ProjectID:     "project_id_4",
 		},
 	}
