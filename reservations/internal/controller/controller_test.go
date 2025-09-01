@@ -303,11 +303,8 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 		}
 
 		// Verify request structure
-		if !req.Sandboxed {
-			t.Errorf("Expected Sandboxed to be true")
-		}
-		if !req.PreselectAllHosts {
-			t.Errorf("Expected PreselectAllHosts to be true")
+		if req.Pipeline != "reservations" {
+			t.Errorf("Expected Pipeline to be 'reservations', got %q", req.Pipeline)
 		}
 		if req.Spec.Data.NumInstances != 1 {
 			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)

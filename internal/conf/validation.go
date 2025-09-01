@@ -99,9 +99,11 @@ func (c *SharedConfig) Validate() error {
 			return err
 		}
 	}
-	for _, step := range c.SchedulerConfig.Nova.Plugins {
-		if err := step.validate(*c); err != nil {
-			return err
+	for _, pipeline := range c.SchedulerConfig.Nova.Pipelines {
+		for _, step := range pipeline.Plugins {
+			if err := step.validate(*c); err != nil {
+				return err
+			}
 		}
 	}
 	for _, step := range c.DeschedulerConfig.Nova.Plugins {
@@ -110,8 +112,10 @@ func (c *SharedConfig) Validate() error {
 		}
 	}
 	// Check general dependencies needed by all scheduler steps.
-	if err := c.SchedulerConfig.Nova.validate(*c); err != nil {
-		return err
+	for _, pipeline := range c.SchedulerConfig.Nova.Pipelines {
+		if err := pipeline.validate(*c); err != nil {
+			return err
+		}
 	}
 	if c.API.LogRequestBodies {
 		slog.Warn("logging request bodies is enabled (debug feature)")

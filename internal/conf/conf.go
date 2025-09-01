@@ -170,21 +170,53 @@ type ExtractorConfig struct {
 }
 
 type CinderSchedulerConfig struct {
+	// Pipelines in this scheduler.
+	Pipelines []CinderSchedulerPipelineConfig `json:"pipelines"`
+}
+
+type CinderSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
 	Plugins []SchedulerStepConfig `json:"plugins"`
+
+	// The name of this scheduler pipeline.
+	// The name is used to distinguish and route between multiple pipelines.
+	Name string `json:"name"`
 }
 
 type ManilaSchedulerConfig struct {
+	// Pipelines in this scheduler.
+	Pipelines []ManilaSchedulerPipelineConfig `json:"pipelines"`
+}
+
+type ManilaSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
 	Plugins []SchedulerStepConfig `json:"plugins"`
+
+	// The name of this scheduler pipeline.
+	// The name is used to distinguish and route between multiple pipelines.
+	Name string `json:"name"`
 }
 
 type NovaSchedulerConfig struct {
+	// Pipelines in this scheduler.
+	Pipelines []NovaSchedulerPipelineConfig `json:"pipelines"`
+}
+
+type NovaSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
 	Plugins []SchedulerStepConfig `json:"plugins"`
 
 	// Dependencies needed by all the Nova scheduler steps.
 	DependencyConfig `json:"dependencies,omitempty"`
+
+	// The name of this scheduler pipeline.
+	// The name is used to distinguish and route between multiple pipelines.
+	Name string `json:"name"`
+
+	// If all available hosts should be selected in the request,
+	// regardless of what nova sends us in the request.
+	// By default, this is false (use the hosts nova gives us).
+	PreselectAllHosts bool `json:"preselectAllHosts"`
 }
 
 type SchedulerStepConfig struct {
@@ -215,10 +247,6 @@ type NovaSchedulerStepScope struct {
 	HostSelectors []NovaSchedulerStepHostSelector `json:"hostSelectors,omitempty"`
 	// Selectors applied to the given nova spec.
 	SpecSelectors []NovaSchedulerStepSpecSelector `json:"specSelectors,omitempty"`
-	// If the step is currently being sandboxed, which means it doesn't
-	// affect the actual placement, but can be executed with the sandbox
-	// flag activated in the scheduler request.
-	Sandbox bool `json:"sandbox,omitempty"`
 }
 
 type NovaSchedulerStepHostSelector struct {

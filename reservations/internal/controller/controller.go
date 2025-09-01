@@ -113,8 +113,8 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 	diskGB := uint64(diskValue)
 
 	externalSchedulerRequest := api.ExternalSchedulerRequest{
-		Sandboxed:         true,
-		PreselectAllHosts: true,
+		// Pipeline with all filters enabled + preselects all hosts.
+		Pipeline: "reservations",
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
 				NumInstances: 1, // One for each reservation.

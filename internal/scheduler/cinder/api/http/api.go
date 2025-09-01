@@ -12,7 +12,11 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	cinderScheduler "github.com/cobaltcore-dev/cortex/internal/scheduler/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/cinder/api"
 )
 
@@ -22,21 +26,35 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	Pipeline scheduler.Pipeline[api.ExternalSchedulerRequest]
-	config   conf.SchedulerAPIConfig
-	monitor  scheduler.APIMonitor
+	pipelines map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]
+	config    conf.SchedulerAPIConfig
+	monitor   scheduler.APIMonitor
 }
 
-func NewAPI(config conf.SchedulerAPIConfig, pipeline scheduler.Pipeline[api.ExternalSchedulerRequest], m scheduler.APIMonitor) HTTPAPI {
+func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
+	monitor := scheduler.NewPipelineMonitor(registry)
+	pipelines := make(map[string]scheduler.Pipeline[api.ExternalSchedulerRequest])
+	for _, pipelineConf := range config.Cinder.Pipelines {
+		if _, exists := pipelines[pipelineConf.Name]; exists {
+			panic("duplicate cinder pipeline name: " + pipelineConf.Name)
+		}
+		pipelines[pipelineConf.Name] = cinderScheduler.NewPipeline(
+			pipelineConf, db, monitor.SubPipeline("cinder-"+pipelineConf.Name), mqttClient,
+		)
+	}
 	return &httpAPI{
-		Pipeline: pipeline,
-		config:   config,
-		monitor:  m,
+		pipelines: pipelines,
+		config:    config.API,
+		monitor:   scheduler.NewSchedulerMonitor(registry),
 	}
 }
 
 // Init the API mux and bind the handlers.
 func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
+	// Check that we have at least one pipeline with the name "default"
+	if _, ok := httpAPI.pipelines["default"]; !ok {
+		panic("no default cinder pipeline configured")
+	}
 	mux.HandleFunc("/scheduler/cinder/external", httpAPI.CinderExternalScheduler)
 }
 
@@ -107,8 +125,22 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Find the requested pipeline.
+	var pipelineName string
+	if requestData.Pipeline == "" {
+		pipelineName = "default"
+	} else {
+		pipelineName = requestData.Pipeline
+	}
+	pipeline, ok := httpAPI.pipelines[pipelineName]
+	if !ok {
+		internalErr := fmt.Errorf("unknown pipeline: %s", pipelineName)
+		c.Respond(http.StatusBadRequest, internalErr, "unknown pipeline")
+		return
+	}
+
 	// Evaluate the pipeline and return the ordered list of hosts.
-	hosts, err := httpAPI.Pipeline.Run(requestData)
+	hosts, err := pipeline.Run(requestData)
 	if err != nil {
 		c.Respond(http.StatusInternalServerError, err, "failed to evaluate pipeline")
 		return

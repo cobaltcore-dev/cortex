@@ -12,7 +12,11 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
+	novaScheduler "github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 )
 
@@ -22,21 +26,35 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	Pipeline scheduler.Pipeline[api.ExternalSchedulerRequest]
-	config   conf.SchedulerAPIConfig
-	monitor  scheduler.APIMonitor
+	pipelines map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]
+	config    conf.SchedulerAPIConfig
+	monitor   scheduler.APIMonitor
 }
 
-func NewAPI(config conf.SchedulerAPIConfig, pipeline scheduler.Pipeline[api.ExternalSchedulerRequest], m scheduler.APIMonitor) HTTPAPI {
+func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
+	monitor := scheduler.NewPipelineMonitor(registry)
+	pipelines := make(map[string]scheduler.Pipeline[api.ExternalSchedulerRequest])
+	for _, pipelineConf := range config.Nova.Pipelines {
+		if _, exists := pipelines[pipelineConf.Name]; exists {
+			panic("duplicate nova pipeline name: " + pipelineConf.Name)
+		}
+		pipelines[pipelineConf.Name] = novaScheduler.NewPipeline(
+			pipelineConf, db, monitor.SubPipeline("nova-"+pipelineConf.Name), mqttClient,
+		)
+	}
 	return &httpAPI{
-		Pipeline: pipeline,
-		config:   config,
-		monitor:  m,
+		pipelines: pipelines,
+		config:    config.API,
+		monitor:   scheduler.NewSchedulerMonitor(registry),
 	}
 }
 
 // Init the API mux and bind the handlers.
 func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
+	// Check that we have at least one pipeline with the name "default"
+	if _, ok := httpAPI.pipelines["default"]; !ok {
+		panic("no default nova pipeline configured")
+	}
 	mux.HandleFunc("/scheduler/nova/external", httpAPI.NovaExternalScheduler)
 }
 
@@ -115,8 +133,22 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Find the requested pipeline.
+	var pipelineName string
+	if requestData.Pipeline == "" {
+		pipelineName = "default"
+	} else {
+		pipelineName = requestData.Pipeline
+	}
+	pipeline, ok := httpAPI.pipelines[pipelineName]
+	if !ok {
+		internalErr := fmt.Errorf("unknown pipeline: %s", pipelineName)
+		callback.Respond(http.StatusBadRequest, internalErr, "unknown pipeline")
+		return
+	}
+
 	// Evaluate the pipeline and return the ordered list of hosts.
-	hosts, err := httpAPI.Pipeline.Run(requestData)
+	hosts, err := pipeline.Run(requestData)
 	if err != nil {
 		callback.Respond(http.StatusInternalServerError, err, "failed to evaluate pipeline")
 		return

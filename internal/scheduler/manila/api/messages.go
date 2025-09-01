@@ -28,13 +28,9 @@ type ExternalSchedulerRequest struct {
 	Hosts []ExternalSchedulerHost `json:"hosts"`
 	// Weights map of share hosts to their weights calculated by the Manila weigher pipeline.
 	Weights map[string]float64 `json:"weights"`
-
-	// Whether the request is a sandboxed request. By default, this is false.
-	//
-	// Sandboxed requests can be used to notify cortex that the resource is not
-	// actually being scheduled, and that sandboxed scheduler steps should be
-	// executed for additional validation.
-	Sandboxed bool `json:"sandboxed"`
+	// The name of the pipeline to execute.
+	// By default the required pipeline with the name "default" will be used.
+	Pipeline string `json:"pipeline"`
 }
 
 // Conform to the PipelineRequest interface.
@@ -57,11 +53,11 @@ func (r ExternalSchedulerRequest) GetTraceLogArgs() []slog.Attr {
 		slog.String("project", r.Context.ProjectID),
 	}
 }
-func (r ExternalSchedulerRequest) IsSandboxed() bool {
-	return r.Sandboxed
+func (r ExternalSchedulerRequest) GetPipeline() string {
+	return r.Pipeline
 }
-func (r ExternalSchedulerRequest) WithSandboxed(sandboxed bool) scheduler.PipelineRequest {
-	r.Sandboxed = sandboxed
+func (r ExternalSchedulerRequest) WithPipeline(pipeline string) scheduler.PipelineRequest {
+	r.Pipeline = pipeline
 	return r
 }
 

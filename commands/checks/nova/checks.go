@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"math/rand"
@@ -22,7 +23,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/sapcc/go-bits/must"
@@ -41,6 +41,52 @@ type datacenter struct {
 	projects    []identity.RawProject
 	domains     []identity.Domain
 	azs         []string
+}
+
+// Get hypervisors from openstack nova.
+// Note: currently we need to fetch this without gophercloud.
+// Gophercloud will just assume the request is a single page even when
+// the response is paginated, returning only the first page.
+func getHypervisors(ctx context.Context, sc *gophercloud.ServiceClient) ([]nova.Hypervisor, error) {
+	initialURL := sc.Endpoint + "os-hypervisors/detail"
+	var nextURL = &initialURL
+	var hypervisors []nova.Hypervisor
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Auth-Token", sc.Token())
+		req.Header.Set("X-OpenStack-Nova-API-Version", sc.Microversion)
+		resp, err := sc.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			Hypervisors []nova.Hypervisor `json:"hypervisors"`
+			Links       []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"hypervisors_links"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&list)
+		if err != nil {
+			return nil, err
+		}
+		hypervisors = append(hypervisors, list.Hypervisors...)
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
+	}
+	return hypervisors, nil
 }
 
 // Prepare the test by fetching the necessary data from OpenStack.
@@ -79,12 +125,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 	slog.Info("nova endpoint found", "novaURL", novaURL)
 
 	slog.Info("listing hypervisors")
-	pages := must.Return(hypervisors.List(novaSC, hypervisors.ListOpts{}).AllPages(ctx))
-	var dataHypervisors = &struct {
-		Hypervisors []nova.Hypervisor `json:"hypervisors"`
-	}{}
-	must.Succeed(pages.(hypervisors.HypervisorPage).ExtractInto(dataHypervisors))
-	hypervisors := dataHypervisors.Hypervisors
+	hypervisors := must.Return(getHypervisors(ctx, novaSC))
 	if len(hypervisors) == 0 {
 		panic("no hypervisors found")
 	}
@@ -92,7 +133,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 
 	slog.Info("listing flavors")
 	flo := flavors.ListOpts{AccessType: flavors.AllAccess}
-	pages = must.Return(flavors.ListDetail(novaSC, flo).AllPages(ctx))
+	pages := must.Return(flavors.ListDetail(novaSC, flo).AllPages(ctx))
 	dataFlavors := &struct {
 		Flavors []nova.Flavor `json:"flavors"`
 	}{}
@@ -242,9 +283,8 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 				"domain_name": []string{domain.Name},
 			},
 		}},
-		Hosts:     hosts,
-		Weights:   weights,
-		Sandboxed: true,
+		Hosts:   hosts,
+		Weights: weights,
 	}
 	return request
 }

@@ -14,7 +14,7 @@ import (
 
 func TestSchedulerMonitor(t *testing.T) {
 	registry := &monitoring.Registry{Registry: prometheus.NewRegistry()}
-	monitor := NewPipelineMonitor("test", registry)
+	monitor := NewPipelineMonitor(registry).SubPipeline("test")
 
 	// Test stepRunTimer
 	expectedStepRunTimer := strings.NewReader(`

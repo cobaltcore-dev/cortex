@@ -3,3 +3,6 @@
 
 # Exclude all Helm chart archives.
 **/*.tgz
+
+# Exclude rendered templates for promtool
+**/rendered

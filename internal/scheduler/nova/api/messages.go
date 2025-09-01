@@ -42,17 +42,9 @@ type ExternalSchedulerRequest struct {
 	Hosts   []ExternalSchedulerHost `json:"hosts"`
 	Weights map[string]float64      `json:"weights"`
 
-	// Whether the request is a sandboxed request. By default, this is false.
-	//
-	// Sandboxed requests can be used to notify cortex that the resource is not
-	// actually being scheduled, and that sandboxed scheduler steps should be
-	// executed for additional validation.
-	Sandboxed bool `json:"sandboxed"`
-
-	// If all available hosts should be selected in the request,
-	// regardless of what nova sends us in the request.
-	// By default, this is false (use the hosts nova gives us).
-	PreselectAllHosts bool `json:"preselectAllHosts"`
+	// The name of the pipeline to execute.
+	// By default the required pipeline with the name "default" will be used.
+	Pipeline string `json:"pipeline"`
 }
 
 // Conform to the PipelineRequest interface.
@@ -79,11 +71,11 @@ func (r ExternalSchedulerRequest) GetTraceLogArgs() []slog.Attr {
 		slog.String("project", r.Context.ProjectID),
 	}
 }
-func (r ExternalSchedulerRequest) IsSandboxed() bool {
-	return r.Sandboxed
+func (r ExternalSchedulerRequest) GetPipeline() string {
+	return r.Pipeline
 }
-func (r ExternalSchedulerRequest) WithSandboxed(sandboxed bool) scheduler.PipelineRequest {
-	r.Sandboxed = sandboxed
+func (r ExternalSchedulerRequest) WithPipeline(pipeline string) scheduler.PipelineRequest {
+	r.Pipeline = pipeline
 	return r
 }
 

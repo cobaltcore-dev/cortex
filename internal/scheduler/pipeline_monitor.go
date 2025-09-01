@@ -34,7 +34,7 @@ type PipelineMonitor struct {
 }
 
 // Create a new scheduler monitor and register the necessary Prometheus metrics.
-func NewPipelineMonitor(name string, registry *monitoring.Registry) PipelineMonitor {
+func NewPipelineMonitor(registry *monitoring.Registry) PipelineMonitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline step run",
@@ -94,7 +94,6 @@ func NewPipelineMonitor(name string, registry *monitoring.Registry) PipelineMoni
 		requestCounter,
 	)
 	return PipelineMonitor{
-		PipelineName:                name,
 		stepRunTimer:                stepRunTimer,
 		stepSubjectWeight:           stepSubjectWeight,
 		stepRemovedSubjectsObserver: stepRemovedSubjectsObserver,
@@ -105,6 +104,13 @@ func NewPipelineMonitor(name string, registry *monitoring.Registry) PipelineMoni
 		subjectNumberOutObserver:    subjectNumberOutObserver,
 		requestCounter:              requestCounter,
 	}
+}
+
+// Get a copied pipeline monitor with the name set, after binding the metrics.
+func (m PipelineMonitor) SubPipeline(name string) PipelineMonitor {
+	cp := m
+	cp.PipelineName = name
+	return cp
 }
 
 // Observe a scheduler pipeline result: subjects going in, and subjects going out.

@@ -258,7 +258,11 @@ func TestInvalidConf_NovaSchedulerDependency(t *testing.T) {
     ]
   },
   "scheduler": {
-    "nova": { "dependencies": { "extractors": ["extractor_2"] } }
+    "nova": {
+      "pipelines": [
+        { "dependencies": { "extractors": ["extractor_2"] } }
+      ]
+    }
   }
 }
 `
