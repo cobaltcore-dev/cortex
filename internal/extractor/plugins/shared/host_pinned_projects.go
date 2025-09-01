@@ -8,17 +8,20 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
 )
 
-// Feature that maps how many resources are utilized on a compute host.
+// Feature that maps hosts that are pinned to projects.
+// See the docs: https://docs.openstack.org/nova/latest/admin/scheduling.html#aggregatemultitenancyisolation
 type HostPinnedProjects struct {
-	// Name of the OpenStack compute host.
-	ComputeHost string `db:"compute_host"`
-	// Project ID
+	// The name of the aggregate where the filter is defined
+	AggregateName string `db:"aggregate_name"`
+	// UUID of the aggregate where the filter is defined
+	AggregateUUID string `db:"aggregate_uuid"`
+	// Tenant ID that belongs to the filter
 	ProjectID string `db:"project_id"`
+	// Name of the OpenStack compute host.
+	ComputeHost *string `db:"compute_host"`
 }
 
 // Table under which the feature is stored.
@@ -47,9 +50,6 @@ func (*HostPinnedProjectsExtractor) GetName() string {
 func (HostPinnedProjectsExtractor) Triggers() []string {
 	return []string{
 		nova.TriggerNovaHypervisorsSynced,
-		placement.TriggerPlacementInventoryUsagesSynced,
-		identity.TriggerIdentityDomainsSynced,
-		identity.TriggerIdentityProjectsSynced,
 	}
 }
 
