@@ -38,7 +38,6 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 	if err := testDB.CreateTable(
 		testDB.AddTable(sap.HostDetails{}),
 		testDB.AddTable(shared.HostUtilization{}),
-		testDB.AddTable(shared.HostDomainProject{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

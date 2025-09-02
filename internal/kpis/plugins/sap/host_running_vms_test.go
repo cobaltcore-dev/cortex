@@ -9,7 +9,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -35,7 +34,6 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 
 	if err := testDB.CreateTable(
 		testDB.AddTable(sap.HostDetails{}),
-		testDB.AddTable(shared.HostDomainProject{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

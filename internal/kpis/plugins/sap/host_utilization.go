@@ -91,8 +91,6 @@ func (k *HostUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			COALESCE(hu.vcpus_utilized_pct, 0) AS vcpus_utilized_pct,
 			COALESCE(hu.disk_utilized_pct, 0) AS disk_utilized_pct
 		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
-		LEFT JOIN ` + shared.HostDomainProject{}.TableName() + ` AS hdp
-		    ON hdp.compute_host = hd.compute_host
 		LEFT JOIN ` + shared.HostUtilization{}.TableName() + ` AS hu
 		    ON hu.compute_host = hd.compute_host
 		WHERE hd.hypervisor_type != 'ironic';
