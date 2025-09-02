@@ -9,8 +9,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
@@ -23,22 +23,58 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 
 	// Create dependency tables
 	err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
+		testDB.AddTable(shared.HostPinnedProjects{}),
 	)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock aggregate data
-	aggregates := []any{
-		&nova.Aggregate{UUID: "agg1", Name: "aggregate1", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host1"), Metadata: "{}"},
-		&nova.Aggregate{UUID: "agg2", Name: "aggregate2", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host2"), Metadata: `{"filter_tenant_id": "project-123"}`},
-		&nova.Aggregate{UUID: "agg3", Name: "aggregate3", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host3"), Metadata: `{"filter_tenant_id": "project-456"}`},
-		&nova.Aggregate{UUID: "agg4", Name: "aggregate4", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host4"), Metadata: `{"filter_tenant_id": "project-123,project-789"}`},
-		&nova.Aggregate{UUID: "agg5", Name: "aggregate5", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: testlib.Ptr("host5"), Metadata: `{"other_metadata": "value"}`},
-		&nova.Aggregate{UUID: "agg6", Name: "aggregate6", AvailabilityZone: testlib.Ptr("az-1"), ComputeHost: nil, Metadata: `{"filter_tenant_id": "project-123"}`},
+	hostPinnedProjects := []any{
+		&shared.HostPinnedProjects{
+			AggregateName: nil,
+			AggregateUUID: nil,
+			ComputeHost:   testlib.Ptr("host1"),
+			ProjectID:     nil,
+		},
+		&shared.HostPinnedProjects{
+			AggregateName: testlib.Ptr("agg2"),
+			AggregateUUID: testlib.Ptr("aggregate2"),
+			ComputeHost:   testlib.Ptr("host2"),
+			ProjectID:     testlib.Ptr("project-123"),
+		},
+		&shared.HostPinnedProjects{
+			AggregateName: testlib.Ptr("agg3"),
+			AggregateUUID: testlib.Ptr("aggregate3"),
+			ComputeHost:   testlib.Ptr("host3"),
+			ProjectID:     testlib.Ptr("project-456"),
+		},
+		&shared.HostPinnedProjects{
+			AggregateName: nil,
+			AggregateUUID: nil,
+			ComputeHost:   testlib.Ptr("host4"),
+			ProjectID:     testlib.Ptr("project-123"),
+		},
+		&shared.HostPinnedProjects{
+			AggregateName: nil,
+			AggregateUUID: nil,
+			ComputeHost:   testlib.Ptr("host4"),
+			ProjectID:     testlib.Ptr("project-789"),
+		},
+		&shared.HostPinnedProjects{
+			AggregateName: nil,
+			AggregateUUID: nil,
+			ComputeHost:   testlib.Ptr("host5"),
+			ProjectID:     nil,
+		},
+		&shared.HostPinnedProjects{
+			AggregateName: testlib.Ptr("agg6"),
+			AggregateUUID: testlib.Ptr("aggregate6"),
+			ComputeHost:   nil,
+			ProjectID:     testlib.Ptr("project-123"),
+		},
 	}
-	if err := testDB.Insert(aggregates...); err != nil {
+
+	if err := testDB.Insert(hostPinnedProjects...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
