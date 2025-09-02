@@ -38,7 +38,6 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	&shared.HostCapabilitiesExtractor{},
 	&shared.VMHostResidencyExtractor{},
 	&shared.VMLifeSpanHistogramExtractor{},
-	&shared.HostDomainProjectExtractor{},
 	&shared.HostAZExtractor{},
 	&shared.HostPinnedProjectsExtractor{},
 	// SAP-specific extractors

@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -23,8 +22,6 @@ type HostRunningVMs struct {
 	HypervisorFamily string  `db:"hypervisor_family"`
 	WorkloadType     string  `db:"workload_type"`
 	Enabled          bool    `db:"enabled"`
-	ProjectNames     *string `db:"project_names"`
-	DomainNames      *string `db:"domain_names"`
 	RunningVMs       float64 `db:"running_vms"`
 }
 
@@ -53,8 +50,6 @@ func (k *HostRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"workload_type",
 			"hypervisor_family",
 			"enabled",
-			"projects",
-			"domains",
 		},
 		nil,
 	)
@@ -70,19 +65,15 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 
 	query := `
 		SELECT
-    		hd.compute_host,
-    		hd.availability_zone,
-    		hd.cpu_architecture,
-    		hd.hypervisor_family,
-    		hd.workload_type,
-    		hd.enabled,
-    		hd.running_vms,
-    		hdp.project_names,
-    		hdp.domain_names
-		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
-		LEFT JOIN ` + shared.HostDomainProject{}.TableName() + ` AS hdp
-		    ON hdp.compute_host = hd.compute_host
-		WHERE hd.hypervisor_type != 'ironic';
+    		compute_host,
+    		availability_zone,
+    		cpu_architecture,
+    		hypervisor_family,
+    		workload_type,
+    		enabled,
+    		running_vms
+		FROM ` + sap.HostDetails{}.TableName() + `
+		WHERE hypervisor_type != 'ironic';
     `
 	if _, err := k.DB.Select(&hostRunningVMs, query); err != nil {
 		slog.Error("failed to select host utilization", "err", err)
@@ -90,15 +81,6 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, host := range hostRunningVMs {
-		projectNames := ""
-		if host.ProjectNames != nil {
-			projectNames = *host.ProjectNames
-		}
-		domainNames := ""
-		if host.DomainNames != nil {
-			domainNames = *host.DomainNames
-		}
-
 		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(
@@ -111,8 +93,6 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
-			projectNames,
-			domainNames,
 		)
 	}
 }

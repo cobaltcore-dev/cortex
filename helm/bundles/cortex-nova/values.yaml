@@ -220,19 +220,6 @@ cortex-core:
                   types:
                     - aggregates
                     - hypervisors
-        - name: host_domain_project_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - hypervisors
-                    - servers
-                identity:
-                  types:
-                    - domains
-                    - projects
         - name: host_utilization_extractor
           recencySeconds: 60 # 1 minute
           dependencies:
@@ -317,18 +304,15 @@ cortex-core:
           dependencies:
             extractors:
               - host_utilization_extractor
-              - host_domain_project_extractor
               - sap_host_details_extractor
         - name: sap_host_utilization_kpi
           dependencies:
             extractors:
               - host_utilization_extractor
-              - host_domain_project_extractor
               - sap_host_details_extractor
         - name: sap_host_running_vms_kpi
           dependencies:
             extractors:
-              - host_domain_project_extractor
               - sap_host_details_extractor
         # Shared KPIs.
         - name: vm_migration_statistics_kpi

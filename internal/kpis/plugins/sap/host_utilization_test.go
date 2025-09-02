@@ -39,7 +39,6 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 	if err := testDB.CreateTable(
 		testDB.AddTable(sap.HostDetails{}),
 		testDB.AddTable(shared.HostUtilization{}),
-		testDB.AddTable(shared.HostDomainProject{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -115,24 +114,6 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	hostDomainProject := []any{
-		&shared.HostDomainProject{
-			ComputeHost:  "vwmare-host",
-			ProjectNames: "project1,project2",
-			ProjectIDs:   "p1,p2",
-			DomainNames:  "domain1,domain2",
-			DomainIDs:    "d1,d2",
-		},
-		&shared.HostDomainProject{
-			ComputeHost:  "kvm-host",
-			ProjectNames: "project2",
-			ProjectIDs:   "p2",
-		},
-	}
-	if err := testDB.Insert(hostDomainProject...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
 	kpi := &HostUtilizationKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -167,8 +148,6 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			"availability_zone": "az1",
 			"enabled":           "true",
 			"disabled_reason":   "-",
-			"projects":          "project1,project2",
-			"domains":           "domain1,domain2",
 			"cpu_architecture":  "cascade-lake",
 			"workload_type":     "general-purpose",
 			"hypervisor_family": "vmware",
@@ -178,8 +157,6 @@ func TestHostUtilizationKPI_Collect(t *testing.T) {
 			"availability_zone": "az2",
 			"enabled":           "false",
 			"disabled_reason":   "external customer",
-			"projects":          "project2",
-			"domains":           "",
 			"cpu_architecture":  "cascade-lake",
 			"workload_type":     "hana",
 			"hypervisor_family": "kvm",
