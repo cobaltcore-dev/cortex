@@ -4,6 +4,7 @@
 package sap
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -11,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -51,8 +53,6 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	exampleServiceDisabledReason := "example reason"
-
 	// Insert mock data into the hypervisors and traits tables
 	hypervisors := []any{
 		// VMware host
@@ -64,9 +64,9 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		// Host with no special traits
 		&nova.Hypervisor{ID: "uuid4", ServiceHost: "node002-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled"},
 		// Host with disabled status, no entry in the resource providers
-		&nova.Hypervisor{ID: "uuid5", ServiceHost: "node003-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "disabled", ServiceDisabledReason: &exampleServiceDisabledReason},
+		&nova.Hypervisor{ID: "uuid5", ServiceHost: "node003-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "disabled", ServiceDisabledReason: testlib.Ptr("example reason")},
 		// Host with disabled trait
-		&nova.Hypervisor{ID: "uuid6", ServiceHost: "node004-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled", ServiceDisabledReason: &exampleServiceDisabledReason},
+		&nova.Hypervisor{ID: "uuid6", ServiceHost: "node004-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled", ServiceDisabledReason: testlib.Ptr("example reason")},
 	}
 
 	if err := testDB.Insert(hypervisors...); err != nil {
@@ -92,16 +92,13 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	availabilityZone1 := "az1"
-	availabilityZone2 := "az2"
-
 	hostAvailabilityZones := []any{
-		&shared.HostAZ{AvailabilityZone: &availabilityZone1, ComputeHost: "nova-compute-bb01"},
+		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az1"), ComputeHost: "nova-compute-bb01"},
 		&shared.HostAZ{AvailabilityZone: nil, ComputeHost: "node001-bb02"},
-		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node002-bb03"},
-		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "ironic-host-01"},
-		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node003-bb03"},
-		&shared.HostAZ{AvailabilityZone: &availabilityZone2, ComputeHost: "node004-bb03"},
+		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node002-bb03"},
+		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "ironic-host-01"},
+		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node003-bb03"},
+		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node004-bb03"},
 	}
 
 	if err := testDB.Insert(hostAvailabilityZones...); err != nil {
@@ -122,45 +119,12 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	}
 
 	var hostDetails []HostDetails
-	_, err := testDB.Select(&hostDetails, "SELECT * FROM "+HostDetails{}.TableName())
+	_, err := testDB.Select(&hostDetails, "SELECT * FROM "+HostDetails{}.TableName()+" ORDER BY compute_host")
 	if err != nil {
 		t.Fatalf("expected no error from Extract, got %v", err)
 	}
 
 	expected := []HostDetails{
-		{
-			ComputeHost:      "nova-compute-bb01",
-			AvailabilityZone: "az1",
-			CPUArchitecture:  "sapphire-rapids",
-			HypervisorType:   "vcenter",
-			HypervisorFamily: "vmware",
-			WorkloadType:     "hana",
-			Enabled:          false,
-			DisabledReason:   &[]string{"external customer"}[0],
-			RunningVMs:       5,
-		},
-		{
-			ComputeHost:      "node001-bb02",
-			AvailabilityZone: "unknown",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "qemu",
-			HypervisorFamily: "kvm",
-			WorkloadType:     "general-purpose",
-			Enabled:          false,
-			DisabledReason:   &[]string{"[state: not up] --"}[0],
-			RunningVMs:       3,
-		},
-		{
-			ComputeHost:      "node002-bb03",
-			AvailabilityZone: "az2",
-			CPUArchitecture:  "unknown",
-			HypervisorFamily: "kvm",
-			HypervisorType:   "test",
-			WorkloadType:     "general-purpose",
-			Enabled:          false,
-			DisabledReason:   &[]string{"decommissioning"}[0],
-			RunningVMs:       2,
-		},
 		{
 			ComputeHost:      "ironic-host-01",
 			AvailabilityZone: "az2",
@@ -173,6 +137,28 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			RunningVMs:       0,
 		},
 		{
+			ComputeHost:      "node001-bb02",
+			AvailabilityZone: "unknown",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "qemu",
+			HypervisorFamily: "kvm",
+			WorkloadType:     "general-purpose",
+			Enabled:          false,
+			DisabledReason:   testlib.Ptr("[state: not up] --"),
+			RunningVMs:       3,
+		},
+		{
+			ComputeHost:      "node002-bb03",
+			AvailabilityZone: "az2",
+			CPUArchitecture:  "unknown",
+			HypervisorFamily: "kvm",
+			HypervisorType:   "test",
+			WorkloadType:     "general-purpose",
+			Enabled:          false,
+			DisabledReason:   testlib.Ptr("decommissioning"),
+			RunningVMs:       2,
+		},
+		{
 			ComputeHost:      "node003-bb03",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "unknown",
@@ -180,7 +166,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &[]string{"[status: not enabled] " + exampleServiceDisabledReason}[0],
+			DisabledReason:   testlib.Ptr("[status: not enabled] example reason"),
 			RunningVMs:       2,
 		},
 		{
@@ -191,63 +177,31 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
 			Enabled:          false,
-			DisabledReason:   &[]string{"[compute status disabled trait] " + exampleServiceDisabledReason}[0],
+			DisabledReason:   testlib.Ptr("[compute status disabled trait] example reason"),
 			RunningVMs:       2,
+		},
+		{
+			ComputeHost:      "nova-compute-bb01",
+			AvailabilityZone: "az1",
+			CPUArchitecture:  "sapphire-rapids",
+			HypervisorType:   "vcenter",
+			HypervisorFamily: "vmware",
+			WorkloadType:     "hana",
+			Enabled:          false,
+			DisabledReason:   testlib.Ptr("external customer"),
+			RunningVMs:       5,
 		},
 	}
 
-	// Map the host details by compute host name for easier comparison
-	hostDetailsMap := make(map[string]HostDetails)
-	for _, details := range hostDetails {
-		hostDetailsMap[details.ComputeHost] = details
-	}
 	// Check if the expected details match the extracted ones
-	if len(hostDetailsMap) != len(expected) {
-		t.Fatalf("expected %d host details, got %d", len(expected), len(hostDetailsMap))
+	if len(hostDetails) != len(expected) {
+		t.Fatalf("expected %d host details, got %d", len(expected), len(hostDetails))
 	}
 	// Compare each expected detail with the extracted ones
-	for _, expectedDetail := range expected {
-		details, exists := hostDetailsMap[expectedDetail.ComputeHost]
-		if !exists {
-			t.Errorf("expected host details for %s not found", expectedDetail.ComputeHost)
-			continue
-		}
-		// Compare all fields
-		if details.ComputeHost != expectedDetail.ComputeHost {
-			t.Errorf("ComputeHost: expected %s, got %s", expectedDetail.ComputeHost, details.ComputeHost)
-		}
-		if details.AvailabilityZone != expectedDetail.AvailabilityZone {
-			t.Errorf("%s[AvailabilityZone]: expected %s, got %s", expectedDetail.ComputeHost, expectedDetail.AvailabilityZone, details.AvailabilityZone)
-		}
-		if details.CPUArchitecture != expectedDetail.CPUArchitecture {
-			t.Errorf("%s[CPUArchitecture]: expected %s, got %s", expectedDetail.ComputeHost, expectedDetail.CPUArchitecture, details.CPUArchitecture)
-		}
-		if details.HypervisorType != expectedDetail.HypervisorType {
-			t.Errorf("%s[HypervisorType]: expected %s, got %s", expectedDetail.ComputeHost, expectedDetail.HypervisorType, details.HypervisorType)
-		}
-		if details.HypervisorFamily != expectedDetail.HypervisorFamily {
-			t.Errorf("%s[HypervisorFamily]: expected %s, got %s", expectedDetail.ComputeHost, expectedDetail.HypervisorFamily, details.HypervisorFamily)
-		}
-		if details.WorkloadType != expectedDetail.WorkloadType {
-			t.Errorf("%s[WorkloadType]: expected %s, got %s", expectedDetail.ComputeHost, expectedDetail.WorkloadType, details.WorkloadType)
-		}
-		if details.Enabled != expectedDetail.Enabled {
-			t.Errorf("%s[Enabled]: expected %v, got %v", expectedDetail.ComputeHost, expectedDetail.Enabled, details.Enabled)
-		}
-		if details.RunningVMs != expectedDetail.RunningVMs {
-			t.Errorf("%s[RunningVMs]: expected %d, got %d", expectedDetail.ComputeHost, expectedDetail.RunningVMs, details.RunningVMs)
-		}
-		// Compare DisabledReason pointer values
-		if (details.DisabledReason == nil) != (expectedDetail.DisabledReason == nil) ||
-			(details.DisabledReason != nil && expectedDetail.DisabledReason != nil && *details.DisabledReason != *expectedDetail.DisabledReason) {
-			t.Errorf("%s[DisabledReason]: expected %s, got %s", expectedDetail.ComputeHost, ptrToString(expectedDetail.DisabledReason), ptrToString(details.DisabledReason))
+	for idx, expectedDetail := range expected {
+		details := hostDetails[idx]
+		if !reflect.DeepEqual(details, expectedDetail) {
+			t.Errorf("expected %v, got %v", expectedDetail, details)
 		}
 	}
-}
-
-func ptrToString(s *string) string {
-	if s == nil {
-		return "nil"
-	}
-	return *s
 }

@@ -42,7 +42,6 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	externalCustomerReason := "external customer"
 	hypervisors := []any{
 		&sap.HostDetails{
 			ComputeHost:      "vwmare-host",
@@ -53,7 +52,6 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			RunningVMs:       5,
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
-			DisabledReason:   nil,
 		},
 		&sap.HostDetails{
 			ComputeHost:      "kvm-host",
@@ -64,7 +62,6 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			RunningVMs:       5,
 			WorkloadType:     "hana",
 			Enabled:          false,
-			DisabledReason:   &externalCustomerReason,
 		},
 		&sap.HostDetails{
 			ComputeHost:      "ironic-host",
@@ -75,7 +72,6 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			RunningVMs:       5,
 			WorkloadType:     "hana",
 			Enabled:          false,
-			DisabledReason:   &externalCustomerReason,
 		},
 	}
 

@@ -211,6 +211,15 @@ cortex-core:
                   - alias: node_exporter_memory_active_pct
 
         # Shared extractors.
+        - name: host_pinned_projects_extractor
+          recencySeconds: 300
+          dependencies:
+            sync:
+              openstack:
+                nova:
+                  types:
+                    - aggregates
+                    - hypervisors
         - name: host_utilization_extractor
           recencySeconds: 60 # 1 minute
           dependencies:
