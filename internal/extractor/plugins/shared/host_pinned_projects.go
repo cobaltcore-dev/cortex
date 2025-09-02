@@ -11,10 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 )
 
-// HostPinnedProjects represents the mapping between compute hosts and their tenant restrictions.
-// This feature tracks which projects are allowed on specific hosts based on Nova aggregate
-// tenant isolation filters. Hosts without restrictions have a NULL project_id, indicating
-// they accept workloads from any project.
+// Feature that maps hosts that are pinned to projects.
 // See the docs: https://docs.openstack.org/nova/latest/admin/scheduling.html#aggregatemultitenancyisolation
 type HostPinnedProjects struct {
 	// The name of the aggregate where the filter is defined
