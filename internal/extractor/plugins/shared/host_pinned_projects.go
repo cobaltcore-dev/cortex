@@ -15,11 +15,11 @@ import (
 // See the docs: https://docs.openstack.org/nova/latest/admin/scheduling.html#aggregatemultitenancyisolation
 type HostPinnedProjects struct {
 	// The name of the aggregate where the filter is defined
-	AggregateName string `db:"aggregate_name"`
+	AggregateName *string `db:"aggregate_name"`
 	// UUID of the aggregate where the filter is defined
-	AggregateUUID string `db:"aggregate_uuid"`
+	AggregateUUID *string `db:"aggregate_uuid"`
 	// Tenant ID that belongs to the filter
-	ProjectID string `db:"project_id"`
+	ProjectID *string `db:"project_id"`
 	// Name of the OpenStack compute host.
 	ComputeHost *string `db:"compute_host"`
 }
@@ -50,6 +50,7 @@ func (*HostPinnedProjectsExtractor) GetName() string {
 func (HostPinnedProjectsExtractor) Triggers() []string {
 	return []string{
 		nova.TriggerNovaHypervisorsSynced,
+		nova.TriggerNovaAggregatesSynced,
 	}
 }
 

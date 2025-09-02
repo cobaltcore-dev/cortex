@@ -219,6 +219,7 @@ cortex-core:
                 nova:
                   types:
                     - aggregates
+                    - hypervisors
         - name: host_domain_project_extractor
           recencySeconds: 60 # 1 minute
           dependencies:
