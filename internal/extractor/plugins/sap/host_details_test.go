@@ -128,7 +128,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		{
 			ComputeHost:      "ironic-host-01",
 			AvailabilityZone: "az2",
-			CPUArchitecture:  "unknown",
+			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "ironic",
 			HypervisorFamily: "unknown",
 			WorkloadType:     "general-purpose",
@@ -150,7 +150,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		{
 			ComputeHost:      "node002-bb03",
 			AvailabilityZone: "az2",
-			CPUArchitecture:  "unknown",
+			CPUArchitecture:  "cascade-lake",
 			HypervisorFamily: "kvm",
 			HypervisorType:   "test",
 			WorkloadType:     "general-purpose",
@@ -161,7 +161,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		{
 			ComputeHost:      "node003-bb03",
 			AvailabilityZone: "az2",
-			CPUArchitecture:  "unknown",
+			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "test",
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
@@ -172,7 +172,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		{
 			ComputeHost:      "node004-bb03",
 			AvailabilityZone: "az2",
-			CPUArchitecture:  "unknown",
+			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "test",
 			HypervisorFamily: "kvm",
 			WorkloadType:     "general-purpose",
