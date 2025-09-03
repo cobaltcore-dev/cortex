@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 )
 
 type FilterProjectAggregatesStep struct {
@@ -30,15 +30,9 @@ func (s *FilterProjectAggregatesStep) Run(traceLog *slog.Logger, request api.Ext
 	var computeHostsMatchingProject []string
 	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsMatchingProject, `
         SELECT DISTINCT compute_host
-        FROM `+nova.Aggregate{}.TableName()+`
-        WHERE compute_host IS NOT NULL AND (
-            metadata NOT LIKE '%filter_tenant_id%' OR
-            (
-                metadata LIKE '%filter_tenant_id%' AND
-                metadata LIKE :projectID
-            )
-        )`,
-		map[string]any{"projectID": "%" + request.Spec.Data.ProjectID + "%"},
+        FROM `+shared.HostPinnedProjects{}.TableName()+`
+        WHERE (compute_host IS NOT NULL AND project_id = :projectID) OR (compute_host IS NOT NULL AND project_id IS NULL)`,
+		map[string]any{"projectID": request.Spec.Data.ProjectID},
 	); err != nil {
 		return nil, err
 	}
