@@ -19,8 +19,7 @@ SELECT
     -- CPU Architecture
     CASE
         WHEN ht.traits LIKE '%CUSTOM_HW_SAPPHIRE_RAPIDS%' THEN 'sapphire-rapids'
-        WHEN ht.traits LIKE '%CUSTOM_NUMASIZE_C48_M729%' THEN 'cascade-lake'
-        ELSE 'unknown'
+        ELSE 'cascade-lake'
     END AS cpu_architecture,
     ht.hypervisor_type,
     CASE
