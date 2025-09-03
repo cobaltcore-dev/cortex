@@ -34,11 +34,13 @@ type HostDetails struct {
 	Enabled bool `db:"enabled"`
 	// Reason why the compute host is disabled, if applicable.
 	DisabledReason *string `db:"disabled_reason"`
+	// Comma separated list of pinned projects of the ComputeHost.
+	PinnendProjects *string `db:"pinned_projects"`
 }
 
 // Table under which the feature is stored.
 func (HostDetails) TableName() string {
-	return "feature_sap_host_details"
+	return "feature_sap_host_details_v2"
 }
 
 // Indexes for the feature.
