@@ -1150,7 +1150,7 @@
       },
       "id": 76,
       "panels": [],
-      "title": "KPIs: Hypervisor Resource Utilization (Reserved)",
+      "title": "KPIs: Hypervisor Resource Available Capacity",
       "type": "row"
     },
     {
@@ -1193,7 +1193,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(cortex_sap_host_utilization_pct_bucket{resource=\"cpu\"}) by (le)",
+          "expr": "sum(cortex_sap_available_capacity_pct_bucket{resource=\"cpu\"}) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -1204,7 +1204,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Hypervisor Resources Used (Reservation, CPU %)",
+      "title": "Hypervisor Resources Available Capacity (CPU %)",
       "tooltip": {
         "show": true,
         "showHistogram": false
@@ -1269,7 +1269,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(cortex_sap_host_utilization_pct_bucket{resource=\"memory\"}) by (le)",
+          "expr": "sum(cortex_sap_available_capacity_pct_bucket{resource=\"ram\"}) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -1280,7 +1280,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Hypervisor Resources Used (Reservation, Memory %)",
+      "title": "Hypervisor Resources Available Capacity (RAM %)",
       "tooltip": {
         "show": true,
         "showHistogram": false
@@ -1345,7 +1345,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(cortex_sap_host_utilization_pct_bucket{resource=\"disk\"}) by (le)",
+          "expr": "sum(cortex_sap_available_capacity_pct_bucket{resource=\"disk\"}) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -1356,7 +1356,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Hypervisor Resources Used (Reserved, Disk %)",
+      "title": "Hypervisor Resources Available Capacity (Disk %)",
       "tooltip": {
         "show": true,
         "showHistogram": false

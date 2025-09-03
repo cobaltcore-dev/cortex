@@ -41,8 +41,8 @@ func (k *HostRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
 		return err
 	}
 	k.hostRunningVMsPerHost = prometheus.NewDesc(
-		"cortex_sap_host_running_vms_per_host_pct",
-		"Resources utilized on the hosts currently (individually by host).",
+		"cortex_sap_running_vms_per_host",
+		"Current amount of running virtual machines on a host.",
 		[]string{
 			"compute_host",
 			"availability_zone",
