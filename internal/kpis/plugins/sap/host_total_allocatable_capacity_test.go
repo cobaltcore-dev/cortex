@@ -16,7 +16,7 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-func TestHostTotalCapacityKPI_Init(t *testing.T) {
+func TestHostTotalAllocatableCapacityKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -28,7 +28,7 @@ func TestHostTotalCapacityKPI_Init(t *testing.T) {
 	}
 }
 
-func TestHostTotalCapacityKPI_Collect(t *testing.T) {
+func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
