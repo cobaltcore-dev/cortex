@@ -104,7 +104,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			delete(result.Activations, utilization.ComputeHost)
 			continue
 		}
-		memoryAllocatableMB := uint64(utilization.TotalMemoryAllocatableMB)
+		memoryAllocatableMB := uint64(utilization.TotalRAMAllocatableMB)
 		if reserved, ok := memoryReserved[utilization.ComputeHost]; ok {
 			memoryAllocatableMB -= reserved
 		}
@@ -113,7 +113,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				"Filtering host due to insufficient RAM capacity",
 				slog.String("host", utilization.ComputeHost),
 				slog.Uint64("requested_mb", request.Spec.Data.Flavor.Data.MemoryMB),
-				slog.Float64("available_mb", utilization.TotalMemoryAllocatableMB),
+				slog.Float64("available_mb", utilization.TotalRAMAllocatableMB),
 			)
 			delete(result.Activations, utilization.ComputeHost)
 			continue

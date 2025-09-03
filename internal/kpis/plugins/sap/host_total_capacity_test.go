@@ -86,9 +86,9 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			VCPUsUtilizedPct: 50,
 			DiskUtilizedPct:  50,
 			// Assuimg 100 <unit> for every resource so we don't have to write an extra expected model for each resource
-			TotalMemoryAllocatableMB: 100,
-			TotalVCPUsAllocatable:    100,
-			TotalDiskAllocatableGB:   100,
+			TotalRAMAllocatableMB:  100,
+			TotalVCPUsAllocatable:  100,
+			TotalDiskAllocatableGB: 100,
 		},
 		&shared.HostUtilization{
 			ComputeHost:      "kvm-host",
@@ -96,18 +96,18 @@ func TestHostTotalCapacityKPI_Collect(t *testing.T) {
 			VCPUsUtilizedPct: 75,
 			DiskUtilizedPct:  80,
 			// Assuimg 1000 <unit> for every resource so we don't have to write an extra expected model for each resource
-			TotalMemoryAllocatableMB: 1000,
-			TotalVCPUsAllocatable:    1000,
-			TotalDiskAllocatableGB:   1000,
+			TotalRAMAllocatableMB:  1000,
+			TotalVCPUsAllocatable:  1000,
+			TotalDiskAllocatableGB: 1000,
 		},
 		&shared.HostUtilization{
-			ComputeHost:              "ironic-host",
-			RAMUtilizedPct:           0,
-			VCPUsUtilizedPct:         0,
-			DiskUtilizedPct:          0,
-			TotalMemoryAllocatableMB: 0,
-			TotalVCPUsAllocatable:    0,
-			TotalDiskAllocatableGB:   0,
+			ComputeHost:            "ironic-host",
+			RAMUtilizedPct:         0,
+			VCPUsUtilizedPct:       0,
+			DiskUtilizedPct:        0,
+			TotalRAMAllocatableMB:  0,
+			TotalVCPUsAllocatable:  0,
+			TotalDiskAllocatableGB: 0,
 		},
 	}
 
