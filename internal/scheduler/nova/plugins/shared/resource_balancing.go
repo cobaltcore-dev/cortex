@@ -190,7 +190,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.ExternalS
 		if s.Options.RAMAfterEnabled {
 			after := hostUtilization.RAMUtilizedPct -
 				(float64(request.Spec.Data.Flavor.Data.MemoryMB) /
-					hostUtilization.TotalMemoryAllocatableMB * 100)
+					hostUtilization.TotalRAMAllocatableMB * 100)
 			activationAfterRAM = scheduler.MinMaxScale(
 				after,
 				s.Options.RAMUtilizedAfterLowerBoundPct,

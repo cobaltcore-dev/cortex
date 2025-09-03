@@ -78,7 +78,7 @@ func (k *HostTotalCapacityKPI) Collect(ch chan<- prometheus.Metric) {
     		COALESCE(hu.ram_utilized_pct, 0) AS ram_utilized_pct,
 			COALESCE(hu.vcpus_utilized_pct, 0) AS vcpus_utilized_pct,
 			COALESCE(hu.disk_utilized_pct, 0) AS disk_utilized_pct,
-			COALESCE(hu.total_memory_allocatable_mb, 0) AS total_memory_allocatable_mb,
+			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
 			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
 			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
 		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
@@ -97,7 +97,7 @@ func (k *HostTotalCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			k.hostTotalCapacityPerHost,
 			prometheus.GaugeValue,
-			host.TotalMemoryAllocatableMB,
+			host.TotalRAMAllocatableMB,
 			host.ComputeHostName,
 			"ram",
 			host.AvailabilityZone,
