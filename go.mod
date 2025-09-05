@@ -11,7 +11,7 @@ replace (
 )
 
 require (
-	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/reservations/api ee2f818600d4
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/go-gorp/gorp v2.2.0+incompatible
