@@ -2,7 +2,7 @@ module github.com/cobaltcore-dev/cortex
 
 go 1.24.0
 
-toolchain go1.25.0
+toolchain go1.25.1
 
 replace (
 	github.com/cobaltcore-dev/cortex/commands => ./commands
@@ -19,7 +19,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/ory/dockertest v3.3.5+incompatible
-	github.com/prometheus/client_golang v1.23.0
+	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-api-declarations v1.17.4
 	github.com/sapcc/go-bits v0.0.0-20250828142518-d29beaf1bcca
