@@ -4,6 +4,7 @@
 package sap
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -75,25 +76,19 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 	kpi.Collect(ch)
 	close(ch)
 
-	expectedLabels := map[string]map[string]string{
-		"host1": {
-			"compute_host":      "host1",
-			"availability_zone": "az1",
-			"enabled":           "true",
-			"cpu_architecture":  "cascade-lake",
-			"workload_type":     "general-purpose",
-			"hypervisor_family": "vmware",
-		},
+	type HostRunningVMsMetric struct {
+		ComputeHost      string
+		AvailabilityZone string
+		Enabled          string
+		CPUArchitecture  string
+		WorkloadType     string
+		HypervisorFamily string
+		Value            float64
 	}
 
-	expectedValues := map[string]float64{
-		"host1": 5,
-	}
-
-	metricsCount := 0
+	actualMetrics := make(map[string]HostRunningVMsMetric, 0)
 
 	for metric := range ch {
-		metricsCount++
 		var m prometheusgo.Metric
 		if err := metric.Write(&m); err != nil {
 			t.Fatalf("failed to write metric: %v", err)
@@ -104,30 +99,44 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			labels[label.GetName()] = label.GetValue()
 		}
 
-		expectedValue := m.Gauge.GetValue()
+		key := labels["compute_host"]
 
-		computeHost := labels["compute_host"]
-
-		if value, exists := expectedValues[computeHost]; exists {
-			if value != expectedValue {
-				t.Errorf("expected value %f for host %s, got %f", value, computeHost, expectedValue)
-			}
-		} else {
-			t.Errorf("unexpected compute host %s in metric labels", computeHost)
-		}
-
-		if expected, ok := expectedLabels[computeHost]; ok {
-			for key, expectedValue := range expected {
-				if value, exists := labels[key]; !exists || value != expectedValue {
-					t.Errorf("expected label %s to be %s for host %s, got %s", key, expectedValue, computeHost, value)
-				}
-			}
-		} else {
-			t.Errorf("unexpected compute host %s in metric labels", computeHost)
+		actualMetrics[key] = HostRunningVMsMetric{
+			ComputeHost:      labels["compute_host"],
+			AvailabilityZone: labels["availability_zone"],
+			Enabled:          labels["enabled"],
+			CPUArchitecture:  labels["cpu_architecture"],
+			WorkloadType:     labels["workload_type"],
+			HypervisorFamily: labels["hypervisor_family"],
+			Value:            m.GetGauge().GetValue(),
 		}
 	}
 
-	if metricsCount != 1 {
-		t.Errorf("expected one metric, got %d", metricsCount)
+	expectedMetrics := map[string]HostRunningVMsMetric{
+		"host1": {
+			ComputeHost:      "host1",
+			AvailabilityZone: "az1",
+			Enabled:          "true",
+			CPUArchitecture:  "cascade-lake",
+			WorkloadType:     "general-purpose",
+			HypervisorFamily: "vmware",
+			Value:            5,
+		},
+	}
+
+	if len(expectedMetrics) != len(actualMetrics) {
+		t.Errorf("expected %d metrics, got %d", len(expectedMetrics), len(actualMetrics))
+	}
+
+	for key, expected := range expectedMetrics {
+		actual, ok := actualMetrics[key]
+		if !ok {
+			t.Errorf("expected metric %q not found", key)
+			continue
+		}
+
+		if !reflect.DeepEqual(expected, actual) {
+			t.Errorf("metric %q: expected %+v, got %+v", key, expected, actual)
+		}
 	}
 }

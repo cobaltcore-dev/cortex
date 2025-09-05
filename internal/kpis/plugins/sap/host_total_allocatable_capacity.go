@@ -16,22 +16,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type HostTotalCapacityKPI struct {
+type HostTotalAllocatbleCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}] // No options passed through yaml config
 	hostTotalCapacityPerHost  *prometheus.Desc
 }
 
-func (HostTotalCapacityKPI) GetName() string {
-	return "sap_host_total_capacity_kpi"
+func (HostTotalAllocatbleCapacityKPI) GetName() string {
+	return "sap_host_total_allocatable_capacity_kpi"
 }
 
-func (k *HostTotalCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
+func (k *HostTotalAllocatbleCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 	if err := k.BaseKPI.Init(db, opts); err != nil {
 		return err
 	}
 	k.hostTotalCapacityPerHost = prometheus.NewDesc(
-		"cortex_sap_total_capacity_per_host",
+		"cortex_sap_total_allocatable_capacity_per_host",
 		"Total resources available on the hosts currently (individually by host).",
 		[]string{
 			"compute_host",
@@ -47,11 +47,11 @@ func (k *HostTotalCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 	return nil
 }
 
-func (k *HostTotalCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
+func (k *HostTotalAllocatbleCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.hostTotalCapacityPerHost
 }
 
-func (k *HostTotalCapacityKPI) Collect(ch chan<- prometheus.Metric) {
+func (k *HostTotalAllocatbleCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostTotalCapacityPerAvailabilityZone struct {
 		ComputeHostName  string  `db:"compute_host"`
 		AvailabilityZone string  `db:"availability_zone"`
@@ -75,9 +75,6 @@ func (k *HostTotalCapacityKPI) Collect(ch chan<- prometheus.Metric) {
     		hd.hypervisor_family,
     		hd.workload_type,
     		hd.enabled,
-    		COALESCE(hu.ram_utilized_pct, 0) AS ram_utilized_pct,
-			COALESCE(hu.vcpus_utilized_pct, 0) AS vcpus_utilized_pct,
-			COALESCE(hu.disk_utilized_pct, 0) AS disk_utilized_pct,
 			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
 			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
 			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
