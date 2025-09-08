@@ -15,8 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 9,
-  "iteration": 1757336694659,
+  "id": 10,
+  "iteration": 1757339679137,
   "links": [],
   "panels": [
     {
@@ -2432,7 +2432,7 @@
             "h": 8,
             "w": 4,
             "x": 0,
-            "y": 20
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 280,
@@ -2551,7 +2551,7 @@
             "h": 8,
             "w": 4,
             "x": 4,
-            "y": 20
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 281,
@@ -2670,7 +2670,7 @@
             "h": 8,
             "w": 4,
             "x": 8,
-            "y": 20
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 282,
@@ -2825,7 +2825,7 @@
             "h": 4,
             "w": 10,
             "x": 12,
-            "y": 20
+            "y": 4
           },
           "id": 284,
           "options": {
@@ -2934,7 +2934,7 @@
             "h": 16,
             "w": 2,
             "x": 22,
-            "y": 20
+            "y": 4
           },
           "id": 279,
           "options": {
@@ -3031,7 +3031,7 @@
             "h": 4,
             "w": 10,
             "x": 12,
-            "y": 24
+            "y": 8
           },
           "id": 285,
           "options": {
@@ -3102,7 +3102,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 28
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 283,
@@ -3335,7 +3335,7 @@
             "h": 4,
             "w": 10,
             "x": 12,
-            "y": 28
+            "y": 12
           },
           "id": 286,
           "options": {
@@ -3518,7 +3518,7 @@
             "h": 4,
             "w": 10,
             "x": 12,
-            "y": 32
+            "y": 16
           },
           "id": 287,
           "options": {
@@ -5726,7 +5726,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host}} {{enabled}}",
@@ -5845,7 +5845,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host}} {{enabled}}",
@@ -5956,7 +5956,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host}} {{enabled}}",
@@ -6325,7 +6325,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "CPU Architecture"
+            "displayName": "Available RAM (%)"
           }
         ]
       },
@@ -6602,7 +6602,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -6674,7 +6674,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -6746,7 +6746,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n    sum by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    ) / count by (compute_host, enabled) (\n      cortex_sap_available_capacity_per_host_pct{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -6820,7 +6820,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": [
             "All"
           ],
@@ -6855,8 +6855,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
-          "tags": [],
+          "selected": false,
           "text": [
             "All"
           ],
@@ -6922,7 +6921,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": [
             "All"
           ],
@@ -6957,7 +6956,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": [
             "All"
           ],
@@ -6988,6 +6987,28 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "You can enter a project_id here, to see the capacity that is available for this project. This includes hosts that are reserved for this project, but also all the capacity that is not reserved for any project. Example \"my-project-id|my-other-project-id\".",
+        "error": null,
+        "hide": 0,
+        "label": null,
+        "name": "project_id",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
       }
     ]
   },
