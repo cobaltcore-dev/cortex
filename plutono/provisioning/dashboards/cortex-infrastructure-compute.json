@@ -15,8 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 10,
-  "iteration": 1757339679137,
+  "id": 5,
+  "iteration": 1757343984909,
   "links": [],
   "panels": [
     {
@@ -3602,7 +3602,7 @@
             "h": 8,
             "w": 4,
             "x": 0,
-            "y": 21
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 270,
@@ -3721,7 +3721,7 @@
             "h": 8,
             "w": 4,
             "x": 4,
-            "y": 21
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 271,
@@ -3840,7 +3840,7 @@
             "h": 8,
             "w": 4,
             "x": 8,
-            "y": 21
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 272,
@@ -3995,7 +3995,7 @@
             "h": 4,
             "w": 10,
             "x": 12,
-            "y": 21
+            "y": 5
           },
           "id": 276,
           "options": {
@@ -4104,7 +4104,7 @@
             "h": 16,
             "w": 2,
             "x": 22,
-            "y": 21
+            "y": 5
           },
           "id": 274,
           "options": {
@@ -4201,7 +4201,7 @@
             "h": 4,
             "w": 10,
             "x": 12,
-            "y": 25
+            "y": 9
           },
           "id": 277,
           "options": {
@@ -4272,7 +4272,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 29
+            "y": 13
           },
           "hiddenSeries": false,
           "id": 273,
@@ -4505,7 +4505,7 @@
             "h": 4,
             "w": 10,
             "x": 12,
-            "y": 29
+            "y": 13
           },
           "id": 278,
           "options": {
@@ -4688,7 +4688,7 @@
             "h": 4,
             "w": 10,
             "x": 12,
-            "y": 33
+            "y": 17
           },
           "id": 275,
           "options": {
@@ -6206,30 +6206,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Total CPUs"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 92
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Available CPUs"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 110
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Compute Host"
             },
             "properties": [
@@ -6325,7 +6301,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "Available RAM (%)"
+            "displayName": "Disabled Reason"
           }
         ]
       },
@@ -6333,7 +6309,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (compute_host, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (cortex_sap_available_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"})",
+          "expr": "# Add all column names here\nmax by (compute_host, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture) (cortex_sap_available_capacity_per_host{resource=\"cpu\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"})",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -6343,7 +6319,7 @@
         },
         {
           "exemplar": true,
-          "expr": "max by (compute_host, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (cortex_sap_available_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"})",
+          "expr": "max by (compute_host) (cortex_sap_available_capacity_per_host{resource=\"ram\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"})",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -6353,7 +6329,7 @@
         },
         {
           "exemplar": true,
-          "expr": "max by (compute_host, running_vms, enabled, disabled_reason, workload_type, availability_zone, cpu_architecture, hypervisor_family) (cortex_sap_available_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"})",
+          "expr": "max by (compute_host) (cortex_sap_available_capacity_per_host{resource=\"disk\", availability_zone=~\"$availability_zone\", compute_host=~\"$compute_host\", hypervisor_family=~\"$hypervisor_family\", workload_type=~\"$workload_type\", enabled=~\"$enabled\", cpu_architecture=~\"$cpu_architecture\"})",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -6492,42 +6468,29 @@
               "workload_type 3": true
             },
             "indexByName": {
-              "Available CPUs": 11,
-              "Available Disk": 17,
-              "Available RAM": 14,
-              "Time 1": 1,
-              "Time 2": 18,
-              "Time 3": 24,
-              "Time 4": 30,
-              "Time 5": 31,
-              "Time 6": 32,
-              "Time 7": 35,
-              "Value #AvailableCPUQuery": 9,
-              "Value #AvailableDiskQuery": 15,
-              "Value #AvailableRAMQuery": 12,
-              "Value #RunningVMsQuery": 5,
-              "Value #TotalCPUQuery": 10,
-              "Value #TotalDiskQuery": 16,
-              "Value #TotalRAMQuery": 13,
-              "availability_zone 1": 2,
-              "availability_zone 2": 19,
-              "availability_zone 3": 25,
+              "Available CPUs": 10,
+              "Available Disk": 16,
+              "Available RAM": 13,
+              "Time 1": 7,
+              "Time 2": 17,
+              "Time 3": 18,
+              "Time 4": 19,
+              "Time 5": 20,
+              "Time 6": 21,
+              "Time 7": 22,
+              "Value #AvailableCPUQuery": 8,
+              "Value #AvailableDiskQuery": 14,
+              "Value #AvailableRAMQuery": 11,
+              "Value #RunningVMsQuery": 4,
+              "Value #TotalCPUQuery": 9,
+              "Value #TotalDiskQuery": 15,
+              "Value #TotalRAMQuery": 12,
+              "availability_zone": 1,
               "compute_host": 0,
-              "cpu_architecture 1": 3,
-              "cpu_architecture 2": 20,
-              "cpu_architecture 3": 26,
-              "disabled_reason 1": 7,
-              "disabled_reason 2": 33,
-              "disabled_reason 3": 34,
-              "enabled 1": 6,
-              "enabled 2": 21,
-              "enabled 3": 27,
-              "hypervisor_family 1": 8,
-              "hypervisor_family 2": 22,
-              "hypervisor_family 3": 28,
-              "workload_type 1": 4,
-              "workload_type 2": 23,
-              "workload_type 3": 29
+              "cpu_architecture": 3,
+              "disabled_reason": 6,
+              "enabled": 5,
+              "workload_type": 2
             },
             "renameByName": {
               "Available CPUs": "Available vCPUs (%)",
@@ -6548,14 +6511,18 @@
               "Value #TotalCPUQuery": "Total vCPUs",
               "Value #TotalDiskQuery": "Total Disk",
               "Value #TotalRAMQuery": "Total RAM",
+              "availability_zone": "Availability Zone",
               "availability_zone 1": "Availability Zone",
               "compute_host": "Compute Host",
+              "cpu_architecture": "CPU Architecture",
               "cpu_architecture 1": "CPU Architecture",
               "disabled_reason": "Disabled Reason",
               "disabled_reason 1": "Disabled Reason",
               "disabled_reason 2": "",
+              "enabled": "Enabled",
               "enabled 1": "Enabled",
               "hypervisor_family 1": "Hypervisor Family",
+              "workload_type": "Workload Type",
               "workload_type 1": "Workload Type"
             }
           }
