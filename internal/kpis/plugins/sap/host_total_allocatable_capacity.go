@@ -16,17 +16,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type HostTotalAllocatbleCapacityKPI struct {
+type HostTotalAllocatableCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}] // No options passed through yaml config
 	hostTotalCapacityPerHost  *prometheus.Desc
 }
 
-func (HostTotalAllocatbleCapacityKPI) GetName() string {
+func (HostTotalAllocatableCapacityKPI) GetName() string {
 	return "sap_host_total_allocatable_capacity_kpi"
 }
 
-func (k *HostTotalAllocatbleCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
+func (k *HostTotalAllocatableCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 	if err := k.BaseKPI.Init(db, opts); err != nil {
 		return err
 	}
@@ -47,11 +47,11 @@ func (k *HostTotalAllocatbleCapacityKPI) Init(db db.DB, opts conf.RawOpts) error
 	return nil
 }
 
-func (k *HostTotalAllocatbleCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
+func (k *HostTotalAllocatableCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.hostTotalCapacityPerHost
 }
 
-func (k *HostTotalAllocatbleCapacityKPI) Collect(ch chan<- prometheus.Metric) {
+func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostTotalCapacityPerAvailabilityZone struct {
 		ComputeHostName  string  `db:"compute_host"`
 		AvailabilityZone string  `db:"availability_zone"`

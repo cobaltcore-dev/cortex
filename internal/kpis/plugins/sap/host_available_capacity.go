@@ -46,6 +46,7 @@ func (k *HostAvailableCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"hypervisor_family",
 			"enabled",
 			"disabled_reason",
+			"pinned_projects",
 		},
 		nil,
 	)
@@ -61,6 +62,7 @@ func (k *HostAvailableCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"hypervisor_family",
 			"enabled",
 			"disabled_reason",
+			"pinned_projects",
 		},
 		nil,
 	)
@@ -81,13 +83,14 @@ func (k *HostAvailableCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 
 func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostUtilizationPerAvailabilityZone struct {
-		ComputeHostName  string  `db:"compute_host"`
-		AvailabilityZone string  `db:"availability_zone"`
-		CPUArchitecture  string  `db:"cpu_architecture"`
-		HypervisorFamily string  `db:"hypervisor_family"`
-		WorkloadType     string  `db:"workload_type"`
-		Enabled          bool    `db:"enabled"`
-		DisabledReason   *string `db:"disabled_reason"`
+		ComputeHostName  string `db:"compute_host"`
+		AvailabilityZone string `db:"availability_zone"`
+		CPUArchitecture  string `db:"cpu_architecture"`
+		HypervisorFamily string `db:"hypervisor_family"`
+		WorkloadType     string `db:"workload_type"`
+		Enabled          bool   `db:"enabled"`
+		DisabledReason   string `db:"disabled_reason"`
+		PinnedProjects   string `db:"pinned_projects"`
 		shared.HostUtilization
 	}
 
@@ -101,8 +104,9 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
     		hd.hypervisor_family,
     		hd.workload_type,
     		hd.enabled,
-    		hd.disabled_reason,
-    		COALESCE(hu.ram_used_mb, 0) AS ram_used_mb,
+    		COALESCE(hd.disabled_reason, '-') AS disabled_reason,
+			COALESCE(hd.pinned_projects, '') AS pinned_projects,
+			COALESCE(hu.ram_used_mb, 0) AS ram_used_mb,
 			COALESCE(hu.vcpus_used, 0) AS vcpus_used,
 			COALESCE(hu.disk_used_gb, 0) AS disk_used_gb,
 			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
@@ -119,11 +123,6 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, host := range hostUtilization {
-		disabledReason := "-"
-		if host.DisabledReason != nil {
-			disabledReason = *host.DisabledReason
-		}
-
 		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(
@@ -137,7 +136,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
-			disabledReason,
+			host.DisabledReason,
+			host.PinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHostPct,
@@ -150,7 +150,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
-			disabledReason,
+			host.DisabledReason,
+			host.PinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHost,
@@ -163,7 +164,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
-			disabledReason,
+			host.DisabledReason,
+			host.PinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHostPct,
@@ -176,7 +178,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
-			disabledReason,
+			host.DisabledReason,
+			host.PinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHost,
@@ -189,7 +192,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
-			disabledReason,
+			host.DisabledReason,
+			host.PinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHostPct,
@@ -202,7 +206,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
-			disabledReason,
+			host.DisabledReason,
+			host.PinnedProjects,
 		)
 	}
 
