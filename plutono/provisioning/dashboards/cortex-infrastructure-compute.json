@@ -15,8 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 4,
-  "iteration": 1757344821088,
+  "id": 1,
+  "iteration": 1757347470558,
   "links": [],
   "panels": [
     {
@@ -134,7 +134,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -142,7 +142,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -253,7 +253,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -261,7 +261,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -372,7 +372,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -380,7 +380,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -506,7 +506,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -515,7 +515,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -524,7 +524,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -615,7 +615,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n) or on() vector(0)",
+              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n) or on() vector(0)",
               "instant": false,
               "interval": "",
               "legendFormat": "Available",
@@ -624,7 +624,7 @@
             },
             {
               "exemplar": true,
-              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"false\"\n    }\n  )\n) or on() vector(0)",
+              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"false\"\n    }\n  )\n) or on() vector(0)",
               "hide": false,
               "interval": "",
               "legendFormat": "Disabled",
@@ -712,7 +712,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -721,7 +721,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -730,7 +730,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -792,7 +792,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available vCPU",
               "queryType": "randomWalk",
@@ -800,7 +800,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Available RAM",
@@ -808,7 +808,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Available Disk",
@@ -816,7 +816,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total vCPU",
@@ -824,7 +824,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total RAM",
@@ -832,7 +832,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total Disk",
@@ -1016,7 +1016,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU Available",
@@ -1025,7 +1025,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -1034,7 +1034,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -1043,7 +1043,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -1052,7 +1052,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -1061,7 +1061,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -1199,7 +1199,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -1208,7 +1208,7 @@
             },
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -1217,7 +1217,7 @@
             },
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"cascade-lake\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -1305,7 +1305,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -1313,7 +1313,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -1424,7 +1424,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -1432,7 +1432,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -1543,7 +1543,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -1551,7 +1551,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -1786,7 +1786,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n) or on() vector(0)",
+              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n) or on() vector(0)",
               "instant": false,
               "interval": "",
               "legendFormat": "Available",
@@ -1795,7 +1795,7 @@
             },
             {
               "exemplar": true,
-              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"false\"\n    }\n  )\n) or on() vector(0)",
+              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"false\"\n    }\n  )\n) or on() vector(0)",
               "hide": false,
               "interval": "",
               "legendFormat": "Disabled",
@@ -1963,7 +1963,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available vCPU",
               "queryType": "randomWalk",
@@ -1971,7 +1971,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Available RAM",
@@ -1979,7 +1979,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Available Disk",
@@ -1987,7 +1987,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total vCPU",
@@ -1995,7 +1995,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total RAM",
@@ -2003,7 +2003,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total Disk",
@@ -2187,7 +2187,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU Available",
@@ -2196,7 +2196,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2205,7 +2205,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2214,7 +2214,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2223,7 +2223,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2232,7 +2232,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2370,7 +2370,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -2379,7 +2379,7 @@
             },
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2388,7 +2388,7 @@
             },
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"general-purpose\",\n        cpu_architecture=\"sapphire-rapids\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"general-purpose\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2475,7 +2475,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -2483,7 +2483,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -2594,7 +2594,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -2602,7 +2602,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -2713,7 +2713,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -2721,7 +2721,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -2847,7 +2847,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -2856,7 +2856,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2865,7 +2865,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -2956,7 +2956,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n) or on() vector(0)",
+              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n) or on() vector(0)",
               "instant": false,
               "interval": "",
               "legendFormat": "Available",
@@ -2965,7 +2965,7 @@
             },
             {
               "exemplar": true,
-              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"false\"\n    }\n  )\n) or on() vector(0)",
+              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"false\"\n    }\n  )\n) or on() vector(0)",
               "hide": false,
               "interval": "",
               "legendFormat": "Disabled",
@@ -3053,7 +3053,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -3062,7 +3062,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3071,7 +3071,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3133,7 +3133,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available vCPU",
               "queryType": "randomWalk",
@@ -3141,7 +3141,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Available RAM",
@@ -3149,7 +3149,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Available Disk",
@@ -3157,7 +3157,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total vCPU",
@@ -3165,7 +3165,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total RAM",
@@ -3173,7 +3173,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total Disk",
@@ -3357,7 +3357,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU Available",
@@ -3366,7 +3366,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3375,7 +3375,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3384,7 +3384,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3393,7 +3393,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3402,7 +3402,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3540,7 +3540,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -3549,7 +3549,7 @@
             },
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3558,7 +3558,7 @@
             },
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"cascade-lake\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -3645,7 +3645,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -3653,7 +3653,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -3764,7 +3764,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -3772,7 +3772,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -3883,7 +3883,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available",
               "queryType": "randomWalk",
@@ -3891,7 +3891,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Total",
@@ -4017,7 +4017,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -4026,7 +4026,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4035,7 +4035,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4126,7 +4126,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n) or on() vector(0)",
+              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n) or on() vector(0)",
               "instant": false,
               "interval": "",
               "legendFormat": "Available",
@@ -4135,7 +4135,7 @@
             },
             {
               "exemplar": true,
-              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"false\"\n    }\n  )\n) or on() vector(0)",
+              "expr": "count(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      # Use any resource here, otherwise the amount would have to be divided by 3, since the metric is exported 3 times per hypervisor (cpu, ram, disk)\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"false\"\n    }\n  )\n) or on() vector(0)",
               "hide": false,
               "interval": "",
               "legendFormat": "Disabled",
@@ -4223,7 +4223,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -4232,7 +4232,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4241,7 +4241,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4303,7 +4303,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "interval": "",
               "legendFormat": "Available vCPU",
               "queryType": "randomWalk",
@@ -4311,7 +4311,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)\n",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)\n",
               "hide": false,
               "interval": "",
               "legendFormat": "Available RAM",
@@ -4319,7 +4319,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Available Disk",
@@ -4327,7 +4327,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total vCPU",
@@ -4335,7 +4335,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total RAM",
@@ -4343,7 +4343,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "interval": "",
               "legendFormat": "Total Disk",
@@ -4527,7 +4527,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU Available",
@@ -4536,7 +4536,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4545,7 +4545,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4554,7 +4554,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4563,7 +4563,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4572,7 +4572,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4710,7 +4710,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "instant": true,
               "interval": "",
               "legendFormat": "vCPU",
@@ -4719,7 +4719,7 @@
             },
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4728,7 +4728,7 @@
             },
             {
               "exemplar": true,
-              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      enabled=\"true\"\n    }\n  )\n)",
+              "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=\"true\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=\"hana\",\n      cpu_architecture=\"sapphire-rapids\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=\"true\"\n    }\n  )\n)",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4838,7 +4838,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "instant": true,
           "interval": "",
           "legendFormat": "Available",
@@ -4847,7 +4847,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -4912,6 +4912,7 @@
         "y": 6
       },
       "id": 206,
+      "interval": null,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -4931,7 +4932,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"cpu\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=~\"$enabled\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "interval": "",
           "legendFormat": "",
           "queryType": "randomWalk",
@@ -5023,7 +5024,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "instant": true,
           "interval": "",
           "legendFormat": "Available",
@@ -5032,7 +5033,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -5116,7 +5117,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"ram\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=~\"$enabled\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "interval": "",
           "legendFormat": "",
           "queryType": "randomWalk",
@@ -5208,7 +5209,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "instant": true,
           "interval": "",
           "legendFormat": "Available",
@@ -5217,7 +5218,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -5301,7 +5302,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        enabled=~\"$enabled\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "predict_linear(\n  sum(\n    max by (compute_host, resource) (\n      cortex_sap_available_capacity_per_host{\n        resource=\"disk\",\n        availability_zone=~\"$availability_zone\",\n        compute_host=~\"$compute_host\",\n        hypervisor_family=~\"$hypervisor_family\",\n        workload_type=~\"$workload_type\",\n        cpu_architecture=~\"$cpu_architecture\",\n        pinned_projects=~\"(^$|.*$project_id.*)\",\n        enabled=~\"$enabled\"\n      }\n    )\n  )\n[56d:], 4838400) \n/ \nsum(\n  max by (compute_host, resource) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "interval": "",
           "legendFormat": "",
           "queryType": "randomWalk",
@@ -5372,7 +5373,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "interval": "",
           "legendFormat": "Available",
           "queryType": "randomWalk",
@@ -5380,7 +5381,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "interval": "",
           "legendFormat": "Total",
@@ -5491,7 +5492,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "interval": "",
           "legendFormat": "Available",
           "queryType": "randomWalk",
@@ -5499,7 +5500,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "interval": "",
           "legendFormat": "Total",
@@ -5610,7 +5611,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
           "interval": "",
           "legendFormat": "Available",
           "queryType": "randomWalk",
@@ -5618,7 +5619,7 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
           "hide": false,
           "interval": "",
           "legendFormat": "Total",
@@ -5845,7 +5846,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host}} {{enabled}}",
@@ -5956,7 +5957,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "instant": true,
           "interval": "",
           "legendFormat": "{{compute_host}} {{enabled}}",
@@ -6582,7 +6583,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -6654,7 +6655,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -6726,7 +6727,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
+          "expr": "sort(\n  max by (compute_host, enabled) (\n    cortex_sap_available_capacity_per_host_pct{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      compute_host=~\"$compute_host\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  ) \n)",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
