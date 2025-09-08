@@ -49,7 +49,22 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		testDB.AddTable(shared.HostAZ{}),
 		testDB.AddTable(nova.Hypervisor{}),
 		testDB.AddTable(placement.Trait{}),
+		testDB.AddTable(shared.HostPinnedProjects{}),
 	); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	hostPinnedProjects := []any{
+		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), ProjectID: testlib.Ptr("project-123")},
+		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), ProjectID: testlib.Ptr("project-456")},
+		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("node001-bb02"), ProjectID: nil},
+		// No entry for ironic-host-1 since it is excluded in the feature host pinned projects
+		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("node002-bb03"), ProjectID: nil},
+		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("node003-bb03"), ProjectID: nil},
+		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("node004-bb03"), ProjectID: nil},
+	}
+
+	if err := testDB.Insert(hostPinnedProjects...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -135,6 +150,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          true,
 			DisabledReason:   nil,
 			RunningVMs:       0,
+			PinnendProjects:  nil,
 		},
 		{
 			ComputeHost:      "node001-bb02",
@@ -146,6 +162,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("[state: not up] --"),
 			RunningVMs:       3,
+			PinnendProjects:  nil,
 		},
 		{
 			ComputeHost:      "node002-bb03",
@@ -157,6 +174,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("decommissioning"),
 			RunningVMs:       2,
+			PinnendProjects:  nil,
 		},
 		{
 			ComputeHost:      "node003-bb03",
@@ -168,6 +186,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("[status: not enabled] example reason"),
 			RunningVMs:       2,
+			PinnendProjects:  nil,
 		},
 		{
 			ComputeHost:      "node004-bb03",
@@ -179,6 +198,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("[compute status disabled trait] example reason"),
 			RunningVMs:       2,
+			PinnendProjects:  nil,
 		},
 		{
 			ComputeHost:      "nova-compute-bb01",
@@ -190,6 +210,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("external customer"),
 			RunningVMs:       5,
+			PinnendProjects:  testlib.Ptr("project-123,project-456"),
 		},
 	}
 

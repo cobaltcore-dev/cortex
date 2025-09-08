@@ -32,7 +32,7 @@ func (HostPinnedProjects) TableName() string {
 // Indexes for the feature.
 func (HostPinnedProjects) Indexes() []db.Index { return nil }
 
-// Extractor that extracts the utilization on a compute host.
+// Extractor that extracts the pinned projects of a compute host.
 type HostPinnedProjectsExtractor struct {
 	// Common base for all extractors that provides standard functionality.
 	plugins.BaseExtractor[
@@ -57,7 +57,7 @@ func (HostPinnedProjectsExtractor) Triggers() []string {
 //go:embed host_pinned_projects.sql
 var hostPinnedProjectsQuery string
 
-// Extract the domains and projects on a compute host.
+// Extract the pinned projects of a compute host.
 func (e *HostPinnedProjectsExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(hostPinnedProjectsQuery)
 }

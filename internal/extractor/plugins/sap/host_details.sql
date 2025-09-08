@@ -11,6 +11,13 @@ WITH host_traits AS (
     LEFT JOIN openstack_resource_provider_traits t
         ON h.id = t.resource_provider_uuid
     GROUP BY h.service_host, h.hypervisor_type, h.running_vms, h.state, h.status, h.service_disabled_reason
+),
+pinned_projects AS (
+    SELECT
+        compute_host,
+        STRING_AGG(project_id, ',' ORDER BY project_id) AS pinned_projects
+    FROM feature_host_pinned_projects
+    GROUP BY compute_host
 )
 SELECT
     ht.service_host AS compute_host,
@@ -46,6 +53,8 @@ SELECT
         WHEN ht.status != 'enabled' THEN '[status: not enabled] ' || COALESCE(ht.service_disabled_reason, '--')
         WHEN ht.state != 'up' THEN '[state: not up] ' || COALESCE(ht.service_disabled_reason, '--')
         ELSE NULL
-    END AS disabled_reason
+    END AS disabled_reason,
+    COALESCE(pp.pinned_projects, NULL) AS pinned_projects
 FROM host_traits ht
+LEFT JOIN pinned_projects pp ON ht.service_host = pp.compute_host
 LEFT JOIN feature_host_az haz ON ht.service_host = haz.compute_host;
