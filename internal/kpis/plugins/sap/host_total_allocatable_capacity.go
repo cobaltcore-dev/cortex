@@ -41,6 +41,7 @@ func (k *HostTotalAllocatableCapacityKPI) Init(db db.DB, opts conf.RawOpts) erro
 			"workload_type",
 			"hypervisor_family",
 			"enabled",
+			"pinned_projects",
 		},
 		nil,
 	)
@@ -53,14 +54,14 @@ func (k *HostTotalAllocatableCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 
 func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	type HostTotalCapacityPerAvailabilityZone struct {
-		ComputeHostName  string  `db:"compute_host"`
-		AvailabilityZone string  `db:"availability_zone"`
-		RunningVMs       int     `db:"running_vms"`
-		CPUArchitecture  string  `db:"cpu_architecture"`
-		HypervisorFamily string  `db:"hypervisor_family"`
-		WorkloadType     string  `db:"workload_type"`
-		Enabled          bool    `db:"enabled"`
-		DisabledReason   *string `db:"disabled_reason"`
+		ComputeHostName  string `db:"compute_host"`
+		AvailabilityZone string `db:"availability_zone"`
+		RunningVMs       int    `db:"running_vms"`
+		CPUArchitecture  string `db:"cpu_architecture"`
+		HypervisorFamily string `db:"hypervisor_family"`
+		WorkloadType     string `db:"workload_type"`
+		Enabled          bool   `db:"enabled"`
+		PinnedProjects   string `db:"pinned_projects"`
 		shared.HostUtilization
 	}
 
@@ -75,6 +76,7 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
     		hd.hypervisor_family,
     		hd.workload_type,
     		hd.enabled,
+			COALESCE(hd.pinned_projects, '') AS pinned_projects,
 			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
 			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
 			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
@@ -102,6 +104,7 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			host.PinnedProjects,
 		)
 
 		ch <- prometheus.MustNewConstMetric(
@@ -115,6 +118,7 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			host.PinnedProjects,
 		)
 
 		ch <- prometheus.MustNewConstMetric(
@@ -128,6 +132,7 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			host.PinnedProjects,
 		)
 	}
 }

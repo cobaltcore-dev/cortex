@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -49,6 +50,7 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			RunningVMs:       5,
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
+			PinnedProjects:   testlib.Ptr("project-123,project-456"),
 		},
 		// Should be ignored since its an ironic host
 		&sap.HostDetails{
@@ -83,6 +85,7 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 		CPUArchitecture  string
 		WorkloadType     string
 		HypervisorFamily string
+		PinnedProjects   string
 		Value            float64
 	}
 
@@ -108,6 +111,7 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			CPUArchitecture:  labels["cpu_architecture"],
 			WorkloadType:     labels["workload_type"],
 			HypervisorFamily: labels["hypervisor_family"],
+			PinnedProjects:   labels["pinned_projects"],
 			Value:            m.GetGauge().GetValue(),
 		}
 	}
@@ -121,6 +125,7 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
 			Value:            5,
+			PinnedProjects:   "project-123,project-456",
 		},
 	}
 

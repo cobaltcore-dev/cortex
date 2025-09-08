@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -50,6 +51,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			HypervisorFamily: "vmware",
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
+			PinnedProjects:   testlib.Ptr("project-123,project-456"),
 		},
 		&sap.HostDetails{
 			ComputeHost:      "kvm-host",
@@ -59,6 +61,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "hana",
 			Enabled:          false,
+			PinnedProjects:   nil,
 		},
 		&sap.HostDetails{
 			ComputeHost:      "ironic-host",
@@ -117,6 +120,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 		CPUArchitecture  string
 		WorkloadType     string
 		HypervisorFamily string
+		PinnedProjects   string
 		Value            float64
 	}
 
@@ -143,6 +147,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  labels["cpu_architecture"],
 			WorkloadType:     labels["workload_type"],
 			HypervisorFamily: labels["hypervisor_family"],
+			PinnedProjects:   labels["pinned_projects"],
 			Value:            m.GetGauge().GetValue(),
 		}
 	}
@@ -156,6 +161,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
+			PinnedProjects:   "project-123,project-456",
 			Value:            100,
 		},
 		"vmware-host-ram": {
@@ -166,6 +172,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
+			PinnedProjects:   "project-123,project-456",
 			Value:            200,
 		},
 		"vmware-host-disk": {
@@ -176,6 +183,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
+			PinnedProjects:   "project-123,project-456",
 			Value:            300,
 		},
 		"kvm-host-cpu": {
@@ -186,6 +194,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
+			PinnedProjects:   "",
 			Value:            100,
 		},
 		"kvm-host-ram": {
@@ -196,6 +205,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
+			PinnedProjects:   "",
 			Value:            100,
 		},
 		"kvm-host-disk": {
@@ -206,6 +216,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
+			PinnedProjects:   "",
 			Value:            100,
 		},
 	}

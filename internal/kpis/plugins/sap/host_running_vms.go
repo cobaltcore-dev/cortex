@@ -22,6 +22,7 @@ type HostRunningVMs struct {
 	HypervisorFamily string  `db:"hypervisor_family"`
 	WorkloadType     string  `db:"workload_type"`
 	Enabled          bool    `db:"enabled"`
+	PinnedProjects   string  `db:"pinned_projects"`
 	RunningVMs       float64 `db:"running_vms"`
 }
 
@@ -50,6 +51,7 @@ func (k *HostRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"workload_type",
 			"hypervisor_family",
 			"enabled",
+			"pinned_projects",
 		},
 		nil,
 	)
@@ -71,12 +73,13 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
     		hypervisor_family,
     		workload_type,
     		enabled,
+			COALESCE(pinned_projects, '') AS pinned_projects,
     		running_vms
 		FROM ` + sap.HostDetails{}.TableName() + `
 		WHERE hypervisor_type != 'ironic';
     `
 	if _, err := k.DB.Select(&hostRunningVMs, query); err != nil {
-		slog.Error("failed to select host utilization", "err", err)
+		slog.Error("failed to select host details", "err", err)
 		return
 	}
 
@@ -93,6 +96,7 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			host.PinnedProjects,
 		)
 	}
 }
