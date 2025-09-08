@@ -63,6 +63,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
 			DisabledReason:   nil,
+			PinnedProjects:   nil,
 		},
 		&sap.HostDetails{
 			ComputeHost:      "kvm-host",
@@ -73,6 +74,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "hana",
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("external customer"),
+			PinnedProjects:   testlib.Ptr("project1,project2"),
 		},
 		&sap.HostDetails{
 			ComputeHost:      "ironic-host",
@@ -83,6 +85,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "hana",
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("external customer"),
+			PinnedProjects:   testlib.Ptr("project1"),
 		},
 	}
 
@@ -142,6 +145,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 		WorkloadType     string
 		HypervisorFamily string
 		DisabledReason   string
+		PinnedProjects   string
 		Value            float64
 	}
 
@@ -177,6 +181,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     labels["workload_type"],
 			HypervisorFamily: labels["hypervisor_family"],
 			DisabledReason:   labels["disabled_reason"],
+			PinnedProjects:   labels["pinned_projects"],
 			Value:            m.GetGauge().GetValue(),
 		}
 	}
@@ -191,6 +196,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
 			DisabledReason:   "-",
+			PinnedProjects:   "",
 			Value:            60, // 100 - 40
 		},
 		"vmware-host-ram": {
@@ -202,6 +208,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
 			DisabledReason:   "-",
+			PinnedProjects:   "",
 			Value:            160, // 200 - 40
 		},
 		"vmware-host-disk": {
@@ -213,6 +220,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
 			DisabledReason:   "-",
+			PinnedProjects:   "",
 			Value:            260, // 300 - 40
 		},
 		"kvm-host-cpu": {
@@ -224,6 +232,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
 			DisabledReason:   "external customer",
+			PinnedProjects:   "project1,project2",
 			Value:            25, // 100 - 75
 		},
 		"kvm-host-ram": {
@@ -235,6 +244,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
 			DisabledReason:   "external customer",
+			PinnedProjects:   "project1,project2",
 			Value:            20, // 100 - 80
 		},
 		"kvm-host-disk": {
@@ -246,6 +256,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
 			DisabledReason:   "external customer",
+			PinnedProjects:   "project1,project2",
 			Value:            15, // 100 - 85
 		},
 	}
@@ -290,6 +301,7 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
 			DisabledReason:   nil,
+			PinnedProjects:   nil,
 		},
 		&sap.HostDetails{
 			ComputeHost:      "kvm-host",
@@ -300,6 +312,7 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			WorkloadType:     "hana",
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("external customer"),
+			PinnedProjects:   testlib.Ptr("project1,project2"),
 		},
 		&sap.HostDetails{
 			ComputeHost:      "ironic-host",
@@ -309,6 +322,7 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "hana",
 			Enabled:          false,
+			PinnedProjects:   testlib.Ptr("project1"),
 			DisabledReason:   testlib.Ptr("external customer"),
 		},
 	}

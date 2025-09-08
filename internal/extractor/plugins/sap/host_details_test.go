@@ -150,7 +150,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          true,
 			DisabledReason:   nil,
 			RunningVMs:       0,
-			PinnendProjects:  nil,
+			PinnedProjects:   nil,
 		},
 		{
 			ComputeHost:      "node001-bb02",
@@ -162,7 +162,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("[state: not up] --"),
 			RunningVMs:       3,
-			PinnendProjects:  nil,
+			PinnedProjects:   nil,
 		},
 		{
 			ComputeHost:      "node002-bb03",
@@ -174,7 +174,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("decommissioning"),
 			RunningVMs:       2,
-			PinnendProjects:  nil,
+			PinnedProjects:   nil,
 		},
 		{
 			ComputeHost:      "node003-bb03",
@@ -186,7 +186,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("[status: not enabled] example reason"),
 			RunningVMs:       2,
-			PinnendProjects:  nil,
+			PinnedProjects:   nil,
 		},
 		{
 			ComputeHost:      "node004-bb03",
@@ -198,7 +198,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("[compute status disabled trait] example reason"),
 			RunningVMs:       2,
-			PinnendProjects:  nil,
+			PinnedProjects:   nil,
 		},
 		{
 			ComputeHost:      "nova-compute-bb01",
@@ -210,7 +210,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			DisabledReason:   testlib.Ptr("external customer"),
 			RunningVMs:       5,
-			PinnendProjects:  testlib.Ptr("project-123,project-456"),
+			PinnedProjects:   testlib.Ptr("project-123,project-456"),
 		},
 	}
 
