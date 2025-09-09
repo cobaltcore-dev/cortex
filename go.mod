@@ -17,7 +17,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/ory/dockertest v3.3.5+incompatible
-	github.com/prometheus/client_golang v1.23.0
+	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-api-declarations v1.17.4
 	github.com/sapcc/go-bits v0.0.0-20250828142518-d29beaf1bcca
@@ -97,13 +97,13 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/prometheus/common v0.65.0 // indirect
+	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
-	google.golang.org/protobuf v1.36.7 // indirect
+	google.golang.org/protobuf v1.36.8 // indirect
 	k8s.io/apimachinery v0.34.0
-	sigs.k8s.io/controller-runtime v0.22.0
+	sigs.k8s.io/controller-runtime v0.22.1
 )
