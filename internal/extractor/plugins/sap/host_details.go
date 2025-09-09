@@ -35,7 +35,7 @@ type HostDetails struct {
 	// Reason why the compute host is disabled, if applicable.
 	DisabledReason *string `db:"disabled_reason"`
 	// Comma separated list of pinned projects of the ComputeHost.
-	PinnendProjects *string `db:"pinned_projects"`
+	PinnedProjects *string `db:"pinned_projects"`
 }
 
 // Table under which the feature is stored.

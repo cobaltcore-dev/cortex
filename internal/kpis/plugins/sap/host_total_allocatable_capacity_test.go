@@ -17,19 +17,19 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-func TestHostRunningVMsKPI_Init(t *testing.T) {
+func TestHostTotalAllocatableCapacityKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	kpi := &HostRunningVMsKPI{}
+	kpi := &HostTotalAllocatableCapacityKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestHostRunningVMsKPI_Collect(t *testing.T) {
+func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
@@ -44,37 +44,44 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 
 	hypervisors := []any{
 		&sap.HostDetails{
-			ComputeHost:      "host1",
+			ComputeHost:      "vmware-host",
 			AvailabilityZone: "az1",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "vcenter",
 			HypervisorFamily: "vmware",
-			RunningVMs:       5,
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
 			PinnedProjects:   testlib.Ptr("project-123,project-456"),
 		},
-		// Should be ignored since its an ironic host
 		&sap.HostDetails{
-			ComputeHost:      "host2",
-			AvailabilityZone: "az1",
+			ComputeHost:      "kvm-host",
+			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "ironic",
-			HypervisorFamily: "vmware",
-			RunningVMs:       5,
-			WorkloadType:     "general-purpose",
-			Enabled:          true,
+			HypervisorType:   "qemu",
+			HypervisorFamily: "kvm",
+			WorkloadType:     "hana",
+			Enabled:          false,
+			PinnedProjects:   nil,
 		},
-		// Should be ignored since it has no usage data
 		&sap.HostDetails{
-			ComputeHost:      "host3",
-			AvailabilityZone: "az1",
+			ComputeHost:      "ironic-host",
+			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "ironic",
-			HypervisorFamily: "vmware",
-			RunningVMs:       5,
-			WorkloadType:     "general-purpose",
-			Enabled:          true,
+			HypervisorFamily: "kvm",
+			WorkloadType:     "hana",
+			Enabled:          false,
+		},
+		// Skip this host as it has no usage data
+		&sap.HostDetails{
+			ComputeHost:      "kvm-host-2",
+			AvailabilityZone: "az2",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "qemu",
+			HypervisorFamily: "kvm",
+			WorkloadType:     "hana",
+			Enabled:          false,
+			PinnedProjects:   nil,
 		},
 	}
 
@@ -84,26 +91,31 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 
 	hostUtilizations := []any{
 		&shared.HostUtilization{
-			ComputeHost:            "host1",
+			ComputeHost:            "vmware-host",
 			TotalVCPUsAllocatable:  100,
 			TotalRAMAllocatableMB:  200,
 			TotalDiskAllocatableGB: 300,
 		},
-		// Ironic host
 		&shared.HostUtilization{
-			ComputeHost:            "host2",
-			TotalVCPUsAllocatable:  1,
-			TotalRAMAllocatableMB:  1,
-			TotalDiskAllocatableGB: 1,
+			ComputeHost:            "kvm-host",
+			TotalVCPUsAllocatable:  100,
+			TotalRAMAllocatableMB:  100,
+			TotalDiskAllocatableGB: 100,
 		},
-		// No Capacity reported for host3
+		&shared.HostUtilization{
+			ComputeHost:            "ironic-host",
+			TotalVCPUsAllocatable:  0,
+			TotalRAMAllocatableMB:  0,
+			TotalDiskAllocatableGB: 0,
+		},
+		// No usage data for kvm-host-2
 	}
 
 	if err := testDB.Insert(hostUtilizations...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	kpi := &HostRunningVMsKPI{}
+	kpi := &HostTotalAllocatableCapacityKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -112,8 +124,9 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 	kpi.Collect(ch)
 	close(ch)
 
-	type HostRunningVMsMetric struct {
+	type HostResourceMetric struct {
 		ComputeHost      string
+		Resource         string
 		AvailabilityZone string
 		Enabled          string
 		CPUArchitecture  string
@@ -123,7 +136,7 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 		Value            float64
 	}
 
-	actualMetrics := make(map[string]HostRunningVMsMetric, 0)
+	actualMetrics := make(map[string]HostResourceMetric, 0)
 
 	for metric := range ch {
 		var m prometheusgo.Metric
@@ -136,10 +149,11 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			labels[label.GetName()] = label.GetValue()
 		}
 
-		key := labels["compute_host"]
+		key := labels["compute_host"] + "-" + labels["resource"]
 
-		actualMetrics[key] = HostRunningVMsMetric{
+		actualMetrics[key] = HostResourceMetric{
 			ComputeHost:      labels["compute_host"],
+			Resource:         labels["resource"],
 			AvailabilityZone: labels["availability_zone"],
 			Enabled:          labels["enabled"],
 			CPUArchitecture:  labels["cpu_architecture"],
@@ -150,16 +164,72 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 		}
 	}
 
-	expectedMetrics := map[string]HostRunningVMsMetric{
-		"host1": {
-			ComputeHost:      "host1",
+	expectedMetrics := map[string]HostResourceMetric{
+		"vmware-host-cpu": {
+			ComputeHost:      "vmware-host",
+			Resource:         "cpu",
 			AvailabilityZone: "az1",
 			Enabled:          "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
-			Value:            5,
 			PinnedProjects:   "project-123,project-456",
+			Value:            100,
+		},
+		"vmware-host-ram": {
+			ComputeHost:      "vmware-host",
+			Resource:         "ram",
+			AvailabilityZone: "az1",
+			Enabled:          "true",
+			CPUArchitecture:  "cascade-lake",
+			WorkloadType:     "general-purpose",
+			HypervisorFamily: "vmware",
+			PinnedProjects:   "project-123,project-456",
+			Value:            200,
+		},
+		"vmware-host-disk": {
+			ComputeHost:      "vmware-host",
+			Resource:         "disk",
+			AvailabilityZone: "az1",
+			Enabled:          "true",
+			CPUArchitecture:  "cascade-lake",
+			WorkloadType:     "general-purpose",
+			HypervisorFamily: "vmware",
+			PinnedProjects:   "project-123,project-456",
+			Value:            300,
+		},
+		"kvm-host-cpu": {
+			ComputeHost:      "kvm-host",
+			Resource:         "cpu",
+			AvailabilityZone: "az2",
+			Enabled:          "false",
+			CPUArchitecture:  "cascade-lake",
+			WorkloadType:     "hana",
+			HypervisorFamily: "kvm",
+			PinnedProjects:   "",
+			Value:            100,
+		},
+		"kvm-host-ram": {
+			ComputeHost:      "kvm-host",
+			Resource:         "ram",
+			AvailabilityZone: "az2",
+			Enabled:          "false",
+			CPUArchitecture:  "cascade-lake",
+			WorkloadType:     "hana",
+			HypervisorFamily: "kvm",
+			PinnedProjects:   "",
+			Value:            100,
+		},
+		"kvm-host-disk": {
+			ComputeHost:      "kvm-host",
+			Resource:         "disk",
+			AvailabilityZone: "az2",
+			Enabled:          "false",
+			CPUArchitecture:  "cascade-lake",
+			WorkloadType:     "hana",
+			HypervisorFamily: "kvm",
+			PinnedProjects:   "",
+			Value:            100,
 		},
 	}
 

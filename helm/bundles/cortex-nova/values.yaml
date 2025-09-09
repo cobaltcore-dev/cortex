@@ -300,12 +300,12 @@ cortex-core:
             extractors:
               - vrops_project_noisiness_extractor
         # SAP specific KPIs.
-        - name: sap_host_total_capacity_kpi
+        - name: sap_host_total_allocatable_capacity_kpi
           dependencies:
             extractors:
               - host_utilization_extractor
               - sap_host_details_extractor
-        - name: sap_host_utilization_kpi
+        - name: sap_host_capacity_kpi
           dependencies:
             extractors:
               - host_utilization_extractor
