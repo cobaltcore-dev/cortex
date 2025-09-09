@@ -1,4 +1,4 @@
-FROM golang:1.24.6-alpine3.21 AS builder
+FROM golang:1.25.1-alpine3.21 AS builder
 
 ARG GOCACHE=/root/.cache/go-build
 ENV GOCACHE=${GOCACHE}
@@ -8,8 +8,8 @@ RUN apk add --no-cache --no-progress ca-certificates gcc git make musl-dev
 COPY . /src
 ARG BININFO_BUILD_DATE BININFO_COMMIT_HASH BININFO_VERSION # provided to 'make install'
 RUN --mount=type=cache,target=/go/pkg/mod/ \
-    --mount=type=cache,target=${GOCACHE} \
-    make -C /src install PREFIX=/pkg GOTOOLCHAIN=local
+  --mount=type=cache,target=${GOCACHE} \
+  make -C /src install PREFIX=/pkg GOTOOLCHAIN=local
 
 ################################################################################
 
