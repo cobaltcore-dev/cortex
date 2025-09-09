@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -24,6 +25,7 @@ type HostRunningVMs struct {
 	Enabled          bool    `db:"enabled"`
 	PinnedProjects   string  `db:"pinned_projects"`
 	RunningVMs       float64 `db:"running_vms"`
+	shared.HostUtilization
 }
 
 type HostRunningVMsKPI struct {
@@ -65,17 +67,24 @@ func (k *HostRunningVMsKPI) Describe(ch chan<- *prometheus.Desc) {
 func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 	var hostRunningVMs []HostRunningVMs
 
+	// We NEED to join with host_utilization to filter out hosts that do not report any capacity.
+	// We are using a LEFT JOIN with host_details to be able to log out hosts that are filtered out due to zero capacity.
 	query := `
 		SELECT
-    		compute_host,
-    		availability_zone,
-    		cpu_architecture,
-    		hypervisor_family,
-    		workload_type,
-    		enabled,
-			COALESCE(pinned_projects, '') AS pinned_projects,
-    		running_vms
-		FROM ` + sap.HostDetails{}.TableName() + `
+    		hd.compute_host,
+    		hd.availability_zone,
+    		hd.cpu_architecture,
+    		hd.hypervisor_family,
+    		hd.workload_type,
+    		hd.enabled,
+			COALESCE(hd.pinned_projects, '') AS pinned_projects,
+    		hd.running_vms,
+			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
+			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
+			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
+		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
+		LEFT JOIN ` + shared.HostUtilization{}.TableName() + ` AS hu
+		    ON hu.compute_host = hd.compute_host
 		WHERE hypervisor_type != 'ironic';
     `
 	if _, err := k.DB.Select(&hostRunningVMs, query); err != nil {
@@ -84,6 +93,18 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, host := range hostRunningVMs {
+		if host.TotalRAMAllocatableMB == 0 || host.TotalVCPUsAllocatable == 0 || host.TotalDiskAllocatableGB == 0 {
+			slog.Info(
+				"Skipping host since placement is reporting zero allocatable resources",
+				"metric", "cortex_sap_running_vms_per_host",
+				"host", host.ComputeHostName,
+				"cpu", host.TotalVCPUsAllocatable,
+				"ram", host.TotalRAMAllocatableMB,
+				"disk", host.TotalDiskAllocatableGB,
+			)
+			continue
+		}
+
 		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(

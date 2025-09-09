@@ -76,6 +76,18 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			DisabledReason:   testlib.Ptr("external customer"),
 			PinnedProjects:   testlib.Ptr("project1,project2"),
 		},
+		// Skip this because placement doesn't report any capacity for this host
+		&sap.HostDetails{
+			ComputeHost:      "kvm-host-2",
+			AvailabilityZone: "az2",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "qemu",
+			HypervisorFamily: "kvm",
+			WorkloadType:     "hana",
+			Enabled:          false,
+			DisabledReason:   testlib.Ptr("external customer"),
+			PinnedProjects:   testlib.Ptr("project1,project2"),
+		},
 		&sap.HostDetails{
 			ComputeHost:      "ironic-host",
 			AvailabilityZone: "az2",
@@ -121,6 +133,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			RAMUsedMB:              0,
 			DiskUsedGB:             0,
 		},
+		// No Capacity reported for host kvm-host-2
 	}
 
 	if err := testDB.Insert(hostUtilizations...); err != nil {
@@ -314,6 +327,18 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			DisabledReason:   testlib.Ptr("external customer"),
 			PinnedProjects:   testlib.Ptr("project1,project2"),
 		},
+		// Skip this because placement doesn't report any capacity for this host
+		&sap.HostDetails{
+			ComputeHost:      "kvm-host-2",
+			AvailabilityZone: "az2",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "qemu",
+			HypervisorFamily: "kvm",
+			WorkloadType:     "hana",
+			Enabled:          false,
+			DisabledReason:   testlib.Ptr("external customer"),
+			PinnedProjects:   testlib.Ptr("project1,project2"),
+		},
 		&sap.HostDetails{
 			ComputeHost:      "ironic-host",
 			AvailabilityZone: "az2",
@@ -359,6 +384,7 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			RAMUsedMB:              0,
 			DiskUsedGB:             0,
 		},
+		// No Capacity reported for host kvm-host-2
 	}
 
 	if err := testDB.Insert(hostUtilizations...); err != nil {

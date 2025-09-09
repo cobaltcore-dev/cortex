@@ -91,6 +91,18 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, host := range hostTotalCapacity {
+		if host.TotalRAMAllocatableMB == 0 || host.TotalVCPUsAllocatable == 0 || host.TotalDiskAllocatableGB == 0 {
+			slog.Info(
+				"Skipping host since placement is reporting zero allocatable resources",
+				"metric", "cortex_sap_total_allocatable_capacity_per_host",
+				"host", host.ComputeHostName,
+				"cpu", host.TotalVCPUsAllocatable,
+				"ram", host.TotalRAMAllocatableMB,
+				"disk", host.TotalDiskAllocatableGB,
+			)
+			continue
+		}
+
 		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(

@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
+	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,6 +37,7 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 
 	if err := testDB.CreateTable(
 		testDB.AddTable(sap.HostDetails{}),
+		testDB.AddTable(shared.HostUtilization{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -63,9 +65,41 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
 		},
+		// Should be ignored since it has no usage data
+		&sap.HostDetails{
+			ComputeHost:      "host3",
+			AvailabilityZone: "az1",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "ironic",
+			HypervisorFamily: "vmware",
+			RunningVMs:       5,
+			WorkloadType:     "general-purpose",
+			Enabled:          true,
+		},
 	}
 
 	if err := testDB.Insert(hypervisors...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	hostUtilizations := []any{
+		&shared.HostUtilization{
+			ComputeHost:            "host1",
+			TotalVCPUsAllocatable:  100,
+			TotalRAMAllocatableMB:  200,
+			TotalDiskAllocatableGB: 300,
+		},
+		// Ironic host
+		&shared.HostUtilization{
+			ComputeHost:            "host2",
+			TotalVCPUsAllocatable:  1,
+			TotalRAMAllocatableMB:  1,
+			TotalDiskAllocatableGB: 1,
+		},
+		// No Capacity reported for host3
+	}
+
+	if err := testDB.Insert(hostUtilizations...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

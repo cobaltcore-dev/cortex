@@ -96,6 +96,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 
 	var hostUtilization []HostUtilizationPerAvailabilityZone
 
+	// Include hosts with no usage data (LEFT JOIN) so that we can log out hosts that are filtered out due to zero capacity
+	// Also exclude ironic hosts as they do not run VMs/instances
 	query := `
 		SELECT
     		hd.compute_host,
@@ -123,6 +125,18 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, host := range hostUtilization {
+		if host.TotalRAMAllocatableMB == 0 || host.TotalVCPUsAllocatable == 0 || host.TotalDiskAllocatableGB == 0 {
+			slog.Info(
+				"Skipping host since placement is reporting zero allocatable resources",
+				"metric", "cortex_sap_available_capacity_per_host",
+				"host", host.ComputeHostName,
+				"cpu", host.TotalVCPUsAllocatable,
+				"ram", host.TotalRAMAllocatableMB,
+				"disk", host.TotalDiskAllocatableGB,
+			)
+			continue
+		}
+
 		enabled := strconv.FormatBool(host.Enabled)
 
 		ch <- prometheus.MustNewConstMetric(

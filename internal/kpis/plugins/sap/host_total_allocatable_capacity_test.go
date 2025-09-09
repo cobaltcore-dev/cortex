@@ -72,6 +72,17 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			WorkloadType:     "hana",
 			Enabled:          false,
 		},
+		// Skip this host as it has no usage data
+		&sap.HostDetails{
+			ComputeHost:      "kvm-host-2",
+			AvailabilityZone: "az2",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "qemu",
+			HypervisorFamily: "kvm",
+			WorkloadType:     "hana",
+			Enabled:          false,
+			PinnedProjects:   nil,
+		},
 	}
 
 	if err := testDB.Insert(hypervisors...); err != nil {
@@ -97,6 +108,7 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			TotalRAMAllocatableMB:  0,
 			TotalDiskAllocatableGB: 0,
 		},
+		// No usage data for kvm-host-2
 	}
 
 	if err := testDB.Insert(hostUtilizations...); err != nil {
