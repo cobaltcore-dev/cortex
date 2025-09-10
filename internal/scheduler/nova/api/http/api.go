@@ -61,6 +61,10 @@ func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
 // Check if the scheduler can run based on the request data.
 // Note: messages returned here are user-facing and should not contain internal details.
 func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest) (ok bool, reason string) {
+	if requestData.Resize {
+		return false, "resizing instances is not supported"
+	}
+
 	// Check that all hosts have a weight.
 	for _, host := range requestData.Hosts {
 		if _, ok := requestData.Weights[host.ComputeHost]; !ok {
@@ -123,8 +127,11 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	}
 	slog.Info(
 		"handling POST request",
-		"url", "/scheduler/nova/external", "rebuild", requestData.Rebuild,
-		"hosts", len(requestData.Hosts), "spec", requestData.Spec,
+		"url", "/scheduler/nova/external",
+		"rebuild", requestData.Rebuild,
+		"resize", requestData.Resize,
+		"hosts", len(requestData.Hosts),
+		"spec", requestData.Spec,
 	)
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
