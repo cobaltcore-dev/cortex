@@ -79,6 +79,20 @@ func TestCanRunScheduler(t *testing.T) {
 			wantOk: false,
 		},
 		{
+			name: "Unsupported resize request",
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1", HypervisorHostname: "hypervisor1"},
+				},
+				VMware: true,
+				Weights: map[string]float64{
+					"host1": 1.0,
+				},
+				Resize: true,
+			},
+			wantOk: false,
+		},
+		{
 			name: "Valid request",
 			request: api.ExternalSchedulerRequest{
 				Hosts: []api.ExternalSchedulerHost{
