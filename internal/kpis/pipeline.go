@@ -30,8 +30,8 @@ var SupportedKPIs = []plugins.KPI{
 	&shared.VMLifeSpanKPI{},
 	&shared.VMCommitmentsKPI{},
 	// SAP kpis.
-	&sap.HostTotalCapacityKPI{},
-	&sap.HostUtilizationKPI{},
+	&sap.HostTotalAllocatableCapacityKPI{},
+	&sap.HostAvailableCapacityKPI{},
 	&sap.HostRunningVMsKPI{},
 }
 

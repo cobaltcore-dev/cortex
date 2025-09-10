@@ -4,12 +4,14 @@
 package sap
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -35,7 +37,7 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 
 	if err := testDB.CreateTable(
 		testDB.AddTable(sap.HostDetails{}),
-		testDB.AddTable(shared.HostDomainProject{}),
+		testDB.AddTable(shared.HostUtilization{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -50,10 +52,22 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			RunningVMs:       5,
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
+			PinnedProjects:   testlib.Ptr("project-123,project-456"),
 		},
 		// Should be ignored since its an ironic host
 		&sap.HostDetails{
 			ComputeHost:      "host2",
+			AvailabilityZone: "az1",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "ironic",
+			HypervisorFamily: "vmware",
+			RunningVMs:       5,
+			WorkloadType:     "general-purpose",
+			Enabled:          true,
+		},
+		// Should be ignored since it has no usage data
+		&sap.HostDetails{
+			ComputeHost:      "host3",
 			AvailabilityZone: "az1",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "ironic",
@@ -68,16 +82,24 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	hostDomainProject := []any{
-		&shared.HostDomainProject{
-			ComputeHost:  "host1",
-			ProjectNames: "project1,project2",
-			ProjectIDs:   "p1,p2",
-			DomainNames:  "domain1,domain2",
-			DomainIDs:    "d1,d2",
+	hostUtilizations := []any{
+		&shared.HostUtilization{
+			ComputeHost:            "host1",
+			TotalVCPUsAllocatable:  100,
+			TotalRAMAllocatableMB:  200,
+			TotalDiskAllocatableGB: 300,
 		},
+		// Ironic host
+		&shared.HostUtilization{
+			ComputeHost:            "host2",
+			TotalVCPUsAllocatable:  1,
+			TotalRAMAllocatableMB:  1,
+			TotalDiskAllocatableGB: 1,
+		},
+		// No Capacity reported for host3
 	}
-	if err := testDB.Insert(hostDomainProject...); err != nil {
+
+	if err := testDB.Insert(hostUtilizations...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -90,27 +112,20 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 	kpi.Collect(ch)
 	close(ch)
 
-	expectedLabels := map[string]map[string]string{
-		"host1": {
-			"compute_host":      "host1",
-			"availability_zone": "az1",
-			"enabled":           "true",
-			"projects":          "project1,project2",
-			"domains":           "domain1,domain2",
-			"cpu_architecture":  "cascade-lake",
-			"workload_type":     "general-purpose",
-			"hypervisor_family": "vmware",
-		},
+	type HostRunningVMsMetric struct {
+		ComputeHost      string
+		AvailabilityZone string
+		Enabled          string
+		CPUArchitecture  string
+		WorkloadType     string
+		HypervisorFamily string
+		PinnedProjects   string
+		Value            float64
 	}
 
-	expectedValues := map[string]float64{
-		"host1": 5,
-	}
-
-	metricsCount := 0
+	actualMetrics := make(map[string]HostRunningVMsMetric, 0)
 
 	for metric := range ch {
-		metricsCount++
 		var m prometheusgo.Metric
 		if err := metric.Write(&m); err != nil {
 			t.Fatalf("failed to write metric: %v", err)
@@ -121,30 +136,46 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			labels[label.GetName()] = label.GetValue()
 		}
 
-		expectedValue := m.Gauge.GetValue()
+		key := labels["compute_host"]
 
-		computeHost := labels["compute_host"]
-
-		if value, exists := expectedValues[computeHost]; exists {
-			if value != expectedValue {
-				t.Errorf("expected value %f for host %s, got %f", value, computeHost, expectedValue)
-			}
-		} else {
-			t.Errorf("unexpected compute host %s in metric labels", computeHost)
-		}
-
-		if expected, ok := expectedLabels[computeHost]; ok {
-			for key, expectedValue := range expected {
-				if value, exists := labels[key]; !exists || value != expectedValue {
-					t.Errorf("expected label %s to be %s for host %s, got %s", key, expectedValue, computeHost, value)
-				}
-			}
-		} else {
-			t.Errorf("unexpected compute host %s in metric labels", computeHost)
+		actualMetrics[key] = HostRunningVMsMetric{
+			ComputeHost:      labels["compute_host"],
+			AvailabilityZone: labels["availability_zone"],
+			Enabled:          labels["enabled"],
+			CPUArchitecture:  labels["cpu_architecture"],
+			WorkloadType:     labels["workload_type"],
+			HypervisorFamily: labels["hypervisor_family"],
+			PinnedProjects:   labels["pinned_projects"],
+			Value:            m.GetGauge().GetValue(),
 		}
 	}
 
-	if metricsCount != 1 {
-		t.Errorf("expected one metric, got %d", metricsCount)
+	expectedMetrics := map[string]HostRunningVMsMetric{
+		"host1": {
+			ComputeHost:      "host1",
+			AvailabilityZone: "az1",
+			Enabled:          "true",
+			CPUArchitecture:  "cascade-lake",
+			WorkloadType:     "general-purpose",
+			HypervisorFamily: "vmware",
+			Value:            5,
+			PinnedProjects:   "project-123,project-456",
+		},
+	}
+
+	if len(expectedMetrics) != len(actualMetrics) {
+		t.Errorf("expected %d metrics, got %d", len(expectedMetrics), len(actualMetrics))
+	}
+
+	for key, expected := range expectedMetrics {
+		actual, ok := actualMetrics[key]
+		if !ok {
+			t.Errorf("expected metric %q not found", key)
+			continue
+		}
+
+		if !reflect.DeepEqual(expected, actual) {
+			t.Errorf("metric %q: expected %+v, got %+v", key, expected, actual)
+		}
 	}
 }

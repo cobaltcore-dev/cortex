@@ -4,7 +4,6 @@
 package nova
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -115,43 +114,7 @@ func setupTestDBWithHypervisors(t *testing.T) db.DB {
 	return testDB
 }
 
-func TestPremodifier_ModifyRequest_PreselectAllHostsDisabled(t *testing.T) {
-	testDB := setupTestDBWithHypervisors(t)
-	defer testDB.Close()
-
-	// Create a request with some existing hosts
-	request := &api.ExternalSchedulerRequest{
-		Hosts: []api.ExternalSchedulerHost{
-			{ComputeHost: "existing-host-1", HypervisorHostname: "existing-hypervisor-1"},
-		},
-		Weights: map[string]float64{
-			"existing-host-1": 1.5,
-		},
-		PreselectAllHosts: false, // Disabled
-	}
-	pipeline := &novaPipeline{database: testDB}
-	err := pipeline.modify(request)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Request should remain unchanged when PreselectAllHosts is false
-	expectedHosts := []api.ExternalSchedulerHost{
-		{ComputeHost: "existing-host-1", HypervisorHostname: "existing-hypervisor-1"},
-	}
-	expectedWeights := map[string]float64{
-		"existing-host-1": 1.5,
-	}
-
-	if !reflect.DeepEqual(request.Hosts, expectedHosts) {
-		t.Errorf("hosts = %v, want %v", request.Hosts, expectedHosts)
-	}
-	if !reflect.DeepEqual(request.Weights, expectedWeights) {
-		t.Errorf("weights = %v, want %v", request.Weights, expectedWeights)
-	}
-}
-
-func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled(t *testing.T) {
+func Test_PreselectAllHostsEnabled(t *testing.T) {
 	testDB := setupTestDBWithHypervisors(t)
 	defer testDB.Close()
 
@@ -163,10 +126,9 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled(t *testing.T) {
 		Weights: map[string]float64{
 			"existing-host-1": 1.5,
 		},
-		PreselectAllHosts: true, // Enabled
 	}
 
-	pipeline := &novaPipeline{database: testDB}
+	pipeline := &novaPipeline{database: testDB, preselectAllHosts: true}
 	err := pipeline.modify(request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -222,12 +184,11 @@ func TestPremodifier_ModifyRequest_PreselectAllHostsEnabled_EmptyRequest(t *test
 
 	// Create an empty request
 	request := &api.ExternalSchedulerRequest{
-		Hosts:             []api.ExternalSchedulerHost{},
-		Weights:           map[string]float64{},
-		PreselectAllHosts: true,
+		Hosts:   []api.ExternalSchedulerHost{},
+		Weights: map[string]float64{},
 	}
 
-	pipeline := &novaPipeline{database: testDB}
+	pipeline := &novaPipeline{database: testDB, preselectAllHosts: true}
 	if err := pipeline.modify(request); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -263,12 +224,11 @@ func TestPremodifier_ModifyRequest_NoHypervisors(t *testing.T) {
 	}
 
 	request := &api.ExternalSchedulerRequest{
-		Hosts:             []api.ExternalSchedulerHost{},
-		Weights:           map[string]float64{},
-		PreselectAllHosts: true,
+		Hosts:   []api.ExternalSchedulerHost{},
+		Weights: map[string]float64{},
 	}
 
-	pipeline := &novaPipeline{database: testDB}
+	pipeline := &novaPipeline{database: testDB, preselectAllHosts: true}
 	err = pipeline.modify(request)
 	if err == nil {
 		t.Fatal("expected error when no hypervisors found, got nil")
@@ -285,12 +245,11 @@ func TestPremodifier_ModifyRequest_DatabaseError(t *testing.T) {
 	defer testDB.Close()
 
 	request := &api.ExternalSchedulerRequest{
-		Hosts:             []api.ExternalSchedulerHost{},
-		Weights:           map[string]float64{},
-		PreselectAllHosts: true,
+		Hosts:   []api.ExternalSchedulerHost{},
+		Weights: map[string]float64{},
 	}
 
-	pipeline := &novaPipeline{database: testDB}
+	pipeline := &novaPipeline{database: testDB, preselectAllHosts: true}
 	if err := pipeline.modify(request); err == nil {
 		t.Fatal("expected database error, got nil")
 	}
@@ -316,21 +275,19 @@ func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 			ProjectID: "test-project",
 			RequestID: "test-request-id",
 		},
-		Rebuild:   true,
-		Resize:    false,
-		Live:      true,
-		VMware:    false,
-		Sandboxed: true,
+		Rebuild: true,
+		Resize:  false,
+		Live:    true,
+		VMware:  false,
 		Hosts: []api.ExternalSchedulerHost{
 			{ComputeHost: "original-host", HypervisorHostname: "original-hypervisor"},
 		},
 		Weights: map[string]float64{
 			"original-host": 2.5,
 		},
-		PreselectAllHosts: true,
 	}
 
-	pipeline := &novaPipeline{database: testDB}
+	pipeline := &novaPipeline{database: testDB, preselectAllHosts: true}
 	if err := pipeline.modify(originalRequest); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -353,9 +310,6 @@ func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 	}
 	if originalRequest.VMware {
 		t.Error("vmware should be false")
-	}
-	if !originalRequest.Sandboxed {
-		t.Error("sandboxed should be true")
 	}
 
 	// Verify that hosts and weights were replaced

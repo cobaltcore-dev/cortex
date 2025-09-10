@@ -33,7 +33,7 @@ type DependencyConfig struct {
 }
 
 // Validate if the dependencies are satisfied in the given config.
-func (deps *DependencyConfig) validate(c config) error {
+func (deps *DependencyConfig) validate(c SharedConfig) error {
 	confedNovaObjects := make(map[string]bool)
 	for _, objectType := range c.OpenStack.Nova.Types {
 		confedNovaObjects[objectType] = true
@@ -88,7 +88,7 @@ func (deps *DependencyConfig) validate(c config) error {
 }
 
 // Check if all dependencies are satisfied.
-func (c *config) Validate() error {
+func (c *SharedConfig) Validate() error {
 	for _, extractor := range c.ExtractorConfig.Plugins {
 		if err := extractor.validate(*c); err != nil {
 			return err
@@ -99,9 +99,11 @@ func (c *config) Validate() error {
 			return err
 		}
 	}
-	for _, step := range c.SchedulerConfig.Nova.Plugins {
-		if err := step.validate(*c); err != nil {
-			return err
+	for _, pipeline := range c.SchedulerConfig.Nova.Pipelines {
+		for _, step := range pipeline.Plugins {
+			if err := step.validate(*c); err != nil {
+				return err
+			}
 		}
 	}
 	for _, step := range c.DeschedulerConfig.Nova.Plugins {
@@ -110,8 +112,10 @@ func (c *config) Validate() error {
 		}
 	}
 	// Check general dependencies needed by all scheduler steps.
-	if err := c.SchedulerConfig.Nova.validate(*c); err != nil {
-		return err
+	for _, pipeline := range c.SchedulerConfig.Nova.Pipelines {
+		if err := pipeline.validate(*c); err != nil {
+			return err
+		}
 	}
 	if c.API.LogRequestBodies {
 		slog.Warn("logging request bodies is enabled (debug feature)")

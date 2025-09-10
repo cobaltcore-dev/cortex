@@ -20,12 +20,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/cinder"
 	cinderAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/cinder/api/http"
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/manila"
 	manilaAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api/http"
-	novaScheduler "github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
 	novaApiHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
@@ -74,43 +70,31 @@ func runExtractor(registry *monitoring.Registry, config conf.ExtractorConfig, db
 
 // Run a webserver that listens for external Nova scheduling requests.
 func runSchedulerNova(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	monitor := scheduler.NewPipelineMonitor("nova", registry)
 	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
-	defer mqttClient.Disconnect()
-	schedulerPipeline := novaScheduler.NewPipeline(config, db, monitor, mqttClient)
-	apiMonitor := scheduler.NewSchedulerMonitor(registry)
-	api := novaApiHTTP.NewAPI(config.API, schedulerPipeline, apiMonitor)
+	api := novaApiHTTP.NewAPI(config, registry, db, mqttClient)
 	api.Init(mux) // non-blocking
 }
 
 // Run a webserver that listens for external Manila scheduling requests.
 func runSchedulerManila(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	monitor := scheduler.NewPipelineMonitor("manila", registry)
 	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
-	defer mqttClient.Disconnect()
-	schedulerPipeline := manila.NewPipeline(config, db, monitor, mqttClient)
-	apiMonitor := scheduler.NewSchedulerMonitor(registry)
-	api := manilaAPIHTTP.NewAPI(config.API, schedulerPipeline, apiMonitor)
+	api := manilaAPIHTTP.NewAPI(config, registry, db, mqttClient)
 	api.Init(mux) // non-blocking
 }
 
 // Run a webserver that listens for external Cinder scheduling requests.
 func runSchedulerCinder(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	monitor := scheduler.NewPipelineMonitor("cinder", registry)
 	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
-	defer mqttClient.Disconnect()
-	schedulerPipeline := cinder.NewPipeline(config, db, monitor, mqttClient)
-	apiMonitor := scheduler.NewSchedulerMonitor(registry)
-	api := cinderAPIHTTP.NewAPI(config.API, schedulerPipeline, apiMonitor)
+	api := cinderAPIHTTP.NewAPI(config, registry, db, mqttClient)
 	api.Init(mux) // non-blocking
 }
 
@@ -169,7 +153,7 @@ func main() {
 	// uses this to check if the binary was built correctly)
 	bininfo.HandleVersionArgument()
 
-	config := conf.NewConfig()
+	config := conf.NewConfig[*conf.SharedConfig]()
 	// Set the configured logger.
 	config.GetLoggingConfig().SetDefaultLogger()
 	if err := config.Validate(); err != nil {

@@ -26,7 +26,7 @@ const (
 
 // Create a new Manila scheduler pipeline.
 func NewPipeline(
-	config conf.SchedulerConfig,
+	config conf.ManilaSchedulerPipelineConfig,
 	db db.DB,
 	monitor scheduler.PipelineMonitor,
 	mqttClient mqtt.Client,
@@ -44,7 +44,7 @@ func NewPipeline(
 		},
 	}
 	return scheduler.NewPipeline(
-		supportedSteps, config.Manila.Plugins, wrappers,
+		supportedSteps, config.Plugins, wrappers,
 		db, monitor, mqttClient, TopicFinished,
 	)
 }

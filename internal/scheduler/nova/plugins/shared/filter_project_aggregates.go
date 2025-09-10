@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 )
 
 type FilterProjectAggregatesStep struct {
@@ -29,7 +30,7 @@ func (s *FilterProjectAggregatesStep) Run(traceLog *slog.Logger, request api.Ext
 	var computeHostsMatchingProject []string
 	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsMatchingProject, `
         SELECT DISTINCT compute_host
-        FROM openstack_aggregates_v2
+        FROM `+nova.Aggregate{}.TableName()+`
         WHERE compute_host IS NOT NULL AND (
             metadata NOT LIKE '%filter_tenant_id%' OR
             (

@@ -16,11 +16,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: 1.25.0
+          go-version-file: 'go.mod'
       - name: Test quickly without Docker
-        run: go test -v ./...
+        run: |
+          echo "Testing main module..."
+          go test -v ./...
+          echo "Testing reservations module..."
+          cd reservations && go test -v ./...
 
   test-with-docker:
     # We don't need to run this longer test if the previous one already failed.
@@ -35,27 +39,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: 1.25.0
+          go-version-file: 'go.mod'
       - name: Run tests with Docker and calculate coverage
         run: |
           export GITHUB_ACTIONS=1
           export POSTGRES_CONTAINER=1
           export RABBITMQ_CONTAINER=1
+
+          echo "Running tests for main module..."
           go test -v \
             -coverpkg=./internal/... \
             -coverprofile=pr_profile.cov ./internal/...
           go tool cover -func pr_profile.cov > pr_func_coverage.txt
-      - name: Upload coverage file
+
+          echo "Running tests for reservations module..."
+          cd reservations
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=reservations_profile.cov ./internal/...
+          go tool cover -func reservations_profile.cov > reservations_func_coverage.txt
+          cd ..
+      - name: Upload coverage files
         uses: actions/upload-artifact@v4
         with:
           name: pr-func-coverage
-          path: pr_func_coverage.txt
+          path: |
+            pr_func_coverage.txt
+            reservations/reservations_func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: comments } = await github.rest.issues.listComments({
@@ -73,7 +89,7 @@ jobs:
                 });
               }
             }
-      - name: Download coverage file (PR only)
+      - name: Download coverage files (PR only)
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/download-artifact@v5
         with:
@@ -81,26 +97,52 @@ jobs:
           path: .
       - name: Post coverage comment (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
 
-            // Extract the last line of the coverage report
-            const coverageReport = fs.readFileSync('pr_func_coverage.txt', 'utf8');
-            const lines = coverageReport.trim().split('\n');
-            const lastLine = lines[lines.length - 1];
-            const coverageMatch = lastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-            const coveragePercentage = coverageMatch ? coverageMatch[1] : 'unknown';
+            // Read main module coverage report
+            const mainCoverageReport = fs.readFileSync('pr_func_coverage.txt', 'utf8');
+            const mainLines = mainCoverageReport.trim().split('\n');
+            const mainLastLine = mainLines[mainLines.length - 1];
+            const mainCoverageMatch = mainLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+            const mainCoveragePercentage = mainCoverageMatch ? mainCoverageMatch[1] : 'unknown';
+
+            // Read reservations module coverage report
+            let reservationsCoverageReport = '';
+            let reservationsCoveragePercentage = 'unknown';
+            try {
+              reservationsCoverageReport = fs.readFileSync('reservations/reservations_func_coverage.txt', 'utf8');
+              const reservationsLines = reservationsCoverageReport.trim().split('\n');
+              const reservationsLastLine = reservationsLines[reservationsLines.length - 1];
+              const reservationsCoverageMatch = reservationsLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              reservationsCoveragePercentage = reservationsCoverageMatch ? reservationsCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              reservationsCoverageReport = 'No coverage data available';
+            }
 
             let commentBody = '<!-- coverage-comment -->\n';
+            commentBody += '## Test Coverage Report\n\n';
+
+            // Main module coverage
             commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in go module internal/: ';
-            commentBody += coveragePercentage;
+            commentBody += '<summary>Coverage in main module (internal/): ';
+            commentBody += mainCoveragePercentage;
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
-            commentBody += coverageReport;
+            commentBody += mainCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n\n';
+
+            // Reservations module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in reservations module (reservations/internal/): ';
+            commentBody += reservationsCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += reservationsCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

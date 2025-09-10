@@ -64,7 +64,7 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation for Cortex Postgres
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
           subject-digest: ${{ steps.push_cortex_postgres.outputs.digest }}
@@ -93,8 +93,49 @@ jobs:
             GIT_TAG=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation for Cortex
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}
           subject-digest: ${{ steps.push_cortex.outputs.digest }}
+          push-to-registry: true
+      # Only build and push the reservations operator image if there are changes
+      # in the reservations directory.
+      - name: Get all changed reservations/ files
+        id: changed_reservations_files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            reservations/**
+      - name: Docker Meta (Cortex Reservations)
+        if: steps.changed_reservations_files.outputs.all_changed_files != ''
+        id: meta_cortex_reservations
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-reservations-operator
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            latest
+      - name: Build and Push Cortex Reservations Operator
+        if: steps.changed_reservations_files.outputs.all_changed_files != ''
+        id: push_cortex_reservations
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.kubebuilder
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_cortex_reservations.outputs.tags }}
+          labels: ${{ steps.meta_cortex_reservations.outputs.labels }}
+          build-args: |
+            GO_MOD_PATH=reservations
+            GIT_TAG=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+      - name: Generate Artifact Attestation for Cortex Reservations
+        if: steps.changed_reservations_files.outputs.all_changed_files != ''
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-reservations-operator
+          subject-digest: ${{ steps.push_cortex_reservations.outputs.digest }}
           push-to-registry: true

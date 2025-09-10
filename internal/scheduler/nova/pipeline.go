@@ -54,11 +54,14 @@ type novaPipeline struct {
 	scheduler.Pipeline[api.ExternalSchedulerRequest]
 	// Database to use for the nova pipeline.
 	database db.DB
+	// Whether the pipeline should preselect all hosts.
+	// This will override hosts provided by the user.
+	preselectAllHosts bool
 }
 
 // Create a new Nova scheduler pipeline.
 func NewPipeline(
-	config conf.SchedulerConfig,
+	config conf.NovaSchedulerPipelineConfig,
 	db db.DB,
 	monitor scheduler.PipelineMonitor,
 	mqttClient mqtt.Client,
@@ -83,15 +86,15 @@ func NewPipeline(
 		},
 	}
 	pipeline := scheduler.NewPipeline(
-		supportedSteps, config.Nova.Plugins, wrappers,
+		supportedSteps, config.Plugins, wrappers,
 		db, monitor, mqttClient, TopicFinished,
 	)
-	return &novaPipeline{pipeline, db}
+	return &novaPipeline{pipeline, db, config.PreselectAllHosts}
 }
 
 // If needed, modify the request before sending it off to the pipeline.
 func (p *novaPipeline) modify(request *api.ExternalSchedulerRequest) error {
-	if request.PreselectAllHosts {
+	if p.preselectAllHosts {
 		// Get all available hypervisors from the database.
 		var hypervisors []nova.Hypervisor
 		if _, err := p.database.Select(
