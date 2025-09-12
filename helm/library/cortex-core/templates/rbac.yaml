@@ -9,10 +9,10 @@ roleRef:
   name: computereservation-viewer-role
 subjects:
 - kind: ServiceAccount
-  name: {{ include "cortex.fullname" . }}
+  name: {{ .Release.Namespace }}-{{ include "cortex.fullname" . }}
   namespace: {{ .Release.Namespace }}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "cortex.fullname" . }}
+  name: {{ .Release.Namespace }}-{{ include "cortex.fullname" . }}
