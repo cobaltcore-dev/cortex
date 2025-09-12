@@ -22,24 +22,16 @@ const (
 type ComputeReservationSpecInstance struct {
 	// The flavor name of the instance to reserve.
 	Flavor string `json:"flavor"`
-	// The memory to reserve (e.g., "1Gi", "512Mi").
-	Memory resource.Quantity `json:"memory"`
-	// The number of vCPUs to reserve (e.g., "2", "500m").
-	VCPUs resource.Quantity `json:"vCPUs"`
-	// The disk space to reserve (e.g., "10Gi", "500Mi").
-	Disk resource.Quantity `json:"disk"`
+	// Resources requested to reserve for this instance.
+	Requests map[string]resource.Quantity `json:"requests,omitempty"`
 	// Extra specifications for the instance.
 	ExtraSpecs map[string]string `json:"extraSpecs,omitempty"`
 }
 
 // Specification for a bare resource reservation
 type ComputeReservationSpecBareResource struct {
-	// The amount of CPU to reserve (e.g., "2", "500m").
-	CPU resource.Quantity `json:"cpu"`
-	// The amount of memory to reserve (e.g., "1Gi", "512Mi").
-	Memory resource.Quantity `json:"memory"`
-	// The amount of disk space to reserve (e.g., "10Gi", "500Mi").
-	Disk resource.Quantity `json:"disk"`
+	// Resources requested to reserve.
+	Requests map[string]resource.Quantity `json:"requests,omitempty"`
 }
 
 // ComputeReservationSpec defines the desired state of ComputeReservation.

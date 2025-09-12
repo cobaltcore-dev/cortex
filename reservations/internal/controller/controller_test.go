@@ -151,9 +151,10 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 						ExtraSpecs: map[string]string{
 							"capabilities:hypervisor_type": "unsupported",
 						},
-						Memory: resource.MustParse("1Gi"),
-						VCPUs:  resource.MustParse("2"),
-						Disk:   resource.MustParse("10Gi"),
+						Requests: map[string]resource.Quantity{
+							"memory": resource.MustParse("1Gi"),
+							"cpu":    resource.MustParse("2"),
+						},
 					},
 				},
 			},
@@ -176,9 +177,10 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 					Instance: v1alpha1.ComputeReservationSpecInstance{
 						Flavor:     "test-flavor",
 						ExtraSpecs: map[string]string{},
-						Memory:     resource.MustParse("1Gi"),
-						VCPUs:      resource.MustParse("2"),
-						Disk:       resource.MustParse("10Gi"),
+						Requests: map[string]resource.Quantity{
+							"memory": resource.MustParse("1Gi"),
+							"cpu":    resource.MustParse("2"),
+						},
 					},
 				},
 			},
@@ -275,9 +277,10 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 				ExtraSpecs: map[string]string{
 					"capabilities:hypervisor_type": "kvm",
 				},
-				Memory: resource.MustParse("1Gi"),
-				VCPUs:  resource.MustParse("2"),
-				Disk:   resource.MustParse("10Gi"),
+				Requests: map[string]resource.Quantity{
+					"memory": resource.MustParse("1Gi"),
+					"cpu":    resource.MustParse("2"),
+				},
 			},
 		},
 	}
@@ -379,9 +382,10 @@ func TestComputeReservationReconciler_reconcileBareResourceReservation(t *testin
 			Kind:      v1alpha1.ComputeReservationSpecKindBareResource,
 			ProjectID: "test-project",
 			BareResource: v1alpha1.ComputeReservationSpecBareResource{
-				CPU:    resource.MustParse("2"),
-				Memory: resource.MustParse("1Gi"),
-				Disk:   resource.MustParse("10Gi"),
+				Requests: map[string]resource.Quantity{
+					"memory": resource.MustParse("1Gi"),
+					"cpu":    resource.MustParse("2"),
+				},
 			},
 		},
 	}

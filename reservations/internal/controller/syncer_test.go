@@ -237,18 +237,13 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 
 	// Check resource values
 	expectedMemory := resource.MustParse("1073741824") // 1024MB in bytes
-	if !res.Spec.Instance.Memory.Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Instance.Memory)
+	if !res.Spec.Instance.Requests["memory"].Equal(expectedMemory) {
+		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Instance.Requests["memory"])
 	}
 
 	expectedVCPUs := resource.MustParse("2")
-	if !res.Spec.Instance.VCPUs.Equal(expectedVCPUs) {
-		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Instance.VCPUs)
-	}
-
-	expectedDisk := resource.MustParse("10737418240") // 10GB in bytes
-	if !res.Spec.Instance.Disk.Equal(expectedDisk) {
-		t.Errorf("Expected disk %v, got %v", expectedDisk, res.Spec.Instance.Disk)
+	if !res.Spec.Instance.Requests["cpu"].Equal(expectedVCPUs) {
+		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Instance.Requests["cpu"])
 	}
 }
 
@@ -322,9 +317,10 @@ func TestSyncer_SyncReservations_BareResourceCommitments(t *testing.T) {
 	var ramRes *v1alpha1.ComputeReservation
 
 	for i := range reservations.Items {
-		if reservations.Items[i].Name == "commitment-abcde" {
+		switch reservations.Items[i].Name {
+		case "commitment-abcde":
 			coresRes = &reservations.Items[i]
-		} else if reservations.Items[i].Name == "commitment-fedcb" {
+		case "commitment-fedcb":
 			ramRes = &reservations.Items[i]
 		}
 	}
@@ -345,14 +341,14 @@ func TestSyncer_SyncReservations_BareResourceCommitments(t *testing.T) {
 	}
 
 	expectedCPU := resource.MustParse("4")
-	if !coresRes.Spec.BareResource.CPU.Equal(expectedCPU) {
-		t.Errorf("Expected CPU %v, got %v", expectedCPU, coresRes.Spec.BareResource.CPU)
+	if !coresRes.Spec.BareResource.Requests["cpu"].Equal(expectedCPU) {
+		t.Errorf("Expected CPU %v, got %v", expectedCPU, coresRes.Spec.BareResource.Requests["cpu"])
 	}
 
 	// Verify ram reservation
 	expectedMemory := resource.MustParse("2147483648") // 2048 MiB in bytes
-	if !ramRes.Spec.BareResource.Memory.Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, ramRes.Spec.BareResource.Memory)
+	if !ramRes.Spec.BareResource.Requests["memory"].Equal(expectedMemory) {
+		t.Errorf("Expected memory %v, got %v", expectedMemory, ramRes.Spec.BareResource.Requests["memory"])
 	}
 }
 
@@ -372,9 +368,10 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			ProjectID: "old-project",
 			Instance: v1alpha1.ComputeReservationSpecInstance{
 				Flavor: "old-flavor",
-				Memory: resource.MustParse("512Mi"),
-				VCPUs:  resource.MustParse("1"),
-				Disk:   resource.MustParse("5Gi"),
+				Requests: map[string]resource.Quantity{
+					"memory": resource.MustParse("512Mi"),
+					"cpu":    resource.MustParse("1"),
+				},
 			},
 		},
 	}

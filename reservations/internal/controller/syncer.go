@@ -404,9 +404,11 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 						Instance: v1alpha1.ComputeReservationSpecInstance{
 							Flavor:     commitment.Flavor.Name,
 							ExtraSpecs: commitment.Flavor.ExtraSpecs,
-							Memory:     *resource.NewQuantity(int64(commitment.Flavor.RAM)*1024*1024, resource.BinarySI),
-							VCPUs:      *resource.NewQuantity(int64(commitment.Flavor.VCPUs), resource.DecimalSI),
-							Disk:       *resource.NewQuantity(int64(commitment.Flavor.Disk)*1024*1024*1024, resource.BinarySI),
+							Requests: map[string]resource.Quantity{
+								"memory": *resource.NewQuantity(int64(commitment.Flavor.RAM)*1024*1024, resource.BinarySI),
+								"cpu":    *resource.NewQuantity(int64(commitment.Flavor.VCPUs), resource.DecimalSI),
+								// Disk is currently not considered.
+							},
 						},
 					},
 				})
@@ -423,6 +425,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 				Kind:      v1alpha1.ComputeReservationSpecKindBareResource,
 				ProjectID: commitment.ProjectID,
 				DomainID:  commitment.DomainID,
+				BareResource: v1alpha1.ComputeReservationSpecBareResource{
+					Requests: map[string]resource.Quantity{},
+				},
 			},
 		}
 		quantity, err := limesUnitToResource(int64(commitment.Amount), commitment.Unit)
@@ -432,9 +437,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		}
 		switch commitment.ResourceName {
 		case "cores":
-			reservation.Spec.BareResource.CPU = quantity
+			reservation.Spec.BareResource.Requests["cpu"] = quantity
 		case "ram":
-			reservation.Spec.BareResource.Memory = quantity
+			reservation.Spec.BareResource.Requests["memory"] = quantity
 		default:
 			syncLog.Info("unsupported bare resource commitment unit", "resource name", commitment.ResourceName)
 			continue
