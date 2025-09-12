@@ -248,27 +248,27 @@ func TestHostPinnedProjectsExtractor_Extract_SupportEmptyComputeHost(t *testing.
 
 	expectedFeatures := []HostPinnedProjects{
 		{
-			AggregateName: testlib.Ptr("agg2"),
-			AggregateUUID: testlib.Ptr("agg2"),
-			ComputeHost:   nil,
+			AggregateName: testlib.Ptr("agg3"),
+			AggregateUUID: testlib.Ptr("agg3"),
+			ComputeHost:   testlib.Ptr("host1"),
 			ProjectID:     testlib.Ptr("project_id_3"),
 		},
 		{
-			AggregateName: testlib.Ptr("agg2"),
-			AggregateUUID: testlib.Ptr("agg2"),
-			ComputeHost:   nil,
+			AggregateName: testlib.Ptr("agg3"),
+			AggregateUUID: testlib.Ptr("agg3"),
+			ComputeHost:   testlib.Ptr("host1"),
 			ProjectID:     testlib.Ptr("project_id_4"),
 		},
 		{
-			AggregateName: testlib.Ptr("agg3"),
-			AggregateUUID: testlib.Ptr("agg3"),
-			ComputeHost:   testlib.Ptr("host1"),
+			AggregateName: testlib.Ptr("agg2"),
+			AggregateUUID: testlib.Ptr("agg2"),
+			ComputeHost:   nil,
 			ProjectID:     testlib.Ptr("project_id_3"),
 		},
 		{
-			AggregateName: testlib.Ptr("agg3"),
-			AggregateUUID: testlib.Ptr("agg3"),
-			ComputeHost:   testlib.Ptr("host1"),
+			AggregateName: testlib.Ptr("agg2"),
+			AggregateUUID: testlib.Ptr("agg2"),
+			ComputeHost:   nil,
 			ProjectID:     testlib.Ptr("project_id_4"),
 		},
 	}
@@ -550,6 +550,95 @@ func TestHostPinnedProjectsExtractor_Extract_FindAllHypervisorsWithNoFilterIfAgg
 			AggregateUUID: nil,
 			ComputeHost:   testlib.Ptr("host3"),
 			ProjectID:     nil,
+		},
+	}
+
+	if len(results) != len(expectedFeatures) {
+		t.Errorf("expected %d results, got %d", len(expectedFeatures), len(results))
+	}
+
+	for i := range results {
+		if !reflect.DeepEqual(results[i], expectedFeatures[i]) {
+			t.Errorf("expected %v, got %v", expectedFeatures[i], results[i])
+		}
+	}
+}
+
+func TestHostPinnedProjectsExtractor_Extract_DuplicateHostsAndProjectsInAggregate(t *testing.T) {
+	if os.Getenv("POSTGRES_CONTAINER") != "1" {
+		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
+	}
+
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	if err := testDB.CreateTable(
+		testDB.AddTable(nova.Aggregate{}),
+		testDB.AddTable(nova.Hypervisor{}),
+	); err != nil {
+		t.Fatalf("failed to create table: %v", err)
+	}
+
+	hypervisors := []any{
+		&nova.Hypervisor{
+			ID:             "1",
+			ServiceHost:    "host1",
+			HypervisorType: "not-ironic",
+		},
+	}
+
+	aggregates := []any{
+		&nova.Aggregate{
+			Name:        "agg1",
+			UUID:        "agg1",
+			ComputeHost: testlib.Ptr("host1"),
+			Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
+		},
+		&nova.Aggregate{
+			Name:        "agg1",
+			UUID:        "agg1",
+			ComputeHost: testlib.Ptr("host1"),
+			Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
+		},
+	}
+
+	if err := testDB.Insert(hypervisors...); err != nil {
+		t.Fatalf("failed to insert hypervisors: %v", err)
+	}
+
+	if err := testDB.Insert(aggregates...); err != nil {
+		t.Fatalf("failed to insert aggregates: %v", err)
+	}
+
+	extractor := &HostPinnedProjectsExtractor{}
+	config := conf.FeatureExtractorConfig{
+		Name:           "host_pinned_projects_extractor",
+		Options:        conf.NewRawOpts("{}"),
+		RecencySeconds: nil,
+	}
+
+	if err := extractor.Init(testDB, config); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if _, err := extractor.Extract(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	var results []HostPinnedProjects
+	table := HostPinnedProjects{}.TableName()
+	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	expectedFeatures := []HostPinnedProjects{
+		{
+			AggregateName: testlib.Ptr("agg1"),
+			AggregateUUID: testlib.Ptr("agg1"),
+			ComputeHost:   testlib.Ptr("host1"),
+			ProjectID:     testlib.Ptr("project_id_1"),
 		},
 	}
 
