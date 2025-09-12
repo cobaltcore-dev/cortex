@@ -93,9 +93,7 @@ func (p *Pipeline) run() map[string][]string {
 	decisionsByStep := map[string][]string{}
 	var wg sync.WaitGroup
 	for _, step := range p.steps {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			slog.Info("descheduler: running step", "name", step.GetName())
 			decisions, err := step.Run()
 			if errors.Is(err, ErrStepSkipped) {
@@ -110,7 +108,7 @@ func (p *Pipeline) run() map[string][]string {
 			lock.Lock()
 			defer lock.Unlock()
 			decisionsByStep[step.GetName()] = decisions
-		}()
+		})
 	}
 	wg.Wait()
 	return decisionsByStep

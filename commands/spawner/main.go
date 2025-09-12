@@ -154,9 +154,7 @@ func main() {
 		if serverInput == "y" || serverInput == "" {
 			var wg sync.WaitGroup
 			for _, s := range serversToDelete {
-				wg.Add(1)
-				go func(s servers.Server) {
-					defer wg.Done()
+				wg.Go(func() {
 					fmt.Printf("🧨 Deleting VM %s on %s\n", s.Name, s.HypervisorHostname)
 					result := servers.Delete(ctx, adminNova, s.ID)
 					must.Succeed(result.Err)
@@ -172,7 +170,7 @@ func main() {
 						}
 					}
 					fmt.Printf("💥 Deleted VM %s on %s\n", s.Name, s.HypervisorHostname)
-				}(s)
+				})
 			}
 			wg.Wait()
 			fmt.Println("🧨 Deleted all existing VMs")
@@ -352,14 +350,12 @@ func main() {
 		}
 		var wg sync.WaitGroup
 		for _, kp := range keypairsFiltered {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				fmt.Printf("🧨 Deleting keypair %s\n", kp.Name)
 				result := keypairs.Delete(ctx, projectCompute, kp.Name, keypairs.DeleteOpts{})
 				must.Succeed(result.Err)
 				fmt.Printf("💥 Deleted keypair %s\n", kp.Name)
-			}()
+			})
 		}
 		wg.Wait()
 		fmt.Println("🧨 Deleted all existing keypairs")
@@ -377,9 +373,7 @@ func main() {
 	// Spawn new VMs.
 	var wg sync.WaitGroup
 	for i := range vmsToSpawn {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			//nolint:gosec // We don't care if the id is cryptographically secure.
 			name := fmt.Sprintf("%s-%05d", prefix, rand.Intn(100000))
 			var scriptBuilder strings.Builder
@@ -443,7 +437,7 @@ func main() {
 			} else {
 				fmt.Printf("%s🎉 Success\n", baseMsg)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

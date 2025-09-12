@@ -87,9 +87,7 @@ func (api *limesAPI) GetAllCommitments(ctx context.Context, projects []identity.
 	errChan := make(chan error, len(projects))
 
 	for _, project := range projects {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Fetch commitments for the project.
 			newResults, err := api.getCommitments(ctx, project)
 			if err != nil {
@@ -100,7 +98,7 @@ func (api *limesAPI) GetAllCommitments(ctx context.Context, projects []identity.
 			resultMutex.Lock()
 			results = append(results, newResults...)
 			resultMutex.Unlock()
-		}()
+		})
 		time.Sleep(api.sleepInterval) // Don't overload the API.
 	}
 

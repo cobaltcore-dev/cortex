@@ -114,9 +114,7 @@ func (p *pipeline[RequestType]) runSteps(log *slog.Logger, request RequestType) 
 	for _, steps := range p.executionOrder {
 		var wg sync.WaitGroup
 		for _, step := range steps {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				stepLog := log.With("stepName", step.GetName(), "stepAlias", step.GetAlias())
 				stepLog.Info("scheduler: running step")
 				result, err := step.Run(stepLog, request)
@@ -132,7 +130,7 @@ func (p *pipeline[RequestType]) runSteps(log *slog.Logger, request RequestType) 
 				lock.Lock()
 				defer lock.Unlock()
 				activationsByStep[getStepKey(step)] = result.Activations
-			}()
+			})
 		}
 		wg.Wait()
 	}
