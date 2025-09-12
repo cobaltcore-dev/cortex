@@ -30,46 +30,60 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 	}
 
 	hostPinnedProjects := []any{
+		// Host1 has no assigned filter_tenant_id - should always be included
 		&shared.HostPinnedProjects{
 			AggregateName: nil,
 			AggregateUUID: nil,
 			ComputeHost:   testlib.Ptr("host1"),
 			ProjectID:     nil,
 		},
+		// Aggregate 2 maps to project-123 to host2
 		&shared.HostPinnedProjects{
 			AggregateName: testlib.Ptr("agg2"),
 			AggregateUUID: testlib.Ptr("aggregate2"),
 			ComputeHost:   testlib.Ptr("host2"),
 			ProjectID:     testlib.Ptr("project-123"),
 		},
+		// Aggregate 3 maps to project-456 to host3
 		&shared.HostPinnedProjects{
 			AggregateName: testlib.Ptr("agg3"),
 			AggregateUUID: testlib.Ptr("aggregate3"),
 			ComputeHost:   testlib.Ptr("host3"),
 			ProjectID:     testlib.Ptr("project-456"),
 		},
+		// Aggregate 4 maps to project-123 and project-789 to host4
 		&shared.HostPinnedProjects{
-			AggregateName: nil,
-			AggregateUUID: nil,
+			AggregateName: testlib.Ptr("agg4"),
+			AggregateUUID: testlib.Ptr("agg4"),
 			ComputeHost:   testlib.Ptr("host4"),
 			ProjectID:     testlib.Ptr("project-123"),
 		},
 		&shared.HostPinnedProjects{
-			AggregateName: nil,
-			AggregateUUID: nil,
+			AggregateName: testlib.Ptr("agg4"),
+			AggregateUUID: testlib.Ptr("agg4"),
 			ComputeHost:   testlib.Ptr("host4"),
 			ProjectID:     testlib.Ptr("project-789"),
 		},
+		// Host5 has no assigned filter_tenant_id - should always be included
 		&shared.HostPinnedProjects{
 			AggregateName: nil,
 			AggregateUUID: nil,
 			ComputeHost:   testlib.Ptr("host5"),
 			ProjectID:     nil,
 		},
+		// Aggregate 6 has no hosts assigned but a tenant filter
+		// This should not have any effect on the filter
 		&shared.HostPinnedProjects{
 			AggregateName: testlib.Ptr("agg6"),
 			AggregateUUID: testlib.Ptr("aggregate6"),
 			ComputeHost:   nil,
+			ProjectID:     testlib.Ptr("project-123"),
+		},
+		// Maps project-123 to host2 a second time to test DISTINCT in SQL
+		&shared.HostPinnedProjects{
+			AggregateName: testlib.Ptr("agg7"),
+			AggregateUUID: testlib.Ptr("aggregate7"),
+			ComputeHost:   testlib.Ptr("host2"),
 			ProjectID:     testlib.Ptr("project-123"),
 		},
 	}
