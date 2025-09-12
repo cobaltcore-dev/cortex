@@ -94,23 +94,23 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 	}
 
 	// Convert resource.Quantity to integers for the API
-	memoryValue := spec.Memory.ScaledValue(resource.Mega)
-	if memoryValue < 0 {
-		return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
+	var memoryMB uint64
+	if memory, ok := spec.Requests["memory"]; ok {
+		memoryValue := memory.ScaledValue(resource.Mega)
+		if memoryValue < 0 {
+			return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
+		}
+		memoryMB = uint64(memoryValue)
 	}
-	memoryMB := uint64(memoryValue)
 
-	vCPUsValue := spec.VCPUs.Value()
-	if vCPUsValue < 0 {
-		return ctrl.Result{}, fmt.Errorf("invalid vCPUs value: %d", vCPUsValue)
+	var cpu uint64
+	if cpuQuantity, ok := spec.Requests["cpu"]; ok {
+		cpuValue := cpuQuantity.ScaledValue(resource.Milli)
+		if cpuValue < 0 {
+			return ctrl.Result{}, fmt.Errorf("invalid cpu value: %d", cpuValue)
+		}
+		cpu = uint64(cpuValue)
 	}
-	vCPUs := uint64(vCPUsValue)
-
-	diskValue := spec.Disk.ScaledValue(resource.Giga)
-	if diskValue < 0 {
-		return ctrl.Result{}, fmt.Errorf("invalid disk value: %d", diskValue)
-	}
-	diskGB := uint64(diskValue)
 
 	externalSchedulerRequest := api.ExternalSchedulerRequest{
 		// Pipeline with all filters enabled + preselects all hosts.
@@ -124,8 +124,8 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 						Name:       spec.Flavor,
 						ExtraSpecs: spec.ExtraSpecs,
 						MemoryMB:   memoryMB,
-						VCPUs:      vCPUs,
-						RootGB:     diskGB,
+						VCPUs:      cpu,
+						// Disk is currently not considered.
 					},
 				},
 			},

@@ -77,9 +77,12 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 		host := reservation.Status.Host
 		instance := reservation.Spec.Instance
-		vcpusReserved[host] += instance.VCPUs.AsDec().UnscaledBig().Uint64()
-		memoryReserved[host] += instance.Memory.AsDec().UnscaledBig().Uint64() / 1000000
-		diskReserved[host] += instance.Disk.AsDec().UnscaledBig().Uint64() / 1000000000
+		if cpu, ok := instance.Requests["cpu"]; ok {
+			vcpusReserved[host] += cpu.AsDec().UnscaledBig().Uint64()
+		}
+		if memory, ok := instance.Requests["memory"]; ok {
+			memoryReserved[host] += memory.AsDec().UnscaledBig().Uint64() / 1000000 // MB
+		}
 	}
 	traceLog.Debug(
 		"reserved resources",

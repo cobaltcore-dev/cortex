@@ -83,12 +83,12 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 		switch reservation.Spec.Kind {
 		case v1alpha1.ComputeReservationSpecKindInstance:
 			// Instance reservations have resources defined in the instance spec.
-			resourcesByLabels[key]["vcpus"] += reservation.Spec.Instance.VCPUs.
-				AsDec().UnscaledBig().Uint64()
-			resourcesByLabels[key]["memory_mb"] += reservation.Spec.Instance.Memory.
-				AsDec().UnscaledBig().Uint64() / 1000000
-			resourcesByLabels[key]["disk_gb"] += reservation.Spec.Instance.Disk.
-				AsDec().UnscaledBig().Uint64() / 1000000000
+			if cpu, ok := reservation.Spec.Instance.Requests["cpu"]; ok {
+				resourcesByLabels[key]["vcpus"] += cpu.AsDec().UnscaledBig().Uint64()
+			}
+			if memory, ok := reservation.Spec.Instance.Requests["memory"]; ok {
+				resourcesByLabels[key]["memory_mb"] += memory.AsDec().UnscaledBig().Uint64() / 1000000
+			}
 		default:
 			continue // Skip non-instance reservations.
 		}

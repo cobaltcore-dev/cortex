@@ -102,9 +102,10 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				ProjectID: "test-project-1",
 				Instance: v1alpha1.ComputeReservationSpecInstance{
 					Flavor: "test-flavor",
-					Memory: resource.MustParse("1Gi"),
-					VCPUs:  resource.MustParse("2"),
-					Disk:   resource.MustParse("10Gi"),
+					Requests: map[string]resource.Quantity{
+						"memory": resource.MustParse("1Gi"),
+						"cpu":    resource.MustParse("2"),
+					},
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -121,9 +122,10 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				ProjectID: "test-project-2",
 				Instance: v1alpha1.ComputeReservationSpecInstance{
 					Flavor: "test-flavor-2",
-					Memory: resource.MustParse("2Gi"),
-					VCPUs:  resource.MustParse("4"),
-					Disk:   resource.MustParse("20Gi"),
+					Requests: map[string]resource.Quantity{
+						"memory": resource.MustParse("2Gi"),
+						"cpu":    resource.MustParse("4"),
+					},
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -139,9 +141,10 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Kind:      v1alpha1.ComputeReservationSpecKindBareResource,
 				ProjectID: "test-project-3",
 				BareResource: v1alpha1.ComputeReservationSpecBareResource{
-					CPU:    resource.MustParse("4"),
-					Memory: resource.MustParse("4Gi"),
-					Disk:   resource.MustParse("40Gi"),
+					Requests: map[string]resource.Quantity{
+						"memory": resource.MustParse("4Gi"),
+						"cpu":    resource.MustParse("4"),
+					},
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -239,9 +242,10 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 			ProjectID: "test-project",
 			Instance: v1alpha1.ComputeReservationSpecInstance{
 				Flavor: "test-flavor",
-				Memory: resource.MustParse("1000Mi"), // 1000 MiB
-				VCPUs:  resource.MustParse("2"),
-				Disk:   resource.MustParse("10Gi"), // 10 GiB
+				Requests: map[string]resource.Quantity{
+					"memory": resource.MustParse("1000Mi"),
+					"cpu":    resource.MustParse("2"),
+				},
 			},
 		},
 		Status: v1alpha1.ComputeReservationStatus{
@@ -274,7 +278,6 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 	// Look for resource metrics
 	foundVCPUs := false
 	foundMemory := false
-	foundDisk := false
 
 	for _, metric := range metrics {
 		var m dto.Metric
@@ -303,15 +306,6 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 					t.Errorf("Expected memory_mb value %f, got %f", expectedMemoryMB, m.GetGauge().GetValue())
 				}
 			}
-			if labels["resource"] == "disk_gb" {
-				foundDisk = true
-				// Disk: 10Gi = 10 * 1024 * 1024 * 1024 bytes = 10737418240 bytes
-				// Converted to GB: 10737418240 / 1000000000 = 10.737418240 GB
-				expectedDiskGB := float64(10) // 10Gi converted to GB (rounded down due to integer division)
-				if m.GetGauge().GetValue() != expectedDiskGB {
-					t.Errorf("Expected disk_gb value %f, got %f", expectedDiskGB, m.GetGauge().GetValue())
-				}
-			}
 		}
 	}
 
@@ -320,9 +314,6 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 	}
 	if !foundMemory {
 		t.Error("Expected to find memory resource metric")
-	}
-	if !foundDisk {
-		t.Error("Expected to find disk resource metric")
 	}
 }
 
@@ -374,9 +365,10 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 			ProjectID: "test-project",
 			Instance: v1alpha1.ComputeReservationSpecInstance{
 				Flavor: "test-flavor",
-				Memory: resource.MustParse("1Gi"),
-				VCPUs:  resource.MustParse("2"),
-				Disk:   resource.MustParse("10Gi"),
+				Requests: map[string]resource.Quantity{
+					"memory": resource.MustParse("1Gi"),
+					"cpu":    resource.MustParse("2"),
+				},
 			},
 		},
 		Status: v1alpha1.ComputeReservationStatus{

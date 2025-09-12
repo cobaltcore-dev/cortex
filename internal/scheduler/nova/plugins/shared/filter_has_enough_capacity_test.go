@@ -467,9 +467,10 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				DomainID:  "test-domain",
 				Instance: v1alpha1.ComputeReservationSpecInstance{
 					Flavor: "test-flavor",
-					Memory: *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
-					VCPUs:  *resource.NewQuantity(4, resource.DecimalSI),
-					Disk:   *resource.NewQuantity(100*1024*1024*1024, resource.BinarySI), // 100GB
+					Requests: map[string]resource.Quantity{
+						"memory": *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
+						"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
+					},
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -488,9 +489,10 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				DomainID:  "test-domain",
 				Instance: v1alpha1.ComputeReservationSpecInstance{
 					Flavor: "test-flavor",
-					Memory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB
-					VCPUs:  *resource.NewQuantity(4, resource.DecimalSI),
-					Disk:   *resource.NewQuantity(200*1024*1024*1024, resource.BinarySI), // 200GB
+					Requests: map[string]resource.Quantity{
+						"memory": *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
+						"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
+					},
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -509,9 +511,10 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				DomainID:  "test-domain",
 				Instance: v1alpha1.ComputeReservationSpecInstance{
 					Flavor: "test-flavor",
-					Memory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16GB
-					VCPUs:  *resource.NewQuantity(8, resource.DecimalSI),
-					Disk:   *resource.NewQuantity(500*1024*1024*1024, resource.BinarySI), // 500GB
+					Requests: map[string]resource.Quantity{
+						"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16GB
+						"cpu":    *resource.NewQuantity(8, resource.DecimalSI),
+					},
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
