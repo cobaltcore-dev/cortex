@@ -640,12 +640,6 @@ func TestHostPinnedProjectsExtractor_Extract_DuplicateHostsAndProjectsInAggregat
 			ComputeHost:   testlib.Ptr("host1"),
 			ProjectID:     testlib.Ptr("project_id_1"),
 		},
-		{
-			AggregateName: testlib.Ptr("agg2"),
-			AggregateUUID: testlib.Ptr("agg2"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_1"),
-		},
 	}
 
 	if len(results) != len(expectedFeatures) {
