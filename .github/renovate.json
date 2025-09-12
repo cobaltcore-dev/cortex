@@ -45,6 +45,23 @@
         "patch"
       ],
       "groupName": "External dependencies"
+    },
+    {
+      "matchFiles": [
+        "reservations/go.mod",
+        "go.mod"
+      ],
+      "matchPackageNames": [
+        "github.com/cobaltcore-dev/cortex",
+        "github.com/cobaltcore-dev/cortex/reservations/api"
+      ],
+      "enabled": false
+    },
+    {
+      "matchFiles": [
+        "reservations/config/manager/kustomization.yaml"
+      ],
+      "enabled": false
     }
   ],
   "prHourlyLimit": 0,
