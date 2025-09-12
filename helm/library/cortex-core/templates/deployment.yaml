@@ -27,7 +27,7 @@ spec:
         app: {{ include "cortex.fullname" $ }}-{{ .name }}
         {{- include "cortex.labels" $ | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "cortex.fullname" $ }}
+      serviceAccountName: {{ .Release.Namespace }}-{{ include "cortex.fullname" $ }}
       containers:
         - name: {{ include "cortex.fullname" $ }}-{{ .name }}
           args: {{ .args | toJson }}
@@ -84,7 +84,7 @@ spec:
         app: {{ include "cortex.fullname" $ }}-cli
         {{- include "cortex.labels" $ | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "cortex.fullname" $ }}
+      serviceAccountName: {{ .Release.Namespace }}-{{ include "cortex.fullname" $ }}
       containers:
         - name: {{ include "cortex.fullname" $ }}-cli
           command:
