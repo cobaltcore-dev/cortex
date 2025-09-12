@@ -118,9 +118,7 @@ func (api *placementAPI) GetAllTraits(ctx context.Context, providers []ResourceP
 	errChan := make(chan error, len(providers))
 
 	for _, provider := range providers {
-		wg.Add(1)
-		go func(provider ResourceProvider) {
-			defer wg.Done()
+		wg.Go(func() {
 			// Fetch traits for the provider.
 			newResults, err := api.getTraits(ctx, provider)
 			if err != nil {
@@ -131,7 +129,7 @@ func (api *placementAPI) GetAllTraits(ctx context.Context, providers []ResourceP
 			resultMutex.Lock()
 			results = append(results, newResults...)
 			resultMutex.Unlock()
-		}(provider)
+		})
 		time.Sleep(api.sleepInterval) // Don't overload the API.
 	}
 
@@ -194,9 +192,7 @@ func (api *placementAPI) GetAllInventoryUsages(ctx context.Context, providers []
 	errChan := make(chan error, len(providers))
 
 	for _, provider := range providers {
-		wg.Add(1)
-		go func(provider ResourceProvider) {
-			defer wg.Done()
+		wg.Go(func() {
 			// Fetch inventory usages for the provider.
 			newResults, err := api.getInventoryUsages(ctx, provider)
 			if err != nil {
@@ -207,7 +203,7 @@ func (api *placementAPI) GetAllInventoryUsages(ctx context.Context, providers []
 			resultMutex.Lock()
 			results = append(results, newResults...)
 			resultMutex.Unlock()
-		}(provider)
+		})
 		time.Sleep(api.sleepInterval) // Don't overload the API.
 	}
 

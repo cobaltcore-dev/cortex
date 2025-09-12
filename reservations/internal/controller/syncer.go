@@ -239,9 +239,7 @@ func (c *commitmentsClient) GetComputeCommitments(ctx context.Context) ([]Commit
 	// Channel to communicate errors from goroutines.
 	errChan := make(chan error, len(projects))
 	for _, project := range projects {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Fetch instance commitments for the project.
 			newResults, err := c.getCommitments(ctx, project)
 			if err != nil {
@@ -252,7 +250,7 @@ func (c *commitmentsClient) GetComputeCommitments(ctx context.Context) ([]Commit
 			commitmentsMutex.Lock()
 			commitments = append(commitments, newResults...)
 			commitmentsMutex.Unlock()
-		}()
+		})
 		time.Sleep(jobloop.DefaultJitter(50 * time.Millisecond)) // Don't overload the API.
 	}
 	// Wait for all goroutines to finish and close the error channel.

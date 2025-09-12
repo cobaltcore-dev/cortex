@@ -34,11 +34,9 @@ func (p *Pipeline) SyncPeriodic(ctx context.Context) {
 		default:
 			var wg sync.WaitGroup
 			for _, syncer := range p.Syncers {
-				wg.Add(1)
-				go func(syncer Datasource) {
-					defer wg.Done()
+				wg.Go(func() {
 					syncer.Sync(ctx)
-				}(syncer)
+				})
 			}
 			wg.Wait()
 			time.Sleep(jobloop.DefaultJitter(time.Minute))

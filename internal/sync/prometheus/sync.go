@@ -92,14 +92,12 @@ func (s CombinedSyncer) Sync(context context.Context) {
 	}
 	var wg gosync.WaitGroup
 	for _, syncer := range s.syncers {
-		wg.Add(1)
-		go func(syncer Syncer) {
-			defer wg.Done()
+		wg.Go(func() {
 			syncer.Sync(context)
 			for _, trigger := range syncer.Triggers() {
 				go s.mqttClient.Publish(trigger, "")
 			}
-		}(syncer)
+		})
 	}
 	wg.Wait()
 }

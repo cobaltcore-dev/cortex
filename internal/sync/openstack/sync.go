@@ -110,13 +110,11 @@ func (s CombinedSyncer) Sync(context context.Context) {
 	// Sync all objects in parallel.
 	var wg gosync.WaitGroup
 	for _, syncer := range s.syncers {
-		wg.Add(1)
-		go func(syncer Syncer) {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := syncer.Sync(context); err != nil {
 				slog.Error("failed to sync objects", "error", err)
 			}
-		}(syncer)
+		})
 	}
 	wg.Wait()
 }
