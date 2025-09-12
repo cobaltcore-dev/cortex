@@ -103,6 +103,6 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
-	k8s.io/apimachinery v0.34.0
+	k8s.io/apimachinery v0.34.1
 	sigs.k8s.io/controller-runtime v0.22.1
 )
