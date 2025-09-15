@@ -15,8 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
-  "iteration": 1754059701443,
+  "iteration": 1757917531460,
   "links": [],
   "panels": [
     {
@@ -26,7 +25,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 8
       },
       "id": 7,
       "panels": [],
@@ -43,14 +42,14 @@
         "h": 12,
         "w": 6,
         "x": 0,
-        "y": 1
+        "y": 9
       },
       "id": 4,
       "options": {
         "content": "# How to read these statistics\n\nPlease note: these statistics only report the demand, not the actual capacity that will be used when the resource is allocated. \n\nFor example, a commitment may contain 1 vcpu core. If the commitment is fulfilled on a host overcommitted by a factor of 2, it will only allocate half of a physical cpu.        ",
         "mode": "markdown"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.41",
       "targets": [
         {
           "queryType": "randomWalk",
@@ -80,7 +79,7 @@
         "h": 12,
         "w": 9,
         "x": 6,
-        "y": 1
+        "y": 9
       },
       "hiddenSeries": false,
       "id": 8,
@@ -100,7 +99,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.41",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -111,7 +110,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (resource_name) (cortex_vm_commitments_cores_sum{availability_zone=~\"$availability_zone\",status=~\"$status\"})",
+          "expr": "sum by (resource_name) (max by (resource_name, availability_zone) (cortex_vm_commitments_cores_sum{availability_zone=~\"$availability_zone\",status=~\"$status\"}))",
           "interval": "",
           "legendFormat": "{{ resource_name }}",
           "queryType": "randomWalk",
@@ -179,7 +178,7 @@
         "h": 12,
         "w": 9,
         "x": 15,
-        "y": 1
+        "y": 9
       },
       "hiddenSeries": false,
       "id": 9,
@@ -199,7 +198,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.41",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -210,7 +209,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (resource_name) (cortex_vm_commitments_memory_sum{availability_zone=~\"$availability_zone\",status=~\"$status\"})",
+          "expr": "sum by (resource_name) (max by (resource_name, availability_zone) (cortex_vm_commitments_memory_sum{availability_zone=~\"$availability_zone\",status=~\"$status\"}))",
           "interval": "",
           "legendFormat": "{{ resource_name }}",
           "queryType": "randomWalk",
@@ -284,7 +283,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 21
       },
       "id": 2,
       "options": {
@@ -302,11 +301,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.41",
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (resource_name) (cortex_vm_commitments_total{availability_zone=~\"$availability_zone\",status=~\"$status\"})",
+          "expr": "sum by (resource_name) (max by (resource_name, availability_zone) (cortex_vm_commitments_total{availability_zone=~\"$availability_zone\",status=~\"$status\"}))",
           "interval": "",
           "legendFormat": "{{ resource_name }}",
           "queryType": "randomWalk",
@@ -365,7 +364,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 21
       },
       "id": 5,
       "options": {
@@ -383,11 +382,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.37",
+      "pluginVersion": "7.5.41",
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (resource_name) (cortex_vm_commitments_sum{availability_zone=~\"$availability_zone\",status=~\"$status\"})",
+          "expr": "sum by (resource_name) (max by (resource_name, availability_zone) (cortex_vm_commitments_sum{availability_zone=~\"$availability_zone\",status=~\"$status\"}))",
           "interval": "",
           "legendFormat": "{{ resource_name }}",
           "queryType": "randomWalk",
