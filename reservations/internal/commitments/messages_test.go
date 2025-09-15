@@ -61,44 +61,8 @@ func TestCommitment_JSONSerialization(t *testing.T) {
 	}
 
 	// Verify all fields are preserved
-	if unmarshaledCommitment.ID != testCommitment.ID {
-		t.Errorf("Expected ID %d, got %d", testCommitment.ID, unmarshaledCommitment.ID)
-	}
-	if unmarshaledCommitment.UUID != testCommitment.UUID {
-		t.Errorf("Expected UUID %s, got %s", testCommitment.UUID, unmarshaledCommitment.UUID)
-	}
-	if unmarshaledCommitment.ServiceType != testCommitment.ServiceType {
-		t.Errorf("Expected ServiceType %s, got %s", testCommitment.ServiceType, unmarshaledCommitment.ServiceType)
-	}
-	if unmarshaledCommitment.ResourceName != testCommitment.ResourceName {
-		t.Errorf("Expected ResourceName %s, got %s", testCommitment.ResourceName, unmarshaledCommitment.ResourceName)
-	}
-	if unmarshaledCommitment.Amount != testCommitment.Amount {
-		t.Errorf("Expected Amount %d, got %d", testCommitment.Amount, unmarshaledCommitment.Amount)
-	}
-	if unmarshaledCommitment.CreatedAt != testCommitment.CreatedAt {
-		t.Errorf("Expected CreatedAt %d, got %d", testCommitment.CreatedAt, unmarshaledCommitment.CreatedAt)
-	}
-	if unmarshaledCommitment.ExpiresAt != testCommitment.ExpiresAt {
-		t.Errorf("Expected ExpiresAt %d, got %d", testCommitment.ExpiresAt, unmarshaledCommitment.ExpiresAt)
-	}
-	if unmarshaledCommitment.Transferable != testCommitment.Transferable {
-		t.Errorf("Expected Transferable %t, got %t", testCommitment.Transferable, unmarshaledCommitment.Transferable)
-	}
-	if unmarshaledCommitment.NotifyOnConfirm != testCommitment.NotifyOnConfirm {
-		t.Errorf("Expected NotifyOnConfirm %t, got %t", testCommitment.NotifyOnConfirm, unmarshaledCommitment.NotifyOnConfirm)
-	}
-
-	// Verify pointer fields
-	if unmarshaledCommitment.ConfirmBy == nil {
-		t.Error("Expected ConfirmBy to be non-nil")
-	} else if *unmarshaledCommitment.ConfirmBy != *testCommitment.ConfirmBy {
-		t.Errorf("Expected ConfirmBy %d, got %d", *testCommitment.ConfirmBy, *unmarshaledCommitment.ConfirmBy)
-	}
-	if unmarshaledCommitment.ConfirmedAt == nil {
-		t.Error("Expected ConfirmedAt to be non-nil")
-	} else if *unmarshaledCommitment.ConfirmedAt != *testCommitment.ConfirmedAt {
-		t.Errorf("Expected ConfirmedAt %d, got %d", *testCommitment.ConfirmedAt, *unmarshaledCommitment.ConfirmedAt)
+	if !reflect.DeepEqual(unmarshaledCommitment, testCommitment) {
+		t.Errorf("Expected %+v, got %+v", testCommitment, unmarshaledCommitment)
 	}
 }
 
