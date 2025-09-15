@@ -63,3 +63,17 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Component prefix for alerts
+*/}}
+{{- define "cortex.alertComponentPrefix" -}}
+{{- .Values.alerts.componentPrefix | default "cortex" }}
+{{- end }}
+
+{{/*
+Namespace filter for alerts to exclude prerelease namespaces
+*/}}
+{{- define "cortex.alertNamespaceSelector" -}}
+{{- .Release.Namespace | default "default" }}
+{{- end }}

@@ -3,8 +3,8 @@ groups:
   rules:
   - alert: CortexNovaInitialPlacementDown
     expr: |
-      up{component="cortex-nova-scheduler"} != 1 or
-      absent(up{component="cortex-nova-scheduler"})
+      up{component="cortex-nova-scheduler", namespace="cortex-nova"} != 1 or
+      absent(up{component="cortex-nova-scheduler", namespace="cortex-nova"})
     for: 5m
     labels:
       context: liveness
@@ -22,8 +22,8 @@ groups:
 
   - alert: CortexNovaSyncerDown
     expr: |
-      up{component="cortex-nova-syncer"} != 1 or
-      absent(up{component="cortex-nova-syncer"})
+      up{component="cortex-nova-syncer", namespace="cortex-nova"} != 1 or
+      absent(up{component="cortex-nova-syncer", namespace="cortex-nova"})
     for: 5m
     labels:
       context: liveness
@@ -43,8 +43,8 @@ groups:
 
   - alert: CortexNovaExtractorDown
     expr: |
-      up{component="cortex-nova-extractor"} != 1 or
-      absent(up{component="cortex-nova-extractor"})
+      up{component="cortex-nova-extractor", namespace="cortex-nova"} != 1 or
+      absent(up{component="cortex-nova-extractor", namespace="cortex-nova"})
     for: 5m
     labels:
       context: liveness
@@ -59,9 +59,9 @@ groups:
         about the datacenter will not be used to extract scheduling knowledge.
         This is no immediate problem, since Nova will continue placing new VMs.
         However, the placement will be less desirable.
-        
+
   - alert: CortexNovaDeschedulerPipelineErroring
-    expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{component=~"cortex-nova-.*",error="true"}[2m]) > 0
+    expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{component=~"cortex-nova-.*", error="true", namespace="cortex-nova"}[2m]) > 0
     for: 5m
     labels:
       context: descheduler
@@ -76,53 +76,53 @@ groups:
         This may indicate issues with the descheduling logic or the underlying infrastructure.
         It is recommended to investigate the descheduler logs and the state of the VMs being processed.
 
-  - alert: CortexNovaHostCPUUtilizationAbove100Percent
-    expr: cortex_sap_host_utilization_per_host_pct{component=~"cortex-nova-.*",resource="cpu"} > 100
+  - alert: CortexNovaHostCPUAvailableCapacityBelow0Percent
+    expr: cortex_sap_available_capacity_per_host_pct{component=~"cortex-nova-.*", resource="cpu", namespace="cortex-nova"} < 0
     for: 5m
     labels:
-      context: hostutilization
+      context: availablecapacity
       dashboard: cortex/cortex
       service: cortex
       severity: info
       support_group: workload-management
     annotations:
-      summary: "CPU utilization on host `{{$labels.compute_host_name}}` is above 100%"
+      summary: "CPU available capacity on host `{{$labels.compute_host_name}}` is below 0%"
       description: >
-        OpenStack Placement reports CPU utilization above 100% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
-        This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
+        OpenStack Placement reports CPU available capacity below 0% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
+        This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report available capacity below 0%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
         Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
         This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
 
-  - alert: CortexNovaHostMemoryUtilizationAbove100Percent
-    expr: cortex_sap_host_utilization_per_host_pct{component=~"cortex-nova-.*",resource="memory"} > 100
+  - alert: CortexNovaHostMemoryAvailableCapacityBelow0Percent
+    expr: cortex_sap_available_capacity_per_host_pct{component=~"cortex-nova-.*", resource="memory", namespace="cortex-nova"} < 0
     for: 5m
     labels:
-      context: hostutilization
+      context: availablecapacity
       dashboard: cortex/cortex
       service: cortex
       severity: info
       support_group: workload-management
     annotations:
-      summary: "Memory utilization on host `{{$labels.compute_host_name}}` is above 100%"
+      summary: "Memory available capacity on host `{{$labels.compute_host_name}}` is below 0%"
       description: >
-        OpenStack Placement reports Memory utilization above 100% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
-        This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
+        OpenStack Placement reports Memory available capacity below 0% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
+        This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report available capacity below 0%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
         Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
         This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
 
-  - alert: CortexNovaHostDiskUtilizationAbove100Percent
-    expr: cortex_sap_host_utilization_per_host_pct{component=~"cortex-nova-.*",resource="disk"} > 100
+  - alert: CortexNovaHostDiskAvailableCapacityBelow0Percent
+    expr: cortex_sap_available_capacity_per_host_pct{component=~"cortex-nova-.*", resource="disk", namespace="cortex-nova"} < 0
     for: 5m
     labels:
-      context: hostutilization
+      context: availablecapacity
       dashboard: cortex/cortex
       service: cortex
       severity: info
       support_group: workload-management
     annotations:
-      summary: "Disk utilization on host `{{$labels.compute_host_name}}` is above 100%."
+      summary: "Disk available capacity on host `{{$labels.compute_host_name}}` is below 0%."
       description: >
-        OpenStack Placement reports Disk utilization above 100% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
-        This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report utilization above 100%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
+        OpenStack Placement reports Disk available capacity below 0% for host `{{$labels.compute_host_name}}` in AZ `{{$labels.availability_zone}}` for over 5 minutes.
+        This can happen if there are VMs in the SHUTOFF state: these VMs still consume resources in Placement, but not in the underlying infrastructure (e.g., VMware). As a result, it is possible to manually migrate additional VMs onto a host with shut off VMs. The combined resource allocation (from running and shut off VMs) can then exceed the host's capacity, causing Placement to report available capacity below 0%. This is expected behavior, as powering on the shut off VMs would overcommit the host.
         Another cause may be shutting down a node without migrating its VMs. The total capacity drops, but Placement still accounts for the shut off VMs’ resource usage.
         This situation should be investigated and resolved to ensure accurate resource accounting and avoid operational issues.
