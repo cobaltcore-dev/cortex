@@ -40,8 +40,12 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ComputeReservationSpec{
-					Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-					ProjectID: "test-project",
+					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+							ProjectID:  "test-project",
+							FlavorName: "test-flavor",
+						},
+					},
 				},
 				Status: v1alpha1.ComputeReservationStatus{
 					Phase: v1alpha1.ComputeReservationStatusPhaseActive,
@@ -51,16 +55,17 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 			shouldRequeue: false,
 		},
 		{
-			name: "skip unsupported reservation kind",
+			name: "skip unsupported reservation scheduler",
 			reservation: &v1alpha1.ComputeReservation{
 				ObjectMeta: ctrl.ObjectMeta{
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ComputeReservationSpec{
-					Kind:      "unsupported",
-					ProjectID: "test-project",
+					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{},
 				},
 			},
+			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
+			expectedError: "reservation is not a cortex-nova reservation",
 			shouldRequeue: false,
 		},
 	}
@@ -70,6 +75,7 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tt.reservation).
+				WithStatusSubresource(&v1alpha1.ComputeReservation{}).
 				Build()
 
 			reconciler := &ComputeReservationReconciler{
@@ -144,17 +150,18 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ComputeReservationSpec{
-					Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-					ProjectID: "test-project",
-					Instance: v1alpha1.ComputeReservationSpecInstance{
-						Flavor: "test-flavor",
-						ExtraSpecs: map[string]string{
-							"capabilities:hypervisor_type": "unsupported",
+					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+							ProjectID:  "test-project",
+							FlavorName: "test-flavor",
+							FlavorExtraSpecs: map[string]string{
+								"capabilities:hypervisor_type": "unsupported",
+							},
 						},
-						Requests: map[string]resource.Quantity{
-							"memory": resource.MustParse("1Gi"),
-							"cpu":    resource.MustParse("2"),
-						},
+					},
+					Requests: map[string]resource.Quantity{
+						"memory": resource.MustParse("1Gi"),
+						"cpu":    resource.MustParse("2"),
 					},
 				},
 			},
@@ -162,7 +169,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 				Hypervisors: []string{"kvm", "vmware"},
 			},
 			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
-			expectedError: "unsupported hv 'unsupported', supported: kvm, vmware",
+			expectedError: "hypervisor type is not supported: unsupported",
 			shouldRequeue: false,
 		},
 		{
@@ -172,15 +179,18 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ComputeReservationSpec{
-					Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-					ProjectID: "test-project",
-					Instance: v1alpha1.ComputeReservationSpecInstance{
-						Flavor:     "test-flavor",
-						ExtraSpecs: map[string]string{},
-						Requests: map[string]resource.Quantity{
-							"memory": resource.MustParse("1Gi"),
-							"cpu":    resource.MustParse("2"),
+					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+							ProjectID:        "test-project",
+							FlavorName:       "test-flavor",
+							FlavorExtraSpecs: map[string]string{
+								// No hypervisor type specified
+							},
 						},
+					},
+					Requests: map[string]resource.Quantity{
+						"memory": resource.MustParse("1Gi"),
+						"cpu":    resource.MustParse("2"),
 					},
 				},
 			},
@@ -188,7 +198,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 				Hypervisors: []string{"kvm", "vmware"},
 			},
 			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
-			expectedError: "hypervisor type is not specified",
+			expectedError: "hypervisor type is not supported: ",
 			shouldRequeue: false,
 		},
 	}
@@ -225,7 +235,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 				},
 			}
 
-			result, err := reconciler.reconcileInstanceReservation(context.Background(), req, *tt.reservation)
+			result, err := reconciler.Reconcile(context.Background(), req)
 
 			if err != nil && !tt.shouldRequeue {
 				t.Errorf("reconcileInstanceReservation() error = %v", err)
@@ -270,17 +280,18 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
-			Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-			ProjectID: "test-project",
-			Instance: v1alpha1.ComputeReservationSpecInstance{
-				Flavor: "test-flavor",
-				ExtraSpecs: map[string]string{
-					"capabilities:hypervisor_type": "kvm",
+			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+					ProjectID:  "test-project",
+					FlavorName: "test-flavor",
+					FlavorExtraSpecs: map[string]string{
+						"capabilities:hypervisor_type": "kvm",
+					},
 				},
-				Requests: map[string]resource.Quantity{
-					"memory": resource.MustParse("1Gi"),
-					"cpu":    resource.MustParse("2"),
-				},
+			},
+			Requests: map[string]resource.Quantity{
+				"memory": resource.MustParse("1Gi"),
+				"cpu":    resource.MustParse("2"),
 			},
 		},
 	}
@@ -336,7 +347,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 		},
 	}
 
-	result, err := reconciler.reconcileInstanceReservation(context.Background(), req, *reservation)
+	result, err := reconciler.Reconcile(context.Background(), req)
 
 	if err != nil {
 		t.Errorf("reconcileInstanceReservation() error = %v", err)
@@ -365,74 +376,6 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 
 	if updated.Status.Error != "" {
 		t.Errorf("Expected no error, got %v", updated.Status.Error)
-	}
-}
-
-func TestComputeReservationReconciler_reconcileBareResourceReservation(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	reservation := &v1alpha1.ComputeReservation{
-		ObjectMeta: ctrl.ObjectMeta{
-			Name: "test-reservation",
-		},
-		Spec: v1alpha1.ComputeReservationSpec{
-			Kind:      v1alpha1.ComputeReservationSpecKindBareResource,
-			ProjectID: "test-project",
-			BareResource: v1alpha1.ComputeReservationSpecBareResource{
-				Requests: map[string]resource.Quantity{
-					"memory": resource.MustParse("1Gi"),
-					"cpu":    resource.MustParse("2"),
-				},
-			},
-		},
-	}
-
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(reservation).
-		WithStatusSubresource(&v1alpha1.ComputeReservation{}).
-		Build()
-
-	reconciler := &ComputeReservationReconciler{
-		Client: client,
-		Scheme: scheme,
-	}
-
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{
-			Name: reservation.Name,
-		},
-	}
-
-	result, err := reconciler.reconcileBareResourceReservation(context.Background(), req, *reservation)
-
-	if err != nil {
-		t.Errorf("reconcileBareResourceReservation() error = %v", err)
-		return
-	}
-
-	if result.RequeueAfter > 0 {
-		t.Errorf("Expected no requeue but got %v", result.RequeueAfter)
-	}
-
-	// Verify the reservation status
-	var updated v1alpha1.ComputeReservation
-	err = client.Get(context.Background(), req.NamespacedName, &updated)
-	if err != nil {
-		t.Errorf("Failed to get updated reservation: %v", err)
-		return
-	}
-
-	if updated.Status.Phase != v1alpha1.ComputeReservationStatusPhaseFailed {
-		t.Errorf("Expected phase %v, got %v", v1alpha1.ComputeReservationStatusPhaseFailed, updated.Status.Phase)
-	}
-
-	expectedError := "bare resource reservations are not supported"
-	if updated.Status.Error != expectedError {
-		t.Errorf("Expected error %v, got %v", expectedError, updated.Status.Error)
 	}
 }
 

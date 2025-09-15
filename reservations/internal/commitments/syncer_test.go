@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package controller
+package commitments
 
 import (
 	"context"
@@ -84,81 +84,6 @@ func TestSyncer_Init(t *testing.T) {
 	}
 }
 
-func TestLimesUnitToResource(t *testing.T) {
-	tests := []struct {
-		name        string
-		val         int64
-		unit        string
-		expected    string
-		shouldError bool
-	}{
-		{
-			name:     "no unit",
-			val:      100,
-			unit:     "",
-			expected: "100",
-		},
-		{
-			name:     "bytes",
-			val:      1024,
-			unit:     "B",
-			expected: "1Ki",
-		},
-		{
-			name:     "KiB",
-			val:      1,
-			unit:     "KiB",
-			expected: "1Ki",
-		},
-		{
-			name:     "MiB",
-			val:      1,
-			unit:     "MiB",
-			expected: "1Mi",
-		},
-		{
-			name:     "GiB",
-			val:      1,
-			unit:     "GiB",
-			expected: "1Gi",
-		},
-		{
-			name:     "TiB",
-			val:      1,
-			unit:     "TiB",
-			expected: "1Ti",
-		},
-		{
-			name:        "unsupported unit",
-			val:         100,
-			unit:        "PiB",
-			shouldError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := limesUnitToResource(tt.val, tt.unit)
-
-			if tt.shouldError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-				return
-			}
-
-			if result.String() != tt.expected {
-				t.Errorf("Expected %s, got %s", tt.expected, result.String())
-			}
-		})
-	}
-}
-
 func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -223,132 +148,23 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 
 	// Verify the first reservation
 	res := reservations.Items[0]
-	if res.Spec.Kind != v1alpha1.ComputeReservationSpecKindInstance {
-		t.Errorf("Expected instance kind, got %v", res.Spec.Kind)
+	if res.Spec.Scheduler.CortexNova.ProjectID != "test-project-1" {
+		t.Errorf("Expected project ID test-project-1, got %v", res.Spec.Scheduler.CortexNova.ProjectID)
 	}
 
-	if res.Spec.ProjectID != "test-project-1" {
-		t.Errorf("Expected project ID test-project-1, got %v", res.Spec.ProjectID)
-	}
-
-	if res.Spec.Instance.Flavor != "test-flavor" {
-		t.Errorf("Expected flavor test-flavor, got %v", res.Spec.Instance.Flavor)
+	if res.Spec.Scheduler.CortexNova.FlavorName != "test-flavor" {
+		t.Errorf("Expected flavor test-flavor, got %v", res.Spec.Scheduler.CortexNova.FlavorName)
 	}
 
 	// Check resource values
 	expectedMemory := resource.MustParse("1073741824") // 1024MB in bytes
-	if !res.Spec.Instance.Requests["memory"].Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Instance.Requests["memory"])
+	if !res.Spec.Requests["memory"].Equal(expectedMemory) {
+		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Requests["memory"])
 	}
 
 	expectedVCPUs := resource.MustParse("2")
-	if !res.Spec.Instance.Requests["cpu"].Equal(expectedVCPUs) {
-		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Instance.Requests["cpu"])
-	}
-}
-
-func TestSyncer_SyncReservations_BareResourceCommitments(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
-
-	// Create mock commitments with bare resources
-	mockCommitments := []Commitment{
-		{
-			ID:               2,
-			UUID:             "abcdef-12345-67890",
-			ServiceType:      "compute",
-			ResourceName:     "cores",
-			AvailabilityZone: "az1",
-			Amount:           4,
-			Unit:             "",
-			ProjectID:        "test-project-2",
-			DomainID:         "test-domain-2",
-		},
-		{
-			ID:               3,
-			UUID:             "fedcba-54321-09876",
-			ServiceType:      "compute",
-			ResourceName:     "ram",
-			AvailabilityZone: "az1",
-			Amount:           2048,
-			Unit:             "MiB",
-			ProjectID:        "test-project-3",
-			DomainID:         "test-domain-3",
-		},
-	}
-
-	mockClient := &mockCommitmentsClient{
-		commitments: mockCommitments,
-	}
-
-	syncer := &Syncer{
-		CommitmentsClient: mockClient,
-		Client:            k8sClient,
-	}
-
-	err := syncer.SyncReservations(context.Background())
-	if err != nil {
-		t.Errorf("SyncReservations() error = %v", err)
-		return
-	}
-
-	// Verify that reservations were created
-	var reservations v1alpha1.ComputeReservationList
-	err = k8sClient.List(context.Background(), &reservations)
-	if err != nil {
-		t.Errorf("Failed to list reservations: %v", err)
-		return
-	}
-
-	// Should have 2 reservations (one for cores, one for ram)
-	if len(reservations.Items) != 2 {
-		t.Errorf("Expected 2 reservations, got %d", len(reservations.Items))
-		return
-	}
-
-	// Find the cores reservation
-	var coresRes *v1alpha1.ComputeReservation
-	var ramRes *v1alpha1.ComputeReservation
-
-	for i := range reservations.Items {
-		switch reservations.Items[i].Name {
-		case "commitment-abcde":
-			coresRes = &reservations.Items[i]
-		case "commitment-fedcb":
-			ramRes = &reservations.Items[i]
-		}
-	}
-
-	if coresRes == nil {
-		t.Error("Expected to find cores reservation")
-		return
-	}
-
-	if ramRes == nil {
-		t.Error("Expected to find ram reservation")
-		return
-	}
-
-	// Verify cores reservation
-	if coresRes.Spec.Kind != v1alpha1.ComputeReservationSpecKindBareResource {
-		t.Errorf("Expected bare resource kind, got %v", coresRes.Spec.Kind)
-	}
-
-	expectedCPU := resource.MustParse("4")
-	if !coresRes.Spec.BareResource.Requests["cpu"].Equal(expectedCPU) {
-		t.Errorf("Expected CPU %v, got %v", expectedCPU, coresRes.Spec.BareResource.Requests["cpu"])
-	}
-
-	// Verify ram reservation
-	expectedMemory := resource.MustParse("2147483648") // 2048 MiB in bytes
-	if !ramRes.Spec.BareResource.Requests["memory"].Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, ramRes.Spec.BareResource.Requests["memory"])
+	if !res.Spec.Requests["cpu"].Equal(expectedVCPUs) {
+		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Requests["cpu"])
 	}
 }
 
@@ -364,14 +180,15 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			Name: "commitment-12345-0", // Instance commitments have -0 suffix
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
-			Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-			ProjectID: "old-project",
-			Instance: v1alpha1.ComputeReservationSpecInstance{
-				Flavor: "old-flavor",
-				Requests: map[string]resource.Quantity{
-					"memory": resource.MustParse("512Mi"),
-					"cpu":    resource.MustParse("1"),
+			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+					ProjectID:  "old-project",
+					FlavorName: "old-flavor",
 				},
+			},
+			Requests: map[string]resource.Quantity{
+				"memory": resource.MustParse("512Mi"),
+				"cpu":    resource.MustParse("1"),
 			},
 		},
 	}
@@ -428,12 +245,12 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 	}
 
 	// Verify the reservation was updated with new values
-	if updatedReservation.Spec.ProjectID != "new-project" {
-		t.Errorf("Expected project ID new-project, got %v", updatedReservation.Spec.ProjectID)
+	if updatedReservation.Spec.Scheduler.CortexNova.ProjectID != "new-project" {
+		t.Errorf("Expected project ID new-project, got %v", updatedReservation.Spec.Scheduler.CortexNova.ProjectID)
 	}
 
-	if updatedReservation.Spec.Instance.Flavor != "new-flavor" {
-		t.Errorf("Expected flavor new-flavor, got %v", updatedReservation.Spec.Instance.Flavor)
+	if updatedReservation.Spec.Scheduler.CortexNova.FlavorName != "new-flavor" {
+		t.Errorf("Expected flavor new-flavor, got %v", updatedReservation.Spec.Scheduler.CortexNova.FlavorName)
 	}
 }
 

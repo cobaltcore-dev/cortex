@@ -3,8 +3,6 @@
 
 package controller
 
-import "github.com/cobaltcore-dev/cortex/internal/conf"
-
 // Endpoints for the reservations operator.
 type EndpointsConfig struct {
 	// The nova external scheduler endpoint.
@@ -17,6 +15,4 @@ type Config struct {
 	Endpoints EndpointsConfig `json:"endpoints"`
 	// Hypervisor types that should be managed.
 	Hypervisors []string `json:"hypervisors"`
-	// Keystone config.
-	Keystone conf.KeystoneConfig `json:"keystone"`
 }

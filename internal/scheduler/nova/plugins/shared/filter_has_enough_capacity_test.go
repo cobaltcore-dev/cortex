@@ -254,32 +254,6 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			filteredHosts: []string{"host2", "host3", "host5", "host6"},
 		},
 		{
-			name: "Disk constraint only",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								VCPUs:    1,
-								MemoryMB: 1024,
-								RootGB:   600, // More than host3 (250) and host5 (100)
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
-				},
-			},
-			expectedHosts: []string{"host1", "host4"}, // Only hosts with >= 600 GB disk
-			filteredHosts: []string{"host2", "host3", "host5", "host6"},
-		},
-		{
 			name: "Zero resource flavor",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
@@ -462,15 +436,16 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: "test-project",
-				DomainID:  "test-domain",
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor: "test-flavor",
-					Requests: map[string]resource.Quantity{
-						"memory": *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
-						"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+						FlavorName: "test-flavor",
+						ProjectID:  "test-project",
+						DomainID:   "test-domain",
 					},
+				},
+				Requests: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
+					"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -484,15 +459,16 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: "test-project",
-				DomainID:  "test-domain",
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor: "test-flavor",
-					Requests: map[string]resource.Quantity{
-						"memory": *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
-						"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+						FlavorName: "test-flavor",
+						ProjectID:  "test-project",
+						DomainID:   "test-domain",
 					},
+				},
+				Requests: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
+					"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -506,15 +482,16 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: "test-project",
-				DomainID:  "test-domain",
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor: "test-flavor",
-					Requests: map[string]resource.Quantity{
-						"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16GB
-						"cpu":    *resource.NewQuantity(8, resource.DecimalSI),
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+						FlavorName: "test-flavor",
+						ProjectID:  "test-project",
+						DomainID:   "test-domain",
 					},
+				},
+				Requests: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16GB
+					"cpu":    *resource.NewQuantity(8, resource.DecimalSI),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
