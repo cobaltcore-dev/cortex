@@ -67,6 +67,8 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
+			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
+			expectedError: "reservation is not a cortex-nova reservation",
 			shouldRequeue: false,
 		},
 	}
@@ -76,6 +78,7 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tt.reservation).
+				WithStatusSubresource(&v1alpha1.ComputeReservation{}).
 				Build()
 
 			reconciler := &ComputeReservationReconciler{
@@ -170,7 +173,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 				Hypervisors: []string{"kvm", "vmware"},
 			},
 			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
-			expectedError: "unsupported hv 'unsupported', supported: kvm, vmware",
+			expectedError: "hypervisor type is not supported: unsupported",
 			shouldRequeue: false,
 		},
 		{
@@ -200,7 +203,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 				Hypervisors: []string{"kvm", "vmware"},
 			},
 			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
-			expectedError: "hypervisor type is not specified",
+			expectedError: "hypervisor type is not supported: ",
 			shouldRequeue: false,
 		},
 	}

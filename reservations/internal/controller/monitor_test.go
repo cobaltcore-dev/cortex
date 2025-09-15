@@ -98,6 +98,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-1",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("1Gi"),
 					"cpu":    resource.MustParse("2"),
@@ -113,6 +116,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-2",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("2Gi"),
 					"cpu":    resource.MustParse("4"),
@@ -128,6 +134,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-3",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("4Gi"),
 					"cpu":    resource.MustParse("4"),
@@ -171,10 +180,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 		t.Error("Expected some metrics to be collected")
 	}
 
-	// Verify that we have metrics for different phases and kinds
-	foundActiveInstance := false
-	foundFailedInstance := false
-	foundActiveBare := false
+	// Verify that we have metrics for different phases
+	foundActiveCortexNova := false
+	foundFailedCortexNova := false
 
 	for _, metric := range metrics {
 		var m dto.Metric
@@ -189,26 +197,20 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				labels[label.GetName()] = label.GetValue()
 			}
 
-			if labels["status_phase"] == "active" && labels["spec_scheduler"] == "instance" {
-				foundActiveInstance = true
+			if labels["status_phase"] == "active" && labels["spec_scheduler"] == "cortex-nova" {
+				foundActiveCortexNova = true
 			}
-			if labels["status_phase"] == "failed" && labels["spec_scheduler"] == "instance" {
-				foundFailedInstance = true
-			}
-			if labels["status_phase"] == "active" && labels["spec_scheduler"] == "bare" {
-				foundActiveBare = true
+			if labels["status_phase"] == "failed" && labels["spec_scheduler"] == "cortex-nova" {
+				foundFailedCortexNova = true
 			}
 		}
 	}
 
-	if !foundActiveInstance {
-		t.Error("Expected to find active instance reservation metric")
+	if !foundActiveCortexNova {
+		t.Error("Expected to find active cortex-nova reservation metric")
 	}
-	if !foundFailedInstance {
-		t.Error("Expected to find failed instance reservation metric")
-	}
-	if !foundActiveBare {
-		t.Error("Expected to find active bare resource reservation metric")
+	if !foundFailedCortexNova {
+		t.Error("Expected to find failed cortex-nova reservation metric")
 	}
 }
 
@@ -224,6 +226,9 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
+			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+			},
 			Requests: map[string]resource.Quantity{
 				"memory": resource.MustParse("1000Mi"),
 				"cpu":    resource.MustParse("2"),
@@ -257,7 +262,7 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 	}
 
 	// Look for resource metrics
-	foundVCPUs := false
+	foundCPU := false
 	foundMemory := false
 
 	for _, metric := range metrics {
@@ -272,26 +277,27 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 				labels[label.GetName()] = label.GetValue()
 			}
 
-			if labels["resource"] == "vcpus" {
-				foundVCPUs = true
-				if m.GetGauge().GetValue() != 2 {
-					t.Errorf("Expected vCPUs value 2, got %f", m.GetGauge().GetValue())
+			if labels["resource"] == "cpu" {
+				foundCPU = true
+				// CPU resource is stored as actual CPU count (not milli-CPUs in this context)
+				expectedCPU := float64(2) // 2 CPUs
+				if m.GetGauge().GetValue() != expectedCPU {
+					t.Errorf("Expected CPU value %f, got %f", expectedCPU, m.GetGauge().GetValue())
 				}
 			}
-			if labels["resource"] == "memory_mb" {
+			if labels["resource"] == "memory" {
 				foundMemory = true
 				// Memory: 1000Mi = 1000 * 1024 * 1024 bytes = 1048576000 bytes
-				// Converted to MB: 1048576000 / 1000000 = 1048.576 MB
-				expectedMemoryMB := float64(1048) // 1000Mi converted to MB
-				if m.GetGauge().GetValue() != expectedMemoryMB {
-					t.Errorf("Expected memory_mb value %f, got %f", expectedMemoryMB, m.GetGauge().GetValue())
+				expectedMemory := float64(1048576000) // 1000Mi in bytes
+				if m.GetGauge().GetValue() != expectedMemory {
+					t.Errorf("Expected memory value %f, got %f", expectedMemory, m.GetGauge().GetValue())
 				}
 			}
 		}
 	}
 
-	if !foundVCPUs {
-		t.Error("Expected to find vCPUs resource metric")
+	if !foundCPU {
+		t.Error("Expected to find CPU resource metric")
 	}
 	if !foundMemory {
 		t.Error("Expected to find memory resource metric")
@@ -342,6 +348,9 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
+			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+			},
 			Requests: map[string]resource.Quantity{
 				"memory": resource.MustParse("1Gi"),
 				"cpu":    resource.MustParse("2"),
