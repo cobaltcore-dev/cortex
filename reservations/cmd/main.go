@@ -28,6 +28,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/reservations/internal/commitments"
 	"github.com/cobaltcore-dev/cortex/reservations/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
@@ -232,9 +233,9 @@ func main() {
 	monitor.Init()
 	metrics.Registry.MustRegister(&monitor)
 
-	setupLog.Info("starting syncer")
+	setupLog.Info("starting commitments syncer")
 	ctx := context.Background()
-	syncer := controller.NewSyncer(mgr.GetClient())
+	syncer := commitments.NewSyncer(mgr.GetClient())
 	syncer.Init(ctx)
 	go syncer.Run(ctx)
 
