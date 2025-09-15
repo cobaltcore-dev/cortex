@@ -47,7 +47,7 @@
       "groupName": "External dependencies"
     },
     {
-      "matchFiles": [
+      "matchFileNames": [
         "reservations/go.mod",
         "go.mod"
       ],
@@ -58,7 +58,7 @@
       "enabled": false
     },
     {
-      "matchFiles": [
+      "matchFileNames": [
         "reservations/config/manager/kustomization.yaml"
       ],
       "enabled": false
