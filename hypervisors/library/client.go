@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package hypervisors
+package library
 
 import (
 	"context"
@@ -41,20 +41,21 @@ func (c *hypervisorsClient) Init() {
 	if c.clients != nil {
 		return
 	}
-	for _, apiServer := range c.Config.HypervisorAPIServers {
+	for _, apiServer := range c.Config.APIServers {
 		scheme := must.Return(v1.SchemeBuilder.Build())
-		clientConfig := &rest.Config{
+		apiPath := apiServer.APIPath
+		if apiPath == "" {
+			apiPath = "/api"
+		}
+		rc := &rest.Config{
 			Host:        apiServer.Host,
-			APIPath:     apiServer.APIPath,
+			APIPath:     apiPath,
 			BearerToken: apiServer.BearerToken,
 			TLSClientConfig: rest.TLSClientConfig{
 				CAData: []byte(apiServer.CACrt),
 			},
 		}
-		cl, err := client.New(clientConfig, client.Options{Scheme: scheme})
-		if err != nil {
-			continue
-		}
+		cl := must.Return(client.New(rc, client.Options{Scheme: scheme}))
 		c.clients = append(c.clients, cl)
 	}
 }

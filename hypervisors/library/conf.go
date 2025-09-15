@@ -1,11 +1,11 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package hypervisors
+package library
 
 type Conf struct {
 	// The remote API servers to scrape hypervisors from.
-	HypervisorAPIServers []Kubeconfig `json:"hypervisorAPIServers,omitempty"`
+	APIServers []Kubeconfig `json:"apiservers,omitempty"`
 }
 
 // Kubeconfig for connecting to the kubernetes apiserver.
