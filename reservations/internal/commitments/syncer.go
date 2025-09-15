@@ -89,6 +89,14 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 			meta := ctrl.ObjectMeta{
 				Name: fmt.Sprintf("commitment-%s-%d", commitmentUUIDShort, n),
 			}
+			if _, exists := reservationsByName[meta.Name]; exists {
+				syncLog.Error(errors.New("duplicate reservation name"),
+					"reservation name already exists",
+					"name", meta.Name,
+					"commitmentUUID", commitment.UUID,
+				)
+				continue
+			}
 			reservationsByName[meta.Name] = v1alpha1.ComputeReservation{
 				ObjectMeta: meta,
 				Spec:       spec,
