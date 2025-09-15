@@ -98,36 +98,7 @@ func TestFlavor_JSONSerialization(t *testing.T) {
 	}
 
 	// Verify all fields are preserved
-	if unmarshaledFlavor.ID != testFlavor.ID {
-		t.Errorf("Expected ID %s, got %s", testFlavor.ID, unmarshaledFlavor.ID)
-	}
-	if unmarshaledFlavor.Name != testFlavor.Name {
-		t.Errorf("Expected Name %s, got %s", testFlavor.Name, unmarshaledFlavor.Name)
-	}
-	if unmarshaledFlavor.RAM != testFlavor.RAM {
-		t.Errorf("Expected RAM %d, got %d", testFlavor.RAM, unmarshaledFlavor.RAM)
-	}
-	if unmarshaledFlavor.VCPUs != testFlavor.VCPUs {
-		t.Errorf("Expected VCPUs %d, got %d", testFlavor.VCPUs, unmarshaledFlavor.VCPUs)
-	}
-	if unmarshaledFlavor.Disk != testFlavor.Disk {
-		t.Errorf("Expected Disk %d, got %d", testFlavor.Disk, unmarshaledFlavor.Disk)
-	}
-	if unmarshaledFlavor.RxTxFactor != testFlavor.RxTxFactor {
-		t.Errorf("Expected RxTxFactor %f, got %f", testFlavor.RxTxFactor, unmarshaledFlavor.RxTxFactor)
-	}
-	if unmarshaledFlavor.IsPublic != testFlavor.IsPublic {
-		t.Errorf("Expected IsPublic %t, got %t", testFlavor.IsPublic, unmarshaledFlavor.IsPublic)
-	}
-	if unmarshaledFlavor.Ephemeral != testFlavor.Ephemeral {
-		t.Errorf("Expected Ephemeral %d, got %d", testFlavor.Ephemeral, unmarshaledFlavor.Ephemeral)
-	}
-	if unmarshaledFlavor.Description != testFlavor.Description {
-		t.Errorf("Expected Description %s, got %s", testFlavor.Description, unmarshaledFlavor.Description)
-	}
-
-	// Verify ExtraSpecs map
-	if !reflect.DeepEqual(unmarshaledFlavor.ExtraSpecs, testFlavor.ExtraSpecs) {
-		t.Errorf("Expected ExtraSpecs %v, got %v", testFlavor.ExtraSpecs, unmarshaledFlavor.ExtraSpecs)
+	if !reflect.DeepEqual(unmarshaledFlavor, testFlavor) {
+		t.Errorf("Expected %+v, got %+v", testFlavor, unmarshaledFlavor)
 	}
 }
