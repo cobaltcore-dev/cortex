@@ -15,11 +15,11 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 7,
+  "id": 5,
   "links": [],
   "panels": [
     {
-      "collapsed": true,
+      "collapsed": false,
       "datasource": null,
       "gridPos": {
         "h": 1,
@@ -28,39 +28,38 @@
         "y": 0
       },
       "id": 28,
-      "panels": [
-        {
-          "datasource": null,
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 6,
-            "x": 0,
-            "y": 9
-          },
-          "id": 22,
-          "options": {
-            "content": "# Readme\n\nReservations are generated from limes commitments that are for a concrete flavor (so called instance commitments). Commitments for bare resources are not processed by cortex as there is no way to tell where and how many vms would be placed. ",
-            "mode": "markdown"
-          },
-          "pluginVersion": "7.5.37",
-          "targets": [
-            {
-              "queryType": "randomWalk",
-              "refId": "A"
-            }
-          ],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Readme",
-          "type": "text"
-        }
-      ],
+      "panels": [],
       "title": "Readme",
       "type": "row"
+    },
+    {
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 22,
+      "options": {
+        "content": "# Readme\n\nReservations are generated from limes commitments that are for a concrete flavor (so called instance commitments). Commitments for bare resources are not processed by cortex as there is no way to tell where and how many vms would be placed. ",
+        "mode": "markdown"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Readme",
+      "type": "text"
     },
     {
       "collapsed": false,
@@ -69,91 +68,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1
+        "y": 6
       },
       "id": 24,
       "panels": [],
       "title": "Reservations",
       "type": "row"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": null,
-            "filterable": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "unit": "decgbytes"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Disk Reserved"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "basic"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 11,
-        "w": 6,
-        "x": 0,
-        "y": 2
-      },
-      "id": 12,
-      "options": {
-        "showHeader": false
-      },
-      "pluginVersion": "7.5.37",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "max by (host) (cortex_reservations_resources{status_phase=\"active\",resource=\"disk_gb\"})",
-          "format": "table",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "queryType": "randomWalk",
-          "refId": "A"
-        }
-      ],
-      "title": "Disk Reserved",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {},
-            "renameByName": {
-              "Value": "Disk Reserved",
-              "host": "Host"
-            }
-          }
-        }
-      ],
-      "type": "table"
     },
     {
       "datasource": "prometheus-openstack",
@@ -196,8 +116,8 @@
       "gridPos": {
         "h": 11,
         "w": 6,
-        "x": 6,
-        "y": 2
+        "x": 0,
+        "y": 7
       },
       "id": 15,
       "options": {
@@ -275,8 +195,8 @@
       "gridPos": {
         "h": 11,
         "w": 6,
-        "x": 12,
-        "y": 2
+        "x": 6,
+        "y": 7
       },
       "id": 16,
       "options": {
@@ -386,7 +306,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 2
+        "y": 7
       },
       "id": 11,
       "options": {
@@ -442,86 +362,6 @@
               }
             ]
           },
-          "unit": "decgbytes"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Quantity"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "basic"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 11,
-        "w": 6,
-        "x": 0,
-        "y": 13
-      },
-      "id": 17,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "7.5.37",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "max by (status_error) (cortex_reservations_resources{status_phase!=\"active\",resource=\"disk_gb\"})",
-          "format": "table",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "queryType": "randomWalk",
-          "refId": "A"
-        }
-      ],
-      "title": "Disk Not Reservable",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {},
-            "renameByName": {
-              "Value": "Quantity",
-              "host": "Host",
-              "status_error": "Reason"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": null,
-            "filterable": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              }
-            ]
-          },
           "unit": "vCPUs"
         },
         "overrides": [
@@ -542,8 +382,8 @@
       "gridPos": {
         "h": 11,
         "w": 6,
-        "x": 6,
-        "y": 13
+        "x": 0,
+        "y": 18
       },
       "id": 18,
       "options": {
@@ -622,8 +462,8 @@
       "gridPos": {
         "h": 11,
         "w": 6,
-        "x": 12,
-        "y": 13
+        "x": 6,
+        "y": 18
       },
       "id": 19,
       "options": {
@@ -734,7 +574,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 13
+        "y": 18
       },
       "id": 20,
       "options": {
@@ -776,7 +616,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 29
       },
       "id": 26,
       "panels": [],
@@ -799,7 +639,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 30
       },
       "hiddenSeries": false,
       "id": 30,
@@ -907,7 +747,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 30
       },
       "hiddenSeries": false,
       "id": 31,
