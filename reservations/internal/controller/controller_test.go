@@ -41,7 +41,6 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 				},
 				Spec: v1alpha1.ComputeReservationSpec{
 					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-						Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 							ProjectID:  "test-project",
 							FlavorName: "test-flavor",
@@ -62,9 +61,7 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ComputeReservationSpec{
-					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-						Type: "unsupported-scheduler",
-					},
+					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{},
 				},
 			},
 			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
@@ -154,7 +151,6 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 				},
 				Spec: v1alpha1.ComputeReservationSpec{
 					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-						Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 							ProjectID:  "test-project",
 							FlavorName: "test-flavor",
@@ -184,7 +180,6 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 				},
 				Spec: v1alpha1.ComputeReservationSpec{
 					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-						Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 							ProjectID:        "test-project",
 							FlavorName:       "test-flavor",
@@ -286,7 +281,6 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
 			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 					ProjectID:  "test-project",
 					FlavorName: "test-flavor",

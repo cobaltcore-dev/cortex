@@ -437,7 +437,6 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
 				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 						FlavorName: "test-flavor",
 						ProjectID:  "test-project",
@@ -461,7 +460,6 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
 				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 						FlavorName: "test-flavor",
 						ProjectID:  "test-project",
@@ -485,7 +483,6 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
 				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 						FlavorName: "test-flavor",
 						ProjectID:  "test-project",

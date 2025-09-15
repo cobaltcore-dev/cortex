@@ -8,19 +8,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// By which scheduler the compute reservation will be placed.
-type ComputeReservationSchedulerType string
-
-const (
-	// The external scheduler endpoint of cortex for nova will handle the
-	// host selection and scoring for this compute reservation.
-	ComputeReservationSchedulerTypeCortexNova ComputeReservationSchedulerType = "cortex-nova"
-)
-
 // Additional specifications needed to place the reservation.
 type ComputeReservationSchedulerSpec struct {
-	// The type of scheduler that will handle the reservation.
-	Type ComputeReservationSchedulerType `json:"type,omitempty"`
 	// If the type of scheduler is cortex-nova, this field will contain additional
 	// information used by cortex-nova to place the instance.
 	CortexNova *ComputeReservationSchedulerSpecCortexNova `json:"cortexNova,omitempty"`

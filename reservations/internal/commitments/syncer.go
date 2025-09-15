@@ -72,7 +72,6 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		spec := v1alpha1.ComputeReservationSpec{
 			Creator: Creator,
 			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 					ProjectID:        commitment.ProjectID,
 					DomainID:         commitment.DomainID,

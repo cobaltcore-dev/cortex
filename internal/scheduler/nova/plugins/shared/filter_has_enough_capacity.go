@@ -71,7 +71,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		if reservation.Status.Phase != v1alpha1.ComputeReservationStatusPhaseActive {
 			continue // Only consider active reservations.
 		}
-		if reservation.Spec.Scheduler.Type != v1alpha1.ComputeReservationSchedulerTypeCortexNova {
+		if reservation.Spec.Scheduler.CortexNova == nil {
 			continue // Not handled by us.
 		}
 		host := reservation.Status.Host

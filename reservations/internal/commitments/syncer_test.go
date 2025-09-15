@@ -181,7 +181,6 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
 			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
 				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
 					ProjectID:  "old-project",
 					FlavorName: "old-flavor",

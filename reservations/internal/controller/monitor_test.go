@@ -99,7 +99,7 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
 				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
 				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("1Gi"),
@@ -117,7 +117,7 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
 				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
 				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("2Gi"),
@@ -135,7 +135,7 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
 				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
 				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("4Gi"),
@@ -197,10 +197,10 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				labels[label.GetName()] = label.GetValue()
 			}
 
-			if labels["status_phase"] == "active" && labels["spec_scheduler"] == "cortex-nova" {
+			if labels["status_phase"] == "active" {
 				foundActiveCortexNova = true
 			}
-			if labels["status_phase"] == "failed" && labels["spec_scheduler"] == "cortex-nova" {
+			if labels["status_phase"] == "failed" {
 				foundFailedCortexNova = true
 			}
 		}
@@ -227,7 +227,7 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
 			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
 			},
 			Requests: map[string]resource.Quantity{
 				"memory": resource.MustParse("1000Mi"),
@@ -349,7 +349,7 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
 			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
 			},
 			Requests: map[string]resource.Quantity{
 				"memory": resource.MustParse("1Gi"),

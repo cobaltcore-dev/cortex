@@ -32,11 +32,11 @@ func (m *Monitor) Init() {
 	m.numberOfReservations = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_reservations_number",
 		Help: "Number of reservations.",
-	}, []string{"status_phase", "status_error", "spec_scheduler"})
+	}, []string{"status_phase", "status_error"})
 	m.reservedResources = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_reservations_resources",
 		Help: "Resources reserved by reservations.",
-	}, []string{"status_phase", "status_error", "spec_scheduler", "host", "resource"})
+	}, []string{"status_phase", "status_error", "host", "resource"})
 }
 
 // Describe the metrics for Prometheus.
@@ -60,8 +60,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	countByLabels := map[string]uint64{}
 	for _, reservation := range reservations.Items {
 		key := string(reservation.Status.Phase) +
-			"," + strings.ReplaceAll(reservation.Status.Error, ",", ";") +
-			"," + string(reservation.Spec.Scheduler.Type)
+			"," + strings.ReplaceAll(reservation.Status.Error, ",", ";")
 		countByLabels[key]++
 	}
 	for key, count := range countByLabels {
@@ -75,7 +74,6 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 		host := ""
 		key := string(reservation.Status.Phase) +
 			"," + strings.ReplaceAll(reservation.Status.Error, ",", ";") +
-			"," + string(reservation.Spec.Scheduler.Type) +
 			"," + host
 		if _, ok := resourcesByLabels[key]; !ok {
 			resourcesByLabels[key] = map[string]uint64{}

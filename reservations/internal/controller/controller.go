@@ -56,7 +56,7 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Currently we can only reconcile cortex-nova reservations.
-	if res.Spec.Scheduler.Type != v1alpha1.ComputeReservationSchedulerTypeCortexNova {
+	if res.Spec.Scheduler.CortexNova == nil {
 		log.Info("reservation is not a cortex-nova reservation, skipping", "reservation", req.Name)
 		res.Status.Error = "reservation is not a cortex-nova reservation"
 		res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed

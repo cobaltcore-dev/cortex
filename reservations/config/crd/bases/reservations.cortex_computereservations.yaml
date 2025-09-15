@@ -91,9 +91,6 @@ spec:
                         description: The project ID to reserve for.
                         type: string
                     type: object
-                  type:
-                    description: The type of scheduler that will handle the reservation.
-                    type: string
                 type: object
             type: object
           status:
