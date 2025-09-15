@@ -22,6 +22,8 @@ import (
 
 var (
 	syncLog = ctrl.Log.WithName("sync")
+	// Identifier for the creator of reservations.
+	Creator = "commitments syncer"
 )
 
 type Syncer struct {
@@ -63,64 +65,36 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 			continue
 		}
 		commitmentUUIDShort := commitment.UUID[:5]
-
-		if commitment.Flavor != nil {
-			// Flavor (instance) commitment
-			spec := v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: commitment.ProjectID,
-				DomainID:  commitment.DomainID,
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor:     commitment.Flavor.Name,
-					ExtraSpecs: commitment.Flavor.ExtraSpecs,
-					Requests: map[string]resource.Quantity{
-						"memory": *resource.NewQuantity(int64(commitment.Flavor.RAM)*1024*1024, resource.BinarySI),
-						"cpu":    *resource.NewQuantity(int64(commitment.Flavor.VCPUs), resource.DecimalSI),
-						// Disk is currently not considered.
-					},
-				},
-			}
-			for n := range commitment.Amount { // N instances
-				meta := ctrl.ObjectMeta{
-					Name: fmt.Sprintf("commitment-%s-%d", commitmentUUIDShort, n),
-				}
-				reservationsByName[meta.Name] = v1alpha1.ComputeReservation{
-					ObjectMeta: meta,
-					Spec:       spec,
-				}
-			}
+		if commitment.Flavor == nil {
 			continue
 		}
-
-		// Bare resource commitment
-		reservation := v1alpha1.ComputeReservation{
-			ObjectMeta: ctrl.ObjectMeta{
-				Name: fmt.Sprintf("commitment-%s", commitmentUUIDShort),
-			},
-			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindBareResource,
-				ProjectID: commitment.ProjectID,
-				DomainID:  commitment.DomainID,
-				BareResource: v1alpha1.ComputeReservationSpecBareResource{
-					Requests: map[string]resource.Quantity{},
+		// Flavor (instance) commitment
+		spec := v1alpha1.ComputeReservationSpec{
+			Creator: Creator,
+			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+					ProjectID:        commitment.ProjectID,
+					DomainID:         commitment.DomainID,
+					FlavorName:       commitment.Flavor.Name,
+					FlavorExtraSpecs: commitment.Flavor.ExtraSpecs,
 				},
 			},
+			Requests: map[string]resource.Quantity{
+				"memory": *resource.NewQuantity(int64(commitment.Flavor.RAM)*1024*1024, resource.BinarySI),
+				"cpu":    *resource.NewQuantity(int64(commitment.Flavor.VCPUs), resource.DecimalSI),
+				// Disk is currently not considered.
+			},
 		}
-		quantity, err := commitment.ParseResource()
-		if err != nil {
-			syncLog.Error(err, "failed to convert limes unit", "resource name", commitment.ResourceName)
-			continue
+		for n := range commitment.Amount { // N instances
+			meta := ctrl.ObjectMeta{
+				Name: fmt.Sprintf("commitment-%s-%d", commitmentUUIDShort, n),
+			}
+			reservationsByName[meta.Name] = v1alpha1.ComputeReservation{
+				ObjectMeta: meta,
+				Spec:       spec,
+			}
 		}
-		switch commitment.ResourceName {
-		case "cores":
-			reservation.Spec.BareResource.Requests["cpu"] = quantity
-		case "ram":
-			reservation.Spec.BareResource.Requests["memory"] = quantity
-		default:
-			syncLog.Info("unsupported bare resource commitment unit", "resource name", commitment.ResourceName)
-			continue
-		}
-		reservationsByName[reservation.Name] = reservation
 	}
 
 	// Create new reservations or update existing ones.
@@ -156,6 +130,10 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		return err
 	}
 	for _, existing := range existingReservations.Items {
+		// Only manage reservations created by this syncer.
+		if existing.Spec.Creator != Creator {
+			continue
+		}
 		if _, found := reservationsByName[existing.Name]; !found {
 			// Reservation not found in commitments, delete it.
 			if err := s.Delete(ctx, &existing); err != nil {

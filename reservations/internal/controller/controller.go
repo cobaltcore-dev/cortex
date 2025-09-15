@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -55,36 +54,24 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		log.Info("reservation is already active, skipping", "reservation", req.Name)
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
-	switch res.Spec.Kind {
-	case v1alpha1.ComputeReservationSpecKindInstance:
-		return r.reconcileInstanceReservation(ctx, req, res)
-	case v1alpha1.ComputeReservationSpecKindBareResource:
-		return r.reconcileBareResourceReservation(ctx, req, res)
-	default:
-		log.Info("reservation kind is not supported, skipping", "reservation", req.Name, "kind", res.Spec.Kind)
+
+	// Currently we can only reconcile cortex-nova reservations.
+	if res.Spec.Scheduler.Type != v1alpha1.ComputeReservationSchedulerTypeCortexNova {
+		log.Info("reservation is not a cortex-nova reservation, skipping", "reservation", req.Name)
+		res.Status.Error = "reservation is not a cortex-nova reservation"
+		res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed
+		if err := r.Client.Status().Update(ctx, &res); err != nil {
+			log.Error(err, "failed to update reservation status")
+			return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
+		}
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
-}
 
-// Reconcile an instance reservation.
-func (r *ComputeReservationReconciler) reconcileInstanceReservation(
-	ctx context.Context,
-	req ctrl.Request,
-	res v1alpha1.ComputeReservation,
-) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-	spec := res.Spec.Instance
-	hvType, ok := spec.ExtraSpecs["capabilities:hypervisor_type"]
+	schedulerSpec := res.Spec.Scheduler.CortexNova
+	hvType, ok := schedulerSpec.FlavorExtraSpecs["capabilities:hypervisor_type"]
 	if !ok || !slices.Contains(r.Conf.Hypervisors, hvType) {
-		log.Info("hypervisor type is not supported", "reservation", req.Name, "type", hvType)
-		if hvType == "" {
-			res.Status.Error = "hypervisor type is not specified"
-		} else {
-			hvs := r.Conf.Hypervisors
-			sort.Strings(hvs)
-			supported := strings.Join(hvs, ", ")
-			res.Status.Error = fmt.Sprintf("unsupported hv '%s', supported: %s", hvType, supported)
-		}
+		log.Info("hypervisor type is not supported", "reservation", req.Name)
+		res.Status.Error = fmt.Sprintf("hypervisor type is not supported: %s", hvType)
 		res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
@@ -95,7 +82,7 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 
 	// Convert resource.Quantity to integers for the API
 	var memoryMB uint64
-	if memory, ok := spec.Requests["memory"]; ok {
+	if memory, ok := res.Spec.Requests["memory"]; ok {
 		memoryValue := memory.ScaledValue(resource.Mega)
 		if memoryValue < 0 {
 			return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
@@ -104,7 +91,7 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 	}
 
 	var cpu uint64
-	if cpuQuantity, ok := spec.Requests["cpu"]; ok {
+	if cpuQuantity, ok := res.Spec.Requests["cpu"]; ok {
 		cpuValue := cpuQuantity.ScaledValue(resource.Milli)
 		if cpuValue < 0 {
 			return ctrl.Result{}, fmt.Errorf("invalid cpu value: %d", cpuValue)
@@ -118,11 +105,11 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
 				NumInstances: 1, // One for each reservation.
-				ProjectID:    res.Spec.ProjectID,
+				ProjectID:    schedulerSpec.ProjectID,
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
-						Name:       spec.Flavor,
-						ExtraSpecs: spec.ExtraSpecs,
+						Name:       schedulerSpec.FlavorName,
+						ExtraSpecs: schedulerSpec.FlavorExtraSpecs,
 						MemoryMB:   memoryMB,
 						VCPUs:      cpu,
 						// Disk is currently not considered.
@@ -164,24 +151,6 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
 	}
 	return ctrl.Result{}, nil // No need to requeue, the reservation is now active.
-}
-
-// Reconcile a bare resource reservation.
-func (r *ComputeReservationReconciler) reconcileBareResourceReservation(
-	ctx context.Context,
-	req ctrl.Request,
-	res v1alpha1.ComputeReservation,
-) (ctrl.Result, error) {
-
-	log := logf.FromContext(ctx)
-	log.Info("bare resource reservations are not supported", "reservation", req.Name)
-	res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed
-	res.Status.Error = "bare resource reservations are not supported"
-	if err := r.Client.Status().Update(ctx, &res); err != nil {
-		log.Error(err, "failed to update reservation status")
-		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
-	}
-	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -3,12 +3,6 @@
 
 package commitments
 
-import (
-	"fmt"
-
-	"k8s.io/apimachinery/pkg/api/resource"
-)
-
 // Commitment model from the limes API.
 // See: https://github.com/sapcc/limes/blob/5ea068b/docs/users/api-spec-resources.md?plain=1#L493
 // See: https://github.com/sapcc/go-api-declarations/blob/94ee3e5/limes/resources/commitment.go#L19
@@ -71,27 +65,6 @@ type Commitment struct {
 	// Resolved flavor if the commitment is for a specific instance,
 	// i.e. has the unit instances_<flavor_name>.
 	Flavor *Flavor
-}
-
-// Convert the given limes commitment unit and value to a resource.Quantity.
-func (c *Commitment) ParseResource() (resource.Quantity, error) {
-	val := int64(c.Amount)
-	switch c.Unit {
-	case "":
-		return *resource.NewQuantity(val, resource.DecimalSI), nil
-	case "B":
-		return *resource.NewQuantity(val, resource.BinarySI), nil
-	case "KiB":
-		return *resource.NewQuantity(val*1024, resource.BinarySI), nil
-	case "MiB":
-		return *resource.NewQuantity(val*1024*1024, resource.BinarySI), nil
-	case "GiB":
-		return *resource.NewQuantity(val*1024*1024*1024, resource.BinarySI), nil
-	case "TiB":
-		return *resource.NewQuantity(val*1024*1024*1024*1024, resource.BinarySI), nil
-	default:
-		return resource.Quantity{}, fmt.Errorf("unsupported limes unit: %s", c.Unit)
-	}
 }
 
 // OpenStack flavor model as returned by the Nova API under /flavors/detail.

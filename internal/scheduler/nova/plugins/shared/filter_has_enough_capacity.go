@@ -67,28 +67,26 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	// Resources reserved by hosts.
 	vcpusReserved := make(map[string]uint64)  // in vCPUs
 	memoryReserved := make(map[string]uint64) // in MB
-	diskReserved := make(map[string]uint64)   // in GB
 	for _, reservation := range reservations.Items {
 		if reservation.Status.Phase != v1alpha1.ComputeReservationStatusPhaseActive {
 			continue // Only consider active reservations.
 		}
-		if reservation.Spec.Kind != v1alpha1.ComputeReservationSpecKindInstance {
-			continue // Not an instance reservation, skip it.
+		if reservation.Spec.Scheduler.Type != v1alpha1.ComputeReservationSchedulerTypeCortexNova {
+			continue // Not handled by us.
 		}
 		host := reservation.Status.Host
-		instance := reservation.Spec.Instance
-		if cpu, ok := instance.Requests["cpu"]; ok {
+		if cpu, ok := reservation.Spec.Requests["cpu"]; ok {
 			vcpusReserved[host] += cpu.AsDec().UnscaledBig().Uint64()
 		}
-		if memory, ok := instance.Requests["memory"]; ok {
+		if memory, ok := reservation.Spec.Requests["memory"]; ok {
 			memoryReserved[host] += memory.AsDec().UnscaledBig().Uint64() / 1000000 // MB
 		}
+		// Disk is currently not considered.
 	}
 	traceLog.Debug(
 		"reserved resources",
 		"vcpus", vcpusReserved,
 		"memory", memoryReserved,
-		"disk", diskReserved,
 	)
 	hostsEncountered := map[string]struct{}{}
 	for _, utilization := range hostUtilizations {
@@ -121,20 +119,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			delete(result.Activations, utilization.ComputeHost)
 			continue
 		}
-		diskAllocatableGB := uint64(utilization.TotalDiskAllocatableGB)
-		if reserved, ok := diskReserved[utilization.ComputeHost]; ok {
-			diskAllocatableGB -= reserved
-		}
-		if diskAllocatableGB < request.Spec.Data.Flavor.Data.RootGB {
-			slog.Debug(
-				"Filtering host due to insufficient Disk capacity",
-				slog.String("host", utilization.ComputeHost),
-				slog.Uint64("requested_gb", request.Spec.Data.Flavor.Data.RootGB),
-				slog.Float64("available_gb", utilization.TotalDiskAllocatableGB),
-			)
-			delete(result.Activations, utilization.ComputeHost)
-			continue
-		}
+		// Disk is currently not considered.
 	}
 	// Remove all hosts that weren't encountered.
 	for host := range result.Activations {

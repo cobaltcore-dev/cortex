@@ -98,14 +98,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-1",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: "test-project-1",
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor: "test-flavor",
-					Requests: map[string]resource.Quantity{
-						"memory": resource.MustParse("1Gi"),
-						"cpu":    resource.MustParse("2"),
-					},
+				Requests: map[string]resource.Quantity{
+					"memory": resource.MustParse("1Gi"),
+					"cpu":    resource.MustParse("2"),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -118,14 +113,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-2",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: "test-project-2",
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor: "test-flavor-2",
-					Requests: map[string]resource.Quantity{
-						"memory": resource.MustParse("2Gi"),
-						"cpu":    resource.MustParse("4"),
-					},
+				Requests: map[string]resource.Quantity{
+					"memory": resource.MustParse("2Gi"),
+					"cpu":    resource.MustParse("4"),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -138,13 +128,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-3",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindBareResource,
-				ProjectID: "test-project-3",
-				BareResource: v1alpha1.ComputeReservationSpecBareResource{
-					Requests: map[string]resource.Quantity{
-						"memory": resource.MustParse("4Gi"),
-						"cpu":    resource.MustParse("4"),
-					},
+				Requests: map[string]resource.Quantity{
+					"memory": resource.MustParse("4Gi"),
+					"cpu":    resource.MustParse("4"),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -203,13 +189,13 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				labels[label.GetName()] = label.GetValue()
 			}
 
-			if labels["status_phase"] == "active" && labels["spec_kind"] == "instance" {
+			if labels["status_phase"] == "active" && labels["spec_scheduler"] == "instance" {
 				foundActiveInstance = true
 			}
-			if labels["status_phase"] == "failed" && labels["spec_kind"] == "instance" {
+			if labels["status_phase"] == "failed" && labels["spec_scheduler"] == "instance" {
 				foundFailedInstance = true
 			}
-			if labels["status_phase"] == "active" && labels["spec_kind"] == "bare" {
+			if labels["status_phase"] == "active" && labels["spec_scheduler"] == "bare" {
 				foundActiveBare = true
 			}
 		}
@@ -238,14 +224,9 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
-			Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-			ProjectID: "test-project",
-			Instance: v1alpha1.ComputeReservationSpecInstance{
-				Flavor: "test-flavor",
-				Requests: map[string]resource.Quantity{
-					"memory": resource.MustParse("1000Mi"),
-					"cpu":    resource.MustParse("2"),
-				},
+			Requests: map[string]resource.Quantity{
+				"memory": resource.MustParse("1000Mi"),
+				"cpu":    resource.MustParse("2"),
 			},
 		},
 		Status: v1alpha1.ComputeReservationStatus{
@@ -361,14 +342,9 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
-			Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-			ProjectID: "test-project",
-			Instance: v1alpha1.ComputeReservationSpecInstance{
-				Flavor: "test-flavor",
-				Requests: map[string]resource.Quantity{
-					"memory": resource.MustParse("1Gi"),
-					"cpu":    resource.MustParse("2"),
-				},
+			Requests: map[string]resource.Quantity{
+				"memory": resource.MustParse("1Gi"),
+				"cpu":    resource.MustParse("2"),
 			},
 		},
 		Status: v1alpha1.ComputeReservationStatus{

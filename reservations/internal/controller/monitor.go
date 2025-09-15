@@ -32,11 +32,11 @@ func (m *Monitor) Init() {
 	m.numberOfReservations = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_reservations_number",
 		Help: "Number of reservations.",
-	}, []string{"status_phase", "status_error", "spec_kind"})
+	}, []string{"status_phase", "status_error", "spec_scheduler"})
 	m.reservedResources = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_reservations_resources",
 		Help: "Resources reserved by reservations.",
-	}, []string{"status_phase", "status_error", "spec_kind", "host", "resource"})
+	}, []string{"status_phase", "status_error", "spec_scheduler", "host", "resource"})
 }
 
 // Describe the metrics for Prometheus.
@@ -61,7 +61,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	for _, reservation := range reservations.Items {
 		key := string(reservation.Status.Phase) +
 			"," + strings.ReplaceAll(reservation.Status.Error, ",", ";") +
-			"," + string(reservation.Spec.Kind)
+			"," + string(reservation.Spec.Scheduler.Type)
 		countByLabels[key]++
 	}
 	for key, count := range countByLabels {
@@ -75,22 +75,13 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 		host := ""
 		key := string(reservation.Status.Phase) +
 			"," + strings.ReplaceAll(reservation.Status.Error, ",", ";") +
-			"," + string(reservation.Spec.Kind) +
+			"," + string(reservation.Spec.Scheduler.Type) +
 			"," + host
 		if _, ok := resourcesByLabels[key]; !ok {
 			resourcesByLabels[key] = map[string]uint64{}
 		}
-		switch reservation.Spec.Kind {
-		case v1alpha1.ComputeReservationSpecKindInstance:
-			// Instance reservations have resources defined in the instance spec.
-			if cpu, ok := reservation.Spec.Instance.Requests["cpu"]; ok {
-				resourcesByLabels[key]["vcpus"] += cpu.AsDec().UnscaledBig().Uint64()
-			}
-			if memory, ok := reservation.Spec.Instance.Requests["memory"]; ok {
-				resourcesByLabels[key]["memory_mb"] += memory.AsDec().UnscaledBig().Uint64() / 1000000
-			}
-		default:
-			continue // Skip non-instance reservations.
+		for resourceName, resourceQuantity := range reservation.Spec.Requests {
+			resourcesByLabels[key][resourceName] += resourceQuantity.AsDec().UnscaledBig().Uint64()
 		}
 	}
 	for key, resources := range resourcesByLabels {

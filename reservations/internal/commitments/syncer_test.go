@@ -148,27 +148,23 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 
 	// Verify the first reservation
 	res := reservations.Items[0]
-	if res.Spec.Kind != v1alpha1.ComputeReservationSpecKindInstance {
-		t.Errorf("Expected instance kind, got %v", res.Spec.Kind)
+	if res.Spec.Scheduler.CortexNova.ProjectID != "test-project-1" {
+		t.Errorf("Expected project ID test-project-1, got %v", res.Spec.Scheduler.CortexNova.ProjectID)
 	}
 
-	if res.Spec.ProjectID != "test-project-1" {
-		t.Errorf("Expected project ID test-project-1, got %v", res.Spec.ProjectID)
-	}
-
-	if res.Spec.Instance.Flavor != "test-flavor" {
-		t.Errorf("Expected flavor test-flavor, got %v", res.Spec.Instance.Flavor)
+	if res.Spec.Scheduler.CortexNova.FlavorName != "test-flavor" {
+		t.Errorf("Expected flavor test-flavor, got %v", res.Spec.Scheduler.CortexNova.FlavorName)
 	}
 
 	// Check resource values
 	expectedMemory := resource.MustParse("1073741824") // 1024MB in bytes
-	if !res.Spec.Instance.Requests["memory"].Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Instance.Requests["memory"])
+	if !res.Spec.Requests["memory"].Equal(expectedMemory) {
+		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Requests["memory"])
 	}
 
 	expectedVCPUs := resource.MustParse("2")
-	if !res.Spec.Instance.Requests["cpu"].Equal(expectedVCPUs) {
-		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Instance.Requests["cpu"])
+	if !res.Spec.Requests["cpu"].Equal(expectedVCPUs) {
+		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Requests["cpu"])
 	}
 }
 
@@ -261,19 +257,16 @@ func TestSyncer_SyncReservations_BareResourceCommitments(t *testing.T) {
 	}
 
 	// Verify cores reservation
-	if coresRes.Spec.Kind != v1alpha1.ComputeReservationSpecKindBareResource {
-		t.Errorf("Expected bare resource kind, got %v", coresRes.Spec.Kind)
-	}
 
 	expectedCPU := resource.MustParse("4")
-	if !coresRes.Spec.BareResource.Requests["cpu"].Equal(expectedCPU) {
-		t.Errorf("Expected CPU %v, got %v", expectedCPU, coresRes.Spec.BareResource.Requests["cpu"])
+	if !coresRes.Spec.Requests["cpu"].Equal(expectedCPU) {
+		t.Errorf("Expected CPU %v, got %v", expectedCPU, coresRes.Spec.Requests["cpu"])
 	}
 
 	// Verify ram reservation
 	expectedMemory := resource.MustParse("2147483648") // 2048 MiB in bytes
-	if !ramRes.Spec.BareResource.Requests["memory"].Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, ramRes.Spec.BareResource.Requests["memory"])
+	if !ramRes.Spec.Requests["memory"].Equal(expectedMemory) {
+		t.Errorf("Expected memory %v, got %v", expectedMemory, ramRes.Spec.Requests["memory"])
 	}
 }
 
@@ -289,14 +282,16 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			Name: "commitment-12345-0", // Instance commitments have -0 suffix
 		},
 		Spec: v1alpha1.ComputeReservationSpec{
-			Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-			ProjectID: "old-project",
-			Instance: v1alpha1.ComputeReservationSpecInstance{
-				Flavor: "old-flavor",
-				Requests: map[string]resource.Quantity{
-					"memory": resource.MustParse("512Mi"),
-					"cpu":    resource.MustParse("1"),
+			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+				Type: v1alpha1.ComputeReservationSchedulerTypeCortexNova,
+				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+					ProjectID:  "old-project",
+					FlavorName: "old-flavor",
 				},
+			},
+			Requests: map[string]resource.Quantity{
+				"memory": resource.MustParse("512Mi"),
+				"cpu":    resource.MustParse("1"),
 			},
 		},
 	}
@@ -353,12 +348,12 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 	}
 
 	// Verify the reservation was updated with new values
-	if updatedReservation.Spec.ProjectID != "new-project" {
-		t.Errorf("Expected project ID new-project, got %v", updatedReservation.Spec.ProjectID)
+	if updatedReservation.Spec.Scheduler.CortexNova.ProjectID != "new-project" {
+		t.Errorf("Expected project ID new-project, got %v", updatedReservation.Spec.Scheduler.CortexNova.ProjectID)
 	}
 
-	if updatedReservation.Spec.Instance.Flavor != "new-flavor" {
-		t.Errorf("Expected flavor new-flavor, got %v", updatedReservation.Spec.Instance.Flavor)
+	if updatedReservation.Spec.Scheduler.CortexNova.FlavorName != "new-flavor" {
+		t.Errorf("Expected flavor new-flavor, got %v", updatedReservation.Spec.Scheduler.CortexNova.FlavorName)
 	}
 }
 

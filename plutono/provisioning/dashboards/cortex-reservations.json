@@ -207,7 +207,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (host) (cortex_reservations_resources{status_phase=\"active\",resource=\"vcpus\"})",
+          "expr": "max by (host) (cortex_reservations_resources{status_phase=\"active\",resource=\"cpu\"})",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -286,7 +286,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (host) (cortex_reservations_resources{status_phase=\"active\",resource=\"memory_mb\"})",
+          "expr": "max by (host) (cortex_reservations_resources{status_phase=\"active\",resource=\"memory\"})",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -351,12 +351,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "memory_mb"
+              "options": "memory"
             },
             "properties": [
               {
                 "id": "unit",
-                "value": "decmbytes"
+                "value": "bytes"
               },
               {
                 "id": "displayName",
@@ -367,7 +367,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "vcpus"
+              "options": "cpu"
             },
             "properties": [
               {
@@ -553,7 +553,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (status_error) (cortex_reservations_resources{status_phase!=\"active\",resource=\"vcpus\"})",
+          "expr": "max by (status_error) (cortex_reservations_resources{status_phase!=\"active\",resource=\"cpu\"})",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -633,7 +633,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (status_error) (cortex_reservations_resources{status_phase!=\"active\",resource=\"memory_mb\"})",
+          "expr": "max by (status_error) (cortex_reservations_resources{status_phase!=\"active\",resource=\"memory\"})",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -699,12 +699,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "memory_mb"
+              "options": "memory"
             },
             "properties": [
               {
                 "id": "unit",
-                "value": "decmbytes"
+                "value": "bytes"
               },
               {
                 "id": "displayName",
@@ -715,7 +715,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "vcpus"
+              "options": "cpu"
             },
             "properties": [
               {
