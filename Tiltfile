@@ -13,9 +13,6 @@ if not os.path.exists(os.getenv('TILT_VALUES_PATH')):
     fail("TILT_VALUES_PATH "+ os.getenv('TILT_VALUES_PATH') + " does not exist.")
 tilt_values = os.getenv('TILT_VALUES_PATH')
 
-# The upgrade job may take a long time to run, so it is disabled by default.
-enable_postgres_upgrade = False
-
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo(
     'Prometheus Community Helm Repo',
