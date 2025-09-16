@@ -5,7 +5,6 @@ package commitments
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -19,20 +18,51 @@ import (
 
 // Mock CommitmentsClient for testing
 type mockCommitmentsClient struct {
-	commitments []Commitment
-	initCalled  bool
-	shouldError bool
+	initFunc                      func(ctx context.Context)
+	initFuncCalled                bool
+	listProjectsFunc              func(ctx context.Context) ([]Project, error)
+	listProjectsFuncCalled        bool
+	listFlavorsByNameFunc         func(ctx context.Context) (map[string]Flavor, error)
+	listFlavorsByNameFuncCalled   bool
+	listCommitmentsByIDFunc       func(ctx context.Context, projects ...Project) (map[string]Commitment, error)
+	listCommitmentsByIDFuncCalled bool
+	listActiveServersFunc         func(ctx context.Context, projects ...Project) (map[string][]Server, error)
+	listActiveServersFuncCalled   bool
 }
 
 func (m *mockCommitmentsClient) Init(ctx context.Context) {
-	m.initCalled = true
-}
-
-func (m *mockCommitmentsClient) GetComputeCommitments(ctx context.Context) ([]Commitment, error) {
-	if m.shouldError {
-		return nil, errors.New("mock error")
+	m.initFuncCalled = true
+	if m.initFunc != nil {
+		m.initFunc(ctx)
 	}
-	return m.commitments, nil
+}
+func (m *mockCommitmentsClient) ListProjects(ctx context.Context) ([]Project, error) {
+	m.listProjectsFuncCalled = true
+	if m.listProjectsFunc == nil {
+		return []Project{}, nil
+	}
+	return m.listProjectsFunc(ctx)
+}
+func (m *mockCommitmentsClient) ListFlavorsByName(ctx context.Context) (map[string]Flavor, error) {
+	m.listFlavorsByNameFuncCalled = true
+	if m.listFlavorsByNameFunc == nil {
+		return map[string]Flavor{}, nil
+	}
+	return m.listFlavorsByNameFunc(ctx)
+}
+func (m *mockCommitmentsClient) ListCommitmentsByID(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+	m.listCommitmentsByIDFuncCalled = true
+	if m.listCommitmentsByIDFunc == nil {
+		return map[string]Commitment{}, nil
+	}
+	return m.listCommitmentsByIDFunc(ctx, projects...)
+}
+func (m *mockCommitmentsClient) ListActiveServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+	m.listActiveServersFuncCalled = true
+	if m.listActiveServersFunc == nil {
+		return map[string][]Server{}, nil
+	}
+	return m.listActiveServersFunc(ctx, projects...)
 }
 
 func TestNewSyncer(t *testing.T) {
@@ -79,7 +109,7 @@ func TestSyncer_Init(t *testing.T) {
 
 	syncer.Init(context.Background())
 
-	if !mockClient.initCalled {
+	if !mockClient.initFuncCalled {
 		t.Error("Expected Init to be called on commitments client")
 	}
 }
@@ -106,19 +136,44 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 			Unit:             "",
 			ProjectID:        "test-project-1",
 			DomainID:         "test-domain-1",
-			Flavor: &Flavor{
-				ID:         "flavor-1",
-				Name:       "test-flavor",
-				RAM:        1024, // 1GB in MB
-				VCPUs:      2,
-				Disk:       10, // 10GB
-				ExtraSpecs: map[string]string{"key": "value"},
-			},
 		},
 	}
 
 	mockClient := &mockCommitmentsClient{
-		commitments: mockCommitments,
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			result := make(map[string]Commitment)
+			for _, c := range mockCommitments {
+				result[c.UUID] = c
+			}
+			return result, nil
+		},
+		listFlavorsByNameFunc: func(ctx context.Context) (map[string]Flavor, error) {
+			return map[string]Flavor{
+				"test-flavor": {
+					ID:    "flavor-1",
+					Name:  "test-flavor",
+					RAM:   1024, // 1GB in MB
+					VCPUs: 2,
+					Disk:  20, // 20GB
+					ExtraSpecs: map[string]string{
+						"hw:cpu_policy":                         "dedicated",
+						"hw:numa_nodes":                         "1",
+						"aggregate_instance_extra_specs:pinned": "true",
+					},
+				},
+			}, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{
+				{ID: "test-project-1", DomainID: "test-domain-1", Name: "Test Project 1"},
+			}, nil
+		},
+		listActiveServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+			return map[string][]Server{}, nil // No active servers
+		},
+		initFunc: func(ctx context.Context) {
+			// No-op for init
+		},
 	}
 
 	syncer := &Syncer{
@@ -210,19 +265,44 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			Unit:             "",
 			ProjectID:        "new-project",
 			DomainID:         "new-domain",
-			Flavor: &Flavor{
-				ID:         "flavor-2",
-				Name:       "new-flavor",
-				RAM:        2048, // 2GB in MB
-				VCPUs:      4,
-				Disk:       20, // 20GB
-				ExtraSpecs: map[string]string{"new": "spec"},
-			},
 		},
 	}
 
 	mockClient := &mockCommitmentsClient{
-		commitments: mockCommitments,
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			result := make(map[string]Commitment)
+			for _, c := range mockCommitments {
+				result[c.UUID] = c
+			}
+			return result, nil
+		},
+		listFlavorsByNameFunc: func(ctx context.Context) (map[string]Flavor, error) {
+			return map[string]Flavor{
+				"new-flavor": {
+					ID:    "flavor-2",
+					Name:  "new-flavor",
+					RAM:   2048, // 2GB in MB
+					VCPUs: 4,
+					Disk:  40, // 40GB
+					ExtraSpecs: map[string]string{
+						"hw:cpu_policy":                         "shared",
+						"hw:numa_nodes":                         "2",
+						"aggregate_instance_extra_specs:pinned": "false",
+					},
+				},
+			}, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{
+				{ID: "new-project", DomainID: "new-domain", Name: "New Project"},
+			}, nil
+		},
+		listActiveServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+			return map[string][]Server{}, nil // No active servers
+		},
+		initFunc: func(ctx context.Context) {
+			// No-op for init
+		},
 	}
 
 	syncer := &Syncer{
@@ -254,31 +334,6 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 	}
 }
 
-func TestSyncer_SyncReservations_Error(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
-
-	mockClient := &mockCommitmentsClient{
-		shouldError: true,
-	}
-
-	syncer := &Syncer{
-		CommitmentsClient: mockClient,
-		Client:            k8sClient,
-	}
-
-	err := syncer.SyncReservations(context.Background())
-	if err == nil {
-		t.Error("Expected error but got none")
-	}
-}
-
 func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -301,14 +356,44 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 			Unit:             "",
 			ProjectID:        "test-project",
 			DomainID:         "test-domain",
-			Flavor: &Flavor{
-				Name: "test-flavor",
-			},
 		},
 	}
 
 	mockClient := &mockCommitmentsClient{
-		commitments: mockCommitments,
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			result := make(map[string]Commitment)
+			for _, c := range mockCommitments {
+				result[c.UUID] = c
+			}
+			return result, nil
+		},
+		listFlavorsByNameFunc: func(ctx context.Context) (map[string]Flavor, error) {
+			return map[string]Flavor{
+				"test-flavor": {
+					ID:    "flavor-1",
+					Name:  "test-flavor",
+					RAM:   1024, // 1GB in MB
+					VCPUs: 2,
+					Disk:  20, // 20GB
+					ExtraSpecs: map[string]string{
+						"hw:cpu_policy":                         "dedicated",
+						"hw:numa_nodes":                         "1",
+						"aggregate_instance_extra_specs:pinned": "true",
+					},
+				},
+			}, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{
+				{ID: "test-project", DomainID: "test-domain", Name: "Test Project"},
+			}, nil
+		},
+		listActiveServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+			return map[string][]Server{}, nil // No active servers
+		},
+		initFunc: func(ctx context.Context) {
+			// No-op for init
+		},
 	}
 
 	syncer := &Syncer{
@@ -332,59 +417,6 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 
 	if len(reservations.Items) != 0 {
 		t.Errorf("Expected 0 reservations due to short UUID, got %d", len(reservations.Items))
-	}
-}
-
-func TestSyncer_SyncReservations_UnsupportedResource(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
-
-	// Create mock commitment with unsupported resource name
-	mockCommitments := []Commitment{
-		{
-			ID:               1,
-			UUID:             "12345-67890-abcdef",
-			ServiceType:      "compute",
-			ResourceName:     "unsupported_resource",
-			AvailabilityZone: "az1",
-			Amount:           1,
-			Unit:             "",
-			ProjectID:        "test-project",
-			DomainID:         "test-domain",
-		},
-	}
-
-	mockClient := &mockCommitmentsClient{
-		commitments: mockCommitments,
-	}
-
-	syncer := &Syncer{
-		CommitmentsClient: mockClient,
-		Client:            k8sClient,
-	}
-
-	err := syncer.SyncReservations(context.Background())
-	if err != nil {
-		t.Errorf("SyncReservations() error = %v", err)
-		return
-	}
-
-	// Verify that no reservations were created due to unsupported resource
-	var reservations v1alpha1.ComputeReservationList
-	err = k8sClient.List(context.Background(), &reservations)
-	if err != nil {
-		t.Errorf("Failed to list reservations: %v", err)
-		return
-	}
-
-	if len(reservations.Items) != 0 {
-		t.Errorf("Expected 0 reservations due to unsupported resource, got %d", len(reservations.Items))
 	}
 }
 

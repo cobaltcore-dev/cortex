@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,16 +50,118 @@ func (s *Syncer) Init(ctx context.Context) {
 	s.CommitmentsClient.Init(ctx)
 }
 
-// Fetch commitments and update/create reservations for each of them.
-func (s *Syncer) SyncReservations(ctx context.Context) error {
-	computeCommitments, err := s.GetComputeCommitments(ctx)
+// Helper struct to unify the commitment with metadata needed for reservation creation.
+type resolvedCommitment struct {
+	Commitment
+	Flavor Flavor
+}
+
+// Get all compute commitments that should be converted to reservations.
+func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommitment, error) {
+	// Get all data we need from the openstack services.
+	allProjects, err := s.ListProjects(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	flavors, err := s.ListFlavorsByName(ctx)
+	if err != nil {
+		return nil, err
+	}
+	commitments, err := s.ListCommitmentsByID(ctx, allProjects...)
+	if err != nil {
+		return nil, err
+	}
+	projectsWithCommitments := make([]Project, 0, len(commitments))
+	projectIDs := make(map[string]bool)
+	for _, commitment := range commitments {
+		projectIDs[commitment.ProjectID] = true
+	}
+	for _, project := range allProjects {
+		if _, exists := projectIDs[project.ID]; exists {
+			projectsWithCommitments = append(projectsWithCommitments, project)
+		}
+	}
+	servers, err := s.ListActiveServersByProjectID(ctx, projectsWithCommitments...)
+	if err != nil {
+		return nil, err
 	}
 
+	// Remove non-compute/non-instance commitments or commitments we can't resolve.
+	var resolvedCommitments []resolvedCommitment
+	for id, commitment := range commitments {
+		if commitment.ServiceType != "compute" {
+			delete(commitments, id)
+			syncLog.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
+			continue
+		}
+		if !strings.HasPrefix(commitment.ResourceName, "instances_") {
+			syncLog.Info("skipping non-instance commitment", "id", id, "resourceName", commitment.ResourceName)
+			delete(commitments, id)
+			continue
+		}
+		flavorName := strings.TrimPrefix(commitment.ResourceName, "instances_")
+		flavor, ok := flavors[flavorName]
+		if !ok {
+			syncLog.Info("skipping commitment without known flavor", "id", id, "flavorName", flavorName)
+			delete(commitments, id)
+			continue
+		}
+		resolvedCommitments = append(resolvedCommitments, resolvedCommitment{
+			Commitment: commitment,
+			Flavor:     flavor,
+		})
+	}
+
+	// Remove all commitments which are currently actively in use by a vm.
+	sort.Slice(resolvedCommitments, func(i, j int) bool {
+		return resolvedCommitments[i].ID < resolvedCommitments[j].ID
+	})
+	mappedServers := map[string]struct{}{} // Servers subtracted from a commitment
+	var unusedCommitments []resolvedCommitment
+	for _, commitment := range resolvedCommitments {
+		activeServers, ok := servers[commitment.ProjectID]
+		if !ok || len(activeServers) == 0 {
+			// No active servers in this project, keep the commitment.
+			unusedCommitments = append(unusedCommitments, commitment)
+			continue
+		}
+		// Some active servers, subtract them from the commitment amount.
+		sort.Slice(activeServers, func(i, j int) bool {
+			return activeServers[i].ID < activeServers[j].ID
+		})
+		for _, server := range activeServers {
+			if _, exists := mappedServers[server.ID]; exists {
+				// This server is already subtracted from another commitment.
+				continue
+			}
+			if server.FlavorName != commitment.Flavor.Name {
+				// This server is of a different flavor, skip it.
+				continue
+			}
+			mappedServers[server.ID] = struct{}{}
+			commitment.Amount--
+		}
+		if commitment.Amount <= 0 {
+			syncLog.Info("skipping commitment that is fully used by active servers", "id", commitment.UUID, "project", commitment.ProjectID)
+			continue
+		}
+		unusedCommitments = append(unusedCommitments, commitment)
+	}
+
+	return unusedCommitments, nil
+}
+
+// Fetch commitments and update/create reservations for each of them.
+func (s *Syncer) SyncReservations(ctx context.Context) error {
+	// Get all commitments that should be converted to reservations.
+	commitments, err := s.resolveUnusedCommitments(ctx)
+	if err != nil {
+		syncLog.Error(err, "failed to get compute commitments")
+		return err
+	}
 	// Map commitments to reservations.
 	var reservationsByName = make(map[string]v1alpha1.ComputeReservation)
-	for _, commitment := range computeCommitments {
+	for _, commitment := range commitments {
 		// Get only the 5 first characters from the uuid. This should be safe enough.
 		if len(commitment.UUID) < 5 {
 			err := errors.New("commitment UUID is too short")
@@ -65,10 +169,6 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 			continue
 		}
 		commitmentUUIDShort := commitment.UUID[:5]
-		if commitment.Flavor == nil {
-			continue
-		}
-		// Flavor (instance) commitment
 		spec := v1alpha1.ComputeReservationSpec{
 			Creator: Creator,
 			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{

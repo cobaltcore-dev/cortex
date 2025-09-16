@@ -3,6 +3,8 @@
 
 package commitments
 
+import "encoding/json"
+
 // Commitment model from the limes API.
 // See: https://github.com/sapcc/limes/blob/5ea068b/docs/users/api-spec-resources.md?plain=1#L493
 // See: https://github.com/sapcc/go-api-declarations/blob/94ee3e5/limes/resources/commitment.go#L19
@@ -61,10 +63,6 @@ type Commitment struct {
 	ProjectID string `json:"project_id"`
 	// The openstack domain ID this commitment is for.
 	DomainID string `json:"domain_id"`
-
-	// Resolved flavor if the commitment is for a specific instance,
-	// i.e. has the unit instances_<flavor_name>.
-	Flavor *Flavor
 }
 
 // OpenStack flavor model as returned by the Nova API under /flavors/detail.
@@ -82,4 +80,96 @@ type Flavor struct {
 
 	// JSON string of extra specifications used when scheduling the flavor.
 	ExtraSpecs map[string]string `json:"extra_specs" db:"extra_specs"`
+}
+
+// OpenStack project model as returned by the Keystone API under /projects.
+// See: https://docs.openstack.org/api-ref/identity/v3/#projects
+type Project struct {
+	// DomainID is the domain ID the project belongs to.
+	DomainID string `json:"domain_id"`
+	// ID is the unique ID of the project.
+	ID string `json:"id"`
+	// Name is the name of the project.
+	Name string `json:"name"`
+	// ParentID is the parent_id of the project.
+	ParentID string `json:"parent_id"`
+
+	// Some fields were omitted. Add them if needed.
+}
+
+// OpenStack server model as returned by the Nova API under /servers/detail.
+// See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
+type Server struct {
+	ID                             string  `json:"id" db:"id,primarykey"`
+	Name                           string  `json:"name" db:"name"`
+	Status                         string  `json:"status" db:"status"`
+	TenantID                       string  `json:"tenant_id" db:"tenant_id"`
+	UserID                         string  `json:"user_id" db:"user_id"`
+	HostID                         string  `json:"hostId" db:"host_id"`
+	Created                        string  `json:"created" db:"created"`
+	Updated                        string  `json:"updated" db:"updated"`
+	AccessIPv4                     string  `json:"accessIPv4" db:"access_ipv4"`
+	AccessIPv6                     string  `json:"accessIPv6" db:"access_ipv6"`
+	OSDCFdiskConfig                string  `json:"OS-DCF:diskConfig" db:"os_dcf_disk_config"`
+	Progress                       int     `json:"progress" db:"progress"`
+	OSEXTAvailabilityZone          string  `json:"OS-EXT-AZ:availability_zone" db:"os_ext_az_availability_zone"`
+	ConfigDrive                    string  `json:"config_drive" db:"config_drive"`
+	KeyName                        string  `json:"key_name" db:"key_name"`
+	OSSRVUSGLaunchedAt             string  `json:"OS-SRV-USG:launched_at" db:"os_srv_usg_launched_at"`
+	OSSRVUSGTerminatedAt           *string `json:"OS-SRV-USG:terminated_at" db:"os_srv_usg_terminated_at"`
+	OSEXTSRVATTRHost               string  `json:"OS-EXT-SRV-ATTR:host" db:"os_ext_srv_attr_host"`
+	OSEXTSRVATTRInstanceName       string  `json:"OS-EXT-SRV-ATTR:instance_name" db:"os_ext_srv_attr_instance_name"`
+	OSEXTSRVATTRHypervisorHostname string  `json:"OS-EXT-SRV-ATTR:hypervisor_hostname" db:"os_ext_srv_attr_hypervisor_hostname"`
+	OSEXTSTSTaskState              *string `json:"OS-EXT-STS:task_state" db:"os_ext_sts_task_state"`
+	OSEXTSTSVmState                string  `json:"OS-EXT-STS:vm_state" db:"os_ext_sts_vm_state"`
+	OSEXTSTSPowerState             int     `json:"OS-EXT-STS:power_state" db:"os_ext_sts_power_state"`
+
+	// From nested JSON
+	FlavorName string `json:"-" db:"flavor_name"`
+
+	// Note: there are some more fields that are omitted. To include them again, add
+	// custom unmarshalers and marshalers for the struct below.
+}
+
+// Custom unmarshaler for OpenStackServer to handle nested JSON.
+func (s *Server) UnmarshalJSON(data []byte) error {
+	type Alias Server
+	aux := &struct {
+		Flavor json.RawMessage `json:"flavor"`
+		*Alias
+	}{
+		Alias: (*Alias)(s),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	var flavor struct {
+		// Starting in microversion 2.47, "id" was removed...
+		Name string `json:"original_name"`
+	}
+	if err := json.Unmarshal(aux.Flavor, &flavor); err != nil {
+		return err
+	}
+	s.FlavorName = flavor.Name
+	return nil
+}
+
+// Custom marshaler for OpenStackServer to handle nested JSON.
+func (s *Server) MarshalJSON() ([]byte, error) {
+	type Alias Server
+	aux := &struct {
+		Flavor struct {
+			// Starting in microversion 2.47, "id" was removed...
+			Name string `json:"original_name"`
+		} `json:"flavor"`
+		*Alias
+	}{
+		Alias: (*Alias)(s),
+		Flavor: struct {
+			Name string `json:"original_name"`
+		}{
+			Name: s.FlavorName,
+		},
+	}
+	return json.Marshal(aux)
 }

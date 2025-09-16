@@ -6,711 +6,786 @@ package commitments
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 )
 
-// Test that NewCommitmentsClient returns a proper client instance
 func TestNewCommitmentsClient(t *testing.T) {
 	config := conf.KeystoneConfig{
-		URL:                 "http://test.example.com",
+		URL:                 "http://keystone.example.com",
 		OSUsername:          "testuser",
 		OSPassword:          "testpass",
 		OSProjectName:       "testproject",
-		OSUserDomainName:    "testdomain",
-		OSProjectDomainName: "testprojectdomain",
+		OSUserDomainName:    "default",
+		OSProjectDomainName: "default",
 	}
 
 	client := NewCommitmentsClient(config)
 	if client == nil {
-		t.Fatal("NewCommitmentsClient returned nil")
+		t.Fatal("expected client to be created, got nil")
 	}
 
-	// Verify internal configuration
-	c, ok := client.(*commitmentsClient)
+	// Check that the returned client is of the correct type
+	concreteClient, ok := client.(*commitmentsClient)
 	if !ok {
-		t.Fatal("NewCommitmentsClient did not return a *commitmentsClient")
+		t.Fatal("expected client to be of type *commitmentsClient")
 	}
 
-	if c.conf.URL != config.URL {
-		t.Errorf("Expected URL %s, got %s", config.URL, c.conf.URL)
+	// Verify config is set correctly
+	if concreteClient.conf.URL != config.URL {
+		t.Errorf("expected URL %s, got %s", config.URL, concreteClient.conf.URL)
 	}
-	if c.conf.OSUsername != config.OSUsername {
-		t.Errorf("Expected OSUsername %s, got %s", config.OSUsername, c.conf.OSUsername)
+	if concreteClient.conf.OSUsername != config.OSUsername {
+		t.Errorf("expected username %s, got %s", config.OSUsername, concreteClient.conf.OSUsername)
 	}
 }
 
-// Test data structures and helper functions for tests
-func createMockServiceClient(endpoint string) *gophercloud.ServiceClient {
-	// Ensure endpoint has trailing slash for proper URL construction
-	if !strings.HasSuffix(endpoint, "/") {
-		endpoint += "/"
-	}
-	return &gophercloud.ServiceClient{
-		ProviderClient: &gophercloud.ProviderClient{
-			HTTPClient: *http.DefaultClient,
+func TestCommitmentsClient_ListProjects(t *testing.T) {
+	// Mock server for Keystone identity service
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v3/projects" {
+			// Return raw JSON string as the gophercloud pages expect
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{
+				"projects": [
+					{
+						"id": "project1",
+						"name": "Test Project 1",
+						"domain_id": "domain1",
+						"parent_id": ""
+					},
+					{
+						"id": "project2",
+						"name": "Test Project 2",
+						"domain_id": "domain1",
+						"parent_id": "project1"
+					}
+				]
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		keystone: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+			},
+			Endpoint: server.URL + "/v3/",
 		},
-		Endpoint: endpoint,
+	}
+
+	ctx := context.Background()
+	projects, err := client.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedProjects := []Project{
+		{
+			ID:       "project1",
+			Name:     "Test Project 1",
+			DomainID: "domain1",
+			ParentID: "",
+		},
+		{
+			ID:       "project2",
+			Name:     "Test Project 2",
+			DomainID: "domain1",
+			ParentID: "project1",
+		},
+	}
+
+	if len(projects) != len(expectedProjects) {
+		t.Fatalf("expected %d projects, got %d", len(expectedProjects), len(projects))
+	}
+
+	for i, expected := range expectedProjects {
+		if projects[i] != expected {
+			t.Errorf("project %d: expected %+v, got %+v", i, expected, projects[i])
+		}
 	}
 }
 
-func createTestFlavors() []Flavor {
-	return []Flavor{
-		{
-			ID:          "flavor-1",
-			Name:        "small",
-			RAM:         1024,
+func TestCommitmentsClient_ListProjects_Error(t *testing.T) {
+	// Mock server that returns an error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		keystone: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+			},
+			Endpoint: server.URL + "/v3",
+		},
+	}
+
+	ctx := context.Background()
+	projects, err := client.ListProjects(ctx)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if projects != nil {
+		t.Errorf("expected nil projects, got %+v", projects)
+	}
+}
+
+func TestCommitmentsClient_ListFlavorsByName(t *testing.T) {
+	// Mock server for Nova compute service
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/flavors/detail") {
+			// Return raw JSON string as the gophercloud pages expect
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{
+				"flavors": [
+					{
+						"id": "flavor1",
+						"name": "m1.small",
+						"ram": 2048,
+						"vcpus": 1,
+						"disk": 20,
+						"rxtx_factor": 1.0,
+						"os-flavor-access:is_public": true,
+						"OS-FLV-EXT-DATA:ephemeral": 0,
+						"description": "Small flavor",
+						"extra_specs": {"hw:cpu_policy": "shared"}
+					},
+					{
+						"id": "flavor2",
+						"name": "m1.medium",
+						"ram": 4096,
+						"vcpus": 2,
+						"disk": 40,
+						"rxtx_factor": 1.0,
+						"os-flavor-access:is_public": true,
+						"OS-FLV-EXT-DATA:ephemeral": 0,
+						"description": "Medium flavor",
+						"extra_specs": {"hw:cpu_policy": "dedicated"}
+					}
+				]
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		nova: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+			},
+			Endpoint:     server.URL + "/",
+			Microversion: "2.61",
+		},
+	}
+
+	ctx := context.Background()
+	flavorsByName, err := client.ListFlavorsByName(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedFlavors := map[string]Flavor{
+		"m1.small": {
+			ID:          "flavor1",
+			Name:        "m1.small",
+			RAM:         2048,
 			VCPUs:       1,
-			Disk:        10,
-			IsPublic:    true,
+			Disk:        20,
 			RxTxFactor:  1.0,
+			IsPublic:    true,
 			Ephemeral:   0,
 			Description: "Small flavor",
 			ExtraSpecs:  map[string]string{"hw:cpu_policy": "shared"},
 		},
-		{
-			ID:          "flavor-2",
-			Name:        "medium",
-			RAM:         2048,
+		"m1.medium": {
+			ID:          "flavor2",
+			Name:        "m1.medium",
+			RAM:         4096,
 			VCPUs:       2,
-			Disk:        20,
-			IsPublic:    true,
+			Disk:        40,
 			RxTxFactor:  1.0,
-			Ephemeral:   5,
+			IsPublic:    true,
+			Ephemeral:   0,
 			Description: "Medium flavor",
 			ExtraSpecs:  map[string]string{"hw:cpu_policy": "dedicated"},
 		},
 	}
-}
 
-func createTestProjects() []projects.Project {
-	return []projects.Project{
-		{
-			ID:       "project-1",
-			Name:     "test-project-1",
-			DomainID: "domain-1",
-			Enabled:  true,
-		},
-		{
-			ID:       "project-2",
-			Name:     "test-project-2",
-			DomainID: "domain-1",
-			Enabled:  true,
-		},
-	}
-}
-
-func createTestCommitments() []Commitment {
-	now := uint64(time.Now().Unix())
-	return []Commitment{
-		{
-			ID:               1,
-			UUID:             "commitment-1-uuid",
-			ServiceType:      "compute",
-			ResourceName:     "instances_small",
-			AvailabilityZone: "nova",
-			Amount:           5,
-			Unit:             "instances",
-			Duration:         "1 year",
-			CreatedAt:        now - 86400,
-			ExpiresAt:        now + 31536000,
-			Status:           "confirmed",
-			NotifyOnConfirm:  false,
-			ProjectID:        "project-1",
-			DomainID:         "domain-1",
-		},
-		{
-			ID:               2,
-			UUID:             "commitment-2-uuid",
-			ServiceType:      "compute",
-			ResourceName:     "instances_medium",
-			AvailabilityZone: "nova",
-			Amount:           3,
-			Unit:             "instances",
-			Duration:         "6 months",
-			CreatedAt:        now - 43200,
-			ExpiresAt:        now + 15768000,
-			Status:           "pending",
-			NotifyOnConfirm:  true,
-			ProjectID:        "project-2",
-			DomainID:         "domain-1",
-		},
-		{
-			ID:               3,
-			UUID:             "commitment-3-uuid",
-			ServiceType:      "network",
-			ResourceName:     "networks",
-			AvailabilityZone: "nova",
-			Amount:           10,
-			Unit:             "networks",
-			Duration:         "1 month",
-			CreatedAt:        now - 21600,
-			ExpiresAt:        now + 2592000,
-			Status:           "confirmed",
-			NotifyOnConfirm:  false,
-			ProjectID:        "project-1",
-			DomainID:         "domain-1",
-		},
-	}
-}
-
-// Mock HTTP server for testing getAllFlavors
-func TestCommitmentsClient_getAllFlavors(t *testing.T) {
-	testFlavors := createTestFlavors()
-
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/flavors/detail") {
-			t.Errorf("Expected request to /flavors/detail, got %s", r.URL.Path)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		response := struct {
-			Flavors []Flavor `json:"flavors"`
-		}{
-			Flavors: testFlavors,
-		}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
-
-	// Create client with mock service client
-	client := &commitmentsClient{
-		nova: createMockServiceClient(server.URL),
+	if len(flavorsByName) != len(expectedFlavors) {
+		t.Fatalf("expected %d flavors, got %d", len(expectedFlavors), len(flavorsByName))
 	}
 
-	ctx := context.Background()
-	flavors, err := client.getAllFlavors(ctx)
-
-	if err != nil {
-		t.Fatalf("getAllFlavors returned error: %v", err)
-	}
-
-	if len(flavors) != len(testFlavors) {
-		t.Errorf("Expected %d flavors, got %d", len(testFlavors), len(flavors))
-	}
-
-	for i, flavor := range flavors {
-		expectedFlavor := testFlavors[i]
-		if flavor.ID != expectedFlavor.ID {
-			t.Errorf("Expected flavor ID %s, got %s", expectedFlavor.ID, flavor.ID)
-		}
-		if flavor.Name != expectedFlavor.Name {
-			t.Errorf("Expected flavor name %s, got %s", expectedFlavor.Name, flavor.Name)
-		}
-		if flavor.RAM != expectedFlavor.RAM {
-			t.Errorf("Expected flavor RAM %d, got %d", expectedFlavor.RAM, flavor.RAM)
-		}
-		if flavor.VCPUs != expectedFlavor.VCPUs {
-			t.Errorf("Expected flavor VCPUs %d, got %d", expectedFlavor.VCPUs, flavor.VCPUs)
-		}
-	}
-}
-
-// Test getAllFlavors error handling
-func TestCommitmentsClient_getAllFlavors_Error(t *testing.T) {
-	// Create mock server that returns error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
-	}))
-	defer server.Close()
-
-	client := &commitmentsClient{
-		nova: createMockServiceClient(server.URL),
-	}
-
-	ctx := context.Background()
-	_, err := client.getAllFlavors(ctx)
-
-	if err == nil {
-		t.Fatal("Expected getAllFlavors to return error, got nil")
-	}
-}
-
-// Test getAllProjects
-func TestCommitmentsClient_getAllProjects(t *testing.T) {
-	testProjects := createTestProjects()
-
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/projects") {
-			t.Errorf("Expected request to /projects, got %s", r.URL.Path)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		response := struct {
-			Projects []projects.Project `json:"projects"`
-		}{
-			Projects: testProjects,
-		}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
-
-	client := &commitmentsClient{
-		keystone: createMockServiceClient(server.URL),
-	}
-
-	ctx := context.Background()
-	projects, err := client.getAllProjects(ctx)
-
-	if err != nil {
-		t.Fatalf("getAllProjects returned error: %v", err)
-	}
-
-	if len(projects) != len(testProjects) {
-		t.Errorf("Expected %d projects, got %d", len(testProjects), len(projects))
-	}
-
-	for i, project := range projects {
-		expectedProject := testProjects[i]
-		if project.ID != expectedProject.ID {
-			t.Errorf("Expected project ID %s, got %s", expectedProject.ID, project.ID)
-		}
-		if project.Name != expectedProject.Name {
-			t.Errorf("Expected project name %s, got %s", expectedProject.Name, project.Name)
-		}
-		if project.DomainID != expectedProject.DomainID {
-			t.Errorf("Expected project domain ID %s, got %s", expectedProject.DomainID, project.DomainID)
-		}
-	}
-}
-
-// Test getAllProjects error handling
-func TestCommitmentsClient_getAllProjects_Error(t *testing.T) {
-	// Create mock server that returns error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("Unauthorized"))
-	}))
-	defer server.Close()
-
-	client := &commitmentsClient{
-		keystone: createMockServiceClient(server.URL),
-	}
-
-	ctx := context.Background()
-	_, err := client.getAllProjects(ctx)
-
-	if err == nil {
-		t.Fatal("Expected getAllProjects to return error, got nil")
-	}
-}
-
-// Test getCommitments (private method)
-func TestCommitmentsClient_getCommitments(t *testing.T) {
-	testCommitments := createTestCommitments()
-	project := createTestProjects()[0]
-
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		expectedPath := fmt.Sprintf("/v1/domains/%s/projects/%s/commitments", project.DomainID, project.ID)
-		if !strings.Contains(r.URL.Path, expectedPath) {
-			t.Errorf("Expected request to %s, got %s", expectedPath, r.URL.Path)
-		}
-
-		// Check auth token header
-		if r.Header.Get("X-Auth-Token") == "" {
-			t.Error("Expected X-Auth-Token header to be set")
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		response := struct {
-			Commitments []Commitment `json:"commitments"`
-		}{
-			Commitments: testCommitments,
-		}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
-
-	// Create mock service client with token
-	serviceClient := createMockServiceClient(server.URL)
-	serviceClient.SetToken("test-token")
-
-	client := &commitmentsClient{
-		limes: serviceClient,
-	}
-
-	ctx := context.Background()
-	commitments, err := client.getCommitments(ctx, project)
-
-	if err != nil {
-		t.Fatalf("getCommitments returned error: %v", err)
-	}
-
-	// Should only return compute commitments
-	expectedComputeCommitments := 0
-	for _, c := range testCommitments {
-		if c.ServiceType == "compute" {
-			expectedComputeCommitments++
-		}
-	}
-
-	if len(commitments) != expectedComputeCommitments {
-		t.Errorf("Expected %d compute commitments, got %d", expectedComputeCommitments, len(commitments))
-	}
-
-	// Verify all returned commitments are compute type and have project info
-	for _, commitment := range commitments {
-		if commitment.ServiceType != "compute" {
-			t.Errorf("Expected compute commitment, got %s", commitment.ServiceType)
-		}
-		if commitment.ProjectID != project.ID {
-			t.Errorf("Expected project ID %s, got %s", project.ID, commitment.ProjectID)
-		}
-		if commitment.DomainID != project.DomainID {
-			t.Errorf("Expected domain ID %s, got %s", project.DomainID, commitment.DomainID)
-		}
-	}
-}
-
-// Test getCommitments error cases
-func TestCommitmentsClient_getCommitments_ErrorCases(t *testing.T) {
-	project := createTestProjects()[0]
-
-	testCases := []struct {
-		name        string
-		statusCode  int
-		response    string
-		expectError bool
-	}{
-		{
-			name:        "HTTP 404 Not Found",
-			statusCode:  http.StatusNotFound,
-			response:    "Not Found",
-			expectError: true,
-		},
-		{
-			name:        "HTTP 500 Internal Server Error",
-			statusCode:  http.StatusInternalServerError,
-			response:    "Internal Server Error",
-			expectError: true,
-		},
-		{
-			name:        "Invalid JSON response",
-			statusCode:  http.StatusOK,
-			response:    "invalid json",
-			expectError: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(tc.statusCode)
-				w.Write([]byte(tc.response))
-			}))
-			defer server.Close()
-
-			serviceClient := createMockServiceClient(server.URL)
-			serviceClient.SetToken("test-token")
-
-			client := &commitmentsClient{
-				limes: serviceClient,
-			}
-
-			ctx := context.Background()
-			_, err := client.getCommitments(ctx, project)
-
-			if tc.expectError && err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-			if !tc.expectError && err != nil {
-				t.Fatalf("Expected no error, got %v", err)
-			}
-		})
-	}
-}
-
-// Test GetComputeCommitments integration
-func TestCommitmentsClient_GetComputeCommitments(t *testing.T) {
-	testProjects := createTestProjects()
-	testFlavors := createTestFlavors()
-	testCommitments := createTestCommitments()
-
-	// Create mock servers for different services
-	keystoneServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		response := struct {
-			Projects []projects.Project `json:"projects"`
-		}{
-			Projects: testProjects,
-		}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer keystoneServer.Close()
-
-	novaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		response := struct {
-			Flavors []Flavor `json:"flavors"`
-		}{
-			Flavors: testFlavors,
-		}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer novaServer.Close()
-
-	limesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		response := struct {
-			Commitments []Commitment `json:"commitments"`
-		}{
-			Commitments: testCommitments,
-		}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer limesServer.Close()
-
-	// Create client with mock service clients
-	keystoneClient := createMockServiceClient(keystoneServer.URL)
-	novaClient := createMockServiceClient(novaServer.URL)
-	limesClient := createMockServiceClient(limesServer.URL)
-	limesClient.SetToken("test-token")
-
-	client := &commitmentsClient{
-		keystone: keystoneClient,
-		nova:     novaClient,
-		limes:    limesClient,
-	}
-
-	ctx := context.Background()
-	commitments, err := client.GetComputeCommitments(ctx)
-
-	if err != nil {
-		t.Fatalf("GetComputeCommitments returned error: %v", err)
-	}
-
-	// Should return compute commitments for all projects
-	expectedComputeCommitments := 0
-	for _, c := range testCommitments {
-		if c.ServiceType == "compute" {
-			expectedComputeCommitments++
-		}
-	}
-	expectedTotal := expectedComputeCommitments * len(testProjects)
-
-	if len(commitments) != expectedTotal {
-		t.Errorf("Expected %d commitments, got %d", expectedTotal, len(commitments))
-	}
-
-	// Verify flavor resolution for instance commitments
-	flavorResolved := false
-	for _, commitment := range commitments {
-		if strings.HasPrefix(commitment.ResourceName, "instances_") {
-			flavorName := strings.TrimPrefix(commitment.ResourceName, "instances_")
-			if commitment.Flavor != nil && commitment.Flavor.Name == flavorName {
-				flavorResolved = true
-				break
-			}
-		}
-	}
-
-	if !flavorResolved {
-		t.Error("Expected at least one instance commitment to have resolved flavor")
-	}
-}
-
-// Test GetComputeCommitments error handling
-func TestCommitmentsClient_GetComputeCommitments_ErrorHandling(t *testing.T) {
-	testCases := []struct {
-		name            string
-		keystoneFailure bool
-		novaFailure     bool
-		limesFailure    bool
-		expectError     bool
-	}{
-		{
-			name:            "Keystone failure",
-			keystoneFailure: true,
-			expectError:     true,
-		},
-		{
-			name:        "Nova failure",
-			novaFailure: true,
-			expectError: true,
-		},
-		{
-			name:         "Limes failure",
-			limesFailure: true,
-			expectError:  true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Create servers that fail or succeed based on test case
-			keystoneServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tc.keystoneFailure {
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				response := struct {
-					Projects []projects.Project `json:"projects"`
-				}{
-					Projects: createTestProjects(),
-				}
-				json.NewEncoder(w).Encode(response)
-			}))
-			defer keystoneServer.Close()
-
-			novaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tc.novaFailure {
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				response := struct {
-					Flavors []Flavor `json:"flavors"`
-				}{
-					Flavors: createTestFlavors(),
-				}
-				json.NewEncoder(w).Encode(response)
-			}))
-			defer novaServer.Close()
-
-			limesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tc.limesFailure {
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				response := struct {
-					Commitments []Commitment `json:"commitments"`
-				}{
-					Commitments: createTestCommitments(),
-				}
-				json.NewEncoder(w).Encode(response)
-			}))
-			defer limesServer.Close()
-
-			keystoneClient := createMockServiceClient(keystoneServer.URL)
-			novaClient := createMockServiceClient(novaServer.URL)
-			limesClient := createMockServiceClient(limesServer.URL)
-			limesClient.SetToken("test-token")
-
-			client := &commitmentsClient{
-				keystone: keystoneClient,
-				nova:     novaClient,
-				limes:    limesClient,
-			}
-
-			ctx := context.Background()
-			_, err := client.GetComputeCommitments(ctx)
-
-			if tc.expectError && err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-			if !tc.expectError && err != nil {
-				t.Fatalf("Expected no error, got %v", err)
-			}
-		})
-	}
-}
-
-// Test flavor resolution logic
-func TestCommitmentsClient_FlavorResolution(t *testing.T) {
-	testFlavors := createTestFlavors()
-
-	// Create commitments with various resource names
-	commitments := []Commitment{
-		{
-			ID:           1,
-			ServiceType:  "compute",
-			ResourceName: "instances_small", // Should resolve to small flavor
-		},
-		{
-			ID:           2,
-			ServiceType:  "compute",
-			ResourceName: "instances_medium", // Should resolve to medium flavor
-		},
-		{
-			ID:           3,
-			ServiceType:  "compute",
-			ResourceName: "instances_nonexistent", // Should not resolve
-		},
-		{
-			ID:           4,
-			ServiceType:  "compute",
-			ResourceName: "cores", // Not an instance commitment
-		},
-	}
-
-	// Create flavor map
-	flavorsByName := make(map[string]Flavor, len(testFlavors))
-	for _, flavor := range testFlavors {
-		flavorsByName[flavor.Name] = flavor
-	}
-
-	// Apply flavor resolution logic
-	for i := range commitments {
-		if !strings.HasPrefix(commitments[i].ResourceName, "instances_") {
+	for name, expected := range expectedFlavors {
+		actual, exists := flavorsByName[name]
+		if !exists {
+			t.Errorf("expected flavor %s to exist", name)
 			continue
 		}
-		flavorName := strings.TrimPrefix(commitments[i].ResourceName, "instances_")
-		if flavor, ok := flavorsByName[flavorName]; ok {
-			commitments[i].Flavor = &flavor
+		if !reflect.DeepEqual(actual, expected) {
+			t.Errorf("flavor %s: expected %+v, got %+v", name, expected, actual)
 		}
-	}
-
-	// Verify results
-	if commitments[0].Flavor == nil || commitments[0].Flavor.Name != "small" {
-		t.Error("Expected small flavor to be resolved for instances_small commitment")
-	}
-
-	if commitments[1].Flavor == nil || commitments[1].Flavor.Name != "medium" {
-		t.Error("Expected medium flavor to be resolved for instances_medium commitment")
-	}
-
-	if commitments[2].Flavor != nil {
-		t.Error("Expected no flavor to be resolved for instances_nonexistent commitment")
-	}
-
-	if commitments[3].Flavor != nil {
-		t.Error("Expected no flavor to be resolved for cores commitment")
 	}
 }
 
-// Test context cancellation
-func TestCommitmentsClient_ContextCancellation(t *testing.T) {
-	// Create a server that delays response to test cancellation
+func TestCommitmentsClient_ListFlavorsByName_Error(t *testing.T) {
+	// Mock server that returns an error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(struct {
-			Projects []projects.Project `json:"projects"`
-		}{
-			Projects: createTestProjects(),
-		})
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
 
 	client := &commitmentsClient{
-		keystone: createMockServiceClient(server.URL),
+		nova: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+			},
+			Endpoint: server.URL + "/",
+		},
 	}
 
-	// Create context that will be cancelled
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
-
-	_, err := client.getAllProjects(ctx)
-
+	ctx := context.Background()
+	flavors, err := client.ListFlavorsByName(ctx)
 	if err == nil {
-		t.Fatal("Expected error due to context cancellation, got nil")
+		t.Fatal("expected error, got nil")
+	}
+	if flavors != nil {
+		t.Errorf("expected nil flavors, got %+v", flavors)
+	}
+}
+
+func TestCommitmentsClient_ListCommitmentsByID(t *testing.T) {
+	// Mock server for Limes service
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Extract project and domain from URL path
+		pathParts := strings.Split(r.URL.Path, "/")
+		if len(pathParts) >= 6 && pathParts[len(pathParts)-1] == "commitments" {
+			projectID := pathParts[len(pathParts)-2]
+			domainID := pathParts[len(pathParts)-4]
+
+			response := map[string]any{
+				"commitments": []Commitment{
+					{
+						ID:               1,
+						UUID:             "commitment1",
+						ServiceType:      "compute",
+						ResourceName:     "instances",
+						AvailabilityZone: "nova",
+						Amount:           10,
+						Unit:             "instances",
+						Duration:         "1 year",
+						CreatedAt:        uint64(time.Now().Unix()),
+						ExpiresAt:        uint64(time.Now().Add(365 * 24 * time.Hour).Unix()),
+						Status:           "confirmed",
+						ProjectID:        projectID,
+						DomainID:         domainID,
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		limes: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+				TokenID:    "test-token",
+			},
+			Endpoint: server.URL + "/",
+		},
 	}
 
-	if !strings.Contains(err.Error(), "context canceled") {
-		t.Errorf("Expected context cancellation error, got: %v", err)
+	projects := []Project{
+		{
+			ID:       "project1",
+			DomainID: "domain1",
+			Name:     "Test Project",
+		},
+	}
+
+	ctx := context.Background()
+	commitments, err := client.ListCommitmentsByID(ctx, projects...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(commitments) != 1 {
+		t.Fatalf("expected 1 commitment, got %d", len(commitments))
+	}
+
+	commitment, exists := commitments["commitment1"]
+	if !exists {
+		t.Fatal("expected commitment1 to exist")
+	}
+
+	if commitment.UUID != "commitment1" {
+		t.Errorf("expected UUID commitment1, got %s", commitment.UUID)
+	}
+	if commitment.ProjectID != "project1" {
+		t.Errorf("expected ProjectID project1, got %s", commitment.ProjectID)
+	}
+	if commitment.DomainID != "domain1" {
+		t.Errorf("expected DomainID domain1, got %s", commitment.DomainID)
+	}
+	if commitment.ServiceType != "compute" {
+		t.Errorf("expected ServiceType compute, got %s", commitment.ServiceType)
+	}
+}
+
+func TestCommitmentsClient_ListCommitmentsByID_Error(t *testing.T) {
+	// Mock server that returns an error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		limes: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+				TokenID:    "test-token",
+			},
+			Endpoint: server.URL + "/",
+		},
+	}
+
+	projects := []Project{
+		{ID: "project1", DomainID: "domain1"},
+	}
+
+	ctx := context.Background()
+	commitments, err := client.ListCommitmentsByID(ctx, projects...)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if commitments != nil {
+		t.Errorf("expected nil commitments, got %+v", commitments)
+	}
+}
+
+func TestCommitmentsClient_ListActiveServersByProjectID(t *testing.T) {
+	// Mock server for Nova compute service
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/servers/detail") {
+			// Parse query parameters to determine which project
+			tenantID := r.URL.Query().Get("tenant_id")
+			status := r.URL.Query().Get("status")
+
+			if status != "ACTIVE" {
+				t.Errorf("expected status=ACTIVE, got %s", status)
+			}
+
+			// Return raw JSON string as the gophercloud pages expect
+			w.Header().Set("Content-Type", "application/json")
+			if tenantID == "project1" {
+				w.Write([]byte(`{
+					"servers": [
+						{
+							"id": "server1",
+							"name": "test-server-1",
+							"status": "ACTIVE",
+							"tenant_id": "project1",
+							"flavor": {"original_name": "m1.small"}
+						}
+					]
+				}`))
+			} else {
+				w.Write([]byte(`{"servers": []}`))
+			}
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		nova: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+			},
+			Endpoint: server.URL + "/",
+		},
+	}
+
+	projects := []Project{
+		{ID: "project1", Name: "Test Project 1"},
+		{ID: "project2", Name: "Test Project 2"},
+	}
+
+	ctx := context.Background()
+	serversByProject, err := client.ListActiveServersByProjectID(ctx, projects...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(serversByProject) != 2 {
+		t.Fatalf("expected 2 project entries, got %d", len(serversByProject))
+	}
+
+	// Check project1 has 1 server
+	servers1, exists := serversByProject["project1"]
+	if !exists {
+		t.Fatal("expected project1 to exist in results")
+	}
+	if len(servers1) != 1 {
+		t.Fatalf("expected 1 server for project1, got %d", len(servers1))
+	}
+	if servers1[0].ID != "server1" {
+		t.Errorf("expected server ID server1, got %s", servers1[0].ID)
+	}
+
+	// Check project2 has 0 servers
+	servers2, exists := serversByProject["project2"]
+	if !exists {
+		t.Fatal("expected project2 to exist in results")
+	}
+	if len(servers2) != 0 {
+		t.Fatalf("expected 0 servers for project2, got %d", len(servers2))
+	}
+}
+
+func TestCommitmentsClient_ListActiveServersByProjectID_Error(t *testing.T) {
+	// Mock server that returns an error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		nova: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+			},
+			Endpoint: server.URL + "/",
+		},
+	}
+
+	projects := []Project{
+		{ID: "project1"},
+	}
+
+	ctx := context.Background()
+	servers, err := client.ListActiveServersByProjectID(ctx, projects...)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if servers != nil {
+		t.Errorf("expected nil servers, got %+v", servers)
+	}
+}
+
+func TestCommitmentsClient_listCommitments(t *testing.T) {
+	// Mock server for Limes service
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/commitments") {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Check auth token
+		token := r.Header.Get("X-Auth-Token")
+		if token != "test-token" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		response := map[string]any{
+			"commitments": []Commitment{
+				{
+					ID:               1,
+					UUID:             "commitment1",
+					ServiceType:      "compute",
+					ResourceName:     "instances",
+					AvailabilityZone: "nova",
+					Amount:           5,
+					Unit:             "instances",
+					Duration:         "6 months",
+					CreatedAt:        1672531200, // 2023-01-01
+					ExpiresAt:        1688169600, // 2023-07-01
+					Status:           "confirmed",
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		limes: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+				TokenID:    "test-token",
+			},
+			Endpoint: server.URL + "/",
+		},
+	}
+
+	project := Project{
+		ID:       "test-project",
+		DomainID: "test-domain",
+		Name:     "Test Project",
+	}
+
+	ctx := context.Background()
+	commitments, err := client.listCommitments(ctx, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(commitments) != 1 {
+		t.Fatalf("expected 1 commitment, got %d", len(commitments))
+	}
+
+	commitment := commitments[0]
+	if commitment.UUID != "commitment1" {
+		t.Errorf("expected commitment UUID commitment1, got %s", commitment.UUID)
+	}
+	if commitment.ProjectID != "test-project" {
+		t.Errorf("expected ProjectID test-project, got %s", commitment.ProjectID)
+	}
+	if commitment.DomainID != "test-domain" {
+		t.Errorf("expected DomainID test-domain, got %s", commitment.DomainID)
+	}
+}
+
+func TestCommitmentsClient_listCommitments_HTTPError(t *testing.T) {
+	// Mock server that returns non-200 status
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Not Found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		limes: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+				TokenID:    "test-token",
+			},
+			Endpoint: server.URL + "/",
+		},
+	}
+
+	project := Project{ID: "test-project", DomainID: "test-domain"}
+
+	ctx := context.Background()
+	commitments, err := client.listCommitments(ctx, project)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if commitments != nil {
+		t.Errorf("expected nil commitments, got %+v", commitments)
+	}
+
+	expectedError := "unexpected status code: 404"
+	if err.Error() != expectedError {
+		t.Errorf("expected error %q, got %q", expectedError, err.Error())
+	}
+}
+
+func TestCommitmentsClient_listCommitments_JSONError(t *testing.T) {
+	// Mock server that returns invalid JSON
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("invalid json"))
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		limes: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+				TokenID:    "test-token",
+			},
+			Endpoint: server.URL,
+		},
+	}
+
+	project := Project{ID: "test-project", DomainID: "test-domain"}
+
+	ctx := context.Background()
+	commitments, err := client.listCommitments(ctx, project)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if commitments != nil {
+		t.Errorf("expected nil commitments, got %+v", commitments)
+	}
+}
+
+func TestCommitmentsClient_listActiveServersForProject(t *testing.T) {
+	// Mock server for Nova compute service
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/servers/detail") {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Verify query parameters
+		query := r.URL.Query()
+		if query.Get("all_tenants") != "true" {
+			t.Errorf("expected all_tenants=true, got %s", query.Get("all_tenants"))
+		}
+		if query.Get("tenant_id") != "test-project" {
+			t.Errorf("expected tenant_id=test-project, got %s", query.Get("tenant_id"))
+		}
+		if query.Get("status") != "ACTIVE" {
+			t.Errorf("expected status=ACTIVE, got %s", query.Get("status"))
+		}
+
+		// Return raw JSON string as the gophercloud pages expect
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"servers": [
+				{
+					"id": "server1",
+					"name": "test-server",
+					"status": "ACTIVE",
+					"tenant_id": "test-project",
+					"flavor": {"original_name": "m1.small"}
+				},
+				{
+					"id": "server2",
+					"name": "another-server",
+					"status": "ACTIVE",
+					"tenant_id": "test-project",
+					"flavor": {"original_name": "m1.medium"}
+				}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		nova: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+			},
+			Endpoint: server.URL + "/",
+		},
+	}
+
+	project := Project{
+		ID:   "test-project",
+		Name: "Test Project",
+	}
+
+	ctx := context.Background()
+	servers, err := client.listActiveServersForProject(ctx, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(servers) != 2 {
+		t.Fatalf("expected 2 servers, got %d", len(servers))
+	}
+
+	expectedServers := []Server{
+		{
+			ID:         "server1",
+			Name:       "test-server",
+			Status:     "ACTIVE",
+			TenantID:   "test-project",
+			FlavorName: "m1.small",
+		},
+		{
+			ID:         "server2",
+			Name:       "another-server",
+			Status:     "ACTIVE",
+			TenantID:   "test-project",
+			FlavorName: "m1.medium",
+		},
+	}
+
+	for i, expected := range expectedServers {
+		if servers[i].ID != expected.ID {
+			t.Errorf("server %d: expected ID %s, got %s", i, expected.ID, servers[i].ID)
+		}
+		if servers[i].Name != expected.Name {
+			t.Errorf("server %d: expected Name %s, got %s", i, expected.Name, servers[i].Name)
+		}
+		if servers[i].Status != expected.Status {
+			t.Errorf("server %d: expected Status %s, got %s", i, expected.Status, servers[i].Status)
+		}
+		if servers[i].TenantID != expected.TenantID {
+			t.Errorf("server %d: expected TenantID %s, got %s", i, expected.TenantID, servers[i].TenantID)
+		}
+		if servers[i].FlavorName != expected.FlavorName {
+			t.Errorf("server %d: expected FlavorName %s, got %s", i, expected.FlavorName, servers[i].FlavorName)
+		}
+	}
+}
+
+func TestCommitmentsClient_listActiveServersForProject_Error(t *testing.T) {
+	// Mock server that returns an error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := &commitmentsClient{
+		nova: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: *http.DefaultClient,
+			},
+			Endpoint: server.URL,
+		},
+	}
+
+	project := Project{ID: "test-project"}
+
+	ctx := context.Background()
+	servers, err := client.listActiveServersForProject(ctx, project)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if servers != nil {
+		t.Errorf("expected nil servers, got %+v", servers)
+	}
+}
+
+func TestCommitmentsClient_ContextCancellation(t *testing.T) {
+	// Test context cancellation handling
+	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a slow server
+		time.Sleep(100 * time.Millisecond)
+		json.NewEncoder(w).Encode(map[string]any{"projects": []Project{}})
+	}))
+	defer slowServer.Close()
+
+	client := &commitmentsClient{
+		keystone: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{HTTPClient: *http.DefaultClient},
+			Endpoint:       slowServer.URL + "/v3",
+		},
+	}
+
+	// Create a context that will be cancelled immediately
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	// This should fail due to context timeout
+	projects, err := client.ListProjects(ctx)
+	if err == nil {
+		t.Fatal("expected error due to context cancellation, got nil")
+	}
+	if projects != nil {
+		t.Errorf("expected nil projects, got %+v", projects)
 	}
 }

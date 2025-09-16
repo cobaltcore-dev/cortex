@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	gosync "sync"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
@@ -25,8 +25,15 @@ import (
 type CommitmentsClient interface {
 	// Init the client.
 	Init(ctx context.Context)
-	// Get all commitments with resolved metadata (e.g. project, flavor, ...).
-	GetComputeCommitments(ctx context.Context) ([]Commitment, error)
+	// List all projects to resolve commitments.
+	ListProjects(ctx context.Context) ([]Project, error)
+	// List all flavors by their name to resolve instance commitments.
+	ListFlavorsByName(ctx context.Context) (map[string]Flavor, error)
+	// List all commitments with resolved metadata (e.g. project, flavor, ...).
+	ListCommitmentsByID(ctx context.Context, projects ...Project) (map[string]Commitment, error)
+	// List all currently running (ACTIVE) servers for the given projects from nova.
+	// The result is a map from project ID to the list of active servers.
+	ListActiveServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error)
 }
 
 // Commitments client fetching commitments from openstack services.
@@ -97,7 +104,7 @@ func (c *commitmentsClient) Init(ctx context.Context) {
 }
 
 // Get all Nova flavors by their name to resolve instance commitments.
-func (c *commitmentsClient) getAllFlavors(ctx context.Context) ([]Flavor, error) {
+func (c *commitmentsClient) ListFlavorsByName(ctx context.Context) (map[string]Flavor, error) {
 	syncLog.Info("fetching all flavors from nova")
 	flo := flavors.ListOpts{AccessType: flavors.AllAccess}
 	pages, err := flavors.ListDetail(c.nova, flo).AllPages(ctx)
@@ -112,18 +119,22 @@ func (c *commitmentsClient) getAllFlavors(ctx context.Context) ([]Flavor, error)
 		return nil, err
 	}
 	syncLog.Info("fetched flavors from nova", "count", len(data.Flavors))
-	return data.Flavors, nil
+	flavorsByName := make(map[string]Flavor, len(data.Flavors))
+	for _, flavor := range data.Flavors {
+		flavorsByName[flavor.Name] = flavor
+	}
+	return flavorsByName, nil
 }
 
 // Get all projects from Keystone to resolve commitments.
-func (c *commitmentsClient) getAllProjects(ctx context.Context) ([]projects.Project, error) {
+func (c *commitmentsClient) ListProjects(ctx context.Context) ([]Project, error) {
 	syncLog.Info("fetching projects from keystone")
 	allPages, err := projects.List(c.keystone, nil).AllPages(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var data = &struct {
-		Projects []projects.Project `json:"projects"`
+		Projects []Project `json:"projects"`
 	}{}
 	if err := allPages.(projects.ProjectPage).ExtractInto(data); err != nil {
 		return nil, err
@@ -134,14 +145,10 @@ func (c *commitmentsClient) getAllProjects(ctx context.Context) ([]projects.Proj
 
 // Get all available commitments from limes + keystone + nova.
 // This function fetches the commitments for each project in parallel.
-func (c *commitmentsClient) GetComputeCommitments(ctx context.Context) ([]Commitment, error) {
-	projects, err := c.getAllProjects(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get projects: %w", err)
-	}
-	syncLog.Info("fetching flavor commitments from limes", "projects", len(projects))
+func (c *commitmentsClient) ListCommitmentsByID(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+	syncLog.Info("fetching commitments from limes", "projects", len(projects))
 	commitmentsMutex := gosync.Mutex{}
-	commitments := []Commitment{}
+	commitments := make(map[string]Commitment)
 	var wg gosync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -150,14 +157,16 @@ func (c *commitmentsClient) GetComputeCommitments(ctx context.Context) ([]Commit
 	for _, project := range projects {
 		wg.Go(func() {
 			// Fetch instance commitments for the project.
-			newResults, err := c.getCommitments(ctx, project)
+			newResults, err := c.listCommitments(ctx, project)
 			if err != nil {
 				errChan <- err
 				cancel()
 				return
 			}
 			commitmentsMutex.Lock()
-			commitments = append(commitments, newResults...)
+			for _, c := range newResults {
+				commitments[c.UUID] = c
+			}
 			commitmentsMutex.Unlock()
 		})
 		time.Sleep(jobloop.DefaultJitter(50 * time.Millisecond)) // Don't overload the API.
@@ -175,33 +184,11 @@ func (c *commitmentsClient) GetComputeCommitments(ctx context.Context) ([]Commit
 		}
 	}
 	syncLog.Info("resolved commitments from limes", "count", len(commitments))
-
-	flavors, err := c.getAllFlavors(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get flavors: %w", err)
-	}
-	// Resolve the flavor for each commitment.
-	flavorsByName := make(map[string]Flavor, len(flavors))
-	for _, flavor := range flavors {
-		flavorsByName[flavor.Name] = flavor
-	}
-	for i := range commitments {
-		if !strings.HasPrefix(commitments[i].ResourceName, "instances_") {
-			// Not an instance commitment.
-			continue
-		}
-		flavorName := strings.TrimPrefix(commitments[i].ResourceName, "instances_")
-		if flavor, ok := flavorsByName[flavorName]; ok {
-			commitments[i].Flavor = &flavor
-		} else {
-			syncLog.Info("flavor not found for commitment", "flavor", flavorName, "commitment_id", commitments[i].ID)
-		}
-	}
 	return commitments, nil
 }
 
 // Resolve the commitments for the given project.
-func (c *commitmentsClient) getCommitments(ctx context.Context, project projects.Project) ([]Commitment, error) {
+func (c *commitmentsClient) listCommitments(ctx context.Context, project Project) ([]Commitment, error) {
 	url := c.limes.Endpoint + "v1" +
 		"/domains/" + project.DomainID +
 		"/projects/" + project.ID +
@@ -229,13 +216,74 @@ func (c *commitmentsClient) getCommitments(ctx context.Context, project projects
 	// Add the project information to each commitment.
 	var commitments []Commitment
 	for _, c := range list.Commitments {
-		if c.ServiceType != "compute" {
-			// Not a compute commitment.
-			continue
-		}
 		c.ProjectID = project.ID
 		c.DomainID = project.DomainID
 		commitments = append(commitments, c)
 	}
 	return commitments, nil
+}
+
+// Get all currently running (ACTIVE) servers for the given project ids from nova.
+// The result is a map from project ID to the list of active servers.
+func (c *commitmentsClient) ListActiveServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+	syncLog.Info("fetching active servers from nova")
+	serversByProject := make(map[string][]Server, len(projects))
+	var mu gosync.Mutex
+	var wg gosync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// Channel to communicate errors from goroutines.
+	errChan := make(chan error, len(projects))
+	for _, project := range projects {
+		wg.Go(func() {
+			servers, err := c.listActiveServersForProject(ctx, project)
+			if err != nil {
+				errChan <- err
+				cancel()
+				return
+			}
+			mu.Lock()
+			serversByProject[project.ID] = servers
+			mu.Unlock()
+		})
+		time.Sleep(jobloop.DefaultJitter(50 * time.Millisecond)) // Don't overload the API.
+	}
+	// Wait for all goroutines to finish and close the error channel.
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+	// Return the first error encountered, if any.
+	for err := range errChan {
+		if err != nil {
+			syncLog.Error(err, "failed to fetch active servers")
+			return nil, err
+		}
+	}
+	syncLog.Info("fetched active servers from nova", "projects", len(serversByProject))
+	return serversByProject, nil
+}
+
+// Get all currently running (ACTIVE) servers for the given project id from nova.
+func (c *commitmentsClient) listActiveServersForProject(ctx context.Context, project Project) ([]Server, error) {
+	lo := servers.ListOpts{
+		// AllTenants must be set to fetch servers from other projects
+		// than the one we are authenticated with.
+		AllTenants: true,
+		TenantID:   project.ID,
+		Status:     "ACTIVE", // Use string literal instead of servers.StateActive which is lowercase
+	}
+	pages, err := servers.List(c.nova, lo).AllPages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Parse the json data into our custom model.
+	var data = &struct {
+		Servers []Server `json:"servers"`
+	}{}
+	if err := pages.(servers.ServerPage).ExtractInto(data); err != nil {
+		return nil, err
+	}
+	syncLog.Info("fetched active servers for project", "project", project.ID, "count", len(data.Servers))
+	return data.Servers, nil
 }
