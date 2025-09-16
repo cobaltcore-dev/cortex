@@ -74,6 +74,12 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		if reservation.Spec.Scheduler.CortexNova == nil {
 			continue // Not handled by us.
 		}
+		// If the requested vm matches this reservation, free the resources.
+		if reservation.Spec.Scheduler.CortexNova.ProjectID == request.Spec.Data.ProjectID &&
+			reservation.Spec.Scheduler.CortexNova.FlavorName == request.Spec.Data.Flavor.Data.Name {
+			traceLog.Info("unlocking resources reserved by matching reservation", "reservation", reservation.Name)
+			continue
+		}
 		host := reservation.Status.Host
 		if cpu, ok := reservation.Spec.Requests["cpu"]; ok {
 			vcpusReserved[host] += cpu.AsDec().UnscaledBig().Uint64()
