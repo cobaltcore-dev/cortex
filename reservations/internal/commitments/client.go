@@ -97,7 +97,7 @@ func (c *commitmentsClient) Init(ctx context.Context) {
 }
 
 // Get all Nova flavors by their name to resolve instance commitments.
-func (c *commitmentsClient) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
+func (c *commitmentsClient) getAllFlavors(ctx context.Context) ([]Flavor, error) {
 	syncLog.Info("fetching all flavors from nova")
 	flo := flavors.ListOpts{AccessType: flavors.AllAccess}
 	pages, err := flavors.ListDetail(c.nova, flo).AllPages(ctx)
@@ -116,7 +116,7 @@ func (c *commitmentsClient) GetAllFlavors(ctx context.Context) ([]Flavor, error)
 }
 
 // Get all projects from Keystone to resolve commitments.
-func (c *commitmentsClient) GetAllProjects(ctx context.Context) ([]projects.Project, error) {
+func (c *commitmentsClient) getAllProjects(ctx context.Context) ([]projects.Project, error) {
 	syncLog.Info("fetching projects from keystone")
 	allPages, err := projects.List(c.keystone, nil).AllPages(ctx)
 	if err != nil {
@@ -135,7 +135,7 @@ func (c *commitmentsClient) GetAllProjects(ctx context.Context) ([]projects.Proj
 // Get all available commitments from limes + keystone + nova.
 // This function fetches the commitments for each project in parallel.
 func (c *commitmentsClient) GetComputeCommitments(ctx context.Context) ([]Commitment, error) {
-	projects, err := c.GetAllProjects(ctx)
+	projects, err := c.getAllProjects(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get projects: %w", err)
 	}
@@ -176,7 +176,7 @@ func (c *commitmentsClient) GetComputeCommitments(ctx context.Context) ([]Commit
 	}
 	syncLog.Info("resolved commitments from limes", "count", len(commitments))
 
-	flavors, err := c.GetAllFlavors(ctx)
+	flavors, err := c.getAllFlavors(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flavors: %w", err)
 	}

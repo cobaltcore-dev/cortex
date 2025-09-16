@@ -162,8 +162,8 @@ func createTestCommitments() []Commitment {
 	}
 }
 
-// Mock HTTP server for testing GetAllFlavors
-func TestCommitmentsClient_GetAllFlavors(t *testing.T) {
+// Mock HTTP server for testing getAllFlavors
+func TestCommitmentsClient_getAllFlavors(t *testing.T) {
 	testFlavors := createTestFlavors()
 
 	// Create mock server
@@ -188,10 +188,10 @@ func TestCommitmentsClient_GetAllFlavors(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	flavors, err := client.GetAllFlavors(ctx)
+	flavors, err := client.getAllFlavors(ctx)
 
 	if err != nil {
-		t.Fatalf("GetAllFlavors returned error: %v", err)
+		t.Fatalf("getAllFlavors returned error: %v", err)
 	}
 
 	if len(flavors) != len(testFlavors) {
@@ -215,8 +215,8 @@ func TestCommitmentsClient_GetAllFlavors(t *testing.T) {
 	}
 }
 
-// Test GetAllFlavors error handling
-func TestCommitmentsClient_GetAllFlavors_Error(t *testing.T) {
+// Test getAllFlavors error handling
+func TestCommitmentsClient_getAllFlavors_Error(t *testing.T) {
 	// Create mock server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -229,15 +229,15 @@ func TestCommitmentsClient_GetAllFlavors_Error(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err := client.GetAllFlavors(ctx)
+	_, err := client.getAllFlavors(ctx)
 
 	if err == nil {
-		t.Fatal("Expected GetAllFlavors to return error, got nil")
+		t.Fatal("Expected getAllFlavors to return error, got nil")
 	}
 }
 
-// Test GetAllProjects
-func TestCommitmentsClient_GetAllProjects(t *testing.T) {
+// Test getAllProjects
+func TestCommitmentsClient_getAllProjects(t *testing.T) {
 	testProjects := createTestProjects()
 
 	// Create mock server
@@ -261,10 +261,10 @@ func TestCommitmentsClient_GetAllProjects(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	projects, err := client.GetAllProjects(ctx)
+	projects, err := client.getAllProjects(ctx)
 
 	if err != nil {
-		t.Fatalf("GetAllProjects returned error: %v", err)
+		t.Fatalf("getAllProjects returned error: %v", err)
 	}
 
 	if len(projects) != len(testProjects) {
@@ -285,8 +285,8 @@ func TestCommitmentsClient_GetAllProjects(t *testing.T) {
 	}
 }
 
-// Test GetAllProjects error handling
-func TestCommitmentsClient_GetAllProjects_Error(t *testing.T) {
+// Test getAllProjects error handling
+func TestCommitmentsClient_getAllProjects_Error(t *testing.T) {
 	// Create mock server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -299,10 +299,10 @@ func TestCommitmentsClient_GetAllProjects_Error(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err := client.GetAllProjects(ctx)
+	_, err := client.getAllProjects(ctx)
 
 	if err == nil {
-		t.Fatal("Expected GetAllProjects to return error, got nil")
+		t.Fatal("Expected getAllProjects to return error, got nil")
 	}
 }
 
@@ -704,7 +704,7 @@ func TestCommitmentsClient_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	_, err := client.GetAllProjects(ctx)
+	_, err := client.getAllProjects(ctx)
 
 	if err == nil {
 		t.Fatal("Expected error due to context cancellation, got nil")
