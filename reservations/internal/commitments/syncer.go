@@ -142,6 +142,7 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 			}
 			mappedServers[server.ID] = struct{}{}
 			commitment.Amount--
+			syncLog.Info("subtracting server from commitment", "commitmentID", commitment.UUID, "serverID", server.ID, "remainingAmount", commitment.Amount)
 		}
 		if commitment.Amount <= 0 {
 			syncLog.Info("skipping commitment that is fully used by active servers", "id", commitment.UUID, "project", commitment.ProjectID)
