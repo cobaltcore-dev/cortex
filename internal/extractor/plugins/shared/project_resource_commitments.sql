@@ -47,16 +47,3 @@ SELECT
 FROM openstack_projects p
 LEFT JOIN combined_commitments cc ON p.id = cc.project_id
 ORDER BY p.id;
-
-SELECT
-        c.project_id,
-        c.amount as total_instances,
-        f.vcpus as total_committed_vcpus,
-        f.ram as total_committed_ram_mb,
-        f.disk as total_committed_disk_gb
-    FROM openstack_limes_commitments_v2 c
-    LEFT JOIN openstack_flavors_v2 f ON f.name = REPLACE(c.resource_name, 'instances_', '')
-    WHERE c.service_type = 'compute'
-      AND c.resource_name LIKE 'instances_%'
-      AND c.project_id = '5a39c2f52d57455ead9834a915cba9a4'
-    ORDER BY c.project_id;
