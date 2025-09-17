@@ -36,7 +36,6 @@ func TestProjectResourceUtilizationExtractor_Init(t *testing.T) {
 }
 
 func TestProjectResourceUtilizationExtractor_Extract(t *testing.T) {
-
 	tests := []struct {
 		name     string
 		mockData []any

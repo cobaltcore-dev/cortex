@@ -37,7 +37,6 @@ func TestProjectResourceCommitmentsExtractor_Init(t *testing.T) {
 }
 
 func TestProjectResourceCommitmentsExtractor_Extract(t *testing.T) {
-
 	tests := []struct {
 		name     string
 		mockData []any
