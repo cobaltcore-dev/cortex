@@ -71,22 +71,6 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 	if err != nil {
 		return nil, err
 	}
-	projectsWithCommitments := make([]Project, 0, len(commitments))
-	projectIDs := make(map[string]bool)
-	for _, commitment := range commitments {
-		projectIDs[commitment.ProjectID] = true
-	}
-	for _, project := range allProjects {
-		if _, exists := projectIDs[project.ID]; exists {
-			projectsWithCommitments = append(projectsWithCommitments, project)
-		}
-	}
-	// List all servers, not only the active ones, like limes when it calculates
-	// subresource usage: https://github.com/sapcc/limes/blob/c146c82/internal/liquids/nova/subresources.go#L94
-	servers, err := s.ListServersByProjectID(ctx, projectsWithCommitments...)
-	if err != nil {
-		return nil, err
-	}
 
 	// Remove non-compute/non-instance commitments or commitments we can't resolve.
 	var resolvedCommitments []resolvedCommitment
@@ -115,6 +99,22 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 	}
 
 	// Remove all commitments which are currently actively in use by a vm.
+	projectsWithCommitments := make([]Project, 0, len(resolvedCommitments))
+	projectIDs := make(map[string]bool)
+	for _, commitment := range resolvedCommitments {
+		projectIDs[commitment.ProjectID] = true
+	}
+	for _, project := range allProjects {
+		if _, exists := projectIDs[project.ID]; exists {
+			projectsWithCommitments = append(projectsWithCommitments, project)
+		}
+	}
+	// List all servers, not only the active ones, like limes when it calculates
+	// subresource usage: https://github.com/sapcc/limes/blob/c146c82/internal/liquids/nova/subresources.go#L94
+	servers, err := s.ListServersByProjectID(ctx, projectsWithCommitments...)
+	if err != nil {
+		return nil, err
+	}
 	sort.Slice(resolvedCommitments, func(i, j int) bool {
 		return resolvedCommitments[i].ID < resolvedCommitments[j].ID
 	})
