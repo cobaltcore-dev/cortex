@@ -36,714 +36,364 @@ func TestHostPinnedProjectsExtractor_Init(t *testing.T) {
 	}
 }
 
-func TestHostPinnedProjectsExtractor_Extract_FindComputeHostProjectMapping(t *testing.T) {
+func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 	if os.Getenv("POSTGRES_CONTAINER") != "1" {
 		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
 	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
-		testDB.AddTable(nova.Hypervisor{}),
-	); err != nil {
-		t.Fatalf("failed to create table: %v", err)
-	}
-
-	aggregates := []any{
-		&nova.Aggregate{
-			Name:        "agg1",
-			UUID:        "agg1",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
-		},
-		&nova.Aggregate{
-			Name:        "agg1",
-			UUID:        "agg1",
-			ComputeHost: testlib.Ptr("host2"),
-			Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
-		},
-	}
-
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("failed to insert aggregates: %v", err)
-	}
-
-	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        conf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-
-	if err := extractor.Init(testDB, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var results []HostPinnedProjects
-	table := HostPinnedProjects{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	expectedFeatures := []HostPinnedProjects{
+	tests := []struct {
+		name     string
+		mockData []any
+		expected []HostPinnedProjects
+	}{
 		{
-			AggregateName: testlib.Ptr("agg1"),
-			AggregateUUID: testlib.Ptr("agg1"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_1"),
+			name: "find compute host to project mapping from aggregates",
+			mockData: []any{
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
+				},
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: testlib.Ptr("host2"),
+					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
+				},
+			},
+			expected: []HostPinnedProjects{
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_2"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host2"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host2"),
+					ProjectID:     testlib.Ptr("project_id_2"),
+				},
+			},
 		},
 		{
-			AggregateName: testlib.Ptr("agg1"),
-			AggregateUUID: testlib.Ptr("agg1"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_2"),
+			name: "ignore aggregates without filter_tenant_id",
+			mockData: []any{
+				&nova.Aggregate{
+					Name:        "ignore-no-filter-tenant",
+					UUID:        "ignore",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"something_different":"project_id_1, project_id_2"}`,
+				},
+			},
+			expected: []HostPinnedProjects{},
 		},
 		{
-			AggregateName: testlib.Ptr("agg1"),
-			AggregateUUID: testlib.Ptr("agg1"),
-			ComputeHost:   testlib.Ptr("host2"),
-			ProjectID:     testlib.Ptr("project_id_1"),
+			name: "support filter_tenant_id with no compute host assigned to the aggregate",
+			mockData: []any{
+				// This aggregate doesn't have a compute host so project_3 and 4 should have an empty entry for the compute host
+				&nova.Aggregate{
+					Name:        "agg2",
+					UUID:        "agg2",
+					ComputeHost: nil,
+					Metadata:    `{"filter_tenant_id":"project_id_3, project_id_4"}`,
+				},
+				// Because of this aggregate project 3 and 4 should additionally have a host-4 as pinned
+				&nova.Aggregate{
+					Name:        "agg3",
+					UUID:        "agg3",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"filter_tenant_id":"project_id_3, project_id_4"}`,
+				},
+			},
+			expected: []HostPinnedProjects{
+				{
+					AggregateName: testlib.Ptr("agg3"),
+					AggregateUUID: testlib.Ptr("agg3"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_3"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg3"),
+					AggregateUUID: testlib.Ptr("agg3"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_4"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg2"),
+					AggregateUUID: testlib.Ptr("agg2"),
+					ComputeHost:   nil,
+					ProjectID:     testlib.Ptr("project_id_3"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg2"),
+					AggregateUUID: testlib.Ptr("agg2"),
+					ComputeHost:   nil,
+					ProjectID:     testlib.Ptr("project_id_4"),
+				},
+			},
 		},
 		{
-			AggregateName: testlib.Ptr("agg1"),
-			AggregateUUID: testlib.Ptr("agg1"),
-			ComputeHost:   testlib.Ptr("host2"),
-			ProjectID:     testlib.Ptr("project_id_2"),
-		},
-	}
-
-	if len(results) != len(expectedFeatures) {
-		t.Errorf("expected %d results, got %d", len(expectedFeatures), len(results))
-	}
-
-	for i := range results {
-		if !reflect.DeepEqual(results[i], expectedFeatures[i]) {
-			t.Errorf("expected %v, got %v", expectedFeatures[i], results[i])
-		}
-	}
-}
-
-func TestHostPinnedProjectsExtractor_Extract_SkipAggregatesWithNoFilterTenant(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
-		testDB.AddTable(nova.Hypervisor{}),
-	); err != nil {
-		t.Fatalf("failed to create table: %v", err)
-	}
-
-	aggregates := []any{
-		&nova.Aggregate{
-			Name:        "ignore-no-filter-tenant",
-			UUID:        "ignore",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"something_different":"project_id_1, project_id_2"}`,
-		},
-	}
-
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("failed to insert aggregates: %v", err)
-	}
-
-	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        conf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-
-	if err := extractor.Init(testDB, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var results []HostPinnedProjects
-	table := HostPinnedProjects{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if len(results) > 0 {
-		t.Errorf("expected no results, got %d", len(results))
-	}
-}
-
-func TestHostPinnedProjectsExtractor_Extract_SupportEmptyComputeHost(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
-		testDB.AddTable(nova.Hypervisor{}),
-	); err != nil {
-		t.Fatalf("failed to create table: %v", err)
-	}
-
-	aggregates := []any{
-		// This aggregate doesn't have a compute host so project_3 and 4 should have an empty entry for the compute host
-		&nova.Aggregate{
-			Name:        "agg2",
-			UUID:        "agg2",
-			ComputeHost: nil,
-			Metadata:    `{"filter_tenant_id":"project_id_3, project_id_4"}`,
-		},
-		// Because of this aggregate project 3 and 4 should additionally have a host-4 as pinned
-		&nova.Aggregate{
-			Name:        "agg3",
-			UUID:        "agg3",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"filter_tenant_id":"project_id_3, project_id_4"}`,
-		},
-	}
-
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("failed to insert aggregates: %v", err)
-	}
-
-	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        conf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-
-	if err := extractor.Init(testDB, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var results []HostPinnedProjects
-	table := HostPinnedProjects{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	expectedFeatures := []HostPinnedProjects{
-		{
-			AggregateName: testlib.Ptr("agg3"),
-			AggregateUUID: testlib.Ptr("agg3"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_3"),
+			name: "filter out empty filter_tenant_id lists",
+			mockData: []any{
+				// Doesn't have any filter_tenant_id set, so this aggregate is supposed to be ignored
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: nil,
+					Metadata:    `{"filter_tenant_id":""}`,
+				},
+				&nova.Aggregate{
+					Name:        "agg2",
+					UUID:        "agg2",
+					ComputeHost: nil,
+					Metadata:    `{"filter_tenant_id":[]}`,
+				},
+			},
+			expected: []HostPinnedProjects{},
 		},
 		{
-			AggregateName: testlib.Ptr("agg3"),
-			AggregateUUID: testlib.Ptr("agg3"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_4"),
+			name: "find all hypervisors if no aggregate is provided",
+			mockData: []any{
+				// Doesn't have any filter_tenant_id set, so this aggregate is supposed to be ignored
+				&nova.Hypervisor{
+					ID:             "1",
+					ServiceHost:    "host1",
+					HypervisorType: "ironic",
+				},
+				&nova.Hypervisor{
+					ID:             "2",
+					ServiceHost:    "host2",
+					HypervisorType: "not-ironic",
+				},
+				// Ignore ironic hypervisors
+				&nova.Hypervisor{
+					ID:             "3",
+					ServiceHost:    "host3",
+					HypervisorType: "other-not-ironic",
+				},
+			},
+			expected: []HostPinnedProjects{
+				{
+					AggregateName: nil,
+					AggregateUUID: nil,
+					ComputeHost:   testlib.Ptr("host2"),
+					ProjectID:     nil,
+				},
+				{
+					AggregateName: nil,
+					AggregateUUID: nil,
+					ComputeHost:   testlib.Ptr("host3"),
+					ProjectID:     nil,
+				},
+			},
 		},
 		{
-			AggregateName: testlib.Ptr("agg2"),
-			AggregateUUID: testlib.Ptr("agg2"),
-			ComputeHost:   nil,
-			ProjectID:     testlib.Ptr("project_id_3"),
+			name: "check if all hypervisors without filter_tenant_id are found when aggregates with filter_tenant_id exist",
+			mockData: []any{
+				// Hypervisors
+				&nova.Hypervisor{
+					ID:             "1",
+					ServiceHost:    "host1",
+					HypervisorType: "not-ironic",
+				},
+				&nova.Hypervisor{
+					ID:             "2",
+					ServiceHost:    "host2",
+					HypervisorType: "other-not-ironic",
+				},
+				&nova.Hypervisor{
+					ID:             "3",
+					ServiceHost:    "host3",
+					HypervisorType: "non-filter-host",
+				},
+
+				// Aggregates
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
+				},
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: testlib.Ptr("host2"),
+					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
+				},
+				&nova.Aggregate{
+					Name:        "az1",
+					UUID:        "az1",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"type":"az"}`,
+				},
+				&nova.Aggregate{
+					Name:        "az1",
+					UUID:        "az1",
+					ComputeHost: testlib.Ptr("host2"),
+					Metadata:    `{"type":"az"}`,
+				},
+				// Host 3 is part of an availability zone aggregate, but has no filter_tenant_id
+				&nova.Aggregate{
+					Name:        "az1",
+					UUID:        "az1",
+					ComputeHost: testlib.Ptr("host3"),
+					Metadata:    `{"type":"az"}`,
+				},
+			},
+			expected: []HostPinnedProjects{
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host2"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+				},
+				{
+					AggregateName: nil,
+					AggregateUUID: nil,
+					ComputeHost:   testlib.Ptr("host3"),
+					ProjectID:     nil,
+				},
+			},
 		},
 		{
-			AggregateName: testlib.Ptr("agg2"),
-			AggregateUUID: testlib.Ptr("agg2"),
-			ComputeHost:   nil,
-			ProjectID:     testlib.Ptr("project_id_4"),
-		},
-	}
+			name: "check behavior with duplicate hosts and projects in one aggregate",
+			mockData: []any{
+				// Hypervisors
+				&nova.Hypervisor{
+					ID:             "1",
+					ServiceHost:    "host1",
+					HypervisorType: "not-ironic",
+				},
 
-	if len(results) != len(expectedFeatures) {
-		t.Errorf("expected %d results, got %d", len(expectedFeatures), len(results))
-	}
-
-	for i := range results {
-		if !reflect.DeepEqual(results[i], expectedFeatures[i]) {
-			t.Errorf("expected %v, got %v", expectedFeatures[i], results[i])
-		}
-	}
-}
-
-func TestHostPinnedProjectsExtractor_Extract_FilterOutEmptyFilterTenantLists(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
-		testDB.AddTable(nova.Hypervisor{}),
-	); err != nil {
-		t.Fatalf("failed to create table: %v", err)
-	}
-
-	aggregates := []any{
-		// Doesn't have any filter_tenant_id set, so this aggregate is supposed to be ignored
-		&nova.Aggregate{
-			Name:        "agg1",
-			UUID:        "agg1",
-			ComputeHost: nil,
-			Metadata:    `{"filter_tenant_id":""}`,
-		},
-		&nova.Aggregate{
-			Name:        "agg2",
-			UUID:        "agg2",
-			ComputeHost: nil,
-			Metadata:    `{"filter_tenant_id":[]}`,
-		},
-	}
-
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("failed to insert aggregates: %v", err)
-	}
-
-	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        conf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-
-	if err := extractor.Init(testDB, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var results []HostPinnedProjects
-	table := HostPinnedProjects{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if len(results) > 0 {
-		t.Errorf("expected no results, got %d", len(results))
-	}
-}
-
-func TestHostPinnedProjectsExtractor_Extract_FindAllHypervisorsIfNoAggregateIsProvided(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
-		testDB.AddTable(nova.Hypervisor{}),
-	); err != nil {
-		t.Fatalf("failed to create table: %v", err)
-	}
-
-	hypervisors := []any{
-		// Ironic hypervisor should be filtered out
-		&nova.Hypervisor{
-			ID:             "1",
-			ServiceHost:    "host1",
-			HypervisorType: "ironic",
-		},
-		&nova.Hypervisor{
-			ID:             "2",
-			ServiceHost:    "host2",
-			HypervisorType: "not-ironic",
-		},
-		&nova.Hypervisor{
-			ID:             "3",
-			ServiceHost:    "host3",
-			HypervisorType: "other-not-ironic",
-		},
-	}
-
-	if err := testDB.Insert(hypervisors...); err != nil {
-		t.Fatalf("failed to insert hypervisors: %v", err)
-	}
-
-	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        conf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-
-	if err := extractor.Init(testDB, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var results []HostPinnedProjects
-	table := HostPinnedProjects{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	expectedFeatures := []HostPinnedProjects{
-		{
-			AggregateName: nil,
-			AggregateUUID: nil,
-			ComputeHost:   testlib.Ptr("host2"),
-			ProjectID:     nil,
+				// Aggregates
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
+				},
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
+				},
+			},
+			expected: []HostPinnedProjects{
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+				},
+			},
 		},
 		{
-			AggregateName: nil,
-			AggregateUUID: nil,
-			ComputeHost:   testlib.Ptr("host3"),
-			ProjectID:     nil,
+			name: "check behavior if project id and host are part of multiple aggregates",
+			mockData: []any{
+				// Hypervisors
+				&nova.Hypervisor{
+					ID:             "1",
+					ServiceHost:    "host1",
+					HypervisorType: "not-ironic",
+				},
+
+				// Aggregates
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
+				},
+				&nova.Aggregate{
+					Name:        "agg2",
+					UUID:        "agg2",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
+				},
+			},
+			expected: []HostPinnedProjects{
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg2"),
+					AggregateUUID: testlib.Ptr("agg2"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+				},
+			},
 		},
 	}
 
-	if len(results) != len(expectedFeatures) {
-		t.Errorf("expected %d results, got %d", len(expectedFeatures), len(results))
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dbEnv := testlibDB.SetupDBEnv(t)
+			testDB := db.DB{DbMap: dbEnv.DbMap}
+			defer testDB.Close()
+			defer dbEnv.Close()
 
-	for i := range results {
-		if !reflect.DeepEqual(results[i], expectedFeatures[i]) {
-			t.Errorf("expected %v, got %v", expectedFeatures[i], results[i])
-		}
-	}
-}
+			if err := testDB.CreateTable(
+				testDB.AddTable(nova.Aggregate{}),
+				testDB.AddTable(nova.Hypervisor{}),
+			); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if err := testDB.Insert(tt.mockData...); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
 
-func TestHostPinnedProjectsExtractor_Extract_FindAllHypervisorsWithNoFilterIfAggregatesExist(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
+			extractor := &HostPinnedProjectsExtractor{}
+			config := conf.FeatureExtractorConfig{
+				Name:           "host_pinned_projects_extractor",
+				Options:        conf.NewRawOpts("{}"),
+				RecencySeconds: nil,
+			}
 
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
+			if err := extractor.Init(testDB, config); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
 
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
-		testDB.AddTable(nova.Hypervisor{}),
-	); err != nil {
-		t.Fatalf("failed to create table: %v", err)
-	}
+			if _, err := extractor.Extract(); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
 
-	hypervisors := []any{
-		&nova.Hypervisor{
-			ID:             "1",
-			ServiceHost:    "host1",
-			HypervisorType: "not-ironic",
-		},
-		&nova.Hypervisor{
-			ID:             "2",
-			ServiceHost:    "host2",
-			HypervisorType: "other-not-ironic",
-		},
-		&nova.Hypervisor{
-			ID:             "3",
-			ServiceHost:    "host3",
-			HypervisorType: "non-filter-host",
-		},
-	}
+			var hostPinnedProjects []HostPinnedProjects
+			table := HostPinnedProjects{}.TableName()
+			if _, err := testDB.Select(&hostPinnedProjects, "SELECT * FROM "+table); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
 
-	aggregates := []any{
-		&nova.Aggregate{
-			Name:        "agg1",
-			UUID:        "agg1",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"filter_tenant_id":"project_id_1"}`,
-		},
-		&nova.Aggregate{
-			Name:        "agg1",
-			UUID:        "agg1",
-			ComputeHost: testlib.Ptr("host2"),
-			Metadata:    `{"filter_tenant_id":"project_id_1"}`,
-		},
-		&nova.Aggregate{
-			Name:        "az1",
-			UUID:        "az1",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"type":"az"}`,
-		},
-		&nova.Aggregate{
-			Name:        "az1",
-			UUID:        "az1",
-			ComputeHost: testlib.Ptr("host2"),
-			Metadata:    `{"type":"az"}`,
-		},
-		// Host 3 is part of an availability zone aggregate, but has no filter_tenant_id
-		&nova.Aggregate{
-			Name:        "az1",
-			UUID:        "az1",
-			ComputeHost: testlib.Ptr("host3"),
-			Metadata:    `{"type":"az"}`,
-		},
-	}
-
-	if err := testDB.Insert(hypervisors...); err != nil {
-		t.Fatalf("failed to insert hypervisors: %v", err)
-	}
-
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("failed to insert aggregates: %v", err)
-	}
-
-	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        conf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-
-	if err := extractor.Init(testDB, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var results []HostPinnedProjects
-	table := HostPinnedProjects{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	expectedFeatures := []HostPinnedProjects{
-		{
-			AggregateName: testlib.Ptr("agg1"),
-			AggregateUUID: testlib.Ptr("agg1"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_1"),
-		},
-		{
-			AggregateName: testlib.Ptr("agg1"),
-			AggregateUUID: testlib.Ptr("agg1"),
-			ComputeHost:   testlib.Ptr("host2"),
-			ProjectID:     testlib.Ptr("project_id_1"),
-		},
-		{
-			AggregateName: nil,
-			AggregateUUID: nil,
-			ComputeHost:   testlib.Ptr("host3"),
-			ProjectID:     nil,
-		},
-	}
-
-	if len(results) != len(expectedFeatures) {
-		t.Errorf("expected %d results, got %d", len(expectedFeatures), len(results))
-	}
-
-	for i := range results {
-		if !reflect.DeepEqual(results[i], expectedFeatures[i]) {
-			t.Errorf("expected %v, got %v", expectedFeatures[i], results[i])
-		}
-	}
-}
-
-func TestHostPinnedProjectsExtractor_Extract_DuplicateHostsAndProjectsInAggregate(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
-		testDB.AddTable(nova.Hypervisor{}),
-	); err != nil {
-		t.Fatalf("failed to create table: %v", err)
-	}
-
-	hypervisors := []any{
-		&nova.Hypervisor{
-			ID:             "1",
-			ServiceHost:    "host1",
-			HypervisorType: "not-ironic",
-		},
-	}
-
-	aggregates := []any{
-		&nova.Aggregate{
-			Name:        "agg1",
-			UUID:        "agg1",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
-		},
-		&nova.Aggregate{
-			Name:        "agg1",
-			UUID:        "agg1",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
-		},
-	}
-
-	if err := testDB.Insert(hypervisors...); err != nil {
-		t.Fatalf("failed to insert hypervisors: %v", err)
-	}
-
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("failed to insert aggregates: %v", err)
-	}
-
-	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        conf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-
-	if err := extractor.Init(testDB, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var results []HostPinnedProjects
-	table := HostPinnedProjects{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	expectedFeatures := []HostPinnedProjects{
-		{
-			AggregateName: testlib.Ptr("agg1"),
-			AggregateUUID: testlib.Ptr("agg1"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_1"),
-		},
-	}
-
-	if len(results) != len(expectedFeatures) {
-		t.Errorf("expected %d results, got %d", len(expectedFeatures), len(results))
-	}
-
-	for i := range results {
-		if !reflect.DeepEqual(results[i], expectedFeatures[i]) {
-			t.Errorf("expected %v, got %v", expectedFeatures[i], results[i])
-		}
-	}
-}
-
-func TestHostPinnedProjectsExtractor_Extract_DoubleHostProjectAssignmentOfMultipleAggregates(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Aggregate{}),
-		testDB.AddTable(nova.Hypervisor{}),
-	); err != nil {
-		t.Fatalf("failed to create table: %v", err)
-	}
-
-	hypervisors := []any{
-		&nova.Hypervisor{
-			ID:             "1",
-			ServiceHost:    "host1",
-			HypervisorType: "not-ironic",
-		},
-	}
-
-	aggregates := []any{
-		&nova.Aggregate{
-			Name:        "agg1",
-			UUID:        "agg1",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"filter_tenant_id":"project_id_1"}`,
-		},
-		&nova.Aggregate{
-			Name:        "agg2",
-			UUID:        "agg2",
-			ComputeHost: testlib.Ptr("host1"),
-			Metadata:    `{"filter_tenant_id":"project_id_1"}`,
-		},
-	}
-
-	if err := testDB.Insert(hypervisors...); err != nil {
-		t.Fatalf("failed to insert hypervisors: %v", err)
-	}
-
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("failed to insert aggregates: %v", err)
-	}
-
-	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        conf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-
-	if err := extractor.Init(testDB, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var results []HostPinnedProjects
-	table := HostPinnedProjects{}.TableName()
-	if _, err := testDB.Select(&results, "SELECT * FROM "+table); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	expectedFeatures := []HostPinnedProjects{
-		{
-			AggregateName: testlib.Ptr("agg1"),
-			AggregateUUID: testlib.Ptr("agg1"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_1"),
-		},
-		{
-			AggregateName: testlib.Ptr("agg2"),
-			AggregateUUID: testlib.Ptr("agg2"),
-			ComputeHost:   testlib.Ptr("host1"),
-			ProjectID:     testlib.Ptr("project_id_1"),
-		},
-	}
-
-	if len(results) != len(expectedFeatures) {
-		t.Errorf("expected %d results, got %d", len(expectedFeatures), len(results))
-	}
-
-	for i := range results {
-		if !reflect.DeepEqual(results[i], expectedFeatures[i]) {
-			t.Errorf("expected %v, got %v", expectedFeatures[i], results[i])
-		}
+			// Check if the expected hosts match the extracted ones
+			if len(hostPinnedProjects) != len(tt.expected) {
+				t.Fatalf("expected %d host pinned projects, got %d", len(tt.expected), len(hostPinnedProjects))
+			}
+			// Compare each expected host with the extracted ones
+			if !reflect.DeepEqual(tt.expected, hostPinnedProjects) {
+				t.Errorf("expected %v, got %v", tt.expected, hostPinnedProjects)
+			}
+		})
 	}
 }
