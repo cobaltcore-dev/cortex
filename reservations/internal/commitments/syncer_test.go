@@ -26,8 +26,8 @@ type mockCommitmentsClient struct {
 	listFlavorsByNameFuncCalled   bool
 	listCommitmentsByIDFunc       func(ctx context.Context, projects ...Project) (map[string]Commitment, error)
 	listCommitmentsByIDFuncCalled bool
-	listActiveServersFunc         func(ctx context.Context, projects ...Project) (map[string][]Server, error)
-	listActiveServersFuncCalled   bool
+	listServersFunc               func(ctx context.Context, projects ...Project) (map[string][]Server, error)
+	listServersFuncCalled         bool
 }
 
 func (m *mockCommitmentsClient) Init(ctx context.Context) {
@@ -57,12 +57,12 @@ func (m *mockCommitmentsClient) ListCommitmentsByID(ctx context.Context, project
 	}
 	return m.listCommitmentsByIDFunc(ctx, projects...)
 }
-func (m *mockCommitmentsClient) ListActiveServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error) {
-	m.listActiveServersFuncCalled = true
-	if m.listActiveServersFunc == nil {
+func (m *mockCommitmentsClient) ListServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+	m.listServersFuncCalled = true
+	if m.listServersFunc == nil {
 		return map[string][]Server{}, nil
 	}
-	return m.listActiveServersFunc(ctx, projects...)
+	return m.listServersFunc(ctx, projects...)
 }
 
 func TestNewSyncer(t *testing.T) {
@@ -168,7 +168,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 				{ID: "test-project-1", DomainID: "test-domain-1", Name: "Test Project 1"},
 			}, nil
 		},
-		listActiveServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+		listServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
 			return map[string][]Server{}, nil // No active servers
 		},
 		initFunc: func(ctx context.Context) {
@@ -297,7 +297,7 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 				{ID: "new-project", DomainID: "new-domain", Name: "New Project"},
 			}, nil
 		},
-		listActiveServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+		listServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
 			return map[string][]Server{}, nil // No active servers
 		},
 		initFunc: func(ctx context.Context) {
@@ -388,7 +388,7 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 				{ID: "test-project", DomainID: "test-domain", Name: "Test Project"},
 			}, nil
 		},
-		listActiveServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+		listServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
 			return map[string][]Server{}, nil // No active servers
 		},
 		initFunc: func(ctx context.Context) {

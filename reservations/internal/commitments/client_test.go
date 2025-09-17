@@ -380,17 +380,12 @@ func TestCommitmentsClient_ListCommitmentsByID_Error(t *testing.T) {
 	}
 }
 
-func TestCommitmentsClient_ListActiveServersByProjectID(t *testing.T) {
+func TestCommitmentsClient_ListServersByProjectID(t *testing.T) {
 	// Mock server for Nova compute service
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/servers/detail") {
 			// Parse query parameters to determine which project
 			tenantID := r.URL.Query().Get("tenant_id")
-			status := r.URL.Query().Get("status")
-
-			if status != "ACTIVE" {
-				t.Errorf("expected status=ACTIVE, got %s", status)
-			}
 
 			// Return raw JSON string as the gophercloud pages expect
 			w.Header().Set("Content-Type", "application/json")
@@ -430,7 +425,7 @@ func TestCommitmentsClient_ListActiveServersByProjectID(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	serversByProject, err := client.ListActiveServersByProjectID(ctx, projects...)
+	serversByProject, err := client.ListServersByProjectID(ctx, projects...)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -461,7 +456,7 @@ func TestCommitmentsClient_ListActiveServersByProjectID(t *testing.T) {
 	}
 }
 
-func TestCommitmentsClient_ListActiveServersByProjectID_Error(t *testing.T) {
+func TestCommitmentsClient_ListServersByProjectID_Error(t *testing.T) {
 	// Mock server that returns an error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
@@ -482,7 +477,7 @@ func TestCommitmentsClient_ListActiveServersByProjectID_Error(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	servers, err := client.ListActiveServersByProjectID(ctx, projects...)
+	servers, err := client.ListServersByProjectID(ctx, projects...)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -629,7 +624,7 @@ func TestCommitmentsClient_listCommitments_JSONError(t *testing.T) {
 	}
 }
 
-func TestCommitmentsClient_listActiveServersForProject(t *testing.T) {
+func TestCommitmentsClient_listServersForProject(t *testing.T) {
 	// Mock server for Nova compute service
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/servers/detail") {
@@ -644,9 +639,6 @@ func TestCommitmentsClient_listActiveServersForProject(t *testing.T) {
 		}
 		if query.Get("tenant_id") != "test-project" {
 			t.Errorf("expected tenant_id=test-project, got %s", query.Get("tenant_id"))
-		}
-		if query.Get("status") != "ACTIVE" {
-			t.Errorf("expected status=ACTIVE, got %s", query.Get("status"))
 		}
 
 		// Return raw JSON string as the gophercloud pages expect
@@ -687,7 +679,7 @@ func TestCommitmentsClient_listActiveServersForProject(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	servers, err := client.listActiveServersForProject(ctx, project)
+	servers, err := client.listServersForProject(ctx, project)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -732,7 +724,7 @@ func TestCommitmentsClient_listActiveServersForProject(t *testing.T) {
 	}
 }
 
-func TestCommitmentsClient_listActiveServersForProject_Error(t *testing.T) {
+func TestCommitmentsClient_listServersForProject_Error(t *testing.T) {
 	// Mock server that returns an error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -751,7 +743,7 @@ func TestCommitmentsClient_listActiveServersForProject_Error(t *testing.T) {
 	project := Project{ID: "test-project"}
 
 	ctx := context.Background()
-	servers, err := client.listActiveServersForProject(ctx, project)
+	servers, err := client.listServersForProject(ctx, project)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

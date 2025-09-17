@@ -81,7 +81,9 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 			projectsWithCommitments = append(projectsWithCommitments, project)
 		}
 	}
-	servers, err := s.ListActiveServersByProjectID(ctx, projectsWithCommitments...)
+	// List all servers, not only the active ones, like limes when it calculates
+	// subresource usage: https://github.com/sapcc/limes/blob/c146c82/internal/liquids/nova/subresources.go#L94
+	servers, err := s.ListServersByProjectID(ctx, projectsWithCommitments...)
 	if err != nil {
 		return nil, err
 	}

@@ -31,9 +31,9 @@ type CommitmentsClient interface {
 	ListFlavorsByName(ctx context.Context) (map[string]Flavor, error)
 	// List all commitments with resolved metadata (e.g. project, flavor, ...).
 	ListCommitmentsByID(ctx context.Context, projects ...Project) (map[string]Commitment, error)
-	// List all currently running (ACTIVE) servers for the given projects from nova.
-	// The result is a map from project ID to the list of active servers.
-	ListActiveServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error)
+	// List all servers for the given projects from nova.
+	// The result is a map from project ID to the list of servers.
+	ListServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error)
 }
 
 // Commitments client fetching commitments from openstack services.
@@ -223,10 +223,10 @@ func (c *commitmentsClient) listCommitments(ctx context.Context, project Project
 	return commitments, nil
 }
 
-// Get all currently running (ACTIVE) servers for the given project ids from nova.
-// The result is a map from project ID to the list of active servers.
-func (c *commitmentsClient) ListActiveServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error) {
-	syncLog.Info("fetching active servers from nova")
+// Get all servers for the given project ids from nova.
+// The result is a map from project ID to the list of servers.
+func (c *commitmentsClient) ListServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error) {
+	syncLog.Info("fetching servers from nova")
 	serversByProject := make(map[string][]Server, len(projects))
 	var mu gosync.Mutex
 	var wg gosync.WaitGroup
@@ -236,7 +236,7 @@ func (c *commitmentsClient) ListActiveServersByProjectID(ctx context.Context, pr
 	errChan := make(chan error, len(projects))
 	for _, project := range projects {
 		wg.Go(func() {
-			servers, err := c.listActiveServersForProject(ctx, project)
+			servers, err := c.listServersForProject(ctx, project)
 			if err != nil {
 				errChan <- err
 				cancel()
@@ -256,22 +256,21 @@ func (c *commitmentsClient) ListActiveServersByProjectID(ctx context.Context, pr
 	// Return the first error encountered, if any.
 	for err := range errChan {
 		if err != nil {
-			syncLog.Error(err, "failed to fetch active servers")
+			syncLog.Error(err, "failed to fetch servers")
 			return nil, err
 		}
 	}
-	syncLog.Info("fetched active servers from nova", "projects", len(serversByProject))
+	syncLog.Info("fetched servers from nova", "projects", len(serversByProject))
 	return serversByProject, nil
 }
 
-// Get all currently running (ACTIVE) servers for the given project id from nova.
-func (c *commitmentsClient) listActiveServersForProject(ctx context.Context, project Project) ([]Server, error) {
+// Get all servers for the given project id from nova.
+func (c *commitmentsClient) listServersForProject(ctx context.Context, project Project) ([]Server, error) {
 	lo := servers.ListOpts{
 		// AllTenants must be set to fetch servers from other projects
 		// than the one we are authenticated with.
 		AllTenants: true,
 		TenantID:   project.ID,
-		Status:     "ACTIVE", // Use string literal instead of servers.StateActive which is lowercase
 	}
 	pages, err := servers.List(c.nova, lo).AllPages(ctx)
 	if err != nil {
@@ -284,6 +283,6 @@ func (c *commitmentsClient) listActiveServersForProject(ctx context.Context, pro
 	if err := pages.(servers.ServerPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	syncLog.Info("fetched active servers for project", "project", project.ID, "count", len(data.Servers))
+	syncLog.Info("fetched servers for project", "project", project.ID, "count", len(data.Servers))
 	return data.Servers, nil
 }
