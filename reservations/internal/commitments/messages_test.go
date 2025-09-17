@@ -33,18 +33,6 @@ func TestCommitment_JSONSerialization(t *testing.T) {
 		NotifyOnConfirm:  true,
 		ProjectID:        "project-123",
 		DomainID:         "domain-456",
-		Flavor: &Flavor{
-			ID:          "flavor-1",
-			Name:        "small",
-			RAM:         1024,
-			VCPUs:       1,
-			Disk:        10,
-			IsPublic:    true,
-			RxTxFactor:  1.0,
-			Ephemeral:   0,
-			Description: "Small flavor",
-			ExtraSpecs:  map[string]string{"hw:cpu_policy": "shared"},
-		},
 	}
 
 	// Test marshaling

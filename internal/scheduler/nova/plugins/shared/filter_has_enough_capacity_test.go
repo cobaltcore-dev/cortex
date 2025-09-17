@@ -589,3 +589,215 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 		t.Error("expected host2 to be filtered out due to insufficient vCPUs after reservations")
 	}
 }
+
+func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	// Create dependency tables
+	err := testDB.CreateTable(
+		testDB.AddTable(shared.HostUtilization{}),
+	)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert mock data into the feature_host_utilization table
+	hostUtilizations := []any{
+		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalRAMAllocatableMB: 16384, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500}, // Limited capacity host
+	}
+	if err := testDB.Insert(hostUtilizations...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	tests := []struct {
+		name                string
+		reservations        []v1alpha1.ComputeReservation
+		request             api.ExternalSchedulerRequest
+		expectedHostPresent bool
+		description         string
+	}{
+		{
+			name: "Reservation matches request - resources should be unlocked",
+			reservations: []v1alpha1.ComputeReservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "matching-reservation",
+						Namespace: "test-namespace",
+					},
+					Spec: v1alpha1.ComputeReservationSpec{
+						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+								FlavorName: "test-flavor",  // Matches request
+								ProjectID:  "test-project", // Matches request
+								DomainID:   "test-domain",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB - consumes all memory
+							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs - consumes half vCPUs
+						},
+					},
+					Status: v1alpha1.ComputeReservationStatus{
+						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+						Host:  "host1",
+					},
+				},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "test-project", // Matches reservation
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "test-flavor", // Matches reservation
+								VCPUs:    6,             // Would normally fail (8 - 4 = 4 < 6), but reservation should be unlocked
+								MemoryMB: 12288,         // Would normally fail (16384 - 8192 = 8192 < 12288), but reservation should be unlocked
+								RootGB:   200,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			expectedHostPresent: true,
+			description:         "When ProjectID and FlavorName match, reservation resources should be unlocked allowing the request to succeed",
+		},
+		{
+			name: "Reservation does not match ProjectID - resources remain reserved",
+			reservations: []v1alpha1.ComputeReservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "non-matching-project-reservation",
+						Namespace: "test-namespace",
+					},
+					Spec: v1alpha1.ComputeReservationSpec{
+						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+								FlavorName: "test-flavor",       // Matches request
+								ProjectID:  "different-project", // Does NOT match request
+								DomainID:   "test-domain",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB
+							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs
+						},
+					},
+					Status: v1alpha1.ComputeReservationStatus{
+						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+						Host:  "host1",
+					},
+				},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "test-project", // Does NOT match reservation
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "test-flavor", // Matches reservation
+								VCPUs:    6,             // Should fail (8 - 4 = 4 < 6)
+								MemoryMB: 12288,         // Should fail (16384 - 8192 = 8192 < 12288)
+								RootGB:   200,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			expectedHostPresent: false,
+			description:         "When ProjectID does not match, reservation resources should remain reserved and request should fail",
+		},
+		{
+			name: "Reservation does not match FlavorName - resources remain reserved",
+			reservations: []v1alpha1.ComputeReservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "non-matching-flavor-reservation",
+						Namespace: "test-namespace",
+					},
+					Spec: v1alpha1.ComputeReservationSpec{
+						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+								FlavorName: "different-flavor", // Does NOT match request
+								ProjectID:  "test-project",     // Matches request
+								DomainID:   "test-domain",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB
+							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs
+						},
+					},
+					Status: v1alpha1.ComputeReservationStatus{
+						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+						Host:  "host1",
+					},
+				},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "test-project", // Matches reservation
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "test-flavor", // Does NOT match reservation
+								VCPUs:    6,             // Should fail (8 - 4 = 4 < 6)
+								MemoryMB: 12288,         // Should fail (16384 - 8192 = 8192 < 12288)
+								RootGB:   200,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			expectedHostPresent: false,
+			description:         "When FlavorName does not match, reservation resources should remain reserved and request should fail",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create fake Kubernetes client with reservations
+			scheme := testScheme()
+			var runtimeObjects []runtime.Object
+			for i := range tt.reservations {
+				runtimeObjects = append(runtimeObjects, &tt.reservations[i])
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(runtimeObjects...).
+				Build()
+
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fakeClient // Override the real client with our fake client
+			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			result, err := step.Run(slog.Default(), tt.request)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			// Check if host is present or absent as expected
+			_, hostPresent := result.Activations["host1"]
+			if hostPresent != tt.expectedHostPresent {
+				t.Errorf("Test case: %s\nExpected host1 present: %v, got: %v\nDescription: %s",
+					tt.name, tt.expectedHostPresent, hostPresent, tt.description)
+			}
+
+			// Debug information
+			t.Logf("Test: %s, Host present: %v, Activations: %v", tt.name, hostPresent, result.Activations)
+		})
+	}
+}
