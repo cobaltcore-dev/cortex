@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -47,13 +48,11 @@ func TestProjectResourceUtilizationExtractor_Extract(t *testing.T) {
 			expected: []ProjectResourceUtilization{},
 		},
 		{
-			name: "should return 0 values when no servers exist for project",
+			name: "should return empty list when projects have no servers",
 			mockData: []any{
 				&identity.Project{ID: "project-123"},
 			},
-			expected: []ProjectResourceUtilization{
-				{ProjectID: "project-123", TotalServers: 0, TotalVCPUsUsed: 0, TotalRAMUsedMB: 0, TotalDiskUsedGB: 0},
-			},
+			expected: []ProjectResourceUtilization{},
 		},
 		{
 			name: "should have values of flavor when only one server exists",
@@ -62,13 +61,16 @@ func TestProjectResourceUtilizationExtractor_Extract(t *testing.T) {
 				&identity.Project{ID: "project-123"},
 
 				// Servers
-				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE"},
+				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
 
 				// Flavors
 				&nova.Flavor{ID: "1", Name: "flavor-small", VCPUs: 2, RAM: 4096, Disk: 20},
+
+				// Availability zones
+				&HostAZ{ComputeHost: "host1", AvailabilityZone: testlib.Ptr("az1")},
 			},
 			expected: []ProjectResourceUtilization{
-				{ProjectID: "project-123", TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
+				{ProjectID: "project-123", AvailabilityZone: testlib.Ptr("az1"), TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
 			},
 		},
 		{
@@ -78,14 +80,17 @@ func TestProjectResourceUtilizationExtractor_Extract(t *testing.T) {
 				&identity.Project{ID: "project-123"},
 
 				// Servers
-				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE"},
-				&nova.Server{ID: "server-2", TenantID: "project-123", FlavorName: "flavor-small", Status: "DELETED"},
+				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
+				&nova.Server{ID: "server-2", TenantID: "project-123", FlavorName: "flavor-small", Status: "DELETED", OSEXTSRVATTRHost: "host1"},
 
 				// Flavors
 				&nova.Flavor{ID: "1", Name: "flavor-small", VCPUs: 2, RAM: 4096, Disk: 20},
+
+				// Availability zones
+				&HostAZ{ComputeHost: "host1", AvailabilityZone: testlib.Ptr("az1")},
 			},
 			expected: []ProjectResourceUtilization{
-				{ProjectID: "project-123", TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
+				{ProjectID: "project-123", AvailabilityZone: testlib.Ptr("az1"), TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
 			},
 		},
 		{
@@ -94,34 +99,99 @@ func TestProjectResourceUtilizationExtractor_Extract(t *testing.T) {
 				// Projects
 				&identity.Project{ID: "project-123"},
 				&identity.Project{ID: "project-456"},
-				&identity.Project{ID: "project-789"},
+				&identity.Project{ID: "project-789"}, // No servers for this project
 
 				// Servers
-				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE"},
-				&nova.Server{ID: "server-2", TenantID: "project-456", FlavorName: "flavor-small", Status: "ACTIVE"},
-				&nova.Server{ID: "server-3", TenantID: "project-456", FlavorName: "flavor-big", Status: "ACTIVE"},
+				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
+				&nova.Server{ID: "server-2", TenantID: "project-456", FlavorName: "flavor-small", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
+				&nova.Server{ID: "server-3", TenantID: "project-456", FlavorName: "flavor-big", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
 
 				// Flavors
 				&nova.Flavor{ID: "1", Name: "flavor-small", VCPUs: 2, RAM: 4096, Disk: 20},
 				&nova.Flavor{ID: "2", Name: "flavor-big", VCPUs: 4, RAM: 8192, Disk: 40},
+
+				// Availability zones
+				&HostAZ{ComputeHost: "host1", AvailabilityZone: testlib.Ptr("az1")},
 			},
 			expected: []ProjectResourceUtilization{
-				{ProjectID: "project-123", TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
-				{ProjectID: "project-456", TotalServers: 2, TotalVCPUsUsed: 4 + 2, TotalRAMUsedMB: 4096 + 8192, TotalDiskUsedGB: 20 + 40},
-				{ProjectID: "project-789", TotalServers: 0, TotalVCPUsUsed: 0, TotalRAMUsedMB: 0, TotalDiskUsedGB: 0},
+				{ProjectID: "project-123", AvailabilityZone: testlib.Ptr("az1"), TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
+				{ProjectID: "project-456", AvailabilityZone: testlib.Ptr("az1"), TotalServers: 2, TotalVCPUsUsed: 4 + 2, TotalRAMUsedMB: 4096 + 8192, TotalDiskUsedGB: 20 + 40},
 			},
 		},
 		{
-			name: "should return 0 values when flavor does not exist",
+			name: "should return entry when flavor cannot be resolved with unresolved count",
 			mockData: []any{
 				// Projects
 				&identity.Project{ID: "project-123"},
 
 				// Servers
-				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-nonexistent", Status: "ACTIVE"},
+				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-nonexistent", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
+
+				// Availability zones
+				&HostAZ{ComputeHost: "host1", AvailabilityZone: testlib.Ptr("az1")},
 			},
 			expected: []ProjectResourceUtilization{
-				{ProjectID: "project-123", TotalServers: 1, TotalVCPUsUsed: 0, TotalRAMUsedMB: 0, TotalDiskUsedGB: 0},
+				{ProjectID: "project-123", AvailabilityZone: testlib.Ptr("az1"), TotalServers: 1, UnresolvedServerFlavors: 1, TotalVCPUsUsed: 0, TotalRAMUsedMB: 0, TotalDiskUsedGB: 0},
+			},
+		},
+		{
+			name: "should differentiate availability zones",
+			mockData: []any{
+				// Projects
+				&identity.Project{ID: "project-123"},
+
+				// Servers
+				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
+				&nova.Server{ID: "server-2", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE", OSEXTSRVATTRHost: "host2"},
+				&nova.Server{ID: "server-3", TenantID: "project-123", FlavorName: "flavor-big", Status: "ACTIVE", OSEXTSRVATTRHost: "host3"},
+
+				// Flavors
+				&nova.Flavor{ID: "1", Name: "flavor-small", VCPUs: 2, RAM: 4096, Disk: 20},
+				&nova.Flavor{ID: "2", Name: "flavor-big", VCPUs: 4, RAM: 8192, Disk: 40},
+
+				// Availability zones
+				&HostAZ{ComputeHost: "host1", AvailabilityZone: testlib.Ptr("az1")},
+				&HostAZ{ComputeHost: "host2", AvailabilityZone: testlib.Ptr("az2")},
+				&HostAZ{ComputeHost: "host3", AvailabilityZone: testlib.Ptr("az2")},
+			},
+			expected: []ProjectResourceUtilization{
+				{ProjectID: "project-123", AvailabilityZone: testlib.Ptr("az1"), TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
+				{ProjectID: "project-123", AvailabilityZone: testlib.Ptr("az2"), TotalServers: 2, TotalVCPUsUsed: 4 + 2, TotalRAMUsedMB: 4096 + 8192, TotalDiskUsedGB: 20 + 40},
+			},
+		},
+		{
+			name: "should return nil as availability zone if the host is not mapped to a availability zone",
+			mockData: []any{
+				// Projects
+				&identity.Project{ID: "project-123"},
+
+				// Servers
+				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
+
+				// Flavors
+				&nova.Flavor{ID: "1", Name: "flavor-small", VCPUs: 2, RAM: 4096, Disk: 20},
+			},
+			expected: []ProjectResourceUtilization{
+				{ProjectID: "project-123", AvailabilityZone: nil, TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
+			},
+		},
+		{
+			name: "should return nil as availability zone if the host has no a availability zone",
+			mockData: []any{
+				// Projects
+				&identity.Project{ID: "project-123"},
+
+				// Servers
+				&nova.Server{ID: "server-1", TenantID: "project-123", FlavorName: "flavor-small", Status: "ACTIVE", OSEXTSRVATTRHost: "host1"},
+
+				// Flavors
+				&nova.Flavor{ID: "1", Name: "flavor-small", VCPUs: 2, RAM: 4096, Disk: 20},
+
+				// Availability zones
+				&HostAZ{ComputeHost: "host1", AvailabilityZone: nil},
+			},
+			expected: []ProjectResourceUtilization{
+				{ProjectID: "project-123", AvailabilityZone: nil, TotalServers: 1, TotalVCPUsUsed: 2, TotalRAMUsedMB: 4096, TotalDiskUsedGB: 20},
 			},
 		},
 	}
@@ -137,6 +207,7 @@ func TestProjectResourceUtilizationExtractor_Extract(t *testing.T) {
 				testDB.AddTable(identity.Project{}),
 				testDB.AddTable(nova.Server{}),
 				testDB.AddTable(nova.Flavor{}),
+				testDB.AddTable(HostAZ{}),
 			); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

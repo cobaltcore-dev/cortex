@@ -286,15 +286,14 @@ cortex-core:
         - name: project_resource_utilization_extractor
           recencySeconds: 300
           dependencies:
+            extractors:
+              - host_az_extractor
             sync:
               openstack:
                 nova:
                   types:
                     - flavors
                     - servers
-                identity:
-                  types:
-                    - projects
         # SAP-specific extractors.
         - name: sap_host_details_extractor
           recencySeconds: 60 # 1 minute

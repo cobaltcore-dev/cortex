@@ -12,12 +12,18 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 )
 
-// Feature to calculate the resource (vcpu, ram, disk) utilization of all servers of all projects.
+// Feature to calculate the resource (vcpu, ram, disk) utilization of all servers of projects with servers.
+// Projects with no servers are not included in this table.
 type ProjectResourceUtilization struct {
 	// ID of the project.
 	ProjectID string `db:"project_id"`
+	// Availability zone of the servers.
+	// This field can in theory be nil, but it should never be nil
+	AvailabilityZone *string `db:"availability_zone"`
 	// Total number of servers of the project.
 	TotalServers int64 `db:"total_servers"`
+	// Total number of servers of the project with a flavor that could not be resolved.
+	UnresolvedServerFlavors int64 `db:"unresolved_server_flavors"`
 	// Total number of vcpus used by all servers of the project.
 	TotalVCPUsUsed int64 `db:"total_vcpus_used"`
 	// Total amount of ram (in MB) used by all servers of the project.
@@ -34,7 +40,7 @@ func (ProjectResourceUtilization) TableName() string {
 // Indexes for the feature.
 func (ProjectResourceUtilization) Indexes() []db.Index { return nil }
 
-// Extractor that extracts the resource utilization of all servers of all projects.
+// Extractor that extracts the resource utilization of all servers of projects with servers.
 type ProjectResourceUtilizationExtractor struct {
 	// Common base for all extractors that provides standard functionality.
 	plugins.BaseExtractor[
@@ -60,7 +66,7 @@ func (ProjectResourceUtilizationExtractor) Triggers() []string {
 //go:embed project_resource_utilization.sql
 var projectResourceUtilizationQuery string
 
-// Extract the resource utilization of all servers of all projects.
+// Extract the resource utilization of all servers of projects with servers.
 func (e *ProjectResourceUtilizationExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(projectResourceUtilizationQuery)
 }
