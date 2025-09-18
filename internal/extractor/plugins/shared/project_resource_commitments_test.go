@@ -48,33 +48,29 @@ func TestProjectResourceCommitmentsExtractor_Extract(t *testing.T) {
 			expected: []ProjectResourceCommitments{},
 		},
 		{
-			name: "should return 0 values when no commitments exist for project",
+			name: "should not include projects without commitments",
 			mockData: []any{
 				&identity.Project{ID: "project-123"},
 			},
-			expected: []ProjectResourceCommitments{
-				{ProjectID: "project-123", TotalInstanceCommitments: 0, TotalVCPUsCommitted: 0, TotalRAMCommittedMB: 0, TotalDiskCommittedGB: 0},
-			},
+			expected: []ProjectResourceCommitments{},
 		},
 		{
 			name: "should have values of bare resource commitments when only bare resource commitments exist",
 			mockData: []any{
 				&identity.Project{ID: "project-123"},
 				&identity.Project{ID: "project-456"},
-				&identity.Project{ID: "project-789"},
 
 				// Commitments
-				&limes.Commitment{ID: 1, ServiceType: "compute", ProjectID: "project-123", ResourceName: "cores", Amount: 10},
-				&limes.Commitment{ID: 2, ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 1024},
-				&limes.Commitment{ID: 3, ServiceType: "compute", ProjectID: "project-123", ResourceName: "cores", Amount: 20},
-				&limes.Commitment{ID: 4, ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 2048},
-				&limes.Commitment{ID: 5, ServiceType: "compute", ProjectID: "project-456", ResourceName: "cores", Amount: 10},
-				&limes.Commitment{ID: 6, ServiceType: "compute", ProjectID: "project-456", ResourceName: "ram", Amount: 1024},
+				&limes.Commitment{ID: 1, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "cores", Amount: 10},
+				&limes.Commitment{ID: 2, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 1024},
+				&limes.Commitment{ID: 3, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "cores", Amount: 20},
+				&limes.Commitment{ID: 4, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 2048},
+				&limes.Commitment{ID: 5, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-456", ResourceName: "cores", Amount: 10},
+				&limes.Commitment{ID: 6, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-456", ResourceName: "ram", Amount: 1024},
 			},
 			expected: []ProjectResourceCommitments{
-				{ProjectID: "project-123", TotalInstanceCommitments: 0, TotalVCPUsCommitted: 10 + 20, TotalRAMCommittedMB: 1024 + 2048, TotalDiskCommittedGB: 0},
-				{ProjectID: "project-456", TotalInstanceCommitments: 0, TotalVCPUsCommitted: 10, TotalRAMCommittedMB: 1024, TotalDiskCommittedGB: 0},
-				{ProjectID: "project-789", TotalInstanceCommitments: 0, TotalVCPUsCommitted: 0, TotalRAMCommittedMB: 0, TotalDiskCommittedGB: 0},
+				{ProjectID: "project-123", AvailabilityZone: "az1", TotalInstanceCommitments: 0, TotalVCPUsCommitted: 10 + 20, TotalRAMCommittedMB: 1024 + 2048, TotalDiskCommittedGB: 0},
+				{ProjectID: "project-456", AvailabilityZone: "az1", TotalInstanceCommitments: 0, TotalVCPUsCommitted: 10, TotalRAMCommittedMB: 1024, TotalDiskCommittedGB: 0},
 			},
 		},
 		{
@@ -87,20 +83,19 @@ func TestProjectResourceCommitmentsExtractor_Extract(t *testing.T) {
 				&identity.Project{ID: "project-0"},
 
 				// Commitments
-				&limes.Commitment{ID: 1, ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_small-flavor", Amount: 1},
-				&limes.Commitment{ID: 2, ServiceType: "compute", ProjectID: "project-456", ResourceName: "instances_big-flavor", Amount: 1},
-				&limes.Commitment{ID: 3, ServiceType: "compute", ProjectID: "project-789", ResourceName: "instances_small-flavor", Amount: 1},
-				&limes.Commitment{ID: 4, ServiceType: "compute", ProjectID: "project-789", ResourceName: "instances_big-flavor", Amount: 1},
+				&limes.Commitment{ID: 1, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_small-flavor", Amount: 1},
+				&limes.Commitment{ID: 2, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-456", ResourceName: "instances_big-flavor", Amount: 1},
+				&limes.Commitment{ID: 3, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-789", ResourceName: "instances_small-flavor", Amount: 1},
+				&limes.Commitment{ID: 4, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-789", ResourceName: "instances_big-flavor", Amount: 1},
 
 				// Flavors
 				&nova.Flavor{ID: "1", Name: "small-flavor", VCPUs: 2, RAM: 4096, Disk: 20},
 				&nova.Flavor{ID: "2", Name: "big-flavor", VCPUs: 4, RAM: 8192, Disk: 40},
 			},
 			expected: []ProjectResourceCommitments{
-				{ProjectID: "project-0", TotalInstanceCommitments: 0, TotalVCPUsCommitted: 0, TotalRAMCommittedMB: 0, TotalDiskCommittedGB: 0},
-				{ProjectID: "project-123", TotalInstanceCommitments: 1, TotalVCPUsCommitted: 2, TotalRAMCommittedMB: 4096, TotalDiskCommittedGB: 20},
-				{ProjectID: "project-456", TotalInstanceCommitments: 1, TotalVCPUsCommitted: 4, TotalRAMCommittedMB: 8192, TotalDiskCommittedGB: 40},
-				{ProjectID: "project-789", TotalInstanceCommitments: 2, TotalVCPUsCommitted: 2 + 4, TotalRAMCommittedMB: 4096 + 8192, TotalDiskCommittedGB: 20 + 40},
+				{ProjectID: "project-123", AvailabilityZone: "az1", TotalInstanceCommitments: 1, TotalVCPUsCommitted: 2, TotalRAMCommittedMB: 4096, TotalDiskCommittedGB: 20},
+				{ProjectID: "project-456", AvailabilityZone: "az1", TotalInstanceCommitments: 1, TotalVCPUsCommitted: 4, TotalRAMCommittedMB: 8192, TotalDiskCommittedGB: 40},
+				{ProjectID: "project-789", AvailabilityZone: "az1", TotalInstanceCommitments: 2, TotalVCPUsCommitted: 2 + 4, TotalRAMCommittedMB: 4096 + 8192, TotalDiskCommittedGB: 20 + 40},
 			},
 		},
 		{
@@ -110,12 +105,12 @@ func TestProjectResourceCommitmentsExtractor_Extract(t *testing.T) {
 				&identity.Project{ID: "project-123"},
 
 				// Commitments
-				&limes.Commitment{ID: 1, ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_small-flavor", Amount: 2},
+				&limes.Commitment{ID: 1, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_small-flavor", Amount: 2},
 				// Flavors
 				&nova.Flavor{ID: "1", Name: "small-flavor", VCPUs: 2, RAM: 4096, Disk: 20},
 			},
 			expected: []ProjectResourceCommitments{
-				{ProjectID: "project-123", TotalInstanceCommitments: 2, TotalVCPUsCommitted: 2 * 2, TotalRAMCommittedMB: 4096 * 2, TotalDiskCommittedGB: 20 * 2},
+				{ProjectID: "project-123", AvailabilityZone: "az1", TotalInstanceCommitments: 2, TotalVCPUsCommitted: 2 * 2, TotalRAMCommittedMB: 4096 * 2, TotalDiskCommittedGB: 20 * 2},
 			},
 		},
 		{
@@ -124,12 +119,12 @@ func TestProjectResourceCommitmentsExtractor_Extract(t *testing.T) {
 				&identity.Project{ID: "project-123"},
 
 				// Commitments
-				&limes.Commitment{ID: 1, ServiceType: "compute", ProjectID: "project-123", ResourceName: "cores", Amount: 10},
-				&limes.Commitment{ID: 2, ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 1024},
-				&limes.Commitment{ID: 3, ServiceType: "compute", ProjectID: "project-123", ResourceName: "cores", Amount: 20},
-				&limes.Commitment{ID: 4, ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 2048},
-				&limes.Commitment{ID: 5, ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_small-flavor", Amount: 1},
-				&limes.Commitment{ID: 6, ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_big-flavor", Amount: 2},
+				&limes.Commitment{ID: 1, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "cores", Amount: 10},
+				&limes.Commitment{ID: 2, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 1024},
+				&limes.Commitment{ID: 3, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "cores", Amount: 20},
+				&limes.Commitment{ID: 4, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 2048},
+				&limes.Commitment{ID: 5, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_small-flavor", Amount: 1},
+				&limes.Commitment{ID: 6, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_big-flavor", Amount: 2},
 
 				// Flavors
 				&nova.Flavor{ID: "1", Name: "small-flavor", VCPUs: 2, RAM: 4096, Disk: 20},
@@ -138,6 +133,7 @@ func TestProjectResourceCommitmentsExtractor_Extract(t *testing.T) {
 			expected: []ProjectResourceCommitments{
 				{
 					ProjectID:                "project-123",
+					AvailabilityZone:         "az1",
 					TotalInstanceCommitments: 1 + 2, // 1 small + 2 big
 					TotalVCPUsCommitted:      10 + 20 + 2*1 + 4*2,
 					TotalRAMCommittedMB:      1024 + 2048 + 4096*1 + 8192*2,
@@ -146,20 +142,46 @@ func TestProjectResourceCommitmentsExtractor_Extract(t *testing.T) {
 			},
 		},
 		{
-			name: "should return 0 values when flavor of instance commitment does not exist",
+			name: "should exclude commitments with unknown flavors",
 			mockData: []any{
 				&identity.Project{ID: "project-123"},
 
 				// Commitments
-				&limes.Commitment{ServiceType: "compute", ID: 5, ProjectID: "project-123", ResourceName: "instance_nonexistent", Amount: 1},
+				&limes.Commitment{ServiceType: "compute", ID: 1, AvailabilityZone: "az1", ProjectID: "project-123", ResourceName: "instances_nonexistent", Amount: 1},
+				&limes.Commitment{ServiceType: "compute", ID: 2, AvailabilityZone: "az1", ProjectID: "project-123", ResourceName: "instances_exists", Amount: 1},
+
+				// Flavors
+				&nova.Flavor{ID: "1", Name: "exists", VCPUs: 2, RAM: 4096, Disk: 20},
 			},
 			expected: []ProjectResourceCommitments{
 				{
-					ProjectID:                "project-123",
-					TotalInstanceCommitments: 0,
-					TotalVCPUsCommitted:      0,
-					TotalRAMCommittedMB:      0,
-					TotalDiskCommittedGB:     0,
+					ProjectID:                     "project-123",
+					AvailabilityZone:              "az1",
+					TotalInstanceCommitments:      2,
+					UnresolvedInstanceCommitments: 1,
+					TotalVCPUsCommitted:           2,
+					TotalRAMCommittedMB:           4096,
+					TotalDiskCommittedGB:          20,
+				},
+			},
+		},
+		{
+			name: "should show projects with no resolved instance commitments",
+			mockData: []any{
+				&identity.Project{ID: "project-123"},
+
+				// Commitments
+				&limes.Commitment{ServiceType: "compute", ID: 1, AvailabilityZone: "az1", ProjectID: "project-123", ResourceName: "instances_nonexistent", Amount: 1},
+			},
+			expected: []ProjectResourceCommitments{
+				{
+					ProjectID:                     "project-123",
+					AvailabilityZone:              "az1",
+					TotalInstanceCommitments:      1,
+					UnresolvedInstanceCommitments: 1,
+					TotalVCPUsCommitted:           0,
+					TotalRAMCommittedMB:           0,
+					TotalDiskCommittedGB:          0,
 				},
 			},
 		},
@@ -169,10 +191,44 @@ func TestProjectResourceCommitmentsExtractor_Extract(t *testing.T) {
 				&identity.Project{ID: "project-123"},
 
 				// Commitments
-				&limes.Commitment{ID: 1, ServiceType: "not-compute", ProjectID: "project-123", ResourceName: "cores", Amount: 10},
+				&limes.Commitment{ID: 1, AvailabilityZone: "az1", ServiceType: "not-compute", ProjectID: "project-123", ResourceName: "cores", Amount: 10},
+			},
+			expected: []ProjectResourceCommitments{},
+		},
+		{
+			name: "split up by availability zone",
+			mockData: []any{
+				&identity.Project{ID: "project-123"},
+
+				// Commitments
+				// AZ 1
+				&limes.Commitment{ID: 1, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 2048},
+				&limes.Commitment{ID: 2, AvailabilityZone: "az1", ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_small-flavor", Amount: 1},
+				// AZ 2
+				&limes.Commitment{ID: 3, AvailabilityZone: "az2", ServiceType: "compute", ProjectID: "project-123", ResourceName: "ram", Amount: 4048},
+				&limes.Commitment{ID: 4, AvailabilityZone: "az2", ServiceType: "compute", ProjectID: "project-123", ResourceName: "instances_big-flavor", Amount: 2},
+
+				// Flavors
+				&nova.Flavor{ID: "1", Name: "small-flavor", VCPUs: 2, RAM: 4096, Disk: 20},
+				&nova.Flavor{ID: "2", Name: "big-flavor", VCPUs: 4, RAM: 8192, Disk: 40},
 			},
 			expected: []ProjectResourceCommitments{
-				{ProjectID: "project-123", TotalInstanceCommitments: 0, TotalVCPUsCommitted: 0, TotalRAMCommittedMB: 0, TotalDiskCommittedGB: 0},
+				{
+					ProjectID:                "project-123",
+					AvailabilityZone:         "az1",
+					TotalInstanceCommitments: 1,
+					TotalVCPUsCommitted:      1 * 2,
+					TotalRAMCommittedMB:      2048 + 1*4096,
+					TotalDiskCommittedGB:     1 * 20,
+				},
+				{
+					ProjectID:                "project-123",
+					AvailabilityZone:         "az2",
+					TotalInstanceCommitments: 2,
+					TotalVCPUsCommitted:      2 * 4,
+					TotalRAMCommittedMB:      4048 + 2*8192,
+					TotalDiskCommittedGB:     2 * 40,
+				},
 			},
 		},
 	}
