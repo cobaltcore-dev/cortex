@@ -112,5 +112,4 @@ func (k *UnusedCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 			c.AvailabilityZone,
 		)
 	}
-
 }
