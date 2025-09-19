@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
@@ -158,5 +159,9 @@ func (r *ComputeReservationReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&reservationsv1alpha1.ComputeReservation{}).
 		Named("computereservation").
+		WithOptions(controller.Options{
+			// We want to process reservations one at a time to avoid overbooking.
+			MaxConcurrentReconciles: 1,
+		}).
 		Complete(r)
 }
