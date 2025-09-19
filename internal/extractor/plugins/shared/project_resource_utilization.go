@@ -34,7 +34,7 @@ type ProjectResourceUtilization struct {
 
 // Table under which the feature is stored.
 func (ProjectResourceUtilization) TableName() string {
-	return "feature_project_resource_utilization"
+	return "feature_project_resource_utilization_v2"
 }
 
 // Indexes for the feature.
