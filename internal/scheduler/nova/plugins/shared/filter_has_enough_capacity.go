@@ -19,7 +19,7 @@ import (
 
 type FilterHasEnoughCapacityOpts struct {
 	// If reserved space should be locked even for matching requests.
-	LockReservedForMatching bool `json:"lockReservedForMatching"`
+	LockReserved bool `json:"lockReserved"`
 }
 
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
@@ -82,7 +82,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue // Not handled by us.
 		}
 		// If the requested vm matches this reservation, free the resources.
-		if !s.Options.LockReservedForMatching &&
+		if !s.Options.LockReserved &&
 			reservation.Spec.Scheduler.CortexNova.ProjectID == request.Spec.Data.ProjectID &&
 			reservation.Spec.Scheduler.CortexNova.FlavorName == request.Spec.Data.Flavor.Data.Name {
 			traceLog.Info("unlocking resources reserved by matching reservation", "reservation", reservation.Name)

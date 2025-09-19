@@ -526,7 +526,7 @@ cortex-core:
                   # For the reservations pipeline, we don't want to unlock
                   # reserved space, to avoid reservations for the same project
                   # and flavor to overlap.
-                  lockReservedForMatching: true
+                  lockReserved: true
                 disabledValidations:
                   sameSubjectNumberInOut: true
                 dependencies: {extractors: [host_utilization_extractor]}
