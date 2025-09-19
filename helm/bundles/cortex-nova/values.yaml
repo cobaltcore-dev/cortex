@@ -340,6 +340,12 @@ cortex-core:
             extractors:
               - sap_host_details_extractor
         # Shared KPIs.
+        - name: unused_commitments_kpi
+          dependencies:
+            extractors:
+              - host_az_extractor
+              - project_resource_commitments_extractor
+              - project_resource_utilization_extractor
         - name: vm_migration_statistics_kpi
           dependencies:
             extractors:
