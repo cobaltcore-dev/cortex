@@ -17,8 +17,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type FilterHasEnoughCapacityOpts struct {
+	// If reserved space should be locked even for matching requests.
+	LockReservedForMatching bool `json:"lockReservedForMatching"`
+}
+
+func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
+
 type FilterHasEnoughCapacity struct {
-	scheduler.BaseStep[api.ExternalSchedulerRequest, scheduler.EmptyStepOpts]
+	scheduler.BaseStep[api.ExternalSchedulerRequest, FilterHasEnoughCapacityOpts]
 
 	// Kubernetes client.
 	Client client.Client
@@ -75,7 +82,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue // Not handled by us.
 		}
 		// If the requested vm matches this reservation, free the resources.
-		if reservation.Spec.Scheduler.CortexNova.ProjectID == request.Spec.Data.ProjectID &&
+		if !s.Options.LockReservedForMatching &&
+			reservation.Spec.Scheduler.CortexNova.ProjectID == request.Spec.Data.ProjectID &&
 			reservation.Spec.Scheduler.CortexNova.FlavorName == request.Spec.Data.Flavor.Data.Name {
 			traceLog.Info("unlocking resources reserved by matching reservation", "reservation", reservation.Name)
 			continue

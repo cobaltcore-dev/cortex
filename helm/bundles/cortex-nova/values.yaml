@@ -521,6 +521,12 @@ cortex-core:
 
               # Only get hosts that have sufficient space for the requested flavor.
               - name: filter_has_enough_capacity
+                options:
+                  # If reserved space should be locked even for matching requests.
+                  # For the reservations pipeline, we don't want to unlock
+                  # reserved space, to avoid reservations for the same project
+                  # and flavor to overlap.
+                  lockReservedForMatching: true
                 disabledValidations:
                   sameSubjectNumberInOut: true
                 dependencies: {extractors: [host_utilization_extractor]}
