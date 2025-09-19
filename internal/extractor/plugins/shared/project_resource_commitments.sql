@@ -14,6 +14,7 @@ WITH instance_commitments AS (
     LEFT JOIN openstack_flavors_v2 f ON f.name = REPLACE(c.resource_name, 'instances_', '')
     WHERE c.service_type = 'compute'
       AND c.resource_name LIKE 'instances_%'
+      AND c.status = 'confirmed' -- Might need to change that wen 'guaranteed' is supported
     GROUP BY c.project_id, c.availability_zone
 ),
 -- Get all bare resource commitments (cores and ram) per project
@@ -26,7 +27,7 @@ bare_commitments AS (
         SUM(CASE WHEN resource_name = 'cores' THEN amount ELSE 0 END) as total_committed_vcpus,
         SUM(CASE WHEN resource_name = 'ram' THEN amount ELSE 0 END) as total_committed_ram_mb
     FROM openstack_limes_commitments_v2
-    WHERE service_type = 'compute' AND resource_name IN ('cores', 'ram')
+    WHERE service_type = 'compute' AND resource_name IN ('cores', 'ram') AND status = 'confirmed'
     GROUP BY project_id, availability_zone
 )
 SELECT
