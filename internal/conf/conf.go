@@ -200,6 +200,22 @@ type ManilaSchedulerPipelineConfig struct {
 type NovaSchedulerConfig struct {
 	// Pipelines in this scheduler.
 	Pipelines []NovaSchedulerPipelineConfig `json:"pipelines"`
+	// Configuration for the Liquid API.
+	LiquidAPI NovaSchedulerLiquidAPIConfig `json:"liquidAPI"`
+}
+
+type NovaHypervisorType = string
+
+const (
+	NovaHypervisorTypeQEMU   NovaHypervisorType = "QEMU"
+	NovaHypervisorTypeCH     NovaHypervisorType = "CH" // Cloud hypervisor
+	NovaHypervisorTypeVMware NovaHypervisorType = "VMware vCenter Server"
+	NovaHypervisorTypeIronic NovaHypervisorType = "ironic"
+)
+
+type NovaSchedulerLiquidAPIConfig struct {
+	// Hypervisors that should be handled by the api.
+	Hypervisors []NovaHypervisorType `json:"hypervisors"`
 }
 
 type NovaSchedulerPipelineConfig struct {

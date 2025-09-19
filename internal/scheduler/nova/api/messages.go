@@ -105,7 +105,7 @@ type NovaSpec struct {
 	UserID           string `json:"user_id"`
 	InstanceUUID     string `json:"instance_uuid"`
 	AvailabilityZone string `json:"availability_zone"`
-	NumInstances     int    `json:"num_instances"`
+	NumInstances     uint64 `json:"num_instances"`
 	IsBfv            bool   `json:"is_bfv"`
 
 	// Consider using GetSchedulerHintStr.

@@ -362,6 +362,20 @@ cortex-core:
 
     scheduler:
       nova:
+        # Configuration for the Liquid API.
+        liquidAPI:
+          # Which hypervisor types should be handled by the commitments
+          # acceptance endpoint of the scheduler.
+          #
+          # Please note that the strings here must match exactly with the
+          # `capabilities:hypervisor_type` extra spec in the flavors.
+          hypervisors:
+            - "QEMU"
+            - "CH" # Cloud hypervisor
+            # Not supported:
+            # - "VMware vCenter Server"
+            # - "ironic"
+
         pipelines:
           # Note: there needs to be at least one pipeline with the name "default".
           - name: default
@@ -518,6 +532,7 @@ cortex-core:
               - name: filter_host_instructions
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
 
               # Only get hosts that have sufficient space for the requested flavor.
               - name: filter_has_enough_capacity
@@ -529,6 +544,7 @@ cortex-core:
                   lockReserved: true
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
                 dependencies: {extractors: [host_utilization_extractor]}
 
               # Check if the traits required/forbidden in the flavor extra spec
@@ -536,12 +552,14 @@ cortex-core:
               - name: filter_has_requested_traits
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
                 dependencies: {extractors: [host_capabilities_extractor]}
 
               # If requested, only get hosts with accelerators.
               - name: filter_has_accelerators
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
                 dependencies: {sync: { openstack: {
                   nova: {types: [servers]},
                   placement: {types: [traits] },
@@ -557,6 +575,7 @@ cortex-core:
               - name: filter_disabled
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
                 dependencies: {sync: { openstack: {
                   nova: {types: [servers]},
                   placement: {types: [traits] },
@@ -567,6 +586,7 @@ cortex-core:
               - name: filter_external_customer
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
                 options:
                   domainNamePrefixes: ["iaas-"]
                 dependencies: {sync: { openstack: {
@@ -578,6 +598,7 @@ cortex-core:
               - name: filter_packed_virtqueue
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
                 dependencies: {sync: { openstack: {
                   nova: {types: [servers]},
                   placement: {types: [traits] },
@@ -588,6 +609,7 @@ cortex-core:
               - name: filter_project_aggregates
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
                 dependencies: {sync: { openstack: {
                   nova: {types: [aggregates]},
                 }}}
@@ -597,6 +619,7 @@ cortex-core:
               - name: filter_compute_capabilities
                 disabledValidations:
                   sameSubjectNumberInOut: true
+                  someSubjectsRemain: true
                 dependencies: {sync: { openstack: {
                   nova: {types: [hypervisors]},
                 }}}
