@@ -28,7 +28,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Get all changed library Chart.yaml files
         id: changed-chart-yaml-files-library
-        uses: tj-actions/changed-files@v46
+        uses: tj-actions/changed-files@v47
         with:
           files: |
             helm/library/**/Chart.yaml
@@ -46,7 +46,7 @@ jobs:
           done
       - name: Get all changed bundle Chart.yaml files
         id: changed-chart-yaml-files-bundle
-        uses: tj-actions/changed-files@v46
+        uses: tj-actions/changed-files@v47
         with:
           files: |
             helm/bundles/**/Chart.yaml
@@ -64,7 +64,7 @@ jobs:
           done
       - name: Get all changed reservations Chart.yaml files
         id: changed-chart-yaml-files-reservations
-        uses: tj-actions/changed-files@v46
+        uses: tj-actions/changed-files@v47
         with:
           files: |
             reservations/dist/chart/Chart.yaml
