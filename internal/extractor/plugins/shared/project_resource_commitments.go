@@ -18,7 +18,7 @@ type ProjectResourceCommitments struct {
 	// ID of the project.
 	ProjectID string `db:"project_id, primarykey"`
 	// Availability zone of the commitments.
-	AvailabilityZone string `db:"availability_zone, primarykey"`
+	AvailabilityZone string `db:"availability_zone,primarykey"`
 	// Total number of servers of the project.
 	TotalInstanceCommitments int64 `db:"total_instance_commitments"`
 	// Total number of servers of the project with a flavor that could not be resolved.
