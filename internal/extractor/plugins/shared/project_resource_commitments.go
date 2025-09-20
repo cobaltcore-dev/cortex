@@ -16,7 +16,7 @@ import (
 // Feature to calculate the total resource (vcpu, ram) commitments of all projects with commitments.
 type ProjectResourceCommitments struct {
 	// ID of the project.
-	ProjectID string `db:"project_id, primarykey"`
+	ProjectID string `db:"project_id,primarykey"`
 	// Availability zone of the commitments.
 	AvailabilityZone string `db:"availability_zone,primarykey"`
 	// Total number of servers of the project.
