@@ -176,7 +176,7 @@ func TestProjectResourceUtilizationExtractor_Extract(t *testing.T) {
 			},
 		},
 		{
-			name: "should return nil as availability zone if the host has no a availability zone",
+			name: "should return nil as availability zone if the host has no availability zone",
 			mockData: []any{
 				// Projects
 				&identity.Project{ID: "project-123"},
