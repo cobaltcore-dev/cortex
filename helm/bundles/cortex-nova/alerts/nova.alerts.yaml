@@ -60,6 +60,42 @@ groups:
         This is no immediate problem, since Nova will continue placing new VMs.
         However, the placement will be less desirable.
 
+  - alert: CortexNovaKPIsDown
+    expr: |
+      up{component="cortex-nova-kpis", namespace="cortex-nova"} != 1 or
+      absent(up{component="cortex-nova-kpis", namespace="cortex-nova"})
+    for: 5m
+    labels:
+      context: liveness
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Cortex KPI service is down"
+      description: >
+        The Cortex KPI service is down. This means that no new metrics will be
+        exported about the scheduling quality and resource usage in the
+        datacenter.
+
+  - alert: CortexNovaDeschedulerDown
+    expr: |
+      up{component="cortex-nova-descheduler", namespace="cortex-nova"} != 1 or
+      absent(up{component="cortex-nova-descheduler", namespace="cortex-nova"})
+    for: 5m
+    labels:
+      context: liveness
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Cortex Descheduler is down"
+      description: >
+        The Cortex Descheduler is down. This means that no VMs will be
+        descheduled and migrated to improve the resource usage in the
+        datacenter.
+
   - alert: CortexNovaDeschedulerPipelineErroring
     expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{component=~"cortex-nova-.*", error="true", namespace="cortex-nova"}[2m]) > 0
     for: 5m
