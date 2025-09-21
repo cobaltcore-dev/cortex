@@ -254,6 +254,85 @@ func TestUnusedCommitmentsKPI_Collect(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "should support project across multiple availability zones",
+			mockData: []any{
+				// Commitments
+				&shared.ProjectResourceCommitments{
+					ProjectID:           "project-1",
+					AvailabilityZone:    "az1",
+					TotalVCPUsCommitted: 2,
+					TotalRAMCommittedMB: 2048,
+				},
+				&shared.ProjectResourceCommitments{
+					ProjectID:           "project-1",
+					AvailabilityZone:    "az2",
+					TotalVCPUsCommitted: 2,
+					TotalRAMCommittedMB: 2048,
+				},
+
+				// Availability zones
+				&shared.HostAZ{AvailabilityZone: testlib.Ptr("az1")},
+				&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2")},
+			},
+			expected: map[string]UnusedCommitmentsMetric{
+				"az1|cpu": {
+					AvailabilityZone: "az1",
+					Resource:         "cpu",
+					Value:            2,
+				},
+				"az1|ram": {
+					AvailabilityZone: "az1",
+					Resource:         "ram",
+					Value:            2048,
+				},
+				"az2|cpu": {
+					AvailabilityZone: "az2",
+					Resource:         "cpu",
+					Value:            2,
+				},
+				"az2|ram": {
+					AvailabilityZone: "az2",
+					Resource:         "ram",
+					Value:            2048,
+				},
+			},
+		},
+		{
+			name: "should ignore usage from other projects",
+			mockData: []any{
+				// Utilization
+				&shared.ProjectResourceUtilization{
+					ProjectID:        "project-1",
+					AvailabilityZone: testlib.Ptr("az1"),
+					TotalVCPUsUsed:   2,
+					TotalRAMUsedMB:   2048,
+				},
+
+				// Commitments
+				&shared.ProjectResourceCommitments{
+					ProjectID:           "project-2",
+					AvailabilityZone:    "az1",
+					TotalVCPUsCommitted: 2,
+					TotalRAMCommittedMB: 2048,
+				},
+
+				// Availability zones
+				&shared.HostAZ{AvailabilityZone: testlib.Ptr("az1")},
+			},
+			expected: map[string]UnusedCommitmentsMetric{
+				"az1|cpu": {
+					AvailabilityZone: "az1",
+					Resource:         "cpu",
+					Value:            2,
+				},
+				"az1|ram": {
+					AvailabilityZone: "az1",
+					Resource:         "ram",
+					Value:            2048,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
