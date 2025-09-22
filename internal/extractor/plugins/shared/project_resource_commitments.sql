@@ -14,7 +14,7 @@ WITH instance_commitments AS (
     LEFT JOIN openstack_flavors_v2 f ON f.name = REPLACE(c.resource_name, 'instances_', '')
     WHERE c.service_type = 'compute'
       AND c.resource_name LIKE 'instances_%'
-      AND c.status = 'confirmed' -- Might need to change that wen 'guaranteed' is supported
+      AND c.status = 'confirmed' -- Might need to change that when 'guaranteed' is supported
     GROUP BY c.project_id, c.availability_zone
 ),
 -- Get all bare resource commitments (cores and ram) per project
