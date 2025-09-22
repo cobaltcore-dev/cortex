@@ -36,7 +36,7 @@ func (k *UnusedCommitmentsKPI) Init(db db.DB, opts conf.RawOpts) error {
 		return err
 	}
 	k.unusedCommitmentsSum = prometheus.NewDesc(
-		"cortex_project_commitments_unused",
+		"cortex_resource_commitments_unused",
 		"Current amount of unused commitments over all projects per availability_zone.",
 		[]string{
 			"resource",
@@ -83,6 +83,7 @@ func (k *UnusedCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
             ), 0) AS ram_unused_mb
         FROM (
             SELECT DISTINCT availability_zone FROM feature_host_az
+			WHERE availability_zone IS NOT NULL
         ) azs
         LEFT JOIN ` + projectCommitmentsTable + ` AS comm
             ON comm.availability_zone = azs.availability_zone

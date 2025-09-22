@@ -333,6 +333,14 @@ func TestUnusedCommitmentsKPI_Collect(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "should ignore usage of nil availbility zone",
+			mockData: []any{
+				// Availability zones
+				&shared.HostAZ{AvailabilityZone: nil},
+			},
+			expected: map[string]UnusedCommitmentsMetric{},
+		},
 	}
 
 	for _, tt := range tests {
