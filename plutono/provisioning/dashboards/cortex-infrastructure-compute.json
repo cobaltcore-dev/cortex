@@ -275,7 +275,7 @@
               "vCPU": 1
             },
             "renameByName": {
-              "Available": "Available - Commited",
+              "Available": "Available - Committed",
               "Available (without commitments)": "Available",
               "Capacity (%)": "",
               "Total": "Total",
@@ -439,7 +439,7 @@
               "Total": 4
             },
             "renameByName": {
-              "Available": "Available - Commited",
+              "Available": "Available - Committed",
               "Available (without commitments)": "Available",
               "Capacity (%)": "",
               "RAM": "Unused Commitments",
