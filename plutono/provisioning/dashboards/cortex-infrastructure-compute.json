@@ -15,8 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 530,
-  "iteration": 1757528485612,
+  "id": 11,
+  "iteration": 1758534821593,
   "links": [],
   "panels": [
     {
@@ -45,7 +45,7 @@
           },
           "id": 195,
           "options": {
-            "content": "# Capacity Overview by Workload Type & CPU Architecture\n\nThis section displays current resource utilization organized by **workload type** (General Purpose, HANA) and **CPU architecture** (Cascade Lake, Sapphire Rapids). The visualizations show available capacity percentages for CPU, RAM, and Disk resources across your infrastructure.\n\n**Note:** All capacity calculations are based on Cortex's knowledge database, which includes potential overcommit scenarios (e.g. vCPU overcommit) and considers all initial placement/scheduling constraints and objectives to provide realistic capacity estimates.\n\n## Current Filters Applied\nThe displayed data is filtered based on your current selections:\n- **Availability Zone**: Controls which zones are included in the analysis\n- **Hypervisor Family**: Filters by virtualization platform (KVM, VMware)\n\n## Understanding the Metrics\nEach panel shows the percentage of **available capacity** (not utilization) for the selected resource type. Higher percentages indicate more available resources for new workloads.\n\n---\n\nFor detailed breakdowns and historical trends, explore the **\"Total Over Current Selection\"** section below, where you can:\n- View aggregated totals across your current filter selection\n- Analyze capacity trends over time\n- Examine per-host capacity distribution\n- Apply additional filters for deeper analysis (specific hypervisors, workload types, CPU architectures)",
+            "content": "# Cortex Infrastructure Dashboard - Compute\n\nWelcome to the Cortex Infrastructure Dashboard for the compute scheduling domain of Cortex! This dashboard provides real-time insights into the current state of our data centers and their available capacity for virtual machine placement.\nThe dashboard is built on top of the Cortex Knowledge Database, with all metrics directly exported by Cortex. This ensures that the data you see here is exactly the same data used for our actual scheduling decisions.\n\nThis dashboard is still under active development. We welcome your feedback and contributions! Please feel free to reach out to use if you want to contribute or have suggestions for improvements.\n\nThe data displayed in this dashboard represents the available capacity of each hypervisor with the following important considerations:\n\n- **Includes overcommits** - The capacity values reflect overcommitted resources as configured in the system.\n- **Failover capacity limitations** - Failover capacity is automatically excluded from the displayed values, meaning the capacity you see is what's actually available for new VM placements. However, we cannot currently show you how much capacity is being reserved for failover scenarios.\n- **Commitments not included** - The displayed capacity does not yet account for resource commitments, so this is not the final available capacity for scheduling decisions\n\n## Filters\n\n| Filter | Description |\n|--------|-------------|\n| **Availability Zone** | See the whole region or filter by specific availability zones |\n| **Hypervisor Family** | Filter by virtualization platform (KVM, VMware) |\n| **Specific Hypervisors** | Drill down to individual hypervisors |\n| **Enabled** | TODO |\n| **Workload Type** | Workload type that is supposed to run on this hypervisor. General Purpose, HANA |\n| **CPU Architecture** | CPU Architecture of the hypervisor. Cascade Lake, Sapphire Rapids |\n| **Project ID** | Filter the capacity for a specific projects. This does then include all hypervisors that allow every project as well as hypervisors that are dedicated to the specific project. |\n\n## Structure\n\nThe dashboard is organized into two main sections to provide both quick insights and detailed analysis capabilities:\n\n### Pre-filtered Sections\n\nAt the top of the dashboard, you'll find 4 pre-configured sections that represent the most common combinations of workload type and CPU architecture:\n\nThese sections are designed to save you time by eliminating the need to manually apply workload type and CPU architecture filters every time you open the dashboard. Obviously the filters for workload type and cpu architecture are already applied, but you can still use additional filters (Availability Zone, Hypervisor Family, etc.) on top of these pre-configured views.\n\nEach pre-filtered section includes:\n\n- Time series data showing available capacity trends per resource\n- Current available capacity per resource\n- Current number of hypervisors considered in the section\n- Linear trend analysis showing projected future capacity\n\n### Custom Analysis Section\n\nBelow the pre-filtered sections, there's a flexible analysis section where you can:\n\n- Apply any combination of filters according to your specific needs\n- Access the same visualization panels as in the pre-filtered sections\n- View additional detailed information about individual hypervisors (not just aggregated values)\n",
             "mode": "markdown"
           },
           "pluginVersion": "7.5.41",
@@ -65,13 +65,400 @@
       "type": "row"
     },
     {
-      "collapsed": true,
+      "collapsed": false,
       "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 1
+      },
+      "id": 312,
+      "panels": [],
+      "title": "Commitments",
+      "type": "row"
+    },
+    {
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 2
+      },
+      "id": 314,
+      "links": [
+        {
+          "title": "Commitments Dashboard",
+          "url": "/d/cortex-commitments?orgId=1&refresh=1m"
+        }
+      ],
+      "options": {
+        "content": "# Committed Resources\n\nCustomers can commit to resources for a specific time frame, which enables better capacity planning and provides them with discounted pricing.\n\nWhen a customer purchases a commitment, we must reserve that capacity even if it's not actively being used. This reduces our available capacity pool, ensuring the committed resources remain accessible to the customer when needed.\n\n**Current Limitations**: \n- Commitments are not tied to specific hosts yet\n- Filtering of the commitments is currently limited to availability zones only\n\n**Filters you can apply here to the available capacity**:\n- `project_id`\n- `enabled`",
+        "mode": "markdown"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Description",
+      "type": "text"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "rgba(242, 73, 92, 0)",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Capacity (%)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.2
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.3
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 2
+      },
+      "id": 310,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(max by (availability_zone) (cortex_resource_commitments_unused{availability_zone=~\"$availability_zone\", resource=\"cpu\"}))",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "vCPU",
+          "queryType": "randomWalk",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "legendFormat": "",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "legendFormat": "Available (without commitments)",
+          "refId": "C"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "legendFormat": "Total",
+          "refId": "D"
+        }
+      ],
+      "title": "vCPUs",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Available",
+            "binary": {
+              "left": "Available (without commitments)",
+              "operator": "-",
+              "reducer": "sum",
+              "right": "vCPU"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Capacity (%)",
+            "binary": {
+              "left": "Available",
+              "operator": "/",
+              "reducer": "sum",
+              "right": "Total"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Available": 3,
+              "Available (without commitments)": 2,
+              "Capacity (%)": 5,
+              "Time": 0,
+              "Total": 4,
+              "vCPU": 1
+            },
+            "renameByName": {
+              "Available": "Available - Committed",
+              "Available (without commitments)": "Available",
+              "Capacity (%)": "",
+              "Total": "Total",
+              "vCPU": "Unused Commitments"
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": "prometheus-openstack",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "rgba(242, 73, 92, 0)",
+                "value": null
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Capacity (%)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.2
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.3
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 2
+      },
+      "id": 315,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(max by (availability_zone) (cortex_resource_commitments_unused{availability_zone=~\"$availability_zone\", resource=\"ram\"}))",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "RAM",
+          "queryType": "randomWalk",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "legendFormat": "Available (without commitments)",
+          "refId": "C"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      pinned_projects=~\"(^$|.*$project_id.*)\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "legendFormat": "Total",
+          "refId": "D"
+        }
+      ],
+      "title": "RAM",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Available",
+            "binary": {
+              "left": "Available (without commitments)",
+              "operator": "-",
+              "reducer": "sum",
+              "right": "RAM"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Capacity (%)",
+            "binary": {
+              "left": "Available",
+              "operator": "/",
+              "reducer": "sum",
+              "right": "Total"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Available": 3,
+              "Available (without commitments)": 2,
+              "Capacity (%)": 5,
+              "RAM": 1,
+              "Time": 0,
+              "Total": 4
+            },
+            "renameByName": {
+              "Available": "Available - Committed",
+              "Available (without commitments)": "Available",
+              "Capacity (%)": "",
+              "RAM": "Unused Commitments",
+              "Total": "Total",
+              "vCPU": "Unused Commitments"
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "collapsed": true,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 10
       },
       "id": 214,
       "panels": [
@@ -131,7 +518,7 @@
             "h": 11,
             "w": 2,
             "x": 0,
-            "y": 2
+            "y": 3
           },
           "id": 291,
           "options": {
@@ -192,7 +579,7 @@
             "h": 11,
             "w": 7,
             "x": 2,
-            "y": 2
+            "y": 3
           },
           "hiddenSeries": false,
           "id": 292,
@@ -405,7 +792,7 @@
                   }
                 ]
               },
-              "unit": "none"
+              "unit": "short"
             },
             "overrides": [
               {
@@ -478,7 +865,7 @@
             "h": 11,
             "w": 5,
             "x": 9,
-            "y": 2
+            "y": 3
           },
           "id": 293,
           "options": {
@@ -665,7 +1052,7 @@
             "h": 11,
             "w": 5,
             "x": 14,
-            "y": 2
+            "y": 3
           },
           "id": 294,
           "options": {
@@ -852,7 +1239,7 @@
             "h": 11,
             "w": 5,
             "x": 19,
-            "y": 2
+            "y": 3
           },
           "id": 295,
           "options": {
@@ -961,7 +1348,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 2
+        "y": 11
       },
       "id": 230,
       "panels": [
@@ -1021,7 +1408,7 @@
             "h": 11,
             "w": 2,
             "x": 0,
-            "y": 14
+            "y": 4
           },
           "id": 246,
           "options": {
@@ -1082,7 +1469,7 @@
             "h": 11,
             "w": 7,
             "x": 2,
-            "y": 14
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 243,
@@ -1295,7 +1682,7 @@
                   }
                 ]
               },
-              "unit": "none"
+              "unit": "short"
             },
             "overrides": [
               {
@@ -1368,7 +1755,7 @@
             "h": 11,
             "w": 5,
             "x": 9,
-            "y": 14
+            "y": 4
           },
           "id": 288,
           "options": {
@@ -1555,7 +1942,7 @@
             "h": 11,
             "w": 5,
             "x": 14,
-            "y": 14
+            "y": 4
           },
           "id": 289,
           "options": {
@@ -1742,7 +2129,7 @@
             "h": 11,
             "w": 5,
             "x": 19,
-            "y": 14
+            "y": 4
           },
           "id": 290,
           "options": {
@@ -1850,7 +2237,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 12
       },
       "id": 226,
       "panels": [
@@ -1910,7 +2297,7 @@
             "h": 11,
             "w": 2,
             "x": 0,
-            "y": 4
+            "y": 5
           },
           "id": 299,
           "options": {
@@ -1971,7 +2358,7 @@
             "h": 11,
             "w": 7,
             "x": 2,
-            "y": 4
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 300,
@@ -2184,7 +2571,7 @@
                   }
                 ]
               },
-              "unit": "none"
+              "unit": "short"
             },
             "overrides": [
               {
@@ -2257,7 +2644,7 @@
             "h": 11,
             "w": 5,
             "x": 9,
-            "y": 4
+            "y": 5
           },
           "id": 301,
           "options": {
@@ -2444,7 +2831,7 @@
             "h": 11,
             "w": 5,
             "x": 14,
-            "y": 4
+            "y": 5
           },
           "id": 302,
           "options": {
@@ -2631,7 +3018,7 @@
             "h": 11,
             "w": 5,
             "x": 19,
-            "y": 4
+            "y": 5
           },
           "id": 303,
           "options": {
@@ -2739,7 +3126,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 13
       },
       "id": 228,
       "panels": [
@@ -2799,7 +3186,7 @@
             "h": 11,
             "w": 2,
             "x": 0,
-            "y": 5
+            "y": 6
           },
           "id": 304,
           "options": {
@@ -2860,7 +3247,7 @@
             "h": 11,
             "w": 7,
             "x": 2,
-            "y": 5
+            "y": 6
           },
           "hiddenSeries": false,
           "id": 305,
@@ -3073,7 +3460,7 @@
                   }
                 ]
               },
-              "unit": "none"
+              "unit": "short"
             },
             "overrides": [
               {
@@ -3146,7 +3533,7 @@
             "h": 11,
             "w": 5,
             "x": 9,
-            "y": 5
+            "y": 6
           },
           "id": 306,
           "options": {
@@ -3333,7 +3720,7 @@
             "h": 11,
             "w": 5,
             "x": 14,
-            "y": 5
+            "y": 6
           },
           "id": 307,
           "options": {
@@ -3520,7 +3907,7 @@
             "h": 11,
             "w": 5,
             "x": 19,
-            "y": 5
+            "y": 6
           },
           "id": 308,
           "options": {
@@ -3628,7 +4015,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 14
       },
       "id": 165,
       "panels": [],
@@ -3652,7 +4039,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "short"
         },
         "overrides": [
           {
@@ -3722,10 +4109,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 0,
-        "y": 6
+        "y": 15
       },
       "id": 296,
       "options": {
@@ -3743,7 +4130,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -3909,10 +4296,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 8,
-        "y": 6
+        "y": 15
       },
       "id": 297,
       "options": {
@@ -3930,7 +4317,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -4096,10 +4483,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 16,
-        "y": 6
+        "y": 15
       },
       "id": 298,
       "options": {
@@ -4117,7 +4504,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -4212,7 +4599,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 14
+        "y": 24
       },
       "hiddenSeries": false,
       "id": 183,
@@ -4232,7 +4619,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4331,7 +4718,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 14
+        "y": 24
       },
       "hiddenSeries": false,
       "id": 184,
@@ -4351,7 +4738,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4450,7 +4837,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 14
+        "y": 24
       },
       "hiddenSeries": false,
       "id": 185,
@@ -4470,7 +4857,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4567,7 +4954,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 22
+        "y": 32
       },
       "hiddenSeries": false,
       "id": 187,
@@ -4587,7 +4974,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4686,7 +5073,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 22
+        "y": 32
       },
       "hiddenSeries": false,
       "id": 188,
@@ -4706,7 +5093,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4797,7 +5184,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 22
+        "y": 32
       },
       "hiddenSeries": false,
       "id": 189,
@@ -4817,7 +5204,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -5181,6 +5568,90 @@
                 "value": "-"
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Available vCPUs"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "rgba(242, 73, 92, 0)",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Available RAM"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "rgba(242, 73, 92, 0)",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Available Disk"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "rgba(242, 73, 92, 0)",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
           }
         ]
       },
@@ -5188,14 +5659,14 @@
         "h": 28,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 40
       },
       "id": 217,
       "options": {
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "7.5.41",
+      "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
@@ -5445,7 +5916,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 68
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -5517,7 +5988,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 81
+        "y": 91
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -5589,7 +6060,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 104
+        "y": 114
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -5678,7 +6149,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
+          "selected": true,
           "text": [
             "All"
           ],
@@ -5713,7 +6184,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
+          "selected": true,
           "text": [
             "All"
           ],
@@ -5780,12 +6251,8 @@
         "allValue": null,
         "current": {
           "selected": false,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": "prometheus-openstack",
         "definition": "label_values(cortex_sap_available_capacity_per_host, workload_type)",
@@ -5815,12 +6282,8 @@
         "allValue": null,
         "current": {
           "selected": false,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": "prometheus-openstack",
         "definition": "label_values(cortex_sap_available_capacity_per_host, cpu_architecture)",
@@ -5848,7 +6311,7 @@
       },
       {
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "",
           "value": ""
         },
@@ -5871,12 +6334,12 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-7d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Cortex Infrastructure Dashboard - Compute",
   "uid": "cortex-infrastructure-dashboard-compute",
-  "version": 8
+  "version": 1
 }
