@@ -15,6 +15,7 @@ require (
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/lib/pq v1.10.9
+	github.com/majewsky/gg v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.23.2

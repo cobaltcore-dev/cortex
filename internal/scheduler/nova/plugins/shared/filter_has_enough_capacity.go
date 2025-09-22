@@ -5,6 +5,7 @@ package shared
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -57,6 +58,19 @@ func (s *FilterHasEnoughCapacity) Init(alias string, db db.DB, opts conf.RawOpts
 func (s *FilterHasEnoughCapacity) GetName() string { return "filter_has_enough_capacity" }
 
 // Filter hosts that don't have enough capacity to run the requested flavor.
+//
+// This filter takes the capacity of the hosts and subtracts from it:
+//   - The resources currently used by VMs.
+//   - The resources reserved by active ComputeReservations.
+//
+// In case the project and flavor match, space reserved is unlocked (slotting).
+//
+// Please note that, if num_instances is larger than 1, there needs to be enough
+// capacity to place all instances on the same host. This limitation is necessary
+// because we can't spread out instances, as the final set of valid hosts is not
+// known at this point.
+//
+// Please also note that disk space is currently not considered by this filter.
 func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
 	var hostUtilizations []shared.HostUtilization
@@ -109,11 +123,16 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		if reserved, ok := vcpusReserved[utilization.ComputeHost]; ok {
 			vCPUsAllocatable -= reserved
 		}
-		if vCPUsAllocatable < request.Spec.Data.Flavor.Data.VCPUs {
-			slog.Debug(
+		if request.Spec.Data.Flavor.Data.VCPUs == 0 {
+			return nil, errors.New("flavor has 0 vcpus")
+		}
+		vcpuSlots := vCPUsAllocatable / request.Spec.Data.Flavor.Data.VCPUs // floored.
+		if vcpuSlots < request.Spec.Data.NumInstances {
+			traceLog.Debug(
 				"Filtering host due to insufficient VCPU capacity",
 				slog.String("host", utilization.ComputeHost),
 				slog.Uint64("requested_vcpus", request.Spec.Data.Flavor.Data.VCPUs),
+				slog.Uint64("requested_instances", request.Spec.Data.NumInstances),
 				slog.Float64("available_vcpus", utilization.TotalVCPUsAllocatable),
 			)
 			delete(result.Activations, utilization.ComputeHost)
@@ -123,11 +142,16 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		if reserved, ok := memoryReserved[utilization.ComputeHost]; ok {
 			memoryAllocatableMB -= reserved
 		}
-		if memoryAllocatableMB < request.Spec.Data.Flavor.Data.MemoryMB {
-			slog.Debug(
+		if request.Spec.Data.Flavor.Data.MemoryMB == 0 {
+			return nil, errors.New("flavor has 0 memory")
+		}
+		memorySlots := memoryAllocatableMB / request.Spec.Data.Flavor.Data.MemoryMB // floored.
+		if memorySlots < request.Spec.Data.NumInstances {
+			traceLog.Debug(
 				"Filtering host due to insufficient RAM capacity",
 				slog.String("host", utilization.ComputeHost),
 				slog.Uint64("requested_mb", request.Spec.Data.Flavor.Data.MemoryMB),
+				slog.Uint64("requested_instances", request.Spec.Data.NumInstances),
 				slog.Float64("available_mb", utilization.TotalRAMAllocatableMB),
 			)
 			delete(result.Activations, utilization.ComputeHost)
