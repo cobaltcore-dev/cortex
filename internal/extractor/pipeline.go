@@ -31,6 +31,7 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	// KVM-specific extractors
 	&kvm.NodeExporterHostCPUUsageExtractor{},
 	&kvm.NodeExporterHostMemoryActiveExtractor{},
+	&kvm.LibvirtDomainCPUStealTimeExtractor{},
 	// NetApp-specific extractors
 	&netapp.StoragePoolCPUUsageExtractor{},
 	// Shared extractors
