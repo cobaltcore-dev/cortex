@@ -5,12 +5,12 @@ apiVersion: v3
 name: cortex-cinder
 description: A Helm chart deploying Cortex for Cinder.
 type: application
-version: 0.0.9
+version: 0.0.10
 appVersion: 0.1.0
 dependencies:
   - name: cortex-core
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.25.1
+    version: 0.26.0
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.5.3
