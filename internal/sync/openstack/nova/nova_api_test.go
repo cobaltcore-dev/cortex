@@ -64,7 +64,6 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 	if len(servers) != 1 {
 		t.Fatalf("expected 1 server, got %d", len(servers))
 	}
-
 }
 
 func TestNovaAPI_GetAllHypervisors(t *testing.T) {
@@ -139,7 +138,6 @@ func TestNovaAPI_GetAllFlavors(t *testing.T) {
 	if len(flavors) != 1 {
 		t.Fatalf("expected 1 flavor, got %d", len(flavors))
 	}
-
 }
 
 func TestNovaAPI_GetAllMigrations(t *testing.T) {
