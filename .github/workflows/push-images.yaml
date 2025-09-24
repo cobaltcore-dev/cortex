@@ -17,7 +17,7 @@ jobs:
       packages: write
       attestations: write
       id-token: write
-    runs-on: ubuntu-latest
+    runs-on: large_runner_16core_64gb
     steps:
       - uses: actions/checkout@v5
       - name: Set up QEMU
@@ -34,7 +34,7 @@ jobs:
       # postgres directory.
       - name: Get all changed postgres/ files
         id: changed_postgres_files
-        uses: tj-actions/changed-files@v46
+        uses: tj-actions/changed-files@v47
         with:
           files: |
             postgres/**
@@ -102,7 +102,7 @@ jobs:
       # in the reservations directory.
       - name: Get all changed reservations/ files
         id: changed_reservations_files
-        uses: tj-actions/changed-files@v46
+        uses: tj-actions/changed-files@v47
         with:
           files: |
             reservations/**

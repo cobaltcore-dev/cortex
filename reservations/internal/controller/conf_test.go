@@ -5,8 +5,6 @@ package controller
 
 import (
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 )
 
 func TestConfig_Structure(t *testing.T) {
@@ -16,14 +14,6 @@ func TestConfig_Structure(t *testing.T) {
 			NovaExternalScheduler: "http://localhost:8080",
 		},
 		Hypervisors: []string{"kvm", "vmware"},
-		Keystone: conf.KeystoneConfig{
-			URL:                 "http://keystone:5000/v3",
-			OSUsername:          "test-user",
-			OSPassword:          "test-password",
-			OSProjectName:       "test-project",
-			OSUserDomainName:    "default",
-			OSProjectDomainName: "default",
-		},
 	}
 
 	// Verify the config fields are set correctly
@@ -41,10 +31,6 @@ func TestConfig_Structure(t *testing.T) {
 
 	if config.Hypervisors[1] != "vmware" {
 		t.Errorf("Expected second hypervisor to be 'vmware', got %v", config.Hypervisors[1])
-	}
-
-	if config.Keystone.URL != "http://keystone:5000/v3" {
-		t.Errorf("Expected Keystone URL to be 'http://keystone:5000/v3', got %v", config.Keystone.URL)
 	}
 }
 
@@ -69,10 +55,6 @@ func TestConfig_EmptyValues(t *testing.T) {
 
 	if len(config.Hypervisors) != 0 {
 		t.Errorf("Expected 0 hypervisors, got %d", len(config.Hypervisors))
-	}
-
-	if config.Keystone.URL != "" {
-		t.Errorf("Expected empty Keystone URL, got %v", config.Keystone.URL)
 	}
 }
 

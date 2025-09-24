@@ -3,8 +3,8 @@ groups:
   rules:
   - alert: CortexCinderInitialPlacementDown
     expr: |
-      up{component="cortex-cinder-scheduler"} != 1 or
-      absent(up{component="cortex-cinder-scheduler"})
+      up{component="cortex-cinder-scheduler", namespace="cortex-cinder"} != 1 or
+      absent(up{component="cortex-cinder-scheduler", namespace="cortex-cinder"})
     for: 5m
     labels:
       context: liveness
@@ -22,8 +22,8 @@ groups:
 
   - alert: CortexCinderSyncerDown
     expr: |
-      up{component="cortex-cinder-syncer"} != 1 or
-      absent(up{component="cortex-cinder-syncer"})
+      up{component="cortex-cinder-syncer", namespace="cortex-cinder"} != 1 or
+      absent(up{component="cortex-cinder-syncer", namespace="cortex-cinder"})
     for: 5m
     labels:
       context: liveness
@@ -44,8 +44,8 @@ groups:
 
   - alert: CortexCinderExtractorDown
     expr: |
-      up{component="cortex-cinder-extractor"} != 1 or
-      absent(up{component="cortex-cinder-extractor"})
+      up{component="cortex-cinder-extractor", namespace="cortex-cinder"} != 1 or
+      absent(up{component="cortex-cinder-extractor", namespace="cortex-cinder"})
     for: 5m
     labels:
       context: liveness

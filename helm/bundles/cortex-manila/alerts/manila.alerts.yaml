@@ -3,8 +3,8 @@ groups:
   rules:
   - alert: CortexManilaInitialPlacementDown
     expr: |
-      up{component="cortex-manila-scheduler"} != 1 or
-      absent(up{component="cortex-manila-scheduler"})
+      up{component="cortex-manila-scheduler", namespace="cortex-manila"} != 1 or
+      absent(up{component="cortex-manila-scheduler", namespace="cortex-manila"})
     for: 5m
     labels:
       context: liveness
@@ -22,8 +22,8 @@ groups:
 
   - alert: CortexManilaSyncerDown
     expr: |
-      up{component="cortex-manila-syncer"} != 1 or
-      absent(up{component="cortex-manila-syncer"})
+      up{component="cortex-manila-syncer", namespace="cortex-manila"} != 1 or
+      absent(up{component="cortex-manila-syncer", namespace="cortex-manila"})
     for: 5m
     labels:
       context: liveness
@@ -44,8 +44,8 @@ groups:
 
   - alert: CortexManilaExtractorDown
     expr: |
-      up{component="cortex-manila-extractor"} != 1 or
-      absent(up{component="cortex-manila-extractor"})
+      up{component="cortex-manila-extractor", namespace="cortex-manila"} != 1 or
+      absent(up{component="cortex-manila-extractor", namespace="cortex-manila"})
     for: 5m
     labels:
       context: liveness

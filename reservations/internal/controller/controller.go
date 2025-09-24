@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
@@ -55,36 +55,24 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		log.Info("reservation is already active, skipping", "reservation", req.Name)
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
-	switch res.Spec.Kind {
-	case v1alpha1.ComputeReservationSpecKindInstance:
-		return r.reconcileInstanceReservation(ctx, req, res)
-	case v1alpha1.ComputeReservationSpecKindBareResource:
-		return r.reconcileBareResourceReservation(ctx, req, res)
-	default:
-		log.Info("reservation kind is not supported, skipping", "reservation", req.Name, "kind", res.Spec.Kind)
+
+	// Currently we can only reconcile cortex-nova reservations.
+	if res.Spec.Scheduler.CortexNova == nil {
+		log.Info("reservation is not a cortex-nova reservation, skipping", "reservation", req.Name)
+		res.Status.Error = "reservation is not a cortex-nova reservation"
+		res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed
+		if err := r.Client.Status().Update(ctx, &res); err != nil {
+			log.Error(err, "failed to update reservation status")
+			return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
+		}
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
-}
 
-// Reconcile an instance reservation.
-func (r *ComputeReservationReconciler) reconcileInstanceReservation(
-	ctx context.Context,
-	req ctrl.Request,
-	res v1alpha1.ComputeReservation,
-) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-	spec := res.Spec.Instance
-	hvType, ok := spec.ExtraSpecs["capabilities:hypervisor_type"]
+	schedulerSpec := res.Spec.Scheduler.CortexNova
+	hvType, ok := schedulerSpec.FlavorExtraSpecs["capabilities:hypervisor_type"]
 	if !ok || !slices.Contains(r.Conf.Hypervisors, hvType) {
-		log.Info("hypervisor type is not supported", "reservation", req.Name, "type", hvType)
-		if hvType == "" {
-			res.Status.Error = "hypervisor type is not specified"
-		} else {
-			hvs := r.Conf.Hypervisors
-			sort.Strings(hvs)
-			supported := strings.Join(hvs, ", ")
-			res.Status.Error = fmt.Sprintf("unsupported hv '%s', supported: %s", hvType, supported)
-		}
+		log.Info("hypervisor type is not supported", "reservation", req.Name)
+		res.Status.Error = fmt.Sprintf("hypervisor type is not supported: %s", hvType)
 		res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
@@ -94,23 +82,23 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 	}
 
 	// Convert resource.Quantity to integers for the API
-	memoryValue := spec.Memory.ScaledValue(resource.Mega)
-	if memoryValue < 0 {
-		return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
+	var memoryMB uint64
+	if memory, ok := res.Spec.Requests["memory"]; ok {
+		memoryValue := memory.ScaledValue(resource.Mega)
+		if memoryValue < 0 {
+			return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
+		}
+		memoryMB = uint64(memoryValue)
 	}
-	memoryMB := uint64(memoryValue)
 
-	vCPUsValue := spec.VCPUs.Value()
-	if vCPUsValue < 0 {
-		return ctrl.Result{}, fmt.Errorf("invalid vCPUs value: %d", vCPUsValue)
+	var cpu uint64
+	if cpuQuantity, ok := res.Spec.Requests["cpu"]; ok {
+		cpuValue := cpuQuantity.ScaledValue(resource.Milli)
+		if cpuValue < 0 {
+			return ctrl.Result{}, fmt.Errorf("invalid cpu value: %d", cpuValue)
+		}
+		cpu = uint64(cpuValue)
 	}
-	vCPUs := uint64(vCPUsValue)
-
-	diskValue := spec.Disk.ScaledValue(resource.Giga)
-	if diskValue < 0 {
-		return ctrl.Result{}, fmt.Errorf("invalid disk value: %d", diskValue)
-	}
-	diskGB := uint64(diskValue)
 
 	externalSchedulerRequest := api.ExternalSchedulerRequest{
 		// Pipeline with all filters enabled + preselects all hosts.
@@ -118,14 +106,14 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
 				NumInstances: 1, // One for each reservation.
-				ProjectID:    res.Spec.ProjectID,
+				ProjectID:    schedulerSpec.ProjectID,
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
-						Name:       spec.Flavor,
-						ExtraSpecs: spec.ExtraSpecs,
+						Name:       schedulerSpec.FlavorName,
+						ExtraSpecs: schedulerSpec.FlavorExtraSpecs,
 						MemoryMB:   memoryMB,
-						VCPUs:      vCPUs,
-						RootGB:     diskGB,
+						VCPUs:      cpu,
+						// Disk is currently not considered.
 					},
 				},
 			},
@@ -166,28 +154,14 @@ func (r *ComputeReservationReconciler) reconcileInstanceReservation(
 	return ctrl.Result{}, nil // No need to requeue, the reservation is now active.
 }
 
-// Reconcile a bare resource reservation.
-func (r *ComputeReservationReconciler) reconcileBareResourceReservation(
-	ctx context.Context,
-	req ctrl.Request,
-	res v1alpha1.ComputeReservation,
-) (ctrl.Result, error) {
-
-	log := logf.FromContext(ctx)
-	log.Info("bare resource reservations are not supported", "reservation", req.Name)
-	res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed
-	res.Status.Error = "bare resource reservations are not supported"
-	if err := r.Client.Status().Update(ctx, &res); err != nil {
-		log.Error(err, "failed to update reservation status")
-		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
-	}
-	return ctrl.Result{}, nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *ComputeReservationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&reservationsv1alpha1.ComputeReservation{}).
 		Named("computereservation").
+		WithOptions(controller.Options{
+			// We want to process reservations one at a time to avoid overbooking.
+			MaxConcurrentReconciles: 1,
+		}).
 		Complete(r)
 }

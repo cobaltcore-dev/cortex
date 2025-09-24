@@ -40,6 +40,8 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	&shared.VMLifeSpanHistogramExtractor{},
 	&shared.HostAZExtractor{},
 	&shared.HostPinnedProjectsExtractor{},
+	&shared.ProjectResourceUtilizationExtractor{},
+	&shared.ProjectResourceCommitmentsExtractor{},
 	// SAP-specific extractors
 	&sap.HostDetailsExtractor{},
 }
@@ -202,9 +204,7 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 	for _, extractors := range order {
 		var wg sync.WaitGroup
 		for _, extractor := range extractors {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if !extractor.NeedsUpdate() {
 					slog.Info("feature extractor: skipping extraction", "extractor", extractor.GetName(), "nextExecution", extractor.NextPossibleExecution())
 					extractor.NotifySkip()
@@ -223,7 +223,7 @@ func (p *FeatureExtractorPipeline) extract(order [][]plugins.FeatureExtractor) {
 				} else {
 					slog.Warn("feature extractor extracted no features", "extractor", extractor.GetName())
 				}
-			}()
+			})
 		}
 		wg.Wait()
 	}

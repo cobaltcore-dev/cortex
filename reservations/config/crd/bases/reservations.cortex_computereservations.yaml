@@ -52,91 +52,46 @@ spec:
           spec:
             description: spec defines the desired state of ComputeReservation
             properties:
-              bareResource:
+              creator:
                 description: |-
-                  If reservation kind is bare resource, this field will contain metadata
-                  necessary to determine if the bare resource reservation can be fulfilled.
-                properties:
-                  cpu:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    description: The amount of CPU to reserve (e.g., "2", "500m").
-                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                    x-kubernetes-int-or-string: true
-                  disk:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    description: The amount of disk space to reserve (e.g., "10Gi",
-                      "500Mi").
-                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                    x-kubernetes-int-or-string: true
-                  memory:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    description: The amount of memory to reserve (e.g., "1Gi", "512Mi").
-                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                    x-kubernetes-int-or-string: true
-                required:
-                - cpu
-                - disk
-                - memory
-                type: object
-              domainID:
-                description: The domain ID to reserve for.
+                  A remark that can be used to identify the creator of the reservation.
+                  This can be used to clean up reservations synced from external systems
+                  without touching reservations created manually or by other systems.
                 type: string
-              instance:
-                description: |-
-                  If reservation kind is instance, this field will contain metadata
-                  necessary to determine if the instance reservation can be fulfilled.
+              requests:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: Resources requested to reserve for this instance.
+                type: object
+              scheduler:
+                description: Specification of the scheduler that will handle the reservation.
                 properties:
-                  disk:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    description: The disk space to reserve (e.g., "10Gi", "500Mi").
-                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                    x-kubernetes-int-or-string: true
-                  extraSpecs:
-                    additionalProperties:
-                      type: string
-                    description: Extra specifications for the instance.
+                  cortexNova:
+                    description: |-
+                      If the type of scheduler is cortex-nova, this field will contain additional
+                      information used by cortex-nova to place the instance.
+                    properties:
+                      domainID:
+                        description: The domain ID to reserve for.
+                        type: string
+                      flavorExtraSpecs:
+                        additionalProperties:
+                          type: string
+                        description: Extra specifications relevant for initial placement
+                          of the instance.
+                        type: object
+                      flavorName:
+                        description: The flavor name of the instance to reserve.
+                        type: string
+                      projectID:
+                        description: The project ID to reserve for.
+                        type: string
                     type: object
-                  flavor:
-                    description: The flavor name of the instance to reserve.
-                    type: string
-                  memory:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    description: The memory to reserve (e.g., "1Gi", "512Mi").
-                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                    x-kubernetes-int-or-string: true
-                  vCPUs:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    description: The number of vCPUs to reserve (e.g., "2", "500m").
-                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                    x-kubernetes-int-or-string: true
-                required:
-                - disk
-                - flavor
-                - memory
-                - vCPUs
                 type: object
-              kind:
-                description: The kind of reservation.
-                type: string
-              projectID:
-                description: The project ID to reserve for.
-                type: string
-            required:
-            - domainID
-            - kind
-            - projectID
             type: object
           status:
             description: status defines the observed state of ComputeReservation

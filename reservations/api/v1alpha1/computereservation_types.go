@@ -8,55 +8,35 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// The kind of reservation.
-type ComputeReservationSpecKind string
-
-const (
-	// Reservation for a specific virtual machine configuration.
-	ComputeReservationSpecKindInstance ComputeReservationSpecKind = "instance"
-	// Reservation for a bare resource.
-	ComputeReservationSpecKindBareResource ComputeReservationSpecKind = "bare"
-)
-
-// Specification for an instance reservation.
-type ComputeReservationSpecInstance struct {
-	// The flavor name of the instance to reserve.
-	Flavor string `json:"flavor"`
-	// The memory to reserve (e.g., "1Gi", "512Mi").
-	Memory resource.Quantity `json:"memory"`
-	// The number of vCPUs to reserve (e.g., "2", "500m").
-	VCPUs resource.Quantity `json:"vCPUs"`
-	// The disk space to reserve (e.g., "10Gi", "500Mi").
-	Disk resource.Quantity `json:"disk"`
-	// Extra specifications for the instance.
-	ExtraSpecs map[string]string `json:"extraSpecs,omitempty"`
+// Additional specifications needed to place the reservation.
+type ComputeReservationSchedulerSpec struct {
+	// If the type of scheduler is cortex-nova, this field will contain additional
+	// information used by cortex-nova to place the instance.
+	CortexNova *ComputeReservationSchedulerSpecCortexNova `json:"cortexNova,omitempty"`
 }
 
-// Specification for a bare resource reservation
-type ComputeReservationSpecBareResource struct {
-	// The amount of CPU to reserve (e.g., "2", "500m").
-	CPU resource.Quantity `json:"cpu"`
-	// The amount of memory to reserve (e.g., "1Gi", "512Mi").
-	Memory resource.Quantity `json:"memory"`
-	// The amount of disk space to reserve (e.g., "10Gi", "500Mi").
-	Disk resource.Quantity `json:"disk"`
+// Additional specifications needed by cortex-nova to place the instance.
+type ComputeReservationSchedulerSpecCortexNova struct {
+	// The project ID to reserve for.
+	ProjectID string `json:"projectID,omitempty"`
+	// The domain ID to reserve for.
+	DomainID string `json:"domainID,omitempty"`
+	// The flavor name of the instance to reserve.
+	FlavorName string `json:"flavorName,omitempty"`
+	// Extra specifications relevant for initial placement of the instance.
+	FlavorExtraSpecs map[string]string `json:"flavorExtraSpecs,omitempty"`
 }
 
 // ComputeReservationSpec defines the desired state of ComputeReservation.
 type ComputeReservationSpec struct {
-	Kind ComputeReservationSpecKind `json:"kind"`
-
-	// The project ID to reserve for.
-	ProjectID string `json:"projectID"`
-	// The domain ID to reserve for.
-	DomainID string `json:"domainID"`
-
-	// If reservation kind is instance, this field will contain metadata
-	// necessary to determine if the instance reservation can be fulfilled.
-	Instance ComputeReservationSpecInstance `json:"instance,omitempty"`
-	// If reservation kind is bare resource, this field will contain metadata
-	// necessary to determine if the bare resource reservation can be fulfilled.
-	BareResource ComputeReservationSpecBareResource `json:"bareResource,omitempty"`
+	// A remark that can be used to identify the creator of the reservation.
+	// This can be used to clean up reservations synced from external systems
+	// without touching reservations created manually or by other systems.
+	Creator string `json:"creator,omitempty"`
+	// Specification of the scheduler that will handle the reservation.
+	Scheduler ComputeReservationSchedulerSpec `json:"scheduler,omitempty"`
+	// Resources requested to reserve for this instance.
+	Requests map[string]resource.Quantity `json:"requests,omitempty"`
 }
 
 // The phase in which the reservation is.

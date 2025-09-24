@@ -5,6 +5,7 @@ package shared
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
@@ -17,8 +18,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type FilterHasEnoughCapacityOpts struct {
+	// If reserved space should be locked even for matching requests.
+	LockReserved bool `json:"lockReserved"`
+}
+
+func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
+
 type FilterHasEnoughCapacity struct {
-	scheduler.BaseStep[api.ExternalSchedulerRequest, scheduler.EmptyStepOpts]
+	scheduler.BaseStep[api.ExternalSchedulerRequest, FilterHasEnoughCapacityOpts]
 
 	// Kubernetes client.
 	Client client.Client
@@ -50,6 +58,19 @@ func (s *FilterHasEnoughCapacity) Init(alias string, db db.DB, opts conf.RawOpts
 func (s *FilterHasEnoughCapacity) GetName() string { return "filter_has_enough_capacity" }
 
 // Filter hosts that don't have enough capacity to run the requested flavor.
+//
+// This filter takes the capacity of the hosts and subtracts from it:
+//   - The resources currently used by VMs.
+//   - The resources reserved by active ComputeReservations.
+//
+// In case the project and flavor match, space reserved is unlocked (slotting).
+//
+// Please note that, if num_instances is larger than 1, there needs to be enough
+// capacity to place all instances on the same host. This limitation is necessary
+// because we can't spread out instances, as the final set of valid hosts is not
+// known at this point.
+//
+// Please also note that disk space is currently not considered by this filter.
 func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduler.StepResult, error) {
 	result := s.PrepareResult(request)
 	var hostUtilizations []shared.HostUtilization
@@ -67,25 +88,33 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	// Resources reserved by hosts.
 	vcpusReserved := make(map[string]uint64)  // in vCPUs
 	memoryReserved := make(map[string]uint64) // in MB
-	diskReserved := make(map[string]uint64)   // in GB
 	for _, reservation := range reservations.Items {
 		if reservation.Status.Phase != v1alpha1.ComputeReservationStatusPhaseActive {
 			continue // Only consider active reservations.
 		}
-		if reservation.Spec.Kind != v1alpha1.ComputeReservationSpecKindInstance {
-			continue // Not an instance reservation, skip it.
+		if reservation.Spec.Scheduler.CortexNova == nil {
+			continue // Not handled by us.
+		}
+		// If the requested vm matches this reservation, free the resources.
+		if !s.Options.LockReserved &&
+			reservation.Spec.Scheduler.CortexNova.ProjectID == request.Spec.Data.ProjectID &&
+			reservation.Spec.Scheduler.CortexNova.FlavorName == request.Spec.Data.Flavor.Data.Name {
+			traceLog.Info("unlocking resources reserved by matching reservation", "reservation", reservation.Name)
+			continue
 		}
 		host := reservation.Status.Host
-		instance := reservation.Spec.Instance
-		vcpusReserved[host] += instance.VCPUs.AsDec().UnscaledBig().Uint64()
-		memoryReserved[host] += instance.Memory.AsDec().UnscaledBig().Uint64() / 1000000
-		diskReserved[host] += instance.Disk.AsDec().UnscaledBig().Uint64() / 1000000000
+		if cpu, ok := reservation.Spec.Requests["cpu"]; ok {
+			vcpusReserved[host] += cpu.AsDec().UnscaledBig().Uint64()
+		}
+		if memory, ok := reservation.Spec.Requests["memory"]; ok {
+			memoryReserved[host] += memory.AsDec().UnscaledBig().Uint64() / 1000000 // MB
+		}
+		// Disk is currently not considered.
 	}
 	traceLog.Debug(
 		"reserved resources",
 		"vcpus", vcpusReserved,
 		"memory", memoryReserved,
-		"disk", diskReserved,
 	)
 	hostsEncountered := map[string]struct{}{}
 	for _, utilization := range hostUtilizations {
@@ -94,11 +123,16 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		if reserved, ok := vcpusReserved[utilization.ComputeHost]; ok {
 			vCPUsAllocatable -= reserved
 		}
-		if vCPUsAllocatable < request.Spec.Data.Flavor.Data.VCPUs {
-			slog.Debug(
+		if request.Spec.Data.Flavor.Data.VCPUs == 0 {
+			return nil, errors.New("flavor has 0 vcpus")
+		}
+		vcpuSlots := vCPUsAllocatable / request.Spec.Data.Flavor.Data.VCPUs // floored.
+		if vcpuSlots < request.Spec.Data.NumInstances {
+			traceLog.Debug(
 				"Filtering host due to insufficient VCPU capacity",
 				slog.String("host", utilization.ComputeHost),
 				slog.Uint64("requested_vcpus", request.Spec.Data.Flavor.Data.VCPUs),
+				slog.Uint64("requested_instances", request.Spec.Data.NumInstances),
 				slog.Float64("available_vcpus", utilization.TotalVCPUsAllocatable),
 			)
 			delete(result.Activations, utilization.ComputeHost)
@@ -108,30 +142,22 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		if reserved, ok := memoryReserved[utilization.ComputeHost]; ok {
 			memoryAllocatableMB -= reserved
 		}
-		if memoryAllocatableMB < request.Spec.Data.Flavor.Data.MemoryMB {
-			slog.Debug(
+		if request.Spec.Data.Flavor.Data.MemoryMB == 0 {
+			return nil, errors.New("flavor has 0 memory")
+		}
+		memorySlots := memoryAllocatableMB / request.Spec.Data.Flavor.Data.MemoryMB // floored.
+		if memorySlots < request.Spec.Data.NumInstances {
+			traceLog.Debug(
 				"Filtering host due to insufficient RAM capacity",
 				slog.String("host", utilization.ComputeHost),
 				slog.Uint64("requested_mb", request.Spec.Data.Flavor.Data.MemoryMB),
+				slog.Uint64("requested_instances", request.Spec.Data.NumInstances),
 				slog.Float64("available_mb", utilization.TotalRAMAllocatableMB),
 			)
 			delete(result.Activations, utilization.ComputeHost)
 			continue
 		}
-		diskAllocatableGB := uint64(utilization.TotalDiskAllocatableGB)
-		if reserved, ok := diskReserved[utilization.ComputeHost]; ok {
-			diskAllocatableGB -= reserved
-		}
-		if diskAllocatableGB < request.Spec.Data.Flavor.Data.RootGB {
-			slog.Debug(
-				"Filtering host due to insufficient Disk capacity",
-				slog.String("host", utilization.ComputeHost),
-				slog.Uint64("requested_gb", request.Spec.Data.Flavor.Data.RootGB),
-				slog.Float64("available_gb", utilization.TotalDiskAllocatableGB),
-			)
-			delete(result.Activations, utilization.ComputeHost)
-			continue
-		}
+		// Disk is currently not considered.
 	}
 	// Remove all hosts that weren't encountered.
 	for host := range result.Activations {

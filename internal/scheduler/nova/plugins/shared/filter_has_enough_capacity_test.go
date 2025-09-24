@@ -4,6 +4,7 @@
 package shared
 
 import (
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -76,6 +77,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    2,
@@ -102,6 +104,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    8,
@@ -128,6 +131,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    16,
@@ -154,6 +158,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    32,
@@ -180,6 +185,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    64,
@@ -206,6 +212,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    10, // More than host3 (4) and host5 (2)
@@ -232,6 +239,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    1,
@@ -254,15 +262,16 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			filteredHosts: []string{"host2", "host3", "host5", "host6"},
 		},
 		{
-			name: "Disk constraint only",
+			name: "Very small flavor",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    1,
-								MemoryMB: 1024,
-								RootGB:   600, // More than host3 (250) and host5 (100)
+								MemoryMB: 512,
+								RootGB:   10,
 							},
 						},
 					},
@@ -276,40 +285,15 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 					{ComputeHost: "host6"},
 				},
 			},
-			expectedHosts: []string{"host1", "host4"}, // Only hosts with >= 600 GB disk
-			filteredHosts: []string{"host2", "host3", "host5", "host6"},
-		},
-		{
-			name: "Zero resource flavor",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								VCPUs:    0,
-								MemoryMB: 0,
-								RootGB:   0,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
-				},
-			},
-			expectedHosts: []string{"host1", "host2", "host3", "host4", "host5", "host6"}, // All hosts can handle zero resources
-			filteredHosts: []string{},
+			expectedHosts: []string{"host1", "host2", "host3", "host4", "host5"}, // All except host6 (0 capacity)
+			filteredHosts: []string{"host6"},
 		},
 		{
 			name: "Host not in database",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    2,
@@ -332,6 +316,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    2,
@@ -351,6 +336,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    8, // Exactly matches host2
@@ -375,6 +361,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
+						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								VCPUs:    9,     // Just over host2's 8 vCPUs
@@ -394,10 +381,57 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			expectedHosts: []string{"host1", "host4"}, // Only hosts that exceed the requirements
 			filteredHosts: []string{"host2", "host3"}, // host2 is just under, host3 is well under
 		},
+		{
+			name: "Edge case - exactly enough total slots",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 8,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								VCPUs:    1,
+								MemoryMB: 4096,
+								RootGB:   20,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"}, // 32768/4096 = 8 memory slots, 16/1 = 16 vcpu slots
+					{ComputeHost: "host5"}, // 4096/4096 = 1 memory slot, 2/1 = 2 vcpu slots
+				},
+			},
+			expectedHosts: []string{"host1"}, // Should pass as memorySlotsTotal (8+1=9) == numInstances (9)
+			filteredHosts: []string{"host5"},
+		},
+		{
+			name: "Edge case - 1 vm more than available slots",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 9, // 1 more than available.
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								VCPUs:    1,
+								MemoryMB: 4096,
+								RootGB:   20,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"}, // 32768/4096 = 8 memory slots, 16/1 = 16 vcpu slots
+					{ComputeHost: "host5"}, // 4096/4096 = 1 memory slot, 2/1 = 2 vcpu slots
+				},
+			},
+			expectedHosts: []string{}, // Should fail as memorySlotsTotal (8+1=9) < numInstances (10)
+			filteredHosts: []string{"host1", "host5"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("Running test case: %s", tt.name)
 			step := &FilterHasEnoughCapacity{}
 			step.Client = testClient() // Override the real client with our fake client
 			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
@@ -462,14 +496,16 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: "test-project",
-				DomainID:  "test-domain",
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor: "test-flavor",
-					Memory: *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
-					VCPUs:  *resource.NewQuantity(4, resource.DecimalSI),
-					Disk:   *resource.NewQuantity(100*1024*1024*1024, resource.BinarySI), // 100GB
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+						FlavorName: "test-flavor",
+						ProjectID:  "test-project",
+						DomainID:   "test-domain",
+					},
+				},
+				Requests: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
+					"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -483,14 +519,16 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: "test-project",
-				DomainID:  "test-domain",
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor: "test-flavor",
-					Memory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB
-					VCPUs:  *resource.NewQuantity(4, resource.DecimalSI),
-					Disk:   *resource.NewQuantity(200*1024*1024*1024, resource.BinarySI), // 200GB
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+						FlavorName: "test-flavor",
+						ProjectID:  "test-project",
+						DomainID:   "test-domain",
+					},
+				},
+				Requests: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI), // 4GB
+					"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -504,14 +542,16 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: v1alpha1.ComputeReservationSpec{
-				Kind:      v1alpha1.ComputeReservationSpecKindInstance,
-				ProjectID: "test-project",
-				DomainID:  "test-domain",
-				Instance: v1alpha1.ComputeReservationSpecInstance{
-					Flavor: "test-flavor",
-					Memory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16GB
-					VCPUs:  *resource.NewQuantity(8, resource.DecimalSI),
-					Disk:   *resource.NewQuantity(500*1024*1024*1024, resource.BinarySI), // 500GB
+				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+						FlavorName: "test-flavor",
+						ProjectID:  "test-project",
+						DomainID:   "test-domain",
+					},
+				},
+				Requests: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16GB
+					"cpu":    *resource.NewQuantity(8, resource.DecimalSI),
 				},
 			},
 			Status: v1alpha1.ComputeReservationStatus{
@@ -542,6 +582,7 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 	request := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
+				NumInstances: 1,
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
 						VCPUs:    14,    // host1 has 16 total, 4 reserved = 12 available, so this should fail
@@ -579,6 +620,7 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 	request2 := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
+				NumInstances: 1,
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
 						VCPUs:    10,    // host1 has 16 - 4 = 12 available, so this should pass
@@ -607,5 +649,220 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 	// host2 should be filtered out (8-4=4 vCPUs < 10)
 	if _, ok := result2.Activations["host2"]; ok {
 		t.Error("expected host2 to be filtered out due to insufficient vCPUs after reservations")
+	}
+}
+
+func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	// Create dependency tables
+	err := testDB.CreateTable(
+		testDB.AddTable(shared.HostUtilization{}),
+	)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert mock data into the feature_host_utilization table
+	hostUtilizations := []any{
+		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalRAMAllocatableMB: 16384, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500}, // Limited capacity host
+	}
+	if err := testDB.Insert(hostUtilizations...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	tests := []struct {
+		name                string
+		reservations        []v1alpha1.ComputeReservation
+		request             api.ExternalSchedulerRequest
+		expectedHostPresent bool
+		description         string
+	}{
+		{
+			name: "Reservation matches request - resources should be unlocked",
+			reservations: []v1alpha1.ComputeReservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "matching-reservation",
+						Namespace: "test-namespace",
+					},
+					Spec: v1alpha1.ComputeReservationSpec{
+						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+								FlavorName: "test-flavor",  // Matches request
+								ProjectID:  "test-project", // Matches request
+								DomainID:   "test-domain",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB - consumes all memory
+							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs - consumes half vCPUs
+						},
+					},
+					Status: v1alpha1.ComputeReservationStatus{
+						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+						Host:  "host1",
+					},
+				},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 1,
+						ProjectID:    "test-project", // Matches reservation
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "test-flavor", // Matches reservation
+								VCPUs:    6,             // Would normally fail (8 - 4 = 4 < 6), but reservation should be unlocked
+								MemoryMB: 12288,         // Would normally fail (16384 - 8192 = 8192 < 12288), but reservation should be unlocked
+								RootGB:   200,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			expectedHostPresent: true,
+			description:         "When ProjectID and FlavorName match, reservation resources should be unlocked allowing the request to succeed",
+		},
+		{
+			name: "Reservation does not match ProjectID - resources remain reserved",
+			reservations: []v1alpha1.ComputeReservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "non-matching-project-reservation",
+						Namespace: "test-namespace",
+					},
+					Spec: v1alpha1.ComputeReservationSpec{
+						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+								FlavorName: "test-flavor",       // Matches request
+								ProjectID:  "different-project", // Does NOT match request
+								DomainID:   "test-domain",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB
+							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs
+						},
+					},
+					Status: v1alpha1.ComputeReservationStatus{
+						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+						Host:  "host1",
+					},
+				},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 1,
+						ProjectID:    "test-project", // Does NOT match reservation
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "test-flavor", // Matches reservation
+								VCPUs:    6,             // Should fail (8 - 4 = 4 < 6)
+								MemoryMB: 12288,         // Should fail (16384 - 8192 = 8192 < 12288)
+								RootGB:   200,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			expectedHostPresent: false,
+			description:         "When ProjectID does not match, reservation resources should remain reserved and request should fail",
+		},
+		{
+			name: "Reservation does not match FlavorName - resources remain reserved",
+			reservations: []v1alpha1.ComputeReservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "non-matching-flavor-reservation",
+						Namespace: "test-namespace",
+					},
+					Spec: v1alpha1.ComputeReservationSpec{
+						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+								FlavorName: "different-flavor", // Does NOT match request
+								ProjectID:  "test-project",     // Matches request
+								DomainID:   "test-domain",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8GB
+							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs
+						},
+					},
+					Status: v1alpha1.ComputeReservationStatus{
+						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+						Host:  "host1",
+					},
+				},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 1,
+						ProjectID:    "test-project", // Matches reservation
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "test-flavor", // Does NOT match reservation
+								VCPUs:    6,             // Should fail (8 - 4 = 4 < 6)
+								MemoryMB: 12288,         // Should fail (16384 - 8192 = 8192 < 12288)
+								RootGB:   200,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			expectedHostPresent: false,
+			description:         "When FlavorName does not match, reservation resources should remain reserved and request should fail",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create fake Kubernetes client with reservations
+			scheme := testScheme()
+			var runtimeObjects []runtime.Object
+			for i := range tt.reservations {
+				runtimeObjects = append(runtimeObjects, &tt.reservations[i])
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(runtimeObjects...).
+				Build()
+
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fakeClient // Override the real client with our fake client
+			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			result, err := step.Run(slog.Default(), tt.request)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			// Check if host is present or absent as expected
+			_, hostPresent := result.Activations["host1"]
+			if hostPresent != tt.expectedHostPresent {
+				t.Errorf("Test case: %s\nExpected host1 present: %v, got: %v\nDescription: %s",
+					tt.name, tt.expectedHostPresent, hostPresent, tt.description)
+			}
+
+			// Debug information
+			t.Logf("Test: %s, Host present: %v, Activations: %v", tt.name, hostPresent, result.Activations)
+		})
 	}
 }

@@ -6,10 +6,14 @@ package http
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
@@ -18,6 +22,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler"
 	novaScheduler "github.com/cobaltcore-dev/cortex/internal/scheduler/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
+	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/majewsky/gg/option"
+	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/jobloop"
 )
 
 type HTTPAPI interface {
@@ -27,8 +35,11 @@ type HTTPAPI interface {
 
 type httpAPI struct {
 	pipelines map[string]scheduler.Pipeline[api.ExternalSchedulerRequest]
-	config    conf.SchedulerAPIConfig
+	config    conf.SchedulerConfig // General API config for all schedulers.
 	monitor   scheduler.APIMonitor
+
+	// Database connection to load specific objects during the scheduling process.
+	DB db.DB
 }
 
 func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
@@ -44,8 +55,9 @@ func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB
 	}
 	return &httpAPI{
 		pipelines: pipelines,
-		config:    config.API,
+		config:    config,
 		monitor:   scheduler.NewSchedulerMonitor(registry),
+		DB:        db,
 	}
 }
 
@@ -56,6 +68,7 @@ func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
 		panic("no default nova pipeline configured")
 	}
 	mux.HandleFunc("/scheduler/nova/external", httpAPI.NovaExternalScheduler)
+	mux.HandleFunc("/scheduler/nova/commitments/change", httpAPI.HandleCommitmentChangeRequest)
 }
 
 // Check if the scheduler can run based on the request data.
@@ -110,7 +123,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	defer r.Body.Close()
 
 	// If configured, log out the complete request body.
-	if httpAPI.config.LogRequestBodies {
+	if httpAPI.config.API.LogRequestBodies {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			callback.Respond(http.StatusInternalServerError, err, "failed to read request body")
@@ -167,4 +180,231 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	callback.Respond(http.StatusOK, nil, "Success")
+}
+
+// Limes handles commitments for customers and can accept/reject them.
+//
+// However, limes doesn't know exactly which commitments can be currently placed
+// in the infrastructure, since this depends on scheduling logic. Therefore, limes
+// can ask cortex to approve/reject commitment changes via this endpoint.
+//
+// This handler will check for each commitment change if we have space for it.
+// Note that this is only possible for flavor-based (i.e. instance) commitments.
+// Other commitment types will be accepted without further checks.
+//
+// If one commitment is encountered that cannot be placed, the whole request will
+// be rejected.
+func (httpAPI *httpAPI) HandleCommitmentChangeRequest(w http.ResponseWriter, r *http.Request) {
+	callback := httpAPI.monitor.Callback(w, r, "/scheduler/nova/commitment-change")
+
+	// Exit early if the request method is not POST.
+	if r.Method != http.MethodPost {
+		internalErr := fmt.Errorf("invalid request method: %s", r.Method)
+		callback.Respond(http.StatusMethodNotAllowed, internalErr, "invalid request method")
+		return
+	}
+
+	// Ensure body is closed after reading.
+	defer r.Body.Close()
+
+	// If configured, log out the complete request body.
+	if httpAPI.config.API.LogRequestBodies {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			callback.Respond(http.StatusInternalServerError, err, "failed to read request body")
+			return
+		}
+		slog.Info("request body", "body", string(body))
+		r.Body = io.NopCloser(bytes.NewBuffer(body)) // Restore the body for further processing
+	}
+
+	// When we check which commitments can be placed, we'll run a pipeline that
+	// preselects all hosts and has all filters for the supported hypervisor
+	// types enabled. Currently, this is the reservations pipeline.
+	pipeline, ok := httpAPI.pipelines["reservations"]
+	if !ok {
+		slog.Error("no reservations pipeline configured, cannot check commitment change")
+		callback.Respond(http.StatusInternalServerError, errors.New("no reservations pipeline configured"), "internal error")
+		return
+	}
+
+	var requestData liquid.CommitmentChangeRequest
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		callback.Respond(http.StatusBadRequest, err, "failed to decode request body")
+		return
+	}
+	reqLog := slog.With("req", requestData, "url", "/scheduler/nova/commitment-change")
+	reqLog.Info("handling POST request")
+
+	response := liquid.CommitmentChangeResponse{}
+	w.Header().Set("Content-Type", "application/json")
+
+	// Ensure we don't reject commitments if they don't require confirmation.
+	if !requestData.RequiresConfirmation() {
+		reqLog.Info("commitment change doesn't require confirmation, accepting")
+		response.RejectionReason = "" // Just to make it explicit.
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
+			return
+		}
+		callback.Respond(http.StatusOK, nil, "")
+		return
+	}
+
+	// We'll call this function when we encounter something that requires us to
+	// reject the commitment change. If retry is true, limes will retry after a
+	// minute, otherwise the rejection is indefinite.
+	reject := func(log *slog.Logger, reason string, retry bool) {
+		response.RejectionReason = reason
+		if !retry {
+			response.RetryAt = option.None[time.Time]()
+		} else {
+			response.RetryAt = option.Some(time.Now().Add(jobloop.DefaultJitter(time.Minute)))
+		}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
+			return
+		}
+		callback.Respond(http.StatusOK, nil, "")
+		log.Info("rejected commitment change", "reason", reason)
+	}
+
+	// Get all available flavors.
+	var flavors []nova.Flavor
+	table := nova.Flavor{}.TableName()
+	if _, err := httpAPI.DB.Select(&flavors, "SELECT * FROM "+table); err != nil {
+		reqLog.Error("failed to load flavors", "err", err)
+		return
+	}
+	if len(flavors) == 0 {
+		// Assume sync isn't finished yet and retry in a minute.
+		reject(reqLog, "cortex has no flavor information yet, please retry later", true)
+		return
+	}
+	flavorsByName := make(map[string]nova.Flavor, len(flavors))
+	for _, flavor := range flavors {
+		flavorsByName[flavor.Name] = flavor
+	}
+
+	for _, commitmentChangeset := range requestData.ByProject {
+		// Find which new flavors would need to be placed from the commitment changeset.
+		// Note that there are also commitment conversions from one flavor to another.
+		// For conversions we check if there is enough space to place the new reservation,
+		// because the old reservation will need to stay until the commitment is updated.
+		for resourceName, resourceCommitmentChangeset := range commitmentChangeset.ByResource {
+			specificLog := reqLog.With("resourceName", resourceName) // Better traceability in logs.
+			resourceName := string(resourceName)
+			if !strings.HasPrefix(resourceName, "instances_") {
+				// For non-instance commitments we don't know where to place them,
+				// therefore we can't check anything and continue searching.
+				specificLog.Debug("won't reject non-instance commitment change")
+				continue
+			}
+
+			// Safely convert uint64 to int to avoid integer overflow.
+			totalAfter := resourceCommitmentChangeset.TotalConfirmedAfter
+			totalBefore := resourceCommitmentChangeset.TotalConfirmedBefore
+			// Check for potential overflow when converting uint64 to int
+			const maxInt = int64(^uint64(0) >> 1) // Maximum value for int on this platform
+			if totalAfter > uint64(maxInt) || totalBefore > uint64(maxInt) {
+				specificLog.Error("commitment values too large for safe conversion",
+					"totalAfter", totalAfter, "totalBefore", totalBefore, "maxInt", maxInt)
+				reject(specificLog, "commitment values exceed system limits", false)
+				return
+			}
+			nNewVMs := int64(totalAfter) - int64(totalBefore)
+			if nNewVMs <= 0 {
+				specificLog.Debug("won't reject commitment conversion/shrinkage", "nNewVMs", nNewVMs)
+				continue
+			}
+
+			flavorName := strings.TrimPrefix(resourceName, "instances_")
+			flavor, ok := flavorsByName[flavorName]
+			if !ok {
+				// The only case in which this is expected to happen is a) when
+				// cortex hasn't synced flavors yet (handled above) or b) when
+				// the flavor was deleted in nova after the commitment was made.
+				// Case b) indicates a disagreement between nova and limes and
+				// doesn't fall into our responsibility to handle it.
+				msg := "possible inconsistency between nova and limes, flavor not found: " + flavorName
+				reject(specificLog, msg, false)
+				return
+			}
+			var flavorExtraSpecs map[string]string
+			if err := json.Unmarshal([]byte(flavor.ExtraSpecs), &flavorExtraSpecs); err != nil {
+				// The flavor extra specs should always be valid JSON.
+				// If they're not, this should be fixed in their nova representation.
+				msg := "misconfigured flavor: invalid extra specs for flavor: " + flavorName
+				reject(specificLog, msg, false)
+				return
+			}
+
+			hvType, ok := flavorExtraSpecs["capabilities:hypervisor_type"]
+			if !ok {
+				// All flavors should have a hypervisor type set. Otherwise, this
+				// is an inconsistency that should be fixed in nova.
+				msg := "misconfigured flavor: missing capabilities:hypervisor_type for flavor: " + flavorName
+				reject(specificLog, msg, false)
+				return
+			}
+			if !slices.Contains(httpAPI.config.Nova.LiquidAPI.Hypervisors, hvType) {
+				specificLog.Info("won't reject because hypervisor type is not checked", "hypervisorType", hvType)
+				continue
+			}
+			novaFlavorSpec := api.NovaFlavor{
+				// Relevant flavor fields for scheduling decisions.
+				FlavorID:    flavor.ID,
+				Name:        flavor.Name,
+				MemoryMB:    flavor.RAM,
+				VCPUs:       flavor.VCPUs,
+				RootGB:      flavor.Disk,
+				EphemeralGB: flavor.Ephemeral,
+				RXTXFactor:  flavor.RxTxFactor,
+				IsPublic:    flavor.IsPublic,
+				ExtraSpecs:  flavorExtraSpecs,
+			}
+			projectMeta := commitmentChangeset.ProjectMetadata.
+				UnwrapOr(liquid.ProjectMetadata{})
+			novaSpec := api.NovaSpec{
+				Flavor:           api.NovaObject[api.NovaFlavor]{Data: novaFlavorSpec},
+				ProjectID:        projectMeta.UUID,
+				AvailabilityZone: string(requestData.AZ),
+				NumInstances:     uint64(nNewVMs), // Guaranteed non-negative.
+			}
+			novaRequestContext := api.NovaRequestContext{
+				ProjectID:       projectMeta.UUID,
+				ProjectDomainID: projectMeta.Domain.UUID,
+			}
+			hosts, err := pipeline.Run(api.ExternalSchedulerRequest{
+				Spec:    api.NovaObject[api.NovaSpec]{Data: novaSpec},
+				Context: novaRequestContext,
+				// Act as if we would newly place the vm.
+				Rebuild: false, Resize: false, Live: false,
+				VMware: hvType == conf.NovaHypervisorTypeVMware,
+				// No need to provide hosts/weights, the pipeline will preselect all hosts.
+				Hosts: nil, Weights: nil,
+			})
+			if err != nil {
+				// Maybe the DB is down or something happened that is recoverable.
+				reject(specificLog, "cortex pipeline failed to execute, please try again", true)
+				return
+			}
+			if len(hosts) == 0 {
+				// Reject indefinitely if there is no space.
+				reject(specificLog, "no space for this commitment", false)
+				return
+			}
+			specificLog.Info(
+				"success - found possible hosts for commitment change",
+				"req", requestData, "hosts", hosts,
+			)
+		}
+	}
+
+	// If nothing is found we'll return no rejection reason.
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
+		return
+	}
+	callback.Respond(http.StatusOK, nil, "")
 }
