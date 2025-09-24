@@ -76,7 +76,7 @@ func (s *NovaSyncer) Init(ctx context.Context) {
 func (s *NovaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.Conf.Types, "servers") {
-		changedServers, err := s.SyncChangedServers(ctx)
+		changedServers, err := s.SyncAllServers(ctx)
 		if err != nil {
 			return err
 		}
@@ -85,7 +85,7 @@ func (s *NovaSyncer) Sync(ctx context.Context) error {
 		}
 	}
 	if slices.Contains(s.Conf.Types, "hypervisors") {
-		_, err := s.SyncChangedHypervisors(ctx)
+		_, err := s.SyncAllHypervisors(ctx)
 		if err != nil {
 			return err
 		}
@@ -210,24 +210,20 @@ func upsert[O any](s *NovaSyncer, objects []O, pk string, getpk func(O) string, 
 }
 
 // Sync the OpenStack servers into the database.
-// Return only new servers that were created since the last sync.
-func (s *NovaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
-	tableName := Server{}.TableName()
-	lastSyncTime := s.getLastSyncTime(tableName)
-	defer s.setLastSyncTime(tableName, time.Now())
-	changedServers, err := s.API.GetChangedServers(ctx, lastSyncTime)
+func (s *NovaSyncer) SyncAllServers(ctx context.Context) ([]Server, error) {
+	allServers, err := s.API.GetAllServers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = upsert(s, changedServers, "id", func(s Server) string { return s.ID }, tableName)
+	err = db.ReplaceAll(s.DB, allServers...)
 	if err != nil {
 		return nil, err
 	}
-	return changedServers, nil
+	return allServers, nil
 }
 
 // Sync the OpenStack hypervisors into the database.
-func (s *NovaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, error) {
+func (s *NovaSyncer) SyncAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	allHypervisors, err := s.API.GetAllHypervisors(ctx)
 	if err != nil {
 		return nil, err

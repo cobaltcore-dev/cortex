@@ -25,7 +25,7 @@ type NovaAPI interface {
 	// Init the nova API.
 	Init(ctx context.Context)
 	// Get all changed nova servers since the timestamp.
-	GetChangedServers(ctx context.Context, changedSince *time.Time) ([]Server, error)
+	GetAllServers(ctx context.Context) ([]Server, error)
 	// Get all nova hypervisors since the timestamp.
 	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	// Get all changed nova flavors since the timestamp.
@@ -78,9 +78,9 @@ func (api *novaAPI) Init(ctx context.Context) {
 }
 
 // Get all changed Nova servers since the timestamp.
-func (api *novaAPI) GetChangedServers(ctx context.Context, changedSince *time.Time) ([]Server, error) {
+func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	label := Server{}.TableName()
-	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
+	slog.Info("fetching nova data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {
@@ -88,12 +88,7 @@ func (api *novaAPI) GetChangedServers(ctx context.Context, changedSince *time.Ti
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
-		// It is important to omit the changes-since parameter if it is nil.
-		// Otherwise Nova will return huge amounts of data since the beginning of time.
 		lo := servers.ListOpts{AllTenants: true}
-		if changedSince != nil {
-			lo.ChangesSince = changedSince.Format(time.RFC3339)
-		}
 		return servers.List(api.sc, lo).AllPages(ctx)
 	}()
 	if err != nil {

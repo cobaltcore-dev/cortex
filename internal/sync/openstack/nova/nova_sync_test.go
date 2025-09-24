@@ -18,7 +18,7 @@ type mockNovaAPI struct{}
 
 func (m *mockNovaAPI) Init(ctx context.Context) {}
 
-func (m *mockNovaAPI) GetChangedServers(ctx context.Context, t *time.Time) ([]Server, error) {
+func (m *mockNovaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	return []Server{{ID: "1", Name: "server1"}}, nil
 }
 
@@ -93,7 +93,7 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	servers, err := syncer.SyncChangedServers(ctx)
+	servers, err := syncer.SyncAllServers(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -118,7 +118,7 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	hypervisors, err := syncer.SyncChangedHypervisors(ctx)
+	hypervisors, err := syncer.SyncAllHypervisors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

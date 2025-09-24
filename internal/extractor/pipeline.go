@@ -37,7 +37,6 @@ var SupportedExtractors = []plugins.FeatureExtractor{
 	&shared.HostUtilizationExtractor{},
 	&shared.HostCapabilitiesExtractor{},
 	&shared.VMHostResidencyExtractor{},
-	&shared.VMLifeSpanHistogramExtractor{},
 	&shared.HostAZExtractor{},
 	&shared.HostPinnedProjectsExtractor{},
 	&shared.ProjectResourceUtilizationExtractor{},

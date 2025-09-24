@@ -9,6 +9,6 @@ SELECT
 FROM openstack_servers s
 LEFT JOIN openstack_flavors_v2 f ON f.name = s.flavor_name
 LEFT JOIN feature_host_az az ON az.compute_host = s.os_ext_srv_attr_host
-WHERE s.status != 'DELETED'
+WHERE s.status != 'DELETED' -- Check even if we currently do not sync deleted servers.
 GROUP BY s.tenant_id, az.availability_zone
 ORDER BY s.tenant_id;

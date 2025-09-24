@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 4,
+  "id": 6,
   "links": [],
   "panels": [
     {
@@ -822,332 +822,6 @@
         "x": 0,
         "y": 50
       },
-      "id": 71,
-      "panels": [],
-      "title": "KPIs: VM Life Span",
-      "type": "row"
-    },
-    {
-      "cards": {
-        "cardPadding": 0,
-        "cardRound": 0
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateTurbo",
-        "exponent": 0.01,
-        "max": null,
-        "min": null,
-        "mode": "spectrum"
-      },
-      "dataFormat": "tsbuckets",
-      "datasource": "prometheus-openstack",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 12,
-        "x": 0,
-        "y": 51
-      },
-      "heatmap": {},
-      "hideZeroBuckets": true,
-      "highlightCards": true,
-      "id": 59,
-      "interval": null,
-      "legend": {
-        "show": true
-      },
-      "pluginVersion": "7.5.35",
-      "reverseYBuckets": false,
-      "targets": [
-        {
-          "exemplar": false,
-          "expr": "sum(delta(cortex_vm_life_span_bucket{flavor_name=\"all\"}[2m]) / 2) by (le)",
-          "format": "heatmap",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{le}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Life span of deleted VMs (change over time)",
-      "tooltip": {
-        "show": true,
-        "showHistogram": false
-      },
-      "tooltipDecimals": null,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": 0,
-        "format": "s",
-        "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "auto",
-      "yBucketNumber": null,
-      "yBucketSize": null
-    },
-    {
-      "cards": {
-        "cardPadding": 0,
-        "cardRound": 0
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateTurbo",
-        "exponent": 0.01,
-        "max": null,
-        "min": null,
-        "mode": "spectrum"
-      },
-      "dataFormat": "tsbuckets",
-      "datasource": "prometheus-openstack",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 12,
-        "x": 12,
-        "y": 51
-      },
-      "heatmap": {},
-      "hideZeroBuckets": true,
-      "highlightCards": true,
-      "id": 65,
-      "interval": null,
-      "legend": {
-        "show": true
-      },
-      "pluginVersion": "7.5.35",
-      "reverseYBuckets": false,
-      "targets": [
-        {
-          "exemplar": false,
-          "expr": "sum(cortex_vm_life_span_bucket{flavor_name=\"all\"}) by (le)",
-          "format": "heatmap",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{le}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Life span of deleted VMs (total)",
-      "tooltip": {
-        "show": true,
-        "showHistogram": false
-      },
-      "tooltipDecimals": null,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": 0,
-        "format": "s",
-        "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "auto",
-      "yBucketNumber": null,
-      "yBucketSize": null
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "rgb(33, 33, 33)",
-                "value": null
-              },
-              {
-                "color": "dark-blue",
-                "value": 0
-              },
-              {
-                "color": "semi-dark-blue",
-                "value": 100
-              },
-              {
-                "color": "blue",
-                "value": 1000
-              },
-              {
-                "color": "light-blue",
-                "value": 10000
-              },
-              {
-                "color": "super-light-blue",
-                "value": 10000
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 16,
-        "w": 12,
-        "x": 0,
-        "y": 63
-      },
-      "id": 64,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.5.37",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sort(sum by (flavor_name) (cortex_vm_life_span_count))",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{flavor_name}}",
-          "queryType": "randomWalk",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Newly created vms by flavor",
-      "type": "stat"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              },
-              {
-                "color": "dark-blue",
-                "value": 0
-              },
-              {
-                "color": "semi-dark-blue",
-                "value": 60
-              },
-              {
-                "color": "blue",
-                "value": 3600
-              },
-              {
-                "color": "light-blue",
-                "value": 86400
-              },
-              {
-                "color": "super-light-blue",
-                "value": 604800
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 16,
-        "w": 12,
-        "x": 12,
-        "y": 63
-      },
-      "id": 62,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.5.37",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sort(sum by (flavor_name) (cortex_vm_life_span_sum) / sum by (flavor_name) (cortex_vm_life_span_count))",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{flavor_name}}",
-          "queryType": "randomWalk",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Average life span of newly created vms by flavor",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "datasource": null,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 79
-      },
       "id": 76,
       "panels": [],
       "title": "KPIs: Hypervisor Resource Available Capacity",
@@ -1178,7 +852,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 80
+        "y": 51
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1254,7 +928,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 80
+        "y": 51
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1330,7 +1004,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 92
+        "y": 63
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1411,7 +1085,7 @@
         "h": 12,
         "w": 4,
         "x": 12,
-        "y": 92
+        "y": 63
       },
       "id": 79,
       "interval": null,
@@ -1476,7 +1150,7 @@
         "h": 12,
         "w": 4,
         "x": 16,
-        "y": 92
+        "y": 63
       },
       "id": 80,
       "interval": null,
@@ -1541,7 +1215,7 @@
         "h": 12,
         "w": 4,
         "x": 20,
-        "y": 92
+        "y": 63
       },
       "id": 81,
       "interval": null,
@@ -1583,7 +1257,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 104
+        "y": 75
       },
       "id": 84,
       "panels": [],
@@ -1615,7 +1289,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 105
+        "y": 76
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1691,7 +1365,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 105
+        "y": 76
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -1749,7 +1423,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 117
+        "y": 88
       },
       "id": 88,
       "panels": [],
@@ -1781,7 +1455,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 118
+        "y": 89
       },
       "heatmap": {},
       "hideZeroBuckets": false,
