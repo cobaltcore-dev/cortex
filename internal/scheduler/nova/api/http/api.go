@@ -301,7 +301,7 @@ func (httpAPI *httpAPI) HandleCommitmentChangeRequest(w http.ResponseWriter, r *
 				continue
 			}
 
-			// Safely convert uint64 to int to avoid integer overflow (G115)
+			// Safely convert uint64 to int to avoid integer overflow.
 			totalAfter := resourceCommitmentChangeset.TotalConfirmedAfter
 			totalBefore := resourceCommitmentChangeset.TotalConfirmedBefore
 			// Check for potential overflow when converting uint64 to int
