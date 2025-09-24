@@ -143,7 +143,6 @@ func TestNovaAPI_GetAllFlavors(t *testing.T) {
 }
 
 func TestNovaAPI_GetAllMigrations(t *testing.T) {
-
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		// We only want the current state of all migrations, so
 		// the changes-since query parameter should not be set.
