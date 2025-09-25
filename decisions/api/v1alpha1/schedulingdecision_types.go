@@ -19,6 +19,7 @@ type SchedulingDecisionPipelineSpec struct {
 
 // SchedulingDecisionSpec defines the desired state of SchedulingDecision.
 type SchedulingDecisionSpec struct {
+	Input    map[string]float64             `json:"input,omitempty"`
 	Pipeline SchedulingDecisionPipelineSpec `json:"pipeline"`
 }
 
