@@ -1,0 +1,118 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: computedecisions.decisions.cortex
+spec:
+  group: decisions.cortex
+  names:
+    kind: ComputeDecision
+    listKind: ComputeDecisionList
+    plural: computedecisions
+    shortNames:
+    - cres
+    singular: computedecision
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.host
+      name: Host
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.error
+      name: Error
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ComputeDecision is the Schema for the computedecisions
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of ComputeDecision
+            properties:
+              creator:
+                description: |-
+                  A remark that can be used to identify the creator of the decision.
+                  This can be used to clean up decisions synced from external systems
+                  without touching decisions created manually or by other systems.
+                type: string
+              requests:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: Resources requested to reserve for this instance.
+                type: object
+              scheduler:
+                description: Specification of the scheduler that will handle the decision.
+                properties:
+                  cortexNova:
+                    description: |-
+                      If the type of scheduler is cortex-nova, this field will contain additional
+                      information used by cortex-nova to place the instance.
+                    properties:
+                      domainID:
+                        description: The domain ID to reserve for.
+                        type: string
+                      flavorExtraSpecs:
+                        additionalProperties:
+                          type: string
+                        description: Extra specifications relevant for initial placement
+                          of the instance.
+                        type: object
+                      flavorName:
+                        description: The flavor name of the instance to reserve.
+                        type: string
+                      projectID:
+                        description: The project ID to reserve for.
+                        type: string
+                    type: object
+                type: object
+            type: object
+          status:
+            description: status defines the observed state of ComputeDecision
+            properties:
+              error:
+                description: An error explaining why the decision is failed, if
+                  applicable.
+                type: string
+              host:
+                description: The name of the compute host that was allocated.
+                type: string
+              phase:
+                description: The current phase of the decision.
+                type: string
+            required:
+            - host
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
