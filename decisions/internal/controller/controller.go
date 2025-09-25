@@ -43,6 +43,11 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
+	// If the decision is already resolved or in error state, do nothing.
+	if res.Status.State == v1alpha1.SchedulingDecisionStateResolved || res.Status.State == v1alpha1.SchedulingDecisionStateError {
+		return ctrl.Result{}, nil
+	}
+
 	// Validate that there is at least one host in the input
 	if len(res.Spec.Input) == 0 {
 		res.Status.State = v1alpha1.SchedulingDecisionStateError
