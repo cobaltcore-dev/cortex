@@ -20,7 +20,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   # From the decisions operator.
-  name: schedulingdecision-viewer-role
+  name: schedulingdecision-editor-role
 subjects:
 - kind: ServiceAccount
   name: {{ .Release.Namespace }}-{{ include "cortex.fullname" . }}
