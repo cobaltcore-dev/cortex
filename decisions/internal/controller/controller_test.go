@@ -83,7 +83,7 @@ func TestReconcile(t *testing.T) {
 	if updatedResource.Status.Error != "" {
 		t.Errorf("Expected empty error, got '%s'", updatedResource.Status.Error)
 	}
-	expectedDescription := "Selected: host1 (score: 1.50), certainty: perfect, 2 hosts evaluated"
+	expectedDescription := "Selected: host1 (score: 1.50), certainty: perfect, 2 hosts evaluated\nInput favored host2 (score: 2.00, now filtered), final winner was #2 in input (1.00→1.50)."
 	if updatedResource.Status.Description != expectedDescription {
 		t.Errorf("Expected description '%s', got '%s'", expectedDescription, updatedResource.Status.Description)
 	}
@@ -692,6 +692,127 @@ func TestReconcileNoHostsRemaining(t *testing.T) {
 	}
 
 	t.Logf("No hosts remaining test completed: %s", updatedResource.Status.Description)
+}
+
+func TestReconcileInputVsFinalComparison(t *testing.T) {
+	tests := []struct {
+		name                 string
+		input                map[string]float64
+		activations          []map[string]float64
+		expectedDescContains []string
+	}{
+		{
+			name: "input-choice-confirmed",
+			input: map[string]float64{
+				"host1": 3.0, // highest in input
+				"host2": 2.0,
+				"host3": 1.0,
+			},
+			activations: []map[string]float64{
+				{"host1": 0.5, "host2": 0.3, "host3": 0.1}, // host1 stays winner
+			},
+			expectedDescContains: []string{
+				"Selected: host1",
+				"Input choice confirmed: host1 (3.00→3.50, remained #1)",
+			},
+		},
+		{
+			name: "input-winner-filtered",
+			input: map[string]float64{
+				"host1": 1.0,
+				"host2": 3.0, // highest in input
+				"host3": 2.0,
+			},
+			activations: []map[string]float64{
+				{"host1": 0.5, "host3": 0.3}, // host2 filtered out, host3 becomes winner
+			},
+			expectedDescContains: []string{
+				"Selected: host3",
+				"Input favored host2 (score: 3.00, now filtered)",
+				"final winner was #2 in input (2.00→2.30)",
+			},
+		},
+		{
+			name: "input-winner-demoted",
+			input: map[string]float64{
+				"host1": 1.0,
+				"host2": 3.0, // highest in input
+				"host3": 2.0,
+			},
+			activations: []map[string]float64{
+				{"host1": 2.5, "host2": -0.5, "host3": 0.8}, // host1 becomes winner, host2 demoted to #3
+			},
+			expectedDescContains: []string{
+				"Selected: host1",
+				"Input favored host2 (score: 3.00, now #3 with 2.50)",
+				"final winner was #3 in input (1.00→3.50)",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource := &v1alpha1.SchedulingDecision{
+				ObjectMeta: ctrl.ObjectMeta{
+					Name: "test-input-vs-final-" + tt.name,
+				},
+				Spec: v1alpha1.SchedulingDecisionSpec{
+					Input: tt.input,
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name: "input-vs-final-pipeline",
+						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+							{
+								Step:        "weigher",
+								Activations: tt.activations[0],
+							},
+						},
+					},
+				},
+			}
+
+			scheme := runtime.NewScheme()
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatalf("Failed to add scheme: %v", err)
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(resource).
+				WithStatusSubresource(&v1alpha1.SchedulingDecision{}).
+				Build()
+
+			req := ctrl.Request{
+				NamespacedName: client.ObjectKey{
+					Name: "test-input-vs-final-" + tt.name,
+				},
+			}
+
+			reconciler := &SchedulingDecisionReconciler{
+				Conf:   Config{},
+				Client: fakeClient,
+			}
+			_, err := reconciler.Reconcile(t.Context(), req)
+			if err != nil {
+				t.Fatalf("Reconcile returned an error: %v", err)
+			}
+
+			// Fetch the updated resource to check status
+			var updatedResource v1alpha1.SchedulingDecision
+			if err := fakeClient.Get(t.Context(), client.ObjectKey{Name: "test-input-vs-final-" + tt.name}, &updatedResource); err != nil {
+				t.Fatalf("Failed to get updated resource: %v", err)
+			}
+
+			// Verify the description contains expected elements
+			description := updatedResource.Status.Description
+			for _, expectedContent := range tt.expectedDescContains {
+				if !contains(description, expectedContent) {
+					t.Errorf("Expected description to contain '%s', got '%s'", expectedContent, description)
+				}
+			}
+
+			t.Logf("Input vs Final test %s completed: %s", tt.name, description)
+		})
+	}
 }
 
 // Helper function to check if a string contains a substring

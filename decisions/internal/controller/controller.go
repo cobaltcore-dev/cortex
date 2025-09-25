@@ -97,7 +97,7 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		res.Status.Error = ""
 
 		// Sort finalScores by score (highest to lowest) and generate enhanced description
-		orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, len(res.Spec.Input))
+		orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, res.Spec.Input)
 
 		res.Status.FinalScores = orderedScores
 		res.Status.DeletedHosts = deletedHosts
@@ -112,8 +112,9 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 }
 
 // generateOrderedScoresAndDescription sorts final scores by value (highest to lowest)
-// and generates a brief description with highest host, certainty, and host count
-func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(finalScores map[string]float64, totalInputHosts int) (map[string]float64, string) {
+// and generates a brief description with highest host, certainty, host count, and input comparison
+func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(finalScores map[string]float64, inputScores map[string]float64) (map[string]float64, string) {
+	totalInputHosts := len(inputScores)
 	if len(finalScores) == 0 {
 		return finalScores, fmt.Sprintf("No hosts remaining after filtering, %d hosts evaluated", totalInputHosts)
 	}
@@ -140,7 +141,30 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 		orderedScores[hs.host] = hs.score
 	}
 
-	// Generate description
+	// Sort input scores to determine input-based ranking
+	var sortedInputHosts []hostScore
+	for host, score := range inputScores {
+		sortedInputHosts = append(sortedInputHosts, hostScore{host: host, score: score})
+	}
+	sort.Slice(sortedInputHosts, func(i, j int) bool {
+		return sortedInputHosts[i].score > sortedInputHosts[j].score
+	})
+
+	// Find positions and generate comparison
+	finalWinner := sortedHosts[0].host
+	inputWinner := sortedInputHosts[0].host
+	finalWinnerInputScore := inputScores[finalWinner]
+
+	// Find final winner's position in input ranking
+	finalWinnerInputPosition := -1
+	for i, hs := range sortedInputHosts {
+		if hs.host == finalWinner {
+			finalWinnerInputPosition = i + 1 // 1-based position
+			break
+		}
+	}
+
+	// Generate main description
 	var description string
 	if len(sortedHosts) == 1 {
 		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: perfect, %d hosts evaluated",
@@ -161,6 +185,37 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 			sortedHosts[0].host, sortedHosts[0].score, certainty, gap, totalInputHosts)
 	}
 
+	// Add input vs. final comparison
+	var comparison string
+	if inputWinner == finalWinner {
+		// Input choice confirmed
+		comparison = fmt.Sprintf("\nInput choice confirmed: %s (%.2f→%.2f, remained #1).",
+			finalWinner, finalWinnerInputScore, sortedHosts[0].score)
+	} else {
+		// Input winner different from final winner
+		inputWinnerScore := sortedInputHosts[0].score
+
+		// Check if input winner was filtered out
+		_, inputWinnerSurvived := finalScores[inputWinner]
+		if !inputWinnerSurvived {
+			comparison = fmt.Sprintf("\nInput favored %s (score: %.2f, now filtered), final winner was #%d in input (%.2f→%.2f).",
+				inputWinner, inputWinnerScore, finalWinnerInputPosition, finalWinnerInputScore, sortedHosts[0].score)
+		} else {
+			// Find input winner's position in final ranking
+			inputWinnerFinalPosition := -1
+			for i, hs := range sortedHosts {
+				if hs.host == inputWinner {
+					inputWinnerFinalPosition = i + 1 // 1-based position
+					break
+				}
+			}
+			comparison = fmt.Sprintf("\nInput favored %s (score: %.2f, now #%d with %.2f), final winner was #%d in input (%.2f→%.2f).",
+				inputWinner, inputWinnerScore, inputWinnerFinalPosition, finalScores[inputWinner],
+				finalWinnerInputPosition, finalWinnerInputScore, sortedHosts[0].score)
+		}
+	}
+
+	description += comparison
 	return orderedScores, description
 }
 
