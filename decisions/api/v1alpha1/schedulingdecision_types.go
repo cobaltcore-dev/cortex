@@ -45,9 +45,10 @@ type SchedulingDecisionStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=sdecs
+// +kubebuilder:resource:scope=Cluster,shortName=sdec;sdecs
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
+// +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 
 // SchedulingDecision is the Schema for the schedulingdecisions API
 type SchedulingDecision struct {

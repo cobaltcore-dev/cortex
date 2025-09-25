@@ -9,10 +9,18 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) crd:allowDangerousTypes=true object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
+.PHONY: cleanup
+cleanup:
+	rm -rf ./.github
+
+.PHONY: dekustomize
+dekustomize:
+	kubebuilder edit --plugins=helm/v1-alpha
+
 ##@ Build
 
 .PHONY: build
-build: manifests generate
+build: manifests generate dekustomize cleanup
 
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):

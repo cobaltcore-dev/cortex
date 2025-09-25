@@ -18,6 +18,7 @@ spec:
     listKind: SchedulingDecisionList
     plural: schedulingdecisions
     shortNames:
+    - sdec
     - sdecs
     singular: schedulingdecision
   scope: Cluster
@@ -29,6 +30,9 @@ spec:
     - jsonPath: .status.error
       name: Error
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Created
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -89,9 +93,11 @@ spec:
             properties:
               deletedHosts:
                 additionalProperties:
-                  type: string
+                  items:
+                    type: string
+                  type: array
                 description: Hosts that were deleted during pipeline processing and
-                  the step that deleted them.
+                  all steps that attempted to delete them.
                 type: object
               description:
                 type: string
