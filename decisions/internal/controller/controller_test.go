@@ -19,6 +19,7 @@ func TestReconcile(t *testing.T) {
 			Name: "test-decision",
 		},
 		Spec: v1alpha1.SchedulingDecisionSpec{
+			Input: map[string]float64{},
 			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
 				Name: "test-pipeline",
 				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
