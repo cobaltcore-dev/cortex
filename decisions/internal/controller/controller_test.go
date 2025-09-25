@@ -67,5 +67,5 @@ func TestReconcile(t *testing.T) {
 		t.Fatalf("Reconcile returned an error: %v", err)
 	}
 
-	t.Logf("Reconcile completed successfully: %v", resource)
+	t.Logf("Reconcile completed successfully: description=%s", resource.Status.Description)
 }
