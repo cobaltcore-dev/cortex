@@ -60,9 +60,42 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 		}
 
+		// Calculate final scores for all hosts
+		finalScores := make(map[string]float64)
+		deletedHosts := make(map[string][]string)
+
+		// Start with input values as initial scores
+		for hostName, inputValue := range res.Spec.Input {
+			finalScores[hostName] = inputValue
+		}
+
+		// Process each pipeline step sequentially
+		for _, output := range res.Spec.Pipeline.Outputs {
+			// Check which hosts will be deleted in this step
+			for hostName := range finalScores {
+				if _, exists := output.Activations[hostName]; !exists {
+					// Host not in this step's activations - will be deleted
+					deletedHosts[hostName] = append(deletedHosts[hostName], output.Step)
+				}
+			}
+
+			// Apply activations and remove hosts not in this step
+			for hostName := range finalScores {
+				if activation, exists := output.Activations[hostName]; exists {
+					// Add activation to current score
+					finalScores[hostName] = finalScores[hostName] + activation
+				} else {
+					// Host not in this step - remove it
+					delete(finalScores, hostName)
+				}
+			}
+		}
+
 		res.Status.State = v1alpha1.SchedulingDecisionStateResolved
 		res.Status.Error = ""
-		res.Status.Description = "...."
+		res.Status.FinalScores = finalScores
+		res.Status.DeletedHosts = deletedHosts
+		res.Status.Description = "Calculated final scores for hosts"
 	}
 
 	if err := r.Status().Update(ctx, &res); err != nil {

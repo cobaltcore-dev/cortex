@@ -37,6 +37,10 @@ type SchedulingDecisionStatus struct {
 	// Only given if state is "error".
 	Error       string `json:"error,omitempty"`
 	Description string `json:"description,omitempty"`
+	// Final scores for each host after processing all pipeline steps.
+	FinalScores map[string]float64 `json:"finalScores,omitempty"`
+	// Hosts that were deleted during pipeline processing and all steps that attempted to delete them.
+	DeletedHosts map[string][]string `json:"deletedHosts,omitempty"`
 }
 
 // +kubebuilder:object:root=true
