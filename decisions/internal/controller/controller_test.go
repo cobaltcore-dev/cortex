@@ -83,7 +83,7 @@ func TestReconcile(t *testing.T) {
 	if updatedResource.Status.Error != "" {
 		t.Errorf("Expected empty error, got '%s'", updatedResource.Status.Error)
 	}
-	expectedDescription := "Selected: host1 (score: 1.50), certainty: perfect, 2 hosts evaluated\nInput favored host2 (score: 2.00, now filtered), final winner was #2 in input (1.00→1.50)."
+	expectedDescription := "Selected: host1 (score: 1.50), certainty: perfect, 2 hosts evaluated\nInput favored host2 (score: 2.00, now filtered), final winner was #2 in input (1.00→1.50).\nDecision driven by 1/2 pipeline step: filter."
 	if updatedResource.Status.Description != expectedDescription {
 		t.Errorf("Expected description '%s', got '%s'", expectedDescription, updatedResource.Status.Description)
 	}
@@ -811,6 +811,153 @@ func TestReconcileInputVsFinalComparison(t *testing.T) {
 			}
 
 			t.Logf("Input vs Final test %s completed: %s", tt.name, description)
+		})
+	}
+}
+
+func TestReconcileCriticalStepElimination(t *testing.T) {
+	tests := []struct {
+		name                    string
+		input                   map[string]float64
+		pipeline                []v1alpha1.SchedulingDecisionPipelineOutputSpec
+		expectedCriticalMessage string
+	}{
+		{
+			name: "single-critical-step",
+			input: map[string]float64{
+				"host1": 2.0, // Would win without pipeline
+				"host2": 1.0,
+				"host3": 1.5,
+			},
+			pipeline: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+				{
+					Step: "non-critical-weigher",
+					Activations: map[string]float64{
+						"host1": 0.1, // Small changes don't affect winner
+						"host2": 0.1,
+						"host3": 0.1,
+					},
+				},
+				{
+					Step: "critical-filter",
+					Activations: map[string]float64{
+						"host2": 0.0, // host1 and host3 filtered out, host2 becomes winner
+						"host3": 0.0,
+					},
+				},
+			},
+			expectedCriticalMessage: "Decision driven by 1/2 pipeline step: critical-filter.",
+		},
+		{
+			name: "multiple-critical-steps",
+			input: map[string]float64{
+				"host1": 1.0,
+				"host2": 2.0, // Would win without pipeline
+				"host3": 1.5,
+			},
+			pipeline: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+				{
+					Step: "critical-weigher1",
+					Activations: map[string]float64{
+						"host1": 1.5, // Gives host1 strong boost to overtake host2
+						"host2": 0.0,
+						"host3": 0.5,
+					},
+				},
+				{
+					Step: "critical-weigher2",
+					Activations: map[string]float64{
+						"host1": 0.1, // Further secures host1's lead
+						"host2": 0.0,
+						"host3": 0.0,
+					},
+				},
+			},
+			expectedCriticalMessage: "Decision driven by 1/2 pipeline step: critical-weigher1.",
+		},
+		{
+			name: "all-non-critical",
+			input: map[string]float64{
+				"host1": 3.0, // Clear winner from input
+				"host2": 1.0,
+				"host3": 2.0,
+			},
+			pipeline: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+				{
+					Step: "non-critical-weigher1",
+					Activations: map[string]float64{
+						"host1": 0.1, // Small changes don't change winner
+						"host2": 0.1,
+						"host3": 0.1,
+					},
+				},
+				{
+					Step: "non-critical-weigher2",
+					Activations: map[string]float64{
+						"host1": 0.2,
+						"host2": 0.0,
+						"host3": 0.1,
+					},
+				},
+			},
+			expectedCriticalMessage: "Decision driven by input only (all 2 steps are non-critical).",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource := &v1alpha1.SchedulingDecision{
+				ObjectMeta: ctrl.ObjectMeta{
+					Name: "test-critical-steps-" + tt.name,
+				},
+				Spec: v1alpha1.SchedulingDecisionSpec{
+					Input: tt.input,
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name:    "critical-step-test-pipeline",
+						Outputs: tt.pipeline,
+					},
+				},
+			}
+
+			scheme := runtime.NewScheme()
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatalf("Failed to add scheme: %v", err)
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(resource).
+				WithStatusSubresource(&v1alpha1.SchedulingDecision{}).
+				Build()
+
+			req := ctrl.Request{
+				NamespacedName: client.ObjectKey{
+					Name: "test-critical-steps-" + tt.name,
+				},
+			}
+
+			reconciler := &SchedulingDecisionReconciler{
+				Conf:   Config{},
+				Client: fakeClient,
+			}
+			_, err := reconciler.Reconcile(t.Context(), req)
+			if err != nil {
+				t.Fatalf("Reconcile returned an error: %v", err)
+			}
+
+			// Fetch the updated resource to check status
+			var updatedResource v1alpha1.SchedulingDecision
+			if err := fakeClient.Get(t.Context(), client.ObjectKey{Name: "test-critical-steps-" + tt.name}, &updatedResource); err != nil {
+				t.Fatalf("Failed to get updated resource: %v", err)
+			}
+
+			// Verify the description contains the expected critical step message
+			description := updatedResource.Status.Description
+			if !contains(description, tt.expectedCriticalMessage) {
+				t.Errorf("Expected description to contain '%s', got '%s'", tt.expectedCriticalMessage, description)
+			}
+
+			t.Logf("Critical step test %s completed: %s", tt.name, description)
 		})
 	}
 }
