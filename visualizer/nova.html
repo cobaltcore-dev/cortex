@@ -176,8 +176,6 @@
         const hasWeight = state.pipeline.out[host] !== undefined
         const utilization = utilizations[host]
 
-        console.log("utilization", utilization)
-
         const cpusUsed = utilization.vcpusUsed
         const memUsedMB = utilization.ramUsedMB
         const diskUsedGB = utilization.diskUsedGB
