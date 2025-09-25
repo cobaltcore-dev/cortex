@@ -26,7 +26,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SchedulingDecision is the Schema for the computedecisions API
+        description: SchedulingDecision is the Schema for the schedulingdecisions API
         properties:
           apiVersion:
             description: |-

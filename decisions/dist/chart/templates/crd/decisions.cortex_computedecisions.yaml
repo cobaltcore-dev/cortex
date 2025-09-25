@@ -10,22 +10,22 @@ metadata:
     "helm.sh/resource-policy": keep
     {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: computedecisions.decisions.cortex
+  name: schedulingdecisions.decisions.cortex
 spec:
   group: decisions.cortex
   names:
     kind: SchedulingDecision
     listKind: SchedulingDecisionList
-    plural: computedecisions
+    plural: schedulingdecisions
     shortNames:
     - cdec
-    singular: computedecision
+    singular: schedulingdecision
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SchedulingDecision is the Schema for the computedecisions API
+        description: SchedulingDecision is the Schema for the schedulingdecisions API
         properties:
           apiVersion:
             description: |-

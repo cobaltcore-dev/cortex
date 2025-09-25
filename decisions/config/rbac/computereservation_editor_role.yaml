@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: decisions
     app.kubernetes.io/managed-by: kustomize
-  name: computedecision-editor-role
+  name: schedulingdecision-editor-role
 rules:
 - apiGroups:
   - decisions.cortex
   resources:
-  - computedecisions
+  - schedulingdecisions
   verbs:
   - create
   - delete
@@ -28,6 +28,6 @@ rules:
 - apiGroups:
   - decisions.cortex
   resources:
-  - computedecisions/status
+  - schedulingdecisions/status
   verbs:
   - get

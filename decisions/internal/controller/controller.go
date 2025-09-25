@@ -26,9 +26,9 @@ type SchedulingDecisionReconciler struct {
 	Conf Config
 }
 
-// +kubebuilder:rbac:groups=decisions.cortex,resources=computedecisions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=decisions.cortex,resources=computedecisions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=decisions.cortex,resources=computedecisions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=decisions.cortex,resources=schedulingdecisions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=decisions.cortex,resources=schedulingdecisions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=decisions.cortex,resources=schedulingdecisions/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -53,7 +53,7 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 func (r *SchedulingDecisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&decisionsv1alpha1.SchedulingDecision{}).
-		Named("computedecision").
+		Named("schedulingdecision").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1, // Default
 		}).

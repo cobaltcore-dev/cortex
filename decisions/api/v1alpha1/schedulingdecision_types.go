@@ -44,7 +44,7 @@ type SchedulingDecisionStatus struct {
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
-// SchedulingDecision is the Schema for the computedecisions API
+// SchedulingDecision is the Schema for the schedulingdecisions API
 type SchedulingDecision struct {
 	metav1.TypeMeta `json:",inline"`
 

@@ -22,7 +22,7 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the decisions itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- computedecision_admin_role.yaml
-- computedecision_editor_role.yaml
-- computedecision_viewer_role.yaml
+- schedulingdecision_admin_role.yaml
+- schedulingdecision_editor_role.yaml
+- schedulingdecision_viewer_role.yaml
 
