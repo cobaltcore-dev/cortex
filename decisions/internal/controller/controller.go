@@ -48,7 +48,7 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 	} else {
 		// Validate that all hosts in pipeline outputs exist in input
 		for _, output := range res.Spec.Pipeline.Outputs {
-			for hostName := range output.Weights {
+			for hostName := range output.Activations {
 				if _, exists := res.Spec.Input[hostName]; !exists {
 					res.Status.State = v1alpha1.SchedulingDecisionStateError
 					res.Status.Error = "Host '" + hostName + "' in pipeline output not found in input"

@@ -26,7 +26,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SchedulingDecision is the Schema for the schedulingdecisions API
+        description: SchedulingDecision is the Schema for the schedulingdecisions
+          API
         properties:
           apiVersion:
             description: |-
@@ -59,12 +60,14 @@ spec:
                   outputs:
                     items:
                       properties:
-                        step:
-                          type: string
-                        weights:
+                        activations:
                           additionalProperties:
                             type: number
+                          description: Weights calculated by this step subjected to
+                            the activation function.
                           type: object
+                        step:
+                          type: string
                       required:
                       - step
                       type: object

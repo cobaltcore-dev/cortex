@@ -8,8 +8,9 @@ import (
 )
 
 type SchedulingDecisionPipelineOutputSpec struct {
-	Step    string             `json:"step"`
-	Weights map[string]float64 `json:"weights,omitempty"`
+	Step string `json:"step"`
+	// Weights calculated by this step subjected to the activation function.
+	Activations map[string]float64 `json:"activations,omitempty"`
 }
 
 type SchedulingDecisionPipelineSpec struct {

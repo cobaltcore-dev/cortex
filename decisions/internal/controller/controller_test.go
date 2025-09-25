@@ -28,14 +28,14 @@ func TestReconcile(t *testing.T) {
 				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
 					{
 						Step: "weigher",
-						Weights: map[string]float64{
+						Activations: map[string]float64{
 							"host1": 0.5,
 							"host2": 0.5,
 						},
 					},
 					{
 						Step: "filter",
-						Weights: map[string]float64{
+						Activations: map[string]float64{
 							"host1": 0.0,
 						},
 					},
@@ -102,7 +102,7 @@ func TestReconcileEmptyInput(t *testing.T) {
 				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
 					{
 						Step: "weigher",
-						Weights: map[string]float64{
+						Activations: map[string]float64{
 							"host1": 0.5,
 							"host2": 0.5,
 						},
@@ -174,7 +174,7 @@ func TestReconcileHostMismatch(t *testing.T) {
 				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
 					{
 						Step: "weigher",
-						Weights: map[string]float64{
+						Activations: map[string]float64{
 							"host1": 0.5,
 							"host3": 0.3, // host3 doesn't exist in input
 						},
