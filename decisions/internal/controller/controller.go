@@ -41,7 +41,15 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	res.Status.Description = "...."
+	// Validate that there is at least one host in the input
+	if len(res.Spec.Input) == 0 {
+		res.Status.State = v1alpha1.SchedulingDecisionStateError
+		res.Status.Error = "No hosts provided in input"
+	} else {
+		res.Status.State = v1alpha1.SchedulingDecisionStateResolved
+		res.Status.Description = "...."
+	}
+
 	if err := r.Status().Update(ctx, &res); err != nil {
 		return ctrl.Result{}, err
 	}
