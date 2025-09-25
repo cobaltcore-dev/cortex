@@ -31,7 +31,7 @@ def kubebuilder_binary_files(path):
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile.kubebuilder',
     build_args={'GO_MOD_PATH': 'reservations'},
-    only=kubebuilder_binary_files('reservations') + ['internal/', 'go.mod', 'go.sum'],
+    only=kubebuilder_binary_files('reservations') + ['internal/', 'decisions/', 'go.mod', 'go.sum'],
 )
 local('sh helm/sync.sh reservations/dist/chart')
 k8s_yaml(helm('reservations/dist/chart', name='cortex-reservations', values=[tilt_values]))
