@@ -5,6 +5,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"sort"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -93,9 +95,13 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		res.Status.State = v1alpha1.SchedulingDecisionStateResolved
 		res.Status.Error = ""
-		res.Status.FinalScores = finalScores
+
+		// Sort finalScores by score (highest to lowest) and generate enhanced description
+		orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, len(res.Spec.Input))
+
+		res.Status.FinalScores = orderedScores
 		res.Status.DeletedHosts = deletedHosts
-		res.Status.Description = "Calculated final scores for hosts"
+		res.Status.Description = description
 	}
 
 	if err := r.Status().Update(ctx, &res); err != nil {
@@ -103,6 +109,59 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	return ctrl.Result{}, nil // No need to requeue.
+}
+
+// generateOrderedScoresAndDescription sorts final scores by value (highest to lowest)
+// and generates a brief description with highest host, certainty, and host count
+func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(finalScores map[string]float64, totalInputHosts int) (map[string]float64, string) {
+	if len(finalScores) == 0 {
+		return finalScores, fmt.Sprintf("No hosts remaining after filtering, %d hosts evaluated", totalInputHosts)
+	}
+
+	// Create a slice of host-score pairs for sorting
+	type hostScore struct {
+		host  string
+		score float64
+	}
+
+	var sortedHosts []hostScore
+	for host, score := range finalScores {
+		sortedHosts = append(sortedHosts, hostScore{host: host, score: score})
+	}
+
+	// Sort by score (highest to lowest)
+	sort.Slice(sortedHosts, func(i, j int) bool {
+		return sortedHosts[i].score > sortedHosts[j].score
+	})
+
+	// Create ordered map (Go maps maintain insertion order as of Go 1.8+)
+	orderedScores := make(map[string]float64)
+	for _, hs := range sortedHosts {
+		orderedScores[hs.host] = hs.score
+	}
+
+	// Generate description
+	var description string
+	if len(sortedHosts) == 1 {
+		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: perfect, %d hosts evaluated",
+			sortedHosts[0].host, sortedHosts[0].score, totalInputHosts)
+	} else {
+		// Calculate certainty based on gap between 1st and 2nd place
+		gap := sortedHosts[0].score - sortedHosts[1].score
+		var certainty string
+		if gap >= 0.5 {
+			certainty = "high"
+		} else if gap >= 0.2 {
+			certainty = "medium"
+		} else {
+			certainty = "low"
+		}
+
+		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: %s (gap: %.2f), %d hosts evaluated",
+			sortedHosts[0].host, sortedHosts[0].score, certainty, gap, totalInputHosts)
+	}
+
+	return orderedScores, description
 }
 
 // SetupWithManager sets up the controller with the Manager.

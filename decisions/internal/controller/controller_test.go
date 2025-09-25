@@ -83,8 +83,9 @@ func TestReconcile(t *testing.T) {
 	if updatedResource.Status.Error != "" {
 		t.Errorf("Expected empty error, got '%s'", updatedResource.Status.Error)
 	}
-	if updatedResource.Status.Description != "Calculated final scores for hosts" {
-		t.Errorf("Expected description 'Calculated final scores for hosts', got '%s'", updatedResource.Status.Description)
+	expectedDescription := "Selected: host1 (score: 1.50), certainty: perfect, 2 hosts evaluated"
+	if updatedResource.Status.Description != expectedDescription {
+		t.Errorf("Expected description '%s', got '%s'", expectedDescription, updatedResource.Status.Description)
 	}
 
 	// Verify final scores calculation
@@ -503,4 +504,202 @@ func TestReconcileMultipleDeletionSteps(t *testing.T) {
 
 	t.Logf("Multiple deletion test completed: finalScores=%v, deletedHosts=%v",
 		updatedResource.Status.FinalScores, updatedResource.Status.DeletedHosts)
+}
+
+func TestReconcileCertaintyLevels(t *testing.T) {
+	tests := []struct {
+		name              string
+		input             map[string]float64
+		activations       map[string]float64
+		expectedWinner    string
+		expectedCertainty string
+	}{
+		{
+			name: "high-certainty",
+			input: map[string]float64{
+				"host1": 1.0,
+				"host2": 1.0,
+			},
+			activations: map[string]float64{
+				"host1": 1.0, // host1: 2.0, host2: 1.0, gap = 1.0 (high)
+				"host2": 0.0,
+			},
+			expectedWinner:    "host1",
+			expectedCertainty: "high",
+		},
+		{
+			name: "medium-certainty",
+			input: map[string]float64{
+				"host1": 1.0,
+				"host2": 1.0,
+			},
+			activations: map[string]float64{
+				"host1": 0.3, // host1: 1.3, host2: 1.0, gap = 0.3 (medium)
+				"host2": 0.0,
+			},
+			expectedWinner:    "host1",
+			expectedCertainty: "medium",
+		},
+		{
+			name: "low-certainty",
+			input: map[string]float64{
+				"host1": 1.0,
+				"host2": 1.0,
+			},
+			activations: map[string]float64{
+				"host1": 0.1, // host1: 1.1, host2: 1.0, gap = 0.1 (low)
+				"host2": 0.0,
+			},
+			expectedWinner:    "host1",
+			expectedCertainty: "low",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource := &v1alpha1.SchedulingDecision{
+				ObjectMeta: ctrl.ObjectMeta{
+					Name: "test-certainty-" + tt.name,
+				},
+				Spec: v1alpha1.SchedulingDecisionSpec{
+					Input: tt.input,
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name: "certainty-test-pipeline",
+						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+							{
+								Step:        "weigher",
+								Activations: tt.activations,
+							},
+						},
+					},
+				},
+			}
+
+			scheme := runtime.NewScheme()
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatalf("Failed to add scheme: %v", err)
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(resource).
+				WithStatusSubresource(&v1alpha1.SchedulingDecision{}).
+				Build()
+
+			req := ctrl.Request{
+				NamespacedName: client.ObjectKey{
+					Name: "test-certainty-" + tt.name,
+				},
+			}
+
+			reconciler := &SchedulingDecisionReconciler{
+				Conf:   Config{},
+				Client: fakeClient,
+			}
+			_, err := reconciler.Reconcile(t.Context(), req)
+			if err != nil {
+				t.Fatalf("Reconcile returned an error: %v", err)
+			}
+
+			// Fetch the updated resource to check status
+			var updatedResource v1alpha1.SchedulingDecision
+			if err := fakeClient.Get(t.Context(), client.ObjectKey{Name: "test-certainty-" + tt.name}, &updatedResource); err != nil {
+				t.Fatalf("Failed to get updated resource: %v", err)
+			}
+
+			// Verify the description contains the expected winner and certainty
+			description := updatedResource.Status.Description
+			if !contains(description, "Selected: "+tt.expectedWinner) {
+				t.Errorf("Expected description to contain 'Selected: %s', got '%s'", tt.expectedWinner, description)
+			}
+			if !contains(description, "certainty: "+tt.expectedCertainty) {
+				t.Errorf("Expected description to contain 'certainty: %s', got '%s'", tt.expectedCertainty, description)
+			}
+
+			t.Logf("Certainty test %s completed: %s", tt.name, description)
+		})
+	}
+}
+
+func TestReconcileNoHostsRemaining(t *testing.T) {
+	resource := &v1alpha1.SchedulingDecision{
+		ObjectMeta: ctrl.ObjectMeta{
+			Name: "test-no-hosts-remaining",
+		},
+		Spec: v1alpha1.SchedulingDecisionSpec{
+			Input: map[string]float64{
+				"host1": 1.0,
+				"host2": 2.0,
+			},
+			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+				Name: "filter-all-pipeline",
+				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+					{
+						Step:        "filter-all",
+						Activations: map[string]float64{
+							// No hosts in activations - all will be filtered out
+						},
+					},
+				},
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(resource).
+		WithStatusSubresource(&v1alpha1.SchedulingDecision{}).
+		Build()
+
+	req := ctrl.Request{
+		NamespacedName: client.ObjectKey{
+			Name: "test-no-hosts-remaining",
+		},
+	}
+
+	reconciler := &SchedulingDecisionReconciler{
+		Conf:   Config{},
+		Client: fakeClient,
+	}
+	_, err := reconciler.Reconcile(t.Context(), req)
+	if err != nil {
+		t.Fatalf("Reconcile returned an error: %v", err)
+	}
+
+	// Fetch the updated resource to check status
+	var updatedResource v1alpha1.SchedulingDecision
+	if err := fakeClient.Get(t.Context(), client.ObjectKey{Name: "test-no-hosts-remaining"}, &updatedResource); err != nil {
+		t.Fatalf("Failed to get updated resource: %v", err)
+	}
+
+	// Verify success state but no final scores
+	if updatedResource.Status.State != v1alpha1.SchedulingDecisionStateResolved {
+		t.Errorf("Expected state '%s', got '%s'", v1alpha1.SchedulingDecisionStateResolved, updatedResource.Status.State)
+	}
+
+	if len(updatedResource.Status.FinalScores) != 0 {
+		t.Errorf("Expected 0 final scores, got %d", len(updatedResource.Status.FinalScores))
+	}
+
+	expectedDescription := "No hosts remaining after filtering, 2 hosts evaluated"
+	if updatedResource.Status.Description != expectedDescription {
+		t.Errorf("Expected description '%s', got '%s'", expectedDescription, updatedResource.Status.Description)
+	}
+
+	t.Logf("No hosts remaining test completed: %s", updatedResource.Status.Description)
+}
+
+// Helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
