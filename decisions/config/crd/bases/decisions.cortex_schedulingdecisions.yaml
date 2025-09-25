@@ -16,7 +16,14 @@ spec:
     singular: schedulingdecision
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.error
+      name: Error
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: SchedulingDecision is the Schema for the computedecisions API
@@ -41,6 +48,10 @@ spec:
           spec:
             description: spec defines the desired state of SchedulingDecision
             properties:
+              input:
+                additionalProperties:
+                  type: number
+                type: object
               pipeline:
                 properties:
                   name:
@@ -68,6 +79,11 @@ spec:
             description: status defines the observed state of SchedulingDecision
             properties:
               description:
+                type: string
+              error:
+                description: Only given if state is "error".
+                type: string
+              state:
                 type: string
             type: object
         required:

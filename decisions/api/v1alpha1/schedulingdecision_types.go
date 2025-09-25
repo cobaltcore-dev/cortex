@@ -23,14 +23,26 @@ type SchedulingDecisionSpec struct {
 	Pipeline SchedulingDecisionPipelineSpec `json:"pipeline"`
 }
 
+type SchedulingDecisionState string
+
+const (
+	SchedulingDecisionStateResolved SchedulingDecisionState = "resolved"
+	SchedulingDecisionStateError    SchedulingDecisionState = "error"
+)
+
 // SchedulingDecisionStatus defines the observed state of SchedulingDecision.
 type SchedulingDecisionStatus struct {
+	State SchedulingDecisionState `json:"state,omitempty"`
+	// Only given if state is "error".
+	Error       string `json:"error,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=sdecs
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // SchedulingDecision is the Schema for the computedecisions API
 type SchedulingDecision struct {
