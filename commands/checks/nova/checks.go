@@ -271,6 +271,7 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
 	request := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
+			InstanceUUID:     "cortex-e2e-tests",
 			AvailabilityZone: az,
 			ProjectID:        project.ID,
 			Flavor: api.NovaObject[api.NovaFlavor]{Data: api.NovaFlavor{

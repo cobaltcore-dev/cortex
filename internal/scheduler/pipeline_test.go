@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
+	"k8s.io/client-go/rest"
 )
 
 type mockPipelineStep struct {
@@ -227,6 +228,11 @@ func TestNewPipeline(t *testing.T) {
 	database := db.DB{}          // Mock or initialize as needed
 	monitor := PipelineMonitor{} // Replace with an actual mock implementation if available
 	mqttClient := &mqtt.MockClient{}
+
+	// Set up kubekonfig for GetConfigOrDie
+	restConfig := &rest.Config{}
+	_ = restConfig
+
 	supportedSteps := map[string]func() Step[mockPipelineRequest]{
 		"mock_pipeline_step": func() Step[mockPipelineRequest] {
 			return &mockPipelineStep{

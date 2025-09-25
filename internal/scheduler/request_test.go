@@ -22,3 +22,4 @@ func (m mockPipelineRequest) WithPipeline(pipeline string) PipelineRequest {
 	m.Pipeline = pipeline
 	return m
 }
+func (m mockPipelineRequest) GetResourceID() string { return "mock-resource-id" }
