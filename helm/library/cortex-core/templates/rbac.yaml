@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Release.Namespace }}-{{ include "cortex.fullname" . }}
+  name: {{ .Release.Namespace }}-{{ include "cortex.fullname" . }}-computereservation
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -15,7 +15,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Release.Namespace }}-{{ include "cortex.fullname" . }}
+  name: {{ .Release.Namespace }}-{{ include "cortex.fullname" . }}-schedulingdescision
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
