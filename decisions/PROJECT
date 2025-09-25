@@ -16,7 +16,7 @@ resources:
   controller: true
   domain: cortex
   group: decisions
-  kind: ComputeDecision
+  kind: SchedulingDecision
   path: github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1
   version: v1alpha1
 version: "3"

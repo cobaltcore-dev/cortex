@@ -190,12 +190,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ComputeDecisionReconciler{
+	if err := (&controller.SchedulingDecisionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Conf:   conf.NewConfig[controller.Config](),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ComputeDecision")
+		setupLog.Error(err, "unable to create controller", "controller", "SchedulingDecision")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

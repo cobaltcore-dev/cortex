@@ -4,22 +4,22 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: computedecisions.decisions.cortex
+  name: schedulingdecisions.decisions.cortex
 spec:
   group: decisions.cortex
   names:
-    kind: ComputeDecision
-    listKind: ComputeDecisionList
-    plural: computedecisions
+    kind: SchedulingDecision
+    listKind: SchedulingDecisionList
+    plural: schedulingdecisions
     shortNames:
-    - cdec
-    singular: computedecision
+    - sdecs
+    singular: schedulingdecision
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ComputeDecision is the Schema for the computedecisions API
+        description: SchedulingDecision is the Schema for the computedecisions API
         properties:
           apiVersion:
             description: |-
@@ -39,7 +39,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of ComputeDecision
+            description: spec defines the desired state of SchedulingDecision
             properties:
               pipeline:
                 properties:
@@ -65,22 +65,10 @@ spec:
             - pipeline
             type: object
           status:
-            description: status defines the observed state of ComputeDecision
+            description: status defines the observed state of SchedulingDecision
             properties:
               description:
                 type: string
-              factors:
-                items:
-                  properties:
-                    expl:
-                      type: string
-                    host:
-                      type: string
-                  required:
-                  - expl
-                  - host
-                  type: object
-                type: array
             type: object
         required:
         - spec

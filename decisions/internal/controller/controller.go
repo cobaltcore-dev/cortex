@@ -16,8 +16,8 @@ import (
 	decisionsv1alpha1 "github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 )
 
-// ComputeDecisionReconciler reconciles a ComputeDecision object
-type ComputeDecisionReconciler struct {
+// SchedulingDecisionReconciler reconciles a SchedulingDecision object
+type SchedulingDecisionReconciler struct {
 	// Client for the kubernetes API.
 	client.Client
 	// Kubernetes scheme to use for the decisions.
@@ -32,24 +32,27 @@ type ComputeDecisionReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *ComputeDecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 	// Fetch the decision object.
-	var res v1alpha1.ComputeDecision
+	var res v1alpha1.SchedulingDecision
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
 		// Can happen when the resource was just deleted.
 		return ctrl.Result{}, err
 	}
 
-	// TODO: Reconciliation logic.
+	res.Status.Description = "...."
+	if err := r.Status().Update(ctx, &res); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil // No need to requeue.
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ComputeDecisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *SchedulingDecisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&decisionsv1alpha1.ComputeDecision{}).
+		For(&decisionsv1alpha1.SchedulingDecision{}).
 		Named("computedecision").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1, // Default
