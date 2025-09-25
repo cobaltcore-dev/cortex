@@ -83,7 +83,7 @@ func TestReconcile(t *testing.T) {
 	if updatedResource.Status.Error != "" {
 		t.Errorf("Expected empty error, got '%s'", updatedResource.Status.Error)
 	}
-	expectedDescription := "Selected: host1 (score: 1.50), certainty: perfect, 2 hosts evaluated\nInput favored host2 (score: 2.00, now filtered), final winner was #2 in input (1.00→1.50).\nDecision driven by 1/2 pipeline step: filter."
+	expectedDescription := "Selected: host1 (score: 1.50), certainty: perfect, 2 hosts evaluated. Input favored host2 (score: 2.00, now filtered), final winner was #2 in input (1.00→1.50). Decision driven by 1/2 pipeline step: filter. Step impacts:\n• weigher +0.50\n• filter +0.00→#1."
 	if updatedResource.Status.Description != expectedDescription {
 		t.Errorf("Expected description '%s', got '%s'", expectedDescription, updatedResource.Status.Description)
 	}
@@ -852,28 +852,28 @@ func TestReconcileCriticalStepElimination(t *testing.T) {
 			name: "multiple-critical-steps",
 			input: map[string]float64{
 				"host1": 1.0,
-				"host2": 2.0, // Would win without pipeline
-				"host3": 1.5,
+				"host2": 3.0, // Strong initial winner
+				"host3": 2.0,
 			},
 			pipeline: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
 				{
 					Step: "critical-weigher1",
 					Activations: map[string]float64{
-						"host1": 1.5, // Gives host1 strong boost to overtake host2
-						"host2": 0.0,
+						"host1": 1.0, // host1: 2.0, host2: 2.5, host3: 2.5 (ties host2 and host3)
+						"host2": -0.5,
 						"host3": 0.5,
 					},
 				},
 				{
 					Step: "critical-weigher2",
 					Activations: map[string]float64{
-						"host1": 0.1, // Further secures host1's lead
+						"host1": 1.0, // host1: 3.0, host2: 2.5, host3: 2.5 (host1 becomes winner)
 						"host2": 0.0,
 						"host3": 0.0,
 					},
 				},
 			},
-			expectedCriticalMessage: "Decision driven by 1/2 pipeline step: critical-weigher1.",
+			expectedCriticalMessage: "Decision requires all 2 pipeline steps.",
 		},
 		{
 			name: "all-non-critical",

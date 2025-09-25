@@ -65,6 +65,9 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// Calculate final scores with full pipeline
 		finalScores, deletedHosts := r.calculateScores(res.Spec.Input, res.Spec.Pipeline.Outputs)
 
+		// Calculate step-by-step impact for the winner
+		stepImpacts := r.calculateStepImpacts(res.Spec.Input, res.Spec.Pipeline.Outputs, finalScores)
+
 		// Find minimal critical path
 		criticalSteps, criticalStepCount := r.findCriticalSteps(res.Spec.Input, res.Spec.Pipeline.Outputs, finalScores)
 
@@ -72,7 +75,7 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		res.Status.Error = ""
 
 		// Sort finalScores by score (highest to lowest) and generate enhanced description
-		orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, res.Spec.Input, criticalSteps, criticalStepCount, len(res.Spec.Pipeline.Outputs))
+		orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, res.Spec.Input, criticalSteps, criticalStepCount, len(res.Spec.Pipeline.Outputs), stepImpacts)
 
 		res.Status.FinalScores = orderedScores
 		res.Status.DeletedHosts = deletedHosts
@@ -176,9 +179,112 @@ func (r *SchedulingDecisionReconciler) findCriticalSteps(input map[string]float6
 	return criticalSteps, len(criticalSteps)
 }
 
+// StepImpact represents the impact of a single pipeline step on the winning host
+type StepImpact struct {
+	Step               string
+	ScoreBefore        float64
+	ScoreAfter         float64
+	ScoreDelta         float64
+	CompetitorsRemoved int
+	PromotedToFirst    bool
+}
+
+// calculateStepImpacts tracks how each pipeline step affects the final winner
+func (r *SchedulingDecisionReconciler) calculateStepImpacts(input map[string]float64, outputs []v1alpha1.SchedulingDecisionPipelineOutputSpec, finalScores map[string]float64) []StepImpact {
+	if len(finalScores) == 0 || len(outputs) == 0 {
+		return []StepImpact{}
+	}
+
+	// Find the final winner
+	finalWinner := ""
+	maxScore := float64(-999999)
+	for host, score := range finalScores {
+		if score > maxScore {
+			maxScore = score
+			finalWinner = host
+		}
+	}
+
+	if finalWinner == "" {
+		return []StepImpact{}
+	}
+
+	stepImpacts := make([]StepImpact, 0, len(outputs))
+	currentScores := make(map[string]float64)
+
+	// Start with input values as initial scores
+	for hostName, inputValue := range input {
+		currentScores[hostName] = inputValue
+	}
+
+	// Track score before first step
+	scoreBefore := currentScores[finalWinner]
+
+	// Process each pipeline step and track the winner's evolution
+	for _, output := range outputs {
+		// Count how many competitors will be removed in this step
+		competitorsRemoved := 0
+		for hostName := range currentScores {
+			if hostName != finalWinner {
+				if _, exists := output.Activations[hostName]; !exists {
+					competitorsRemoved++
+				}
+			}
+		}
+
+		// Check if winner was #1 before this step
+		wasFirst := true
+		winnerScoreBefore := currentScores[finalWinner]
+		for host, score := range currentScores {
+			if host != finalWinner && score > winnerScoreBefore {
+				wasFirst = false
+				break
+			}
+		}
+
+		// Apply activations and remove hosts not in this step
+		newScores := make(map[string]float64)
+		for hostName, score := range currentScores {
+			if activation, exists := output.Activations[hostName]; exists {
+				newScores[hostName] = score + activation
+			}
+			// Hosts not in activations are removed (don't copy to newScores)
+		}
+
+		// Get winner's score after this step
+		scoreAfter := newScores[finalWinner]
+
+		// Check if winner became #1 after this step
+		isFirstAfter := true
+		for host, score := range newScores {
+			if host != finalWinner && score > scoreAfter {
+				isFirstAfter = false
+				break
+			}
+		}
+
+		promotedToFirst := !wasFirst && isFirstAfter
+
+		stepImpacts = append(stepImpacts, StepImpact{
+			Step:               output.Step,
+			ScoreBefore:        scoreBefore,
+			ScoreAfter:         scoreAfter,
+			ScoreDelta:         scoreAfter - scoreBefore,
+			CompetitorsRemoved: competitorsRemoved,
+			PromotedToFirst:    promotedToFirst,
+		})
+
+		// Update for next iteration
+		currentScores = newScores
+		scoreBefore = scoreAfter
+	}
+
+	return stepImpacts
+}
+
 // generateOrderedScoresAndDescription sorts final scores by value (highest to lowest)
-// and generates a brief description with highest host, certainty, host count, input comparison, and critical path
-func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(finalScores map[string]float64, inputScores map[string]float64, criticalSteps []string, criticalStepCount int, totalSteps int) (map[string]float64, string) {
+// and generates a brief description with highest host, certainty, host count, input comparison, step impacts, and critical path
+func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(finalScores map[string]float64, inputScores map[string]float64, criticalSteps []string, criticalStepCount int, totalSteps int, stepImpacts []StepImpact) (map[string]float64, string) {
 	totalInputHosts := len(inputScores)
 	if len(finalScores) == 0 {
 		return finalScores, fmt.Sprintf("No hosts remaining after filtering, %d hosts evaluated", totalInputHosts)
@@ -232,7 +338,7 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 	// Generate main description
 	var description string
 	if len(sortedHosts) == 1 {
-		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: perfect, %d hosts evaluated",
+		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: perfect, %d hosts evaluated.",
 			sortedHosts[0].host, sortedHosts[0].score, totalInputHosts)
 	} else {
 		// Calculate certainty based on gap between 1st and 2nd place
@@ -246,7 +352,7 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 			certainty = "low"
 		}
 
-		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: %s (gap: %.2f), %d hosts evaluated",
+		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: %s (gap: %.2f), %d hosts evaluated.",
 			sortedHosts[0].host, sortedHosts[0].score, certainty, gap, totalInputHosts)
 	}
 
@@ -254,7 +360,7 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 	var comparison string
 	if inputWinner == finalWinner {
 		// Input choice confirmed
-		comparison = fmt.Sprintf("\nInput choice confirmed: %s (%.2f→%.2f, remained #1).",
+		comparison = fmt.Sprintf(" Input choice confirmed: %s (%.2f→%.2f, remained #1).",
 			finalWinner, finalWinnerInputScore, sortedHosts[0].score)
 	} else {
 		// Input winner different from final winner
@@ -263,7 +369,7 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 		// Check if input winner was filtered out
 		_, inputWinnerSurvived := finalScores[inputWinner]
 		if !inputWinnerSurvived {
-			comparison = fmt.Sprintf("\nInput favored %s (score: %.2f, now filtered), final winner was #%d in input (%.2f→%.2f).",
+			comparison = fmt.Sprintf(" Input favored %s (score: %.2f, now filtered), final winner was #%d in input (%.2f→%.2f).",
 				inputWinner, inputWinnerScore, finalWinnerInputPosition, finalWinnerInputScore, sortedHosts[0].score)
 		} else {
 			// Find input winner's position in final ranking
@@ -274,22 +380,28 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 					break
 				}
 			}
-			comparison = fmt.Sprintf("\nInput favored %s (score: %.2f, now #%d with %.2f), final winner was #%d in input (%.2f→%.2f).",
+			comparison = fmt.Sprintf(" Input favored %s (score: %.2f, now #%d with %.2f), final winner was #%d in input (%.2f→%.2f).",
 				inputWinner, inputWinnerScore, inputWinnerFinalPosition, finalScores[inputWinner],
 				finalWinnerInputPosition, finalWinnerInputScore, sortedHosts[0].score)
 		}
+	}
+
+	// Add step impact analysis for the winner using multi-line format
+	var stepImpactInfo string
+	if len(stepImpacts) > 0 {
+		stepImpactInfo = r.formatStepImpactsMultiLine(stepImpacts)
 	}
 
 	// Add critical path information
 	var criticalPath string
 	if totalSteps > 0 {
 		if criticalStepCount == 0 {
-			criticalPath = fmt.Sprintf("\nDecision driven by input only (all %d steps are non-critical).", totalSteps)
+			criticalPath = fmt.Sprintf(" Decision driven by input only (all %d steps are non-critical).", totalSteps)
 		} else if criticalStepCount == totalSteps {
-			criticalPath = fmt.Sprintf("\nDecision requires all %d pipeline steps.", totalSteps)
+			criticalPath = fmt.Sprintf(" Decision requires all %d pipeline steps.", totalSteps)
 		} else {
 			if criticalStepCount == 1 {
-				criticalPath = fmt.Sprintf("\nDecision driven by 1/%d pipeline step: %s.", totalSteps, criticalSteps[0])
+				criticalPath = fmt.Sprintf(" Decision driven by 1/%d pipeline step: %s.", totalSteps, criticalSteps[0])
 			} else {
 				// Join critical steps with commas
 				stepList := ""
@@ -302,13 +414,143 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 						stepList += step + ", "
 					}
 				}
-				criticalPath = fmt.Sprintf("\nDecision driven by %d/%d pipeline steps: %s.", criticalStepCount, totalSteps, stepList)
+				criticalPath = fmt.Sprintf(" Decision driven by %d/%d pipeline steps: %s.", criticalStepCount, totalSteps, stepList)
 			}
 		}
 	}
 
-	description += comparison + criticalPath
+	description += comparison + criticalPath + stepImpactInfo
 	return orderedScores, description
+}
+
+// formatStepImpactsMultiLine formats step impacts in a simple delta-ordered format
+// without confusing terminology, ordered by absolute impact magnitude
+func (r *SchedulingDecisionReconciler) formatStepImpactsMultiLine(stepImpacts []StepImpact) string {
+	if len(stepImpacts) == 0 {
+		return ""
+	}
+
+	// Create a copy of impacts for sorting
+	sortedImpacts := make([]StepImpact, len(stepImpacts))
+	copy(sortedImpacts, stepImpacts)
+
+	// Sort by absolute delta impact (highest first), with promotions taking priority for ties
+	sort.Slice(sortedImpacts, func(i, j int) bool {
+		absI := sortedImpacts[i].ScoreDelta
+		if absI < 0 {
+			absI = -absI
+		}
+		absJ := sortedImpacts[j].ScoreDelta
+		if absJ < 0 {
+			absJ = -absJ
+		}
+
+		// First priority: higher absolute delta
+		if absI != absJ {
+			return absI > absJ
+		}
+
+		// Tie-breaking: promotions come first
+		if sortedImpacts[i].PromotedToFirst != sortedImpacts[j].PromotedToFirst {
+			return sortedImpacts[i].PromotedToFirst
+		}
+
+		// Final tie-breaking: maintain original pipeline order (use step name for consistency)
+		return sortedImpacts[i].Step < sortedImpacts[j].Step
+	})
+
+	var lines []string
+
+	for _, impact := range sortedImpacts {
+		var stepDesc string
+
+		if impact.PromotedToFirst {
+			// Step promoted winner to first place
+			if impact.ScoreDelta != 0 {
+				stepDesc = fmt.Sprintf("%s %+.2f→#1", impact.Step, impact.ScoreDelta)
+			} else {
+				// Zero delta but promoted (must have removed competitors)
+				stepDesc = fmt.Sprintf("%s +0.00→#1", impact.Step)
+			}
+		} else if impact.ScoreDelta != 0 {
+			// Step changed winner's score but didn't promote to #1
+			stepDesc = fmt.Sprintf("%s %+.2f", impact.Step, impact.ScoreDelta)
+		} else if impact.CompetitorsRemoved > 0 {
+			// Step removed competitors but didn't change winner's score or promote
+			stepDesc = fmt.Sprintf("%s +0.00 (removed %d)", impact.Step, impact.CompetitorsRemoved)
+		} else {
+			// Step had no measurable impact
+			stepDesc = fmt.Sprintf("%s +0.00", impact.Step)
+		}
+
+		lines = append(lines, fmt.Sprintf("• %s", stepDesc))
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+
+	// Join with newlines and add initial label
+	return fmt.Sprintf(" Step impacts:\n%s", joinLines(lines))
+}
+
+// joinStepList joins step descriptions with appropriate separators
+func joinStepList(steps []string) string {
+	if len(steps) == 0 {
+		return ""
+	}
+	if len(steps) == 1 {
+		return steps[0]
+	}
+	if len(steps) == 2 {
+		return steps[0] + ", " + steps[1]
+	}
+
+	result := ""
+	for i, step := range steps {
+		if i < len(steps)-1 {
+			result += step + ", "
+		} else {
+			result += step
+		}
+	}
+	return result
+}
+
+// joinLines joins multiple lines with newlines and proper indentation
+func joinLines(lines []string) string {
+	result := ""
+	for i, line := range lines {
+		if i < len(lines)-1 {
+			result += line + "\n"
+		} else {
+			result += line
+		}
+	}
+	return result + "."
+}
+
+// joinImpacts joins step impact descriptions with appropriate separators (kept for compatibility)
+func joinImpacts(impacts []string) string {
+	if len(impacts) == 0 {
+		return ""
+	}
+	if len(impacts) == 1 {
+		return impacts[0]
+	}
+	if len(impacts) == 2 {
+		return impacts[0] + ", " + impacts[1]
+	}
+
+	result := ""
+	for i, impact := range impacts {
+		if i == len(impacts)-1 {
+			result += impact
+		} else {
+			result += impact + ", "
+		}
+	}
+	return result
 }
 
 // SetupWithManager sets up the controller with the Manager.
