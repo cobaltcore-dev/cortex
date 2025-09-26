@@ -121,25 +121,21 @@ func (c *novaPipelineConsumer) Consume(
 		})
 	}
 
-	// Need to check if nova request -> circular dependency
-	// Move to nova pipeline?
-	// -> Missing data
-	// omit?
-
+	flavor := request.Spec.Data.Flavor
 	decision := &v1alpha1.SchedulingDecision{
 		ObjectMeta: ctrl.ObjectMeta{Name: request.Spec.Data.InstanceUUID},
 		Spec: v1alpha1.SchedulingDecisionSpec{
 			Input:            inWeights,
-			AvailabilityZone: "TODO",
+			AvailabilityZone: request.Spec.Data.AvailabilityZone,
 			Flavor: v1alpha1.Flavor{
-				Name:  "TODO",
-				VCPUs: 0,
-				RAM:   0,
-				Disk:  0,
+				Name:  flavor.Data.Name,
+				VCPUs: int(flavor.Data.VCPUs), // assume this is safe
+				RAM:   int(flavor.Data.MemoryMB),
+				Disk:  int(flavor.Data.RootGB),
 			},
-			VMware: false,
-			Live:   false,
-			Resize: false,
+			VMware: request.VMware,
+			Live:   request.Live,
+			Resize: request.Resize,
 			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
 				Name:    request.GetPipeline(),
 				Outputs: outputs,
