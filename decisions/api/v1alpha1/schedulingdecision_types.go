@@ -29,9 +29,9 @@ type Flavor struct {
 type SchedulingDecisionSpec struct {
 	Input            map[string]float64 `json:"input,omitempty"`
 	AvailabilityZone string             `json:"availbilityZone,omitempty"`
-	VMware           bool               `json:"vmware,omitempty"`
-	Live             bool               `json:"live,omitempty"`
-	Resize           bool               `json:"resize,omitempty"`
+	VMware           bool               `json:"vmware"`
+	Live             bool               `json:"live"`
+	Resize           bool               `json:"resize"`
 	Flavor           Flavor             `json:"flavor"`
 
 	Pipeline SchedulingDecisionPipelineSpec `json:"pipeline"`

@@ -214,6 +214,11 @@
                 header.textContent = `Scheduling Decision for VM ID: ${decision.metadata.name}`;
                 div.appendChild(header);
 
+                const description = document.createElement('p');
+                description.textContent = decision.status.description;
+                div.appendChild(description);
+
+
                 /*const pre = document.createElement('pre');
                 pre.textContent = JSON.stringify(decision, null, 2);
                 div.appendChild(pre);*/
@@ -224,6 +229,7 @@
                 const date = new Date(decision.metadata.creationTimestamp);
                 timestamp.textContent = `Created at: ${date.toLocaleString()}`;
                 div.appendChild(timestamp);
+
 
                 details.appendChild(div);
                 details.onclick = function () {

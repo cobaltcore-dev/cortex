@@ -104,35 +104,77 @@
       return utilizations
     }
 
-    async function redraw() {
-      if (Object.keys(state.pipeline).length === 0) return
+    function convertSchedulingDecisionToPipeline(schedulingDecision) {
+      const steps = {}
+      const order = []
 
-      // TODO use data of scheduling decision
+      for (const step of schedulingDecision.spec.pipeline.outputs) {
+        steps[step.step] = step.activations
+        order.push(step.step)
+      }
+
+
+      return {
+        request: {
+          spec: {
+            "nova_object.data": {
+              weights: schedulingDecision.spec.input,
+              availability_zone: schedulingDecision.spec.availbilityZone,
+              flavor: {
+                "nova_object.data": {
+                  name: schedulingDecision.spec.flavor.name,
+                  memory_mb: schedulingDecision.spec.flavor.ram,
+                  vcpus: schedulingDecision.spec.flavor.vcpus,
+                  disk: schedulingDecision.spec.flavor.disk,
+                }
+              },
+            }
+          },
+          vmware: schedulingDecision.spec.vmware,
+          live: schedulingDecision.spec.live,
+          resize: schedulingDecision.spec.resize,
+          weights: schedulingDecision.spec.input,
+        },
+        steps: schedulingDecision.status.steps,
+        in: schedulingDecision.spec.input,
+        out: schedulingDecision.status.finalScores,
+        steps,
+        order
+      }
+    }
+
+    async function redraw() {
+      if (Object.keys(state.pipeline).length === 0 && state.schedulingDecision === null) return
+
+      let data = state.pipeline
+      if (state.schedulingDecision !== null) {
+        data = convertSchedulingDecisionToPipeline(state.schedulingDecision)
+      }
 
       const greyout = 'filter: grayscale(50%); opacity: 0.25'
 
-      const spec = state.pipeline.request.spec["nova_object.data"]
+      const spec = data.request.spec["nova_object.data"]
       const flavor = spec.flavor["nova_object.data"]
 
       const utilizations = getUtilizationByHost()
       const hostnames = Object.keys(utilizations).sort((a, b) => {
-        if (state.pipeline.in[a] === undefined) return 1
-        if (state.pipeline.in[b] === undefined) return -1
+        if (data.in[a] === undefined) return 1
+        if (data.in[b] === undefined) return -1
         // If both values are equal (e.g. both undefined) compare by the name.
-        if (state.pipeline.out[a] === state.pipeline.out[b]) return a.localeCompare(b)
-        if (state.pipeline.out[a] === undefined) return 1
-        if (state.pipeline.out[b] === undefined) return -1
-        return state.pipeline.out[b] - state.pipeline.out[a]
+        if (data.out[a] === data.out[b]) return a.localeCompare(b)
+        if (data.out[a] === undefined) return 1
+        if (data.out[b] === undefined) return -1
+        return data.out[b] - data.out[a]
       })
 
       // Also include the nova input weights, scaled weights, and output weights.
       steps = {
-        ...state.pipeline.steps,
-        'nova input': state.pipeline.request.weights,
-        'scaled weights': state.pipeline.in,
-        'output weights': state.pipeline.out,
+        ...data.steps,
+        'nova input': data.request.weights,
+        'scaled weights': data.in,
+        'output weights': data.out,
       }
-      order = ['nova input', 'scaled weights', ...state.pipeline.order, 'output weights']
+      order = ['nova input', 'scaled weights', ...data.order, 'output weights']
       highlights = ['nova input', 'output weights']
 
       let table = '<table>'
@@ -176,7 +218,7 @@
       // Add hosts to the table.
       table += '<tr>'
       for (const host of hostnames) {
-        const hasWeight = state.pipeline.out[host] !== undefined
+        const hasWeight = data.out[host] !== undefined
         table += `
           <th class="hostname" style="${hasWeight ? '' : greyout}">
             <div>${host}</div>
@@ -199,7 +241,7 @@
         }
       }
       for (const host of hostnames) {
-        const hasWeight = state.pipeline.out[host] !== undefined
+        const hasWeight = data.out[host] !== undefined
         const utilization = utilizations[host]
 
         const cpusUsed = utilization.vcpusUsed
@@ -246,21 +288,55 @@
       }
       table += '</tr>'
 
+
+      const navData = [
+        {
+          label: "Cortex Nova",
+          value: "Scheduled VM:",
+        },
+        {
+          label: "VMware",
+          value: data.request.vmware,
+        },
+        {
+          label: "Live Migration",
+          value: data.request.live,
+        },
+        {
+          label: "Resize",
+          value: data.request.resize,
+        },
+        {
+          label: "Availability Zone",
+          value: spec.availability_zone,
+        },
+        {
+          label: "Flavor",
+          value: `${flavor.name} (MB: ${flavor.memory_mb}, vCPUs: ${flavor.vcpus})`,
+        },
+      ]
+
+      if (state.schedulingDecision !== null) {
+        navData.push({
+          label: "Decision",
+          value: state.schedulingDecision.status.description,
+        })
+      }
+
+
+
       const nav = `
         <nav>
-          <div class="element"><p class="highlight">Cortex Nova</p>Scheduled VM:</div>
-          <div class="element"><p class="highlight">VMware</p>${state.pipeline.request.vmware}</div>
-          <div class="element"><p class="highlight">Live Migration</p>${state.pipeline.request.live}</div>
-          <div class="element"><p class="highlight">Resize</p>${state.pipeline.request.resize}</div>
-          <div class="element"><p class="highlight">Availability Zone</p>${spec.availability_zone}</div>
-          <div class="element"><p class="highlight">Flavor</p>${flavor.name} (MB: ${flavor.memory_mb}, vCPUs: ${flavor.vcpus})</div>
+          ${navData.map(item => `
+            <div class="element"><p class="highlight">${item.label}</p>${item.value}</div>
+          `).join('')}
         </nav>
       `
 
       document.querySelector('#app').innerHTML = `
         <main>
-          ${table}
           ${nav}
+          ${table}
         </main>
       `
     }
