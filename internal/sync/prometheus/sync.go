@@ -194,7 +194,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to count rows: %w", err)
 	}
-	slog.Debug("number of rows", "nRows", nRows)
+	slog.Debug("number of rows", "nRows", nRows, "tableName", tableName)
 	if nRows == 0 {
 		// No metrics in the database yet. Start <timeRange> in the past.
 		start := time.Now().Add(-s.SyncTimeRange)
