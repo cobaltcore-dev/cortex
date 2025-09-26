@@ -56,22 +56,22 @@ spec:
           spec:
             description: spec defines the desired state of SchedulingDecision
             properties:
-              availbility_zone:
+              availbilityZone:
                 type: string
               flavor:
                 properties:
                   disk:
                     type: integer
-                  memory_mb:
-                    type: integer
                   name:
                     type: string
+                  ram:
+                    type: integer
                   vcpus:
                     type: integer
                 required:
                 - disk
-                - memory_mb
                 - name
+                - ram
                 - vcpus
                 type: object
               input:

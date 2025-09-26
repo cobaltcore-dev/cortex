@@ -21,14 +21,14 @@ type SchedulingDecisionPipelineSpec struct {
 type Flavor struct {
 	Name  string `json:"name"`
 	VCPUs int    `json:"vcpus"`
-	RAM   int    `json:"memory_mb"`
+	RAM   int    `json:"ram"`
 	Disk  int    `json:"disk"`
 }
 
 // SchedulingDecisionSpec defines the desired state of SchedulingDecision.
 type SchedulingDecisionSpec struct {
 	Input            map[string]float64 `json:"input,omitempty"`
-	AvailabilityZone string             `json:"availbility_zone,omitempty"`
+	AvailabilityZone string             `json:"availbilityZone,omitempty"`
 	VMware           bool               `json:"vmware,omitempty"`
 	Live             bool               `json:"live,omitempty"`
 	Resize           bool               `json:"resize,omitempty"`
