@@ -4,7 +4,6 @@
 package scheduler
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"maps"
@@ -17,15 +16,14 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
-
-	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Pipeline[RequestType PipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
 	Run(request RequestType) ([]string, error)
+
+	// Set the consumer that will receive the decisions.
+	SetConsumer(consumer SchedulingDecisionConsumer[RequestType])
 }
 
 type Premodifier[RequestType PipelineRequest] interface {
@@ -49,8 +47,12 @@ type pipeline[RequestType PipelineRequest] struct {
 	// MQTT topic to publish telemetry data on when the pipeline is finished.
 	mqttTopic string
 
-	// Kubernetes client to create decision resources.
-	Client client.Client
+	// Optional consumer to listen for the decisions.
+	Consumer SchedulingDecisionConsumer[RequestType]
+}
+
+func (p *pipeline[RequestType]) SetConsumer(consumer SchedulingDecisionConsumer[RequestType]) {
+	p.Consumer = consumer
 }
 
 type StepWrapper[RequestType PipelineRequest] func(Step[RequestType], conf.SchedulerStepConfig) Step[RequestType]
@@ -104,16 +106,6 @@ func NewPipeline[RequestType PipelineRequest](
 		)
 	}
 
-	var kubernetesClient client.Client
-	if scheme, err := v1alpha1.SchemeBuilder.Build(); err == nil {
-		if clientConfig, err := ctrl.GetConfig(); err == nil {
-			if cl, err := client.New(clientConfig, client.Options{Scheme: scheme}); err == nil {
-				// Successfully created a client, use it.
-				kubernetesClient = cl
-			}
-		}
-	}
-
 	return &pipeline[RequestType]{
 		// All steps can be run in parallel.
 		executionOrder:   [][]Step[RequestType]{steps},
@@ -121,7 +113,6 @@ func NewPipeline[RequestType PipelineRequest](
 		monitor:          monitor,
 		mqttClient:       mqttClient,
 		mqttTopic:        mqttTopic,
-		Client:           kubernetesClient,
 	}
 }
 
@@ -212,6 +203,15 @@ type TelemetryMessage[RequestType PipelineRequest] struct {
 	Out     map[string]float64            `json:"out"`
 }
 
+type SchedulingDecisionConsumer[RequestType PipelineRequest] interface {
+	Consume(
+		request RequestType,
+		applicationOrder []string,
+		inWeights map[string]float64,
+		stepWeights map[string]map[string]float64,
+	)
+}
+
 // Evaluate the pipeline and return a list of subjects in order of preference.
 func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 	slogArgs := request.GetTraceLogArgs()
@@ -251,71 +251,9 @@ func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 		Out:     outWeights,
 	})
 
-	// Create a new scheduling decision object for this object.
-	go func() {
-		if p.Client == nil {
-			return
-		}
-		var existing v1alpha1.SchedulingDecision
-		if err := p.Client.Get(
-			context.Background(),
-			client.ObjectKey{Name: request.GetResourceID()},
-			&existing,
-		); err == nil {
-			// Decision already exists, do not create a new one.
-			// TODO: Add new decisions for the same vm id if this is a migration.
-			traceLog.Info("scheduler: decision already exists, not creating a new one", "resourceID", request.GetResourceID())
-			return
-		}
-		outputs := []v1alpha1.SchedulingDecisionPipelineOutputSpec{}
-		for _, stepKey := range p.applicationOrder {
-			weights, ok := stepWeights[stepKey]
-			if !ok {
-				// This is ok, since steps can be skipped.
-				continue
-			}
-			activations := make(map[string]float64, len(weights))
-			for k, v := range weights {
-				activations[k] = p.ActivationFunction.Norm(v)
-			}
-			outputs = append(outputs, v1alpha1.SchedulingDecisionPipelineOutputSpec{
-				Step:        stepKey,
-				Activations: activations,
-			})
-		}
-
-		// Need to check if nova request -> circular dependency
-		// Move to nova pipeline?
-		// -> Missing data
-		// omit?
-
-		decision := &v1alpha1.SchedulingDecision{
-			ObjectMeta: ctrl.ObjectMeta{Name: request.GetResourceID()},
-			Spec: v1alpha1.SchedulingDecisionSpec{
-				Input:            inWeights,
-				AvailabilityZone: "TODO",
-				Flavor: v1alpha1.Flavor{
-					Name:  "TODO",
-					VCPUs: 0,
-					RAM:   0,
-					Disk:  0,
-				},
-				VMware: false,
-				Live:   false,
-				Resize: false,
-				Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-					Name:    request.GetPipeline(),
-					Outputs: outputs,
-				},
-			},
-			// Status will be filled in by the controller.
-		}
-		if err := p.Client.Create(context.Background(), decision); err != nil {
-			traceLog.Error("scheduler: failed to create decision", "error", err)
-			return
-		}
-		traceLog.Info("scheduler: created decision", "resourceID", request.GetResourceID())
-	}()
+	if p.Consumer != nil {
+		go p.Consumer.Consume(request, p.applicationOrder, inWeights, stepWeights)
+	}
 
 	return subjects, nil
 }

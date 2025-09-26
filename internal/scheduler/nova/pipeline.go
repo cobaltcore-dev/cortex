@@ -4,9 +4,12 @@
 package nova
 
 import (
+	"context"
 	"errors"
 	"log/slog"
+	"math"
 
+	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -16,6 +19,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type NovaStep = scheduler.Step[api.ExternalSchedulerRequest]
@@ -59,6 +64,96 @@ type novaPipeline struct {
 	preselectAllHosts bool
 }
 
+type novaPipelineConsumer struct {
+	// Kubernetes client to create decision resources.
+	Client client.Client
+}
+
+func NewNovaPipelineConsumer() *novaPipelineConsumer {
+	var kubernetesClient client.Client
+	if scheme, err := v1alpha1.SchemeBuilder.Build(); err == nil {
+		if clientConfig, err := ctrl.GetConfig(); err == nil {
+			if cl, err := client.New(clientConfig, client.Options{Scheme: scheme}); err == nil {
+				// Successfully created a client, use it.
+				kubernetesClient = cl
+			}
+		}
+	}
+	return &novaPipelineConsumer{
+		Client: kubernetesClient,
+	}
+}
+
+func (c *novaPipelineConsumer) Consume(
+	request api.ExternalSchedulerRequest,
+	applicationOrder []string,
+	inWeights map[string]float64,
+	stepWeights map[string]map[string]float64,
+) {
+	if c.Client == nil {
+		return
+	}
+	var existing v1alpha1.SchedulingDecision
+	if err := c.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: request.Spec.Data.InstanceUUID},
+		&existing,
+	); err == nil {
+		// Decision already exists, do not create a new one.
+		// TODO: Add new decisions for the same vm id if this is a migration.
+		slog.Info("scheduler: decision already exists, not creating a new one", "resourceID", request.Spec.Data.InstanceUUID)
+		return
+	}
+	outputs := []v1alpha1.SchedulingDecisionPipelineOutputSpec{}
+	for _, stepKey := range applicationOrder {
+		weights, ok := stepWeights[stepKey]
+		if !ok {
+			// This is ok, since steps can be skipped.
+			continue
+		}
+		activations := make(map[string]float64, len(weights))
+		for k, v := range weights {
+			activations[k] = math.Tanh(v)
+		}
+		outputs = append(outputs, v1alpha1.SchedulingDecisionPipelineOutputSpec{
+			Step:        stepKey,
+			Activations: activations,
+		})
+	}
+
+	// Need to check if nova request -> circular dependency
+	// Move to nova pipeline?
+	// -> Missing data
+	// omit?
+
+	decision := &v1alpha1.SchedulingDecision{
+		ObjectMeta: ctrl.ObjectMeta{Name: request.Spec.Data.InstanceUUID},
+		Spec: v1alpha1.SchedulingDecisionSpec{
+			Input:            inWeights,
+			AvailabilityZone: "TODO",
+			Flavor: v1alpha1.Flavor{
+				Name:  "TODO",
+				VCPUs: 0,
+				RAM:   0,
+				Disk:  0,
+			},
+			VMware: false,
+			Live:   false,
+			Resize: false,
+			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+				Name:    request.GetPipeline(),
+				Outputs: outputs,
+			},
+		},
+		// Status will be filled in by the controller.
+	}
+	if err := c.Client.Create(context.Background(), decision); err != nil {
+		slog.Error("scheduler: failed to create decision", "error", err)
+		return
+	}
+	slog.Info("scheduler: created decision", "resourceID", request.Spec.Data.InstanceUUID)
+}
+
 // Create a new Nova scheduler pipeline.
 func NewPipeline(
 	config conf.NovaSchedulerPipelineConfig,
@@ -89,7 +184,9 @@ func NewPipeline(
 		supportedSteps, config.Plugins, wrappers,
 		db, monitor, mqttClient, TopicFinished,
 	)
-	return &novaPipeline{pipeline, db, config.PreselectAllHosts}
+	wrapped := &novaPipeline{pipeline, db, config.PreselectAllHosts}
+	wrapped.SetConsumer(NewNovaPipelineConsumer())
+	return wrapped
 }
 
 // If needed, modify the request before sending it off to the pipeline.

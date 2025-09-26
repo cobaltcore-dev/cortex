@@ -19,8 +19,4 @@ type PipelineRequest interface {
 	GetPipeline() string
 	// Return a copy of the request with the pipeline name set.
 	WithPipeline(pipeline string) PipelineRequest
-
-	// Get the identifier of the resource that should be placed,
-	// e.g. the virtual machine id for virtual machines.
-	GetResourceID() string
 }
