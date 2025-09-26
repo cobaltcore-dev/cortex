@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -19,6 +20,70 @@ import (
 	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 	decisionsv1alpha1 "github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 )
+
+const (
+	// MinScoreValue represents the minimum possible score value
+	MinScoreValue = -999999
+
+	// String format templates for descriptions
+	selectedPerfectFmt   = "Selected: %s (score: %.2f), certainty: perfect, %d hosts evaluated."
+	selectedCertaintyFmt = "Selected: %s (score: %.2f), certainty: %s (gap: %.2f), %d hosts evaluated."
+	noHostsRemainingFmt  = "No hosts remaining after filtering, %d hosts evaluated"
+	inputConfirmedFmt    = " Input choice confirmed: %s (%.2f→%.2f, remained #1)."
+	inputFilteredFmt     = " Input favored %s (score: %.2f, now filtered), final winner was #%d in input (%.2f→%.2f)."
+	inputDemotedFmt      = " Input favored %s (score: %.2f, now #%d with %.2f), final winner was #%d in input (%.2f→%.2f)."
+)
+
+// certaintyLevel represents a threshold and its corresponding certainty level
+type certaintyLevel struct {
+	threshold float64
+	level     string
+}
+
+// certaintyLevels maps score gaps to certainty levels (ordered from highest to lowest threshold)
+var certaintyLevels = []certaintyLevel{
+	{0.5, "high"},
+	{0.2, "medium"},
+	{0.0, "low"},
+}
+
+// getCertaintyLevel returns the certainty level for a given score gap
+func getCertaintyLevel(gap float64) string {
+	for _, cl := range certaintyLevels {
+		if gap >= cl.threshold {
+			return cl.level
+		}
+	}
+	return "low" // fallback
+}
+
+// hostScore represents a host-score pair for sorting operations
+type hostScore struct {
+	host  string
+	score float64
+}
+
+// mapToSortedHostScores converts a score map to sorted hostScore slice (highest to lowest)
+func mapToSortedHostScores(scores map[string]float64) []hostScore {
+	sorted := make([]hostScore, 0, len(scores))
+	for host, score := range scores {
+		sorted = append(sorted, hostScore{host: host, score: score})
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].score > sorted[j].score
+	})
+	return sorted
+}
+
+// findHostPosition returns the 1-based position of a host in sorted hosts slice
+func findHostPosition(hosts []hostScore, targetHost string) int {
+	for i, hs := range hosts {
+		if hs.host == targetHost {
+			return i + 1 // 1-based position
+		}
+	}
+	return -1
+}
 
 // SchedulingDecisionReconciler reconciles a SchedulingDecision object
 type SchedulingDecisionReconciler struct {
@@ -50,44 +115,40 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// Validate that there is at least one host in the input
-	if len(res.Spec.Input) == 0 {
-		res.Status.State = v1alpha1.SchedulingDecisionStateError
-		res.Status.Error = "No hosts provided in input"
-	} else {
-		// Validate that all hosts in pipeline outputs exist in input
-		for _, output := range res.Spec.Pipeline.Outputs {
-			for hostName := range output.Activations {
-				if _, exists := res.Spec.Input[hostName]; !exists {
-					res.Status.State = v1alpha1.SchedulingDecisionStateError
-					res.Status.Error = "Host '" + hostName + "' in pipeline output not found in input"
-					if err := r.Status().Update(ctx, &res); err != nil {
-						return ctrl.Result{}, err
-					}
-					return ctrl.Result{}, nil
-				}
-			}
+	// Validate input has at least one host
+	if err := r.validateInput(res.Spec.Input); err != nil {
+		if err := r.setErrorState(ctx, &res, err); err != nil {
+			return ctrl.Result{}, err
 		}
-
-		// Calculate final scores with full pipeline
-		finalScores, deletedHosts := r.calculateScores(res.Spec.Input, res.Spec.Pipeline.Outputs)
-
-		// Calculate step-by-step impact for the winner
-		stepImpacts := r.calculateStepImpacts(res.Spec.Input, res.Spec.Pipeline.Outputs, finalScores)
-
-		// Find minimal critical path
-		criticalSteps, criticalStepCount := r.findCriticalSteps(res.Spec.Input, res.Spec.Pipeline.Outputs, finalScores)
-
-		res.Status.State = v1alpha1.SchedulingDecisionStateResolved
-		res.Status.Error = ""
-
-		// Sort finalScores by score (highest to lowest) and generate enhanced description
-		orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, res.Spec.Input, criticalSteps, criticalStepCount, len(res.Spec.Pipeline.Outputs), stepImpacts)
-
-		res.Status.FinalScores = orderedScores
-		res.Status.DeletedHosts = deletedHosts
-		res.Status.Description = description
+		return ctrl.Result{}, nil
 	}
+
+	// Validate that all hosts in pipeline outputs exist in input
+	if err := r.validatePipelineHosts(res.Spec.Input, res.Spec.Pipeline.Outputs); err != nil {
+		if err := r.setErrorState(ctx, &res, err); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Calculate final scores with full pipeline
+	finalScores, deletedHosts := r.calculateScores(res.Spec.Input, res.Spec.Pipeline.Outputs)
+
+	// Calculate step-by-step impact for the winner
+	stepImpacts := r.calculateStepImpacts(res.Spec.Input, res.Spec.Pipeline.Outputs, finalScores)
+
+	// Find minimal critical path
+	criticalSteps, criticalStepCount := r.findCriticalSteps(res.Spec.Input, res.Spec.Pipeline.Outputs, finalScores)
+
+	res.Status.State = v1alpha1.SchedulingDecisionStateResolved
+	res.Status.Error = ""
+
+	// Sort finalScores by score (highest to lowest) and generate enhanced description
+	orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, res.Spec.Input, criticalSteps, criticalStepCount, len(res.Spec.Pipeline.Outputs), stepImpacts)
+
+	res.Status.FinalScores = orderedScores
+	res.Status.DeletedHosts = deletedHosts
+	res.Status.Description = description
 
 	if err := r.Status().Update(ctx, &res); err != nil {
 		return ctrl.Result{}, err
@@ -96,9 +157,53 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil // No need to requeue.
 }
 
+// validateInput checks if the input has at least one host
+func (r *SchedulingDecisionReconciler) validateInput(input map[string]float64) error {
+	if len(input) == 0 {
+		return fmt.Errorf("No hosts provided in input")
+	}
+	return nil
+}
+
+// validatePipelineHosts checks if all hosts in pipeline outputs exist in input
+func (r *SchedulingDecisionReconciler) validatePipelineHosts(input map[string]float64, outputs []v1alpha1.SchedulingDecisionPipelineOutputSpec) error {
+	for _, output := range outputs {
+		for hostName := range output.Activations {
+			if _, exists := input[hostName]; !exists {
+				return fmt.Errorf("Host '%s' in pipeline output not found in input", hostName)
+			}
+		}
+	}
+	return nil
+}
+
+// setErrorState sets the error state and updates the resource status
+func (r *SchedulingDecisionReconciler) setErrorState(ctx context.Context, res *v1alpha1.SchedulingDecision, err error) error {
+	res.Status.State = v1alpha1.SchedulingDecisionStateError
+	res.Status.Error = err.Error()
+	return r.Status().Update(ctx, res)
+}
+
+// findWinner returns the host with the highest score and the score value
+func findWinner(scores map[string]float64) (string, float64) {
+	if len(scores) == 0 {
+		return "", MinScoreValue
+	}
+
+	winner := ""
+	maxScore := float64(MinScoreValue)
+	for host, score := range scores {
+		if score > maxScore {
+			maxScore = score
+			winner = host
+		}
+	}
+	return winner, maxScore
+}
+
 // calculateScores processes pipeline outputs and returns final scores and deleted hosts
 func (r *SchedulingDecisionReconciler) calculateScores(input map[string]float64, outputs []v1alpha1.SchedulingDecisionPipelineOutputSpec) (map[string]float64, map[string][]string) {
-	finalScores := make(map[string]float64)
+	finalScores := make(map[string]float64, len(input))
 	deletedHosts := make(map[string][]string)
 
 	// Start with input values as initial scores
@@ -139,15 +244,7 @@ func (r *SchedulingDecisionReconciler) findCriticalSteps(input map[string]float6
 	}
 
 	// Get baseline winner
-	baselineWinner := ""
-	maxScore := float64(-999999)
-	for host, score := range baselineFinalScores {
-		if score > maxScore {
-			maxScore = score
-			baselineWinner = host
-		}
-	}
-
+	baselineWinner, _ := findWinner(baselineFinalScores)
 	if baselineWinner == "" {
 		return []string{}, 0
 	}
@@ -156,26 +253,16 @@ func (r *SchedulingDecisionReconciler) findCriticalSteps(input map[string]float6
 
 	// Try removing each step one by one
 	for i, stepToRemove := range outputs {
-		// Create pipeline without this step
+		// Create pipeline without this step using slice operations
 		reducedOutputs := make([]v1alpha1.SchedulingDecisionPipelineOutputSpec, 0, len(outputs)-1)
-		for j, output := range outputs {
-			if j != i {
-				reducedOutputs = append(reducedOutputs, output)
-			}
-		}
+		reducedOutputs = append(reducedOutputs, outputs[:i]...)
+		reducedOutputs = append(reducedOutputs, outputs[i+1:]...)
 
 		// Calculate scores without this step
 		reducedFinalScores, _ := r.calculateScores(input, reducedOutputs)
 
 		// Find winner without this step
-		reducedWinner := ""
-		reducedMaxScore := float64(-999999)
-		for host, score := range reducedFinalScores {
-			if score > reducedMaxScore {
-				reducedMaxScore = score
-				reducedWinner = host
-			}
-		}
+		reducedWinner, _ := findWinner(reducedFinalScores)
 
 		// If removing this step changes the winner, it's critical
 		if reducedWinner != baselineWinner {
@@ -203,15 +290,7 @@ func (r *SchedulingDecisionReconciler) calculateStepImpacts(input map[string]flo
 	}
 
 	// Find the final winner
-	finalWinner := ""
-	maxScore := float64(-999999)
-	for host, score := range finalScores {
-		if score > maxScore {
-			maxScore = score
-			finalWinner = host
-		}
-	}
-
+	finalWinner, _ := findWinner(finalScores)
 	if finalWinner == "" {
 		return []StepImpact{}
 	}
@@ -294,24 +373,11 @@ func (r *SchedulingDecisionReconciler) calculateStepImpacts(input map[string]flo
 func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(finalScores map[string]float64, inputScores map[string]float64, criticalSteps []string, criticalStepCount int, totalSteps int, stepImpacts []StepImpact) (map[string]float64, string) {
 	totalInputHosts := len(inputScores)
 	if len(finalScores) == 0 {
-		return finalScores, fmt.Sprintf("No hosts remaining after filtering, %d hosts evaluated", totalInputHosts)
+		return finalScores, fmt.Sprintf(noHostsRemainingFmt, totalInputHosts)
 	}
 
-	// Create a slice of host-score pairs for sorting
-	type hostScore struct {
-		host  string
-		score float64
-	}
-
-	var sortedHosts []hostScore
-	for host, score := range finalScores {
-		sortedHosts = append(sortedHosts, hostScore{host: host, score: score})
-	}
-
-	// Sort by score (highest to lowest)
-	sort.Slice(sortedHosts, func(i, j int) bool {
-		return sortedHosts[i].score > sortedHosts[j].score
-	})
+	// Sort final scores by value (highest to lowest)
+	sortedHosts := mapToSortedHostScores(finalScores)
 
 	// Create ordered map (Go maps maintain insertion order as of Go 1.8+)
 	orderedScores := make(map[string]float64)
@@ -320,13 +386,7 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 	}
 
 	// Sort input scores to determine input-based ranking
-	var sortedInputHosts []hostScore
-	for host, score := range inputScores {
-		sortedInputHosts = append(sortedInputHosts, hostScore{host: host, score: score})
-	}
-	sort.Slice(sortedInputHosts, func(i, j int) bool {
-		return sortedInputHosts[i].score > sortedInputHosts[j].score
-	})
+	sortedInputHosts := mapToSortedHostScores(inputScores)
 
 	// Find positions and generate comparison
 	finalWinner := sortedHosts[0].host
@@ -334,41 +394,24 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 	finalWinnerInputScore := inputScores[finalWinner]
 
 	// Find final winner's position in input ranking
-	finalWinnerInputPosition := -1
-	for i, hs := range sortedInputHosts {
-		if hs.host == finalWinner {
-			finalWinnerInputPosition = i + 1 // 1-based position
-			break
-		}
-	}
+	finalWinnerInputPosition := findHostPosition(sortedInputHosts, finalWinner)
 
 	// Generate main description
 	var description string
 	if len(sortedHosts) == 1 {
-		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: perfect, %d hosts evaluated.",
-			sortedHosts[0].host, sortedHosts[0].score, totalInputHosts)
+		description = fmt.Sprintf(selectedPerfectFmt, sortedHosts[0].host, sortedHosts[0].score, totalInputHosts)
 	} else {
 		// Calculate certainty based on gap between 1st and 2nd place
 		gap := sortedHosts[0].score - sortedHosts[1].score
-		var certainty string
-		if gap >= 0.5 {
-			certainty = "high"
-		} else if gap >= 0.2 {
-			certainty = "medium"
-		} else {
-			certainty = "low"
-		}
-
-		description = fmt.Sprintf("Selected: %s (score: %.2f), certainty: %s (gap: %.2f), %d hosts evaluated.",
-			sortedHosts[0].host, sortedHosts[0].score, certainty, gap, totalInputHosts)
+		certainty := getCertaintyLevel(gap)
+		description = fmt.Sprintf(selectedCertaintyFmt, sortedHosts[0].host, sortedHosts[0].score, certainty, gap, totalInputHosts)
 	}
 
 	// Add input vs. final comparison
 	var comparison string
 	if inputWinner == finalWinner {
 		// Input choice confirmed
-		comparison = fmt.Sprintf(" Input choice confirmed: %s (%.2f→%.2f, remained #1).",
-			finalWinner, finalWinnerInputScore, sortedHosts[0].score)
+		comparison = fmt.Sprintf(inputConfirmedFmt, finalWinner, finalWinnerInputScore, sortedHosts[0].score)
 	} else {
 		// Input winner different from final winner
 		inputWinnerScore := sortedInputHosts[0].score
@@ -376,19 +419,11 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 		// Check if input winner was filtered out
 		_, inputWinnerSurvived := finalScores[inputWinner]
 		if !inputWinnerSurvived {
-			comparison = fmt.Sprintf(" Input favored %s (score: %.2f, now filtered), final winner was #%d in input (%.2f→%.2f).",
-				inputWinner, inputWinnerScore, finalWinnerInputPosition, finalWinnerInputScore, sortedHosts[0].score)
+			comparison = fmt.Sprintf(inputFilteredFmt, inputWinner, inputWinnerScore, finalWinnerInputPosition, finalWinnerInputScore, sortedHosts[0].score)
 		} else {
 			// Find input winner's position in final ranking
-			inputWinnerFinalPosition := -1
-			for i, hs := range sortedHosts {
-				if hs.host == inputWinner {
-					inputWinnerFinalPosition = i + 1 // 1-based position
-					break
-				}
-			}
-			comparison = fmt.Sprintf(" Input favored %s (score: %.2f, now #%d with %.2f), final winner was #%d in input (%.2f→%.2f).",
-				inputWinner, inputWinnerScore, inputWinnerFinalPosition, finalScores[inputWinner],
+			inputWinnerFinalPosition := findHostPosition(sortedHosts, inputWinner)
+			comparison = fmt.Sprintf(inputDemotedFmt, inputWinner, inputWinnerScore, inputWinnerFinalPosition, finalScores[inputWinner],
 				finalWinnerInputPosition, finalWinnerInputScore, sortedHosts[0].score)
 		}
 	}
@@ -429,6 +464,20 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 	return orderedScores, description
 }
 
+// formatImpactValue formats a single step impact value
+func formatImpactValue(impact StepImpact) string {
+	if impact.PromotedToFirst {
+		return fmt.Sprintf("%+.2f→#1", impact.ScoreDelta)
+	}
+	if impact.ScoreDelta != 0 {
+		return fmt.Sprintf("%+.2f", impact.ScoreDelta)
+	}
+	if impact.CompetitorsRemoved > 0 {
+		return fmt.Sprintf("+0.00 (removed %d)", impact.CompetitorsRemoved)
+	}
+	return "+0.00"
+}
+
 // formatStepImpactsMultiLine formats step impacts in a simple delta-ordered format
 // without confusing terminology, ordered by absolute impact magnitude
 func (r *SchedulingDecisionReconciler) formatStepImpactsMultiLine(stepImpacts []StepImpact) string {
@@ -436,68 +485,24 @@ func (r *SchedulingDecisionReconciler) formatStepImpactsMultiLine(stepImpacts []
 		return ""
 	}
 
-	// Create a copy of impacts for sorting
-	sortedImpacts := make([]StepImpact, len(stepImpacts))
-	copy(sortedImpacts, stepImpacts)
-
 	// Sort by absolute delta impact (highest first), with promotions taking priority for ties
-	sort.Slice(sortedImpacts, func(i, j int) bool {
-		absI := sortedImpacts[i].ScoreDelta
-		if absI < 0 {
-			absI = -absI
-		}
-		absJ := sortedImpacts[j].ScoreDelta
-		if absJ < 0 {
-			absJ = -absJ
-		}
-
-		// First priority: higher absolute delta
+	sort.Slice(stepImpacts, func(i, j int) bool {
+		absI, absJ := math.Abs(stepImpacts[i].ScoreDelta), math.Abs(stepImpacts[j].ScoreDelta)
 		if absI != absJ {
 			return absI > absJ
 		}
-
-		// Tie-breaking: promotions come first
-		if sortedImpacts[i].PromotedToFirst != sortedImpacts[j].PromotedToFirst {
-			return sortedImpacts[i].PromotedToFirst
+		if stepImpacts[i].PromotedToFirst != stepImpacts[j].PromotedToFirst {
+			return stepImpacts[i].PromotedToFirst
 		}
-
-		// Final tie-breaking: maintain original pipeline order (use step name for consistency)
-		return sortedImpacts[i].Step < sortedImpacts[j].Step
+		return stepImpacts[i].Step < stepImpacts[j].Step
 	})
 
-	var lines []string
-
-	for _, impact := range sortedImpacts {
-		var stepDesc string
-
-		if impact.PromotedToFirst {
-			// Step promoted winner to first place
-			if impact.ScoreDelta != 0 {
-				stepDesc = fmt.Sprintf("%s %+.2f→#1", impact.Step, impact.ScoreDelta)
-			} else {
-				// Zero delta but promoted (must have removed competitors)
-				stepDesc = fmt.Sprintf("%s +0.00→#1", impact.Step)
-			}
-		} else if impact.ScoreDelta != 0 {
-			// Step changed winner's score but didn't promote to #1
-			stepDesc = fmt.Sprintf("%s %+.2f", impact.Step, impact.ScoreDelta)
-		} else if impact.CompetitorsRemoved > 0 {
-			// Step removed competitors but didn't change winner's score or promote
-			stepDesc = fmt.Sprintf("%s +0.00 (removed %d)", impact.Step, impact.CompetitorsRemoved)
-		} else {
-			// Step had no measurable impact
-			stepDesc = fmt.Sprintf("%s +0.00", impact.Step)
-		}
-
-		lines = append(lines, fmt.Sprintf("• %s", stepDesc))
+	var b strings.Builder
+	b.WriteString(" Step impacts:")
+	for _, impact := range stepImpacts {
+		fmt.Fprintf(&b, "\n• %s %s", impact.Step, formatImpactValue(impact))
 	}
-
-	if len(lines) == 0 {
-		return ""
-	}
-
-	// Join with newlines and add initial label
-	return fmt.Sprintf(" Step impacts:\n%s.", strings.Join(lines, "\n"))
+	return b.String() + "."
 }
 
 // SetupWithManager sets up the controller with the Manager.
