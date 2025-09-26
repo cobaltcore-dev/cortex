@@ -434,6 +434,16 @@ func (httpAPI *httpAPI) HandleCommitmentChangeRequest(w http.ResponseWriter, r *
 
 // List all scheduling decisions.
 func (httpAPI *httpAPI) HandleListSchedulingDecisions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4000")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	// Handle preflight OPTIONS request
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	callback := httpAPI.monitor.Callback(w, r, "/scheduler/nova/scheduling-decisions")
 
 	// Exit early if the request method is not GET.
@@ -453,8 +463,8 @@ func (httpAPI *httpAPI) HandleListSchedulingDecisions(w http.ResponseWriter, r *
 			callback.Respond(http.StatusInternalServerError, err, "failed to list scheduling decisions")
 			return
 		}
-
 		w.Header().Set("Content-Type", "application/json")
+
 		if err := json.NewEncoder(w).Encode(decisions); err != nil {
 			callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
 			return
@@ -475,6 +485,7 @@ func (httpAPI *httpAPI) HandleListSchedulingDecisions(w http.ResponseWriter, r *
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
 	if err := json.NewEncoder(w).Encode(decision); err != nil {
 		callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
 		return

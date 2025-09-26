@@ -7,6 +7,8 @@
 <head>
   <title>Cortex Nova Visualizer</title>
   <meta charset="utf-8">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+
   <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 
   <!-- Shared CSS styles -->
@@ -38,6 +40,7 @@
 
   <script>
     let state = {
+      schedulingDecision: null,
       pipeline: {},
       utilizations: {},
     }
@@ -74,21 +77,44 @@
     }
     reconnect()
 
+    const parameters = new URLSearchParams(window.location.search)
+    const vmId = parameters.get('vm_id')
+    if (vmId != null) {
+      loadSchedulingDecision(vmId)
+        .then(data => state.schedulingDecision = data)
+        .catch(error => alert('Error loading scheduling decision: ' + error));
+    }
+
+    async function loadSchedulingDecision(vmId) {
+      const response = await fetch(`http://localhost:8020/scheduler/nova/scheduling-decisions?vm_id=${vmId}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();;
+    }
+
+    function getUtilizationByHost() {
+      // Get the utilization by service host.
+      const utilizations = {}
+      if (Array.isArray(state.utilizations) && state.utilizations.length > 0) {
+        for (const u of state.utilizations) {
+          utilizations[u.computeHost] = u
+        }
+      }
+      return utilizations
+    }
+
     async function redraw() {
       if (Object.keys(state.pipeline).length === 0) return
+
+      // TODO use data of scheduling decision
 
       const greyout = 'filter: grayscale(50%); opacity: 0.25'
 
       const spec = state.pipeline.request.spec["nova_object.data"]
       const flavor = spec.flavor["nova_object.data"]
 
-      // Get the utilization by service host.
-      utilizations = {}
-      if (Array.isArray(state.utilizations) && state.utilizations.length > 0) {
-        for (const u of state.utilizations) {
-          utilizations[u.computeHost] = u
-        }
-      }
+      const utilizations = getUtilizationByHost()
       const hostnames = Object.keys(utilizations).sort((a, b) => {
         if (state.pipeline.in[a] === undefined) return 1
         if (state.pipeline.in[b] === undefined) return -1
@@ -225,7 +251,7 @@
           <div class="element"><p class="highlight">Cortex Nova</p>Scheduled VM:</div>
           <div class="element"><p class="highlight">VMware</p>${state.pipeline.request.vmware}</div>
           <div class="element"><p class="highlight">Live Migration</p>${state.pipeline.request.live}</div>
-          <div class="element"><p class="highlight">Resize</p>${state.pipeline.request.live}</div>
+          <div class="element"><p class="highlight">Resize</p>${state.pipeline.request.resize}</div>
           <div class="element"><p class="highlight">Availability Zone</p>${spec.availability_zone}</div>
           <div class="element"><p class="highlight">Flavor</p>${flavor.name} (MB: ${flavor.memory_mb}, vCPUs: ${flavor.vcpus})</div>
         </nav>

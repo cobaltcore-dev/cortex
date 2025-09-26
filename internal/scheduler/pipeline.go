@@ -283,10 +283,26 @@ func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 				Activations: activations,
 			})
 		}
+
+		// Need to check if nova request -> circular dependency
+		// Move to nova pipeline?
+		// -> Missing data
+		// omit?
+
 		decision := &v1alpha1.SchedulingDecision{
 			ObjectMeta: ctrl.ObjectMeta{Name: request.GetResourceID()},
 			Spec: v1alpha1.SchedulingDecisionSpec{
-				Input: inWeights,
+				Input:            inWeights,
+				AvailabilityZone: "TODO",
+				Flavor: v1alpha1.Flavor{
+					Name:  "TODO",
+					VCPUs: 0,
+					RAM:   0,
+					Disk:  0,
+				},
+				VMware: false,
+				Live:   false,
+				Resize: false,
 				Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
 					Name:    request.GetPipeline(),
 					Outputs: outputs,

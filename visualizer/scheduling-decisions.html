@@ -1,0 +1,239 @@
+<!-- Copyright 2025 SAP SE -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Cortex Scheduling Decisions</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
+    <!-- ...existing code... -->
+    <style>
+        body {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #ffeaa7);
+            background-size: 400% 400%;
+            animation: rainbow 10s ease infinite;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        @keyframes rainbow {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        @keyframes wiggle {
+
+            0%,
+            100% {
+                transform: rotate(0deg);
+            }
+
+            25% {
+                transform: rotate(-5deg);
+            }
+
+            75% {
+                transform: rotate(5deg);
+            }
+        }
+
+        h2 {
+            color: #ff1744;
+            text-shadow: 3px 3px 0 #fff, 6px 6px 0 #333;
+            font-size: 3em;
+            text-align: center;
+            animation: bounce 2s ease infinite;
+            margin: 20px 0;
+        }
+
+        h3 {
+            color: #7b68ee;
+            font-size: 1.5em;
+        }
+
+        .scheduling-decision {
+            background: rgba(255, 255, 255, 0.9);
+            border: 5px dashed #ff6b6b;
+            border-radius: 25px;
+            margin: 20px 0;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transform: rotate(-1deg);
+            transition: transform 0.3s ease;
+            cursor: pointer;
+        }
+
+        .scheduling-decision:nth-child(even) {
+            transform: rotate(1deg);
+            border-color: #4ecdc4;
+        }
+
+        .scheduling-decision:hover {
+            transform: rotate(0deg) scale(1.05);
+            animation: wiggle 0.5s ease;
+        }
+
+        pre {
+            background: #f8f9fa;
+            border: 3px solid #ffd93d;
+            border-radius: 15px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #loading {
+            text-align: center;
+            color: white;
+            font-size: 2em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .progress {
+            width: 100px;
+            height: 100px;
+            border: 8px solid #fff;
+            border-top: 8px solid #ff6b6b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .progress-text {
+            animation: bounce 1.5s ease infinite;
+        }
+
+        /* Make the hire me text extra silly */
+        .hire-me {
+            background: #ff1744;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            transform: rotate(-2deg);
+            box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.3);
+            animation: wiggle 4s ease infinite;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* Add some sparkle effects */
+        body::before {
+            content: '✨ 🌟 ⭐ 💫 ✨ 🌟 ⭐ 💫';
+            position: fixed;
+            top: 10px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 2em;
+            animation: bounce 3s ease infinite;
+            pointer-events: none;
+            z-index: 1000;
+        }
+    </style>
+    <!-- ...existing code... -->
+
+    <!-- MQTT library from vendor folder. -->
+    <script src="mqtt.min.js"></script>
+
+    <div class="hire-me">Hire me on: CSS-is-my-passion.com</div>
+
+    <section id="loading">
+        <!-- Display a loading indicator as long as no data has arrived. -->
+        <div class="progress"></div>
+        <div class="progress-text">Waiting for Scheduling Decisions</div>
+    </section>
+
+    <section id="result" style="display: none;">
+        <h2>Scheduling Decisions</h2>
+        <div id="scheduling-decision-details"></div>
+    </section>
+
+    <script>
+        fetch('http://localhost:8020/scheduler/nova/scheduling-decisions')
+            .then(response => response.json())
+            .then(data => {
+
+                redraw(data);
+            })
+            .catch(error => alert('Error loading scheduling decision: ' + error));
+
+        function redraw(data) {
+            const result = document.getElementById('result');
+            const loader = document.getElementById('loading');
+            loader.style.display = 'none';
+            result.style.display = 'block';
+
+
+            const details = document.getElementById('scheduling-decision-details');
+            details.innerHTML = "";
+
+            for (const decision of data.items) {
+                const div = document.createElement('div');
+                div.className = 'scheduling-decision';
+
+                const header = document.createElement('h3');
+                header.textContent = `Scheduling Decision for VM ID: ${decision.metadata.name}`;
+                div.appendChild(header);
+
+                /*const pre = document.createElement('pre');
+                pre.textContent = JSON.stringify(decision, null, 2);
+                div.appendChild(pre);*/
+                const timestamp = document.createElement('div');
+                timestamp.style.textAlign = 'right';
+                timestamp.style.fontSize = '0.8em';
+                timestamp.style.color = '#555';
+                const date = new Date(decision.metadata.creationTimestamp);
+                timestamp.textContent = `Created at: ${date.toLocaleString()}`;
+                div.appendChild(timestamp);
+
+                details.appendChild(div);
+                details.onclick = function () {
+                    // Redirect to nova.html with vm_id parameter
+                    window.location.href = `nova.html?vm_id=${decision.metadata.name}`;
+                };
+            }
+        }
+    </script>
+
+</html>

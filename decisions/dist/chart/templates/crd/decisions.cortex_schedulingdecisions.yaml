@@ -62,10 +62,30 @@ spec:
           spec:
             description: spec defines the desired state of SchedulingDecision
             properties:
+              availbility_zone:
+                type: string
+              flavor:
+                properties:
+                  disk:
+                    type: integer
+                  memory_mb:
+                    type: integer
+                  name:
+                    type: string
+                  vcpus:
+                    type: integer
+                required:
+                - disk
+                - memory_mb
+                - name
+                - vcpus
+                type: object
               input:
                 additionalProperties:
                   type: number
                 type: object
+              live:
+                type: boolean
               pipeline:
                 properties:
                   name:
@@ -88,7 +108,12 @@ spec:
                 required:
                 - name
                 type: object
+              resize:
+                type: boolean
+              vmware:
+                type: boolean
             required:
+            - flavor
             - pipeline
             type: object
           status:

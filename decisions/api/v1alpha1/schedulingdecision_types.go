@@ -18,9 +18,22 @@ type SchedulingDecisionPipelineSpec struct {
 	Outputs []SchedulingDecisionPipelineOutputSpec `json:"outputs,omitempty"`
 }
 
+type Flavor struct {
+	Name  string `json:"name"`
+	VCPUs int    `json:"vcpus"`
+	RAM   int    `json:"memory_mb"`
+	Disk  int    `json:"disk"`
+}
+
 // SchedulingDecisionSpec defines the desired state of SchedulingDecision.
 type SchedulingDecisionSpec struct {
-	Input    map[string]float64             `json:"input,omitempty"`
+	Input            map[string]float64 `json:"input,omitempty"`
+	AvailabilityZone string             `json:"availbility_zone,omitempty"`
+	VMware           bool               `json:"vmware,omitempty"`
+	Live             bool               `json:"live,omitempty"`
+	Resize           bool               `json:"resize,omitempty"`
+	Flavor           Flavor             `json:"flavor"`
+
 	Pipeline SchedulingDecisionPipelineSpec `json:"pipeline"`
 }
 
