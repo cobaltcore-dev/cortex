@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -409,16 +410,15 @@ func (r *SchedulingDecisionReconciler) generateOrderedScoresAndDescription(final
 			if criticalStepCount == 1 {
 				criticalPath = fmt.Sprintf(" Decision driven by 1/%d pipeline step: %s.", totalSteps, criticalSteps[0])
 			} else {
-				// Join critical steps with commas
-				stepList := ""
-				for i, step := range criticalSteps {
-					if i == len(criticalSteps)-1 {
-						stepList += step
-					} else if i == len(criticalSteps)-2 {
-						stepList += step + " and "
-					} else {
-						stepList += step + ", "
-					}
+				// Join critical steps with proper separators
+				var stepList string
+				if len(criticalSteps) == 2 {
+					stepList = strings.Join(criticalSteps, " and ")
+				} else {
+					// For 3+ steps: "step1, step2, and step3"
+					lastStep := criticalSteps[len(criticalSteps)-1]
+					otherSteps := criticalSteps[:len(criticalSteps)-1]
+					stepList = strings.Join(otherSteps, ", ") + " and " + lastStep
 				}
 				criticalPath = fmt.Sprintf(" Decision driven by %d/%d pipeline steps: %s.", criticalStepCount, totalSteps, stepList)
 			}
@@ -497,66 +497,7 @@ func (r *SchedulingDecisionReconciler) formatStepImpactsMultiLine(stepImpacts []
 	}
 
 	// Join with newlines and add initial label
-	return fmt.Sprintf(" Step impacts:\n%s", joinLines(lines))
-}
-
-// joinStepList joins step descriptions with appropriate separators
-func joinStepList(steps []string) string {
-	if len(steps) == 0 {
-		return ""
-	}
-	if len(steps) == 1 {
-		return steps[0]
-	}
-	if len(steps) == 2 {
-		return steps[0] + ", " + steps[1]
-	}
-
-	result := ""
-	for i, step := range steps {
-		if i < len(steps)-1 {
-			result += step + ", "
-		} else {
-			result += step
-		}
-	}
-	return result
-}
-
-// joinLines joins multiple lines with newlines and proper indentation
-func joinLines(lines []string) string {
-	result := ""
-	for i, line := range lines {
-		if i < len(lines)-1 {
-			result += line + "\n"
-		} else {
-			result += line
-		}
-	}
-	return result + "."
-}
-
-// joinImpacts joins step impact descriptions with appropriate separators (kept for compatibility)
-func joinImpacts(impacts []string) string {
-	if len(impacts) == 0 {
-		return ""
-	}
-	if len(impacts) == 1 {
-		return impacts[0]
-	}
-	if len(impacts) == 2 {
-		return impacts[0] + ", " + impacts[1]
-	}
-
-	result := ""
-	for i, impact := range impacts {
-		if i == len(impacts)-1 {
-			result += impact
-		} else {
-			result += impact + ", "
-		}
-	}
-	return result
+	return fmt.Sprintf(" Step impacts:\n%s.", strings.Join(lines, "\n"))
 }
 
 // SetupWithManager sets up the controller with the Manager.
