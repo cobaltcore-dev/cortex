@@ -1,0 +1,25 @@
+# This file is safe from kubebuilder edit --plugins=helm/v1-alpha
+# If you want to re-generate, add the --force flag.
+
+owner-info:
+  enabled: true
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/hypervisors/demo/dist/chart"
+  maintainers:
+    - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
+  support-group: "workload-management"
+  service: "cortex-hypervisors-demo"
+
+image:
+  repository: ghcr.io/cobaltcore-dev/cortex-hypervisors-demo
+
+demo:
+  # Default configuration.
+  conf: {}
+  # Config provided here will override the config provided above.
+  secrets:
+    apiservers:
+      - host:
+        bearerToken:
+        caCrt:

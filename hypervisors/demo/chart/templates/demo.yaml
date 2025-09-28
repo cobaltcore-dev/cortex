@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: demo
+      labels:
+        {{- include "chart.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: demo
+          command:
+            # Created by kubebuilder Dockerfile
+            - /manager
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+          volumeMounts:
+            - name: demo-config-volume
+              mountPath: /etc/config
+            - name: demo-secrets-volume
+              mountPath: /etc/secrets
+              readOnly: true
+      volumes:
+        # Custom values to configure the demo.
+        - name: demo-config-volume
+          configMap:
+            name: demo-config
+        - name: demo-secrets-volume
+          secret:
+            secretName: demo-secrets
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-config
+data:
+  conf.json: |-
+    {{- if .Values.demo.conf }}
+    {{ toJson .Values.demo.conf }}
+    {{- else }}
+    {}
+    {{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-secrets
+type: Opaque
+data:
+  secrets.json: |-
+    {{- if .Values.demo.secrets }}
+    {{ toJson .Values.demo.secrets | b64enc }}
+    {{- else }}
+    {{ "{}" | b64enc }}
+    {{- end }}

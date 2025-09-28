@@ -27,6 +27,16 @@ def kubebuilder_binary_files(path):
     """
     return [path + '/cmd', path + '/api', path + '/internal', path + '/go.mod', path + '/go.sum']
 
+########### Hypervisors kubernetes client demo
+docker_build('ghcr.io/cobaltcore-dev/cortex-hypervisors-demo', '.',
+    dockerfile='Dockerfile.kubebuilder',
+    build_args={'GO_MOD_PATH': 'hypervisors', 'GO_MAIN_PATH': '.'},
+    only=['hypervisors/', 'internal/', 'go.mod', 'go.sum'],
+)
+local('sh helm/sync.sh hypervisors/demo/chart')
+k8s_yaml(helm('hypervisors/demo/chart', name='cortex-hypervisors-demo', values=[tilt_values]))
+k8s_resource('demo', labels=['Demo'])
+
 ########### Reservations Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile.kubebuilder',

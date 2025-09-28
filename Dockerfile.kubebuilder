@@ -4,6 +4,8 @@ ARG TARGETOS
 ARG TARGETARCH
 # Path of our go.mod
 ARG GO_MOD_PATH=.
+ARG GO_MAIN_PATH=cmd/main.go
+ENV GO_MAIN_PATH=${GO_MAIN_PATH}
 ARG GOCACHE=/root/.cache/go-build
 ENV GOCACHE=${GOCACHE}
 
@@ -28,7 +30,7 @@ ENV GOOS=${TARGETOS:-linux}
 ENV GOARCH=${TARGETARCH}
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=cache,target=${GOCACHE} \
-    go build -a -o manager cmd/main.go
+    go build -a -o manager ${GO_MAIN_PATH}
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
