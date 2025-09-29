@@ -85,14 +85,14 @@ func (s *NovaSyncer) Sync(ctx context.Context) error {
 		}
 	}
 	if slices.Contains(s.Conf.Types, "hypervisors") {
-		_, err := s.SyncChangedHypervisors(ctx)
+		_, err := s.SyncAllHypervisors(ctx)
 		if err != nil {
 			return err
 		}
 		go s.MqttClient.Publish(TriggerNovaHypervisorsSynced, "")
 	}
 	if slices.Contains(s.Conf.Types, "flavors") {
-		changedFlavors, err := s.SyncChangedFlavors(ctx)
+		changedFlavors, err := s.SyncAllFlavors(ctx)
 		if err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func (s *NovaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
 }
 
 // Sync the OpenStack hypervisors into the database.
-func (s *NovaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, error) {
+func (s *NovaSyncer) SyncAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	allHypervisors, err := s.API.GetAllHypervisors(ctx)
 	if err != nil {
 		return nil, err
@@ -242,19 +242,16 @@ func (s *NovaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, 
 }
 
 // Sync the OpenStack flavors into the database.
-func (s *NovaSyncer) SyncChangedFlavors(ctx context.Context) ([]Flavor, error) {
-	tableName := Flavor{}.TableName()
-	lastSyncTime := s.getLastSyncTime(tableName)
-	defer s.setLastSyncTime(tableName, time.Now())
-	changedFlavors, err := s.API.GetChangedFlavors(ctx, lastSyncTime)
+func (s *NovaSyncer) SyncAllFlavors(ctx context.Context) ([]Flavor, error) {
+	allFlavors, err := s.API.GetAllFlavors(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = upsert(s, changedFlavors, "id", func(f Flavor) string { return f.ID }, tableName)
+	err = db.ReplaceAll(s.DB, allFlavors...)
 	if err != nil {
 		return nil, err
 	}
-	return changedFlavors, nil
+	return allFlavors, nil
 }
 
 // Sync the OpenStack migrations into the database.
@@ -274,13 +271,13 @@ func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, er
 }
 
 func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) ([]Aggregate, error) {
-	changedAggregates, err := s.API.GetAllAggregates(ctx)
+	allAggregates, err := s.API.GetAllAggregates(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = db.ReplaceAll(s.DB, changedAggregates...)
+	err = db.ReplaceAll(s.DB, allAggregates...)
 	if err != nil {
 		return nil, err
 	}
-	return changedAggregates, nil
+	return allAggregates, nil
 }

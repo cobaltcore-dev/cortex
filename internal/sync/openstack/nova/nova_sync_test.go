@@ -26,7 +26,7 @@ func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, erro
 	return []Hypervisor{{ID: "1", Hostname: "hypervisor1"}}, nil
 }
 
-func (m *mockNovaAPI) GetChangedFlavors(ctx context.Context, t *time.Time) ([]Flavor, error) {
+func (m *mockNovaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	return []Flavor{{ID: "1", Name: "flavor1"}}, nil
 }
 
@@ -118,7 +118,7 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	hypervisors, err := syncer.SyncChangedHypervisors(ctx)
+	hypervisors, err := syncer.SyncAllHypervisors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -143,7 +143,7 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	flavors, err := syncer.SyncChangedFlavors(ctx)
+	flavors, err := syncer.SyncAllFlavors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

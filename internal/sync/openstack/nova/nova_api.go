@@ -26,13 +26,13 @@ type NovaAPI interface {
 	Init(ctx context.Context)
 	// Get all changed nova servers since the timestamp.
 	GetChangedServers(ctx context.Context, changedSince *time.Time) ([]Server, error)
-	// Get all nova hypervisors since the timestamp.
+	// Get all nova hypervisors.
 	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
-	// Get all changed nova flavors since the timestamp.
-	GetChangedFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error)
+	// Get all nova flavors.
+	GetAllFlavors(ctx context.Context) ([]Flavor, error)
 	// Get all changed nova migrations since the timestamp.
 	GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error)
-	// Get all changed aggregates since the timestamp.
+	// Get all aggregates.
 	GetAllAggregates(ctx context.Context) ([]Aggregate, error)
 }
 
@@ -164,10 +164,10 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	return hypervisors, nil
 }
 
-// Get all Nova flavors since the timestamp.
-func (api *novaAPI) GetChangedFlavors(ctx context.Context, changedSince *time.Time) ([]Flavor, error) {
+// Get all Nova flavors.
+func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	label := Flavor{}.TableName()
-	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
+	slog.Info("fetching nova data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {
@@ -175,12 +175,7 @@ func (api *novaAPI) GetChangedFlavors(ctx context.Context, changedSince *time.Ti
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
-		// It is important to omit the changes-since parameter if it is nil.
-		// Otherwise Nova will return huge amounts of data since the beginning of time.
 		lo := flavors.ListOpts{AccessType: flavors.AllAccess} // Also private flavors.
-		if changedSince != nil {
-			lo.ChangesSince = changedSince.Format(time.RFC3339)
-		}
 		return flavors.ListDetail(api.sc, lo).AllPages(ctx)
 	}()
 	if err != nil {
@@ -197,7 +192,7 @@ func (api *novaAPI) GetChangedFlavors(ctx context.Context, changedSince *time.Ti
 	return data.Flavors, nil
 }
 
-// Get all Nova migrations.
+// Get all changed Nova migrations.
 func (api *novaAPI) GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error) {
 	label := Migration{}.TableName()
 	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
