@@ -7,9 +7,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type SchedulingEventType string
+
+const (
+	SchedulingEventTypeLiveMigration    SchedulingEventType = "live-migration"
+	SchedulingEventTypeColdMigration    SchedulingEventType = "cold-migration"
+	SchedulingEventTypeEvacuation       SchedulingEventType = "evacuation"
+	SchedulingEventTypeResize           SchedulingEventType = "resize"
+	SchedulingEventTypeInitialPlacement SchedulingEventType = "initial-placement"
+)
+
 type SchedulingDecisionPipelineOutputSpec struct {
-	Step string `json:"step"`
-	// Weights calculated by this step subjected to the activation function.
+	Step        string             `json:"step"`
 	Activations map[string]float64 `json:"activations,omitempty"`
 }
 
@@ -26,15 +35,21 @@ type Flavor struct {
 }
 
 // SchedulingDecisionSpec defines the desired state of SchedulingDecision.
-type SchedulingDecisionSpec struct {
-	Input            map[string]float64 `json:"input,omitempty"`
-	AvailabilityZone string             `json:"availbilityZone,omitempty"`
-	VMware           bool               `json:"vmware"`
-	Live             bool               `json:"live"`
-	Resize           bool               `json:"resize"`
-	Flavor           Flavor             `json:"flavor"`
+type SchedulingDecisionSpec struct { // List of scheduling decisions to be processed.
+	Decisions []SchedulingDecisionRequest `json:"decisions"`
+}
 
-	Pipeline SchedulingDecisionPipelineSpec `json:"pipeline"`
+type SchedulingDecisionRequest struct {
+	ID          string                         `json:"id"`
+	RequestedAt metav1.Time                    `json:"requestedAt"`
+	EventType   SchedulingEventType            `json:"eventType"`
+	Input       map[string]float64             `json:"input,omitempty"`
+	Pipeline    SchedulingDecisionPipelineSpec `json:"pipeline"`
+
+	AvailabilityZone string `json:"availabilityZone,omitempty"`
+	VMware           bool   `json:"vmware"`
+	// TODO more generic flavor to support other than compute
+	Flavor Flavor `json:"flavor"`
 }
 
 type SchedulingDecisionState string
@@ -44,16 +59,25 @@ const (
 	SchedulingDecisionStateError    SchedulingDecisionState = "error"
 )
 
-// SchedulingDecisionStatus defines the observed state of SchedulingDecision.
-type SchedulingDecisionStatus struct {
-	State SchedulingDecisionState `json:"state,omitempty"`
-	// Only given if state is "error".
-	Error       string `json:"error,omitempty"`
+// SchedulingDecisionResult represents the result of processing a single decision request.
+type SchedulingDecisionResult struct {
+	ID          string `json:"id"`
 	Description string `json:"description,omitempty"`
 	// Final scores for each host after processing all pipeline steps.
 	FinalScores map[string]float64 `json:"finalScores,omitempty"`
 	// Hosts that were deleted during pipeline processing and all steps that attempted to delete them.
 	DeletedHosts map[string][]string `json:"deletedHosts,omitempty"`
+}
+
+// SchedulingDecisionStatus defines the observed state of SchedulingDecision.
+type SchedulingDecisionStatus struct {
+	State SchedulingDecisionState `json:"state,omitempty"`
+	Error string                  `json:"error,omitempty"`
+
+	DecisionCount     int    `json:"decisionCount,omitempty"`
+	GlobalDescription string `json:"globalDescription,omitempty"`
+
+	Results []SchedulingDecisionResult `json:"results,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -62,7 +86,9 @@ type SchedulingDecisionStatus struct {
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="Description",type="string",JSONPath=".status.description"
+// +kubebuilder:printcolumn:name="Decisions",type="integer",JSONPath=".status.decisionCount"
+// +kubebuilder:printcolumn:name="Latest Event",type="string",JSONPath=".spec.decisions[-1].eventType"
+// +kubebuilder:printcolumn:name="Description",type="string",JSONPath=".status.globalDescription"
 
 // SchedulingDecision is the Schema for the schedulingdecisions API
 type SchedulingDecision struct {

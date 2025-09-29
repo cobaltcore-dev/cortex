@@ -115,40 +115,61 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// Validate input has at least one host
-	if err := r.validateInput(res.Spec.Input); err != nil {
-		if err := r.setErrorState(ctx, &res, err); err != nil {
+	// Validate we have at least one decision
+	if len(res.Spec.Decisions) == 0 {
+		if err := r.setErrorState(ctx, &res, fmt.Errorf("No decisions provided in spec")); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
-	// Validate that all hosts in pipeline outputs exist in input
-	if err := r.validatePipelineHosts(res.Spec.Input, res.Spec.Pipeline.Outputs); err != nil {
-		if err := r.setErrorState(ctx, &res, err); err != nil {
-			return ctrl.Result{}, err
+	// Process each decision individually
+	results := make([]v1alpha1.SchedulingDecisionResult, 0, len(res.Spec.Decisions))
+
+	for _, decision := range res.Spec.Decisions {
+		// Validate input has at least one host for this decision
+		if err := r.validateInput(decision.Input); err != nil {
+			if err := r.setErrorState(ctx, &res, fmt.Errorf("Decision %s: %v", decision.ID, err)); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil
+
+		// Validate that all hosts in pipeline outputs exist in input for this decision
+		if err := r.validatePipelineHosts(decision.Input, decision.Pipeline.Outputs); err != nil {
+			if err := r.setErrorState(ctx, &res, fmt.Errorf("Decision %s: %v", decision.ID, err)); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
+		// Calculate final scores with full pipeline for this decision
+		finalScores, deletedHosts := r.calculateScores(decision.Input, decision.Pipeline.Outputs)
+
+		// Calculate step-by-step impact for the winner for this decision
+		stepImpacts := r.calculateStepImpacts(decision.Input, decision.Pipeline.Outputs, finalScores)
+
+		// Find minimal critical path for this decision
+		criticalSteps, criticalStepCount := r.findCriticalSteps(decision.Input, decision.Pipeline.Outputs, finalScores)
+
+		// Sort finalScores by score (highest to lowest) and generate enhanced description for this decision
+		orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, decision.Input, criticalSteps, criticalStepCount, len(decision.Pipeline.Outputs), stepImpacts)
+
+		// Create result for this decision
+		result := v1alpha1.SchedulingDecisionResult{
+			ID:           decision.ID,
+			Description:  description,
+			FinalScores:  orderedScores,
+			DeletedHosts: deletedHosts,
+		}
+		results = append(results, result)
 	}
 
-	// Calculate final scores with full pipeline
-	finalScores, deletedHosts := r.calculateScores(res.Spec.Input, res.Spec.Pipeline.Outputs)
-
-	// Calculate step-by-step impact for the winner
-	stepImpacts := r.calculateStepImpacts(res.Spec.Input, res.Spec.Pipeline.Outputs, finalScores)
-
-	// Find minimal critical path
-	criticalSteps, criticalStepCount := r.findCriticalSteps(res.Spec.Input, res.Spec.Pipeline.Outputs, finalScores)
-
+	// Update status with all results
 	res.Status.State = v1alpha1.SchedulingDecisionStateResolved
 	res.Status.Error = ""
-
-	// Sort finalScores by score (highest to lowest) and generate enhanced description
-	orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, res.Spec.Input, criticalSteps, criticalStepCount, len(res.Spec.Pipeline.Outputs), stepImpacts)
-
-	res.Status.FinalScores = orderedScores
-	res.Status.DeletedHosts = deletedHosts
-	res.Status.Description = description
+	res.Status.DecisionCount = len(res.Spec.Decisions)
+	res.Status.Results = results
 
 	if err := r.Status().Update(ctx, &res); err != nil {
 		return ctrl.Result{}, err

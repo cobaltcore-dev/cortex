@@ -27,7 +27,13 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
-    - jsonPath: .status.description
+    - jsonPath: .status.decisionCount
+      name: Decisions
+      type: integer
+    - jsonPath: .spec.decisions[-1].eventType
+      name: Latest Event
+      type: string
+    - jsonPath: .status.globalDescription
       name: Description
       type: string
     name: v1alpha1
@@ -56,85 +62,108 @@ spec:
           spec:
             description: spec defines the desired state of SchedulingDecision
             properties:
-              availbilityZone:
-                type: string
-              flavor:
-                properties:
-                  disk:
-                    type: integer
-                  name:
-                    type: string
-                  ram:
-                    type: integer
-                  vcpus:
-                    type: integer
-                required:
-                - disk
-                - name
-                - ram
-                - vcpus
-                type: object
-              input:
-                additionalProperties:
-                  type: number
-                type: object
-              live:
-                type: boolean
-              pipeline:
-                properties:
-                  name:
-                    type: string
-                  outputs:
-                    items:
+              decisions:
+                items:
+                  properties:
+                    availabilityZone:
+                      type: string
+                    eventType:
+                      type: string
+                    flavor:
                       properties:
-                        activations:
-                          additionalProperties:
-                            type: number
-                          description: Weights calculated by this step subjected to
-                            the activation function.
-                          type: object
-                        step:
+                        disk:
+                          type: integer
+                        name:
                           type: string
+                        ram:
+                          type: integer
+                        vcpus:
+                          type: integer
                       required:
-                      - step
+                      - disk
+                      - name
+                      - ram
+                      - vcpus
                       type: object
-                    type: array
-                required:
-                - name
-                type: object
-              resize:
-                type: boolean
-              vmware:
-                type: boolean
+                    id:
+                      type: string
+                    input:
+                      additionalProperties:
+                        type: number
+                      type: object
+                    pipeline:
+                      properties:
+                        name:
+                          type: string
+                        outputs:
+                          items:
+                            properties:
+                              activations:
+                                additionalProperties:
+                                  type: number
+                                type: object
+                              step:
+                                type: string
+                            required:
+                            - step
+                            type: object
+                          type: array
+                      required:
+                      - name
+                      type: object
+                    requestedAt:
+                      format: date-time
+                      type: string
+                    vmware:
+                      type: boolean
+                  required:
+                  - eventType
+                  - flavor
+                  - id
+                  - pipeline
+                  - requestedAt
+                  - vmware
+                  type: object
+                type: array
             required:
-            - flavor
-            - live
-            - pipeline
-            - resize
-            - vmware
+            - decisions
             type: object
           status:
             description: status defines the observed state of SchedulingDecision
             properties:
-              deletedHosts:
-                additionalProperties:
-                  items:
-                    type: string
-                  type: array
-                description: Hosts that were deleted during pipeline processing and
-                  all steps that attempted to delete them.
-                type: object
-              description:
-                type: string
+              decisionCount:
+                type: integer
               error:
-                description: Only given if state is "error".
                 type: string
-              finalScores:
-                additionalProperties:
-                  type: number
-                description: Final scores for each host after processing all pipeline
-                  steps.
-                type: object
+              globalDescription:
+                type: string
+              results:
+                items:
+                  description: SchedulingDecisionResult represents the result of processing
+                    a single decision request.
+                  properties:
+                    deletedHosts:
+                      additionalProperties:
+                        items:
+                          type: string
+                        type: array
+                      description: Hosts that were deleted during pipeline processing
+                        and all steps that attempted to delete them.
+                      type: object
+                    description:
+                      type: string
+                    finalScores:
+                      additionalProperties:
+                        type: number
+                      description: Final scores for each host after processing all
+                        pipeline steps.
+                      type: object
+                    id:
+                      type: string
+                  required:
+                  - id
+                  type: object
+                type: array
               state:
                 type: string
             type: object

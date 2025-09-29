@@ -19,24 +19,29 @@ func TestReconcile(t *testing.T) {
 			Name: "test-decision",
 		},
 		Spec: v1alpha1.SchedulingDecisionSpec{
-			Input: map[string]float64{
-				"host1": 1.0,
-				"host2": 2.0,
-			},
-			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-				Name: "test-pipeline",
-				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
-					{
-						Step: "weigher",
-						Activations: map[string]float64{
-							"host1": 0.5,
-							"host2": 0.5,
-						},
+			Decisions: []v1alpha1.SchedulingDecisionRequest{
+				{
+					ID: "decision-1",
+					Input: map[string]float64{
+						"host1": 1.0,
+						"host2": 2.0,
 					},
-					{
-						Step: "filter",
-						Activations: map[string]float64{
-							"host1": 0.0,
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name: "test-pipeline",
+						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+							{
+								Step: "weigher",
+								Activations: map[string]float64{
+									"host1": 0.5,
+									"host2": 0.5,
+								},
+							},
+							{
+								Step: "filter",
+								Activations: map[string]float64{
+									"host1": 0.0,
+								},
+							},
 						},
 					},
 				},
@@ -83,9 +88,25 @@ func TestReconcile(t *testing.T) {
 	if updatedResource.Status.Error != "" {
 		t.Errorf("Expected empty error, got '%s'", updatedResource.Status.Error)
 	}
+
+	// Verify decision count
+	if updatedResource.Status.DecisionCount != 1 {
+		t.Errorf("Expected decision count 1, got %d", updatedResource.Status.DecisionCount)
+	}
+
+	// Verify we have one result
+	if len(updatedResource.Status.Results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(updatedResource.Status.Results))
+	}
+
+	result := updatedResource.Status.Results[0]
+	if result.ID != "decision-1" {
+		t.Errorf("Expected result ID 'decision-1', got '%s'", result.ID)
+	}
+
 	expectedDescription := "Selected: host1 (score: 1.50), certainty: perfect, 2 hosts evaluated. Input favored host2 (score: 2.00, now filtered), final winner was #2 in input (1.00→1.50). Decision driven by 1/2 pipeline step: filter. Step impacts:\n• weigher +0.50\n• filter +0.00→#1."
-	if updatedResource.Status.Description != expectedDescription {
-		t.Errorf("Expected description '%s', got '%s'", expectedDescription, updatedResource.Status.Description)
+	if result.Description != expectedDescription {
+		t.Errorf("Expected description '%s', got '%s'", expectedDescription, result.Description)
 	}
 
 	// Verify final scores calculation
@@ -93,11 +114,11 @@ func TestReconcile(t *testing.T) {
 	expectedFinalScores := map[string]float64{
 		"host1": 1.5,
 	}
-	if len(updatedResource.Status.FinalScores) != len(expectedFinalScores) {
-		t.Errorf("Expected %d final scores, got %d", len(expectedFinalScores), len(updatedResource.Status.FinalScores))
+	if len(result.FinalScores) != len(expectedFinalScores) {
+		t.Errorf("Expected %d final scores, got %d", len(expectedFinalScores), len(result.FinalScores))
 	}
 	for host, expectedScore := range expectedFinalScores {
-		if actualScore, exists := updatedResource.Status.FinalScores[host]; !exists {
+		if actualScore, exists := result.FinalScores[host]; !exists {
 			t.Errorf("Expected final score for host '%s', but it was not found", host)
 		} else if actualScore != expectedScore {
 			t.Errorf("Expected final score for host '%s' to be %f, got %f", host, expectedScore, actualScore)
@@ -108,11 +129,11 @@ func TestReconcile(t *testing.T) {
 	expectedDeletedHosts := map[string][]string{
 		"host2": {"filter"}, // host2 was deleted by the filter step
 	}
-	if len(updatedResource.Status.DeletedHosts) != len(expectedDeletedHosts) {
-		t.Errorf("Expected %d deleted hosts, got %d", len(expectedDeletedHosts), len(updatedResource.Status.DeletedHosts))
+	if len(result.DeletedHosts) != len(expectedDeletedHosts) {
+		t.Errorf("Expected %d deleted hosts, got %d", len(expectedDeletedHosts), len(result.DeletedHosts))
 	}
 	for host, expectedSteps := range expectedDeletedHosts {
-		if actualSteps, exists := updatedResource.Status.DeletedHosts[host]; !exists {
+		if actualSteps, exists := result.DeletedHosts[host]; !exists {
 			t.Errorf("Expected deleted host '%s', but it was not found", host)
 		} else if len(actualSteps) != len(expectedSteps) {
 			t.Errorf("Expected host '%s' to be deleted by %d steps, got %d", host, len(expectedSteps), len(actualSteps))
@@ -126,7 +147,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	t.Logf("Reconcile completed successfully: state=%s, finalScores=%v, deletedHosts=%v",
-		updatedResource.Status.State, updatedResource.Status.FinalScores, updatedResource.Status.DeletedHosts)
+		updatedResource.Status.State, result.FinalScores, result.DeletedHosts)
 }
 
 func TestReconcileEmptyInput(t *testing.T) {
@@ -135,15 +156,20 @@ func TestReconcileEmptyInput(t *testing.T) {
 			Name: "test-decision-empty-input",
 		},
 		Spec: v1alpha1.SchedulingDecisionSpec{
-			Input: map[string]float64{}, // Empty input - no hosts
-			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-				Name: "test-pipeline",
-				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
-					{
-						Step: "weigher",
-						Activations: map[string]float64{
-							"host1": 0.5,
-							"host2": 0.5,
+			Decisions: []v1alpha1.SchedulingDecisionRequest{
+				{
+					ID:    "decision-1",
+					Input: map[string]float64{}, // Empty input - no hosts
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name: "test-pipeline",
+						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+							{
+								Step: "weigher",
+								Activations: map[string]float64{
+									"host1": 0.5,
+									"host2": 0.5,
+								},
+							},
 						},
 					},
 				},
@@ -187,12 +213,9 @@ func TestReconcileEmptyInput(t *testing.T) {
 	if updatedResource.Status.State != v1alpha1.SchedulingDecisionStateError {
 		t.Errorf("Expected state '%s', got '%s'", v1alpha1.SchedulingDecisionStateError, updatedResource.Status.State)
 	}
-	expectedError := "No hosts provided in input"
+	expectedError := "Decision decision-1: No hosts provided in input"
 	if updatedResource.Status.Error != expectedError {
 		t.Errorf("Expected error '%s', got '%s'", expectedError, updatedResource.Status.Error)
-	}
-	if updatedResource.Status.Description != "" {
-		t.Errorf("Expected empty description, got '%s'", updatedResource.Status.Description)
 	}
 
 	t.Logf("Reconcile completed with error: state=%s, error=%s", updatedResource.Status.State, updatedResource.Status.Error)
@@ -204,18 +227,23 @@ func TestReconcileHostMismatch(t *testing.T) {
 			Name: "test-decision-host-mismatch",
 		},
 		Spec: v1alpha1.SchedulingDecisionSpec{
-			Input: map[string]float64{
-				"host1": 1.0,
-				"host2": 2.0,
-			}, // host3 is missing but referenced in pipeline output
-			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-				Name: "test-pipeline",
-				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
-					{
-						Step: "weigher",
-						Activations: map[string]float64{
-							"host1": 0.5,
-							"host3": 0.3, // host3 doesn't exist in input
+			Decisions: []v1alpha1.SchedulingDecisionRequest{
+				{
+					ID: "decision-1",
+					Input: map[string]float64{
+						"host1": 1.0,
+						"host2": 2.0,
+					}, // host3 is missing but referenced in pipeline output
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name: "test-pipeline",
+						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+							{
+								Step: "weigher",
+								Activations: map[string]float64{
+									"host1": 0.5,
+									"host3": 0.3, // host3 doesn't exist in input
+								},
+							},
 						},
 					},
 				},
@@ -259,12 +287,9 @@ func TestReconcileHostMismatch(t *testing.T) {
 	if updatedResource.Status.State != v1alpha1.SchedulingDecisionStateError {
 		t.Errorf("Expected state '%s', got '%s'", v1alpha1.SchedulingDecisionStateError, updatedResource.Status.State)
 	}
-	expectedError := "Host 'host3' in pipeline output not found in input"
+	expectedError := "Decision decision-1: Host 'host3' in pipeline output not found in input"
 	if updatedResource.Status.Error != expectedError {
 		t.Errorf("Expected error '%s', got '%s'", expectedError, updatedResource.Status.Error)
-	}
-	if updatedResource.Status.Description != "" {
-		t.Errorf("Expected empty description, got '%s'", updatedResource.Status.Description)
 	}
 
 	t.Logf("Reconcile completed with host mismatch error: state=%s, error=%s", updatedResource.Status.State, updatedResource.Status.Error)
@@ -276,35 +301,40 @@ func TestReconcileComplexScoring(t *testing.T) {
 			Name: "test-decision-complex",
 		},
 		Spec: v1alpha1.SchedulingDecisionSpec{
-			Input: map[string]float64{
-				"host1": 1.0,
-				"host2": 2.0,
-				"host3": 3.0,
-				"host4": 4.0,
-			},
-			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-				Name: "complex-pipeline",
-				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
-					{
-						Step: "weigher1",
-						Activations: map[string]float64{
-							"host1": 0.5,
-							"host2": 1.0,
-							"host3": -0.5,
-							"host4": 2.0,
-						},
+			Decisions: []v1alpha1.SchedulingDecisionRequest{
+				{
+					ID: "decision-1",
+					Input: map[string]float64{
+						"host1": 1.0,
+						"host2": 2.0,
+						"host3": 3.0,
+						"host4": 4.0,
 					},
-					{
-						Step: "filter1",
-						Activations: map[string]float64{
-							"host1": 0.2,
-							"host3": 0.1, // host2 and host4 removed by this step
-						},
-					},
-					{
-						Step: "weigher2",
-						Activations: map[string]float64{
-							"host1": -0.3, // host3 removed by this step
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name: "complex-pipeline",
+						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+							{
+								Step: "weigher1",
+								Activations: map[string]float64{
+									"host1": 0.5,
+									"host2": 1.0,
+									"host3": -0.5,
+									"host4": 2.0,
+								},
+							},
+							{
+								Step: "filter1",
+								Activations: map[string]float64{
+									"host1": 0.2,
+									"host3": 0.1, // host2 and host4 removed by this step
+								},
+							},
+							{
+								Step: "weigher2",
+								Activations: map[string]float64{
+									"host1": -0.3, // host3 removed by this step
+								},
+							},
 						},
 					},
 				},
@@ -349,17 +379,27 @@ func TestReconcileComplexScoring(t *testing.T) {
 		t.Errorf("Expected state '%s', got '%s'", v1alpha1.SchedulingDecisionStateResolved, updatedResource.Status.State)
 	}
 
+	// Verify we have one result
+	if len(updatedResource.Status.Results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(updatedResource.Status.Results))
+	}
+
+	result := updatedResource.Status.Results[0]
+	if result.ID != "decision-1" {
+		t.Errorf("Expected result ID 'decision-1', got '%s'", result.ID)
+	}
+
 	// Verify final scores calculation
 	// Expected: host1: 1.0 + 0.5 + 0.2 + (-0.3) = 1.4
 	// host2: removed by filter1, host3: removed by weigher2, host4: removed by filter1
 	expectedFinalScores := map[string]float64{
 		"host1": 1.4,
 	}
-	if len(updatedResource.Status.FinalScores) != len(expectedFinalScores) {
-		t.Errorf("Expected %d final scores, got %d", len(expectedFinalScores), len(updatedResource.Status.FinalScores))
+	if len(result.FinalScores) != len(expectedFinalScores) {
+		t.Errorf("Expected %d final scores, got %d", len(expectedFinalScores), len(result.FinalScores))
 	}
 	for host, expectedScore := range expectedFinalScores {
-		if actualScore, exists := updatedResource.Status.FinalScores[host]; !exists {
+		if actualScore, exists := result.FinalScores[host]; !exists {
 			t.Errorf("Expected final score for host '%s', but it was not found", host)
 		} else if actualScore != expectedScore {
 			t.Errorf("Expected final score for host '%s' to be %f, got %f", host, expectedScore, actualScore)
@@ -372,11 +412,11 @@ func TestReconcileComplexScoring(t *testing.T) {
 		"host4": {"filter1"},  // host4 deleted by filter1
 		"host3": {"weigher2"}, // host3 deleted by weigher2
 	}
-	if len(updatedResource.Status.DeletedHosts) != len(expectedDeletedHosts) {
-		t.Errorf("Expected %d deleted hosts, got %d", len(expectedDeletedHosts), len(updatedResource.Status.DeletedHosts))
+	if len(result.DeletedHosts) != len(expectedDeletedHosts) {
+		t.Errorf("Expected %d deleted hosts, got %d", len(expectedDeletedHosts), len(result.DeletedHosts))
 	}
 	for host, expectedSteps := range expectedDeletedHosts {
-		if actualSteps, exists := updatedResource.Status.DeletedHosts[host]; !exists {
+		if actualSteps, exists := result.DeletedHosts[host]; !exists {
 			t.Errorf("Expected deleted host '%s', but it was not found", host)
 		} else if len(actualSteps) != len(expectedSteps) {
 			t.Errorf("Expected host '%s' to be deleted by %d steps, got %d", host, len(expectedSteps), len(actualSteps))
@@ -390,7 +430,7 @@ func TestReconcileComplexScoring(t *testing.T) {
 	}
 
 	t.Logf("Complex scoring completed: finalScores=%v, deletedHosts=%v",
-		updatedResource.Status.FinalScores, updatedResource.Status.DeletedHosts)
+		result.FinalScores, result.DeletedHosts)
 }
 
 func TestReconcileMultipleDeletionSteps(t *testing.T) {
@@ -399,34 +439,39 @@ func TestReconcileMultipleDeletionSteps(t *testing.T) {
 			Name: "test-decision-multiple-deletions",
 		},
 		Spec: v1alpha1.SchedulingDecisionSpec{
-			Input: map[string]float64{
-				"host1": 1.0,
-				"host2": 2.0,
-				"host3": 3.0,
-			},
-			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-				Name: "multiple-deletion-pipeline",
-				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
-					{
-						Step: "weigher1",
-						Activations: map[string]float64{
-							"host1": 0.5,
-							"host2": 1.0,
-							"host3": -0.5,
-						},
+			Decisions: []v1alpha1.SchedulingDecisionRequest{
+				{
+					ID: "decision-1",
+					Input: map[string]float64{
+						"host1": 1.0,
+						"host2": 2.0,
+						"host3": 3.0,
 					},
-					{
-						Step: "filter1",
-						Activations: map[string]float64{
-							"host1": 0.2,
-							// host2 and host3 removed by this step
-						},
-					},
-					{
-						Step:        "filter2",
-						Activations: map[string]float64{
-							// host1 removed by this step
-							// host2 and host3 would be removed again, but they're already gone
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name: "multiple-deletion-pipeline",
+						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+							{
+								Step: "weigher1",
+								Activations: map[string]float64{
+									"host1": 0.5,
+									"host2": 1.0,
+									"host3": -0.5,
+								},
+							},
+							{
+								Step: "filter1",
+								Activations: map[string]float64{
+									"host1": 0.2,
+									// host2 and host3 removed by this step
+								},
+							},
+							{
+								Step:        "filter2",
+								Activations: map[string]float64{
+									// host1 removed by this step
+									// host2 and host3 would be removed again, but they're already gone
+								},
+							},
 						},
 					},
 				},
@@ -471,11 +516,21 @@ func TestReconcileMultipleDeletionSteps(t *testing.T) {
 		t.Errorf("Expected state '%s', got '%s'", v1alpha1.SchedulingDecisionStateResolved, updatedResource.Status.State)
 	}
 
+	// Verify we have one result
+	if len(updatedResource.Status.Results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(updatedResource.Status.Results))
+	}
+
+	result := updatedResource.Status.Results[0]
+	if result.ID != "decision-1" {
+		t.Errorf("Expected result ID 'decision-1', got '%s'", result.ID)
+	}
+
 	// Verify final scores calculation
 	// Expected: All hosts should be removed, no final scores
 	expectedFinalScores := map[string]float64{}
-	if len(updatedResource.Status.FinalScores) != len(expectedFinalScores) {
-		t.Errorf("Expected %d final scores, got %d", len(expectedFinalScores), len(updatedResource.Status.FinalScores))
+	if len(result.FinalScores) != len(expectedFinalScores) {
+		t.Errorf("Expected %d final scores, got %d", len(expectedFinalScores), len(result.FinalScores))
 	}
 
 	// Verify deleted hosts tracking
@@ -485,11 +540,11 @@ func TestReconcileMultipleDeletionSteps(t *testing.T) {
 		"host3": {"filter1"}, // host3 deleted by filter1
 		"host1": {"filter2"}, // host1 deleted by filter2
 	}
-	if len(updatedResource.Status.DeletedHosts) != len(expectedDeletedHosts) {
-		t.Errorf("Expected %d deleted hosts, got %d", len(expectedDeletedHosts), len(updatedResource.Status.DeletedHosts))
+	if len(result.DeletedHosts) != len(expectedDeletedHosts) {
+		t.Errorf("Expected %d deleted hosts, got %d", len(expectedDeletedHosts), len(result.DeletedHosts))
 	}
 	for host, expectedSteps := range expectedDeletedHosts {
-		if actualSteps, exists := updatedResource.Status.DeletedHosts[host]; !exists {
+		if actualSteps, exists := result.DeletedHosts[host]; !exists {
 			t.Errorf("Expected deleted host '%s', but it was not found", host)
 		} else if len(actualSteps) != len(expectedSteps) {
 			t.Errorf("Expected host '%s' to be deleted by %d steps, got %d", host, len(expectedSteps), len(actualSteps))
@@ -503,7 +558,7 @@ func TestReconcileMultipleDeletionSteps(t *testing.T) {
 	}
 
 	t.Logf("Multiple deletion test completed: finalScores=%v, deletedHosts=%v",
-		updatedResource.Status.FinalScores, updatedResource.Status.DeletedHosts)
+		result.FinalScores, result.DeletedHosts)
 }
 
 func TestReconcileCertaintyLevels(t *testing.T) {
@@ -562,13 +617,18 @@ func TestReconcileCertaintyLevels(t *testing.T) {
 					Name: "test-certainty-" + tt.name,
 				},
 				Spec: v1alpha1.SchedulingDecisionSpec{
-					Input: tt.input,
-					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-						Name: "certainty-test-pipeline",
-						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
-							{
-								Step:        "weigher",
-								Activations: tt.activations,
+					Decisions: []v1alpha1.SchedulingDecisionRequest{
+						{
+							ID:    "decision-1",
+							Input: tt.input,
+							Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+								Name: "certainty-test-pipeline",
+								Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+									{
+										Step:        "weigher",
+										Activations: tt.activations,
+									},
+								},
 							},
 						},
 					},
@@ -607,8 +667,18 @@ func TestReconcileCertaintyLevels(t *testing.T) {
 				t.Fatalf("Failed to get updated resource: %v", err)
 			}
 
+			// Verify we have one result
+			if len(updatedResource.Status.Results) != 1 {
+				t.Errorf("Expected 1 result, got %d", len(updatedResource.Status.Results))
+			}
+
+			result := updatedResource.Status.Results[0]
+			if result.ID != "decision-1" {
+				t.Errorf("Expected result ID 'decision-1', got '%s'", result.ID)
+			}
+
 			// Verify the description contains the expected winner and certainty
-			description := updatedResource.Status.Description
+			description := result.Description
 			if !contains(description, "Selected: "+tt.expectedWinner) {
 				t.Errorf("Expected description to contain 'Selected: %s', got '%s'", tt.expectedWinner, description)
 			}
@@ -627,17 +697,22 @@ func TestReconcileNoHostsRemaining(t *testing.T) {
 			Name: "test-no-hosts-remaining",
 		},
 		Spec: v1alpha1.SchedulingDecisionSpec{
-			Input: map[string]float64{
-				"host1": 1.0,
-				"host2": 2.0,
-			},
-			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-				Name: "filter-all-pipeline",
-				Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
-					{
-						Step:        "filter-all",
-						Activations: map[string]float64{
-							// No hosts in activations - all will be filtered out
+			Decisions: []v1alpha1.SchedulingDecisionRequest{
+				{
+					ID: "decision-1",
+					Input: map[string]float64{
+						"host1": 1.0,
+						"host2": 2.0,
+					},
+					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+						Name: "filter-all-pipeline",
+						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+							{
+								Step:        "filter-all",
+								Activations: map[string]float64{
+									// No hosts in activations - all will be filtered out
+								},
+							},
 						},
 					},
 				},
@@ -682,16 +757,26 @@ func TestReconcileNoHostsRemaining(t *testing.T) {
 		t.Errorf("Expected state '%s', got '%s'", v1alpha1.SchedulingDecisionStateResolved, updatedResource.Status.State)
 	}
 
-	if len(updatedResource.Status.FinalScores) != 0 {
-		t.Errorf("Expected 0 final scores, got %d", len(updatedResource.Status.FinalScores))
+	// Verify we have one result
+	if len(updatedResource.Status.Results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(updatedResource.Status.Results))
+	}
+
+	result := updatedResource.Status.Results[0]
+	if result.ID != "decision-1" {
+		t.Errorf("Expected result ID 'decision-1', got '%s'", result.ID)
+	}
+
+	if len(result.FinalScores) != 0 {
+		t.Errorf("Expected 0 final scores, got %d", len(result.FinalScores))
 	}
 
 	expectedDescription := "No hosts remaining after filtering, 2 hosts evaluated"
-	if updatedResource.Status.Description != expectedDescription {
-		t.Errorf("Expected description '%s', got '%s'", expectedDescription, updatedResource.Status.Description)
+	if result.Description != expectedDescription {
+		t.Errorf("Expected description '%s', got '%s'", expectedDescription, result.Description)
 	}
 
-	t.Logf("No hosts remaining test completed: %s", updatedResource.Status.Description)
+	t.Logf("No hosts remaining test completed: %s", result.Description)
 }
 
 func TestReconcileInputVsFinalComparison(t *testing.T) {
@@ -757,13 +842,18 @@ func TestReconcileInputVsFinalComparison(t *testing.T) {
 					Name: "test-input-vs-final-" + tt.name,
 				},
 				Spec: v1alpha1.SchedulingDecisionSpec{
-					Input: tt.input,
-					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-						Name: "input-vs-final-pipeline",
-						Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
-							{
-								Step:        "weigher",
-								Activations: tt.activations[0],
+					Decisions: []v1alpha1.SchedulingDecisionRequest{
+						{
+							ID:    "decision-1",
+							Input: tt.input,
+							Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+								Name: "input-vs-final-pipeline",
+								Outputs: []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+									{
+										Step:        "weigher",
+										Activations: tt.activations[0],
+									},
+								},
 							},
 						},
 					},
@@ -802,8 +892,18 @@ func TestReconcileInputVsFinalComparison(t *testing.T) {
 				t.Fatalf("Failed to get updated resource: %v", err)
 			}
 
+			// Verify we have one result
+			if len(updatedResource.Status.Results) != 1 {
+				t.Errorf("Expected 1 result, got %d", len(updatedResource.Status.Results))
+			}
+
+			result := updatedResource.Status.Results[0]
+			if result.ID != "decision-1" {
+				t.Errorf("Expected result ID 'decision-1', got '%s'", result.ID)
+			}
+
 			// Verify the description contains expected elements
-			description := updatedResource.Status.Description
+			description := result.Description
 			for _, expectedContent := range tt.expectedDescContains {
 				if !contains(description, expectedContent) {
 					t.Errorf("Expected description to contain '%s', got '%s'", expectedContent, description)
@@ -911,10 +1011,15 @@ func TestReconcileCriticalStepElimination(t *testing.T) {
 					Name: "test-critical-steps-" + tt.name,
 				},
 				Spec: v1alpha1.SchedulingDecisionSpec{
-					Input: tt.input,
-					Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-						Name:    "critical-step-test-pipeline",
-						Outputs: tt.pipeline,
+					Decisions: []v1alpha1.SchedulingDecisionRequest{
+						{
+							ID:    "decision-1",
+							Input: tt.input,
+							Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+								Name:    "critical-step-test-pipeline",
+								Outputs: tt.pipeline,
+							},
+						},
 					},
 				},
 			}
@@ -951,8 +1056,18 @@ func TestReconcileCriticalStepElimination(t *testing.T) {
 				t.Fatalf("Failed to get updated resource: %v", err)
 			}
 
+			// Verify we have one result
+			if len(updatedResource.Status.Results) != 1 {
+				t.Errorf("Expected 1 result, got %d", len(updatedResource.Status.Results))
+			}
+
+			result := updatedResource.Status.Results[0]
+			if result.ID != "decision-1" {
+				t.Errorf("Expected result ID 'decision-1', got '%s'", result.ID)
+			}
+
 			// Verify the description contains the expected critical step message
-			description := updatedResource.Status.Description
+			description := result.Description
 			if !contains(description, tt.expectedCriticalMessage) {
 				t.Errorf("Expected description to contain '%s', got '%s'", tt.expectedCriticalMessage, description)
 			}
