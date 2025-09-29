@@ -213,8 +213,8 @@ func upsert[O any](s *NovaSyncer, objects []O, pk string, getpk func(O) string, 
 // Return only new servers that were created since the last sync.
 func (s *NovaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
 	tableName := Server{}.TableName()
+	updatedSyncTime := time.Now()
 	lastSyncTime := s.getLastSyncTime(tableName)
-	defer s.setLastSyncTime(tableName, time.Now())
 	changedServers, err := s.API.GetChangedServers(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
@@ -223,6 +223,7 @@ func (s *NovaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.setLastSyncTime(tableName, updatedSyncTime)
 	return changedServers, nil
 }
 
@@ -257,8 +258,8 @@ func (s *NovaSyncer) SyncAllFlavors(ctx context.Context) ([]Flavor, error) {
 // Sync the OpenStack migrations into the database.
 func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, error) {
 	tableName := Migration{}.TableName()
+	updatedSyncTime := time.Now()
 	lastSyncTime := s.getLastSyncTime(tableName)
-	defer s.setLastSyncTime(tableName, time.Now())
 	changedMigrations, err := s.API.GetChangedMigrations(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
@@ -267,6 +268,7 @@ func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, er
 	if err != nil {
 		return nil, err
 	}
+	s.setLastSyncTime(tableName, updatedSyncTime)
 	return changedMigrations, nil
 }
 
