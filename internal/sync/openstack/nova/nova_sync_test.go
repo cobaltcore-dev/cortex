@@ -18,8 +18,12 @@ type mockNovaAPI struct{}
 
 func (m *mockNovaAPI) Init(ctx context.Context) {}
 
-func (m *mockNovaAPI) GetChangedServers(ctx context.Context, t *time.Time) ([]Server, error) {
+func (m *mockNovaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	return []Server{{ID: "1", Name: "server1"}}, nil
+}
+
+func (m *mockNovaAPI) GetDeletedServers(ctx context.Context, t *time.Time) ([]DeletedServer, error) {
+	return []DeletedServer{{ID: "1", Name: "server1", Status: "DELETED"}}, nil
 }
 
 func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
@@ -87,13 +91,38 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		Conf: NovaConf{Types: []string{"servers"}},
 		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	servers, err := syncer.SyncChangedServers(ctx)
+	servers, err := syncer.SyncAllServers(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(servers) != 1 {
+		t.Fatalf("expected 1 server, got %d", len(servers))
+	}
+}
+
+func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	mon := sync.Monitor{}
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: NovaConf{Types: []string{"deleted_servers"}},
+		API:  &mockNovaAPI{},
+	}
+
+	ctx := t.Context()
+	syncer.Init(ctx)
+	servers, err := syncer.SyncDeletedServers(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -112,7 +141,7 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		Conf: NovaConf{Types: []string{"hypervisors"}},
 		API:  &mockNovaAPI{},
 	}
 

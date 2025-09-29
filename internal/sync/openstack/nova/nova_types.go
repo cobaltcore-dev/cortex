@@ -15,6 +15,80 @@ type NovaConf = conf.SyncOpenStackNovaConfig
 
 // OpenStack server model as returned by the Nova API under /servers/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
+type DeletedServer struct {
+	ID                             string  `json:"id" db:"id,primarykey"`
+	Name                           string  `json:"name" db:"name"`
+	Status                         string  `json:"status" db:"status"`
+	TenantID                       string  `json:"tenant_id" db:"tenant_id"`
+	UserID                         string  `json:"user_id" db:"user_id"`
+	HostID                         string  `json:"hostId" db:"host_id"`
+	Created                        string  `json:"created" db:"created"`
+	Updated                        string  `json:"updated" db:"updated"`
+	OSEXTAvailabilityZone          string  `json:"OS-EXT-AZ:availability_zone" db:"os_ext_az_availability_zone"`
+	OSSRVUSGLaunchedAt             string  `json:"OS-SRV-USG:launched_at" db:"os_srv_usg_launched_at"`
+	OSSRVUSGTerminatedAt           *string `json:"OS-SRV-USG:terminated_at" db:"os_srv_usg_terminated_at"`
+	OSEXTSRVATTRHost               string  `json:"OS-EXT-SRV-ATTR:host" db:"os_ext_srv_attr_host"`
+	OSEXTSRVATTRInstanceName       string  `json:"OS-EXT-SRV-ATTR:instance_name" db:"os_ext_srv_attr_instance_name"`
+	OSEXTSRVATTRHypervisorHostname string  `json:"OS-EXT-SRV-ATTR:hypervisor_hostname" db:"os_ext_srv_attr_hypervisor_hostname"`
+
+	// From nested JSON
+	FlavorName string `json:"-" db:"flavor_name"`
+
+	// Note: there are some more fields that are omitted. To include them again, add
+	// custom unmarshalers and marshalers for the struct below.
+}
+
+// Custom unmarshaler for OpenStackServer to handle nested JSON.
+func (s *DeletedServer) UnmarshalJSON(data []byte) error {
+	type Alias DeletedServer
+	aux := &struct {
+		Flavor json.RawMessage `json:"flavor"`
+		*Alias
+	}{
+		Alias: (*Alias)(s),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	var flavor struct {
+		// Starting in microversion 2.47, "id" was removed...
+		Name string `json:"original_name"`
+	}
+	if err := json.Unmarshal(aux.Flavor, &flavor); err != nil {
+		return err
+	}
+	s.FlavorName = flavor.Name
+	return nil
+}
+
+// Custom marshaler for OpenStackServer to handle nested JSON.
+func (s *DeletedServer) MarshalJSON() ([]byte, error) {
+	type Alias DeletedServer
+	aux := &struct {
+		Flavor struct {
+			// Starting in microversion 2.47, "id" was removed...
+			Name string `json:"original_name"`
+		} `json:"flavor"`
+		*Alias
+	}{
+		Alias: (*Alias)(s),
+		Flavor: struct {
+			Name string `json:"original_name"`
+		}{
+			Name: s.FlavorName,
+		},
+	}
+	return json.Marshal(aux)
+}
+
+// Table in which the openstack model is stored.
+func (DeletedServer) TableName() string { return "openstack_deleted_servers" }
+
+// Index for the openstack model.
+func (DeletedServer) Indexes() []db.Index { return nil }
+
+// OpenStack server model as returned by the Nova API under /servers/detail.
+// See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
 type Server struct {
 	ID                             string  `json:"id" db:"id,primarykey"`
 	Name                           string  `json:"name" db:"name"`
@@ -91,7 +165,7 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 }
 
 // Table in which the openstack model is stored.
-func (Server) TableName() string { return "openstack_servers" }
+func (Server) TableName() string { return "openstack_servers_v2" }
 
 // Index for the openstack model.
 func (Server) Indexes() []db.Index { return nil }

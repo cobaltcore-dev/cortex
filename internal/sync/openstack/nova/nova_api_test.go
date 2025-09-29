@@ -31,7 +31,7 @@ func TestNewNovaAPI(t *testing.T) {
 	}
 }
 
-func TestNovaAPI_GetChangedServers(t *testing.T) {
+func TestNovaAPI_GetDeletedServers(t *testing.T) {
 	tests := []struct {
 		name string
 		time *time.Time
@@ -56,6 +56,7 @@ func TestNovaAPI_GetChangedServers(t *testing.T) {
 			if _, err := w.Write([]byte(`{"servers": [{
 				"id": "1",
 				"name": "server1",
+				"status": "DELETED",
 				"flavor": {"id": "1", "name": "flavor1"}
 			}]}`)); err != nil {
 				t.Fatalf("failed to write response: %v", err)
@@ -71,13 +72,49 @@ func TestNovaAPI_GetChangedServers(t *testing.T) {
 		api.Init(t.Context())
 
 		ctx := t.Context()
-		servers, err := api.GetChangedServers(ctx, tt.time)
+		servers, err := api.GetDeletedServers(ctx, tt.time)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
 		if len(servers) != 1 {
 			t.Fatalf("expected 1 server, got %d", len(servers))
 		}
+	}
+}
+
+func TestNovaAPI_GetAllServers(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		// changes-since is not supported by the hypervisor api so
+		// the query parameter should not be set.
+		if r.URL.Query().Get("changes-since") != "" {
+			t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
+		}
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(`{"servers": [{
+				"id": "1",
+				"name": "server1",
+				"flavor": {"id": "1", "name": "flavor1"}
+			}]}`)); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
+	}
+	server, k := setupNovaMockServer(handler)
+	defer server.Close()
+
+	mon := sync.Monitor{}
+	conf := NovaConf{Availability: "public"}
+
+	api := NewNovaAPI(mon, k, conf).(*novaAPI)
+	api.Init(t.Context())
+
+	ctx := t.Context()
+	servers, err := api.GetAllServers(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(servers) != 1 {
+		t.Fatalf("expected 1 server, got %d", len(servers))
 	}
 }
 

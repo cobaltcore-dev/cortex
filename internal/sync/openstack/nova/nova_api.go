@@ -24,8 +24,10 @@ import (
 type NovaAPI interface {
 	// Init the nova API.
 	Init(ctx context.Context)
-	// Get all changed nova servers since the timestamp.
-	GetChangedServers(ctx context.Context, changedSince *time.Time) ([]Server, error)
+	// Get all nova servers that are NOT deleted. (Includes ERROR, SHUTOFF etc)
+	GetAllServers(ctx context.Context) ([]Server, error)
+	// Get all deleted nova servers since the timestamp.
+	GetDeletedServers(ctx context.Context, changedSince *time.Time) ([]DeletedServer, error)
 	// Get all nova hypervisors.
 	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	// Get all nova flavors.
@@ -77,9 +79,39 @@ func (api *novaAPI) Init(ctx context.Context) {
 	}
 }
 
-// Get all changed Nova servers since the timestamp.
-func (api *novaAPI) GetChangedServers(ctx context.Context, changedSince *time.Time) ([]Server, error) {
+// Get all Nova servers that are NOT deleted. (Includes ERROR, SHUTOFF etc)
+func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	label := Server{}.TableName()
+	slog.Info("fetching nova data", "label", label)
+	// Fetch all pages.
+	pages, err := func() (pagination.Page, error) {
+		if api.mon.PipelineRequestTimer != nil {
+			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+			timer := prometheus.NewTimer(hist)
+			defer timer.ObserveDuration()
+		}
+		lo := servers.ListOpts{
+			AllTenants: true,
+		}
+		return servers.List(api.sc, lo).AllPages(ctx)
+	}()
+	if err != nil {
+		return nil, err
+	}
+	// Parse the json data into our custom model.
+	var data = &struct {
+		Servers []Server `json:"servers"`
+	}{}
+	if err := pages.(servers.ServerPage).ExtractInto(data); err != nil {
+		return nil, err
+	}
+	slog.Info("fetched", "label", label, "count", len(data.Servers))
+	return data.Servers, nil
+}
+
+// Get all deleted Nova servers.
+func (api *novaAPI) GetDeletedServers(ctx context.Context, changedSince *time.Time) ([]DeletedServer, error) {
+	label := DeletedServer{}.TableName()
 	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
@@ -90,7 +122,10 @@ func (api *novaAPI) GetChangedServers(ctx context.Context, changedSince *time.Ti
 		}
 		// It is important to omit the changes-since parameter if it is nil.
 		// Otherwise Nova will return huge amounts of data since the beginning of time.
-		lo := servers.ListOpts{AllTenants: true}
+		lo := servers.ListOpts{
+			Status:     "DELETED",
+			AllTenants: true,
+		}
 		if changedSince != nil {
 			lo.ChangesSince = changedSince.Format(time.RFC3339)
 		}
@@ -101,7 +136,7 @@ func (api *novaAPI) GetChangedServers(ctx context.Context, changedSince *time.Ti
 	}
 	// Parse the json data into our custom model.
 	var data = &struct {
-		Servers []Server `json:"servers"`
+		Servers []DeletedServer `json:"servers"`
 	}{}
 	if err := pages.(servers.ServerPage).ExtractInto(data); err != nil {
 		return nil, err

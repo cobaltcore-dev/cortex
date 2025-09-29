@@ -55,6 +55,9 @@ func (s *NovaSyncer) Init(ctx context.Context) {
 	if slices.Contains(s.Conf.Types, "servers") {
 		tables = append(tables, s.DB.AddTable(Server{}))
 	}
+	if slices.Contains(s.Conf.Types, "deleted_servers") {
+		tables = append(tables, s.DB.AddTable(DeletedServer{}))
+	}
 	if slices.Contains(s.Conf.Types, "hypervisors") {
 		tables = append(tables, s.DB.AddTable(Hypervisor{}))
 	}
@@ -76,12 +79,21 @@ func (s *NovaSyncer) Init(ctx context.Context) {
 func (s *NovaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.Conf.Types, "servers") {
-		changedServers, err := s.SyncChangedServers(ctx)
+		changedServers, err := s.SyncAllServers(ctx)
 		if err != nil {
 			return err
 		}
 		if len(changedServers) > 0 {
 			go s.MqttClient.Publish(TriggerNovaServersSynced, "")
+		}
+	}
+	if slices.Contains(s.Conf.Types, "deleted_servers") {
+		changedDeletedServers, err := s.SyncDeletedServers(ctx)
+		if err != nil {
+			return err
+		}
+		if len(changedDeletedServers) > 0 {
+			go s.MqttClient.Publish(TriggerNovaDeletedServersSynced, "")
 		}
 	}
 	if slices.Contains(s.Conf.Types, "hypervisors") {
@@ -209,22 +221,35 @@ func upsert[O any](s *NovaSyncer, objects []O, pk string, getpk func(O) string, 
 	return nil
 }
 
-// Sync the OpenStack servers into the database.
-// Return only new servers that were created since the last sync.
-func (s *NovaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
-	tableName := Server{}.TableName()
-	updatedSyncTime := time.Now()
-	lastSyncTime := s.getLastSyncTime(tableName)
-	changedServers, err := s.API.GetChangedServers(ctx, lastSyncTime)
+// Sync all the active OpenStack servers into the database. (Includes ERROR, SHUTOFF, etc. state)
+func (s *NovaSyncer) SyncAllServers(ctx context.Context) ([]Server, error) {
+	allServers, err := s.API.GetAllServers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = upsert(s, changedServers, "id", func(s Server) string { return s.ID }, tableName)
+	err = db.ReplaceAll(s.DB, allServers...)
+	if err != nil {
+		return nil, err
+	}
+	return allServers, nil
+}
+
+// Sync all the deleted OpenStack servers into the database.
+// Only fetch servers that were deleted since the last sync run.
+func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) ([]DeletedServer, error) {
+	tableName := DeletedServer{}.TableName()
+	updatedSyncTime := time.Now()
+	lastSyncTime := s.getLastSyncTime(tableName)
+	deletedServers, err := s.API.GetDeletedServers(ctx, lastSyncTime)
+	if err != nil {
+		return nil, err
+	}
+	err = upsert(s, deletedServers, "id", func(s DeletedServer) string { return s.ID }, tableName)
 	if err != nil {
 		return nil, err
 	}
 	s.setLastSyncTime(tableName, updatedSyncTime)
-	return changedServers, nil
+	return deletedServers, nil
 }
 
 // Sync the OpenStack hypervisors into the database.
