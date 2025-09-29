@@ -22,7 +22,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	cinderAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/cinder/api/http"
 	manilaAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api/http"
-	novaApiHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
+	novaAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
@@ -74,7 +74,7 @@ func runSchedulerNova(mux *http.ServeMux, registry *monitoring.Registry, config 
 	if err := mqttClient.Connect(); err != nil {
 		panic("failed to connect to mqtt broker: " + err.Error())
 	}
-	api := novaApiHTTP.NewAPI(config, registry, db, mqttClient)
+	api := novaAPIHTTP.NewAPI(config, registry, db, mqttClient)
 	api.Init(mux) // non-blocking
 }
 

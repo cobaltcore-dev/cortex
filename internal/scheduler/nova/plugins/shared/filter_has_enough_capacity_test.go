@@ -4,7 +4,6 @@
 package shared
 
 import (
-	"fmt"
 	"log/slog"
 	"testing"
 
@@ -431,7 +430,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fmt.Println("Running test case:", tt.name)
+			t.Logf("Running test case: %s", tt.name)
 			step := &FilterHasEnoughCapacity{}
 			step.Client = testClient() // Override the real client with our fake client
 			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {

@@ -3,24 +3,26 @@
 
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Cortex Nova Visualizer</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 
-    <!-- Shared CSS styles -->
-    <link rel="stylesheet" href="shared.css">
-    <style>
-      td.chart div.barsbefore p,
-      td.chart div.barsafter p,
-      td.chart div.backdrop p,
-      td.chart div.stats p {
-        width: 30%; /* 3 columns */
-      }
-    </style>
+<head>
+  <title>Cortex Nova Visualizer</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 
-    <!-- MQTT library from vendor folder. -->
-    <script src="mqtt.min.js"></script>
+  <!-- Shared CSS styles -->
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    td.chart div.barsbefore p,
+    td.chart div.barsafter p,
+    td.chart div.backdrop p,
+    td.chart div.stats p {
+      width: 30%;
+      /* 3 columns */
+    }
+  </style>
+
+  <!-- MQTT library from vendor folder. -->
+  <script src="mqtt.min.js"></script>
 
   <section id="app">
     <!-- Display a loading indicator as long as no data has arrived. -->
@@ -72,7 +74,7 @@
     }
     reconnect()
 
-    async function redraw () {
+    async function redraw() {
       if (Object.keys(state.pipeline).length === 0) return
 
       const greyout = 'filter: grayscale(50%); opacity: 0.25'
@@ -166,7 +168,7 @@
         const utilization = utilizations[host]
         if (utilization) {
           maxVCPUs = Math.max(maxVCPUs, utilization.totalVCPUsAllocatable)
-          maxMemMB = Math.max(maxMemMB, utilization.totalMemoryAllocatableMB)
+          maxMemMB = Math.max(maxMemMB, utilization.totalRAMAllocatableMB)
           maxDiskGB = Math.max(maxDiskGB, utilization.totalDiskAllocatableGB)
         }
       }
@@ -174,43 +176,43 @@
         const hasWeight = state.pipeline.out[host] !== undefined
         const utilization = utilizations[host]
 
-        const cpusUsed = utilization.vcpusUtilizedPct / 100
-        const memUsed = utilization.ramUtilizedPct / 100
-        const diskUsed = utilization.diskUtilizedPct / 100
-        const cpusUsedAfter = (cpusUsed * utilization.totalVCPUsAllocatable + flavor.vcpus) / utilization.totalVCPUsAllocatable
-        const memUsedAfter = (memUsed * utilization.totalMemoryAllocatableMB + flavor.memory_mb) / utilization.totalMemoryAllocatableMB
-        const diskUsedAfter = (diskUsed * utilization.totalDiskAllocatableGB + flavor.disk) / utilization.totalDiskAllocatableGB
-        const cpusUsedScaled = cpusUsed * utilization.totalVCPUsAllocatable / maxVCPUs
-        const memUsedScaled = memUsed * utilization.totalMemoryAllocatableMB / maxMemMB
-        const diskUsedScaled = diskUsed * utilization.totalDiskAllocatableGB / maxDiskGB
-        const cpusUsedAfterScaled = cpusUsedAfter * utilization.totalVCPUsAllocatable / maxVCPUs
-        const memUsedAfterScaled = memUsedAfter * utilization.totalMemoryAllocatableMB / maxMemMB
-        const diskUsedAfterScaled = diskUsedAfter * utilization.totalDiskAllocatableGB
+        const cpusUsed = utilization.vcpusUsed
+        const memUsedMB = utilization.ramUsedMB
+        const diskUsedGB = utilization.diskUsedGB
+        const cpusUsedAfter = (cpusUsed + flavor.vcpus) / utilization.totalVCPUsAllocatable
+        const memUsedMBAfter = (memUsedMB + flavor.memory_mb) / utilization.totalRAMAllocatableMB
+        const diskUsedGBAfter = (diskUsedGB + flavor.disk) / utilization.totalDiskAllocatableGB
+        const cpusUsedScaled = cpusUsed / maxVCPUs
+        const memUsedMBScaled = memUsedMB / maxMemMB
+        const diskUsedGBScaled = diskUsedGB / maxDiskGB
+        const cpusUsedAfterScaled = cpusUsedAfter / maxVCPUs
+        const memUsedMBAfterScaled = memUsedMBAfter / maxMemMB
+        const diskUsedGBAfterScaled = diskUsedGBAfter / maxDiskGB
         const totalVCPUsAllocatableScaled = utilization.totalVCPUsAllocatable / maxVCPUs
-        const totalMemoryAllocatableMBScaled = utilization.totalMemoryAllocatableMB / maxMemMB
+        const totalRAMAllocatableMBScaled = utilization.totalRAMAllocatableMB / maxMemMB
         const totalDiskAllocatableGBScaled = utilization.totalDiskAllocatableGB / maxDiskGB
 
         table += `
           <td class="chart" style="${hasWeight ? '' : greyout}">
               <div class="backdrop">
                 <p class="cpu" style="height: ${Math.min(100, totalVCPUsAllocatableScaled * 100)}%"></p>
-                <p class="mem" style="height: ${Math.min(100, totalMemoryAllocatableMBScaled * 100)}%"></p>
+                <p class="mem" style="height: ${Math.min(100, totalRAMAllocatableMBScaled * 100)}%"></p>
                 <p class="disk" style="height: ${Math.min(100, totalDiskAllocatableGBScaled * 100)}%"></p>
               </div>
               <div class="barsafter">
                 <p class="cpu" style="height: ${Math.min(100, cpusUsedAfterScaled * 100)}%"></p>
-                <p class="mem" style="height: ${Math.min(100, memUsedAfterScaled * 100)}%"></p>
-                <p class="disk" style="height: ${Math.min(100, diskUsedAfterScaled * 100)}%"></p>
+                <p class="mem" style="height: ${Math.min(100, memUsedMBAfterScaled * 100)}%"></p>
+                <p class="disk" style="height: ${Math.min(100, diskUsedGBAfterScaled * 100)}%"></p>
               </div>
               <div class="barsbefore">
                 <p class="cpu" style="height: ${Math.min(100, cpusUsedScaled * 100)}%"></p>
-                <p class="mem" style="height: ${Math.min(100, memUsedScaled * 100)}%"></p>
-                <p class="disk" style="height: ${Math.min(100, diskUsedScaled * 100)}%"></p>
+                <p class="mem" style="height: ${Math.min(100, memUsedMBScaled * 100)}%"></p>
+                <p class="disk" style="height: ${Math.min(100, diskUsedGBScaled * 100)}%"></p>
               </div>
               <div class="stats">
-                <p>${Math.round(cpusUsed * utilization.totalVCPUsAllocatable)} / ${utilization.totalVCPUsAllocatable} vCPUs</p>
-                <p>${Math.round(memUsed * utilization.totalMemoryAllocatableMB / 1000)} / ${Math.round(utilization.totalMemoryAllocatableMB / 1000)} GB MEM</p>
-                <p>${Math.round(diskUsed * utilization.totalDiskAllocatableGB)} / ${utilization.totalDiskAllocatableGB} GB DISK</p>
+                <p>${cpusUsed} / ${utilization.totalVCPUsAllocatable} vCPUs</p>
+                <p>${(memUsedMB / 1000).toFixed(1)} / ${(utilization.totalRAMAllocatableMB / 1000).toFixed(1)} GB MEM</p>
+                <p>${(diskUsedGB / 1000).toFixed(1)} / ${(utilization.totalDiskAllocatableGB / 1000).toFixed(1)} TB DISK</p>
               </div>
             </div>
           </td>
@@ -237,4 +239,5 @@
       `
     }
   </script>
+
 </html>
