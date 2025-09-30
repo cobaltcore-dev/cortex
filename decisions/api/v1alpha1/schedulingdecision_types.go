@@ -10,9 +10,9 @@ import (
 type SchedulingEventType string
 
 const (
-	SchedulingEventTypeLiveMigration    SchedulingEventType = "live-migration"
-	SchedulingEventTypeColdMigration    SchedulingEventType = "cold-migration"
-	SchedulingEventTypeEvacuation       SchedulingEventType = "evacuation"
+	SchedulingEventTypeLiveMigration SchedulingEventType = "live-migration"
+	// SchedulingEventTypeColdMigration    SchedulingEventType = "cold-migration"
+	// SchedulingEventTypeEvacuation       SchedulingEventType = "evacuation"
 	SchedulingEventTypeResize           SchedulingEventType = "resize"
 	SchedulingEventTypeInitialPlacement SchedulingEventType = "initial-placement"
 )

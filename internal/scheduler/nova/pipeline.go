@@ -19,6 +19,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -93,17 +94,17 @@ func (c *novaPipelineConsumer) Consume(
 	if c.Client == nil {
 		return
 	}
-	var existing v1alpha1.SchedulingDecision
-	if err := c.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: request.Spec.Data.InstanceUUID},
-		&existing,
-	); err == nil {
-		// Decision already exists, do not create a new one.
-		// TODO: Add new decisions for the same vm id if this is a migration.
-		slog.Info("scheduler: decision already exists, not creating a new one", "resourceID", request.Spec.Data.InstanceUUID)
-		return
+
+	// Determine the event type based on request flags
+	var eventType v1alpha1.SchedulingEventType
+	if request.Live {
+		eventType = v1alpha1.SchedulingEventTypeLiveMigration
+	} else if request.Resize {
+		eventType = v1alpha1.SchedulingEventTypeResize
+	} else {
+		eventType = v1alpha1.SchedulingEventTypeInitialPlacement
 	}
+
 	outputs := []v1alpha1.SchedulingDecisionPipelineOutputSpec{}
 	for _, stepKey := range applicationOrder {
 		weights, ok := stepWeights[stepKey]
@@ -122,32 +123,68 @@ func (c *novaPipelineConsumer) Consume(
 	}
 
 	flavor := request.Spec.Data.Flavor
-	decision := &v1alpha1.SchedulingDecision{
-		ObjectMeta: ctrl.ObjectMeta{Name: request.Spec.Data.InstanceUUID},
-		Spec: v1alpha1.SchedulingDecisionSpec{
-			Input:            inWeights,
-			AvailabilityZone: request.Spec.Data.AvailabilityZone,
-			Flavor: v1alpha1.Flavor{
-				Name:  flavor.Data.Name,
-				VCPUs: int(flavor.Data.VCPUs), // assume this is safe
-				RAM:   int(flavor.Data.MemoryMB),
-				Disk:  int(flavor.Data.RootGB),
-			},
-			VMware: request.VMware,
-			Live:   request.Live,
-			Resize: request.Resize,
-			Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
-				Name:    request.GetPipeline(),
-				Outputs: outputs,
-			},
+	decisionRequest := v1alpha1.SchedulingDecisionRequest{
+		ID:          request.Spec.Data.InstanceUUID,
+		RequestedAt: metav1.Now(),
+		EventType:   eventType,
+		Input:       inWeights,
+		Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+			Name:    request.GetPipeline(),
+			Outputs: outputs,
 		},
-		// Status will be filled in by the controller.
+		AvailabilityZone: request.Spec.Data.AvailabilityZone,
+		VMware:           request.VMware,
+		Flavor: v1alpha1.Flavor{
+			Name:  flavor.Data.Name,
+			VCPUs: int(flavor.Data.VCPUs), // assume this is safe
+			RAM:   int(flavor.Data.MemoryMB),
+			Disk:  int(flavor.Data.RootGB),
+		},
 	}
-	if err := c.Client.Create(context.Background(), decision); err != nil {
-		slog.Error("scheduler: failed to create decision", "error", err)
-		return
+
+	objectKey := client.ObjectKey{Name: request.Spec.Data.InstanceUUID}
+
+	// Try to update existing decision with retry logic for concurrent updates
+	const maxRetries = 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		var existing v1alpha1.SchedulingDecision
+		if err := c.Client.Get(context.Background(), objectKey, &existing); err == nil {
+			// Decision already exists, append the new decision to the existing ones
+			existing.Spec.Decisions = append(existing.Spec.Decisions, decisionRequest)
+
+			if err := c.Client.Update(context.Background(), &existing); err != nil {
+				// Check if it's a conflict error (concurrent update)
+				if attempt < maxRetries-1 {
+					slog.Warn("scheduler: conflict updating decision, retrying", "attempt", attempt+1, "resourceID", request.Spec.Data.InstanceUUID)
+					continue
+				}
+				slog.Error("scheduler: failed to update existing decision after retries", "error", err, "resourceID", request.Spec.Data.InstanceUUID)
+				return
+			}
+			slog.Info("scheduler: appended decision to existing resource", "resourceID", request.Spec.Data.InstanceUUID, "eventType", eventType)
+			return
+		} else {
+			// Decision doesn't exist, create a new one
+			decision := &v1alpha1.SchedulingDecision{
+				ObjectMeta: ctrl.ObjectMeta{Name: request.Spec.Data.InstanceUUID},
+				Spec: v1alpha1.SchedulingDecisionSpec{
+					Decisions: []v1alpha1.SchedulingDecisionRequest{decisionRequest},
+				},
+				// Status will be filled in by the controller.
+			}
+			if err := c.Client.Create(context.Background(), decision); err != nil {
+				// Check if it's a conflict error (resource was created concurrently)
+				if attempt < maxRetries-1 {
+					slog.Warn("scheduler: conflict creating decision, retrying", "attempt", attempt+1, "resourceID", request.Spec.Data.InstanceUUID)
+					continue
+				}
+				slog.Error("scheduler: failed to create decision after retries", "error", err, "resourceID", request.Spec.Data.InstanceUUID)
+				return
+			}
+			slog.Info("scheduler: created new decision", "resourceID", request.Spec.Data.InstanceUUID, "eventType", eventType)
+			return
+		}
 	}
-	slog.Info("scheduler: created decision", "resourceID", request.Spec.Data.InstanceUUID)
 }
 
 // Create a new Nova scheduler pipeline.
