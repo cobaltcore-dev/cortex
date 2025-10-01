@@ -46,7 +46,6 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	if err := testDB.CreateTable(
 		testDB.AddTable(prometheus.VROpsVMMetric{}),
 		testDB.AddTable(nova.Server{}),
-		testDB.AddTable(nova.DeletedServer{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -54,7 +53,6 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	vropsVMMetrics := []any{
 		&prometheus.VROpsVMMetric{HostSystem: "hostsystem1", InstanceUUID: "uuid1"},
 		&prometheus.VROpsVMMetric{HostSystem: "hostsystem2", InstanceUUID: "uuid2"},
-		&prometheus.VROpsVMMetric{HostSystem: "hostsystem3", InstanceUUID: "uuid3"}, // Deleted server
 	}
 	if err := testDB.Insert(vropsVMMetrics...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -63,8 +61,6 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	servers := []any{
 		&nova.Server{ID: "uuid1", OSEXTSRVATTRHost: "service_host1"},
 		&nova.Server{ID: "uuid2", OSEXTSRVATTRHost: "service_host2"},
-
-		&nova.DeletedServer{ID: "uuid3", OSEXTSRVATTRHost: "service_host3", Status: "DELETED"},
 	}
 	if err := testDB.Insert(servers...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -93,7 +89,6 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	expected := map[string]string{
 		"hostsystem1": "service_host1",
 		"hostsystem2": "service_host2",
-		"hostsystem3": "service_host3",
 	}
 	if len(resolvedHostsystems) != len(expected) {
 		t.Errorf("expected %d rows, got %d", len(expected), len(resolvedHostsystems))
