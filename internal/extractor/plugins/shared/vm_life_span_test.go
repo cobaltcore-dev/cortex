@@ -50,15 +50,15 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Server{}),
+		testDB.AddTable(nova.DeletedServer{}),
 		testDB.AddTable(nova.Flavor{}),
 	); err != nil {
 		t.Fatalf("failed to create dependency tables: %v", err)
 	}
 
 	servers := []any{
-		&nova.Server{ID: "server1", FlavorName: "small", Created: "2025-01-01T00:00:00Z", Status: "DELETED", Updated: "2025-01-03T00:00:00Z"},
-		&nova.Server{ID: "server2", FlavorName: "medium", Created: "2025-01-02T00:00:00Z", Status: "DELETED", Updated: "2025-01-04T00:00:00Z"},
+		&nova.DeletedServer{ID: "server1", FlavorName: "small", Created: "2025-01-01T00:00:00Z", Status: "DELETED", Updated: "2025-01-03T00:00:00Z"},
+		&nova.DeletedServer{ID: "server2", FlavorName: "medium", Created: "2025-01-02T00:00:00Z", Status: "DELETED", Updated: "2025-01-04T00:00:00Z"},
 	}
 	if err := testDB.Insert(servers...); err != nil {
 		t.Fatalf("failed to insert servers: %v", err)

@@ -55,6 +55,9 @@ func (s *NovaSyncer) Init(ctx context.Context) {
 	if slices.Contains(s.Conf.Types, "servers") {
 		tables = append(tables, s.DB.AddTable(Server{}))
 	}
+	if slices.Contains(s.Conf.Types, "deleted_servers") {
+		tables = append(tables, s.DB.AddTable(DeletedServer{}))
+	}
 	if slices.Contains(s.Conf.Types, "hypervisors") {
 		tables = append(tables, s.DB.AddTable(Hypervisor{}))
 	}
@@ -76,7 +79,7 @@ func (s *NovaSyncer) Init(ctx context.Context) {
 func (s *NovaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.Conf.Types, "servers") {
-		changedServers, err := s.SyncChangedServers(ctx)
+		changedServers, err := s.SyncAllServers(ctx)
 		if err != nil {
 			return err
 		}
@@ -84,15 +87,24 @@ func (s *NovaSyncer) Sync(ctx context.Context) error {
 			go s.MqttClient.Publish(TriggerNovaServersSynced, "")
 		}
 	}
+	if slices.Contains(s.Conf.Types, "deleted_servers") {
+		changedDeletedServers, err := s.SyncDeletedServers(ctx)
+		if err != nil {
+			return err
+		}
+		if len(changedDeletedServers) > 0 {
+			go s.MqttClient.Publish(TriggerNovaDeletedServersSynced, "")
+		}
+	}
 	if slices.Contains(s.Conf.Types, "hypervisors") {
-		_, err := s.SyncChangedHypervisors(ctx)
+		_, err := s.SyncAllHypervisors(ctx)
 		if err != nil {
 			return err
 		}
 		go s.MqttClient.Publish(TriggerNovaHypervisorsSynced, "")
 	}
 	if slices.Contains(s.Conf.Types, "flavors") {
-		changedFlavors, err := s.SyncChangedFlavors(ctx)
+		changedFlavors, err := s.SyncAllFlavors(ctx)
 		if err != nil {
 			return err
 		}
@@ -209,25 +221,43 @@ func upsert[O any](s *NovaSyncer, objects []O, pk string, getpk func(O) string, 
 	return nil
 }
 
-// Sync the OpenStack servers into the database.
-// Return only new servers that were created since the last sync.
-func (s *NovaSyncer) SyncChangedServers(ctx context.Context) ([]Server, error) {
-	tableName := Server{}.TableName()
-	lastSyncTime := s.getLastSyncTime(tableName)
-	defer s.setLastSyncTime(tableName, time.Now())
-	changedServers, err := s.API.GetChangedServers(ctx, lastSyncTime)
+// Sync all the active OpenStack servers into the database. (Includes ERROR, SHUTOFF, etc. state)
+func (s *NovaSyncer) SyncAllServers(ctx context.Context) ([]Server, error) {
+	allServers, err := s.API.GetAllServers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = upsert(s, changedServers, "id", func(s Server) string { return s.ID }, tableName)
+	err = db.ReplaceAll(s.DB, allServers...)
 	if err != nil {
 		return nil, err
 	}
-	return changedServers, nil
+	return allServers, nil
+}
+
+// Sync all the deleted OpenStack servers into the database.
+// Only fetch servers that were deleted since the last sync run.
+func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) ([]DeletedServer, error) {
+	// Default time frame is the last 6 hours
+	since := time.Now().Add(-6 * time.Hour)
+
+	// If there is a configured value, use that instead.
+	if s.Conf.DeletedServersChangesSinceMinutes != nil {
+		since = time.Now().Add(-time.Duration(*s.Conf.DeletedServersChangesSinceMinutes) * time.Minute)
+	}
+
+	deletedServers, err := s.API.GetDeletedServers(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	err = db.ReplaceAll(s.DB, deletedServers...)
+	if err != nil {
+		return nil, err
+	}
+	return deletedServers, nil
 }
 
 // Sync the OpenStack hypervisors into the database.
-func (s *NovaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, error) {
+func (s *NovaSyncer) SyncAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	allHypervisors, err := s.API.GetAllHypervisors(ctx)
 	if err != nil {
 		return nil, err
@@ -242,26 +272,23 @@ func (s *NovaSyncer) SyncChangedHypervisors(ctx context.Context) ([]Hypervisor, 
 }
 
 // Sync the OpenStack flavors into the database.
-func (s *NovaSyncer) SyncChangedFlavors(ctx context.Context) ([]Flavor, error) {
-	tableName := Flavor{}.TableName()
-	lastSyncTime := s.getLastSyncTime(tableName)
-	defer s.setLastSyncTime(tableName, time.Now())
-	changedFlavors, err := s.API.GetChangedFlavors(ctx, lastSyncTime)
+func (s *NovaSyncer) SyncAllFlavors(ctx context.Context) ([]Flavor, error) {
+	allFlavors, err := s.API.GetAllFlavors(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = upsert(s, changedFlavors, "id", func(f Flavor) string { return f.ID }, tableName)
+	err = db.ReplaceAll(s.DB, allFlavors...)
 	if err != nil {
 		return nil, err
 	}
-	return changedFlavors, nil
+	return allFlavors, nil
 }
 
 // Sync the OpenStack migrations into the database.
 func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, error) {
 	tableName := Migration{}.TableName()
+	updatedSyncTime := time.Now()
 	lastSyncTime := s.getLastSyncTime(tableName)
-	defer s.setLastSyncTime(tableName, time.Now())
 	changedMigrations, err := s.API.GetChangedMigrations(ctx, lastSyncTime)
 	if err != nil {
 		return nil, err
@@ -270,17 +297,18 @@ func (s *NovaSyncer) SyncChangedMigrations(ctx context.Context) ([]Migration, er
 	if err != nil {
 		return nil, err
 	}
+	s.setLastSyncTime(tableName, updatedSyncTime)
 	return changedMigrations, nil
 }
 
 func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) ([]Aggregate, error) {
-	changedAggregates, err := s.API.GetAllAggregates(ctx)
+	allAggregates, err := s.API.GetAllAggregates(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = db.ReplaceAll(s.DB, changedAggregates...)
+	err = db.ReplaceAll(s.DB, allAggregates...)
 	if err != nil {
 		return nil, err
 	}
-	return changedAggregates, nil
+	return allAggregates, nil
 }

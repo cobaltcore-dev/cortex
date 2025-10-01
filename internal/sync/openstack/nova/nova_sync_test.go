@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
@@ -18,15 +19,32 @@ type mockNovaAPI struct{}
 
 func (m *mockNovaAPI) Init(ctx context.Context) {}
 
-func (m *mockNovaAPI) GetChangedServers(ctx context.Context, t *time.Time) ([]Server, error) {
+func (m *mockNovaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	return []Server{{ID: "1", Name: "server1"}}, nil
+}
+
+func (m *mockNovaAPI) GetDeletedServers(ctx context.Context, t time.Time) ([]DeletedServer, error) {
+	// Mock different API responses based on the lookback time to test configuration behavior:
+	// - If looking back more than 5 hours: return 2 servers (simulates more historical data)
+	// - If looking back less than 5 hours: return 1 server (simulates less recent data)
+	//
+	// This allows testing:
+	// 1. Default 6-hour lookback should get 2 servers (6h > 5h threshold)
+	// 2. Custom 1-hour lookback should get 1 server (1h < 5h threshold)
+	if t.Before(time.Now().Add(-5 * time.Hour)) {
+		return []DeletedServer{
+			{ID: "1", Name: "server1", Status: "DELETED"},
+			{ID: "2", Name: "server2", Status: "DELETED"},
+		}, nil
+	}
+	return []DeletedServer{{ID: "1", Name: "server1", Status: "DELETED"}}, nil
 }
 
 func (m *mockNovaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	return []Hypervisor{{ID: "1", Hostname: "hypervisor1"}}, nil
 }
 
-func (m *mockNovaAPI) GetChangedFlavors(ctx context.Context, t *time.Time) ([]Flavor, error) {
+func (m *mockNovaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	return []Flavor{{ID: "1", Name: "flavor1"}}, nil
 }
 
@@ -87,18 +105,66 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		Conf: NovaConf{Types: []string{"servers"}},
 		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	servers, err := syncer.SyncChangedServers(ctx)
+	servers, err := syncer.SyncAllServers(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(servers) != 1 {
 		t.Fatalf("expected 1 server, got %d", len(servers))
+	}
+}
+
+func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
+	tests := []struct {
+		Name                              string
+		DeletedServersChangesSinceMinutes *int
+		ExpectedAmountOfDeletedServers    int
+	}{
+		{
+			Name:                              "default time",
+			DeletedServersChangesSinceMinutes: nil, // should default to 6 hours
+			ExpectedAmountOfDeletedServers:    2,
+		},
+		{
+			Name:                              "custom time",
+			DeletedServersChangesSinceMinutes: testlib.Ptr(60),
+			ExpectedAmountOfDeletedServers:    1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+			dbEnv := testlibDB.SetupDBEnv(t)
+			testDB := db.DB{DbMap: dbEnv.DbMap}
+			defer testDB.Close()
+			defer dbEnv.Close()
+
+			mon := sync.Monitor{}
+			syncer := &NovaSyncer{
+				DB:  testDB,
+				Mon: mon,
+				Conf: NovaConf{
+					Types:                             []string{"deleted_servers"},
+					DeletedServersChangesSinceMinutes: tt.DeletedServersChangesSinceMinutes,
+				},
+				API: &mockNovaAPI{},
+			}
+
+			ctx := t.Context()
+			syncer.Init(ctx)
+			servers, err := syncer.SyncDeletedServers(ctx)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if len(servers) != tt.ExpectedAmountOfDeletedServers {
+				t.Fatalf("expected %d server, got %d", tt.ExpectedAmountOfDeletedServers, len(servers))
+			}
+		})
 	}
 }
 
@@ -112,13 +178,13 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: NovaConf{Types: []string{"servers", "hypervisors"}},
+		Conf: NovaConf{Types: []string{"hypervisors"}},
 		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	hypervisors, err := syncer.SyncChangedHypervisors(ctx)
+	hypervisors, err := syncer.SyncAllHypervisors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -143,7 +209,7 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	flavors, err := syncer.SyncChangedFlavors(ctx)
+	flavors, err := syncer.SyncAllFlavors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
