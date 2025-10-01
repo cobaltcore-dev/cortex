@@ -27,7 +27,7 @@ type NovaAPI interface {
 	// Get all nova servers that are NOT deleted. (Includes ERROR, SHUTOFF etc)
 	GetAllServers(ctx context.Context) ([]Server, error)
 	// Get all deleted nova servers since the timestamp.
-	GetDeletedServers(ctx context.Context, changedSince *time.Time) ([]DeletedServer, error)
+	GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error)
 	// Get all nova hypervisors.
 	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	// Get all nova flavors.
@@ -110,9 +110,10 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 }
 
 // Get all deleted Nova servers.
-func (api *novaAPI) GetDeletedServers(ctx context.Context, changedSince *time.Time) ([]DeletedServer, error) {
+func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
-	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
+
+	slog.Info("fetching nova data", "label", label, "changedSince", since)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.PipelineRequestTimer != nil {
@@ -126,9 +127,7 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, changedSince *time.Ti
 			Status:     "DELETED",
 			AllTenants: true,
 		}
-		if changedSince != nil {
-			lo.ChangesSince = changedSince.Format(time.RFC3339)
-		}
+		lo.ChangesSince = since.Format(time.RFC3339)
 		return servers.List(api.sc, lo).AllPages(ctx)
 	}()
 	if err != nil {

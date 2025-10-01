@@ -102,6 +102,8 @@ type SyncOpenStackNovaConfig struct {
 	Availability string `json:"availability"`
 	// The types of resources to sync.
 	Types []string `json:"types"`
+	// Time frame in minutes for the changes-since parameter when fetching deleted servers.
+	DeletedServersChangesSinceMinutes *int `json:"deletedServersChangesSinceMinutes,omitempty"`
 }
 
 // Configuration for the placement service.

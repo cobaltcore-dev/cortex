@@ -33,23 +33,22 @@ func TestNewNovaAPI(t *testing.T) {
 
 func TestNovaAPI_GetDeletedServers(t *testing.T) {
 	tests := []struct {
-		name string
-		time *time.Time
+		Name string
+		Time time.Time
 	}{
-		{"nil", nil},
-		{"time", &time.Time{}},
+		{
+			Name: "should find default changes-since of 6 hours",
+			Time: time.Now().Add(-6 * time.Hour),
+		},
+		{
+			Name: "should find custom changes-since of 1 hour",
+			Time: time.Now().Add(-1 * time.Hour),
+		},
 	}
 	for _, tt := range tests {
 		handler := func(w http.ResponseWriter, r *http.Request) {
-			if tt.time == nil {
-				// Check that the changes-since query parameter is not set.
-				if r.URL.Query().Get("changes-since") != "" {
-					t.Fatalf("expected no changes-since query parameter, got %s", r.URL.Query().Get("changes-since"))
-				}
-			} else {
-				if r.URL.Query().Get("changes-since") != tt.time.Format(time.RFC3339) {
-					t.Fatalf("expected changes-since query parameter to be %s, got %s", tt.time.Format(time.RFC3339), r.URL.Query().Get("changes-since"))
-				}
+			if r.URL.Query().Get("changes-since") != tt.Time.Format(time.RFC3339) {
+				t.Fatalf("expected changes-since query parameter to be %s, got %s", tt.Time.Format(time.RFC3339), r.URL.Query().Get("changes-since"))
 			}
 			w.Header().Add("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -72,7 +71,7 @@ func TestNovaAPI_GetDeletedServers(t *testing.T) {
 		api.Init(t.Context())
 
 		ctx := t.Context()
-		servers, err := api.GetDeletedServers(ctx, tt.time)
+		servers, err := api.GetDeletedServers(ctx, tt.Time)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}

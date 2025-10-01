@@ -237,18 +237,23 @@ func (s *NovaSyncer) SyncAllServers(ctx context.Context) ([]Server, error) {
 // Sync all the deleted OpenStack servers into the database.
 // Only fetch servers that were deleted since the last sync run.
 func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) ([]DeletedServer, error) {
-	tableName := DeletedServer{}.TableName()
-	updatedSyncTime := time.Now()
-	lastSyncTime := s.getLastSyncTime(tableName)
-	deletedServers, err := s.API.GetDeletedServers(ctx, lastSyncTime)
+
+	// Default time frame is the last 6 hours
+	since := time.Now().Add(-6 * time.Hour)
+
+	// If there is a configured value, use that instead.
+	if s.Conf.DeletedServersChangesSinceMinutes != nil {
+		since = time.Now().Add(-time.Duration(*s.Conf.DeletedServersChangesSinceMinutes) * time.Minute)
+	}
+
+	deletedServers, err := s.API.GetDeletedServers(ctx, since)
 	if err != nil {
 		return nil, err
 	}
-	err = upsert(s, deletedServers, "id", func(s DeletedServer) string { return s.ID }, tableName)
+	err = db.ReplaceAll(s.DB, deletedServers...)
 	if err != nil {
 		return nil, err
 	}
-	s.setLastSyncTime(tableName, updatedSyncTime)
 	return deletedServers, nil
 }
 
