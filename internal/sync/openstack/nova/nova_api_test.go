@@ -232,5 +232,4 @@ func TestNovaAPI_GetAllMigrations(t *testing.T) {
 	if migrations[0].ID != 1 || migrations[0].SourceCompute != "host1" || migrations[0].DestCompute != "host2" || migrations[0].Status != "completed" {
 		t.Errorf("unexpected migration data: %+v", migrations[0])
 	}
-
 }
