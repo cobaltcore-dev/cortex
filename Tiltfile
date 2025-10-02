@@ -6,19 +6,12 @@
 
 analytics_settings(False)
 
-
-DEPLOYMENTS = {
-    'NOVA': 'nova',
-    'MANILA': 'manila',
-    'CINDER': 'cinder',
-}
-
-ACTIVE_DEPLOYMENTS = [DEPLOYMENTS['NOVA'], DEPLOYMENTS['MANILA'], DEPLOYMENTS['CINDER']]
-
-valid_deployments = set(DEPLOYMENTS.values())
-for dep in ACTIVE_DEPLOYMENTS:
-    if dep not in valid_deployments:
-        fail("Invalid deployment selected: %s. Allowed: %s" % (dep, valid_deployments))
+# Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
+ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder')
+if ACTIVE_DEPLOYMENTS_ENV == "":
+    ACTIVE_DEPLOYMENTS = [] # Catch "".split(",") = [""]
+else:
+    ACTIVE_DEPLOYMENTS = ACTIVE_DEPLOYMENTS_ENV.split(',')
 
 if not os.getenv('TILT_VALUES_PATH'):
     fail("TILT_VALUES_PATH is not set.")
