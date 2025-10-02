@@ -37,11 +37,21 @@ def kubebuilder_binary_files(path):
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile.kubebuilder',
     build_args={'GO_MOD_PATH': 'reservations'},
-    only=kubebuilder_binary_files('reservations') + ['internal/', 'go.mod', 'go.sum'],
+    only=kubebuilder_binary_files('reservations') + ['internal/', 'decisions/', 'go.mod', 'go.sum'],
 )
 local('sh helm/sync.sh reservations/dist/chart')
 k8s_yaml(helm('reservations/dist/chart', name='cortex-reservations', values=[tilt_values]))
 k8s_resource('reservations-controller-manager', labels=['Reservations'])
+
+########### Decisions Operator & CRDs
+docker_build('ghcr.io/cobaltcore-dev/cortex-decisions-operator', '.',
+    dockerfile='Dockerfile.kubebuilder',
+    build_args={'GO_MOD_PATH': 'decisions'},
+    only=kubebuilder_binary_files('decisions') + ['internal/', 'go.mod', 'go.sum'],
+)
+local('sh helm/sync.sh decisions/dist/chart')
+k8s_yaml(helm('decisions/dist/chart', name='cortex-decisions', values=[tilt_values]))
+k8s_resource('decisions-controller-manager', labels=['Decisions'])
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
@@ -82,6 +92,7 @@ k8s_resource('cortex-plutono', port_forwards=[
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
     'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
     'reservations/api/', # API module of the reservations operator needed for the scheduler.
+    'decisions/api/', # API module of the decisions operator needed for the scheduler.
 ])
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 

@@ -1,0 +1,129 @@
+# This file is safe from kubebuilder edit --plugins=helm/v1-alpha
+# If you want to re-generate, add the --force flag.
+
+owner-info:
+  enabled: true
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/decisions/dist/chart"
+  maintainers:
+    - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
+  support-group: "workload-management"
+  service: "cortex-decisions"
+
+# [MANAGER]: Manager Deployment Configurations
+controllerManager:
+  replicas: 1
+  container:
+    image:
+      repository: ghcr.io/cobaltcore-dev/cortex-decisions-operator
+    args:
+      - "--leader-elect"
+      - "--metrics-bind-address=:8443"
+      - "--health-probe-bind-address=:8081"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+    livenessProbe:
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      httpGet:
+        path: /healthz
+        port: 8081
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      httpGet:
+        path: /readyz
+        port: 8081
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - "ALL"
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  terminationGracePeriodSeconds: 10
+  serviceAccountName: decisions-controller-manager
+
+# [RBAC]: To enable RBAC (Permissions) configurations
+rbac:
+  enable: true
+
+# [CRDs]: To enable the CRDs
+crd:
+  # This option determines whether the CRDs are included
+  # in the installation process.
+  enable: true
+
+  # Enabling this option adds the "helm.sh/resource-policy": keep
+  # annotation to the CRD, ensuring it remains installed even when
+  # the Helm release is uninstalled.
+  # NOTE: Removing the CRDs will also remove all cert-manager CR(s)
+  # (Certificates, Issuers, ...) due to garbage collection.
+  keep: true
+
+# [METRICS]: Set to true to generate manifests for exporting metrics.
+# To disable metrics export set false, and ensure that the
+# ControllerManager argument "--metrics-bind-address=:8443" is removed.
+metrics:
+  enable: true
+
+# [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
+prometheus:
+  enable: true
+
+# [CERT-MANAGER]: To enable cert-manager injection to webhooks set true
+certmanager:
+  enable: false
+
+# [NETWORK POLICIES]: To enable NetworkPolicies set true
+networkPolicy:
+  enable: false
+
+# SSO certificate to use.
+sharedSSOCert: &sharedSSOCert
+  # Certificate "public key". (Optional, remove this key if not needed)
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    Your certificate here
+    -----END CERTIFICATE-----
+  # Certificate private key. (Optional, remove this key if not needed)
+  certKey: |
+    -----BEGIN PRIVATE KEY-----
+    Your private key here
+    -----END PRIVATE KEY
+  # Whether the certificate is self-signed.
+  # If true, the certificate is not verified.
+  selfSigned: false
+
+decisions:
+  # Default configuration provided through configmap to the operator.
+  conf:
+    # Which hypervisor types should be handled by the operator.
+    hypervisors:
+      - "QEMU"
+      - "CH"
+      # Not supported:
+      # - "VMware vCenter Server"
+      # - "ironic"
+    endpoints:
+      # The URL of the Nova external scheduler service.
+      novaExternalScheduler: "http://cortex-nova-scheduler:8080/scheduler/nova/external"
+  # Config provided here will override the config provided above.
+  secrets:
+    # Override the endpoints and credentials to your OpenStack.
+    keystone:
+      url: https://path-to-keystone/v3
+      sso: *sharedSSOCert
+      username: openstack-user-with-all-project-read-access
+      password: openstack-user-password
+      projectName: openstack-project-of-user
+      userDomainName: openstack-domain-of-user
+      projectDomainName: openstack-domain-of-project-scoped-to

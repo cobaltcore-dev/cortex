@@ -21,6 +21,9 @@ import (
 type Pipeline[RequestType PipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
 	Run(request RequestType) ([]string, error)
+
+	// Set the consumer that will receive the decisions.
+	SetConsumer(consumer SchedulingDecisionConsumer[RequestType])
 }
 
 type Premodifier[RequestType PipelineRequest] interface {
@@ -43,6 +46,13 @@ type pipeline[RequestType PipelineRequest] struct {
 	mqttClient mqtt.Client
 	// MQTT topic to publish telemetry data on when the pipeline is finished.
 	mqttTopic string
+
+	// Optional consumer to listen for the decisions.
+	Consumer SchedulingDecisionConsumer[RequestType]
+}
+
+func (p *pipeline[RequestType]) SetConsumer(consumer SchedulingDecisionConsumer[RequestType]) {
+	p.Consumer = consumer
 }
 
 type StepWrapper[RequestType PipelineRequest] func(Step[RequestType], conf.SchedulerStepConfig) Step[RequestType]
@@ -193,6 +203,15 @@ type TelemetryMessage[RequestType PipelineRequest] struct {
 	Out     map[string]float64            `json:"out"`
 }
 
+type SchedulingDecisionConsumer[RequestType PipelineRequest] interface {
+	Consume(
+		request RequestType,
+		applicationOrder []string,
+		inWeights map[string]float64,
+		stepWeights map[string]map[string]float64,
+	)
+}
+
 // Evaluate the pipeline and return a list of subjects in order of preference.
 func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 	slogArgs := request.GetTraceLogArgs()
@@ -231,6 +250,10 @@ func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 		Steps:   stepWeights,
 		Out:     outWeights,
 	})
+
+	if p.Consumer != nil {
+		go p.Consumer.Consume(request, p.applicationOrder, inWeights, stepWeights)
+	}
 
 	return subjects, nil
 }

@@ -4,5 +4,7 @@
 FROM nginx
 COPY vendor/mqtt.min.js /usr/share/nginx/html/mqtt.min.js
 COPY nova.html /usr/share/nginx/html/nova.html
+COPY scheduling-decisions.html /usr/share/nginx/html/scheduling-decisions.html
 COPY manila.html /usr/share/nginx/html/manila.html
 COPY shared.css /usr/share/nginx/html/shared.css
+COPY favicon.ico /usr/share/nginx/html/favicon.ico

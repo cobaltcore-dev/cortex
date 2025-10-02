@@ -21,6 +21,18 @@ type mockPipeline struct {
 	runFunc func(api.ExternalSchedulerRequest) ([]string, error)
 }
 
+func (p *mockPipeline) SetConsumer(consumer scheduler.SchedulingDecisionConsumer[api.ExternalSchedulerRequest]) {
+
+}
+
+func (p *mockPipeline) Consume(
+	request api.ExternalSchedulerRequest,
+	applicationOrder []string,
+	inWeights map[string]float64,
+	stepWeights map[string]map[string]float64,
+) {
+}
+
 func (m *mockPipeline) Run(req api.ExternalSchedulerRequest) ([]string, error) {
 	return m.runFunc(req)
 }
