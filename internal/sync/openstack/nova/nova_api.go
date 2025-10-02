@@ -113,8 +113,8 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 // Note on Nova terminology: Nova uses "instance" internally in its database and code,
 // but exposes these as "server" objects through the public API.
 // Server lifecycle and cleanup:
-// - In SAP Cloud Infrastructure's Nova fork, orphaned servers are purged after 3 weeks
-// - This means historical server data is limited to 3 weeks
+//   - In SAP Cloud Infrastructure's Nova fork, orphaned servers are purged after 3 weeks
+//   - This means historical server data is limited to 3 weeks
 func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
 
