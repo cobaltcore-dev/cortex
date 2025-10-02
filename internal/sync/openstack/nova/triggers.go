@@ -6,6 +6,9 @@ package nova
 // Trigger executed when new servers are available.
 const TriggerNovaServersSynced = "triggers/sync/openstack/nova/types/servers"
 
+// Trigger executed when new deleted servers are available.
+const TriggerNovaDeletedServersSynced = "triggers/sync/openstack/nova/types/deleted_servers"
+
 // Trigger executed when new hypervisors are available.
 const TriggerNovaHypervisorsSynced = "triggers/sync/openstack/nova/types/hypervisors"
 

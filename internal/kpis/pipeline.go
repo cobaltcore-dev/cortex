@@ -26,7 +26,6 @@ var SupportedKPIs = []plugins.KPI{
 	// NetApp kpis.
 	&netapp.NetAppStoragePoolCPUUsageKPI{},
 	// Shared kpis.
-	&shared.UnusedCommitmentsKPI{},
 	&shared.VMMigrationStatisticsKPI{},
 	&shared.VMLifeSpanKPI{},
 	&shared.VMCommitmentsKPI{},
