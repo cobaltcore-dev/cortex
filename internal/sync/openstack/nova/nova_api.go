@@ -110,6 +110,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 }
 
 // Get all deleted Nova servers.
+// In SAP Cloud Infrastructure nova a deleted server is removed from the database after 3 weeks.
 func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
 
@@ -227,6 +228,9 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 }
 
 // Get all Nova migrations.
+// Nova calls vm "instance" internally but via the api they are called "server".
+// Nova deletes migrations when a server (instance) is deleted (https://github.com/openstack/nova/blob/1508cb39a2b12ef2d4f706b9c303a744ce40e707/nova/db/main/api.py#L1337-L1358)
+// The nova fork of SAP Cloud Infrastructure does remove deleted migrations after 3 weeks.
 func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	label := Migration{}.TableName()
 	slog.Info("fetching nova data", "label", label)

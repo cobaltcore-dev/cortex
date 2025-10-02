@@ -60,58 +60,46 @@ func (s *NovaSyncer) Init(ctx context.Context) {
 func (s *NovaSyncer) Sync(ctx context.Context) error {
 	// Only sync the objects that are configured in the yaml conf.
 	if slices.Contains(s.Conf.Types, "servers") {
-		allServers, err := s.SyncAllServers(ctx)
+		_, err := s.SyncAllServers(ctx)
 		if err != nil {
 			return err
 		}
-		if len(allServers) > 0 {
-			go s.MqttClient.Publish(TriggerNovaServersSynced, "")
-		}
+		go s.MqttClient.Publish(TriggerNovaServersSynced, "")
 	}
 	if slices.Contains(s.Conf.Types, "deleted_servers") {
-		deletedServers, err := s.SyncDeletedServers(ctx)
+		_, err := s.SyncDeletedServers(ctx)
 		if err != nil {
 			return err
 		}
-		if len(deletedServers) > 0 {
-			go s.MqttClient.Publish(TriggerNovaDeletedServersSynced, "")
-		}
+		go s.MqttClient.Publish(TriggerNovaDeletedServersSynced, "")
 	}
 	if slices.Contains(s.Conf.Types, "hypervisors") {
-		allHypervisors, err := s.SyncAllHypervisors(ctx)
+		_, err := s.SyncAllHypervisors(ctx)
 		if err != nil {
 			return err
 		}
-		if len(allHypervisors) > 0 {
-			go s.MqttClient.Publish(TriggerNovaHypervisorsSynced, "")
-		}
+		go s.MqttClient.Publish(TriggerNovaHypervisorsSynced, "")
 	}
 	if slices.Contains(s.Conf.Types, "flavors") {
-		allFlavors, err := s.SyncAllFlavors(ctx)
+		_, err := s.SyncAllFlavors(ctx)
 		if err != nil {
 			return err
 		}
-		if len(allFlavors) > 0 {
-			go s.MqttClient.Publish(TriggerNovaFlavorsSynced, "")
-		}
+		go s.MqttClient.Publish(TriggerNovaFlavorsSynced, "")
 	}
 	if slices.Contains(s.Conf.Types, "migrations") {
-		allMigrations, err := s.SyncAllMigrations(ctx)
+		_, err := s.SyncAllMigrations(ctx)
 		if err != nil {
 			return err
 		}
-		if len(allMigrations) > 0 {
-			go s.MqttClient.Publish(TriggerNovaMigrationsSynced, "")
-		}
+		go s.MqttClient.Publish(TriggerNovaMigrationsSynced, "")
 	}
 	if slices.Contains(s.Conf.Types, "aggregates") {
-		allAggregates, err := s.SyncAllAggregates(ctx)
+		_, err := s.SyncAllAggregates(ctx)
 		if err != nil {
 			return err
 		}
-		if len(allAggregates) > 0 {
-			go s.MqttClient.Publish(TriggerNovaAggregatesSynced, "")
-		}
+		go s.MqttClient.Publish(TriggerNovaAggregatesSynced, "")
 	}
 	return nil
 }
@@ -192,6 +180,7 @@ func (s *NovaSyncer) SyncAllMigrations(ctx context.Context) ([]Migration, error)
 	return allMigrations, nil
 }
 
+// Sync the OpenStack aggregates into the database.
 func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	allAggregates, err := s.API.GetAllAggregates(ctx)
 	if err != nil {
