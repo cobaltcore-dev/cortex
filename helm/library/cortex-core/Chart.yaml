@@ -5,5 +5,5 @@ apiVersion: v2
 name: cortex-core
 description: A Helm chart deploying Cortex core services.
 type: application
-appVersion: "sha-4adbc1c"
+appVersion: "sha-dc3a6ca"
 version: 0.26.0
