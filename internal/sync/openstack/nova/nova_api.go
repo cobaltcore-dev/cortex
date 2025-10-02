@@ -110,7 +110,11 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 }
 
 // Get all deleted Nova servers.
-// In SAP Cloud Infrastructure nova a deleted server is removed from the database after 3 weeks.
+// Note on Nova terminology: Nova uses "instance" internally in its database and code,
+// but exposes these as "server" objects through the public API.
+// Server lifecycle and cleanup:
+// - In SAP Cloud Infrastructure's Nova fork, orphaned servers are purged after 3 weeks
+// - This means historical server data is limited to 3 weeks
 func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
 
@@ -227,10 +231,16 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	return data.Flavors, nil
 }
 
-// Get all Nova migrations.
-// Nova calls vm "instance" internally but via the api they are called "server".
-// Nova deletes migrations when a server (instance) is deleted (https://github.com/openstack/nova/blob/1508cb39a2b12ef2d4f706b9c303a744ce40e707/nova/db/main/api.py#L1337-L1358)
-// The nova fork of SAP Cloud Infrastructure does remove deleted migrations after 3 weeks.
+// Get all Nova migrations from the OpenStack API.
+//
+// Note on Nova terminology: Nova uses "instance" internally in its database and code,
+// but exposes these as "server" objects through the public API.
+//
+// Migration lifecycle and cleanup:
+//   - Migrations are automatically deleted when their associated server is deleted
+//     (see Nova source: https://github.com/openstack/nova/blob/1508cb39a2b12ef2d4f706b9c303a744ce40e707/nova/db/main/api.py#L1337-L1358)
+//   - In SAP Cloud Infrastructure's Nova fork, orphaned migrations are purged after 3 weeks
+//   - This means historical migration data has limited retention
 func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	label := Migration{}.TableName()
 	slog.Info("fetching nova data", "label", label)
