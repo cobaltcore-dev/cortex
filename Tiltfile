@@ -4,8 +4,21 @@
 # For Pylance to not complain around:
 # type: ignore
 
-# Don't track us.
 analytics_settings(False)
+
+
+DEPLOYMENTS = {
+    'NOVA': 'nova',
+    'MANILA': 'manila',
+    'CINDER': 'cinder',
+}
+
+ACTIVE_DEPLOYMENTS = [DEPLOYMENTS['NOVA'], DEPLOYMENTS['MANILA'], DEPLOYMENTS['CINDER']]
+
+valid_deployments = set(DEPLOYMENTS.values())
+for dep in ACTIVE_DEPLOYMENTS:
+    if dep not in valid_deployments:
+        fail("Invalid deployment selected: %s. Allowed: %s" % (dep, valid_deployments))
 
 if not os.getenv('TILT_VALUES_PATH'):
     fail("TILT_VALUES_PATH is not set.")
@@ -81,107 +94,109 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 
 # Package the lib charts locally and sync them to the bundle charts. In this way
 # we can bump the lib charts locally and test them before pushing them to the OCI registry.
+
+
+# --- Chart lists based on ACTIVE_DEPLOYMENTS ---
 lib_charts = ['cortex-core', 'cortex-postgres', 'cortex-mqtt']
-bundle_charts = ['cortex-nova', 'cortex-manila', 'cortex-cinder']
+bundle_charts = ['cortex-' + name for name in ACTIVE_DEPLOYMENTS]
+
 for lib_chart in lib_charts:
-    watch_file('helm/library/' + lib_chart) # React to lib chart changes.
+    watch_file('helm/library/' + lib_chart)
     local('sh helm/sync.sh helm/library/' + lib_chart)
     for bundle_chart in bundle_charts:
         local('helm package helm/library/' + lib_chart)
         gen_tgz = str(local('ls ' + lib_chart + '-*.tgz')).strip()
         cmp = 'sh helm/cmp.sh ' + gen_tgz + ' helm/bundles/' + bundle_chart + '/charts/' + gen_tgz
         cmp_result = str(local(cmp)).strip()
-        if cmp_result == 'true': # same chart
+        if cmp_result == 'true':
             print('Skipping ' + lib_chart + ' as it is already up to date in ' + bundle_chart)
-            # Make sure the gen_tgz is removed from the local directory.
             local('rm -f ' + gen_tgz)
         else:
             local('mkdir -p helm/bundles/' + bundle_chart + '/charts/')
             local('mv -f ' + gen_tgz + ' helm/bundles/' + bundle_chart + '/charts/')
-# Ensure the bundle charts are up to date.
 for bundle_chart in bundle_charts:
     local('sh helm/sync.sh helm/bundles/' + bundle_chart)
 
-# Deploy the Cortex bundles.
-k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values]))
-k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=[tilt_values]))
-k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=[tilt_values]))
+# Deploy the selected Cortex bundles
+for name in ACTIVE_DEPLOYMENTS:
+    k8s_yaml(helm('./helm/bundles/cortex-' + name, name='cortex-' + name, values=[tilt_values]))
 
 # Note: place resources higher in this list to ensure their local port stays the same.
 # Elements placed lower in the list will have their local port shifted by elements inserted above.
-resources = [
-    (
-        'MQTT',
-        [
-            'cortex-nova-mqtt',
-            'cortex-manila-mqtt',
-            'cortex-cinder-mqtt',
-        ],
-        [(1883, 'tcp'), (15675, 'ws')],
-    ),
-    (
-        'Database',
-        [
-            'cortex-nova-postgresql',
-            'cortex-manila-postgresql',
-            'cortex-cinder-postgresql',
-        ],
-        [(5432, 'psql')],
-    ),
-    (
-        'Cortex-Nova',
-        [
-            'cortex-nova-migrations',
-            'cortex-nova-cli',
-            'cortex-nova-syncer',
-            'cortex-nova-extractor',
-            'cortex-nova-kpis',
-            'cortex-nova-scheduler',
-            'cortex-nova-descheduler',
-        ],
-        [(2112, 'metrics'), (8080, 'api')],
-    ),
-    (
-        'Cortex-Manila',
-        [
-            'cortex-manila-migrations',
-            'cortex-manila-cli',
-            'cortex-manila-syncer',
-            'cortex-manila-extractor',
-            'cortex-manila-kpis',
-            'cortex-manila-scheduler',
-        ],
-        [(2112, 'metrics'), (8080, 'api')],
-    ),
-    (
-        'Cortex-Cinder',
-        [
-            'cortex-cinder-migrations',
-            'cortex-cinder-cli',
-            'cortex-cinder-syncer',
-            'cortex-cinder-extractor',
-            'cortex-cinder-kpis',
-            'cortex-cinder-scheduler',
-        ],
-        [(2112, 'metrics'), (8080, 'api')],
-    ),
-]
+
+# --- Resource definitions based on ACTIVE_DEPLOYMENTS ---
+resources_def = {
+    'MQTT': {
+        'suffix': 'mqtt',
+        'components': lambda name: ['cortex-' + name + '-mqtt'],
+        'ports': [(1883, 'tcp'), (15675, 'ws')],
+    },
+    'Database': {
+        'suffix': 'postgresql',
+        'components': lambda name: ['cortex-' + name + '-postgresql'],
+        'ports': [(5432, 'psql')],
+    },
+    'Cortex': {
+        'suffix': '',
+        'components': lambda name: [
+            'cortex-' + name + '-migrations',
+            'cortex-' + name + '-cli',
+            'cortex-' + name + '-syncer',
+            'cortex-' + name + '-extractor',
+            'cortex-' + name + '-kpis',
+            'cortex-' + name + '-scheduler',
+        ] + (['cortex-' + name + '-descheduler'] if name == 'nova' else []),
+        'ports': [(2112, 'metrics'), (8080, 'api')],
+    },
+}
+
 local_port = 8000
-for label, components, service_ports in resources:
-    for component in components:
+for name in ACTIVE_DEPLOYMENTS:
+    # MQTT
+    for component in resources_def['MQTT']['components'](name):
         k8s_resource(
             component,
             port_forwards=[
                 port_forward(local_port + i, service_port)
-                for i, (service_port, _) in enumerate(service_ports)
+                for i, (service_port, _) in enumerate(resources_def['MQTT']['ports'])
             ],
             links=[
                 link('http://localhost:' + str(local_port + i) + '/' + service_port_name, '/' + service_port_name)
-                for i, (_, service_port_name) in enumerate(service_ports)
+                for i, (_, service_port_name) in enumerate(resources_def['MQTT']['ports'])
             ],
-            labels=[label],
+            labels=['MQTT'],
         )
-        local_port += len(service_ports)
+        local_port += len(resources_def['MQTT']['ports'])
+    # Database
+    for component in resources_def['Database']['components'](name):
+        k8s_resource(
+            component,
+            port_forwards=[
+                port_forward(local_port + i, service_port)
+                for i, (service_port, _) in enumerate(resources_def['Database']['ports'])
+            ],
+            links=[
+                link('http://localhost:' + str(local_port + i) + '/' + service_port_name, '/' + service_port_name)
+                for i, (_, service_port_name) in enumerate(resources_def['Database']['ports'])
+            ],
+            labels=['Database'],
+        )
+        local_port += len(resources_def['Database']['ports'])
+    # Cortex core components
+    for component in resources_def['Cortex']['components'](name):
+        k8s_resource(
+            component,
+            port_forwards=[
+                port_forward(local_port + i, service_port)
+                for i, (service_port, _) in enumerate(resources_def['Cortex']['ports'])
+            ],
+            links=[
+                link('http://localhost:' + str(local_port + i) + '/' + service_port_name, '/' + service_port_name)
+                for i, (_, service_port_name) in enumerate(resources_def['Cortex']['ports'])
+            ],
+            labels=['Cortex-' + name.capitalize()],
+        )
+        local_port += len(resources_def['Cortex']['ports'])
 
 ########### E2E Tests
 local_resource(
