@@ -48,7 +48,7 @@ func (m *mockNovaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	return []Flavor{{ID: "1", Name: "flavor1"}}, nil
 }
 
-func (m *mockNovaAPI) GetChangedMigrations(ctx context.Context, t *time.Time) ([]Migration, error) {
+func (m *mockNovaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	return []Migration{{ID: 1}}, nil
 }
 
@@ -234,7 +234,7 @@ func TestNovaSyncer_SyncMigrations(t *testing.T) {
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	migrations, err := syncer.SyncChangedMigrations(ctx)
+	migrations, err := syncer.SyncAllMigrations(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

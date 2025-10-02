@@ -32,8 +32,8 @@ type NovaAPI interface {
 	GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	// Get all nova flavors.
 	GetAllFlavors(ctx context.Context) ([]Flavor, error)
-	// Get all changed nova migrations since the timestamp.
-	GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error)
+	// Get all nova migrations.
+	GetAllMigrations(ctx context.Context) ([]Migration, error)
 	// Get all aggregates.
 	GetAllAggregates(ctx context.Context) ([]Aggregate, error)
 }
@@ -110,6 +110,11 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 }
 
 // Get all deleted Nova servers.
+// Note on Nova terminology: Nova uses "instance" internally in its database and code,
+// but exposes these as "server" objects through the public API.
+// Server lifecycle and cleanup:
+//   - In SAP Cloud Infrastructure's Nova fork, orphaned servers are purged after 3 weeks
+//   - This means historical server data is limited to 3 weeks
 func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
 
@@ -226,10 +231,19 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	return data.Flavors, nil
 }
 
-// Get all changed Nova migrations.
-func (api *novaAPI) GetChangedMigrations(ctx context.Context, changedSince *time.Time) ([]Migration, error) {
+// Get all Nova migrations from the OpenStack API.
+//
+// Note on Nova terminology: Nova uses "instance" internally in its database and code,
+// but exposes these as "server" objects through the public API.
+//
+// Migration lifecycle and cleanup:
+//   - Migrations are automatically deleted when their associated server is deleted
+//     (see Nova source: https://github.com/openstack/nova/blob/1508cb39a2b12ef2d4f706b9c303a744ce40e707/nova/db/main/api.py#L1337-L1358)
+//   - In SAP Cloud Infrastructure's Nova fork, orphaned migrations are purged after 3 weeks
+//   - This means historical migration data has limited retention
+func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	label := Migration{}.TableName()
-	slog.Info("fetching nova data", "label", label, "changedSince", changedSince)
+	slog.Info("fetching nova data", "label", label)
 	// Note: currently we need to fetch this without gophercloud.
 	// See: https://github.com/gophercloud/gophercloud/pull/3244
 	if api.mon.PipelineRequestTimer != nil {
@@ -238,11 +252,6 @@ func (api *novaAPI) GetChangedMigrations(ctx context.Context, changedSince *time
 		defer timer.ObserveDuration()
 	}
 	initialURL := api.sc.Endpoint + "os-migrations"
-	// It is important to omit the changes-since parameter if it is nil.
-	// Otherwise Nova may return huge amounts of data since the beginning of time.
-	if changedSince != nil {
-		initialURL += "?changes-since=" + changedSince.Format(time.RFC3339)
-	}
 	var nextURL = &initialURL
 	var migrations []Migration
 	for nextURL != nil {

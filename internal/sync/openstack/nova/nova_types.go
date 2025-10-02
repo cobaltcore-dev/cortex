@@ -165,7 +165,7 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 }
 
 // Table in which the openstack model is stored.
-func (Server) TableName() string { return "openstack_servers_v2" }
+func (Server) TableName() string { return "openstack_servers" }
 
 // Index for the openstack model.
 func (Server) Indexes() []db.Index { return nil }

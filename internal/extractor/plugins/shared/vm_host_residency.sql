@@ -21,7 +21,7 @@ WITH durations AS (
             )) AS BIGINT)
         ) AS duration
     FROM openstack_migrations AS migrations
-    LEFT JOIN openstack_servers_v2 AS servers ON servers.id = migrations.instance_uuid
+    LEFT JOIN openstack_servers AS servers ON servers.id = migrations.instance_uuid
     LEFT JOIN openstack_flavors_v2 AS flavors ON flavors.name = servers.flavor_name
 )
 SELECT
