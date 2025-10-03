@@ -55,7 +55,7 @@ Cons:
 - Need to consider mqtt triggers when implementing new extractors/syncers
 
 Pros:
-- Features that rarily change are not unnecessarily recalculated
+- Features that rarely change are not unnecessarily recalculated
 - Quicker response to changes in the underlying data, potentially less inconsistencies
 - Concept can be extended in the future, e.g. notifying the syncer when to fetch new data
 
