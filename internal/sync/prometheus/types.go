@@ -266,3 +266,29 @@ func (m NetAppVolumeAggrLabelsMetric) With(n string, t time.Time, v float64) Pro
 	m.Value = v
 	return m
 }
+
+type KVMCPUStealTimeMetric struct {
+	// The name of the metric.
+	Name     string `db:"name"`
+	Instance string `json:"instance" db:"instance"`
+	Domain   string `json:"domain" db:"domain"`
+	Node     string `json:"node" db:"node"`
+	// Timestamp of the metric value.
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
+	// The value of the metric (usually 1 for label metrics).
+	Value float64 `json:"value" db:"value"`
+}
+
+func (m KVMCPUStealTimeMetric) TableName() string {
+	return "kvm_cpu_steal_time_metrics"
+}
+func (m KVMCPUStealTimeMetric) Indexes() []db.Index     { return nil }
+func (m KVMCPUStealTimeMetric) GetName() string         { return m.Name }
+func (m KVMCPUStealTimeMetric) GetTimestamp() time.Time { return m.Timestamp }
+func (m KVMCPUStealTimeMetric) GetValue() float64       { return m.Value }
+func (m KVMCPUStealTimeMetric) With(n string, t time.Time, v float64) PrometheusMetric {
+	m.Name = n
+	m.Timestamp = t
+	m.Value = v
+	return m
+}

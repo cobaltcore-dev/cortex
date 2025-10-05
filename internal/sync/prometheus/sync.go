@@ -33,6 +33,7 @@ var SupportedSyncers = map[string]syncerFunc{
 	"netapp_aggregate_labels_metric":        newSyncerOfType[NetAppAggregateLabelsMetric],
 	"netapp_node_metric":                    newSyncerOfType[NetAppNodeMetric],
 	"netapp_volume_aggregate_labels_metric": newSyncerOfType[NetAppVolumeAggrLabelsMetric],
+	"kvm_cpu_steal_time_metric":             newSyncerOfType[KVMCPUStealTimeMetric],
 }
 
 // Syncer that syncs all configured metrics.
