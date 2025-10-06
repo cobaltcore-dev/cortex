@@ -77,19 +77,18 @@ spec:
                       type: string
                     flavor:
                       properties:
-                        disk:
-                          type: integer
                         name:
                           type: string
-                        ram:
-                          type: integer
-                        vcpus:
-                          type: integer
+                        requests:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          type: object
                       required:
-                      - disk
                       - name
-                      - ram
-                      - vcpus
                       type: object
                     id:
                       type: string
@@ -120,15 +119,11 @@ spec:
                     requestedAt:
                       format: date-time
                       type: string
-                    vmware:
-                      type: boolean
                   required:
                   - eventType
-                  - flavor
                   - id
                   - pipeline
                   - requestedAt
-                  - vmware
                   type: object
                 type: array
             required:

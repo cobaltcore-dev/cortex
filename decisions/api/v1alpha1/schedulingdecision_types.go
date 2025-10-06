@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,10 +29,8 @@ type SchedulingDecisionPipelineSpec struct {
 }
 
 type Flavor struct {
-	Name  string `json:"name"`
-	VCPUs int    `json:"vcpus"`
-	RAM   int    `json:"ram"`
-	Disk  int    `json:"disk"`
+	Name      string                       `json:"name"`
+	Resources map[string]resource.Quantity `json:"requests,omitempty"`
 }
 
 // SchedulingDecisionSpec defines the desired state of SchedulingDecision.
@@ -47,9 +46,8 @@ type SchedulingDecisionRequest struct {
 	Pipeline    SchedulingDecisionPipelineSpec `json:"pipeline"`
 
 	AvailabilityZone string `json:"availabilityZone,omitempty"`
-	VMware           bool   `json:"vmware"`
-	// TODO more generic flavor to support other than compute
-	Flavor Flavor `json:"flavor"`
+
+	Flavor Flavor `json:"flavor,omitempty"`
 }
 
 type SchedulingDecisionState string

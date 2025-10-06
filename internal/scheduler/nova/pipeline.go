@@ -19,6 +19,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -131,6 +132,20 @@ func (c *novaPipelineConsumer) Consume(
 	ram := int(math.Min(float64(flavor.Data.MemoryMB), math.MaxInt))
 	disk := int(math.Min(float64(flavor.Data.RootGB), math.MaxInt))
 
+	resources := map[string]resource.Quantity{
+		"cpu":     *resource.NewQuantity(int64(vcpus), resource.DecimalSI),
+		"memory":  *resource.NewQuantity(int64(ram), resource.DecimalSI),
+		"storage": *resource.NewQuantity(int64(disk), resource.DecimalSI),
+	}
+
+	if request.VMware {
+		resources["hypervisor.vmware"] = *resource.NewQuantity(1, resource.DecimalSI)
+		resources["hypervisor.kvm"] = *resource.NewQuantity(0, resource.DecimalSI)
+	} else {
+		resources["hypervisor.vmware"] = *resource.NewQuantity(0, resource.DecimalSI)
+		resources["hypervisor.kvm"] = *resource.NewQuantity(1, resource.DecimalSI)
+	}
+
 	decisionRequest := v1alpha1.SchedulingDecisionRequest{
 		ID:          request.Spec.Data.InstanceUUID,
 		RequestedAt: metav1.Now(),
@@ -141,12 +156,9 @@ func (c *novaPipelineConsumer) Consume(
 			Outputs: outputs,
 		},
 		AvailabilityZone: request.Spec.Data.AvailabilityZone,
-		VMware:           request.VMware,
 		Flavor: v1alpha1.Flavor{
-			Name:  flavor.Data.Name,
-			VCPUs: vcpus,
-			RAM:   ram,
-			Disk:  disk,
+			Name:      flavor.Data.Name,
+			Resources: resources,
 		},
 	}
 

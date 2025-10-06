@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,10 +47,12 @@ func NewTestDecision(id string) *TestDecisionBuilder {
 				Name: "test-pipeline",
 			},
 			Flavor: decisionsv1alpha1.Flavor{
-				Name:  "test-flavor",
-				VCPUs: DefaultTestVCPUs,
-				RAM:   DefaultTestRAM,
-				Disk:  DefaultTestDisk,
+				Name: "test-flavor",
+				Resources: map[string]resource.Quantity{
+					"cpu":     *resource.NewQuantity(int64(DefaultTestVCPUs), resource.DecimalSI),
+					"memory":  *resource.NewQuantity(int64(DefaultTestRAM), resource.DecimalSI),
+					"storage": *resource.NewQuantity(int64(DefaultTestDisk), resource.DecimalSI),
+				},
 			},
 		},
 	}
