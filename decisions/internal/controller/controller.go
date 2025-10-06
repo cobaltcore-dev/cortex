@@ -135,11 +135,6 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	// If the decision is already resolved or in error state, do nothing.
-	if res.Status.State == v1alpha1.SchedulingDecisionStateResolved || res.Status.State == v1alpha1.SchedulingDecisionStateError {
-		return ctrl.Result{}, nil
-	}
-
 	// Validate we have at least one decision
 	if len(res.Spec.Decisions) == 0 {
 		if err := r.setErrorState(ctx, &res, fmt.Errorf("No decisions provided in spec")); err != nil {
@@ -647,16 +642,13 @@ func (r *SchedulingDecisionReconciler) generateGlobalDescription(results []v1alp
 
 	// Loop detection: check if any host appears again after other hosts in between
 	hasLoop := false
-	for i := 0; i < len(hostChain); i++ {
-		for j := i + 2; j < len(hostChain); j++ { // Skip adjacent hosts (i+1)
-			if hostChain[i] == hostChain[j] {
-				hasLoop = true
-				break
-			}
-		}
-		if hasLoop {
+	seenHosts := make(map[string]bool)
+	for segment := range segments {
+		if seenHosts[segments[segment].host] {
+			hasLoop = true
 			break
 		}
+		seenHosts[segments[segment].host] = true
 	}
 
 	// Build description

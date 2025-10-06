@@ -97,11 +97,12 @@ func (c *novaPipelineConsumer) Consume(
 
 	// Determine the event type based on request flags
 	var eventType v1alpha1.SchedulingEventType
-	if request.Live {
+	switch {
+	case request.Live:
 		eventType = v1alpha1.SchedulingEventTypeLiveMigration
-	} else if request.Resize {
+	case request.Resize:
 		eventType = v1alpha1.SchedulingEventTypeResize
-	} else {
+	default:
 		eventType = v1alpha1.SchedulingEventTypeInitialPlacement
 	}
 
@@ -123,6 +124,12 @@ func (c *novaPipelineConsumer) Consume(
 	}
 
 	flavor := request.Spec.Data.Flavor
+
+	// Safe conversion with bounds checking to prevent integer overflow
+	vcpus := int(math.Min(float64(flavor.Data.VCPUs), math.MaxInt))
+	ram := int(math.Min(float64(flavor.Data.MemoryMB), math.MaxInt))
+	disk := int(math.Min(float64(flavor.Data.RootGB), math.MaxInt))
+
 	decisionRequest := v1alpha1.SchedulingDecisionRequest{
 		ID:          request.Spec.Data.InstanceUUID,
 		RequestedAt: metav1.Now(),
@@ -136,9 +143,9 @@ func (c *novaPipelineConsumer) Consume(
 		VMware:           request.VMware,
 		Flavor: v1alpha1.Flavor{
 			Name:  flavor.Data.Name,
-			VCPUs: int(flavor.Data.VCPUs), // assume this is safe
-			RAM:   int(flavor.Data.MemoryMB),
-			Disk:  int(flavor.Data.RootGB),
+			VCPUs: vcpus,
+			RAM:   ram,
+			Disk:  disk,
 		},
 	}
 
@@ -146,7 +153,7 @@ func (c *novaPipelineConsumer) Consume(
 
 	// Try to update existing decision with retry logic for concurrent updates
 	const maxRetries = 3
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		var existing v1alpha1.SchedulingDecision
 		if err := c.Client.Get(context.Background(), objectKey, &existing); err == nil {
 			// Decision already exists, append the new decision to the existing ones
