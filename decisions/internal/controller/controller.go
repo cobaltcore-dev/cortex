@@ -24,10 +24,8 @@ import (
 )
 
 const (
-	// MinScoreValue represents the minimum possible score value
 	MinScoreValue = -999999
 
-	// String format templates for descriptions
 	selectedPerfectFmt   = "Selected: %s (score: %.2f), certainty: perfect, %d hosts evaluated."
 	selectedCertaintyFmt = "Selected: %s (score: %.2f), certainty: %s (gap: %.2f), %d hosts evaluated."
 	noHostsRemainingFmt  = "No hosts remaining after filtering, %d hosts evaluated"
@@ -36,32 +34,26 @@ const (
 	inputDemotedFmt      = " Input favored %s (score: %.2f, now #%d with %.2f), final winner was #%d in input (%.2f→%.2f)."
 )
 
-// certaintyLevel represents a threshold and its corresponding certainty level
 type certaintyLevel struct {
 	threshold float64
 	level     string
 }
 
-// certaintyLevels maps score gaps to certainty levels (ordered from highest to lowest threshold)
 var certaintyLevels = []certaintyLevel{
 	{0.5, "high"},
 	{0.2, "medium"},
 	{0.0, "low"},
 }
 
-// getCertaintyLevel returns the certainty level for a given score gap
 func getCertaintyLevel(gap float64) string {
 	for _, cl := range certaintyLevels {
 		if gap >= cl.threshold {
 			return cl.level
 		}
 	}
-	return "low" // fallback
+	return "low"
 }
 
-// noDeleteEventsPredicate is a custom predicate that filters out delete events
-// to prevent race conditions with the TTL controller. Generic events are typically
-// used for periodic reconciliation or external triggers, so we allow them.
 type noDeleteEventsPredicate struct{}
 
 func (noDeleteEventsPredicate) Create(e event.CreateEvent) bool {
@@ -78,17 +70,15 @@ func (noDeleteEventsPredicate) Delete(e event.DeleteEvent) bool {
 }
 
 func (noDeleteEventsPredicate) Generic(e event.GenericEvent) bool {
-	// Allow generic events (periodic reconciliation, external triggers)
 	return true
 }
 
-// hostScore represents a host-score pair for sorting operations
 type hostScore struct {
 	host  string
 	score float64
 }
 
-// mapToSortedHostScores converts a score map to sorted hostScore slice (highest to lowest)
+// mapToSortedHostScores sorts hosts by score descending
 func mapToSortedHostScores(scores map[string]float64) []hostScore {
 	sorted := make([]hostScore, 0, len(scores))
 	for host, score := range scores {
@@ -100,11 +90,10 @@ func mapToSortedHostScores(scores map[string]float64) []hostScore {
 	return sorted
 }
 
-// findHostPosition returns the 1-based position of a host in sorted hosts slice
 func findHostPosition(hosts []hostScore, targetHost string) int {
 	for i, hs := range hosts {
 		if hs.host == targetHost {
-			return i + 1 // 1-based position
+			return i + 1
 		}
 	}
 	return -1
@@ -124,8 +113,6 @@ type SchedulingDecisionReconciler struct {
 // +kubebuilder:rbac:groups=decisions.cortex,resources=schedulingdecisions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=decisions.cortex,resources=schedulingdecisions/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
 func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 	// Fetch the decision object.
@@ -163,19 +150,14 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, nil
 		}
 
-		// Calculate final scores with full pipeline for this decision
 		finalScores, deletedHosts := r.calculateScores(decision.Input, decision.Pipeline.Outputs)
 
-		// Calculate step-by-step impact for the winner for this decision
 		stepImpacts := r.calculateStepImpacts(decision.Input, decision.Pipeline.Outputs, finalScores)
 
-		// Find minimal critical path for this decision
 		criticalSteps, criticalStepCount := r.findCriticalSteps(decision.Input, decision.Pipeline.Outputs, finalScores)
 
-		// Sort finalScores by score (highest to lowest) and generate enhanced description for this decision
 		orderedScores, description := r.generateOrderedScoresAndDescription(finalScores, decision.Input, criticalSteps, criticalStepCount, len(decision.Pipeline.Outputs), stepImpacts)
 
-		// Create result for this decision
 		result := v1alpha1.SchedulingDecisionResult{
 			ID:           decision.ID,
 			Description:  description,
@@ -185,10 +167,8 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		results = append(results, result)
 	}
 
-	// Generate global description for multiple decisions
 	globalDescription := r.generateGlobalDescription(results, res.Spec.Decisions)
 
-	// Update status with all results
 	res.Status.State = v1alpha1.SchedulingDecisionStateResolved
 	res.Status.Error = ""
 	res.Status.DecisionCount = len(res.Spec.Decisions)
@@ -202,7 +182,6 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil // No need to requeue.
 }
 
-// validateInput checks if the input has at least one host
 func (r *SchedulingDecisionReconciler) validateInput(input map[string]float64) error {
 	if len(input) == 0 {
 		return fmt.Errorf("No hosts provided in input")
@@ -281,8 +260,7 @@ func (r *SchedulingDecisionReconciler) calculateScores(input map[string]float64,
 	return finalScores, deletedHosts
 }
 
-// findCriticalSteps identifies which pipeline steps are essential for the final decision
-// using backward elimination approach
+// findCriticalSteps determines which steps change the winning host using backward elimination
 func (r *SchedulingDecisionReconciler) findCriticalSteps(input map[string]float64, outputs []v1alpha1.SchedulingDecisionPipelineOutputSpec, baselineFinalScores map[string]float64) ([]string, int) {
 	if len(outputs) == 0 {
 		return []string{}, 0
