@@ -708,7 +708,7 @@ func TestReconcileGlobalDescription(t *testing.T) {
 					WithPipelineOutputs(NewTestPipelineOutput("weigher", map[string]float64{"host3": 0.0})).
 					Build(),
 			},
-			expectedGlobalDescription: "chain: host1 (3h) -> host2 (1h) -> host1 (1h) -> host3 (0m); loop detected",
+			expectedGlobalDescription: "chain (loop detected): host1 (3h) -> host2 (1h) -> host1 (1h) -> host3 (0m)",
 		},
 		{
 			name: "same-host-all-decisions-no-loop",

@@ -582,51 +582,36 @@ func (r *SchedulingDecisionReconciler) generateGlobalDescription(results []v1alp
 		hostChain = append(hostChain, winner)
 	}
 
-	// Group consecutive decisions on the same host with their timestamps
+	// Build segments with durations in one pass
 	segments := make([]hostSegment, 0)
 	if len(hostChain) > 0 {
 		currentHost := hostChain[0]
-		currentCount := 1
+		segmentStart := 0
 
-		for i := 1; i < len(hostChain); i++ {
-			if hostChain[i] == currentHost {
-				currentCount++
-			} else {
+		for i := 1; i <= len(hostChain); i++ {
+			// Check if we've reached the end or found a different host
+			if i == len(hostChain) || hostChain[i] != currentHost {
+				// Calculate duration for this segment
+				startTime := decisions[segmentStart].RequestedAt.Time
+				var endTime time.Time
+				if i == len(hostChain) {
+					endTime = time.Now() // Last segment
+				} else {
+					endTime = decisions[i].RequestedAt.Time
+				}
+
 				segments = append(segments, hostSegment{
 					host:      currentHost,
-					decisions: currentCount,
+					duration:  endTime.Sub(startTime),
+					decisions: i - segmentStart,
 				})
-				currentHost = hostChain[i]
-				currentCount = 1
+
+				if i < len(hostChain) {
+					currentHost = hostChain[i]
+					segmentStart = i
+				}
 			}
 		}
-		// Add the last segment
-		segments = append(segments, hostSegment{
-			host:      currentHost,
-			decisions: currentCount,
-		})
-	}
-
-	// Calculate actual durations using timestamps
-	now := time.Now()
-	totalSegments := len(segments)
-	decisionIndex := 0
-
-	for i := range segments {
-		segmentStartTime := decisions[decisionIndex].RequestedAt.Time
-
-		// Find the end time for this segment
-		var segmentEndTime time.Time
-		if i == totalSegments-1 {
-			// Last segment: use current time
-			segmentEndTime = now
-		} else {
-			// Find the start of the next segment
-			decisionIndex += segments[i].decisions
-			segmentEndTime = decisions[decisionIndex].RequestedAt.Time
-		}
-
-		segments[i].duration = segmentEndTime.Sub(segmentStartTime)
 	}
 
 	// Build chain string with durations
@@ -640,7 +625,6 @@ func (r *SchedulingDecisionReconciler) generateGlobalDescription(results []v1alp
 		chainParts = append(chainParts, part)
 	}
 
-	// Loop detection: check if any host appears again after other hosts in between
 	hasLoop := false
 	seenHosts := make(map[string]bool)
 	for segment := range segments {
@@ -651,15 +635,12 @@ func (r *SchedulingDecisionReconciler) generateGlobalDescription(results []v1alp
 		seenHosts[segments[segment].host] = true
 	}
 
-	// Build description
 	chainStr := strings.Join(chainParts, " -> ")
-	description := fmt.Sprintf("chain: %s", chainStr)
-
 	if hasLoop {
-		description += "; loop detected"
+		return fmt.Sprintf("chain (loop detected): %s", chainStr)
+	} else {
+		return fmt.Sprintf("chain: %s", chainStr)
 	}
-
-	return description
 }
 
 // SetupWithManager sets up the controller with the Manager.
