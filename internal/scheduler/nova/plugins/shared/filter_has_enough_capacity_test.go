@@ -4,7 +4,6 @@
 package shared
 
 import (
-	"fmt"
 	"log/slog"
 	"testing"
 

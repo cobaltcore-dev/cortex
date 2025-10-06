@@ -122,6 +122,7 @@ cortex-core:
           types:
             - hypervisors
             - servers
+            - deleted_servers
             - flavors
             - migrations
             - aggregates
@@ -167,6 +168,7 @@ cortex-core:
                   types:
                     - hypervisors
                     - servers
+                    - deleted_servers
         - name: vrops_project_noisiness_extractor
           recencySeconds: 21600 # 6 hours
           dependencies:
@@ -259,7 +261,7 @@ cortex-core:
                 nova:
                   types:
                     - flavors
-                    - servers
+                    - deleted_servers
         - name: host_az_extractor
           recencySeconds: 60 # 1 minute
           dependencies:
@@ -269,31 +271,6 @@ cortex-core:
                   types:
                     - hypervisors
                     - aggregates
-        - name: project_resource_commitments_extractor
-          recencySeconds: 300
-          dependencies:
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - flavors
-                identity:
-                  types:
-                    - projects
-                limes:
-                  types:
-                    - commitments
-        - name: project_resource_utilization_extractor
-          recencySeconds: 300
-          dependencies:
-            extractors:
-              - host_az_extractor
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - flavors
-                    - servers
         # SAP-specific extractors.
         - name: sap_host_details_extractor
           recencySeconds: 60 # 1 minute
@@ -340,12 +317,6 @@ cortex-core:
             extractors:
               - sap_host_details_extractor
         # Shared KPIs.
-        - name: unused_commitments_kpi
-          dependencies:
-            extractors:
-              - host_az_extractor
-              - project_resource_commitments_extractor
-              - project_resource_utilization_extractor
         - name: vm_migration_statistics_kpi
           dependencies:
             extractors:

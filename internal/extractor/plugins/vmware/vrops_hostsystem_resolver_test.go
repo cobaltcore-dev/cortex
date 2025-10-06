@@ -86,12 +86,12 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(resolvedHostsystems) != 2 {
-		t.Errorf("expected 2 rows, got %d", len(resolvedHostsystems))
-	}
 	expected := map[string]string{
 		"hostsystem1": "service_host1",
 		"hostsystem2": "service_host2",
+	}
+	if len(resolvedHostsystems) != len(expected) {
+		t.Errorf("expected %d rows, got %d", len(expected), len(resolvedHostsystems))
 	}
 	for _, r := range resolvedHostsystems {
 		if expected[r.VROpsHostsystem] != r.NovaComputeHost {
