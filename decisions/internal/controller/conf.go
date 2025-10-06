@@ -5,9 +5,12 @@ package controller
 
 import "time"
 
+const (
+	DefaultTTLHoursAfterDecision = 24 * time.Hour
+)
+
 // Configuration for the decisions operator.
 type Config struct {
 	// TTL for scheduling decisions after the last decision's RequestedAt timestamp
-	// If not set, defaults to 14 days (336 hours)
 	TTLHoursAfterDecision time.Duration `json:"ttlHoursAfterDecision,omitempty"`
 }

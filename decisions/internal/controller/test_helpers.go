@@ -22,7 +22,6 @@ const (
 	DefaultTestTTL   = 2 * time.Hour
 	DefaultTestAge   = 1 * time.Hour
 	OldTestAge       = 3 * time.Hour
-	DefaultTTLDays   = 14 * 24 * time.Hour
 	TestTolerance    = 1 * time.Minute
 	DefaultTestVCPUs = 1
 	DefaultTestRAM   = 2048
@@ -297,7 +296,7 @@ func AssertDescriptionContains(t *testing.T, description string, expectedContent
 }
 
 // CreateTTLReconciler creates a TTL reconciler with the given TTL duration
-// If ttl is 0, the reconciler will use its internal default (14 days)
+// If ttl is 0, the reconciler will use its internal default
 func CreateTTLReconciler(fakeClient client.Client, scheme *runtime.Scheme, ttl time.Duration) *SchedulingDecisionTTLController {
 	return &SchedulingDecisionTTLController{
 		Client: fakeClient,

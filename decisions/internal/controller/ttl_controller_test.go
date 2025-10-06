@@ -120,14 +120,14 @@ func TestTTLControllerDefaultTTL(t *testing.T) {
 		t.Fatalf("Reconcile failed: %v", err)
 	}
 
-	// 1-hour-old resource with 14-day default TTL should be preserved
+	// 1-hour-old resource with default TTL should be preserved
 	AssertResourceExists(t, fakeClient, "default-ttl-decision")
 	if result.RequeueAfter == 0 {
 		t.Error("Expected requeue for resource with default TTL")
 	}
 
-	// Verify requeue time is reasonable (approximately 13 days, 23 hours)
-	expectedRequeue := DefaultTTLDays - DefaultTestAge
+	// Verify requeue time is reasonable
+	expectedRequeue := DefaultTTLHoursAfterDecision - DefaultTestAge
 	if result.RequeueAfter < expectedRequeue-TestTolerance || result.RequeueAfter > expectedRequeue+TestTolerance {
 		t.Errorf("Requeue time %v not within expected range %v ± %v",
 			result.RequeueAfter, expectedRequeue, TestTolerance)

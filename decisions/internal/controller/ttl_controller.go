@@ -85,7 +85,7 @@ func (r *SchedulingDecisionTTLController) getTTL() time.Duration {
 	if r.Conf.TTLHoursAfterDecision > 0 {
 		return r.Conf.TTLHoursAfterDecision
 	}
-	return 14 * 24 * time.Hour
+	return DefaultTTLHoursAfterDecision
 }
 
 func (r *SchedulingDecisionTTLController) SetupWithManager(mgr ctrl.Manager) error {
