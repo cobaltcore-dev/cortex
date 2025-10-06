@@ -179,6 +179,9 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
+	log := logf.FromContext(ctx)
+	log.Info("Updated SchedulingDecision", "name", res.Name, "decisions", len(res.Spec.Decisions))
+
 	return ctrl.Result{}, nil // No need to requeue.
 }
 
@@ -205,6 +208,10 @@ func (r *SchedulingDecisionReconciler) validatePipelineHosts(input map[string]fl
 func (r *SchedulingDecisionReconciler) setErrorState(ctx context.Context, res *v1alpha1.SchedulingDecision, err error) error {
 	res.Status.State = v1alpha1.SchedulingDecisionStateError
 	res.Status.Error = err.Error()
+
+	log := logf.FromContext(ctx)
+	log.Error(err, "Updated SchedulingDecision with error", "name", res.Name)
+
 	return r.Status().Update(ctx, res)
 }
 
