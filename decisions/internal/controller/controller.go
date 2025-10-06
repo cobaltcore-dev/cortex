@@ -9,11 +9,13 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -55,6 +57,29 @@ func getCertaintyLevel(gap float64) string {
 		}
 	}
 	return "low" // fallback
+}
+
+// noDeleteEventsPredicate is a custom predicate that filters out delete events
+// to prevent race conditions with the TTL controller. Generic events are typically
+// used for periodic reconciliation or external triggers, so we allow them.
+type noDeleteEventsPredicate struct{}
+
+func (noDeleteEventsPredicate) Create(e event.CreateEvent) bool {
+	return true
+}
+
+func (noDeleteEventsPredicate) Update(e event.UpdateEvent) bool {
+	return true
+}
+
+func (noDeleteEventsPredicate) Delete(e event.DeleteEvent) bool {
+	// Ignore delete events to prevent race conditions with TTL controller
+	return false
+}
+
+func (noDeleteEventsPredicate) Generic(e event.GenericEvent) bool {
+	// Allow generic events (periodic reconciliation, external triggers)
+	return true
 }
 
 // hostScore represents a host-score pair for sorting operations
@@ -165,10 +190,14 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 		results = append(results, result)
 	}
 
+	// Generate global description for multiple decisions
+	globalDescription := r.generateGlobalDescription(results, res.Spec.Decisions)
+
 	// Update status with all results
 	res.Status.State = v1alpha1.SchedulingDecisionStateResolved
 	res.Status.Error = ""
 	res.Status.DecisionCount = len(res.Spec.Decisions)
+	res.Status.GlobalDescription = globalDescription
 	res.Status.Results = results
 
 	if err := r.Status().Update(ctx, &res); err != nil {
@@ -526,6 +555,121 @@ func (r *SchedulingDecisionReconciler) formatStepImpactsMultiLine(stepImpacts []
 	return b.String() + "."
 }
 
+// hostSegment represents a segment in the host chain with duration and decision count
+type hostSegment struct {
+	host      string
+	duration  time.Duration
+	decisions int
+}
+
+// formatDuration formats a duration in a simple d/h/m format
+func formatDuration(d time.Duration) string {
+	if d >= 24*time.Hour {
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
+	if d >= time.Hour {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dm", int(d.Minutes()))
+}
+
+// generateGlobalDescription creates a global description for multiple decisions
+// showing the host chain with durations and detecting simple loops
+func (r *SchedulingDecisionReconciler) generateGlobalDescription(results []v1alpha1.SchedulingDecisionResult, decisions []v1alpha1.SchedulingDecisionRequest) string {
+	if len(results) <= 1 {
+		return "" // No global description needed for single or no decisions
+	}
+
+	// Extract host chain from winners
+	hostChain := make([]string, 0, len(results))
+	for _, result := range results {
+		winner, _ := findWinner(result.FinalScores)
+		hostChain = append(hostChain, winner)
+	}
+
+	// Group consecutive decisions on the same host with their timestamps
+	segments := make([]hostSegment, 0)
+	if len(hostChain) > 0 {
+		currentHost := hostChain[0]
+		currentCount := 1
+
+		for i := 1; i < len(hostChain); i++ {
+			if hostChain[i] == currentHost {
+				currentCount++
+			} else {
+				segments = append(segments, hostSegment{
+					host:      currentHost,
+					decisions: currentCount,
+				})
+				currentHost = hostChain[i]
+				currentCount = 1
+			}
+		}
+		// Add the last segment
+		segments = append(segments, hostSegment{
+			host:      currentHost,
+			decisions: currentCount,
+		})
+	}
+
+	// Calculate actual durations using timestamps
+	now := time.Now()
+	totalSegments := len(segments)
+	decisionIndex := 0
+
+	for i := range segments {
+		segmentStartTime := decisions[decisionIndex].RequestedAt.Time
+
+		// Find the end time for this segment
+		var segmentEndTime time.Time
+		if i == totalSegments-1 {
+			// Last segment: use current time
+			segmentEndTime = now
+		} else {
+			// Find the start of the next segment
+			decisionIndex += segments[i].decisions
+			segmentEndTime = decisions[decisionIndex].RequestedAt.Time
+		}
+
+		segments[i].duration = segmentEndTime.Sub(segmentStartTime)
+	}
+
+	// Build chain string with durations
+	chainParts := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		part := segment.host + " (" + formatDuration(segment.duration)
+		if segment.decisions > 1 {
+			part += fmt.Sprintf("; %d decisions", segment.decisions)
+		}
+		part += ")"
+		chainParts = append(chainParts, part)
+	}
+
+	// Loop detection: check if any host appears again after other hosts in between
+	hasLoop := false
+	for i := 0; i < len(hostChain); i++ {
+		for j := i + 2; j < len(hostChain); j++ { // Skip adjacent hosts (i+1)
+			if hostChain[i] == hostChain[j] {
+				hasLoop = true
+				break
+			}
+		}
+		if hasLoop {
+			break
+		}
+	}
+
+	// Build description
+	chainStr := strings.Join(chainParts, " -> ")
+	description := fmt.Sprintf("chain: %s", chainStr)
+
+	if hasLoop {
+		description += "; loop detected"
+	}
+
+	return description
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *SchedulingDecisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -534,6 +678,9 @@ func (r *SchedulingDecisionReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1, // Default
 		}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(predicate.And(
+			predicate.GenerationChangedPredicate{},
+			noDeleteEventsPredicate{},
+		)).
 		Complete(r)
 }

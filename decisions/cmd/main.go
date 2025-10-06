@@ -198,6 +198,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "SchedulingDecision")
 		os.Exit(1)
 	}
+
+	if err := (&controller.SchedulingDecisionTTLController{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Conf:   conf.NewConfig[controller.Config](),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "SchedulingDecisionTTL")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
