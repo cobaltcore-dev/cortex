@@ -3,14 +3,12 @@
 
 package controller
 
-import "time"
-
 const (
-	DefaultTTLAfterDecision = 24 * time.Hour
+	DefaultTTLAfterDecisionSeconds = 24 * 60 * 60 // 24 hours in seconds
 )
 
 // Configuration for the decisions operator.
 type Config struct {
-	// TTL for scheduling decisions after the last decision's RequestedAt timestamp
-	TTLAfterDecision time.Duration `json:"ttlAfterDecision,omitempty"`
+	// TTL for scheduling decisions after the last decision's RequestedAt timestamp (in seconds)
+	TTLAfterDecisionSeconds int `json:"ttlAfterDecisionSeconds,omitempty"`
 }

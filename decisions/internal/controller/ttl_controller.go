@@ -82,13 +82,23 @@ func (r *SchedulingDecisionTTLController) Reconcile(ctx context.Context, req ctr
 }
 
 func (r *SchedulingDecisionTTLController) getTTL() time.Duration {
-	if r.Conf.TTLAfterDecision > 0 {
-		return r.Conf.TTLAfterDecision
+	if r.Conf.TTLAfterDecisionSeconds > 0 {
+		return time.Duration(r.Conf.TTLAfterDecisionSeconds) * time.Second
 	}
-	return DefaultTTLAfterDecision
+	return time.Duration(DefaultTTLAfterDecisionSeconds) * time.Second
 }
 
 func (r *SchedulingDecisionTTLController) SetupWithManager(mgr ctrl.Manager) error {
+	log := mgr.GetLogger().WithName("ttl-controller")
+
+	// Log the TTL configuration on startup
+	ttl := r.getTTL()
+	seconds := r.Conf.TTLAfterDecisionSeconds
+	if seconds == 0 {
+		seconds = DefaultTTLAfterDecisionSeconds
+	}
+	log.Info("TTL Controller configured", "ttlAfterDecisionSeconds", seconds, "ttlAfterDecision", ttl.String())
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&decisionsv1alpha1.SchedulingDecision{}).
 		Named("schedulingdecision-ttl").

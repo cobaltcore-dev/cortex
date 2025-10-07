@@ -116,10 +116,10 @@ decisions:
     endpoints:
       # The URL of the Nova external scheduler service.
       novaExternalScheduler: "http://cortex-nova-scheduler:8080/scheduler/nova/external"
-    # TTL for scheduling decisions after the last decision's RequestedAt timestamp
-    # Accepts Go duration strings like "24h", "48h", "72h", etc.
-    # If not specified, defaults to 24 hours
-    ttlAfterDecision: "24h"
+    # TTL for scheduling decisions after the last decision's RequestedAt timestamp (in seconds)
+    # Examples: 86400 (24 hours), 172800 (48 hours), 259200 (72 hours)
+    # If not specified, defaults to 86400 seconds (24 hours)
+    ttlAfterDecisionSeconds: 86400
   # Config provided here will override the config provided above.
   secrets:
     # Override the endpoints and credentials to your OpenStack.

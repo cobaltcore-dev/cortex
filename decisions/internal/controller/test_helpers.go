@@ -299,13 +299,14 @@ func AssertDescriptionContains(t *testing.T, description string, expectedContent
 }
 
 // CreateTTLReconciler creates a TTL reconciler with the given TTL duration
-// If ttl is 0, the reconciler will use its internal default
+// If ttlSeconds is 0, the reconciler will use its internal default
 func CreateTTLReconciler(fakeClient client.Client, scheme *runtime.Scheme, ttl time.Duration) *SchedulingDecisionTTLController {
+	ttlSeconds := int(ttl.Seconds())
 	return &SchedulingDecisionTTLController{
 		Client: fakeClient,
 		Scheme: scheme,
 		Conf: Config{
-			TTLAfterDecision: ttl,
+			TTLAfterDecisionSeconds: ttlSeconds,
 		},
 	}
 }
