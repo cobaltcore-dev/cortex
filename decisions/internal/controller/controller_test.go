@@ -4,6 +4,7 @@
 package controller
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -756,5 +757,334 @@ func TestReconcileGlobalDescription(t *testing.T) {
 
 			t.Logf("Global description test %s completed: '%s'", tt.name, updatedResource.Status.GlobalDescription)
 		})
+	}
+}
+
+// TestReconcileEmptyDecisionsList tests the case where no decisions are provided
+func TestReconcileEmptyDecisionsList(t *testing.T) {
+	resource := NewTestSchedulingDecision("test-empty-decisions").
+		WithDecisions(). // No decisions provided
+		Build()
+
+	fakeClient, _ := SetupTestEnvironment(t, resource)
+	req := CreateTestRequest("test-empty-decisions")
+
+	reconciler := CreateSchedulingReconciler(fakeClient)
+	_, err := reconciler.Reconcile(t.Context(), req)
+	if err != nil {
+		t.Fatalf("Reconcile returned an error: %v", err)
+	}
+
+	// Fetch and verify the updated resource
+	updatedResource := AssertResourceExists(t, fakeClient, "test-empty-decisions")
+	AssertResourceState(t, updatedResource, v1alpha1.SchedulingDecisionStateError)
+	AssertResourceError(t, updatedResource, "No decisions provided in spec")
+
+	t.Logf("Empty decisions test completed: state=%s, error=%s", updatedResource.Status.State, updatedResource.Status.Error)
+}
+
+// TestReconcileResourceNotFound tests the case where the resource is deleted during reconciliation
+func TestReconcileResourceNotFound(t *testing.T) {
+	fakeClient, _ := SetupTestEnvironment(t) // No resource created
+	req := CreateTestRequest("non-existent-resource")
+
+	reconciler := CreateSchedulingReconciler(fakeClient)
+	_, err := reconciler.Reconcile(t.Context(), req)
+
+	// Should return an error when resource is not found
+	if err == nil {
+		t.Fatalf("Expected error when resource not found, got nil")
+	}
+
+	t.Logf("Resource not found test completed: error=%v", err)
+}
+
+// TestUtilityFunctions tests the standalone utility functions
+func TestUtilityFunctions(t *testing.T) {
+	t.Run("findWinner", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			scores         map[string]float64
+			expectedWinner string
+			expectedScore  float64
+		}{
+			{
+				name:           "empty-map",
+				scores:         map[string]float64{},
+				expectedWinner: "",
+				expectedScore:  MinScoreValue,
+			},
+			{
+				name:           "single-host",
+				scores:         map[string]float64{"host1": 5.0},
+				expectedWinner: "host1",
+				expectedScore:  5.0,
+			},
+			{
+				name:           "clear-winner",
+				scores:         map[string]float64{"host1": 3.0, "host2": 1.0, "host3": 2.0},
+				expectedWinner: "host1",
+				expectedScore:  3.0,
+			},
+			{
+				name:           "tied-scores",
+				scores:         map[string]float64{"host1": 2.0, "host2": 2.0},
+				expectedWinner: "", // Don't check specific winner for tied scores (map iteration order is not deterministic)
+				expectedScore:  2.0,
+			},
+			{
+				name:           "negative-scores",
+				scores:         map[string]float64{"host1": -1.0, "host2": -2.0},
+				expectedWinner: "host1",
+				expectedScore:  -1.0,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				winner, score := findWinner(tt.scores)
+				if tt.expectedWinner != "" && winner != tt.expectedWinner {
+					t.Errorf("Expected winner '%s', got '%s'", tt.expectedWinner, winner)
+				}
+				if score != tt.expectedScore {
+					t.Errorf("Expected score %f, got %f", tt.expectedScore, score)
+				}
+				// For tied scores, just verify we got one of the tied hosts
+				if tt.name == "tied-scores" {
+					if winner != "host1" && winner != "host2" {
+						t.Errorf("Expected winner to be either 'host1' or 'host2', got '%s'", winner)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("mapToSortedHostScores", func(t *testing.T) {
+		scores := map[string]float64{
+			"host1": 1.0,
+			"host2": 3.0,
+			"host3": 2.0,
+		}
+		sorted := mapToSortedHostScores(scores)
+
+		if len(sorted) != 3 {
+			t.Errorf("Expected 3 sorted hosts, got %d", len(sorted))
+		}
+
+		// Should be sorted by score descending
+		if sorted[0].host != "host2" || sorted[0].score != 3.0 {
+			t.Errorf("Expected first host to be host2 with score 3.0, got %s with %f", sorted[0].host, sorted[0].score)
+		}
+		if sorted[1].host != "host3" || sorted[1].score != 2.0 {
+			t.Errorf("Expected second host to be host3 with score 2.0, got %s with %f", sorted[1].host, sorted[1].score)
+		}
+		if sorted[2].host != "host1" || sorted[2].score != 1.0 {
+			t.Errorf("Expected third host to be host1 with score 1.0, got %s with %f", sorted[2].host, sorted[2].score)
+		}
+	})
+
+	t.Run("findHostPosition", func(t *testing.T) {
+		hosts := []hostScore{
+			{host: "host2", score: 3.0},
+			{host: "host3", score: 2.0},
+			{host: "host1", score: 1.0},
+		}
+
+		tests := []struct {
+			targetHost       string
+			expectedPosition int
+		}{
+			{"host2", 1},  // First position
+			{"host3", 2},  // Second position
+			{"host1", 3},  // Third position
+			{"host4", -1}, // Not found
+		}
+
+		for _, tt := range tests {
+			position := findHostPosition(hosts, tt.targetHost)
+			if position != tt.expectedPosition {
+				t.Errorf("Expected position %d for host %s, got %d", tt.expectedPosition, tt.targetHost, position)
+			}
+		}
+	})
+
+	t.Run("getCertaintyLevel", func(t *testing.T) {
+		tests := []struct {
+			gap               float64
+			expectedCertainty string
+		}{
+			{1.0, "high"},   // >= 0.5
+			{0.5, "high"},   // exactly 0.5
+			{0.3, "medium"}, // >= 0.2, < 0.5
+			{0.2, "medium"}, // exactly 0.2
+			{0.1, "low"},    // >= 0.0, < 0.2
+			{0.0, "low"},    // exactly 0.0
+			{-0.1, "low"},   // < 0.0
+		}
+
+		for _, tt := range tests {
+			certainty := getCertaintyLevel(tt.gap)
+			if certainty != tt.expectedCertainty {
+				t.Errorf("Expected certainty '%s' for gap %f, got '%s'", tt.expectedCertainty, tt.gap, certainty)
+			}
+		}
+	})
+}
+
+// TestStepImpactAnalysis tests the step impact calculation logic
+func TestStepImpactAnalysis(t *testing.T) {
+	reconciler := &SchedulingDecisionReconciler{}
+
+	t.Run("promotion-scenarios", func(t *testing.T) {
+		input := map[string]float64{
+			"host1": 1.0, // Will become winner
+			"host2": 3.0, // Initial winner
+			"host3": 2.0,
+		}
+
+		outputs := []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+			{
+				Step: "promotion-step",
+				Activations: map[string]float64{
+					"host1": 2.5,  // host1: 3.5 (becomes winner)
+					"host2": -0.5, // host2: 2.5 (demoted)
+					"host3": 0.0,  // host3: 2.0
+				},
+			},
+		}
+
+		finalScores := map[string]float64{
+			"host1": 3.5,
+			"host2": 2.5,
+			"host3": 2.0,
+		}
+
+		impacts := reconciler.calculateStepImpacts(input, outputs, finalScores)
+
+		if len(impacts) != 1 {
+			t.Fatalf("Expected 1 step impact, got %d", len(impacts))
+		}
+
+		impact := impacts[0]
+		if impact.Step != "promotion-step" {
+			t.Errorf("Expected step 'promotion-step', got '%s'", impact.Step)
+		}
+		if !impact.PromotedToFirst {
+			t.Errorf("Expected PromotedToFirst to be true")
+		}
+		if impact.ScoreDelta != 2.5 {
+			t.Errorf("Expected ScoreDelta 2.5, got %f", impact.ScoreDelta)
+		}
+		if impact.CompetitorsRemoved != 0 {
+			t.Errorf("Expected CompetitorsRemoved 0, got %d", impact.CompetitorsRemoved)
+		}
+	})
+
+	t.Run("competitor-removal", func(t *testing.T) {
+		input := map[string]float64{
+			"host1": 1.0, // Will become winner after competitors removed
+			"host2": 3.0, // Initial winner, will be removed
+			"host3": 2.0, // Will be removed
+		}
+
+		outputs := []v1alpha1.SchedulingDecisionPipelineOutputSpec{
+			{
+				Step: "filter-step",
+				Activations: map[string]float64{
+					"host1": 0.0, // Only host1 survives
+				},
+			},
+		}
+
+		finalScores := map[string]float64{
+			"host1": 1.0,
+		}
+
+		impacts := reconciler.calculateStepImpacts(input, outputs, finalScores)
+
+		if len(impacts) != 1 {
+			t.Fatalf("Expected 1 step impact, got %d", len(impacts))
+		}
+
+		impact := impacts[0]
+		if impact.CompetitorsRemoved != 2 {
+			t.Errorf("Expected CompetitorsRemoved 2, got %d", impact.CompetitorsRemoved)
+		}
+		if !impact.PromotedToFirst {
+			t.Errorf("Expected PromotedToFirst to be true (host1 was not #1 before, became #1 after competitors removed)")
+		}
+		if impact.ScoreDelta != 0.0 {
+			t.Errorf("Expected ScoreDelta 0.0, got %f", impact.ScoreDelta)
+		}
+	})
+
+	t.Run("empty-inputs", func(t *testing.T) {
+		// Test with empty final scores
+		impacts := reconciler.calculateStepImpacts(map[string]float64{}, []v1alpha1.SchedulingDecisionPipelineOutputSpec{}, map[string]float64{})
+		if len(impacts) != 0 {
+			t.Errorf("Expected 0 impacts for empty inputs, got %d", len(impacts))
+		}
+
+		// Test with no outputs
+		impacts = reconciler.calculateStepImpacts(map[string]float64{"host1": 1.0}, []v1alpha1.SchedulingDecisionPipelineOutputSpec{}, map[string]float64{"host1": 1.0})
+		if len(impacts) != 0 {
+			t.Errorf("Expected 0 impacts for no outputs, got %d", len(impacts))
+		}
+	})
+}
+
+// TestLargeDatasetPerformance tests the controller with larger datasets
+func TestLargeDatasetPerformance(t *testing.T) {
+	// Create a decision with many hosts
+	input := make(map[string]float64)
+	activations := make(map[string]float64)
+
+	for i := 0; i < 100; i++ {
+		hostName := fmt.Sprintf("host%d", i)
+		input[hostName] = float64(i)
+		activations[hostName] = float64(i % 10) // Vary activations
+	}
+
+	decision := NewTestDecision("large-decision").
+		WithInput(input).
+		WithPipelineOutputs(
+			NewTestPipelineOutput("weigher1", activations),
+			NewTestPipelineOutput("weigher2", activations),
+			NewTestPipelineOutput("weigher3", activations),
+		).
+		Build()
+
+	resource := NewTestSchedulingDecision("test-large-dataset").
+		WithDecisions(decision).
+		Build()
+
+	fakeClient, _ := SetupTestEnvironment(t, resource)
+	req := CreateTestRequest("test-large-dataset")
+
+	reconciler := CreateSchedulingReconciler(fakeClient)
+
+	start := time.Now()
+	_, err := reconciler.Reconcile(t.Context(), req)
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Reconcile returned an error: %v", err)
+	}
+
+	// Verify the result
+	updatedResource := AssertResourceExists(t, fakeClient, "test-large-dataset")
+	AssertResourceState(t, updatedResource, v1alpha1.SchedulingDecisionStateResolved)
+	AssertResultCount(t, updatedResource, 1)
+
+	result := updatedResource.Status.Results[0]
+	if len(result.FinalScores) != 100 {
+		t.Errorf("Expected 100 final scores, got %d", len(result.FinalScores))
+	}
+
+	t.Logf("Large dataset test completed in %v with %d hosts", duration, len(result.FinalScores))
+
+	// Performance check - should complete within reasonable time
+	if duration > 5*time.Second {
+		t.Errorf("Large dataset processing took too long: %v", duration)
 	}
 }
