@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -178,7 +179,18 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 	res.Status.Results = results
 
 	if err := r.Status().Update(ctx, &res); err != nil {
-		return ctrl.Result{}, err
+		// Handle the case where resource was deleted during processing
+		if client.IgnoreNotFound(err) != nil {
+			// If it's a conflict error, just log and ignore - resource was modified concurrently
+			if apierrors.IsConflict(err) {
+				log := logf.FromContext(ctx)
+				log.Info("Resource was modified during processing, ignoring conflict", "name", res.Name, "error", err.Error())
+				return ctrl.Result{}, nil
+			}
+			return ctrl.Result{}, err
+		}
+		// Resource was deleted (e.g., by TTL controller), nothing to update
+		return ctrl.Result{}, nil
 	}
 
 	log := logf.FromContext(ctx)

@@ -791,12 +791,13 @@ func TestReconcileResourceNotFound(t *testing.T) {
 	reconciler := CreateSchedulingReconciler(fakeClient)
 	_, err := reconciler.Reconcile(t.Context(), req)
 
-	// Should return an error when resource is not found
-	if err == nil {
-		t.Fatalf("Expected error when resource not found, got nil")
+	// Should gracefully handle when resource is not found (no error)
+	// This can happen when TTL controller deletes a resource while main controller has queued reconcile request
+	if err != nil {
+		t.Fatalf("Expected no error when resource not found (should be handled gracefully), got: %v", err)
 	}
 
-	t.Logf("Resource not found test completed: error=%v", err)
+	t.Logf("Resource not found test completed: gracefully handled with no error")
 }
 
 // TestUtilityFunctions tests the standalone utility functions
