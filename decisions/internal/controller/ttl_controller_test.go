@@ -148,3 +148,65 @@ func TestTTLControllerNonExistentResource(t *testing.T) {
 		t.Error("Expected no requeue for non-existent resource")
 	}
 }
+
+func TestTTLStartupReconciliation(t *testing.T) {
+	// Create resources with different ages
+	expiredDecision := NewTestDecision("expired-decision").
+		WithRequestedAt(time.Now().Add(-OldTestAge)).
+		Build()
+
+	youngDecision := NewTestDecision("young-decision").
+		WithRequestedAt(time.Now().Add(-DefaultTestAge)).
+		Build()
+
+	expiredResource := NewTestSchedulingDecision("expired-resource").
+		WithDecisions(expiredDecision).
+		Build()
+
+	youngResource := NewTestSchedulingDecision("young-resource").
+		WithDecisions(youngDecision).
+		Build()
+
+	fakeClient, scheme := SetupTestEnvironment(t, expiredResource, youngResource)
+	reconciler := CreateTTLReconciler(fakeClient, scheme, DefaultTestTTL)
+
+	// Run startup reconciliation
+	reconciler.reconcileAllResourcesOnStartup(context.Background())
+
+	// Verify expired resource was deleted
+	AssertResourceDeleted(t, fakeClient, "expired-resource")
+
+	// Verify young resource still exists
+	AssertResourceExists(t, fakeClient, "young-resource")
+}
+
+func TestTTLStartupReconcilerRunnable(t *testing.T) {
+	fakeClient, scheme := SetupTestEnvironment(t)
+	reconciler := CreateTTLReconciler(fakeClient, scheme, DefaultTestTTL)
+
+	// Create the startup reconciler
+	startupReconciler := &TTLStartupReconciler{ttlController: reconciler}
+
+	// Test the Start method
+	err := startupReconciler.Start(context.Background())
+	if err != nil {
+		t.Fatalf("TTLStartupReconciler.Start() should not return error: %v", err)
+	}
+
+	// The method should complete without error (no resources to process)
+	t.Log("TTLStartupReconciler.Start() completed successfully")
+}
+
+func TestTTLStartupReconciliationErrorHandling(t *testing.T) {
+	// This test verifies that startup reconciliation handles errors gracefully
+	// We can't easily simulate List() failures with the fake client, but we can
+	// test that the method doesn't panic and handles empty results properly
+
+	fakeClient, scheme := SetupTestEnvironment(t) // No resources
+	reconciler := CreateTTLReconciler(fakeClient, scheme, DefaultTestTTL)
+
+	// This should complete without error even with no resources
+	reconciler.reconcileAllResourcesOnStartup(context.Background())
+
+	t.Log("Startup reconciliation handled empty resource list gracefully")
+}

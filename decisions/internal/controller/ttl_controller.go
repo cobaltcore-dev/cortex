@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,6 +17,20 @@ import (
 
 	decisionsv1alpha1 "github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 )
+
+// TTLStartupReconciler handles startup reconciliation for existing resources
+type TTLStartupReconciler struct {
+	ttlController *SchedulingDecisionTTLController
+}
+
+// Start implements the Runnable interface and runs startup reconciliation
+func (s *TTLStartupReconciler) Start(ctx context.Context) error {
+	log := logf.FromContext(ctx).WithName("ttl-startup-reconciler")
+	log.Info("Starting TTL startup reconciliation for existing resources")
+
+	s.ttlController.reconcileAllResourcesOnStartup(ctx)
+	return nil
+}
 
 // SchedulingDecisionTTLController handles automatic cleanup of resolved SchedulingDecision resources
 // after a configurable TTL period.
@@ -41,6 +56,18 @@ func (r *SchedulingDecisionTTLController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	return r.processResourceForTTL(ctx, &decision, log)
+}
+
+func (r *SchedulingDecisionTTLController) getTTL() time.Duration {
+	if r.Conf.TTLAfterDecisionSeconds > 0 {
+		return time.Duration(r.Conf.TTLAfterDecisionSeconds) * time.Second
+	}
+	return time.Duration(DefaultTTLAfterDecisionSeconds) * time.Second
+}
+
+// processResourceForTTL handles the common TTL logic for a single resource
+func (r *SchedulingDecisionTTLController) processResourceForTTL(ctx context.Context, decision *decisionsv1alpha1.SchedulingDecision, log logr.Logger) (ctrl.Result, error) {
 	// Calculate age based on last decision's RequestedAt timestamp
 	var referenceTime time.Time
 	if len(decision.Spec.Decisions) > 0 {
@@ -62,7 +89,7 @@ func (r *SchedulingDecisionTTLController) Reconcile(ctx context.Context, req ctr
 			"age", age.String(),
 			"ttl", ttl.String())
 
-		if err := r.Delete(ctx, &decision); err != nil {
+		if err := r.Delete(ctx, decision); err != nil {
 			if client.IgnoreNotFound(err) != nil {
 				log.Error(err, "Failed to delete expired SchedulingDecision", "name", decision.Name)
 				return ctrl.Result{}, err
@@ -81,11 +108,37 @@ func (r *SchedulingDecisionTTLController) Reconcile(ctx context.Context, req ctr
 	return ctrl.Result{RequeueAfter: remainingTime}, nil
 }
 
-func (r *SchedulingDecisionTTLController) getTTL() time.Duration {
-	if r.Conf.TTLAfterDecisionSeconds > 0 {
-		return time.Duration(r.Conf.TTLAfterDecisionSeconds) * time.Second
+// reconcileAllResourcesOnStartup processes all existing SchedulingDecision resources
+// to check for expired ones that should be cleaned up after controller restart
+func (r *SchedulingDecisionTTLController) reconcileAllResourcesOnStartup(ctx context.Context) {
+	log := logf.FromContext(ctx).WithName("ttl-startup-reconciler")
+
+	var resources decisionsv1alpha1.SchedulingDecisionList
+	if err := r.List(ctx, &resources); err != nil {
+		log.Error(err, "Failed to list SchedulingDecision resources during startup reconciliation")
+		return
 	}
-	return time.Duration(DefaultTTLAfterDecisionSeconds) * time.Second
+
+	log.Info("Processing existing resources for TTL cleanup", "resourceCount", len(resources.Items))
+
+	processedCount := 0
+	expiredCount := 0
+
+	for _, resource := range resources.Items {
+		// Use the shared TTL processing logic
+		result, err := r.processResourceForTTL(ctx, &resource, log)
+		if err != nil {
+			log.Error(err, "Failed to process resource during startup reconciliation", "name", resource.Name)
+		} else if result.RequeueAfter == 0 {
+			// Resource was deleted (no requeue means it was expired and deleted)
+			expiredCount++
+		}
+		processedCount++
+	}
+
+	log.Info("Startup TTL reconciliation completed",
+		"processedResources", processedCount,
+		"expiredResources", expiredCount)
 }
 
 func (r *SchedulingDecisionTTLController) SetupWithManager(mgr ctrl.Manager) error {
@@ -98,6 +151,11 @@ func (r *SchedulingDecisionTTLController) SetupWithManager(mgr ctrl.Manager) err
 		seconds = DefaultTTLAfterDecisionSeconds
 	}
 	log.Info("TTL Controller configured", "ttlAfterDecisionSeconds", seconds, "ttlAfterDecision", ttl.String())
+
+	// Add the startup reconciler as a runnable
+	if err := mgr.Add(&TTLStartupReconciler{ttlController: r}); err != nil {
+		return err
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&decisionsv1alpha1.SchedulingDecision{}).
