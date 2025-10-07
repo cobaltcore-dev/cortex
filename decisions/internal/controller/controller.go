@@ -118,8 +118,10 @@ func (r *SchedulingDecisionReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Fetch the decision object.
 	var res v1alpha1.SchedulingDecision
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
-		// Can happen when the resource was just deleted.
-		return ctrl.Result{}, err
+		// Resource was deleted or doesn't exist - nothing to process
+		// This can happen when the TTL controller deletes a resource while
+		// a reconcile request is still queued for the main controller
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// Validate we have at least one decision
