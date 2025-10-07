@@ -82,15 +82,16 @@
     if (vmId != null) {
       loadSchedulingDecision(vmId)
         .then(data => state.schedulingDecision = data)
+        .then(() => redraw())
         .catch(error => alert('Error loading scheduling decision: ' + error));
     }
 
     async function loadSchedulingDecision(vmId) {
-      const response = await fetch(`http://localhost:8020/scheduler/nova/scheduling-decisions?vm_id=${vmId}`);
+      const response = await fetch(`http://localhost:8014/scheduler/nova/scheduling-decisions?vm_id=${vmId}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return await response.json();;
+      return await response.json();
     }
 
     function getUtilizationByHost() {
@@ -108,36 +109,40 @@
       const steps = {}
       const order = []
 
-      for (const step of schedulingDecision.spec.pipeline.outputs) {
+      const decision = schedulingDecision.spec.decisions[0]
+      const status = schedulingDecision.status.results[0]
+
+      for (const step of decision.pipeline.outputs ?? []) {
         steps[step.step] = step.activations
         order.push(step.step)
       }
+
 
 
       return {
         request: {
           spec: {
             "nova_object.data": {
-              weights: schedulingDecision.spec.input,
-              availability_zone: schedulingDecision.spec.availbilityZone,
+              weights: decision.input,
+              availability_zone: decision.availbilityZone,
               flavor: {
                 "nova_object.data": {
-                  name: schedulingDecision.spec.flavor.name,
-                  memory_mb: schedulingDecision.spec.flavor.ram,
-                  vcpus: schedulingDecision.spec.flavor.vcpus,
-                  disk: schedulingDecision.spec.flavor.disk,
+                  name: decision.flavor.name,
+                  memory_mb: decision.flavor.ram,
+                  vcpus: decision.flavor.vcpus,
+                  disk: decision.flavor.disk,
                 }
               },
             }
           },
-          vmware: schedulingDecision.spec.vmware,
-          live: schedulingDecision.spec.live,
-          resize: schedulingDecision.spec.resize,
-          weights: schedulingDecision.spec.input,
+          vmware: decision.vmware,
+          live: decision.live,
+          resize: decision.resize,
+          weights: decision.input,
         },
-        steps: schedulingDecision.status.steps,
-        in: schedulingDecision.spec.input,
-        out: schedulingDecision.status.finalScores,
+        steps: status.steps,
+        in: decision.input,
+        out: status.finalScores,
         steps,
         order
       }
@@ -145,6 +150,8 @@
 
     async function redraw() {
       if (Object.keys(state.pipeline).length === 0 && state.schedulingDecision === null) return
+
+      console.log('Redrawing with state:', state)
 
       let data = state.pipeline
       if (state.schedulingDecision !== null) {
