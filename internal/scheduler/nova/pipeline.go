@@ -147,7 +147,7 @@ func (c *novaPipelineConsumer) Consume(
 	}
 
 	decisionRequest := v1alpha1.SchedulingDecisionRequest{
-		ID:          request.Spec.Data.InstanceUUID,
+		ID:          *request.Context.GlobalRequestID,
 		RequestedAt: metav1.Now(),
 		EventType:   eventType,
 		Input:       inWeights,
