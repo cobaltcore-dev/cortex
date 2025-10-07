@@ -144,13 +144,7 @@ func (r *SchedulingDecisionTTLController) reconcileAllResourcesOnStartup(ctx con
 func (r *SchedulingDecisionTTLController) SetupWithManager(mgr ctrl.Manager) error {
 	log := mgr.GetLogger().WithName("ttl-controller")
 
-	// Log the TTL configuration on startup
-	ttl := r.getTTL()
-	seconds := r.Conf.TTLAfterDecisionSeconds
-	if seconds == 0 {
-		seconds = DefaultTTLAfterDecisionSeconds
-	}
-	log.Info("TTL Controller configured", "ttlAfterDecisionSeconds", seconds, "ttlAfterDecision", ttl.String())
+	log.Info("TTL Controller configured", "ttlAfterDecisionSeconds", r.getTTL().String())
 
 	// Add the startup reconciler as a runnable
 	if err := mgr.Add(&TTLStartupReconciler{ttlController: r}); err != nil {

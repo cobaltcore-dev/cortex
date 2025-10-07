@@ -650,14 +650,14 @@ func TestReconcileGlobalDescription(t *testing.T) {
 		expectedGlobalDescription string
 	}{
 		{
-			name: "single-decision-no-global",
+			name: "single-decision-with-global",
 			decisions: []v1alpha1.SchedulingDecisionRequest{
 				NewTestDecision("decision-1").
 					WithInput(map[string]float64{"host1": 1.0, "host2": 2.0}).
-					WithPipelineOutputs(NewTestPipelineOutput("weigher", map[string]float64{"host1": 1.0, "host2": 0.0})).
+					WithPipelineOutputs(NewTestPipelineOutput("weigher", map[string]float64{"host1": 1.5, "host2": 0.0})).
 					Build(),
 			},
-			expectedGlobalDescription: "", // No global description for single decision
+			expectedGlobalDescription: "chain: host1 (0m)", // Single decision shows chain with 0m duration - host1 wins with 2.5 vs host2 with 2.0
 		},
 		{
 			name: "simple-chain-no-loop",
@@ -725,7 +725,7 @@ func TestReconcileGlobalDescription(t *testing.T) {
 					WithPipelineOutputs(NewTestPipelineOutput("weigher", map[string]float64{"host1": 1.0, "host3": 0.0})).
 					Build(),
 			},
-			expectedGlobalDescription: "chain: host1 (2h; 2 decisions)",
+			expectedGlobalDescription: "chain: host1 (0m; 2 decisions)", // Last segment always shows 0m duration
 		},
 	}
 

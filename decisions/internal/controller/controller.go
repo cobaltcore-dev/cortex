@@ -567,11 +567,11 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", int(d.Minutes()))
 }
 
-// generateGlobalDescription creates a global description for multiple decisions
+// generateGlobalDescription creates a global description for decisions
 // showing the host chain with durations and detecting simple loops
 func (r *SchedulingDecisionReconciler) generateGlobalDescription(results []v1alpha1.SchedulingDecisionResult, decisions []v1alpha1.SchedulingDecisionRequest) string {
-	if len(results) <= 1 {
-		return "" // No global description needed for single or no decisions
+	if len(results) == 0 {
+		return "" // No decisions to describe
 	}
 
 	// Extract host chain from winners
@@ -594,7 +594,8 @@ func (r *SchedulingDecisionReconciler) generateGlobalDescription(results []v1alp
 				startTime := decisions[segmentStart].RequestedAt.Time
 				var endTime time.Time
 				if i == len(hostChain) {
-					endTime = time.Now() // Last segment
+					// For the last segment, use the same time as start time (0 duration)
+					endTime = startTime
 				} else {
 					endTime = decisions[i].RequestedAt.Time
 				}
