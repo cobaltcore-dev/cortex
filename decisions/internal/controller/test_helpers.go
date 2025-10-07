@@ -305,7 +305,7 @@ func CreateTTLReconciler(fakeClient client.Client, scheme *runtime.Scheme, ttl t
 		Client: fakeClient,
 		Scheme: scheme,
 		Conf: Config{
-			TTLHoursAfterDecision: ttl,
+			TTLAfterDecision: ttl,
 		},
 	}
 }

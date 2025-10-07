@@ -127,7 +127,7 @@ func TestTTLControllerDefaultTTL(t *testing.T) {
 	}
 
 	// Verify requeue time is reasonable
-	expectedRequeue := DefaultTTLHoursAfterDecision - DefaultTestAge
+	expectedRequeue := DefaultTTLAfterDecision - DefaultTestAge
 	if result.RequeueAfter < expectedRequeue-TestTolerance || result.RequeueAfter > expectedRequeue+TestTolerance {
 		t.Errorf("Requeue time %v not within expected range %v ± %v",
 			result.RequeueAfter, expectedRequeue, TestTolerance)

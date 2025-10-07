@@ -82,10 +82,10 @@ func (r *SchedulingDecisionTTLController) Reconcile(ctx context.Context, req ctr
 }
 
 func (r *SchedulingDecisionTTLController) getTTL() time.Duration {
-	if r.Conf.TTLHoursAfterDecision > 0 {
-		return r.Conf.TTLHoursAfterDecision
+	if r.Conf.TTLAfterDecision > 0 {
+		return r.Conf.TTLAfterDecision
 	}
-	return DefaultTTLHoursAfterDecision
+	return DefaultTTLAfterDecision
 }
 
 func (r *SchedulingDecisionTTLController) SetupWithManager(mgr ctrl.Manager) error {
