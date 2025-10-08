@@ -13,37 +13,13 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
-	"github.com/cobaltcore-dev/cortex/internal/mqtt"
-	"github.com/cobaltcore-dev/cortex/internal/sync"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
-	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
 	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
-
-// Periodically fetch data from the datasources and insert it into the database.
-func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.Config, db db.DB) {
-	monitor := sync.NewSyncMonitor(registry)
-	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
-	if err := mqttClient.Connect(); err != nil {
-		panic("failed to connect to mqtt broker: " + err.Error())
-	}
-	defer mqttClient.Disconnect()
-	syncConfig := config.GetSyncConfig()
-	keystoneAPI := keystone.NewKeystoneAPI(config.GetKeystoneConfig())
-	syncers := []sync.Datasource{
-		prometheus.NewCombinedSyncer(prometheus.SupportedSyncers, syncConfig.Prometheus, db, monitor, mqttClient),
-		openstack.NewCombinedSyncer(ctx, keystoneAPI, syncConfig.OpenStack, monitor, db, mqttClient),
-	}
-	pipeline := sync.Pipeline{Syncers: syncers}
-	pipeline.Init(ctx)
-	go pipeline.SyncPeriodic(ctx) // blocking
-}
 
 // Run the prometheus metrics server for monitoring.
 func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, config conf.MonitoringConfig) {
@@ -60,9 +36,6 @@ func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, con
 const usage = `
   commands:
   -migrate Run database migrations.
-
-  modes:
-  -syncer    Sync data from external datasources into the database.
 `
 
 func main() {
@@ -136,13 +109,6 @@ func main() {
 	mux.HandleFunc("/up", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-
-	switch taskName {
-	case "syncer":
-		runSyncer(ctx, registry, config, database)
-	default:
-		panic("unknown task")
-	}
 
 	// Run the api server after all other tasks have been started and
 	// all http handlers have been registered to the mux.

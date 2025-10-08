@@ -10,9 +10,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

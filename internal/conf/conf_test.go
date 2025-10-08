@@ -28,32 +28,6 @@ func createTempConfigFile(t *testing.T, content string) string {
 func TestGetConfigOrDie(t *testing.T) {
 	content := `
 {
-  "sync": {
-    "prometheus": {
-      "metrics": [
-        {
-          "name": "vrops_virtualmachine_cpu_demand_ratio",
-          "type": "vrops_vm_metric",
-          "timeRangeSeconds": 2419200,
-          "intervalSeconds": 86400,
-          "resolutionSeconds": 43200
-        },
-        {
-          "name": "vrops_hostsystem_cpu_contention_long_term_percentage",
-		  "alias": "my_custom_metric",
-          "type": "vrops_host_metric"
-        }
-      ]
-    },
-    "openstack": {
-      "nova": {
-        "types": [
-          "server",
-          "hypervisor"
-        ]
-      }
-    }
-  },
   "logging": {
     "level": "debug",
     "format": "text"
@@ -88,15 +62,6 @@ func TestGetConfigOrDie(t *testing.T) {
 		t.Fatalf("Failed to read config: %v", err)
 	}
 	config := newConfigFromMaps[*SharedConfig](rawConfig, nil)
-
-	// Test SyncConfig
-	syncConfig := config.GetSyncConfig()
-	if len(syncConfig.Prometheus.Metrics) != 2 {
-		t.Errorf("Expected 2 Prometheus metrics, got %d", len(syncConfig.Prometheus.Metrics))
-	}
-	if len(syncConfig.OpenStack.Nova.Types) != 2 {
-		t.Errorf("Expected 2 OpenStack types, got %d", len(syncConfig.OpenStack.Nova.Types))
-	}
 
 	// Test LoggingConfig
 	loggingConfig := config.GetLoggingConfig()

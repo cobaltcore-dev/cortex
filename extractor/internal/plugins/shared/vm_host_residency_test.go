@@ -11,7 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
 	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 

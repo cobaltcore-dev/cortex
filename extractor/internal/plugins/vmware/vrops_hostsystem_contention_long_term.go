@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/vmware"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/prometheus"
 )
 
 // Extractor that extracts CPU contention of vROps hostsystems and stores

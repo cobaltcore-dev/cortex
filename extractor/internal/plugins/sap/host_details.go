@@ -8,8 +8,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/sap"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/placement"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/placement"
 )
 
 type HostDetailsExtractor struct {

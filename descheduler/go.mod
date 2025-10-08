@@ -2,10 +2,14 @@ module github.com/cobaltcore-dev/cortex/descheduler
 
 go 1.25.0
 
-replace github.com/cobaltcore-dev/cortex => ../
+replace (
+	github.com/cobaltcore-dev/cortex => ../
+	github.com/cobaltcore-dev/cortex/sync/api => ../sync/api
+)
 
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/sync/api v0.0.0-00010101000000-000000000000
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/sapcc/go-api-declarations v1.17.4
 	go.uber.org/automaxprocs v1.6.0
@@ -21,10 +25,8 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/eclipse/paho.mqtt.golang v1.5.1 // indirect
 	github.com/go-gorp/gorp v2.2.0+incompatible // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
-	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -50,7 +52,6 @@ require (
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/sapcc/go-bits v0.0.0-20251002190222-32e18bbcae76
 	golang.org/x/net v0.44.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 )

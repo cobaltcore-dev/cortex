@@ -350,3 +350,45 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-kpis
           subject-digest: ${{ steps.push_cortex_kpis.outputs.digest }}
           push-to-registry: true
+
+      # Only build and push the syncer image if there are changes
+      # in the syncer directory.
+      - name: Get all changed syncer/ files
+        id: changed_syncer_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            syncer/**
+      - name: Docker Meta (Cortex Syncer)
+        if: steps.changed_syncer_files.outputs.all_changed_files != ''
+        id: meta_cortex_syncer
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-syncer
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            latest
+      - name: Build and Push Cortex Syncer
+        if: steps.changed_syncer_files.outputs.all_changed_files != ''
+        id: push_cortex_syncer
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.kubebuilder
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_cortex_syncer.outputs.tags }}
+          labels: ${{ steps.meta_cortex_syncer.outputs.labels }}
+          build-args: |
+            GO_MOD_PATH=syncer
+            GIT_TAG=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+      - name: Generate Artifact Attestation for Cortex Syncer
+        if: steps.changed_syncer_files.outputs.all_changed_files != ''
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-syncer
+          subject-digest: ${{ steps.push_cortex_syncer.outputs.digest }}
+          push-to-registry: true

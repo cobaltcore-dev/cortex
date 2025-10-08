@@ -132,6 +132,18 @@ jobs:
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-kpis.outputs.all_changed_files }}
 
+      - name: Get all changed syncer Chart.yaml files
+        id: changed-chart-yaml-files-syncer
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            syncer/dist/chart/Chart.yaml
+      - name: Push syncer charts to registry
+        if: steps.changed-chart-yaml-files-syncer.outputs.all_changed_files != ''
+        shell: bash
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-syncer.outputs.all_changed_files }}
+
       - name: Get all changed decisions Chart.yaml files
         id: changed-chart-yaml-files-decisions
         uses: tj-actions/changed-files@v47

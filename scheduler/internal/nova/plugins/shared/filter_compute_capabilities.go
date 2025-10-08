@@ -9,9 +9,9 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 )
 
 type FilterComputeCapabilitiesStep struct {

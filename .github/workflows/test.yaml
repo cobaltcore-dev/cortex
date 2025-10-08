@@ -96,6 +96,14 @@ jobs:
           go tool cover -func kpis_profile.cov > kpis_func_coverage.txt
           cd ..
 
+          echo "Running tests for the sync module..."
+          cd sync
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=sync_profile.cov ./internal/...
+          go tool cover -func sync_profile.cov > sync_func_coverage.txt
+          cd ..
+
           echo "Running tests for decisions module..."
           cd decisions
           go test -v \
@@ -206,6 +214,32 @@ jobs:
               extractorCoverageReport = 'No coverage data available';
             }
 
+            // Read kpis module coverage report
+            let kpisCoverageReport = '';
+            let kpisCoveragePercentage = 'unknown';
+            try {
+              kpisCoverageReport = fs.readFileSync('kpis/kpis_func_coverage.txt', 'utf8');
+              const kpisLines = kpisCoverageReport.trim().split('\n');
+              const kpisLastLine = kpisLines[kpisLines.length - 1];
+              const kpisCoverageMatch = kpisLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              kpisCoveragePercentage = kpisCoverageMatch ? kpisCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              kpisCoverageReport = 'No coverage data available';
+            }
+
+            // Read sync module coverage report
+            let syncCoverageReport = '';
+            let syncCoveragePercentage = 'unknown';
+            try {
+              syncCoverageReport = fs.readFileSync('sync/sync_func_coverage.txt', 'utf8');
+              const syncLines = syncCoverageReport.trim().split('\n');
+              const syncLastLine = syncLines[syncLines.length - 1];
+              const syncCoverageMatch = syncLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              syncCoveragePercentage = syncCoverageMatch ? syncCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              syncCoverageReport = 'No coverage data available';
+            }
+
             // Read decisions module coverage report
             let decisionsCoverageReport = '';
             let decisionsCoveragePercentage = 'unknown';
@@ -279,6 +313,26 @@ jobs:
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
             commentBody += extractorCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // KPIs module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in KPIs module (kpis/internal/): ';
+            commentBody += kpisCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += kpisCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // Sync module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in sync module (sync/internal/): ';
+            commentBody += syncCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += syncCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

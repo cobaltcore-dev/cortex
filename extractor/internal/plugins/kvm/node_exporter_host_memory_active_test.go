@@ -10,7 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
 	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/prometheus"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 

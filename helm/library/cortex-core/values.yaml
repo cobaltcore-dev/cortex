@@ -110,59 +110,6 @@ conf:
     # Authentication/identity service URL for openstack.
     url:
 
-  # Sync plugins config.
-  sync:
-    prometheus:
-      # Prometheus metrics to sync into the database.
-      # Each metric can be synced from a different Prometheus instance.
-      # The `type` parameter should map to a known metric model in the database.
-      metrics:
-        # - alias:
-        #   query:
-        #   type:
-      # Prometheus hosts to consider when syncing the metrics.
-      hosts:
-        # - name:
-        #   # Prometheus URL to scrape metrics from.
-        #   url:
-        #   # The metric types to scrape from this Prometheus instance.
-        #   provides: []
-        #   # Optional, only required if Prometheus is configured with SSO.
-        #   sso:
-        #     # Certificate "public key".
-        #     cert: ""
-        #     # Certificate private key.
-        #     certKey: ""
-        #     # Whether the certificate is self-signed.
-        #     # If true, the certificate is not verified.
-        #     selfSigned: false
-    openstack:
-      nova:
-        # One of admin, public, or internal
-        availability: public
-        # Nova objects to sync into the database.
-        types: [] # e.g. servers
-      placement:
-        # One of admin, public, or internal
-        availability: public
-        # Placement objects to sync into the database.
-        types: [] # e.g. resource_providers
-      identity:
-        # One of admin, public, or internal
-        availability: public
-        # Identity objects to sync into the database.
-        types: [] # e.g. projects
-      manila:
-        # One of admin, public, or internal
-        availability: public
-        # Manila objects to sync into the database.
-        types: [] # e.g. storage_pools
-      limes:
-        # One of admin, public, or internal
-        availability: public
-        # Limes objects to sync into the database.
-        types: [] # e.g. commitments
-
 # Values passed to the service through a kubernetes secret.
 # The keys of these values should correspond to the keys used above in the conf.
 #

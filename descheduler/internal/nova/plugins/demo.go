@@ -4,7 +4,7 @@
 package plugins
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 )
 
 type DemoStepOpts struct {

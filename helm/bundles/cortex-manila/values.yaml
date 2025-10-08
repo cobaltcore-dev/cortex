@@ -29,6 +29,39 @@ global:
       # Must match postgresql settings from the cortex-postgres chart.
       host: cortex-manila-postgresql
 
+# Custom configuration for the cortex postgres chart.
+cortex-postgres:
+  fullnameOverride: cortex-manila-postgresql
+
+# Custom configuration for the cortex mqtt chart.
+cortex-mqtt:
+  fullnameOverride: cortex-manila-mqtt
+
+# Custom configuration for the cortex core chart.
+cortex-core:
+  fullnameOverride: cortex-manila
+  alerts:
+    componentPrefix: cortex-manila
+  service:
+    extraLabels:
+      app: cortex-manila # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-manila
+  # Modes in which the service should be run.
+  # Each mode is translated into a separate service and deployment.
+  modes:
+
+cortex-syncer:
+  fullnameOverride: cortex-manila-syncer
+  service:
+    extraLabels:
+      app: cortex-manila-syncer # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-manila-syncer
+  args: []
+  conf:
     sync:
       prometheus:
         # Prometheus metrics to sync into the database.
@@ -61,37 +94,6 @@ global:
           - name: netapp_prometheus
             url: "" # e.g. "https://netapp-prometheus:9090"
             provides: [netapp_aggregate_labels_metric, netapp_node_metric]
-
-# Custom configuration for the cortex postgres chart.
-cortex-postgres:
-  fullnameOverride: cortex-manila-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-manila-mqtt
-
-# Custom configuration for the cortex core chart.
-cortex-core:
-  fullnameOverride: cortex-manila
-  alerts:
-    componentPrefix: cortex-manila
-  service:
-    extraLabels:
-      app: cortex-manila # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-manila
-  # Modes in which the service should be run.
-  # Each mode is translated into a separate service and deployment.
-  modes:
-    # The name of the mode will be used for the kubernetes deployments.
-    # The args will be passed to the service as command line arguments, meaning
-    # the passed arg need to be baked into the service binary.
-    #
-    # Syncer syncs data from external sources into the database(s).
-    - name: syncer
-      args: ["syncer"]
-      replicas: 1
 
 cortex-kpis:
   fullnameOverride: cortex-manila-kpis

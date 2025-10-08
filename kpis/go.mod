@@ -5,11 +5,13 @@ go 1.25.0
 replace (
 	github.com/cobaltcore-dev/cortex => ../
 	github.com/cobaltcore-dev/cortex/extractor/api => ../extractor/api
+	github.com/cobaltcore-dev/cortex/sync/api => ../sync/api
 )
 
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/sync/api v0.0.0-00010101000000-000000000000
 	github.com/sapcc/go-api-declarations v1.17.4
 	go.uber.org/automaxprocs v1.6.0
 )
@@ -27,7 +29,6 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1 // indirect
 	github.com/go-gorp/gorp v2.2.0+incompatible // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
-	github.com/gophercloud/gophercloud/v2 v2.8.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect

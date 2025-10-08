@@ -4,9 +4,7 @@
 package conf
 
 import (
-	"errors"
 	"fmt"
-	"slices"
 	"strings"
 )
 
@@ -31,57 +29,8 @@ type DependencyConfig struct {
 	Extractors []string `json:"extractors,omitempty"`
 }
 
-// Validate if the dependencies are satisfied in the given config.
-func (deps *DependencyConfig) validate(c SharedConfig) error {
-	confedNovaObjects := make(map[string]bool)
-	for _, objectType := range c.OpenStack.Nova.Types {
-		confedNovaObjects[objectType] = true
-	}
-	for _, objectType := range deps.Sync.OpenStack.Nova.ObjectTypes {
-		if !confedNovaObjects[objectType] {
-			return fmt.Errorf(
-				"openstack object type dependency %s not satisfied, got %v",
-				objectType, c.OpenStack.Nova.Types,
-			)
-		}
-	}
-	confedPlacementObjects := make(map[string]bool)
-	for _, objectType := range c.OpenStack.Placement.Types {
-		confedPlacementObjects[objectType] = true
-	}
-	for _, objectType := range deps.Sync.OpenStack.Placement.ObjectTypes {
-		if !confedPlacementObjects[objectType] {
-			return fmt.Errorf(
-				"openstack object type dependency %s not satisfied, got %v",
-				objectType, c.OpenStack.Placement.Types,
-			)
-		}
-	}
-	confedMetricAliases := make(map[string]bool)
-	confedMetricTypes := make(map[string]bool)
-	for _, metric := range c.Prometheus.Metrics {
-		confedMetricAliases[metric.Alias] = true
-		confedMetricTypes[metric.Type] = true
-	}
-	for _, metric := range deps.Sync.Prometheus.Metrics {
-		if !confedMetricAliases[metric.Alias] && !confedMetricTypes[metric.Type] {
-			return fmt.Errorf(
-				"prometheus metric dependency %s not satisfied, got %v",
-				metric, c.Prometheus.Metrics,
-			)
-		}
-	}
-	return nil
-}
-
 // Check if all dependencies are satisfied.
 func (c *SharedConfig) Validate() error {
-	// If traits (placement) are specified, the resource providers must be synced as well.
-	if len(c.OpenStack.Placement.Types) > 0 {
-		if !slices.Contains(c.OpenStack.Placement.Types, "resource_providers") {
-			return errors.New("resource_providers must be synced if dependent models are specified")
-		}
-	}
 	// Check the keystone URL.
 	if c.KeystoneConfig.URL != "" && !strings.Contains(c.KeystoneConfig.URL, "/v3") {
 		return fmt.Errorf(
@@ -95,43 +44,6 @@ func (c *SharedConfig) Validate() error {
 	} {
 		if strings.HasSuffix(url, "/") {
 			return fmt.Errorf("openstack url %s should not end with a slash", url)
-		}
-	}
-	// Check that the service availability is valid.
-	validAvailabilities := []string{"public", "internal", "admin"}
-	if c.OpenStack.Nova.Availability == "" {
-		c.OpenStack.Nova.Availability = "public"
-	}
-	if c.OpenStack.Placement.Availability == "" {
-		c.OpenStack.Placement.Availability = "public"
-	}
-	if c.OpenStack.Cinder.Availability == "" {
-		c.OpenStack.Cinder.Availability = "public"
-	}
-	if !slices.Contains(validAvailabilities, c.OpenStack.Nova.Availability) {
-		return fmt.Errorf("invalid nova availability %s", c.OpenStack.Nova.Availability)
-	}
-	if !slices.Contains(validAvailabilities, c.OpenStack.Placement.Availability) {
-		return fmt.Errorf("invalid placement availability %s", c.OpenStack.Placement.Availability)
-	}
-	if !slices.Contains(validAvailabilities, c.OpenStack.Cinder.Availability) {
-		return fmt.Errorf("invalid cinder availability %s", c.OpenStack.Cinder.Availability)
-	}
-
-	// Check that all confed metric types have a host to sync from.
-	confedMetricTypes := make(map[string]bool)
-	for _, metric := range c.Prometheus.Metrics {
-		confedMetricTypes[metric.Type] = true
-	}
-	providedMetricTypes := make(map[string]bool)
-	for _, host := range c.Prometheus.Hosts {
-		for _, metricType := range host.ProvidedMetricTypes {
-			providedMetricTypes[metricType] = true
-		}
-	}
-	for metricType := range confedMetricTypes {
-		if !providedMetricTypes[metricType] {
-			return fmt.Errorf("no host provided for metric type %s", metricType)
 		}
 	}
 	return nil

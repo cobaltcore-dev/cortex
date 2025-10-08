@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/sync"
+	"github.com/cobaltcore-dev/cortex/internal/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 )
@@ -54,7 +54,7 @@ func (api *keystoneAPI) Authenticate(ctx context.Context) error {
 			DomainName:  api.keystoneConf.OSProjectDomainName,
 		},
 	}
-	httpClient, err := sync.NewHTTPClient(api.keystoneConf.SSO)
+	httpClient, err := sso.NewHTTPClient(api.keystoneConf.SSO)
 	if err != nil {
 		panic(err)
 	}

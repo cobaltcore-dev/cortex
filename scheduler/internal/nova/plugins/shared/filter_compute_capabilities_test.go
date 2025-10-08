@@ -9,9 +9,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 

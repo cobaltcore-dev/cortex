@@ -8,8 +8,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/netapp"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/manila"
-	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/manila"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/prometheus"
 )
 
 // Extractor that extracts the CPU usage of a storage pool.
