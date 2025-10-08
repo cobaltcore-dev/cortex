@@ -163,17 +163,6 @@ conf:
         # Limes objects to sync into the database.
         types: [] # e.g. commitments
 
-  kpis:
-    # Configuration of KPIs that should be extracted from the synced data.
-    # Each KPI can specify its own dependencies on other extractors and
-    # synced data.
-    #
-    # The `name` should correspond to a known KPI extractor plugin.
-    plugins:
-      # - name:
-      #   # Dependencies needed by this KPI.
-      #   dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
-
 # Values passed to the service through a kubernetes secret.
 # The keys of these values should correspond to the keys used above in the conf.
 #

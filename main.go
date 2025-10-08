@@ -14,7 +14,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/keystone"
-	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
@@ -46,14 +45,6 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.C
 	go pipeline.SyncPeriodic(ctx) // blocking
 }
 
-// Run a kpi service that periodically calculates kpis.
-func runKPIService(registry *monitoring.Registry, config conf.KPIsConfig, db db.DB) {
-	pipeline := kpis.NewPipeline(config)
-	if err := pipeline.Init(kpis.SupportedKPIs, db, registry); err != nil {
-		panic("failed to initialize kpi pipeline: " + err.Error())
-	} // non-blocking
-}
-
 // Run the prometheus metrics server for monitoring.
 func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, config conf.MonitoringConfig) {
 	mux := http.NewServeMux()
@@ -72,8 +63,6 @@ const usage = `
 
   modes:
   -syncer    Sync data from external datasources into the database.
-  -extractor Extract knowledge from the synced data and store it in the database.
-  -kpis      Expose KPIs extracted from the database.
 `
 
 func main() {
@@ -151,8 +140,6 @@ func main() {
 	switch taskName {
 	case "syncer":
 		runSyncer(ctx, registry, config, database)
-	case "kpis":
-		runKPIService(registry, config.GetKPIsConfig(), database)
 	default:
 		panic("unknown task")
 	}

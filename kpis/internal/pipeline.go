@@ -7,14 +7,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/netapp"
-	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/sap"
-	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/conf"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins/netapp"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins/sap"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins/vmware"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

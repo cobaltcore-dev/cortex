@@ -65,6 +65,13 @@ jobs:
           files: |
             extractor/**
 
+      - name: Get all changed kpis/ files
+        id: changed_kpis_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            kpis/**
+
       # Always bumped
       - name: Update appVersion in cortex-core Chart.yaml
         run: |
@@ -143,6 +150,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add extractor/dist/chart/Chart.yaml
           git commit -m "Bump cortex-extractor chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+
+      # Only bumped if there are changes in the kpis directory.
+      - name: Update appVersion in cortex-kpis Chart.yaml
+        if: steps.changed_kpis_files.outputs.all_changed_files != ''
+        run: |
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' kpis/dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex-kpis
+        if: steps.changed_kpis_files.outputs.all_changed_files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kpis/dist/chart/Chart.yaml
+          git commit -m "Bump cortex-kpis chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
 
       # Only bumped if there are changes in the decisions directory.
       - name: Update appVersion in cortex-decisions Chart.yaml

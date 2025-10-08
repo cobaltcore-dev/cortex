@@ -215,34 +215,3 @@ func TestInvalidConf_MissingHost(t *testing.T) {
 		t.Fatalf("expected error, got nil")
 	}
 }
-
-func TestInvalidConf_MissingFeatureForKPI(t *testing.T) {
-	content := `
-{
-  "kpis": {
-    "plugins": [
-      {
-        "name": "vm_life_span_kpi",
-        "dependencies": {
-          "extractors": [
-            "extractor_1"
-          ]
-        }
-      }
-    ]
-  }
-}
-`
-	rawConf, err := readRawConfigFromBytes([]byte(content))
-	if err != nil {
-		t.Fatalf("Failed to read config: %v", err)
-	}
-	conf := newConfigFromMaps[*SharedConfig](rawConf, nil)
-	if len(conf.GetKPIsConfig().Plugins) == 0 {
-		t.Fatalf("expected plugins, got none")
-	}
-	t.Log("conf.GetKPIsConfig().Plugins", conf.GetKPIsConfig().Plugins)
-	if err := conf.Validate(); err == nil {
-		t.Fatalf("expected error, got nil")
-	}
-}

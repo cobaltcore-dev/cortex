@@ -88,6 +88,14 @@ jobs:
           go tool cover -func extractor_profile.cov > extractor_func_coverage.txt
           cd ..
 
+          echo "Running tests for the kpis module..."
+          cd kpis
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=kpis_profile.cov ./internal/...
+          go tool cover -func kpis_profile.cov > kpis_func_coverage.txt
+          cd ..
+
           echo "Running tests for decisions module..."
           cd decisions
           go test -v \

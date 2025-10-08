@@ -54,13 +54,6 @@ func TestGetConfigOrDie(t *testing.T) {
       }
     }
   },
-  "kpis": {
-    "plugins": [
-      {
-        "name": "vm_life_span_kpi"
-      }
-    ]
-  },
   "logging": {
     "level": "debug",
     "format": "text"
@@ -103,12 +96,6 @@ func TestGetConfigOrDie(t *testing.T) {
 	}
 	if len(syncConfig.OpenStack.Nova.Types) != 2 {
 		t.Errorf("Expected 2 OpenStack types, got %d", len(syncConfig.OpenStack.Nova.Types))
-	}
-
-	// Test KPIsConfig
-	kpisConfig := config.GetKPIsConfig()
-	if len(kpisConfig.Plugins) != 1 {
-		t.Errorf("Expected 1 kpi, got %d", len(kpisConfig.Plugins))
 	}
 
 	// Test LoggingConfig

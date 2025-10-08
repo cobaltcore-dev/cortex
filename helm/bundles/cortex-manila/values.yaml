@@ -51,19 +51,6 @@ global:
           types:
             - storage_pools
 
-    kpis:
-      # Configuration of KPIs that should be extracted from the synced data.
-      # Each KPI can specify its own dependencies on other extractors and
-      # synced data.
-      #
-      # The `name` should correspond to a known KPI extractor plugin.
-      plugins:
-        # NetApp-specific KPIs.
-        - name: netapp_storage_pool_cpu_usage_kpi
-          dependencies:
-            extractors:
-              - netapp_storage_pool_cpu_usage_extractor
-
   # Values passed to the service through a kubernetes secret.
   # The keys of these values should correspond to the keys used above in the conf.
   secrets:
@@ -106,10 +93,28 @@ cortex-core:
       args: ["syncer"]
       replicas: 1
 
-    # Service that extracts and exposes KPIs.
-    - name: kpis
-      args: ["kpis"]
-      replicas: 1
+cortex-kpis:
+  fullnameOverride: cortex-manila-kpis
+  service:
+    extraLabels:
+      app: cortex-manila-kpis # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-manila-kpis
+  args: []
+  conf:
+    kpis:
+      # Configuration of KPIs that should be extracted from the synced data.
+      # Each KPI can specify its own dependencies on other extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known KPI extractor plugin.
+      plugins:
+        # NetApp-specific KPIs.
+        - name: netapp_storage_pool_cpu_usage_kpi
+          dependencies:
+            extractors:
+              - netapp_storage_pool_cpu_usage_extractor
 
 cortex-extractor:
   fullnameOverride: cortex-manila-extractor

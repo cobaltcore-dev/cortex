@@ -13,7 +13,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

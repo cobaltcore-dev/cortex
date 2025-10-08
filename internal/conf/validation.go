@@ -76,11 +76,6 @@ func (deps *DependencyConfig) validate(c SharedConfig) error {
 
 // Check if all dependencies are satisfied.
 func (c *SharedConfig) Validate() error {
-	for _, kpi := range c.KPIsConfig.Plugins {
-		if err := kpi.validate(*c); err != nil {
-			return err
-		}
-	}
 	// If traits (placement) are specified, the resource providers must be synced as well.
 	if len(c.OpenStack.Placement.Types) > 0 {
 		if !slices.Contains(c.OpenStack.Placement.Types, "resource_providers") {

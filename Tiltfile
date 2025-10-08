@@ -60,6 +60,15 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-extractor', '.',
 local('sh helm/sync.sh extractor/dist/chart')
 # Deployed as part of bundles below.
 
+########### Cortex KPIs
+docker_build('ghcr.io/cobaltcore-dev/cortex-kpis', '.',
+    dockerfile='Dockerfile.kubebuilder',
+    build_args={'GO_MOD_PATH': 'kpis'},
+    only=kubebuilder_binary_files('kpis') + ['internal/', 'go.mod', 'go.sum'],
+)
+local('sh helm/sync.sh kpis/dist/chart')
+# Deployed as part of bundles below.
+
 ########### Reservations Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile.kubebuilder',

@@ -7,10 +7,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/conf"
+	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -24,7 +25,7 @@ func (m *mockKPI) GetName() string {
 	return m.name
 }
 
-func (m *mockKPI) Init(db db.DB, opts conf.RawOpts) error {
+func (m *mockKPI) Init(db db.DB, opts libconf.RawOpts) error {
 	return m.initErr
 }
 
@@ -40,7 +41,7 @@ func TestKPIPipeline_Init(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer testDB.Close()
 	defer dbEnv.Close()
-	registry := monitoring.NewRegistry(conf.MonitoringConfig{
+	registry := monitoring.NewRegistry(libconf.MonitoringConfig{
 		Labels: map[string]string{"env": "test"},
 	})
 
@@ -49,8 +50,8 @@ func TestKPIPipeline_Init(t *testing.T) {
 
 	config := conf.KPIsConfig{
 		Plugins: []conf.KPIPluginConfig{
-			{Name: "mock_kpi_1", Options: conf.RawOpts{}},
-			{Name: "mock_kpi_2", Options: conf.RawOpts{}},
+			{Name: "mock_kpi_1", Options: libconf.RawOpts{}},
+			{Name: "mock_kpi_2", Options: libconf.RawOpts{}},
 		},
 	}
 

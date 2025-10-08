@@ -161,22 +161,6 @@ const (
 	NovaHypervisorTypeIronic NovaHypervisorType = "ironic"
 )
 
-// Configuration for the kpis module.
-type KPIsConfig struct {
-	// KPI plugins to use.
-	Plugins []KPIPluginConfig `json:"plugins"`
-}
-
-// Configuration for a single KPI plugin.
-type KPIPluginConfig struct {
-	// The name of the KPI plugin.
-	Name string `json:"name"`
-	// Custom options for the KPI plugin, as a raw json map.
-	Options RawOpts `json:"options,omitempty"`
-	// The dependencies this KPI plugin needs.
-	DependencyConfig `json:"dependencies,omitempty"`
-}
-
 // Configuration for the monitoring module.
 type MonitoringConfig struct {
 	// The labels to add to all metrics.
@@ -234,7 +218,6 @@ type Config interface {
 	GetLoggingConfig() LoggingConfig
 	GetDBConfig() DBConfig
 	GetSyncConfig() SyncConfig
-	GetKPIsConfig() KPIsConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
 	GetAPIConfig() APIConfig
@@ -248,7 +231,6 @@ type SharedConfig struct {
 	DBConfig         `json:"db"`
 	SyncConfig       `json:"sync"`
 	MonitoringConfig `json:"monitoring"`
-	KPIsConfig       `json:"kpis"`
 	MQTTConfig       `json:"mqtt"`
 	APIConfig        `json:"api"`
 	KeystoneConfig   `json:"keystone"`
@@ -341,7 +323,6 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 func (c *SharedConfig) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
 func (c *SharedConfig) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *SharedConfig) GetSyncConfig() SyncConfig             { return c.SyncConfig }
-func (c *SharedConfig) GetKPIsConfig() KPIsConfig             { return c.KPIsConfig }
 func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
 func (c *SharedConfig) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }
 func (c *SharedConfig) GetAPIConfig() APIConfig               { return c.APIConfig }
