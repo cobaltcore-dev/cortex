@@ -292,24 +292,6 @@ global:
                   types:
                     - flavors
 
-    descheduler:
-      nova:
-        # Configuration of the descheduler that runs periodically to de-schedule
-        # VMs based on the configured plugins.
-        # Each plugin can specify its own dependencies on extractors and synced data.
-        #
-        # The `name` should correspond to a known descheduler plugin.
-        plugins:
-          - name: demo
-            options:
-              vmName: "cortex-demo-vm"
-            dependencies:
-              sync:
-                openstack:
-                  nova:
-                    types:
-                      - servers
-
   # Values passed to the service through a kubernetes secret.
   # The keys of these values should correspond to the keys used above in the conf.
   secrets:
@@ -365,10 +347,34 @@ cortex-core:
       args: ["kpis"]
       replicas: 1
 
-    # Descheduler for Nova.
-    - name: descheduler
-      args: ["descheduler-nova"]
-      replicas: 1
+cortex-descheduler:
+  fullnameOverride: cortex-nova-descheduler
+  service:
+    extraLabels:
+      app: cortex-nova-descheduler # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-nova-descheduler
+  args: []
+  conf:
+    descheduler:
+      nova:
+        # Configuration of the descheduler that runs periodically to de-schedule
+        # VMs based on the configured plugins.
+        # Each plugin can specify its own dependencies on extractors and synced data.
+        #
+        # The `name` should correspond to a known descheduler plugin.
+        plugins:
+          - name: demo
+            options:
+              vmName: "cortex-demo-vm"
+            dependencies:
+              sync:
+                openstack:
+                  nova:
+                    types:
+                      - servers
+
 
 cortex-scheduler:
   fullnameOverride: cortex-nova-scheduler

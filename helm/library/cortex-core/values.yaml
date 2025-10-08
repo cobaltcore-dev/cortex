@@ -192,24 +192,6 @@ conf:
       #   # Dependencies needed by this KPI.
       #   dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
 
-  descheduler:
-    nova:
-      # If migrations should be executed.
-      disableDryRun: false
-      # The availability of the Nova endpoint to look for.
-      availability: public
-      # Configuration of the descheduler that runs periodically to de-schedule
-      # VMs based on the configured plugins.
-      # Each plugin can specify its own dependencies on extractors and synced data.
-      #
-      # The `name` should correspond to a known descheduler plugin.
-      plugins:
-        # - name:
-        #   # Options for the descheduler plugin.
-        #   options:
-        #   # Dependencies needed by this descheduler plugin.
-        #   dependencies: # e.g. {extractors: [my_nova_extractor]}
-
 # Values passed to the service through a kubernetes secret.
 # The keys of these values should correspond to the keys used above in the conf.
 #

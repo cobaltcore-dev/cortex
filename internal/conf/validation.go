@@ -98,11 +98,6 @@ func (c *SharedConfig) Validate() error {
 			return err
 		}
 	}
-	for _, step := range c.Nova.Plugins {
-		if err := step.validate(*c); err != nil {
-			return err
-		}
-	}
 	// If traits (placement) are specified, the resource providers must be synced as well.
 	if len(c.OpenStack.Placement.Types) > 0 {
 		if !slices.Contains(c.OpenStack.Placement.Types, "resource_providers") {

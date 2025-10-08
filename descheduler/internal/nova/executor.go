@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
 	"github.com/sapcc/go-bits/jobloop"
 )
 

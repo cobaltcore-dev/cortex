@@ -6,7 +6,7 @@ package nova
 import (
 	"context"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
 )
 
 type CycleDetector interface {

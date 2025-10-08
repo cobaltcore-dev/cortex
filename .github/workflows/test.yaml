@@ -72,6 +72,14 @@ jobs:
           go tool cover -func scheduler_profile.cov > scheduler_func_coverage.txt
           cd ..
 
+          echo "Running tests for the descheduler module..."
+          cd descheduler
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=descheduler_profile.cov ./internal/...
+          go tool cover -func descheduler_profile.cov > descheduler_func_coverage.txt
+          cd ..
+
           echo "Running tests for decisions module..."
           cd decisions
           go test -v \
@@ -156,6 +164,19 @@ jobs:
               schedulerCoverageReport = 'No coverage data available';
             }
 
+            // Read descheduler module coverage report
+            let deschedulerCoverageReport = '';
+            let deschedulerCoveragePercentage = 'unknown';
+            try {
+              deschedulerCoverageReport = fs.readFileSync('descheduler/descheduler_func_coverage.txt', 'utf8');
+              const deschedulerLines = deschedulerCoverageReport.trim().split('\n');
+              const deschedulerLastLine = deschedulerLines[deschedulerLines.length - 1];
+              const deschedulerCoverageMatch = deschedulerLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              deschedulerCoveragePercentage = deschedulerCoverageMatch ? deschedulerCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              deschedulerCoverageReport = 'No coverage data available';
+            }
+
             // Read decisions module coverage report
             let decisionsCoverageReport = '';
             let decisionsCoveragePercentage = 'unknown';
@@ -209,6 +230,16 @@ jobs:
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
             commentBody += schedulerCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // Descheduler module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in descheduler module (descheduler/internal/): ';
+            commentBody += deschedulerCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += deschedulerCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

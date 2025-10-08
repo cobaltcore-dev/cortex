@@ -180,30 +180,6 @@ const (
 	NovaHypervisorTypeIronic NovaHypervisorType = "ironic"
 )
 
-// Configuration for the descheduler module.
-type DeschedulerConfig struct {
-	Nova NovaDeschedulerConfig `json:"nova"`
-}
-
-// Configuration for the nova descheduler.
-type NovaDeschedulerConfig struct {
-	// The availability of the nova service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
-	// The steps to execute in the descheduler.
-	Plugins []DeschedulerStepConfig `json:"plugins"`
-	// If dry-run is disabled (by default its enabled).
-	DisableDryRun bool `json:"disableDryRun,omitempty"`
-}
-
-type DeschedulerStepConfig struct {
-	// The name of the step.
-	Name string `json:"name"`
-	// Custom options for the step, as a raw yaml map.
-	Options RawOpts `json:"options,omitempty"`
-	// The dependencies this step needs.
-	DependencyConfig `json:"dependencies,omitempty"`
-}
-
 // Configuration for the kpis module.
 type KPIsConfig struct {
 	// KPI plugins to use.
@@ -278,7 +254,6 @@ type Config interface {
 	GetDBConfig() DBConfig
 	GetSyncConfig() SyncConfig
 	GetExtractorConfig() ExtractorConfig
-	GetDeschedulerConfig() DeschedulerConfig
 	GetKPIsConfig() KPIsConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
@@ -289,16 +264,15 @@ type Config interface {
 }
 
 type SharedConfig struct {
-	LoggingConfig     `json:"logging"`
-	DBConfig          `json:"db"`
-	SyncConfig        `json:"sync"`
-	ExtractorConfig   `json:"extractor"`
-	DeschedulerConfig `json:"descheduler"`
-	MonitoringConfig  `json:"monitoring"`
-	KPIsConfig        `json:"kpis"`
-	MQTTConfig        `json:"mqtt"`
-	APIConfig         `json:"api"`
-	KeystoneConfig    `json:"keystone"`
+	LoggingConfig    `json:"logging"`
+	DBConfig         `json:"db"`
+	SyncConfig       `json:"sync"`
+	ExtractorConfig  `json:"extractor"`
+	MonitoringConfig `json:"monitoring"`
+	KPIsConfig       `json:"kpis"`
+	MQTTConfig       `json:"mqtt"`
+	APIConfig        `json:"api"`
+	KeystoneConfig   `json:"keystone"`
 }
 
 // Create a new configuration from the default config json file.
@@ -385,13 +359,12 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 	return result
 }
 
-func (c *SharedConfig) GetLoggingConfig() LoggingConfig         { return c.LoggingConfig }
-func (c *SharedConfig) GetDBConfig() DBConfig                   { return c.DBConfig }
-func (c *SharedConfig) GetSyncConfig() SyncConfig               { return c.SyncConfig }
-func (c *SharedConfig) GetExtractorConfig() ExtractorConfig     { return c.ExtractorConfig }
-func (c *SharedConfig) GetDeschedulerConfig() DeschedulerConfig { return c.DeschedulerConfig }
-func (c *SharedConfig) GetKPIsConfig() KPIsConfig               { return c.KPIsConfig }
-func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig   { return c.MonitoringConfig }
-func (c *SharedConfig) GetMQTTConfig() MQTTConfig               { return c.MQTTConfig }
-func (c *SharedConfig) GetAPIConfig() APIConfig                 { return c.APIConfig }
-func (c *SharedConfig) GetKeystoneConfig() KeystoneConfig       { return c.KeystoneConfig }
+func (c *SharedConfig) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
+func (c *SharedConfig) GetDBConfig() DBConfig                 { return c.DBConfig }
+func (c *SharedConfig) GetSyncConfig() SyncConfig             { return c.SyncConfig }
+func (c *SharedConfig) GetExtractorConfig() ExtractorConfig   { return c.ExtractorConfig }
+func (c *SharedConfig) GetKPIsConfig() KPIsConfig             { return c.KPIsConfig }
+func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
+func (c *SharedConfig) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }
+func (c *SharedConfig) GetAPIConfig() APIConfig               { return c.APIConfig }
+func (c *SharedConfig) GetKeystoneConfig() KeystoneConfig     { return c.KeystoneConfig }

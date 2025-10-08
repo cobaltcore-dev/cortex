@@ -51,6 +51,13 @@ jobs:
           files: |
             scheduler/**
 
+      - name: Get all changed descheduler/ files
+        id: changed_descheduler_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            descheduler/**
+
       # Always bumped
       - name: Update appVersion in cortex-core Chart.yaml
         run: |
@@ -103,6 +110,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add scheduler/dist/chart/Chart.yaml
           git commit -m "Bump cortex-scheduler chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+
+      # Only bumped if there are changes in the descheduler directory.
+      - name: Update appVersion in cortex-descheduler Chart.yaml
+        if: steps.changed_descheduler_files.outputs.all_changed_files != ''
+        run: |
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' descheduler/dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex-descheduler
+        if: steps.changed_descheduler_files.outputs.all_changed_files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add descheduler/dist/chart/Chart.yaml
+          git commit -m "Bump cortex-descheduler chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
 
       # Only bumped if there are changes in the decisions directory.
       - name: Update appVersion in cortex-decisions Chart.yaml

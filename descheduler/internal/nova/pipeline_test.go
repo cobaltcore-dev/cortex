@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
+	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
@@ -82,7 +83,7 @@ func TestPipeline_Init(t *testing.T) {
 
 	config := conf.DeschedulerConfig{
 		Nova: conf.NovaDeschedulerConfig{
-			Plugins: []conf.DeschedulerStepConfig{{Name: "step1", Options: conf.RawOpts{}}},
+			Plugins: []conf.DeschedulerStepConfig{{Name: "step1", Options: libconf.RawOpts{}}},
 		},
 	}
 	supportedSteps := []Step{

@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
 )

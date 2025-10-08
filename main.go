@@ -13,7 +13,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	novaDescheduler "github.com/cobaltcore-dev/cortex/internal/descheduler/nova"
 	"github.com/cobaltcore-dev/cortex/internal/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
@@ -72,16 +71,6 @@ func runKPIService(registry *monitoring.Registry, config conf.KPIsConfig, db db.
 	} // non-blocking
 }
 
-// Run a descheduler for Nova virtual machines.
-func runDeschedulerNova(ctx context.Context, registry *monitoring.Registry, config conf.Config, db db.DB) {
-	monitor := novaDescheduler.NewPipelineMonitor(registry)
-	keystoneAPI := keystone.NewKeystoneAPI(config.GetKeystoneConfig())
-	deschedulerConf := config.GetDeschedulerConfig()
-	descheduler := novaDescheduler.NewDescheduler(deschedulerConf, monitor, keystoneAPI)
-	descheduler.Init(novaDescheduler.SupportedSteps, ctx, db, deschedulerConf) // non-blocking
-	go descheduler.DeschedulePeriodically(ctx)                                 // blocking
-}
-
 // Run the prometheus metrics server for monitoring.
 func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, config conf.MonitoringConfig) {
 	mux := http.NewServeMux()
@@ -102,7 +91,6 @@ const usage = `
   -syncer    Sync data from external datasources into the database.
   -extractor Extract knowledge from the synced data and store it in the database.
   -kpis      Expose KPIs extracted from the database.
-  -descheduler-nova Run a Nova descheduler that periodically de-schedules VMs.
 `
 
 func main() {
@@ -184,8 +172,6 @@ func main() {
 		runExtractor(registry, config.GetExtractorConfig(), database)
 	case "kpis":
 		runKPIService(registry, config.GetKPIsConfig(), database)
-	case "descheduler-nova":
-		runDeschedulerNova(ctx, registry, config, database)
 	default:
 		panic("unknown task")
 	}

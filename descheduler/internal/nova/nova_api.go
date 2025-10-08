@@ -10,7 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"

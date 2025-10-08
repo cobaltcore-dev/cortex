@@ -42,6 +42,15 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-scheduler', '.',
 local('sh helm/sync.sh scheduler/dist/chart')
 # Deployed as part of bundles below.
 
+########### Cortex Descheduler
+docker_build('ghcr.io/cobaltcore-dev/cortex-descheduler', '.',
+    dockerfile='Dockerfile.kubebuilder',
+    build_args={'GO_MOD_PATH': 'descheduler'},
+    only=kubebuilder_binary_files('descheduler') + ['internal/', 'go.mod', 'go.sum'],
+)
+local('sh helm/sync.sh descheduler/dist/chart')
+# Deployed as part of bundles below.
+
 ########### Reservations Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile.kubebuilder',
