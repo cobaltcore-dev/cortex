@@ -125,17 +125,33 @@ func (c *novaPipelineConsumer) Consume(
 		})
 	}
 
-	flavor := request.Spec.Data.Flavor
+	// Initialize default values for resource calculation
+	var vcpus, ram, disk int
+	var flavorName string
+	var resources map[string]resource.Quantity
 
-	// Safe conversion with bounds checking to prevent integer overflow
-	vcpus := int(math.Min(float64(flavor.Data.VCPUs), math.MaxInt))
-	ram := int(math.Min(float64(flavor.Data.MemoryMB), math.MaxInt))
-	disk := int(math.Min(float64(flavor.Data.RootGB), math.MaxInt))
+	if request.Spec.Data.Flavor.Data.Name == "" {
+		slog.Warn("scheduler: Flavor data is missing, using zero values for resources", "instanceUUID", request.Spec.Data.InstanceUUID)
+		// Use zero values for resources
+		resources = map[string]resource.Quantity{
+			"cpu":     *resource.NewQuantity(0, resource.DecimalSI),
+			"memory":  *resource.NewQuantity(0, resource.DecimalSI),
+			"storage": *resource.NewQuantity(0, resource.DecimalSI),
+		}
+		flavorName = "unknown"
+	} else {
+		flavor := request.Spec.Data.Flavor
+		flavorName = flavor.Data.Name
 
-	resources := map[string]resource.Quantity{
-		"cpu":     *resource.NewQuantity(int64(vcpus), resource.DecimalSI),
-		"memory":  *resource.NewQuantity(int64(ram), resource.DecimalSI),
-		"storage": *resource.NewQuantity(int64(disk), resource.DecimalSI),
+		vcpus = int(math.Min(float64(flavor.Data.VCPUs), math.MaxInt))
+		ram = int(math.Min(float64(flavor.Data.MemoryMB), math.MaxInt))
+		disk = int(math.Min(float64(flavor.Data.RootGB), math.MaxInt))
+
+		resources = map[string]resource.Quantity{
+			"cpu":     *resource.NewQuantity(int64(vcpus), resource.DecimalSI),
+			"memory":  *resource.NewQuantity(int64(ram), resource.DecimalSI),
+			"storage": *resource.NewQuantity(int64(disk), resource.DecimalSI),
+		}
 	}
 
 	if request.VMware {
@@ -147,7 +163,7 @@ func (c *novaPipelineConsumer) Consume(
 	}
 
 	decisionRequest := v1alpha1.SchedulingDecisionRequest{
-		ID:          *request.Context.GlobalRequestID,
+		ID:          request.Context.RequestID,
 		RequestedAt: metav1.Now(),
 		EventType:   eventType,
 		Input:       inWeights,
@@ -157,7 +173,7 @@ func (c *novaPipelineConsumer) Consume(
 		},
 		AvailabilityZone: request.Spec.Data.AvailabilityZone,
 		Flavor: v1alpha1.Flavor{
-			Name:      flavor.Data.Name,
+			Name:      flavorName,
 			Resources: resources,
 		},
 	}
