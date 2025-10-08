@@ -71,28 +71,11 @@ func (deps *DependencyConfig) validate(c SharedConfig) error {
 			)
 		}
 	}
-	confedExtractors := make(map[string]bool)
-	for _, extractor := range c.ExtractorConfig.Plugins {
-		confedExtractors[extractor.Name] = true
-	}
-	for _, extractor := range deps.Extractors {
-		if !confedExtractors[extractor] {
-			return fmt.Errorf(
-				"feature extractor dependency %s not satisfied, got %v",
-				extractor, c.ExtractorConfig.Plugins,
-			)
-		}
-	}
 	return nil
 }
 
 // Check if all dependencies are satisfied.
 func (c *SharedConfig) Validate() error {
-	for _, extractor := range c.ExtractorConfig.Plugins {
-		if err := extractor.validate(*c); err != nil {
-			return err
-		}
-	}
 	for _, kpi := range c.KPIsConfig.Plugins {
 		if err := kpi.validate(*c); err != nil {
 			return err

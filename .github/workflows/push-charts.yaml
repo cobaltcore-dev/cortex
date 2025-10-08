@@ -102,6 +102,17 @@ jobs:
         shell: bash
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-descheduler.outputs.all_changed_files }}
+      - name: Get all changed extractor Chart.yaml files
+        id: changed-chart-yaml-files-extractor
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            extractor/dist/chart/Chart.yaml
+      - name: Push extractor charts to registry
+        if: steps.changed-chart-yaml-files-extractor.outputs.all_changed_files != ''
+        shell: bash
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-extractor.outputs.all_changed_files }}
       - name: Get all changed decisions Chart.yaml files
         id: changed-chart-yaml-files-decisions
         uses: tj-actions/changed-files@v47

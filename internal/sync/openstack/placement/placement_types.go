@@ -5,7 +5,6 @@ package placement
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 // Type alias for the OpenStack placement configuration.
@@ -25,7 +24,7 @@ type ResourceProvider struct {
 func (r ResourceProvider) TableName() string { return "openstack_resource_providers" }
 
 // Indexes for the resource provider table.
-func (r ResourceProvider) Indexes() []db.Index { return nil }
+func (r ResourceProvider) Indexes() map[string][]string { return nil }
 
 // Resource provider trait model from the OpenStack placement API.
 type Trait struct {
@@ -39,7 +38,7 @@ type Trait struct {
 func (r Trait) TableName() string { return "openstack_resource_provider_traits" }
 
 // Indexes for the resource provider trait table.
-func (r Trait) Indexes() []db.Index { return nil }
+func (r Trait) Indexes() map[string][]string { return nil }
 
 // Combined model for resource provider inventories and usages.
 //
@@ -82,4 +81,4 @@ type InventoryUsage struct {
 func (InventoryUsage) TableName() string { return "openstack_resource_provider_inventory_usages" }
 
 // Indexes for the resource provider inventory table.
-func (InventoryUsage) Indexes() []db.Index { return nil }
+func (InventoryUsage) Indexes() map[string][]string { return nil }

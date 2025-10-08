@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/prometheus/client_golang/prometheus"

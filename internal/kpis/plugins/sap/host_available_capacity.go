@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"strconv"
 
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/sap"
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/extractor/api/features/sap"
+	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/internal/tools"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"

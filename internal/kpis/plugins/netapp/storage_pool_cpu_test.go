@@ -6,9 +6,9 @@ package netapp
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/extractor/api/features/netapp"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/netapp"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )

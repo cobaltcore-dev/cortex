@@ -152,25 +152,6 @@ type SyncConfig struct {
 	OpenStack  SyncOpenStackConfig  `json:"openstack"`
 }
 
-type FeatureExtractorConfig struct {
-	// The name of the extractor.
-	Name string `json:"name"`
-	// Custom options for the extractor, as a raw yaml map.
-	Options RawOpts `json:"options,omitempty"`
-	// The dependencies this extractor needs.
-	DependencyConfig `json:"dependencies,omitempty"`
-	// Recency that tells how old a feature needs to be to be recalculated
-	RecencySeconds *int `json:"recencySeconds,omitempty"`
-	// MQTT topic to publish the features to.
-	// If not set, the extractor will not publish features to MQTT.
-	MQTTTopic string `json:"mqttTopic,omitempty"`
-}
-
-// Configuration for the features module.
-type ExtractorConfig struct {
-	Plugins []FeatureExtractorConfig `json:"plugins"`
-}
-
 type NovaHypervisorType = string
 
 const (
@@ -253,7 +234,6 @@ type Config interface {
 	GetLoggingConfig() LoggingConfig
 	GetDBConfig() DBConfig
 	GetSyncConfig() SyncConfig
-	GetExtractorConfig() ExtractorConfig
 	GetKPIsConfig() KPIsConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetMQTTConfig() MQTTConfig
@@ -267,7 +247,6 @@ type SharedConfig struct {
 	LoggingConfig    `json:"logging"`
 	DBConfig         `json:"db"`
 	SyncConfig       `json:"sync"`
-	ExtractorConfig  `json:"extractor"`
 	MonitoringConfig `json:"monitoring"`
 	KPIsConfig       `json:"kpis"`
 	MQTTConfig       `json:"mqtt"`
@@ -362,7 +341,6 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 func (c *SharedConfig) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
 func (c *SharedConfig) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *SharedConfig) GetSyncConfig() SyncConfig             { return c.SyncConfig }
-func (c *SharedConfig) GetExtractorConfig() ExtractorConfig   { return c.ExtractorConfig }
 func (c *SharedConfig) GetKPIsConfig() KPIsConfig             { return c.KPIsConfig }
 func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
 func (c *SharedConfig) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }

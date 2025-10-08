@@ -5,7 +5,6 @@ package identity
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 type IdentityConf = conf.SyncOpenStackIdentityConfig
@@ -23,7 +22,7 @@ type Domain struct {
 func (d Domain) TableName() string { return "openstack_domains" }
 
 // Indexes for the domain table.
-func (d Domain) Indexes() []db.Index { return nil }
+func (d Domain) Indexes() map[string][]string { return nil }
 
 // RawProject represents the raw project data as returned by the OpenStack identity API.
 type RawProject struct {
@@ -54,4 +53,4 @@ type Project struct {
 func (p Project) TableName() string { return "openstack_projects" }
 
 // Indexes for the project table.
-func (p Project) Indexes() []db.Index { return nil }
+func (p Project) Indexes() map[string][]string { return nil }

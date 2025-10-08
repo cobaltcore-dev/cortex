@@ -54,40 +54,6 @@ func TestGetConfigOrDie(t *testing.T) {
       }
     }
   },
-  "extractor": {
-    "plugins": [
-      {
-        "name": "vrops_hostsystem_resolver"
-      },
-      {
-        "name": "vrops_project_noisiness_extractor"
-      },
-      {
-        "name": "vrops_hostsystem_contention_long_term_extractor"
-      }
-    ]
-  },
-  "scheduler": {
-    "nova": {
-      "pipelines": [{
-        "name": "default",
-        "plugins": [
-          {
-            "name": "vmware_anti_affinity_noisy_projects",
-            "options": {
-            "avgCPUThreshold": 20
-            }
-          },
-          {
-            "name": "vmware_avoid_long_term_contended_hosts",
-            "options": {
-            "maxCPUContentionThreshold": 50
-            }
-          }
-        ]
-      }]
-    }
-  },
   "kpis": {
     "plugins": [
       {
@@ -137,12 +103,6 @@ func TestGetConfigOrDie(t *testing.T) {
 	}
 	if len(syncConfig.OpenStack.Nova.Types) != 2 {
 		t.Errorf("Expected 2 OpenStack types, got %d", len(syncConfig.OpenStack.Nova.Types))
-	}
-
-	// Test ExtractorConfig
-	extractorConfig := config.GetExtractorConfig()
-	if len(extractorConfig.Plugins) != 3 {
-		t.Errorf("Expected 3 extractors, got %d", len(extractorConfig.Plugins))
 	}
 
 	// Test KPIsConfig

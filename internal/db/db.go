@@ -33,12 +33,8 @@ type DB struct {
 
 type Table interface {
 	TableName() string
-	Indexes() []Index
-}
-
-type Index struct {
-	Name        string
-	ColumnNames []string
+	// Map of index name to column names.
+	Indexes() map[string][]string
 }
 
 // Create a new postgres database and wait until it is connected.
@@ -151,9 +147,9 @@ func (d *DB) CreateTable(table ...*gorp.TableMap) error {
 func (d *DB) AddTable(t Table) *gorp.TableMap {
 	slog.Info("adding table", "table", t.TableName(), "model", t)
 	tablemap := d.AddTableWithName(t, t.TableName())
-	for _, index := range t.Indexes() {
-		slog.Info("adding index", "index", index.Name, "table", t.TableName(), "columns", index.ColumnNames)
-		tablemap.AddIndex(index.Name, "Btree", index.ColumnNames)
+	for indexName, columnNames := range t.Indexes() {
+		slog.Info("adding index", "index", indexName, "table", t.TableName(), "columns", columnNames)
+		tablemap.AddIndex(indexName, "Btree", columnNames)
 	}
 	return tablemap
 }

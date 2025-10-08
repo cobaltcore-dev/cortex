@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"

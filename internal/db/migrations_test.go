@@ -13,8 +13,8 @@ type test struct {
 	ID int `db:"id, primarykey"`
 }
 
-func (test) TableName() string { return "test" }
-func (test) Indexes() []Index  { return nil }
+func (test) TableName() string            { return "test" }
+func (test) Indexes() map[string][]string { return nil }
 
 func TestMigrate(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)

@@ -5,11 +5,13 @@ go 1.25.0
 replace (
 	github.com/cobaltcore-dev/cortex/commands => ./commands
 	github.com/cobaltcore-dev/cortex/decisions/api => ./decisions/api
+	github.com/cobaltcore-dev/cortex/extractor/api => ./extractor/api
 	github.com/cobaltcore-dev/cortex/reservations/api => ./reservations/api
 	github.com/cobaltcore-dev/cortex/testlib => ./testlib
 )
 
 require (
+	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/go-gorp/gorp v2.2.0+incompatible

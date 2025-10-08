@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 // Type alias for the OpenStack Manila configuration.
@@ -240,4 +239,4 @@ func (sp *StoragePool) MarshalJSON() ([]byte, error) {
 func (StoragePool) TableName() string { return "openstack_manila_storage_pools" }
 
 // Index for the openstack model.
-func (StoragePool) Indexes() []db.Index { return nil }
+func (StoragePool) Indexes() map[string][]string { return nil }

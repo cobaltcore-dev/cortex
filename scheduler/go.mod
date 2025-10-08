@@ -4,6 +4,7 @@ go 1.25.0
 
 replace (
 	github.com/cobaltcore-dev/cortex => ../
+	github.com/cobaltcore-dev/cortex/extractor/api => ../extractor/api
 	github.com/cobaltcore-dev/cortex/decisions/api => ../decisions/api
 	github.com/cobaltcore-dev/cortex/reservations/api => ../reservations/api
 	github.com/cobaltcore-dev/cortex/scheduler/api => ./api
@@ -11,6 +12,7 @@ replace (
 
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/decisions/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/scheduler/api v0.0.0-00010101000000-000000000000

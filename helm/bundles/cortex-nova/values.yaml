@@ -100,6 +100,117 @@ global:
             # Needs projects.
             - commitments
 
+    kpis:
+      # Configuration of KPIs that should be extracted from the synced data.
+      # Each KPI can specify its own dependencies on other extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known KPI extractor plugin.
+      plugins:
+        # VMware-specific KPIs.
+        - name: vmware_host_contention_kpi
+          dependencies:
+            extractors:
+              - vrops_hostsystem_contention_long_term_extractor
+        - name: vmware_project_noisiness_kpi
+          dependencies:
+            extractors:
+              - vrops_project_noisiness_extractor
+        # SAP specific KPIs.
+        - name: sap_host_total_allocatable_capacity_kpi
+          dependencies:
+            extractors:
+              - host_utilization_extractor
+              - sap_host_details_extractor
+        - name: sap_host_capacity_kpi
+          dependencies:
+            extractors:
+              - host_utilization_extractor
+              - sap_host_details_extractor
+        - name: sap_host_running_vms_kpi
+          dependencies:
+            extractors:
+              - sap_host_details_extractor
+        # Shared KPIs.
+        - name: vm_migration_statistics_kpi
+          dependencies:
+            extractors:
+                - vm_host_residency_extractor
+        - name: vm_life_span_kpi
+          dependencies:
+            extractors:
+              - vm_life_span_histogram_extractor
+        - name: vm_commitments_kpi
+          dependencies:
+            sync:
+              openstack:
+                limes:
+                  types:
+                    - commitments
+                nova:
+                  types:
+                    - flavors
+
+  # Values passed to the service through a kubernetes secret.
+  # The keys of these values should correspond to the keys used above in the conf.
+  secrets:
+    sync:
+      prometheus:
+        # Prometheus hosts to consider when syncing the metrics.
+        hosts:
+          - name: vmware_prometheus
+            url: "" # e.g. "https://vmware-prometheus:9090"
+            provides: [vrops_vm_metric, vrops_host_metric]
+          - name: kvm_prometheus
+            url: "" # e.g. "https://kvm-prometheus:9090"
+            provides: [node_exporter_metric]
+
+# Custom configuration for the cortex postgres chart.
+cortex-postgres:
+  fullnameOverride: cortex-nova-postgresql
+
+# Custom configuration for the cortex mqtt chart.
+cortex-mqtt:
+  fullnameOverride: cortex-nova-mqtt
+
+# Custom configuration for the cortex core chart.
+cortex-core:
+  fullnameOverride: cortex-nova
+  alerts:
+    componentPrefix: cortex-nova
+  service:
+    extraLabels:
+      app: cortex-nova # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-nova
+  # Modes in which the service should be run.
+  # Each mode is translated into a separate service and deployment.
+  modes:
+    # The name of the mode will be used for the kubernetes deployments.
+    # The args will be passed to the service as command line arguments, meaning
+    # the passed arg need to be baked into the service binary.
+    #
+    # Syncer syncs data from external sources into the database(s).
+    - name: syncer
+      args: ["syncer"]
+      replicas: 1
+
+    # Service that extracts and exposes KPIs.
+    - name: kpis
+      args: ["kpis"]
+      replicas: 1
+
+cortex-extractor:
+  fullnameOverride: cortex-nova-extractor
+  service:
+    extraLabels:
+      app: cortex-nova-extractor # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-nova-extractor
+  args: []
+  conf:
     extractor:
       # Configuration of features that should be extracted from the synced data.
       # Each extractor can specify its own dependencies on other extractors or
@@ -241,111 +352,6 @@ global:
                 nova:
                   types:
                     - hypervisors
-    kpis:
-      # Configuration of KPIs that should be extracted from the synced data.
-      # Each KPI can specify its own dependencies on other extractors and
-      # synced data.
-      #
-      # The `name` should correspond to a known KPI extractor plugin.
-      plugins:
-        # VMware-specific KPIs.
-        - name: vmware_host_contention_kpi
-          dependencies:
-            extractors:
-              - vrops_hostsystem_contention_long_term_extractor
-        - name: vmware_project_noisiness_kpi
-          dependencies:
-            extractors:
-              - vrops_project_noisiness_extractor
-        # SAP specific KPIs.
-        - name: sap_host_total_allocatable_capacity_kpi
-          dependencies:
-            extractors:
-              - host_utilization_extractor
-              - sap_host_details_extractor
-        - name: sap_host_capacity_kpi
-          dependencies:
-            extractors:
-              - host_utilization_extractor
-              - sap_host_details_extractor
-        - name: sap_host_running_vms_kpi
-          dependencies:
-            extractors:
-              - sap_host_details_extractor
-        # Shared KPIs.
-        - name: vm_migration_statistics_kpi
-          dependencies:
-            extractors:
-                - vm_host_residency_extractor
-        - name: vm_life_span_kpi
-          dependencies:
-            extractors:
-              - vm_life_span_histogram_extractor
-        - name: vm_commitments_kpi
-          dependencies:
-            sync:
-              openstack:
-                limes:
-                  types:
-                    - commitments
-                nova:
-                  types:
-                    - flavors
-
-  # Values passed to the service through a kubernetes secret.
-  # The keys of these values should correspond to the keys used above in the conf.
-  secrets:
-    sync:
-      prometheus:
-        # Prometheus hosts to consider when syncing the metrics.
-        hosts:
-          - name: vmware_prometheus
-            url: "" # e.g. "https://vmware-prometheus:9090"
-            provides: [vrops_vm_metric, vrops_host_metric]
-          - name: kvm_prometheus
-            url: "" # e.g. "https://kvm-prometheus:9090"
-            provides: [node_exporter_metric]
-
-# Custom configuration for the cortex postgres chart.
-cortex-postgres:
-  fullnameOverride: cortex-nova-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-nova-mqtt
-
-# Custom configuration for the cortex core chart.
-cortex-core:
-  fullnameOverride: cortex-nova
-  alerts:
-    componentPrefix: cortex-nova
-  service:
-    extraLabels:
-      app: cortex-nova # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-nova
-  # Modes in which the service should be run.
-  # Each mode is translated into a separate service and deployment.
-  modes:
-    # The name of the mode will be used for the kubernetes deployments.
-    # The args will be passed to the service as command line arguments, meaning
-    # the passed arg need to be baked into the service binary.
-    #
-    # Syncer syncs data from external sources into the database(s).
-    - name: syncer
-      args: ["syncer"]
-      replicas: 1
-
-    # Extractor extracts features from the synced data.
-    - name: extractor
-      args: ["extractor"]
-      replicas: 1
-
-    # Service that extracts and exposes KPIs.
-    - name: kpis
-      args: ["kpis"]
-      replicas: 1
 
 cortex-descheduler:
   fullnameOverride: cortex-nova-descheduler

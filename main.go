@@ -13,7 +13,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/keystone"
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
@@ -45,22 +44,6 @@ func runSyncer(ctx context.Context, registry *monitoring.Registry, config conf.C
 	pipeline := sync.Pipeline{Syncers: syncers}
 	pipeline.Init(ctx)
 	go pipeline.SyncPeriodic(ctx) // blocking
-}
-
-// Periodically extract features from the database.
-func runExtractor(registry *monitoring.Registry, config conf.ExtractorConfig, db db.DB) {
-	monitor := extractor.NewPipelineMonitor(registry)
-
-	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
-	if err := mqttClient.Connect(); err != nil {
-		panic("failed to connect to mqtt broker: " + err.Error())
-	}
-	defer mqttClient.Disconnect()
-
-	pipeline := extractor.NewPipeline(config, db, monitor, mqttClient)
-	// Selects the extractors to run based on the config.
-	pipeline.Init(extractor.SupportedExtractors)
-	go pipeline.ExtractOnTrigger() // blocking
 }
 
 // Run a kpi service that periodically calculates kpis.
@@ -168,8 +151,6 @@ func main() {
 	switch taskName {
 	case "syncer":
 		runSyncer(ctx, registry, config, database)
-	case "extractor":
-		runExtractor(registry, config.GetExtractorConfig(), database)
 	case "kpis":
 		runKPIService(registry, config.GetKPIsConfig(), database)
 	default:

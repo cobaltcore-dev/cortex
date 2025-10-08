@@ -58,6 +58,13 @@ jobs:
           files: |
             descheduler/**
 
+      - name: Get all changed extractor/ files
+        id: changed_extractor_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            extractor/**
+
       # Always bumped
       - name: Update appVersion in cortex-core Chart.yaml
         run: |
@@ -123,6 +130,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add descheduler/dist/chart/Chart.yaml
           git commit -m "Bump cortex-descheduler chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+
+      # Only bumped if there are changes in the extractor directory.
+      - name: Update appVersion in cortex-extractor Chart.yaml
+        if: steps.changed_extractor_files.outputs.all_changed_files != ''
+        run: |
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' extractor/dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex-extractor
+        if: steps.changed_extractor_files.outputs.all_changed_files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add extractor/dist/chart/Chart.yaml
+          git commit -m "Bump cortex-extractor chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
 
       # Only bumped if there are changes in the decisions directory.
       - name: Update appVersion in cortex-decisions Chart.yaml

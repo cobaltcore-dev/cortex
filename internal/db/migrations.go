@@ -35,12 +35,9 @@ func (Migration) TableName() string {
 }
 
 // Indexes for the migration model.
-func (Migration) Indexes() []Index {
-	return []Index{
-		{
-			Name:        "idx_migrations_file_name",
-			ColumnNames: []string{"file_name"},
-		},
+func (Migration) Indexes() map[string][]string {
+	return map[string][]string{
+		"idx_migrations_file_name": {"file_name"},
 	}
 }
 

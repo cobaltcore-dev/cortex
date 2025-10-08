@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 // Type alias for the OpenStack Cinder configuration.
@@ -52,7 +51,7 @@ type StoragePool struct {
 func (StoragePool) TableName() string { return "openstack_cinder_storage_pools" }
 
 // Index for the openstack model.
-func (StoragePool) Indexes() []db.Index { return nil }
+func (StoragePool) Indexes() map[string][]string { return nil }
 
 // Custom unmarshaler for StoragePool to handle nested JSON.
 func (sp *StoragePool) UnmarshalJSON(data []byte) error {

@@ -61,11 +61,11 @@ type VROpsHostMetric struct {
 	Value float64 `json:"value" db:"value"`
 }
 
-func (m VROpsHostMetric) TableName() string       { return "vrops_host_metrics" }
-func (m VROpsHostMetric) Indexes() []db.Index     { return nil }
-func (m VROpsHostMetric) GetName() string         { return m.Name }
-func (m VROpsHostMetric) GetTimestamp() time.Time { return m.Timestamp }
-func (m VROpsHostMetric) GetValue() float64       { return m.Value }
+func (m VROpsHostMetric) TableName() string            { return "vrops_host_metrics" }
+func (m VROpsHostMetric) Indexes() map[string][]string { return nil }
+func (m VROpsHostMetric) GetName() string              { return m.Name }
+func (m VROpsHostMetric) GetTimestamp() time.Time      { return m.Timestamp }
+func (m VROpsHostMetric) GetValue() float64            { return m.Value }
 func (m VROpsHostMetric) With(n string, t time.Time, v float64) PrometheusMetric {
 	m.Name = n
 	m.Timestamp = t
@@ -116,11 +116,11 @@ type VROpsVMMetric struct {
 	Value float64 `json:"value" db:"value"`
 }
 
-func (m VROpsVMMetric) TableName() string       { return "vrops_vm_metrics" }
-func (m VROpsVMMetric) Indexes() []db.Index     { return nil }
-func (m VROpsVMMetric) GetName() string         { return m.Name }
-func (m VROpsVMMetric) GetTimestamp() time.Time { return m.Timestamp }
-func (m VROpsVMMetric) GetValue() float64       { return m.Value }
+func (m VROpsVMMetric) TableName() string            { return "vrops_vm_metrics" }
+func (m VROpsVMMetric) Indexes() map[string][]string { return nil }
+func (m VROpsVMMetric) GetName() string              { return m.Name }
+func (m VROpsVMMetric) GetTimestamp() time.Time      { return m.Timestamp }
+func (m VROpsVMMetric) GetValue() float64            { return m.Value }
 func (m VROpsVMMetric) With(n string, t time.Time, v float64) PrometheusMetric {
 	m.Name = n
 	m.Timestamp = t
@@ -141,11 +141,11 @@ type NodeExporterMetric struct {
 	Value float64 `json:"value" db:"value"`
 }
 
-func (m NodeExporterMetric) TableName() string       { return "node_exporter_metrics" }
-func (m NodeExporterMetric) Indexes() []db.Index     { return nil }
-func (m NodeExporterMetric) GetName() string         { return m.Name }
-func (m NodeExporterMetric) GetTimestamp() time.Time { return m.Timestamp }
-func (m NodeExporterMetric) GetValue() float64       { return m.Value }
+func (m NodeExporterMetric) TableName() string            { return "node_exporter_metrics" }
+func (m NodeExporterMetric) Indexes() map[string][]string { return nil }
+func (m NodeExporterMetric) GetName() string              { return m.Name }
+func (m NodeExporterMetric) GetTimestamp() time.Time      { return m.Timestamp }
+func (m NodeExporterMetric) GetValue() float64            { return m.Value }
 func (m NodeExporterMetric) With(n string, t time.Time, v float64) PrometheusMetric {
 	m.Name = n
 	m.Timestamp = t
@@ -182,11 +182,11 @@ type NetAppAggregateLabelsMetric struct {
 	Value float64 `json:"value" db:"value"`
 }
 
-func (m NetAppAggregateLabelsMetric) TableName() string       { return "netapp_aggregate_labels_metrics" }
-func (m NetAppAggregateLabelsMetric) Indexes() []db.Index     { return nil }
-func (m NetAppAggregateLabelsMetric) GetName() string         { return m.Name }
-func (m NetAppAggregateLabelsMetric) GetTimestamp() time.Time { return m.Timestamp }
-func (m NetAppAggregateLabelsMetric) GetValue() float64       { return m.Value }
+func (m NetAppAggregateLabelsMetric) TableName() string            { return "netapp_aggregate_labels_metrics" }
+func (m NetAppAggregateLabelsMetric) Indexes() map[string][]string { return nil }
+func (m NetAppAggregateLabelsMetric) GetName() string              { return m.Name }
+func (m NetAppAggregateLabelsMetric) GetTimestamp() time.Time      { return m.Timestamp }
+func (m NetAppAggregateLabelsMetric) GetValue() float64            { return m.Value }
 func (m NetAppAggregateLabelsMetric) With(n string, t time.Time, v float64) PrometheusMetric {
 	m.Name = n
 	m.Timestamp = t
@@ -213,11 +213,11 @@ type NetAppNodeMetric struct {
 	Value float64 `json:"value" db:"value"`
 }
 
-func (m NetAppNodeMetric) TableName() string       { return "netapp_node_metrics" }
-func (m NetAppNodeMetric) Indexes() []db.Index     { return nil }
-func (m NetAppNodeMetric) GetName() string         { return m.Name }
-func (m NetAppNodeMetric) GetTimestamp() time.Time { return m.Timestamp }
-func (m NetAppNodeMetric) GetValue() float64       { return m.Value }
+func (m NetAppNodeMetric) TableName() string            { return "netapp_node_metrics" }
+func (m NetAppNodeMetric) Indexes() map[string][]string { return nil }
+func (m NetAppNodeMetric) GetName() string              { return m.Name }
+func (m NetAppNodeMetric) GetTimestamp() time.Time      { return m.Timestamp }
+func (m NetAppNodeMetric) GetValue() float64            { return m.Value }
 func (m NetAppNodeMetric) With(n string, t time.Time, v float64) PrometheusMetric {
 	m.Name = n
 	m.Timestamp = t
@@ -256,10 +256,10 @@ type NetAppVolumeAggrLabelsMetric struct {
 func (m NetAppVolumeAggrLabelsMetric) TableName() string {
 	return "netapp_volume_aggregate_labels_metrics"
 }
-func (m NetAppVolumeAggrLabelsMetric) Indexes() []db.Index     { return nil }
-func (m NetAppVolumeAggrLabelsMetric) GetName() string         { return m.Name }
-func (m NetAppVolumeAggrLabelsMetric) GetTimestamp() time.Time { return m.Timestamp }
-func (m NetAppVolumeAggrLabelsMetric) GetValue() float64       { return m.Value }
+func (m NetAppVolumeAggrLabelsMetric) Indexes() map[string][]string { return nil }
+func (m NetAppVolumeAggrLabelsMetric) GetName() string              { return m.Name }
+func (m NetAppVolumeAggrLabelsMetric) GetTimestamp() time.Time      { return m.Timestamp }
+func (m NetAppVolumeAggrLabelsMetric) GetValue() float64            { return m.Value }
 func (m NetAppVolumeAggrLabelsMetric) With(n string, t time.Time, v float64) PrometheusMetric {
 	m.Name = n
 	m.Timestamp = t

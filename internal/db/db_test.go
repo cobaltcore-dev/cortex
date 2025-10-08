@@ -26,7 +26,7 @@ func (m MockTable) TableName() string {
 	return "mock_table"
 }
 
-func (m MockTable) Indexes() []Index {
+func (m MockTable) Indexes() map[string][]string {
 	return nil
 }
 
@@ -180,7 +180,7 @@ func (BulkMockTable) TableName() string {
 	return "bulk_mock_table"
 }
 
-func (BulkMockTable) Indexes() []Index {
+func (BulkMockTable) Indexes() map[string][]string {
 	return nil
 }
 

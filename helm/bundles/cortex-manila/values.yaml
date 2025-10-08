@@ -51,26 +51,6 @@ global:
           types:
             - storage_pools
 
-    extractor:
-      # Configuration of features that should be extracted from the synced data.
-      # Each extractor can specify its own dependencies on other extractors or
-      # synced data.
-      #
-      # The `name` should correspond to a known feature extractor plugin.
-      # Note that the order defined here will also be the order in which the
-      # extractors are executed. If possible, extractors whose dependencies have
-      # been executed will be executed in parallel to speed up the process.
-      plugins:
-        # NetApp-specific extractors.
-        - name: netapp_storage_pool_cpu_usage_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              prometheus:
-                metrics:
-                  - alias: netapp_node_cpu_busy
-                  - alias: netapp_aggr_labels
-
     kpis:
       # Configuration of KPIs that should be extracted from the synced data.
       # Each KPI can specify its own dependencies on other extractors and
@@ -126,15 +106,40 @@ cortex-core:
       args: ["syncer"]
       replicas: 1
 
-    # Extractor extracts features from the synced data.
-    - name: extractor
-      args: ["extractor"]
-      replicas: 1
-
     # Service that extracts and exposes KPIs.
     - name: kpis
       args: ["kpis"]
       replicas: 1
+
+cortex-extractor:
+  fullnameOverride: cortex-manila-extractor
+  service:
+    extraLabels:
+      app: cortex-manila-extractor # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-manila-extractor
+  args: []
+  conf:
+    extractor:
+      # Configuration of features that should be extracted from the synced data.
+      # Each extractor can specify its own dependencies on other extractors or
+      # synced data.
+      #
+      # The `name` should correspond to a known feature extractor plugin.
+      # Note that the order defined here will also be the order in which the
+      # extractors are executed. If possible, extractors whose dependencies have
+      # been executed will be executed in parallel to speed up the process.
+      plugins:
+        # NetApp-specific extractors.
+        - name: netapp_storage_pool_cpu_usage_extractor
+          recencySeconds: 60 # 1 minute
+          dependencies:
+            sync:
+              prometheus:
+                metrics:
+                  - alias: netapp_node_cpu_busy
+                  - alias: netapp_aggr_labels
 
 cortex-scheduler:
   fullnameOverride: cortex-manila-scheduler

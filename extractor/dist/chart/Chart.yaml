@@ -1,0 +1,9 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+name: cortex-extractor
+description: A Helm chart deploying Cortex extractor.
+type: application
+appVersion: "sha-e94cfd7"
+version: 0.0.1

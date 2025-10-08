@@ -5,7 +5,6 @@ package limes
 
 import (
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 // Type alias for the OpenStack limes configuration.
@@ -77,4 +76,4 @@ type Commitment struct {
 func (Commitment) TableName() string { return "openstack_limes_commitments_v2" }
 
 // Indexes for the resource provider table.
-func (Commitment) Indexes() []db.Index { return nil }
+func (Commitment) Indexes() map[string][]string { return nil }

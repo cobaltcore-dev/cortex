@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 
 	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
 )
 
 // Type alias for the OpenStack nova configuration.
@@ -85,7 +84,7 @@ func (s *DeletedServer) MarshalJSON() ([]byte, error) {
 func (DeletedServer) TableName() string { return "openstack_deleted_servers" }
 
 // Index for the openstack model.
-func (DeletedServer) Indexes() []db.Index { return nil }
+func (DeletedServer) Indexes() map[string][]string { return nil }
 
 // OpenStack server model as returned by the Nova API under /servers/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-servers-detailed
@@ -168,7 +167,7 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 func (Server) TableName() string { return "openstack_servers" }
 
 // Index for the openstack model.
-func (Server) Indexes() []db.Index { return nil }
+func (Server) Indexes() map[string][]string { return nil }
 
 // OpenStack hypervisor model as returned by the Nova API under /os-hypervisors/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details
@@ -272,7 +271,7 @@ func (h *Hypervisor) MarshalJSON() ([]byte, error) {
 func (Hypervisor) TableName() string { return "openstack_hypervisors" }
 
 // Index for the openstack model.
-func (Hypervisor) Indexes() []db.Index { return nil }
+func (Hypervisor) Indexes() map[string][]string { return nil }
 
 // OpenStack flavor model as returned by the Nova API under /flavors/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-flavors
@@ -339,7 +338,7 @@ func (f *Flavor) MarshalJSON() ([]byte, error) {
 func (Flavor) TableName() string { return "openstack_flavors_v2" }
 
 // Index for the openstack model.
-func (Flavor) Indexes() []db.Index { return nil }
+func (Flavor) Indexes() map[string][]string { return nil }
 
 // OpenStack migration model as returned by the Nova API under /os-migrations.
 // See: https://docs.openstack.org/api-ref/compute/#list-migrations
@@ -366,7 +365,7 @@ type Migration struct {
 func (Migration) TableName() string { return "openstack_migrations" }
 
 // Index for the openstack model.
-func (Migration) Indexes() []db.Index { return nil }
+func (Migration) Indexes() map[string][]string { return nil }
 
 // Raw aggregate as returned by the Nova API under /os-aggregates.
 type RawAggregate struct {
@@ -390,4 +389,4 @@ type Aggregate struct {
 func (Aggregate) TableName() string { return "openstack_aggregates_v2" }
 
 // Index for the openstack model.
-func (Aggregate) Indexes() []db.Index { return nil }
+func (Aggregate) Indexes() map[string][]string { return nil }

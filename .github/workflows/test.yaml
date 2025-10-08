@@ -80,6 +80,14 @@ jobs:
           go tool cover -func descheduler_profile.cov > descheduler_func_coverage.txt
           cd ..
 
+          echo "Running tests for the extractor module..."
+          cd extractor
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=extractor_profile.cov ./internal/...
+          go tool cover -func extractor_profile.cov > extractor_func_coverage.txt
+          cd ..
+
           echo "Running tests for decisions module..."
           cd decisions
           go test -v \
@@ -177,6 +185,19 @@ jobs:
               deschedulerCoverageReport = 'No coverage data available';
             }
 
+            // Read extractor module coverage report
+            let extractorCoverageReport = '';
+            let extractorCoveragePercentage = 'unknown';
+            try {
+              extractorCoverageReport = fs.readFileSync('extractor/extractor_func_coverage.txt', 'utf8');
+              const extractorLines = extractorCoverageReport.trim().split('\n');
+              const extractorLastLine = extractorLines[extractorLines.length - 1];
+              const extractorCoverageMatch = extractorLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              extractorCoveragePercentage = extractorCoverageMatch ? extractorCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              extractorCoverageReport = 'No coverage data available';
+            }
+
             // Read decisions module coverage report
             let decisionsCoverageReport = '';
             let decisionsCoveragePercentage = 'unknown';
@@ -240,6 +261,16 @@ jobs:
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
             commentBody += deschedulerCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // Extractor module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in extractor module (extractor/internal/): ';
+            commentBody += extractorCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += extractorCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 
