@@ -218,7 +218,7 @@ for name in ACTIVE_DEPLOYMENTS:
 local_resource(
     'Scheduler E2E Tests (Nova)',
     '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduler -- /manager e2e-nova"',
-    deps=['./internal/checks'],
+    deps=['./scheduler/internal/e2e'],
     labels=['Cortex-Nova'],
     trigger_mode=TRIGGER_MODE_MANUAL,
     auto_init=False,
@@ -226,7 +226,7 @@ local_resource(
 local_resource(
     'Scheduler E2E Tests (Manila)',
     '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduler -- /manager e2e-manila"',
-    deps=['./internal/checks'],
+    deps=['./scheduler/internal/e2e'],
     labels=['Cortex-Manila'],
     trigger_mode=TRIGGER_MODE_MANUAL,
     auto_init=False,
@@ -234,7 +234,7 @@ local_resource(
 local_resource(
     'Scheduler E2E Tests (Cinder)',
     '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduler -- /manager e2e-cinder"',
-    deps=['./internal/checks'],
+    deps=['./scheduler/internal/e2e'],
     labels=['Cortex-Cinder'],
     trigger_mode=TRIGGER_MODE_MANUAL,
     auto_init=False,
