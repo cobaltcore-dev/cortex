@@ -154,6 +154,7 @@ jobs:
               schedulerCoveragePercentage = schedulerCoverageMatch ? schedulerCoverageMatch[1] : 'unknown';
             } catch (error) {
               schedulerCoverageReport = 'No coverage data available';
+            }
 
             // Read decisions module coverage report
             let decisionsCoverageReport = '';
