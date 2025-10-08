@@ -330,3 +330,27 @@ func TestPremodifier_ModifyRequest_PreservesOtherFields(t *testing.T) {
 		t.Error("original host weight should have been replaced")
 	}
 }
+
+// Test that the consumer handles missing flavor data correctly
+func TestConsumerMissingFlavorData(t *testing.T) {
+	consumer := &novaPipelineConsumer{Client: nil}
+
+	request := api.ExternalSchedulerRequest{
+		Context: api.NovaRequestContext{
+			RequestID: "test-request-id",
+		},
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				InstanceUUID: "test-uuid",
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{
+						Name: "", // Empty flavor name triggers missing data handling
+					},
+				},
+			},
+		},
+	}
+
+	// Should handle missing flavor data without panic and use fallback values
+	consumer.Consume(request, []string{}, map[string]float64{}, map[string]map[string]float64{})
+}

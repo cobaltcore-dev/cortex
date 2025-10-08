@@ -4,9 +4,12 @@
 package nova
 
 import (
+	"context"
 	"errors"
 	"log/slog"
+	"math"
 
+	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -16,6 +19,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type NovaStep = scheduler.Step[api.ExternalSchedulerRequest]
@@ -59,6 +66,149 @@ type novaPipeline struct {
 	preselectAllHosts bool
 }
 
+type novaPipelineConsumer struct {
+	// Kubernetes client to create decision resources.
+	Client client.Client
+}
+
+func NewNovaPipelineConsumer() *novaPipelineConsumer {
+	var kubernetesClient client.Client
+	if scheme, err := v1alpha1.SchemeBuilder.Build(); err == nil {
+		if clientConfig, err := ctrl.GetConfig(); err == nil {
+			if cl, err := client.New(clientConfig, client.Options{Scheme: scheme}); err == nil {
+				// Successfully created a client, use it.
+				kubernetesClient = cl
+			}
+		}
+	}
+	return &novaPipelineConsumer{
+		Client: kubernetesClient,
+	}
+}
+
+func (c *novaPipelineConsumer) Consume(
+	request api.ExternalSchedulerRequest,
+	applicationOrder []string,
+	inWeights map[string]float64,
+	stepWeights map[string]map[string]float64,
+) {
+
+	if c.Client == nil {
+		return
+	}
+
+	// Determine the event type based on request flags
+	var eventType v1alpha1.SchedulingEventType
+	switch {
+	case request.Live:
+		eventType = v1alpha1.SchedulingEventTypeLiveMigration
+	case request.Resize:
+		eventType = v1alpha1.SchedulingEventTypeResize
+	default:
+		eventType = v1alpha1.SchedulingEventTypeInitialPlacement
+	}
+
+	outputs := []v1alpha1.SchedulingDecisionPipelineOutputSpec{}
+	for _, stepKey := range applicationOrder {
+		weights, ok := stepWeights[stepKey]
+		if !ok {
+			// This is ok, since steps can be skipped.
+			continue
+		}
+		activations := make(map[string]float64, len(weights))
+		for k, v := range weights {
+			activations[k] = math.Tanh(v)
+		}
+		outputs = append(outputs, v1alpha1.SchedulingDecisionPipelineOutputSpec{
+			Step:        stepKey,
+			Activations: activations,
+		})
+	}
+
+	// Initialize default values for resource calculation
+	var vcpus, ram, disk int
+	var flavorName string
+	var resources map[string]resource.Quantity
+
+	if request.Spec.Data.Flavor.Data.Name == "" {
+		slog.Warn("scheduler: Flavor data is missing, using zero values for resources", "instanceUUID", request.Spec.Data.InstanceUUID)
+		// Use zero values for resources
+		resources = map[string]resource.Quantity{
+			"cpu":     *resource.NewQuantity(0, resource.DecimalSI),
+			"memory":  *resource.NewQuantity(0, resource.DecimalSI),
+			"storage": *resource.NewQuantity(0, resource.DecimalSI),
+		}
+		flavorName = "unknown"
+	} else {
+		flavor := request.Spec.Data.Flavor
+		flavorName = flavor.Data.Name
+
+		vcpus = int(math.Min(float64(flavor.Data.VCPUs), math.MaxInt))
+		ram = int(math.Min(float64(flavor.Data.MemoryMB), math.MaxInt))
+		disk = int(math.Min(float64(flavor.Data.RootGB), math.MaxInt))
+
+		resources = map[string]resource.Quantity{
+			"cpu":     *resource.NewQuantity(int64(vcpus), resource.DecimalSI),
+			"memory":  *resource.NewQuantity(int64(ram), resource.DecimalSI),
+			"storage": *resource.NewQuantity(int64(disk), resource.DecimalSI),
+		}
+	}
+
+	if request.VMware {
+		resources["hypervisor.vmware"] = *resource.NewQuantity(1, resource.DecimalSI)
+		resources["hypervisor.kvm"] = *resource.NewQuantity(0, resource.DecimalSI)
+	} else {
+		resources["hypervisor.vmware"] = *resource.NewQuantity(0, resource.DecimalSI)
+		resources["hypervisor.kvm"] = *resource.NewQuantity(1, resource.DecimalSI)
+	}
+
+	decisionRequest := v1alpha1.SchedulingDecisionRequest{
+		ID:          request.Context.RequestID,
+		RequestedAt: metav1.Now(),
+		EventType:   eventType,
+		Input:       inWeights,
+		Pipeline: v1alpha1.SchedulingDecisionPipelineSpec{
+			Name:    request.GetPipeline(),
+			Outputs: outputs,
+		},
+		AvailabilityZone: request.Spec.Data.AvailabilityZone,
+		Flavor: v1alpha1.Flavor{
+			Name:      flavorName,
+			Resources: resources,
+		},
+	}
+
+	objectKey := client.ObjectKey{Name: request.Spec.Data.InstanceUUID}
+
+	// Try to update existing decision first
+	var existing v1alpha1.SchedulingDecision
+	if err := c.Client.Get(context.Background(), objectKey, &existing); err == nil {
+		// Decision already exists, append the new decision to the existing ones
+		existing.Spec.Decisions = append(existing.Spec.Decisions, decisionRequest)
+
+		if err := c.Client.Update(context.Background(), &existing); err != nil {
+			slog.Error("scheduler: failed to update existing decision", "error", err, "resourceID", request.Spec.Data.InstanceUUID)
+			return
+		}
+		slog.Info("scheduler: appended decision to existing resource", "resourceID", request.Spec.Data.InstanceUUID, "eventType", eventType)
+		return
+	}
+
+	// Decision doesn't exist, create a new one
+	decision := &v1alpha1.SchedulingDecision{
+		ObjectMeta: ctrl.ObjectMeta{Name: request.Spec.Data.InstanceUUID},
+		Spec: v1alpha1.SchedulingDecisionSpec{
+			Decisions: []v1alpha1.SchedulingDecisionRequest{decisionRequest},
+		},
+		// Status will be filled in by the controller.
+	}
+	if err := c.Client.Create(context.Background(), decision); err != nil {
+		slog.Error("scheduler: failed to create decision", "error", err, "resourceID", request.Spec.Data.InstanceUUID)
+		return
+	}
+	slog.Info("scheduler: created new decision", "resourceID", request.Spec.Data.InstanceUUID, "eventType", eventType)
+}
+
 // Create a new Nova scheduler pipeline.
 func NewPipeline(
 	config conf.NovaSchedulerPipelineConfig,
@@ -89,7 +239,9 @@ func NewPipeline(
 		supportedSteps, config.Plugins, wrappers,
 		db, monitor, mqttClient, TopicFinished,
 	)
-	return &novaPipeline{pipeline, db, config.PreselectAllHosts}
+	wrapped := &novaPipeline{pipeline, db, config.PreselectAllHosts}
+	wrapped.SetConsumer(NewNovaPipelineConsumer())
+	return wrapped
 }
 
 // If needed, modify the request before sending it off to the pipeline.
