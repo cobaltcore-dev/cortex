@@ -8,17 +8,21 @@ type: application
 version: 0.0.10
 appVersion: 0.1.0
 dependencies:
+  # from: file://../../library/cortex-core
   - name: cortex-core
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.26.0
+  # from: file://../../library/cortex-postgres
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.5.3
+  # from: file://../../library/cortex-mqtt
   - name: cortex-mqtt
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.1.0
 
   # Services no longer part of the cortex-core chart.
+  # from: file://../../../scheduler/dist/chart
   - name: cortex-scheduler
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
