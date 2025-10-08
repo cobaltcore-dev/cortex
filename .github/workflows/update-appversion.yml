@@ -30,12 +30,26 @@ jobs:
           files: |
             postgres/**
 
+      - name: Get all changed reservations/ files
+        id: changed_reservations_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            reservations/**
+
       - name: Get all changed decisions/ files
         id: changed_decisions_files
         uses: tj-actions/changed-files@v47
         with:
           files: |
             decisions/**
+
+      - name: Get all changed scheduler/ files
+        id: changed_scheduler_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            scheduler/**
 
       # Always bumped
       - name: Update appVersion in cortex-core Chart.yaml
