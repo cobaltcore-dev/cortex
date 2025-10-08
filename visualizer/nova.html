@@ -448,13 +448,14 @@
     // Initialize app
     function initApp() {
       loadSidebarState()
-      redraw()
+
       listSchedulingDecisions()
         .then(data => {
           state.schedulingDecisions = data.items || []
           updateSidebar()
           redraw()
         })
+        .then(updateCurrentDecision)
         .catch(error => {
           alert('Error loading scheduling decisions: ' + error)
         })
