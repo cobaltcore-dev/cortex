@@ -20,9 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
-	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
+	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/sapcc/go-bits/jobloop"
 )
 
@@ -100,15 +99,15 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		cpu = uint64(cpuValue)
 	}
 
-	externalSchedulerRequest := api.ExternalSchedulerRequest{
+	externalSchedulerRequest := schedulerdelegationapi.ExternalSchedulerRequest{
 		// Pipeline with all filters enabled + preselects all hosts.
 		Pipeline: "reservations",
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
+		Spec: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaSpec]{
+			Data: schedulerdelegationapi.NovaSpec{
 				NumInstances: 1, // One for each reservation.
 				ProjectID:    schedulerSpec.ProjectID,
-				Flavor: api.NovaObject[api.NovaFlavor]{
-					Data: api.NovaFlavor{
+				Flavor: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaFlavor]{
+					Data: schedulerdelegationapi.NovaFlavor{
 						Name:       schedulerSpec.FlavorName,
 						ExtraSpecs: schedulerSpec.FlavorExtraSpecs,
 						MemoryMB:   memoryMB,
@@ -132,7 +131,7 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
 	}
 	defer response.Body.Close()
-	var externalSchedulerResponse api.ExternalSchedulerResponse
+	var externalSchedulerResponse schedulerdelegationapi.ExternalSchedulerResponse
 	if err := json.NewDecoder(response.Body).Decode(&externalSchedulerResponse); err != nil {
 		log.Error(err, "failed to decode external scheduler response")
 		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
@@ -157,7 +156,7 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 // SetupWithManager sets up the controller with the Manager.
 func (r *ComputeReservationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&reservationsv1alpha1.ComputeReservation{}).
+		For(&v1alpha1.ComputeReservation{}).
 		Named("computereservation").
 		WithOptions(controller.Options{
 			// We want to process reservations one at a time to avoid overbooking.

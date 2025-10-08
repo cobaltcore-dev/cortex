@@ -6,7 +6,6 @@ package conf
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 )
@@ -99,26 +98,10 @@ func (c *SharedConfig) Validate() error {
 			return err
 		}
 	}
-	for _, pipeline := range c.SchedulerConfig.Nova.Pipelines {
-		for _, step := range pipeline.Plugins {
-			if err := step.validate(*c); err != nil {
-				return err
-			}
-		}
-	}
-	for _, step := range c.DeschedulerConfig.Nova.Plugins {
+	for _, step := range c.Nova.Plugins {
 		if err := step.validate(*c); err != nil {
 			return err
 		}
-	}
-	// Check general dependencies needed by all scheduler steps.
-	for _, pipeline := range c.SchedulerConfig.Nova.Pipelines {
-		if err := pipeline.validate(*c); err != nil {
-			return err
-		}
-	}
-	if c.API.LogRequestBodies {
-		slog.Warn("logging request bodies is enabled (debug feature)")
 	}
 	// If traits (placement) are specified, the resource providers must be synced as well.
 	if len(c.OpenStack.Placement.Types) > 0 {

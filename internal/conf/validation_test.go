@@ -246,32 +246,3 @@ func TestInvalidConf_MissingFeatureForKPI(t *testing.T) {
 		t.Fatalf("expected error, got nil")
 	}
 }
-
-func TestInvalidConf_NovaSchedulerDependency(t *testing.T) {
-	content := `
-{
-  "extractor": {
-    "plugins": [
-      {
-        "name": "extractor_1"
-      }
-    ]
-  },
-  "scheduler": {
-    "nova": {
-      "pipelines": [
-        { "dependencies": { "extractors": ["extractor_2"] } }
-      ]
-    }
-  }
-}
-`
-	rawConf, err := readRawConfigFromBytes([]byte(content))
-	if err != nil {
-		t.Fatalf("Failed to read config: %v", err)
-	}
-	conf := newConfigFromMaps[*SharedConfig](rawConf, nil)
-	if err := conf.Validate(); err == nil {
-		t.Fatalf("expected error, got nil")
-	}
-}

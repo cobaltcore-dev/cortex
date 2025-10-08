@@ -7,11 +7,14 @@ metadata:
   name: {{ include "cortex.fullname" . }}-config
 data:
   conf.json: |-
-    {{- if .Values.conf }}
-    {{ toJson .Values.conf }}
-    {{- else }}
-    {}
+    {{- $mergedConf := dict }}
+    {{- if .Values.global.conf }}
+    {{- $mergedConf = .Values.global.conf }}
     {{- end }}
+    {{- if .Values.conf }}
+    {{- $mergedConf = mergeOverwrite .Values.conf $mergedConf }}
+    {{- end }}
+    {{ toJson $mergedConf }}
 ---
 # Configmap for pre-upgrade resources.
 apiVersion: v1
@@ -24,8 +27,11 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 data:
   conf.json: |-
-    {{- if .Values.conf }}
-    {{ toJson .Values.conf }}
-    {{- else }}
-    {}
+    {{- $mergedConf := dict }}
+    {{- if .Values.global.conf }}
+    {{- $mergedConf = .Values.global.conf }}
     {{- end }}
+    {{- if .Values.conf }}
+    {{- $mergedConf = mergeOverwrite .Values.conf $mergedConf }}
+    {{- end }}
+    {{ toJson $mergedConf }}

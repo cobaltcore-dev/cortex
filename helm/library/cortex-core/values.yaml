@@ -61,9 +61,9 @@ modes:
   # The name of the mode will be used for the kubernetes deployments.
   # The args will be passed to the service as command line arguments, meaning
   # the passed arg need to be baked into the service binary.
-  - name:
-    args:
-    replicas:
+  # - name:
+  #   args:
+  #   replicas:
 
 # Values passed to the service through a configmap.
 conf:
@@ -72,9 +72,6 @@ conf:
     level: debug
     # The log format to use (json, text).
     format: text
-
-  # E2E tests to run when executed with -checks flag.
-  checks: []
 
   # Configuration of metrics exported to the /metrics endpoint.
   monitoring:
@@ -120,25 +117,25 @@ conf:
       # Each metric can be synced from a different Prometheus instance.
       # The `type` parameter should map to a known metric model in the database.
       metrics:
-        - alias:
-          query:
-          type:
+        # - alias:
+        #   query:
+        #   type:
       # Prometheus hosts to consider when syncing the metrics.
       hosts:
-        - name:
-          # Prometheus URL to scrape metrics from.
-          url:
-          # The metric types to scrape from this Prometheus instance.
-          provides: []
-          # Optional, only required if Prometheus is configured with SSO.
-          sso:
-            # Certificate "public key".
-            cert: ""
-            # Certificate private key.
-            certKey: ""
-            # Whether the certificate is self-signed.
-            # If true, the certificate is not verified.
-            selfSigned: false
+        # - name:
+        #   # Prometheus URL to scrape metrics from.
+        #   url:
+        #   # The metric types to scrape from this Prometheus instance.
+        #   provides: []
+        #   # Optional, only required if Prometheus is configured with SSO.
+        #   sso:
+        #     # Certificate "public key".
+        #     cert: ""
+        #     # Certificate private key.
+        #     certKey: ""
+        #     # Whether the certificate is self-signed.
+        #     # If true, the certificate is not verified.
+        #     selfSigned: false
     openstack:
       nova:
         # One of admin, public, or internal
@@ -176,13 +173,13 @@ conf:
     # extractors are executed. If possible, extractors whose dependencies have
     # been executed will be executed in parallel to speed up the process.
     plugins:
-      - name:
-        # How recent the last execution should have been.
-        recencySeconds: # 1 hour
-        # Dependencies needed by this extractor.
-        dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
-        # Optionally, you can specify a custom MQTT topic to publish the extracted data to.
-        mqttTopic: # e.g. "cortex/extraction/feature_name"
+      # - name:
+      #   # How recent the last execution should have been.
+      #   recencySeconds: # 1 hour
+      #   # Dependencies needed by this extractor.
+      #   dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
+      #   # Optionally, you can specify a custom MQTT topic to publish the extracted data to.
+      #   mqttTopic: # e.g. "cortex/extraction/feature_name"
 
   kpis:
     # Configuration of KPIs that should be extracted from the synced data.
@@ -191,74 +188,9 @@ conf:
     #
     # The `name` should correspond to a known KPI extractor plugin.
     plugins:
-      - name:
-        # Dependencies needed by this KPI.
-        dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
-
-  scheduler:
-    api:
-      # Whether request bodies should be logged (debugging feature).
-      logRequestBodies: false
-
-    cinder:
-      pipelines:
-        # Note: there needs to be at least one pipeline with the name "default".
-        - name: default
-          # Configuration of scheduler steps that modify the Cinder scheduler weights.
-          # Each scheduler step can specify its own dependencies on extractors and
-          # synced data.
-          #
-          # The `name` should correspond to a known scheduler plugin.
-          # Note that all scheduler steps will be executed in parallel. However,
-          # the order will be maintained when the weights are applied to the
-          # input weights.
-          plugins:
-            - name:
-              # Options for the scheduler step.
-              options:
-              # Dependencies needed by this scheduler step.
-              dependencies: # e.g. {extractors: [my_cinder_extractor]}
-
-    manila:
-      pipelines:
-        # Note: there needs to be at least one pipeline with the name "default".
-        - name: default
-          # Configuration of scheduler steps that modify the Manila scheduler weights.
-          # Each scheduler step can specify its own dependencies on extractors and
-          # synced data.
-          #
-          # The `name` should correspond to a known scheduler plugin.
-          # Note that all scheduler steps will be executed in parallel. However,
-          # the order will be maintained when the weights are applied to the
-          # input weights.
-          plugins:
-            - name:
-              # Options for the scheduler step.
-              options:
-              # Dependencies needed by this scheduler step.
-              dependencies: # e.g. {extractors: [my_manila_extractor]}
-
-    nova:
-      pipelines:
-        # Note: there needs to be at least one pipeline with the name "default".
-        - name: default
-          # Dependencies needed by all the Nova scheduler steps.
-          dependencies: {}
-
-          # Configuration of scheduler steps that modify the Nova scheduler weights.
-          # Each scheduler step can specify its own dependencies on extractors and
-          # synced data.
-          #
-          # The `name` should correspond to a known scheduler plugin.
-          # Note that all scheduler steps will be executed in parallel. However,
-          # the order will be maintained when the weights are applied to the
-          # input Nova weights.
-          plugins:
-            - name:
-              # Options for the scheduler step.
-              options:
-              # Dependencies needed by this scheduler step.
-              dependencies: # e.g. {extractors: [my_nova_extractor]}
+      # - name:
+      #   # Dependencies needed by this KPI.
+      #   dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
 
   descheduler:
     nova:
@@ -272,11 +204,11 @@ conf:
       #
       # The `name` should correspond to a known descheduler plugin.
       plugins:
-        - name:
-          # Options for the descheduler plugin.
-          options:
-          # Dependencies needed by this descheduler plugin.
-          dependencies: # e.g. {extractors: [my_nova_extractor]}
+        # - name:
+        #   # Options for the descheduler plugin.
+        #   options:
+        #   # Dependencies needed by this descheduler plugin.
+        #   dependencies: # e.g. {extractors: [my_nova_extractor]}
 
 # Values passed to the service through a kubernetes secret.
 # The keys of these values should correspond to the keys used above in the conf.

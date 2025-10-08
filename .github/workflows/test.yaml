@@ -61,6 +61,15 @@ jobs:
             -coverprofile=reservations_profile.cov ./internal/...
           go tool cover -func reservations_profile.cov > reservations_func_coverage.txt
           cd ..
+
+          echo "Running tests for the scheduler module..."
+          cd scheduler
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=scheduler_profile.cov ./internal/...
+          go tool cover -func scheduler_profile.cov > scheduler_func_coverage.txt
+          cd ..
+
       - name: Upload coverage files
         uses: actions/upload-artifact@v4
         with:
@@ -68,6 +77,7 @@ jobs:
           path: |
             pr_func_coverage.txt
             reservations/reservations_func_coverage.txt
+            scheduler/scheduler_func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
@@ -123,6 +133,19 @@ jobs:
               reservationsCoverageReport = 'No coverage data available';
             }
 
+            // Read scheduler module coverage report
+            let schedulerCoverageReport = '';
+            let schedulerCoveragePercentage = 'unknown';
+            try {
+              schedulerCoverageReport = fs.readFileSync('scheduler/scheduler_func_coverage.txt', 'utf8');
+              const schedulerLines = schedulerCoverageReport.trim().split('\n');
+              const schedulerLastLine = schedulerLines[schedulerLines.length - 1];
+              const schedulerCoverageMatch = schedulerLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              schedulerCoveragePercentage = schedulerCoverageMatch ? schedulerCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              schedulerCoverageReport = 'No coverage data available';
+            }
+
             let commentBody = '<!-- coverage-comment -->\n';
             commentBody += '## Test Coverage Report\n\n';
 
@@ -143,6 +166,16 @@ jobs:
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
             commentBody += reservationsCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // Scheduler module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in scheduler module (scheduler/internal/): ';
+            commentBody += schedulerCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += schedulerCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

@@ -36,7 +36,7 @@ type client struct {
 }
 
 func NewClient(monitor Monitor) Client {
-	c := conf.NewConfig[conf.SharedConfig]()
+	c := conf.GetConfigOrDie[conf.SharedConfig]()
 	return NewClientWithConfig(c.GetMQTTConfig(), monitor)
 }
 

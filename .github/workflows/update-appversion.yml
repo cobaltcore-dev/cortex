@@ -69,3 +69,17 @@ jobs:
           git add reservations/dist/chart/Chart.yaml
           git commit -m "Bump cortex-reservations chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
+
+      # Only bumped if there are changes in the scheduler directory.
+      - name: Update appVersion in cortex-scheduler Chart.yaml
+        if: steps.changed_scheduler_files.outputs.all_changed_files != ''
+        run: |
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' scheduler/dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex-scheduler
+        if: steps.changed_scheduler_files.outputs.all_changed_files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scheduler/dist/chart/Chart.yaml
+          git commit -m "Bump cortex-scheduler chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main

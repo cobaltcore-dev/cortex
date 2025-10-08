@@ -1,0 +1,205 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package conf
+
+import (
+	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
+)
+
+type CinderSchedulerConfig struct {
+	// Pipelines in this scheduler.
+	Pipelines []CinderSchedulerPipelineConfig `json:"pipelines"`
+}
+
+type CinderSchedulerPipelineConfig struct {
+	// Scheduler step plugins by their name.
+	Plugins []SchedulerStepConfig `json:"plugins"`
+
+	// The name of this scheduler pipeline.
+	// The name is used to distinguish and route between multiple pipelines.
+	Name string `json:"name"`
+}
+
+type ManilaSchedulerConfig struct {
+	// Pipelines in this scheduler.
+	Pipelines []ManilaSchedulerPipelineConfig `json:"pipelines"`
+}
+
+type ManilaSchedulerPipelineConfig struct {
+	// Scheduler step plugins by their name.
+	Plugins []SchedulerStepConfig `json:"plugins"`
+
+	// The name of this scheduler pipeline.
+	// The name is used to distinguish and route between multiple pipelines.
+	Name string `json:"name"`
+}
+
+type NovaSchedulerConfig struct {
+	// Pipelines in this scheduler.
+	Pipelines []NovaSchedulerPipelineConfig `json:"pipelines"`
+	// Configuration for the Liquid API.
+	LiquidAPI NovaSchedulerLiquidAPIConfig `json:"liquidAPI"`
+}
+
+type NovaHypervisorType = string
+
+const (
+	NovaHypervisorTypeQEMU   NovaHypervisorType = "QEMU"
+	NovaHypervisorTypeCH     NovaHypervisorType = "CH" // Cloud hypervisor
+	NovaHypervisorTypeVMware NovaHypervisorType = "VMware vCenter Server"
+	NovaHypervisorTypeIronic NovaHypervisorType = "ironic"
+)
+
+type NovaSchedulerLiquidAPIConfig struct {
+	// Hypervisors that should be handled by the api.
+	Hypervisors []NovaHypervisorType `json:"hypervisors"`
+}
+
+type NovaSchedulerPipelineConfig struct {
+	// Scheduler step plugins by their name.
+	Plugins []SchedulerStepConfig `json:"plugins"`
+
+	// Dependencies needed by all the Nova scheduler steps.
+	libconf.DependencyConfig `json:"dependencies,omitempty"`
+
+	// The name of this scheduler pipeline.
+	// The name is used to distinguish and route between multiple pipelines.
+	Name string `json:"name"`
+
+	// If all available hosts should be selected in the request,
+	// regardless of what nova sends us in the request.
+	// By default, this is false (use the hosts nova gives us).
+	PreselectAllHosts bool `json:"preselectAllHosts"`
+}
+
+type SchedulerStepConfig struct {
+	// The name of the step implementation.
+	Name string `json:"name"`
+	// The alias of this step, if any.
+	//
+	// The alias can be used to distinguish between different configurations
+	// of the same step, or use a more specific name.
+	Alias string `json:"alias,omitempty"`
+	// Custom options for the step, as a raw yaml map.
+	Options libconf.RawOpts `json:"options,omitempty"`
+	// The dependencies this step needs.
+	libconf.DependencyConfig `json:"dependencies,omitempty"`
+	// The validations to use for this step.
+	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
+
+	// Additional nova configuration for the step.
+
+	// The scope of the step, i.e. which hosts it should be applied to.
+	Scope *NovaSchedulerStepScope `json:"scope,omitempty"`
+}
+
+// Scope that defines which hosts a scheduler step should be applied to.
+// In addition, it also defines the traits for which the step should be applied.
+type NovaSchedulerStepScope struct {
+	// Selectors applied to the compute hosts.
+	HostSelectors []NovaSchedulerStepHostSelector `json:"hostSelectors,omitempty"`
+	// Selectors applied to the given nova spec.
+	SpecSelectors []NovaSchedulerStepSpecSelector `json:"specSelectors,omitempty"`
+}
+
+type NovaSchedulerStepHostSelector struct {
+	// One of: "trait", "hypervisorType"
+	Subject string `json:"subject"`
+	// Selector type, currently only "infix" is supported.
+	Type string `json:"type,omitempty"`
+	// Value of the selector (typed to the given type).
+	Value any `json:"value,omitempty"`
+	// How the selector should be applied:
+	// Let A be the previous set of hosts, and B the scoped hosts.
+	// - "union" means that the scoped hosts are added to the previous set of hosts.
+	// - "difference" means that the scoped hosts are removed from the previous set of hosts.
+	// - "intersection" means that the scoped hosts are the only ones that remain in the previous set of hosts.
+	Operation string `json:"operation,omitempty"`
+}
+
+type NovaSchedulerStepSpecSelector struct {
+	// One of: "flavor", "vmware"
+	Subject string `json:"subject"`
+	// Selector type: bool, infix.
+	Type string `json:"type,omitempty"`
+	// Value of the selector (typed to the given type).
+	Value any `json:"value,omitempty"`
+	// What to do if the selector is matched:
+	// - "skip" means that the step is skipped.
+	// - "continue" means that the step is applied.
+	Action string `json:"action,omitempty"`
+}
+
+type NovaSchedulerStepHostCapabilities struct {
+	// If given, the scheduler step will only be applied to hosts
+	// that have ONE of the given traits.
+	AnyOfTraitInfixes []string `json:"anyOfTraitInfixes,omitempty"`
+	// If given, the scheduler step will only be applied to hosts
+	// that have ONE of the given hypervisor types.
+	AnyOfHypervisorTypeInfixes []string `json:"anyOfHypervisorTypeInfixes,omitempty"`
+	// If given, the scheduler step will only be applied to hosts
+	// that have ALL of the given traits.
+	AllOfTraitInfixes []string `json:"allOfTraitInfixes,omitempty"`
+
+	// If the selection should be inverted, i.e. the step should be applied to hosts
+	// that do NOT match the aforementioned criteria.
+	InvertSelection bool `json:"invertSelection,omitempty"`
+}
+
+func (s NovaSchedulerStepHostCapabilities) IsUndefined() bool {
+	return len(s.AnyOfTraitInfixes) == 0 && len(s.AnyOfHypervisorTypeInfixes) == 0 && len(s.AllOfTraitInfixes) == 0
+}
+
+type NovaSchedulerStepSpecScope struct {
+	// If given, the scheduler step will only be applied to specs
+	// that contain ALL of the following infixes.
+	AllOfFlavorNameInfixes []string `json:"allOfFlavorNameInfixes,omitempty"`
+}
+
+func (s NovaSchedulerStepSpecScope) IsUndefined() bool {
+	return len(s.AllOfFlavorNameInfixes) == 0
+}
+
+// Config for which validations to disable for a scheduler step.
+type SchedulerStepDisabledValidationsConfig struct {
+	// Whether to validate that no subjects are removed or added from the scheduler
+	// step. This should only be disabled for scheduler steps that remove subjects.
+	// Thus, if no value is provided, the default is false.
+	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
+	// Whether to validate that, after running the step, there are remaining subjects.
+	// This should only be disabled for scheduler steps that are expected to
+	// remove all subjects.
+	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
+}
+
+// Configuration for the scheduler module.
+type SchedulerConfig struct {
+	Nova   NovaSchedulerConfig   `json:"nova"`
+	Manila ManilaSchedulerConfig `json:"manila"`
+	Cinder CinderSchedulerConfig `json:"cinder"`
+
+	API SchedulerAPIConfig `json:"api"`
+}
+
+// Configuration for the scheduler API.
+type SchedulerAPIConfig struct {
+	// If request bodies should be logged out.
+	// This feature is intended for debugging purposes only.
+	LogRequestBodies bool `json:"logRequestBodies"`
+}
+
+type Config struct {
+	SchedulerConfig `json:"scheduler"`
+
+	// Lib modules configs.
+	libconf.MonitoringConfig `json:"monitoring"`
+	libconf.LoggingConfig    `json:"logging"`
+	libconf.DBConfig         `json:"db"`
+	libconf.MQTTConfig       `json:"mqtt"`
+
+	// Required for e2e tests.
+	libconf.KeystoneConfig `json:"keystone"`
+	libconf.SyncConfig     `json:"sync"`
+	libconf.APIConfig      `json:"api"`
+}

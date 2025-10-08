@@ -33,11 +33,20 @@ def kubebuilder_binary_files(path):
     """
     return [path + '/cmd', path + '/api', path + '/internal', path + '/go.mod', path + '/go.sum']
 
+########### Cortex Scheduler
+docker_build('ghcr.io/cobaltcore-dev/cortex-scheduler', '.',
+    dockerfile='Dockerfile.kubebuilder',
+    build_args={'GO_MOD_PATH': 'scheduler'},
+    only=kubebuilder_binary_files('scheduler') + ['reservations/', 'internal/', 'go.mod', 'go.sum'],
+)
+local('sh helm/sync.sh scheduler/dist/chart')
+# Deployed as part of bundles below.
+
 ########### Reservations Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile.kubebuilder',
     build_args={'GO_MOD_PATH': 'reservations'},
-    only=kubebuilder_binary_files('reservations') + ['internal/', 'go.mod', 'go.sum'],
+    only=kubebuilder_binary_files('reservations') + ['scheduler/', 'internal/', 'go.mod', 'go.sum'],
 )
 local('sh helm/sync.sh reservations/dist/chart')
 k8s_yaml(helm('reservations/dist/chart', name='cortex-reservations', values=[tilt_values]))
@@ -88,21 +97,25 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 # Package the lib charts locally and sync them to the bundle charts. In this way
 # we can bump the lib charts locally and test them before pushing them to the OCI registry.
 
-
+dep_charts = [
+    ('helm/library/cortex-core', 'cortex-core'),
+    ('helm/library/cortex-postgres', 'cortex-postgres'),
+    ('helm/library/cortex-mqtt', 'cortex-mqtt'),
+    ('scheduler/dist/chart', 'cortex-scheduler'),
+]
 # --- Chart lists based on ACTIVE_DEPLOYMENTS ---
-lib_charts = ['cortex-core', 'cortex-postgres', 'cortex-mqtt']
 bundle_charts = ['cortex-' + name for name in ACTIVE_DEPLOYMENTS]
 
-for lib_chart in lib_charts:
-    watch_file('helm/library/' + lib_chart)
-    local('sh helm/sync.sh helm/library/' + lib_chart)
+for (dep_chart_path, dep_chart_name) in dep_charts:
+    watch_file(dep_chart_path)
+    local('sh helm/sync.sh ' + dep_chart_path)
     for bundle_chart in bundle_charts:
-        local('helm package helm/library/' + lib_chart)
-        gen_tgz = str(local('ls ' + lib_chart + '-*.tgz')).strip()
+        local('helm package ' + dep_chart_path)
+        gen_tgz = str(local('ls ' + dep_chart_name + '-*.tgz')).strip()
         cmp = 'sh helm/cmp.sh ' + gen_tgz + ' helm/bundles/' + bundle_chart + '/charts/' + gen_tgz
         cmp_result = str(local(cmp)).strip()
         if cmp_result == 'true':
-            print('Skipping ' + lib_chart + ' as it is already up to date in ' + bundle_chart)
+            print('Skipping ' + dep_chart_name + ' as it is already up to date in ' + bundle_chart)
             local('rm -f ' + gen_tgz)
         else:
             local('mkdir -p helm/bundles/' + bundle_chart + '/charts/')
@@ -132,12 +145,11 @@ resources_def = {
     'Cortex': {
         'suffix': '',
         'components': lambda name: [
-            'cortex-' + name + '-migrations',
-            'cortex-' + name + '-cli',
-            'cortex-' + name + '-syncer',
-            'cortex-' + name + '-extractor',
-            'cortex-' + name + '-kpis',
-            'cortex-' + name + '-scheduler',
+            'cortex-' + name + '-migrations', # From cortex-core
+            'cortex-' + name + '-syncer', # From cortex-core
+            'cortex-' + name + '-extractor', # From cortex-core
+            'cortex-' + name + '-kpis', # From cortex-core
+            'cortex-' + name + '-scheduler', # From cortex-scheduler
         ] + (['cortex-' + name + '-descheduler'] if name == 'nova' else []),
         'ports': [(2112, 'metrics'), (8080, 'api')],
     },
@@ -193,11 +205,26 @@ for name in ACTIVE_DEPLOYMENTS:
 
 ########### E2E Tests
 local_resource(
-    'Run E2E Tests',
-    '/bin/sh -c "kubectl exec deploy/cortex-nova-cli -- /usr/bin/cortex checks" && '+\
-    '/bin/sh -c "kubectl exec deploy/cortex-manila-cli -- /usr/bin/cortex checks"',
+    'Scheduler E2E Tests (Nova)',
+    '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduler -- /manager e2e-nova"',
     deps=['./internal/checks'],
-    labels=['Commands'],
+    labels=['Cortex-Nova'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+)
+local_resource(
+    'Scheduler E2E Tests (Manila)',
+    '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduler -- /manager e2e-manila"',
+    deps=['./internal/checks'],
+    labels=['Cortex-Manila'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+)
+local_resource(
+    'Scheduler E2E Tests (Cinder)',
+    '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduler -- /manager e2e-cinder"',
+    deps=['./internal/checks'],
+    labels=['Cortex-Cinder'],
     trigger_mode=TRIGGER_MODE_MANUAL,
     auto_init=False,
 )

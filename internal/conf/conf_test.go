@@ -4,7 +4,6 @@
 package conf
 
 import (
-	"encoding/json"
 	"os"
 	"testing"
 )
@@ -26,7 +25,7 @@ func createTempConfigFile(t *testing.T, content string) string {
 	return tmpfile.Name()
 }
 
-func TestNewConfig(t *testing.T) {
+func TestGetConfigOrDie(t *testing.T) {
 	content := `
 {
   "sync": {
@@ -144,30 +143,6 @@ func TestNewConfig(t *testing.T) {
 	extractorConfig := config.GetExtractorConfig()
 	if len(extractorConfig.Plugins) != 3 {
 		t.Errorf("Expected 3 extractors, got %d", len(extractorConfig.Plugins))
-	}
-
-	// Test SchedulerConfig
-	schedulerConfig := config.GetSchedulerConfig()
-	if len(schedulerConfig.Nova.Pipelines) != 1 {
-		t.Errorf("Expected 1 Nova scheduler pipeline, got %d", len(schedulerConfig.Nova.Pipelines))
-	}
-	if len(schedulerConfig.Nova.Pipelines[0].Plugins) != 2 {
-		t.Errorf("Expected 2 scheduler steps, got %d", len(schedulerConfig.Nova.Pipelines[0].Plugins))
-	}
-	var decodedContent map[string]any
-	if err := json.Unmarshal([]byte(content), &decodedContent); err != nil {
-		t.Fatalf("Failed to unmarshal YAML content: %v", err)
-	}
-
-	schedulerPipelines := decodedContent["scheduler"].(map[string]any)["nova"].(map[string]any)["pipelines"].([]any)
-	step1Options := schedulerPipelines[0].(map[string]any)["plugins"].([]any)[0].(map[string]any)["options"].(map[string]any)
-	step2Options := schedulerPipelines[0].(map[string]any)["plugins"].([]any)[1].(map[string]any)["options"].(map[string]any)
-
-	if step1Options["avgCPUThreshold"] != 20.0 {
-		t.Errorf("Expected avgCPUThreshold to be 20, got %v", step1Options["avgCPUThreshold"])
-	}
-	if step2Options["maxCPUContentionThreshold"] != 50.0 {
-		t.Errorf("Expected maxCPUContentionThreshold to be 50, got %v", step2Options["maxCPUContentionThreshold"])
 	}
 
 	// Test KPIsConfig

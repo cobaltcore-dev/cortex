@@ -196,7 +196,7 @@ func main() {
 	if err := (&controller.ComputeReservationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Conf:   conf.NewConfig[controller.Config](),
+		Conf:   conf.GetConfigOrDie[controller.Config](),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ComputeReservation")
 		os.Exit(1)

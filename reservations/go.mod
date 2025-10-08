@@ -5,11 +5,13 @@ go 1.25.0
 replace (
 	github.com/cobaltcore-dev/cortex => ../
 	github.com/cobaltcore-dev/cortex/reservations/api => ./api
+	github.com/cobaltcore-dev/cortex/scheduler/api => ../scheduler/api
 )
 
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/scheduler/api v0.0.0-00010101000000-000000000000
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
@@ -17,17 +19,7 @@ require (
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/dlmiddlecote/sqlstats v1.0.2 // indirect
-	github.com/eclipse/paho.mqtt.golang v1.5.1 // indirect
-	github.com/go-gorp/gorp v2.2.0+incompatible // indirect
-	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
-	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sapcc/go-api-declarations v1.17.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect

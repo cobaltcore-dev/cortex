@@ -37,7 +37,7 @@ type Syncer struct {
 
 // Create a new compute reservation syncer.
 func NewSyncer(k8sClient client.Client) *Syncer {
-	config := conf.NewConfig[Config]()
+	config := conf.GetConfigOrDie[Config]()
 	return &Syncer{
 		CommitmentsClient: NewCommitmentsClient(config.Keystone),
 		Client:            k8sClient,
