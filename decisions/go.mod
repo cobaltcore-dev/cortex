@@ -10,6 +10,7 @@ replace (
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/decisions/api v0.0.0-00010101000000-000000000000
+	github.com/go-logr/logr v1.4.3
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
 	sigs.k8s.io/controller-runtime v0.22.1
@@ -35,7 +36,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
