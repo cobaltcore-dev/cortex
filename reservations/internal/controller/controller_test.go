@@ -16,8 +16,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api"
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
+	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 )
 
 func TestComputeReservationReconciler_Reconcile(t *testing.T) {
@@ -138,7 +138,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 		name          string
 		reservation   *v1alpha1.ComputeReservation
 		config        Config
-		mockResponse  *api.ExternalSchedulerResponse
+		mockResponse  *schedulerdelegationapi.ExternalSchedulerResponse
 		expectedPhase v1alpha1.ComputeReservationStatusPhase
 		expectedError string
 		shouldRequeue bool
@@ -303,13 +303,13 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 		Build()
 
 	// Create a mock server that returns a successful response
-	mockResponse := &api.ExternalSchedulerResponse{
+	mockResponse := &schedulerdelegationapi.ExternalSchedulerResponse{
 		Hosts: []string{"test-host-1", "test-host-2"},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify the request body
-		var req api.ExternalSchedulerRequest
+		var req schedulerdelegationapi.ExternalSchedulerRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Errorf("Failed to decode request: %v", err)
 			w.WriteHeader(http.StatusBadRequest)

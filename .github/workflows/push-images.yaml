@@ -180,3 +180,44 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-decisions-operator
           subject-digest: ${{ steps.push_cortex_decisions.outputs.digest }}
           push-to-registry: true
+      # Only build and push the scheduler image if there are changes
+      # in the scheduler directory.
+      - name: Get all changed scheduler/ files
+        id: changed_scheduler_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            scheduler/**
+      - name: Docker Meta (Cortex Scheduler)
+        if: steps.changed_scheduler_files.outputs.all_changed_files != ''
+        id: meta_cortex_scheduler
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-scheduler
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            latest
+      - name: Build and Push Cortex Scheduler
+        if: steps.changed_scheduler_files.outputs.all_changed_files != ''
+        id: push_cortex_scheduler
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.kubebuilder
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_cortex_scheduler.outputs.tags }}
+          labels: ${{ steps.meta_cortex_scheduler.outputs.labels }}
+          build-args: |
+            GO_MOD_PATH=scheduler
+            GIT_TAG=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+      - name: Generate Artifact Attestation for Cortex Scheduler
+        if: steps.changed_scheduler_files.outputs.all_changed_files != ''
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-scheduler
+          subject-digest: ${{ steps.push_cortex_scheduler.outputs.digest }}
+          push-to-registry: true

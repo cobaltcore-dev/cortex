@@ -281,7 +281,10 @@
 
     // List scheduling decisions, optionally filtered by vmId.
     async function listSchedulingDecisions(vmId) {
-      let url = 'http://localhost:8014/scheduler/nova/scheduling-decisions'
+      // Get the port mapping from /portmappings.json
+      const portMappingsResponse = await fetch('portmappings.json')
+      const novaSchedulerAPIPort = JSON.parse(await portMappingsResponse.text())['cortex-nova-scheduler-api']?.local
+      let url = `http://localhost:${novaSchedulerAPIPort}/scheduler/nova/scheduling-decisions`
 
       if (vmId) {
         url += `?vm_id=${vmId}`

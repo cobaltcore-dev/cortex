@@ -33,11 +33,20 @@ def kubebuilder_binary_files(path):
     """
     return [path + '/cmd', path + '/api', path + '/internal', path + '/go.mod', path + '/go.sum']
 
+########### Cortex Scheduler
+docker_build('ghcr.io/cobaltcore-dev/cortex-scheduler', '.',
+    dockerfile='Dockerfile.kubebuilder',
+    build_args={'GO_MOD_PATH': 'scheduler'},
+    only=kubebuilder_binary_files('scheduler') + ['reservations/', 'decisions/', 'internal/', 'go.mod', 'go.sum'],
+)
+local('sh helm/sync.sh scheduler/dist/chart')
+# Deployed as part of bundles below.
+
 ########### Reservations Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile.kubebuilder',
     build_args={'GO_MOD_PATH': 'reservations'},
-    only=kubebuilder_binary_files('reservations') + ['internal/', 'decisions/', 'go.mod', 'go.sum'],
+    only=kubebuilder_binary_files('reservations') + ['scheduler/', 'decisions/', 'internal/', 'go.mod', 'go.sum'],
 )
 local('sh helm/sync.sh reservations/dist/chart')
 k8s_yaml(helm('reservations/dist/chart', name='cortex-reservations', values=[tilt_values]))
@@ -52,6 +61,90 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-decisions-operator', '.',
 local('sh helm/sync.sh decisions/dist/chart')
 k8s_yaml(helm('decisions/dist/chart', name='cortex-decisions', values=[tilt_values]))
 k8s_resource('decisions-controller-manager', labels=['Decisions'])
+
+########### Cortex Bundles
+docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
+    'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
+    'reservations/api/', # API module of the reservations operator needed for the scheduler.
+    'decisions/api/', # API module of the decisions operator needed for the scheduler.
+])
+docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
+
+# Package the lib charts locally and sync them to the bundle charts. In this way
+# we can bump the lib charts locally and test them before pushing them to the OCI registry.
+
+dep_charts = [
+    ('helm/library/cortex-core', 'cortex-core'),
+    ('helm/library/cortex-postgres', 'cortex-postgres'),
+    ('helm/library/cortex-mqtt', 'cortex-mqtt'),
+    ('scheduler/dist/chart', 'cortex-scheduler'),
+]
+bundle_charts = [
+    ('helm/bundles/cortex-nova', 'cortex-nova'),
+    ('helm/bundles/cortex-manila', 'cortex-manila'),
+    ('helm/bundles/cortex-cinder', 'cortex-cinder'),
+]
+
+for (dep_chart_path, dep_chart_name) in dep_charts:
+    watch_file(dep_chart_path)
+    local('sh helm/sync.sh ' + dep_chart_path)
+    for (bundle_chart_path, bundle_chart_name) in bundle_charts:
+        local('helm package ' + dep_chart_path)
+        gen_tgz = str(local('ls ' + dep_chart_name + '-*.tgz')).strip()
+        cmp = 'sh helm/cmp.sh ' + gen_tgz + ' ' + bundle_chart_path + '/charts/' + gen_tgz
+        cmp_result = str(local(cmp)).strip()
+        if cmp_result == 'true':
+            print('Skipping ' + dep_chart_name + ' as it is already up to date in ' + bundle_chart_name)
+            local('rm -f ' + gen_tgz)
+        else:
+            local('mkdir -p helm/bundles/' + bundle_chart_name + '/charts/')
+            local('mv -f ' + gen_tgz + ' ' + bundle_chart_path + '/charts/')
+for (bundle_chart_path, _) in bundle_charts:
+    local('sh helm/sync.sh ' + bundle_chart_path)
+
+port_mappings = {}
+def new_port_mapping(component, local_port, remote_port):
+    port_mappings[component] = {'local': local_port, 'remote': remote_port}
+    return port_forward(local_port, remote_port, name=component)
+
+if 'nova' in ACTIVE_DEPLOYMENTS:
+    print("Activating Cortex Nova bundle")
+    k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values]))
+    k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-mqtt', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-migrations', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-syncer', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-extractor', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-kpis', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-descheduler', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-scheduler', labels=['Cortex-Nova'], port_forwards=[
+        new_port_mapping('cortex-nova-scheduler-api', 8000, 8080),
+    ])
+
+if 'manila' in ACTIVE_DEPLOYMENTS:
+    print("Activating Cortex Manila bundle")
+    k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=[tilt_values]))
+    k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-mqtt', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-migrations', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-syncer', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-extractor', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-kpis', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-scheduler', labels=['Cortex-Manila'], port_forwards=[
+        new_port_mapping('cortex-manila-scheduler-api', 8001, 8080),
+    ])
+
+if 'cinder' in ACTIVE_DEPLOYMENTS:
+    k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=[tilt_values]))
+    k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-mqtt', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-migrations', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-syncer', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-extractor', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-kpis', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-scheduler', labels=['Cortex-Cinder'], port_forwards=[
+        new_port_mapping('cortex-cinder-scheduler-api', 8002, 8080),
+    ])
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
@@ -72,7 +165,7 @@ k8s_resource(
     objects=['cortex-alertmanager:Alertmanager:default'],
     labels=['Monitoring'],
 )
-docker_build('cortex-visualizer', 'visualizer')
+docker_build('cortex-visualizer', 'visualizer', build_args={'PORTMAPPINGSOBJ': encode_json(port_mappings)})
 k8s_yaml('./visualizer/app.yaml')
 k8s_resource('cortex-visualizer', port_forwards=[
     port_forward(4000, 80),
@@ -88,127 +181,28 @@ k8s_resource('cortex-plutono', port_forwards=[
     link('http://localhost:5000/d/cortex/cortex?orgId=1', 'cortex dashboard'),
 ], labels=['Monitoring'])
 
-########### Cortex Bundles
-docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
-    'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
-    'reservations/api/', # API module of the reservations operator needed for the scheduler.
-    'decisions/api/', # API module of the decisions operator needed for the scheduler.
-])
-docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
-
-# Package the lib charts locally and sync them to the bundle charts. In this way
-# we can bump the lib charts locally and test them before pushing them to the OCI registry.
-
-
-# --- Chart lists based on ACTIVE_DEPLOYMENTS ---
-lib_charts = ['cortex-core', 'cortex-postgres', 'cortex-mqtt']
-bundle_charts = ['cortex-' + name for name in ACTIVE_DEPLOYMENTS]
-
-for lib_chart in lib_charts:
-    watch_file('helm/library/' + lib_chart)
-    local('sh helm/sync.sh helm/library/' + lib_chart)
-    for bundle_chart in bundle_charts:
-        local('helm package helm/library/' + lib_chart)
-        gen_tgz = str(local('ls ' + lib_chart + '-*.tgz')).strip()
-        cmp = 'sh helm/cmp.sh ' + gen_tgz + ' helm/bundles/' + bundle_chart + '/charts/' + gen_tgz
-        cmp_result = str(local(cmp)).strip()
-        if cmp_result == 'true':
-            print('Skipping ' + lib_chart + ' as it is already up to date in ' + bundle_chart)
-            local('rm -f ' + gen_tgz)
-        else:
-            local('mkdir -p helm/bundles/' + bundle_chart + '/charts/')
-            local('mv -f ' + gen_tgz + ' helm/bundles/' + bundle_chart + '/charts/')
-for bundle_chart in bundle_charts:
-    local('sh helm/sync.sh helm/bundles/' + bundle_chart)
-
-# Deploy the selected Cortex bundles
-for name in ACTIVE_DEPLOYMENTS:
-    k8s_yaml(helm('./helm/bundles/cortex-' + name, name='cortex-' + name, values=[tilt_values]))
-
-# Note: place resources higher in this list to ensure their local port stays the same.
-# Elements placed lower in the list will have their local port shifted by elements inserted above.
-
-# --- Resource definitions based on ACTIVE_DEPLOYMENTS ---
-resources_def = {
-    'MQTT': {
-        'suffix': 'mqtt',
-        'components': lambda name: ['cortex-' + name + '-mqtt'],
-        'ports': [(1883, 'tcp'), (15675, 'ws')],
-    },
-    'Database': {
-        'suffix': 'postgresql',
-        'components': lambda name: ['cortex-' + name + '-postgresql'],
-        'ports': [(5432, 'psql')],
-    },
-    'Cortex': {
-        'suffix': '',
-        'components': lambda name: [
-            'cortex-' + name + '-migrations',
-            'cortex-' + name + '-cli',
-            'cortex-' + name + '-syncer',
-            'cortex-' + name + '-extractor',
-            'cortex-' + name + '-kpis',
-            'cortex-' + name + '-scheduler',
-        ] + (['cortex-' + name + '-descheduler'] if name == 'nova' else []),
-        'ports': [(2112, 'metrics'), (8080, 'api')],
-    },
-}
-
-local_port = 8000
-for name in ACTIVE_DEPLOYMENTS:
-    # MQTT
-    for component in resources_def['MQTT']['components'](name):
-        k8s_resource(
-            component,
-            port_forwards=[
-                port_forward(local_port + i, service_port)
-                for i, (service_port, _) in enumerate(resources_def['MQTT']['ports'])
-            ],
-            links=[
-                link('http://localhost:' + str(local_port + i) + '/' + service_port_name, '/' + service_port_name)
-                for i, (_, service_port_name) in enumerate(resources_def['MQTT']['ports'])
-            ],
-            labels=['MQTT'],
-        )
-        local_port += len(resources_def['MQTT']['ports'])
-    # Database
-    for component in resources_def['Database']['components'](name):
-        k8s_resource(
-            component,
-            port_forwards=[
-                port_forward(local_port + i, service_port)
-                for i, (service_port, _) in enumerate(resources_def['Database']['ports'])
-            ],
-            links=[
-                link('http://localhost:' + str(local_port + i) + '/' + service_port_name, '/' + service_port_name)
-                for i, (_, service_port_name) in enumerate(resources_def['Database']['ports'])
-            ],
-            labels=['Database'],
-        )
-        local_port += len(resources_def['Database']['ports'])
-    # Cortex core components
-    for component in resources_def['Cortex']['components'](name):
-        k8s_resource(
-            component,
-            port_forwards=[
-                port_forward(local_port + i, service_port)
-                for i, (service_port, _) in enumerate(resources_def['Cortex']['ports'])
-            ],
-            links=[
-                link('http://localhost:' + str(local_port + i) + '/' + service_port_name, '/' + service_port_name)
-                for i, (_, service_port_name) in enumerate(resources_def['Cortex']['ports'])
-            ],
-            labels=['Cortex-' + name.capitalize()],
-        )
-        local_port += len(resources_def['Cortex']['ports'])
-
 ########### E2E Tests
 local_resource(
-    'Run E2E Tests',
-    '/bin/sh -c "kubectl exec deploy/cortex-nova-cli -- /usr/bin/cortex checks" && '+\
-    '/bin/sh -c "kubectl exec deploy/cortex-manila-cli -- /usr/bin/cortex checks"',
-    deps=['./internal/checks'],
-    labels=['Commands'],
+    'Scheduler E2E Tests (Nova)',
+    '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduler -- /manager e2e-nova"',
+    deps=['./scheduler/internal/e2e'],
+    labels=['Cortex-Nova'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+)
+local_resource(
+    'Scheduler E2E Tests (Manila)',
+    '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduler -- /manager e2e-manila"',
+    deps=['./scheduler/internal/e2e'],
+    labels=['Cortex-Manila'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+)
+local_resource(
+    'Scheduler E2E Tests (Cinder)',
+    '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduler -- /manager e2e-cinder"',
+    deps=['./scheduler/internal/e2e'],
+    labels=['Cortex-Cinder'],
     trigger_mode=TRIGGER_MODE_MANUAL,
     auto_init=False,
 )

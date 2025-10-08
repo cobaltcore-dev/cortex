@@ -193,7 +193,7 @@ func main() {
 	if err := (&controller.SchedulingDecisionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Conf:   conf.NewConfig[controller.Config](),
+		Conf:   conf.GetConfigOrDie[controller.Config](),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SchedulingDecision")
 		os.Exit(1)
@@ -202,7 +202,7 @@ func main() {
 	if err := (&controller.SchedulingDecisionTTLController{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Conf:   conf.NewConfig[controller.Config](),
+		Conf:   conf.GetConfigOrDie[controller.Config](),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SchedulingDecisionTTL")
 		os.Exit(1)

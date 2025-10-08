@@ -11,7 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/commands/checks"
 	"github.com/cobaltcore-dev/cortex/internal/conf"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	novaDescheduler "github.com/cobaltcore-dev/cortex/internal/descheduler/nova"
@@ -20,9 +19,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
-	cinderAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/cinder/api/http"
-	manilaAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/manila/api/http"
-	novaAPIHTTP "github.com/cobaltcore-dev/cortex/internal/scheduler/nova/api/http"
 	"github.com/cobaltcore-dev/cortex/internal/sync"
 	"github.com/cobaltcore-dev/cortex/internal/sync/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/sync/prometheus"
@@ -68,36 +64,6 @@ func runExtractor(registry *monitoring.Registry, config conf.ExtractorConfig, db
 	go pipeline.ExtractOnTrigger() // blocking
 }
 
-// Run a webserver that listens for external Nova scheduling requests.
-func runSchedulerNova(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
-	if err := mqttClient.Connect(); err != nil {
-		panic("failed to connect to mqtt broker: " + err.Error())
-	}
-	api := novaAPIHTTP.NewAPI(config, registry, db, mqttClient)
-	api.Init(mux) // non-blocking
-}
-
-// Run a webserver that listens for external Manila scheduling requests.
-func runSchedulerManila(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
-	if err := mqttClient.Connect(); err != nil {
-		panic("failed to connect to mqtt broker: " + err.Error())
-	}
-	api := manilaAPIHTTP.NewAPI(config, registry, db, mqttClient)
-	api.Init(mux) // non-blocking
-}
-
-// Run a webserver that listens for external Cinder scheduling requests.
-func runSchedulerCinder(mux *http.ServeMux, registry *monitoring.Registry, config conf.SchedulerConfig, db db.DB) {
-	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
-	if err := mqttClient.Connect(); err != nil {
-		panic("failed to connect to mqtt broker: " + err.Error())
-	}
-	api := cinderAPIHTTP.NewAPI(config, registry, db, mqttClient)
-	api.Init(mux) // non-blocking
-}
-
 // Run a kpi service that periodically calculates kpis.
 func runKPIService(registry *monitoring.Registry, config conf.KPIsConfig, db db.DB) {
 	pipeline := kpis.NewPipeline(config)
@@ -130,15 +96,11 @@ func runMonitoringServer(ctx context.Context, registry *monitoring.Registry, con
 // Message printed if cortex is started with unknown arguments.
 const usage = `
   commands:
-  -checks  Run end-to-end tests.
   -migrate Run database migrations.
 
   modes:
   -syncer    Sync data from external datasources into the database.
   -extractor Extract knowledge from the synced data and store it in the database.
-  -scheduler-nova   Serve Nova scheduling requests with a http API.
-  -scheduler-manila Serve Manila scheduling requests with a http API.
-  -scheduler-cinder Serve Cinder scheduling requests with a http API.
   -kpis      Expose KPIs extracted from the database.
   -descheduler-nova Run a Nova descheduler that periodically de-schedules VMs.
 `
@@ -153,7 +115,7 @@ func main() {
 	// uses this to check if the binary was built correctly)
 	bininfo.HandleVersionArgument()
 
-	config := conf.NewConfig[*conf.SharedConfig]()
+	config := conf.GetConfigOrDie[*conf.SharedConfig]()
 	// Set the configured logger.
 	config.GetLoggingConfig().SetDefaultLogger()
 	if err := config.Validate(); err != nil {
@@ -199,11 +161,7 @@ func main() {
 	defer database.Close()
 
 	// Check if we want to perform one-time tasks like checks or migrations.
-	switch taskName {
-	case "checks":
-		checks.RunChecks(ctx, config)
-		return
-	case "migrate":
+	if taskName == "migrate" {
 		migrater := db.NewMigrater(database)
 		migrater.Migrate(true)
 		slog.Info("migrations executed")
@@ -224,12 +182,6 @@ func main() {
 		runSyncer(ctx, registry, config, database)
 	case "extractor":
 		runExtractor(registry, config.GetExtractorConfig(), database)
-	case "scheduler-nova":
-		runSchedulerNova(mux, registry, config.GetSchedulerConfig(), database)
-	case "scheduler-manila":
-		runSchedulerManila(mux, registry, config.GetSchedulerConfig(), database)
-	case "scheduler-cinder":
-		runSchedulerCinder(mux, registry, config.GetSchedulerConfig(), database)
 	case "kpis":
 		runKPIService(registry, config.GetKPIsConfig(), database)
 	case "descheduler-nova":

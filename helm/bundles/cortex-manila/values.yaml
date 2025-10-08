@@ -15,6 +15,86 @@ alerts:
   enabled: true
   prometheus: openstack
 
+# Values accessible to all subcharts.
+global:
+  # Values passed to the service through a configmap.
+  conf:
+    # MQTT broker connection parameters.
+    mqtt:
+      # Must match rabbitmq settings from the cortex-mqtt chart.
+      url: "tcp://cortex-manila-mqtt:1883"
+
+    # Connection parameters for the database where data is stored.
+    db:
+      # Must match postgresql settings from the cortex-postgres chart.
+      host: cortex-manila-postgresql
+
+    sync:
+      prometheus:
+        # Prometheus metrics to sync into the database.
+        # Each metric can be synced from a different Prometheus instance.
+        # The `type` parameter should map to a known metric model in the database.
+        metrics:
+          # NetApp harvest exporter metrics for Manila storage pools.
+        - alias: netapp_aggr_labels
+          query: netapp_aggr_labels
+          type: netapp_aggregate_labels_metric
+        - alias: netapp_node_cpu_busy
+          query: netapp_node_cpu_busy
+          type: netapp_node_metric
+
+      openstack:
+        manila:
+          # One of admin, public, or internal
+          availability: public
+          # Manila objects to sync into the database.
+          types:
+            - storage_pools
+
+    extractor:
+      # Configuration of features that should be extracted from the synced data.
+      # Each extractor can specify its own dependencies on other extractors or
+      # synced data.
+      #
+      # The `name` should correspond to a known feature extractor plugin.
+      # Note that the order defined here will also be the order in which the
+      # extractors are executed. If possible, extractors whose dependencies have
+      # been executed will be executed in parallel to speed up the process.
+      plugins:
+        # NetApp-specific extractors.
+        - name: netapp_storage_pool_cpu_usage_extractor
+          recencySeconds: 60 # 1 minute
+          dependencies:
+            sync:
+              prometheus:
+                metrics:
+                  - alias: netapp_node_cpu_busy
+                  - alias: netapp_aggr_labels
+
+    kpis:
+      # Configuration of KPIs that should be extracted from the synced data.
+      # Each KPI can specify its own dependencies on other extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known KPI extractor plugin.
+      plugins:
+        # NetApp-specific KPIs.
+        - name: netapp_storage_pool_cpu_usage_kpi
+          dependencies:
+            extractors:
+              - netapp_storage_pool_cpu_usage_extractor
+
+  # Values passed to the service through a kubernetes secret.
+  # The keys of these values should correspond to the keys used above in the conf.
+  secrets:
+    sync:
+      prometheus:
+        # Prometheus hosts to consider when syncing the metrics.
+        hosts:
+          - name: netapp_prometheus
+            url: "" # e.g. "https://netapp-prometheus:9090"
+            provides: [netapp_aggregate_labels_metric, netapp_node_metric]
+
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-manila-postgresql
@@ -56,79 +136,16 @@ cortex-core:
       args: ["kpis"]
       replicas: 1
 
-    # External scheduler for Manila.
-    - name: scheduler
-      args: ["scheduler-manila"]
-      replicas: 1
-
-  # Values passed to the service through a configmap.
+cortex-scheduler:
+  fullnameOverride: cortex-manila-scheduler
+  service:
+    extraLabels:
+      app: cortex-manila-scheduler # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-manila-scheduler
+  args: ["scheduler-manila"]
   conf:
-    # E2E tests to run when executed with -checks flag.
-    checks: ["manila"]
-
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-manila-mqtt:1883"
-
-    # Connection parameters for the database where data is stored.
-    db:
-      # Must match postgresql settings from the cortex-postgres chart.
-      host: cortex-manila-postgresql
-
-    sync:
-      prometheus:
-        # Prometheus metrics to sync into the database.
-        # Each metric can be synced from a different Prometheus instance.
-        # The `type` parameter should map to a known metric model in the database.
-        metrics:
-          # NetApp harvest exporter metrics for Manila storage pools.
-        - alias: netapp_aggr_labels
-          query: netapp_aggr_labels
-          type: netapp_aggregate_labels_metric
-        - alias: netapp_node_cpu_busy
-          query: netapp_node_cpu_busy
-          type: netapp_node_metric
-
-      openstack:
-        manila:
-          # Manila objects to sync into the database.
-          types:
-            - storage_pools
-
-    extractor:
-      # Configuration of features that should be extracted from the synced data.
-      # Each extractor can specify its own dependencies on other extractors or
-      # synced data.
-      #
-      # The `name` should correspond to a known feature extractor plugin.
-      # Note that the order defined here will also be the order in which the
-      # extractors are executed. If possible, extractors whose dependencies have
-      # been executed will be executed in parallel to speed up the process.
-      plugins:
-        # NetApp-specific extractors.
-        - name: netapp_storage_pool_cpu_usage_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              prometheus:
-                metrics:
-                  - alias: netapp_node_cpu_busy
-                  - alias: netapp_aggr_labels
-
-    kpis:
-      # Configuration of KPIs that should be extracted from the synced data.
-      # Each KPI can specify its own dependencies on other extractors and
-      # synced data.
-      #
-      # The `name` should correspond to a known KPI extractor plugin.
-      plugins:
-        # NetApp-specific KPIs.
-        - name: netapp_storage_pool_cpu_usage_kpi
-          dependencies:
-            extractors:
-              - netapp_storage_pool_cpu_usage_extractor
-
     scheduler:
       manila:
         pipelines:
@@ -158,13 +175,3 @@ cortex-core:
                 dependencies:
                   extractors: [netapp_storage_pool_cpu_usage_extractor]
 
-  # Values passed to the service through a kubernetes secret.
-  # The keys of these values should correspond to the keys used above in the conf.
-  secrets:
-    sync:
-      prometheus:
-        # Prometheus hosts to consider when syncing the metrics.
-        hosts:
-          - name: netapp_prometheus
-            url: "" # e.g. "https://netapp-prometheus:9090"
-            provides: [netapp_aggregate_labels_metric, netapp_node_metric]

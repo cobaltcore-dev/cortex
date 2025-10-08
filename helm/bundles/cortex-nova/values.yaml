@@ -15,62 +15,10 @@ alerts:
   enabled: true
   prometheus: openstack
 
-# Custom configuration for the cortex postgres chart.
-cortex-postgres:
-  fullnameOverride: cortex-nova-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-nova-mqtt
-
-# Custom configuration for the cortex core chart.
-cortex-core:
-  fullnameOverride: cortex-nova
-  alerts:
-    componentPrefix: cortex-nova
-  service:
-    extraLabels:
-      app: cortex-nova # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-nova
-  # Modes in which the service should be run.
-  # Each mode is translated into a separate service and deployment.
-  modes:
-    # The name of the mode will be used for the kubernetes deployments.
-    # The args will be passed to the service as command line arguments, meaning
-    # the passed arg need to be baked into the service binary.
-    #
-    # Syncer syncs data from external sources into the database(s).
-    - name: syncer
-      args: ["syncer"]
-      replicas: 1
-
-    # Extractor extracts features from the synced data.
-    - name: extractor
-      args: ["extractor"]
-      replicas: 1
-
-    # Service that extracts and exposes KPIs.
-    - name: kpis
-      args: ["kpis"]
-      replicas: 1
-
-    # External scheduler for Nova.
-    - name: scheduler
-      args: ["scheduler-nova"]
-      replicas: 1
-
-    # Descheduler for Nova.
-    - name: descheduler
-      args: ["descheduler-nova"]
-      replicas: 1
-
+# Values shared between all subcharts.
+global:
   # Values passed to the service through a configmap.
   conf:
-    # E2E tests to run when executed with -checks flag.
-    checks: ["nova"]
-
     # MQTT broker connection parameters.
     mqtt:
       # Must match rabbitmq settings from the cortex-mqtt chart.
@@ -118,6 +66,8 @@ cortex-core:
 
       openstack:
         nova:
+          # One of admin, public, or internal
+          availability: public
           # Nova objects to sync into the database.
           types:
             - hypervisors
@@ -127,6 +77,8 @@ cortex-core:
             - migrations
             - aggregates
         placement:
+          # One of admin, public, or internal
+          availability: public
           # Placement objects to sync into the database.
           types:
             - resource_providers
@@ -134,11 +86,15 @@ cortex-core:
             - traits
             - inventory_usages
         identity:
+          # One of admin, public, or internal
+          availability: public
           # Identity objects to sync into the database.
           types:
             - domains
             - projects
         limes:
+          # One of admin, public, or internal
+          availability: public
           # Limes objects to sync into the database.
           types:
             # Needs projects.
@@ -336,6 +292,94 @@ cortex-core:
                   types:
                     - flavors
 
+    descheduler:
+      nova:
+        # Configuration of the descheduler that runs periodically to de-schedule
+        # VMs based on the configured plugins.
+        # Each plugin can specify its own dependencies on extractors and synced data.
+        #
+        # The `name` should correspond to a known descheduler plugin.
+        plugins:
+          - name: demo
+            options:
+              vmName: "cortex-demo-vm"
+            dependencies:
+              sync:
+                openstack:
+                  nova:
+                    types:
+                      - servers
+
+  # Values passed to the service through a kubernetes secret.
+  # The keys of these values should correspond to the keys used above in the conf.
+  secrets:
+    sync:
+      prometheus:
+        # Prometheus hosts to consider when syncing the metrics.
+        hosts:
+          - name: vmware_prometheus
+            url: "" # e.g. "https://vmware-prometheus:9090"
+            provides: [vrops_vm_metric, vrops_host_metric]
+          - name: kvm_prometheus
+            url: "" # e.g. "https://kvm-prometheus:9090"
+            provides: [node_exporter_metric]
+
+# Custom configuration for the cortex postgres chart.
+cortex-postgres:
+  fullnameOverride: cortex-nova-postgresql
+
+# Custom configuration for the cortex mqtt chart.
+cortex-mqtt:
+  fullnameOverride: cortex-nova-mqtt
+
+# Custom configuration for the cortex core chart.
+cortex-core:
+  fullnameOverride: cortex-nova
+  alerts:
+    componentPrefix: cortex-nova
+  service:
+    extraLabels:
+      app: cortex-nova # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-nova
+  # Modes in which the service should be run.
+  # Each mode is translated into a separate service and deployment.
+  modes:
+    # The name of the mode will be used for the kubernetes deployments.
+    # The args will be passed to the service as command line arguments, meaning
+    # the passed arg need to be baked into the service binary.
+    #
+    # Syncer syncs data from external sources into the database(s).
+    - name: syncer
+      args: ["syncer"]
+      replicas: 1
+
+    # Extractor extracts features from the synced data.
+    - name: extractor
+      args: ["extractor"]
+      replicas: 1
+
+    # Service that extracts and exposes KPIs.
+    - name: kpis
+      args: ["kpis"]
+      replicas: 1
+
+    # Descheduler for Nova.
+    - name: descheduler
+      args: ["descheduler-nova"]
+      replicas: 1
+
+cortex-scheduler:
+  fullnameOverride: cortex-nova-scheduler
+  service:
+    extraLabels:
+      app: cortex-nova-scheduler # See below, used for the service monitor.
+  serviceMonitor:
+    matchLabels: # See above, this is used to select the postgresql service.
+      app: cortex-nova-scheduler
+  args: ["scheduler-nova"]
+  conf:
     scheduler:
       nova:
         # Configuration for the Liquid API.
@@ -711,35 +755,3 @@ cortex-core:
                   maxCPUContentionActivationUpperBound: -0.25
                 dependencies:
                   extractors: [vrops_hostsystem_contention_short_term_extractor]
-
-    descheduler:
-      nova:
-        # Configuration of the descheduler that runs periodically to de-schedule
-        # VMs based on the configured plugins.
-        # Each plugin can specify its own dependencies on extractors and synced data.
-        #
-        # The `name` should correspond to a known descheduler plugin.
-        plugins:
-          - name: demo
-            options:
-              vmName: "cortex-demo-vm"
-            dependencies:
-              sync:
-                openstack:
-                  nova:
-                    types:
-                      - servers
-
-  # Values passed to the service through a kubernetes secret.
-  # The keys of these values should correspond to the keys used above in the conf.
-  secrets:
-    sync:
-      prometheus:
-        # Prometheus hosts to consider when syncing the metrics.
-        hosts:
-          - name: vmware_prometheus
-            url: "" # e.g. "https://vmware-prometheus:9090"
-            provides: [vrops_vm_metric, vrops_host_metric]
-          - name: kvm_prometheus
-            url: "" # e.g. "https://kvm-prometheus:9090"
-            provides: [node_exporter_metric]
