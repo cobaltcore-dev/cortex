@@ -4,6 +4,8 @@ go 1.25.0
 
 replace (
 	github.com/cobaltcore-dev/cortex/commands => ./commands
+	github.com/cobaltcore-dev/cortex/decisions/api => ./decisions/api
+	github.com/cobaltcore-dev/cortex/reservations/api => ./reservations/api
 	github.com/cobaltcore-dev/cortex/testlib => ./testlib
 )
 

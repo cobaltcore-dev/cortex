@@ -15,11 +15,24 @@ import (
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/cinder"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/cinder/api"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	scheduler "github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 )
 
 type mockPipeline struct {
 	runFunc func(api.PipelineRequest) ([]string, error)
+}
+
+func (p *mockPipeline) SetConsumer(consumer lib.SchedulingDecisionConsumer[api.PipelineRequest]) {
+
+}
+
+func (p *mockPipeline) Consume(
+	request api.PipelineRequest,
+	applicationOrder []string,
+	inWeights map[string]float64,
+	stepWeights map[string]map[string]float64,
+) {
 }
 
 func (m *mockPipeline) Run(req api.PipelineRequest) ([]string, error) {

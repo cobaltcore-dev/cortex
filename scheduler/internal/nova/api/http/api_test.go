@@ -32,6 +32,19 @@ func (m *mockExternalSchedulerPipeline) Run(request api.PipelineRequest) ([]stri
 	return []string{"host1"}, nil
 }
 
+func (m *mockExternalSchedulerPipeline) SetConsumer(consumer lib.SchedulingDecisionConsumer[api.PipelineRequest]) {
+	// Do nothing
+}
+
+func (m *mockExternalSchedulerPipeline) Consume(
+	request api.PipelineRequest,
+	applicationOrder []string,
+	inWeights map[string]float64,
+	stepWeights map[string]map[string]float64,
+) {
+	// Do nothing
+}
+
 func TestCanRunScheduler(t *testing.T) {
 	httpAPI := &httpAPI{
 		pipelines: map[string]lib.Pipeline[api.PipelineRequest]{
@@ -255,6 +268,18 @@ func TestHandleExternalSchedulerRequest(t *testing.T) {
 type mockCommitmentsPipeline struct {
 	shouldReturnHosts bool
 	shouldError       bool
+}
+
+func (p *mockCommitmentsPipeline) SetConsumer(consumer lib.SchedulingDecisionConsumer[api.PipelineRequest]) {
+
+}
+
+func (p *mockCommitmentsPipeline) Consume(
+	request api.PipelineRequest,
+	applicationOrder []string,
+	inWeights map[string]float64,
+	stepWeights map[string]map[string]float64,
+) {
 }
 
 func (p *mockCommitmentsPipeline) Run(request api.PipelineRequest) ([]string, error) {

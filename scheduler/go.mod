@@ -4,12 +4,14 @@ go 1.25.0
 
 replace (
 	github.com/cobaltcore-dev/cortex => ../
+	github.com/cobaltcore-dev/cortex/decisions/api => ../decisions/api
 	github.com/cobaltcore-dev/cortex/reservations/api => ../reservations/api
 	github.com/cobaltcore-dev/cortex/scheduler/api => ./api
 )
 
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/decisions/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/scheduler/api v0.0.0-00010101000000-000000000000
 	github.com/eclipse/paho.mqtt.golang v1.5.1
@@ -18,6 +20,7 @@ require (
 	github.com/sapcc/go-api-declarations v1.17.4
 	go.uber.org/automaxprocs v1.6.0
 	k8s.io/apimachinery v0.34.1
+	k8s.io/client-go v0.34.1
 	sigs.k8s.io/controller-runtime v0.22.1
 )
 
@@ -48,7 +51,6 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	k8s.io/client-go v0.34.1 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 )
 

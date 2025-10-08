@@ -139,7 +139,48 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-reservations-operator
           subject-digest: ${{ steps.push_cortex_reservations.outputs.digest }}
           push-to-registry: true
-      # Only build and push the scheduler operator image if there are changes
+      # Only build and push the decisions operator image if there are changes
+      # in the decisions directory.
+      - name: Get all changed decisions/ files
+        id: changed_decisions_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            decisions/**
+      - name: Docker Meta (Cortex Decisions)
+        if: steps.changed_decisions_files.outputs.all_changed_files != ''
+        id: meta_cortex_decisions
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-decisions-operator
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            latest
+      - name: Build and Push Cortex Decisions Operator
+        if: steps.changed_decisions_files.outputs.all_changed_files != ''
+        id: push_cortex_decisions
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.kubebuilder
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_cortex_decisions.outputs.tags }}
+          labels: ${{ steps.meta_cortex_decisions.outputs.labels }}
+          build-args: |
+            GO_MOD_PATH=decisions
+            GIT_TAG=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+      - name: Generate Artifact Attestation for Cortex Decisions
+        if: steps.changed_decisions_files.outputs.all_changed_files != ''
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-decisions-operator
+          subject-digest: ${{ steps.push_cortex_decisions.outputs.digest }}
+          push-to-registry: true
+      # Only build and push the scheduler image if there are changes
       # in the scheduler directory.
       - name: Get all changed scheduler/ files
         id: changed_scheduler_files

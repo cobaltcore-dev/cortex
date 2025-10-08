@@ -25,6 +25,8 @@ jobs:
           go test -v ./...
           echo "Testing reservations module..."
           cd reservations && go test -v ./...
+          echo "Testing decisions module..."
+          cd ../decisions && go test -v ./...
 
   test-with-docker:
     # We don't need to run this longer test if the previous one already failed.
@@ -70,6 +72,13 @@ jobs:
           go tool cover -func scheduler_profile.cov > scheduler_func_coverage.txt
           cd ..
 
+          echo "Running tests for decisions module..."
+          cd decisions
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=decisions_profile.cov ./internal/...
+          go tool cover -func decisions_profile.cov > decisions_func_coverage.txt
+          cd ..
       - name: Upload coverage files
         uses: actions/upload-artifact@v4
         with:
@@ -78,6 +87,7 @@ jobs:
             pr_func_coverage.txt
             reservations/reservations_func_coverage.txt
             scheduler/scheduler_func_coverage.txt
+            decisions/decisions_func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
@@ -144,6 +154,18 @@ jobs:
               schedulerCoveragePercentage = schedulerCoverageMatch ? schedulerCoverageMatch[1] : 'unknown';
             } catch (error) {
               schedulerCoverageReport = 'No coverage data available';
+
+            // Read decisions module coverage report
+            let decisionsCoverageReport = '';
+            let decisionsCoveragePercentage = 'unknown';
+            try {
+              decisionsCoverageReport = fs.readFileSync('decisions/decisions_func_coverage.txt', 'utf8');
+              const decisionsLines = decisionsCoverageReport.trim().split('\n');
+              const decisionsLastLine = decisionsLines[decisionsLines.length - 1];
+              const decisionsCoverageMatch = decisionsLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              decisionsCoveragePercentage = decisionsCoverageMatch ? decisionsCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              decisionsCoverageReport = 'No coverage data available';
             }
 
             let commentBody = '<!-- coverage-comment -->\n';
@@ -166,6 +188,16 @@ jobs:
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
             commentBody += reservationsCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n\n';
+
+            // Decisions module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in decisions module (decisions/internal/): ';
+            commentBody += decisionsCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += decisionsCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

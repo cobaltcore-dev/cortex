@@ -24,58 +24,70 @@ body {
 /* Nice animated progress bar on top of the page. */
 .progress {
   position: fixed;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 0.5em;
   background: var(--color-primary);
   z-index: 1000;
 }
+
 .progress::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 0.5em;
   background: var(--color-secondary);
   animation: progress 2s infinite;
 }
+
 @keyframes progress {
-  0% { left: -100%; right: 100%; }
-  100% { left: 100%; right: -100%; }
+  0% {
+    left: -100%;
+    right: 100%;
+  }
+
+  100% {
+    left: 100%;
+    right: -100%;
+  }
 }
+
 .progress-text {
   position: fixed;
-  top: 2em; left: 0; right: 0;
+  top: 2em;
+  left: 0;
+  right: 0;
   text-align: center;
   font-weight: bold;
 }
 
 /* Navbar that shows information. */
 nav {
-  position: fixed;
-  top: 0; left: 0; right: 0;
   padding-left: 0.25em;
   background: var(--color-surface);
   box-shadow: 0 0 1em rgba(0, 0, 0, 0.1);
   z-index: 1;
 }
+
 nav div.element {
   display: inline-block;
-  padding-top: 1em; padding-bottom: 2em;
-  padding-left: 1em; padding-right: 1em;
+  padding-top: 1em;
+  padding-bottom: 2em;
+  padding-left: 1em;
+  padding-right: 1em;
   margin: 0;
   background: var(--color-surface);
   color: var(--color-on-surface);
   border-right: 2px solid var(--color-background);
   font-size: 1em;
 }
+
 nav div.element p.highlight {
   font-size: 1.25em;
   font-weight: bold;
-}
-
-main {
-  /* Space for the description */
-  padding-top: 9em;
-  padding-left: 0.5em;
 }
 
 table {
@@ -89,25 +101,39 @@ td.weight {
   position: relative;
   animation: weightAnimation 0.25s ease-in-out;
 }
+
 td.weight div {
   border-radius: 0.5em;
   padding: 0.5em;
   margin: 0.5em;
   border: 2px solid var(--color-surface);
 }
+
 /* Backdrop white for the weight cells */
 td.weight::after {
   content: '';
   position: absolute;
-  --m: 0.6em; top: var(--m); bottom: var(--m); left: var(--m); right: var(--m);
+  --m: 0.6em;
+  top: var(--m);
+  bottom: var(--m);
+  left: var(--m);
+  right: var(--m);
   border-radius: 0.5em;
   background: var(--color-surface);
   z-index: -1;
 }
+
 /* Animation for weights when they first appear */
 @keyframes weightAnimation {
-  0% { opacity: 0; transform: scale(0.5); }
-  100% { opacity: 1; transform: scale(1); }
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Table cell showing the hostname/name. */
@@ -115,6 +141,7 @@ th.hostname {
   text-align: center;
   position: relative;
 }
+
 th.hostname div {
   position: relative;
   padding: 0.1em;
@@ -131,10 +158,12 @@ th.metainfo {
   text-align: center;
   position: relative;
 }
+
 th.metainfo div p {
   width: 6em;
   overflow: hidden;
 }
+
 th.metainfo div p.issue {
   color: var(--color-tertiary);
   border-radius: 0.5em;
@@ -162,12 +191,16 @@ td.chart {
   position: relative;
   height: 24em;
 }
+
 td.chart div.barsbefore,
 td.chart div.barsafter,
 td.chart div.backdrop,
 td.chart div.stats {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
@@ -177,6 +210,7 @@ td.chart div.stats {
   justify-content: center;
   align-items: flex-end;
 }
+
 td.chart div.barsbefore p,
 td.chart div.barsafter p,
 td.chart div.backdrop p,
@@ -186,44 +220,73 @@ td.chart div.stats p {
   display: flex;
   border-radius: 0.2em;
 }
+
 td.chart div.backdrop p {
   height: 100%;
   border-radius: 0.2em;
   border: 1px solid rgba(0, 0, 0, 0.05);
   background: white;
 }
+
 td.chart div.stats {
   text-align: center;
   display: flex;
   justify-content: center;
   align-items: flex-start;
 }
+
 td.chart div.stats p {
   writing-mode: vertical-lr;
   text-orientation: mixed;
   display: flex;
   font-size: 1em;
   font-weight: bold;
-  margin-left: 0.1em; margin-right: 0.1em;
+  margin-left: 0.1em;
+  margin-right: 0.1em;
   justify-content: center;
   align-items: center;
 }
+
 /* Animation for chart bars */
 td.chart div.barsafter p,
 td.chart div.barsbefore p {
   animation: barAnim 0.25s ease-in-out;
   overflow: hidden;
 }
+
 @keyframes barAnim {
-  0% { transform: scaleY(0); }
-  100% { transform: scaleY(1); }
+  0% {
+    transform: scaleY(0);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
 }
-td.chart div.barsafter p.cpu { background: var(--color-primary); }
-td.chart div.barsafter p.mem { background: var(--color-primary); }
-td.chart div.barsafter p.disk { background: var(--color-primary); }
-td.chart div.barsbefore p.cpu { background: var(--color-secondary); }
-td.chart div.barsbefore p.mem { background: var(--color-secondary); }
-td.chart div.barsbefore p.disk { background: var(--color-secondary); }
+
+td.chart div.barsafter p.cpu {
+  background: var(--color-primary);
+}
+
+td.chart div.barsafter p.mem {
+  background: var(--color-primary);
+}
+
+td.chart div.barsafter p.disk {
+  background: var(--color-primary);
+}
+
+td.chart div.barsbefore p.cpu {
+  background: var(--color-secondary);
+}
+
+td.chart div.barsbefore p.mem {
+  background: var(--color-secondary);
+}
+
+td.chart div.barsbefore p.disk {
+  background: var(--color-secondary);
+}
 
 
 /* Style for the input and button */
@@ -233,6 +296,7 @@ td.chart div.barsbefore p.disk { background: var(--color-secondary); }
   align-items: center;
   margin: 1em;
 }
+
 .mqtt-url-input input {
   padding: 0.5em;
   font-size: 1em;
@@ -241,6 +305,7 @@ td.chart div.barsbefore p.disk { background: var(--color-secondary); }
   margin-right: 0.5em;
   min-width: 12em;
 }
+
 .mqtt-url-input button {
   padding: 0.5em 1em;
   margin-right: 0.5em;
@@ -251,6 +316,7 @@ td.chart div.barsbefore p.disk { background: var(--color-secondary); }
   border-radius: 0.25em;
   cursor: pointer;
 }
+
 .mqtt-url-input button:hover {
   background: var(--color-secondary);
   color: var(--color-on-secondary);

@@ -22,6 +22,18 @@ type mockPipeline struct {
 	runFunc func(api.PipelineRequest) ([]string, error)
 }
 
+func (p *mockPipeline) SetConsumer(consumer lib.SchedulingDecisionConsumer[api.PipelineRequest]) {
+
+}
+
+func (p *mockPipeline) Consume(
+	request api.PipelineRequest,
+	applicationOrder []string,
+	inWeights map[string]float64,
+	stepWeights map[string]map[string]float64,
+) {
+}
+
 func (m *mockPipeline) Run(req api.PipelineRequest) ([]string, error) {
 	return m.runFunc(req)
 }

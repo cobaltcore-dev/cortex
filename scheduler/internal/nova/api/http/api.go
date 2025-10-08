@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/db"
 	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/internal/mqtt"
@@ -27,6 +28,9 @@ import (
 	"github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type HTTPAPI interface {
@@ -41,6 +45,9 @@ type httpAPI struct {
 
 	// Database connection to load specific objects during the scheduling process.
 	DB db.DB
+
+	// Kubernetes client
+	Client client.Client
 }
 
 func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
@@ -54,11 +61,26 @@ func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB
 			pipelineConf, db, monitor.SubPipeline("nova-"+pipelineConf.Name), mqttClient,
 		)
 	}
+
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
+		panic(err)
+	}
+	clientConfig, err := ctrl.GetConfig()
+	if err != nil {
+		panic(err)
+	}
+	cl, err := client.New(clientConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		panic(err)
+	}
+
 	return &httpAPI{
 		pipelines: pipelines,
 		config:    config,
 		monitor:   lib.NewSchedulerMonitor(registry),
 		DB:        db,
+		Client:    cl, // TODO
 	}
 }
 
@@ -70,6 +92,7 @@ func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("/scheduler/nova/external", httpAPI.NovaExternalScheduler)
 	mux.HandleFunc("/scheduler/nova/commitments/change", httpAPI.HandleCommitmentChangeRequest)
+	mux.HandleFunc("/scheduler/nova/scheduling-decisions", httpAPI.HandleListSchedulingDecisions)
 }
 
 // Check if the scheduler can run based on the request data.
@@ -408,4 +431,65 @@ func (httpAPI *httpAPI) HandleCommitmentChangeRequest(w http.ResponseWriter, r *
 		return
 	}
 	callback.Respond(http.StatusOK, nil, "")
+}
+
+// List all scheduling decisions.
+func (httpAPI *httpAPI) HandleListSchedulingDecisions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4000")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	// Handle preflight OPTIONS request
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	callback := httpAPI.monitor.Callback(w, r, "/scheduler/nova/scheduling-decisions")
+
+	// Exit early if the request method is not GET.
+	if r.Method != http.MethodGet {
+		internalErr := fmt.Errorf("invalid request method: %s", r.Method)
+		callback.Respond(http.StatusMethodNotAllowed, internalErr, "invalid request method")
+		return
+	}
+
+	// Check if a specific vm id is requested.
+	vmID := r.URL.Query().Get("vm_id")
+
+	// If no specific vm id is requested, list all scheduling decisions.
+	if vmID == "" {
+		var decisions v1alpha1.SchedulingDecisionList
+		if err := httpAPI.Client.List(r.Context(), &decisions); err != nil {
+			callback.Respond(http.StatusInternalServerError, err, "failed to list scheduling decisions")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := json.NewEncoder(w).Encode(decisions); err != nil {
+			callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
+			return
+		}
+		return
+	}
+
+	var decision v1alpha1.SchedulingDecision
+	nn := client.ObjectKey{Name: vmID}
+	if err := httpAPI.Client.Get(r.Context(), nn, &decision); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			callback.Respond(http.StatusInternalServerError, err, "failed to get scheduling decision")
+			return
+		}
+		// Not found
+		callback.Respond(http.StatusNotFound, err, "scheduling decision not found")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(decision); err != nil {
+		callback.Respond(http.StatusInternalServerError, err, "failed to encode response")
+		return
+	}
+	callback.Respond(http.StatusOK, nil, "Success")
 }
