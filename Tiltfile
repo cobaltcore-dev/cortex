@@ -37,7 +37,7 @@ def kubebuilder_binary_files(path):
 docker_build('ghcr.io/cobaltcore-dev/cortex-scheduler', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'scheduler'},
-    only=kubebuilder_binary_files('scheduler') + ['reservations/', 'decisions/', 'extractor/', 'sync/', 'lib/'],
+    only=kubebuilder_binary_files('scheduler') + ['reservations/', 'decisions/', 'extractor/', 'sync/', 'lib/', 'testlib/'],
 )
 local('sh helm/sync.sh scheduler/dist/chart')
 # Deployed as part of bundles below.
@@ -46,7 +46,7 @@ local('sh helm/sync.sh scheduler/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-descheduler', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'descheduler'},
-    only=kubebuilder_binary_files('descheduler') + ['lib/', 'sync/'],
+    only=kubebuilder_binary_files('descheduler') + ['lib/', 'testlib/', 'sync/'],
 )
 local('sh helm/sync.sh descheduler/dist/chart')
 # Deployed as part of bundles below.
@@ -55,7 +55,7 @@ local('sh helm/sync.sh descheduler/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-extractor', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'extractor'},
-    only=kubebuilder_binary_files('extractor') + ['lib/', 'sync/'],
+    only=kubebuilder_binary_files('extractor') + ['lib/', 'testlib/', 'sync/'],
 )
 local('sh helm/sync.sh extractor/dist/chart')
 # Deployed as part of bundles below.
@@ -64,7 +64,7 @@ local('sh helm/sync.sh extractor/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-kpis', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'kpis'},
-    only=kubebuilder_binary_files('kpis') + ['lib/', 'sync/', 'extractor/'],
+    only=kubebuilder_binary_files('kpis') + ['lib/', 'testlib/', 'sync/', 'extractor/'],
 )
 local('sh helm/sync.sh kpis/dist/chart')
 # Deployed as part of bundles below.
@@ -73,7 +73,7 @@ local('sh helm/sync.sh kpis/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-syncer', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'sync'},
-    only=kubebuilder_binary_files('sync') + ['lib/'],
+    only=kubebuilder_binary_files('sync') + ['lib/', 'testlib/'],
 )
 local('sh helm/sync.sh sync/dist/chart')
 # Deployed as part of bundles below.
@@ -82,7 +82,7 @@ local('sh helm/sync.sh sync/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'reservations'},
-    only=kubebuilder_binary_files('reservations') + ['scheduler/', 'decisions/', 'lib/'],
+    only=kubebuilder_binary_files('reservations') + ['scheduler/', 'decisions/', 'lib/', 'testlib/'],
 )
 local('sh helm/sync.sh reservations/dist/chart')
 k8s_yaml(helm('reservations/dist/chart', name='cortex-reservations', values=[tilt_values]))
@@ -92,7 +92,7 @@ k8s_resource('reservations-controller-manager', labels=['Reservations'])
 docker_build('ghcr.io/cobaltcore-dev/cortex-decisions-operator', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'decisions'},
-    only=kubebuilder_binary_files('decisions') + ['lib/'],
+    only=kubebuilder_binary_files('decisions') + ['lib/', 'testlib/'],
 )
 local('sh helm/sync.sh decisions/dist/chart')
 k8s_yaml(helm('decisions/dist/chart', name='cortex-decisions', values=[tilt_values]))
