@@ -3,23 +3,22 @@ module github.com/cobaltcore-dev/cortex/kpis
 go 1.25.0
 
 replace (
-	github.com/cobaltcore-dev/cortex/lib => ../lib
-	github.com/cobaltcore-dev/cortex/testlib => ../testlib
 	github.com/cobaltcore-dev/cortex/extractor/api => ../extractor/api
+	github.com/cobaltcore-dev/cortex/lib => ../lib
 	github.com/cobaltcore-dev/cortex/sync/api => ../sync/api
+	github.com/cobaltcore-dev/cortex/testlib => ../testlib
 )
 
 require (
-	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/sync/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/sapcc/go-api-declarations v1.17.4
 	go.uber.org/automaxprocs v1.6.0
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect

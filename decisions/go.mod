@@ -3,15 +3,14 @@ module github.com/cobaltcore-dev/cortex/decisions
 go 1.25.0
 
 replace (
+	github.com/cobaltcore-dev/cortex/decisions/api => ./api
 	github.com/cobaltcore-dev/cortex/lib => ../lib
 	github.com/cobaltcore-dev/cortex/testlib => ../testlib
-	github.com/cobaltcore-dev/cortex/decisions/api => ./api
 )
 
 require (
-	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/decisions/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
 	github.com/go-logr/logr v1.4.3
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1

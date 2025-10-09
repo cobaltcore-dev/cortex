@@ -27,6 +27,16 @@ jobs:
           cd reservations && go test -v ./...
           echo "Testing decisions module..."
           cd ../decisions && go test -v ./...
+          echo "Testing scheduler module..."
+          cd ../scheduler && go test -v ./...
+          echo "Testing descheduler module..."
+          cd ../descheduler && go test -v ./...
+          echo "Testing extractor module..."
+          cd ../extractor && go test -v ./...
+          echo "Testing kpis module..."
+          cd ../kpis && go test -v ./...
+          echo "Testing sync module..."
+          cd ../sync && go test -v ./...
 
   test-with-docker:
     # We don't need to run this longer test if the previous one already failed.
@@ -50,11 +60,13 @@ jobs:
           export POSTGRES_CONTAINER=1
           export RABBITMQ_CONTAINER=1
 
-          echo "Running tests for main module..."
+          echo "Running tests for lib module..."
+          cd lib
           go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=pr_profile.cov ./internal/...
-          go tool cover -func pr_profile.cov > pr_func_coverage.txt
+            -coverpkg=./... \
+            -coverprofile=lib_profile.cov ./...
+          go tool cover -func lib_profile.cov > lib_func_coverage.txt
+          cd ..
 
           echo "Running tests for reservations module..."
           cd reservations
@@ -155,12 +167,12 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            // Read main module coverage report
-            const mainCoverageReport = fs.readFileSync('pr_func_coverage.txt', 'utf8');
-            const mainLines = mainCoverageReport.trim().split('\n');
-            const mainLastLine = mainLines[mainLines.length - 1];
-            const mainCoverageMatch = mainLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-            const mainCoveragePercentage = mainCoverageMatch ? mainCoverageMatch[1] : 'unknown';
+            // Read lib module coverage report
+            const libCoverageReport = fs.readFileSync('lib_func_coverage.txt', 'utf8');
+            const libLines = libCoverageReport.trim().split('\n');
+            const libLastLine = libLines[libLines.length - 1];
+            const libCoverageMatch = libLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+            const libCoveragePercentage = libCoverageMatch ? libCoverageMatch[1] : 'unknown';
 
             // Read reservations module coverage report
             let reservationsCoverageReport = '';
@@ -256,13 +268,13 @@ jobs:
             let commentBody = '<!-- coverage-comment -->\n';
             commentBody += '## Test Coverage Report\n\n';
 
-            // Main module coverage
+            // Lib module coverage
             commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in main module (internal/): ';
-            commentBody += mainCoveragePercentage;
+            commentBody += '<summary>Coverage in lib module (lib/): ';
+            commentBody += libCoveragePercentage;
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
-            commentBody += mainCoverageReport;
+            commentBody += libCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n\n';
 
