@@ -3,7 +3,7 @@ name: cortex-reservations
 description: A Helm chart to distribute the cortex reservations operator.
 type: application
 version: 0.2.0
-appVersion: "latest"
+appVersion: "sha-adb3b9a"
 icon: "https://example.com/icon.png"
 dependencies:
   # Owner info adds a configmap to the kubernetes cluster with information on
