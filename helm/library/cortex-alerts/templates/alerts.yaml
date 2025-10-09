@@ -1,0 +1,168 @@
+{{- if .Values.alerts.enabled }}
+{{- $componentPrefix := include "cortex.alertComponentPrefix" . }}
+{{- $namespaceSelector := include "cortex.alertNamespaceSelector" . }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "cortex.fullname" . }}-lib-alerts
+  labels:
+    type: alerting-rules
+    prometheus: {{ .Values.alerts.prometheus | quote }}
+spec:
+  groups:
+  - name: cortex-lib-alerts
+    rules:
+    - alert: CortexHttpRequest400sTooHigh
+      expr: rate(cortex_scheduler_api_request_duration_seconds_count {component=~"{{ $componentPrefix }}-scheduler", status=~"4.+", namespace="{{ $namespaceSelector }}" }[5m]) > 0.1
+      for: 5m
+      labels:
+        context: api
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` HTTP request 400 errors too high"
+        description: >
+          `{{`{{$labels.component}}`}}` is responding to placement requests with HTTP 4xx
+          errors. This is expected when the scheduling request cannot be served
+          by Cortex. However, it could also indicate that the request format has
+          changed and Cortex is unable to parse it.
+
+    - alert: CortexHttpRequest500sTooHigh
+      expr: rate(cortex_scheduler_api_request_duration_seconds_count {component=~"{{ $componentPrefix }}-scheduler", status=~"5.+", namespace="{{ $namespaceSelector }}" }[5m]) > 0.1
+      for: 5m
+      labels:
+        context: api
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` HTTP request 500 errors too high"
+        description: >
+          `{{`{{$labels.component}}`}}` is responding to placement requests with HTTP 5xx errors.
+          This is not expected and indicates that Cortex is having some internal problem.
+          Nova will continue to place new VMs, but the placement will be less desirable.
+          Thus, no immediate action is needed.
+
+    - alert: CortexSyncNotSuccessful
+      expr: cortex_sync_request_processed_total{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" } - cortex_sync_request_duration_seconds_count{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" } > 0
+      for: 5m
+      labels:
+        context: syncstatus
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` Sync not successful"
+        description: >
+          `{{`{{$labels.component}}`}}` experienced an issue syncing data from a datasource. This may
+          happen when the datasource (OpenStack, Prometheus, etc.) is down or
+          the sync module is misconfigured. No immediate action is needed, since
+          the sync module will retry the sync operation and the currently synced
+          data will be kept. However, when this problem persists for a longer
+          time the service will have a less recent view of the datacenter.
+
+    - alert: CortexSyncObjectsDroppedToZero
+      expr: cortex_sync_objects{component=~"{{ $componentPrefix }}-.*", datasource!="openstack_migrations", namespace="{{ $namespaceSelector }}" } == 0
+      for: 60m
+      labels:
+        context: syncobjects
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` is not syncing any new data from `{{`{{$labels.datasource}}`}}`"
+        description: >
+          `{{`{{$labels.component}}`}}` is not syncing any objects from a datasource. This may happen
+          when the datasource (OpenStack, Prometheus, etc.) is down or the sync
+          module is misconfigured. No immediate action is needed, since the sync
+          module will retry the sync operation and the currently synced data will
+          be kept. However, when this problem persists for a longer time the
+          service will have a less recent view of the datacenter.
+
+    - alert: CortexSyncObjectsTooHigh
+      expr: cortex_sync_objects{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" } > 10000000
+      for: 5m
+      labels:
+        context: syncobjects
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` is syncing unexpectedly many objects from `{{`{{$labels.datasource}}`}}`"
+        description: >
+          `{{`{{$labels.component}}`}}` is syncing more than 1 million objects from a datasource. This
+          may happen when the datasource (OpenStack, Prometheus, etc.) returns
+          unexpectedly many objects, or when the database cannot drop old objects.
+          No immediate action is needed, but should this condition persist for a
+          longer time, the database may fill up and crash.
+
+    - alert: CortexHighMemoryUsage
+      expr: process_resident_memory_bytes{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" } > 6000 * 1024 * 1024
+      for: 5m
+      labels:
+        context: memory
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` uses too much memory"
+        description: >
+          `{{`{{$labels.component}}`}}` should not be using more than 6000 MiB of memory. Usually it
+          should use much less, so there may be a memory leak or other changes
+          that are causing the memory usage to increase significantly.
+
+    - alert: CortexHighCPUUsage
+      expr: rate(process_cpu_seconds_total{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" }[1m]) > 0.5
+      for: 5m
+      labels:
+        context: cpu
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` uses too much CPU"
+        description: >
+          `{{`{{$labels.component}}`}}` should not be using more than 50% of a single CPU core. Usually
+          it should use much less, so there may be a CPU leak or other changes
+          that are causing the CPU usage to increase significantly.
+
+    - alert: CortexTooManyMQTTConnectionAttempts
+      expr: rate(cortex_mqtt_connection_attempts_total{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" }[5m]) > 0.1
+      for: 1m
+      labels:
+        context: mqtt
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` is trying to connect to MQTT too often"
+        description: >
+          `{{`{{$labels.component}}`}}` is trying to connect to the MQTT broker too often. This may
+          happen when the broker is down or the connection parameters are
+          misconfigured.
+
+    - alert: CortexTooManyDBConnectionAttempts
+      expr: rate(cortex_db_connection_attempts_total{component=~"{{ $componentPrefix }}-.*", namespace="{{ $namespaceSelector }}" }[5m]) > 0.1
+      for: 5m
+      labels:
+        context: db
+        dashboard: cortex/cortex
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "`{{`{{$labels.component}}`}}` is trying to connect to the database too often"
+        description: >
+          `{{`{{$labels.component}}`}}` is trying to connect to the database too often. This may happen
+          when the database is down or the connection parameters are misconfigured.
+
+{{- end }}

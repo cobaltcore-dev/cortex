@@ -1,0 +1,105 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+image:
+  repository: ghcr.io/cobaltcore-dev/cortex-kpis
+  pullPolicy: IfNotPresent
+
+# Can be used to override the chart name.
+fullnameOverride: ""
+nameOverride: ""
+
+# Select the command line args to run the service with.
+args:
+
+service:
+  extraLabels: {} # Additional labels to add to the service.
+serviceMonitor:
+  extraLabels:
+    # The name of the prometheus instance to use for scraping metrics.
+    prometheus: openstack
+  matchLabels: {} # Additional matchers to select the service for scraping metrics.
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "10m" # Will be increased by the VPA if needed.
+  limits:
+    memory: "6Gi"
+    cpu: "4"
+
+# Liveness and readiness probes for the cortex services.
+livenessProbe:
+  httpGet:
+    path: /up
+    port: api
+readinessProbe:
+  httpGet:
+    path: /up
+    port: api
+
+# Values passed to the service through a configmap.
+conf:
+  logging:
+    # The log level to use (debug, info, warn, error).
+    level: debug
+    # The log format to use (json, text).
+    format: text
+
+  # Configuration of metrics exported to the /metrics endpoint.
+  monitoring:
+    # The port to expose the metrics on.
+    port: 2112
+
+    # Custom labels added to the exported metrics.
+    labels:
+      github_org: cobaltcore-dev
+      github_repo: cortex
+
+  # MQTT broker connection parameters.
+  mqtt:
+    # Must match rabbitmq settings from the cortex-mqtt chart.
+    url:
+    # Configure how Cortex should handle lost connections to the MQTT broker.
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
+
+  # The port to use for the api serve mux.
+  api:
+    port: 8080
+
+  # Connection parameters for the database where data is stored.
+  db:
+    host:
+    port: 5432
+    database: postgres
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
+      livenessPingIntervalSeconds: 5
+
+  kpis:
+    # Configuration of KPIs that should be extracted from the synced data.
+    # Each KPI can specify its own dependencies on other extractors and
+    # synced data.
+    #
+    # The `name` should correspond to a known KPI extractor plugin.
+    plugins:
+      # - name:
+      #   # Dependencies needed by this KPI.
+      #   dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
+
+# Values passed to the service through a kubernetes secret.
+# The keys of these values should correspond to the keys used above in the conf.
+#
+# Note: Please only add values here that MUST be overridden using the "secrets:" key.
+secrets:
+  # MQTT broker connection credentials.
+  mqtt:
+    username: cortex
+    password: secret
+  # Database connection credentials.
+  db:
+    user: postgres
+    password: secret

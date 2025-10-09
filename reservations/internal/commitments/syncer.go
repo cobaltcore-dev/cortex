@@ -13,7 +13,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	"github.com/sapcc/go-bits/jobloop"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"

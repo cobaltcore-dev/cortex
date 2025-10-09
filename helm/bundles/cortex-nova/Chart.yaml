@@ -8,10 +8,10 @@ type: application
 version: 0.0.10
 appVersion: 0.1.0
 dependencies:
-  # from: file://../../library/cortex-core
-  - name: cortex-core
+  # from: file://../../library/cortex-alerts
+  - name: cortex-alerts
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.26.0
+    version: 0.0.1
   # from: file://../../library/cortex-postgres
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
@@ -21,9 +21,24 @@ dependencies:
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.1.0
 
-  # Services no longer part of the cortex-core chart.
   # from: file://../../../scheduler/dist/chart
   - name: cortex-scheduler
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.0.1
+  # from: file://../../../descheduler/dist/chart
+  - name: cortex-descheduler
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.0.1
+  # from: file://../../../extractor/dist/chart
+  - name: cortex-extractor
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.0.1
+  # from: file://../../../kpis/dist/chart
+  - name: cortex-kpis
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.0.1
+  # from: file://../../../sync/dist/chart
+  - name: cortex-syncer
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
 

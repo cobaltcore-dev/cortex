@@ -6,7 +6,7 @@ package commitments
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
 func TestConfig_Structure(t *testing.T) {

@@ -9,12 +9,12 @@
 # oci references.
 #
 # Example:
-#   # from: file://../../library/cortex-core
-#   - name: cortex-core
+#   # from: file://../../library/cortex-alerts
+#   - name: cortex-alerts
 #     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
 # Is converted to:
-#   - name: cortex-core
-#     repository: file://../../library/cortex-core
+#   - name: cortex-alerts
+#     repository: file://../../library/cortex-alerts
 #
 # Usage: ./replace-oci-refs.sh path/to/chart
 # Output: Modified Chart.yaml content to stdout.

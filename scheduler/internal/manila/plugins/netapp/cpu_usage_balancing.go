@@ -7,7 +7,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/netapp"
+	"github.com/cobaltcore-dev/cortex/extractor/api/features/netapp"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/manila/api"
 )

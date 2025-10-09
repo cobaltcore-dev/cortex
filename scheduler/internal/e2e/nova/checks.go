@@ -15,10 +15,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/sync/openstack/nova"
 	api "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"

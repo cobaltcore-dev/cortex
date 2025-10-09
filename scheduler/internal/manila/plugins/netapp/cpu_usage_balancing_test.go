@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/extractor/plugins/netapp"
+	"github.com/cobaltcore-dev/cortex/extractor/api/features/netapp"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/manila/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"

@@ -18,15 +18,25 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: 'lib/go.mod'
       - name: Test quickly without Docker
         run: |
-          echo "Testing main module..."
-          go test -v ./...
+          echo "Testing lib module..."
+          cd lib && go test -v ./...
           echo "Testing reservations module..."
-          cd reservations && go test -v ./...
+          cd ..reservations && go test -v ./...
           echo "Testing decisions module..."
           cd ../decisions && go test -v ./...
+          echo "Testing scheduler module..."
+          cd ../scheduler && go test -v ./...
+          echo "Testing descheduler module..."
+          cd ../descheduler && go test -v ./...
+          echo "Testing extractor module..."
+          cd ../extractor && go test -v ./...
+          echo "Testing kpis module..."
+          cd ../kpis && go test -v ./...
+          echo "Testing sync module..."
+          cd ../sync && go test -v ./...
 
   test-with-docker:
     # We don't need to run this longer test if the previous one already failed.
@@ -43,18 +53,20 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: 'lib/go.mod'
       - name: Run tests with Docker and calculate coverage
         run: |
           export GITHUB_ACTIONS=1
           export POSTGRES_CONTAINER=1
           export RABBITMQ_CONTAINER=1
 
-          echo "Running tests for main module..."
+          echo "Running tests for lib module..."
+          cd lib
           go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=pr_profile.cov ./internal/...
-          go tool cover -func pr_profile.cov > pr_func_coverage.txt
+            -coverpkg=./... \
+            -coverprofile=lib_profile.cov ./...
+          go tool cover -func lib_profile.cov > lib_func_coverage.txt
+          cd ..
 
           echo "Running tests for reservations module..."
           cd reservations
@@ -72,6 +84,38 @@ jobs:
           go tool cover -func scheduler_profile.cov > scheduler_func_coverage.txt
           cd ..
 
+          echo "Running tests for the descheduler module..."
+          cd descheduler
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=descheduler_profile.cov ./internal/...
+          go tool cover -func descheduler_profile.cov > descheduler_func_coverage.txt
+          cd ..
+
+          echo "Running tests for the extractor module..."
+          cd extractor
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=extractor_profile.cov ./internal/...
+          go tool cover -func extractor_profile.cov > extractor_func_coverage.txt
+          cd ..
+
+          echo "Running tests for the kpis module..."
+          cd kpis
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=kpis_profile.cov ./internal/...
+          go tool cover -func kpis_profile.cov > kpis_func_coverage.txt
+          cd ..
+
+          echo "Running tests for the sync module..."
+          cd sync
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=sync_profile.cov ./internal/...
+          go tool cover -func sync_profile.cov > sync_func_coverage.txt
+          cd ..
+
           echo "Running tests for decisions module..."
           cd decisions
           go test -v \
@@ -84,10 +128,14 @@ jobs:
         with:
           name: pr-func-coverage
           path: |
-            pr_func_coverage.txt
+            lib/lib_func_coverage.txt
             reservations/reservations_func_coverage.txt
             scheduler/scheduler_func_coverage.txt
             decisions/decisions_func_coverage.txt
+            descheduler/descheduler_func_coverage.txt
+            extractor/extractor_func_coverage.txt
+            kpis/kpis_func_coverage.txt
+            sync/sync_func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
@@ -123,12 +171,19 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            // Read main module coverage report
-            const mainCoverageReport = fs.readFileSync('pr_func_coverage.txt', 'utf8');
-            const mainLines = mainCoverageReport.trim().split('\n');
-            const mainLastLine = mainLines[mainLines.length - 1];
-            const mainCoverageMatch = mainLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-            const mainCoveragePercentage = mainCoverageMatch ? mainCoverageMatch[1] : 'unknown';
+            // Read lib module coverage report
+            let libCoverageReport = '';
+            let libCoveragePercentage = 'unknown';
+            try {
+              libCoverageReport = fs.readFileSync('lib/lib_func_coverage.txt', 'utf8');
+              const libLines = libCoverageReport.trim().split('\n');
+              const libLastLine = libLines[libLines.length - 1];
+              const libCoverageMatch = libLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              libCoveragePercentage = libCoverageMatch ? libCoverageMatch[1] : 'unknown';
+              libCoveragePercentage = libCoverageMatch ? libCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              libCoverageReport = 'No coverage data available';
+            }
 
             // Read reservations module coverage report
             let reservationsCoverageReport = '';
@@ -156,6 +211,58 @@ jobs:
               schedulerCoverageReport = 'No coverage data available';
             }
 
+            // Read descheduler module coverage report
+            let deschedulerCoverageReport = '';
+            let deschedulerCoveragePercentage = 'unknown';
+            try {
+              deschedulerCoverageReport = fs.readFileSync('descheduler/descheduler_func_coverage.txt', 'utf8');
+              const deschedulerLines = deschedulerCoverageReport.trim().split('\n');
+              const deschedulerLastLine = deschedulerLines[deschedulerLines.length - 1];
+              const deschedulerCoverageMatch = deschedulerLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              deschedulerCoveragePercentage = deschedulerCoverageMatch ? deschedulerCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              deschedulerCoverageReport = 'No coverage data available';
+            }
+
+            // Read extractor module coverage report
+            let extractorCoverageReport = '';
+            let extractorCoveragePercentage = 'unknown';
+            try {
+              extractorCoverageReport = fs.readFileSync('extractor/extractor_func_coverage.txt', 'utf8');
+              const extractorLines = extractorCoverageReport.trim().split('\n');
+              const extractorLastLine = extractorLines[extractorLines.length - 1];
+              const extractorCoverageMatch = extractorLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              extractorCoveragePercentage = extractorCoverageMatch ? extractorCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              extractorCoverageReport = 'No coverage data available';
+            }
+
+            // Read kpis module coverage report
+            let kpisCoverageReport = '';
+            let kpisCoveragePercentage = 'unknown';
+            try {
+              kpisCoverageReport = fs.readFileSync('kpis/kpis_func_coverage.txt', 'utf8');
+              const kpisLines = kpisCoverageReport.trim().split('\n');
+              const kpisLastLine = kpisLines[kpisLines.length - 1];
+              const kpisCoverageMatch = kpisLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              kpisCoveragePercentage = kpisCoverageMatch ? kpisCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              kpisCoverageReport = 'No coverage data available';
+            }
+
+            // Read sync module coverage report
+            let syncCoverageReport = '';
+            let syncCoveragePercentage = 'unknown';
+            try {
+              syncCoverageReport = fs.readFileSync('sync/sync_func_coverage.txt', 'utf8');
+              const syncLines = syncCoverageReport.trim().split('\n');
+              const syncLastLine = syncLines[syncLines.length - 1];
+              const syncCoverageMatch = syncLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              syncCoveragePercentage = syncCoverageMatch ? syncCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              syncCoverageReport = 'No coverage data available';
+            }
+
             // Read decisions module coverage report
             let decisionsCoverageReport = '';
             let decisionsCoveragePercentage = 'unknown';
@@ -172,13 +279,13 @@ jobs:
             let commentBody = '<!-- coverage-comment -->\n';
             commentBody += '## Test Coverage Report\n\n';
 
-            // Main module coverage
+            // Lib module coverage
             commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in main module (internal/): ';
-            commentBody += mainCoveragePercentage;
+            commentBody += '<summary>Coverage in lib module (lib/): ';
+            commentBody += libCoveragePercentage;
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
-            commentBody += mainCoverageReport;
+            commentBody += libCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n\n';
 
@@ -209,6 +316,46 @@ jobs:
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
             commentBody += schedulerCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // Descheduler module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in descheduler module (descheduler/internal/): ';
+            commentBody += deschedulerCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += deschedulerCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // Extractor module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in extractor module (extractor/internal/): ';
+            commentBody += extractorCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += extractorCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // KPIs module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in KPIs module (kpis/internal/): ';
+            commentBody += kpisCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += kpisCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // Sync module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in sync module (sync/internal/): ';
+            commentBody += syncCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += syncCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

@@ -26,7 +26,7 @@ import (
 
 	decisionsv1alpha1 "github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/decisions/internal/controller"
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 	// +kubebuilder:scaffold:imports
 )
 

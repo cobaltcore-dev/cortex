@@ -11,9 +11,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
-	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/cinder"
 	cinderScheduler "github.com/cobaltcore-dev/cortex/scheduler/internal/cinder"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/cinder/api"

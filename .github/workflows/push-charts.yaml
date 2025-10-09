@@ -26,6 +26,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Get all changed library Chart.yaml files
         id: changed-chart-yaml-files-library
         uses: tj-actions/changed-files@v47
@@ -44,6 +45,7 @@ jobs:
             CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
+
       - name: Get all changed bundle Chart.yaml files
         id: changed-chart-yaml-files-bundle
         uses: tj-actions/changed-files@v47
@@ -62,6 +64,7 @@ jobs:
             CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
+
       - name: Get all changed reservations Chart.yaml files
         id: changed-chart-yaml-files-reservations
         uses: tj-actions/changed-files@v47
@@ -80,6 +83,7 @@ jobs:
             CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
+
       - name: Get all changed scheduler Chart.yaml files
         id: changed-chart-yaml-files-scheduler
         uses: tj-actions/changed-files@v47
@@ -91,6 +95,55 @@ jobs:
         shell: bash
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-scheduler.outputs.all_changed_files }}
+
+      - name: Get all changed descheduler Chart.yaml files
+        id: changed-chart-yaml-files-descheduler
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            descheduler/dist/chart/Chart.yaml
+      - name: Push descheduler charts to registry
+        if: steps.changed-chart-yaml-files-descheduler.outputs.all_changed_files != ''
+        shell: bash
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-descheduler.outputs.all_changed_files }}
+
+      - name: Get all changed extractor Chart.yaml files
+        id: changed-chart-yaml-files-extractor
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            extractor/dist/chart/Chart.yaml
+      - name: Push extractor charts to registry
+        if: steps.changed-chart-yaml-files-extractor.outputs.all_changed_files != ''
+        shell: bash
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-extractor.outputs.all_changed_files }}
+
+      - name: Get all changed kpis Chart.yaml files
+        id: changed-chart-yaml-files-kpis
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            kpis/dist/chart/Chart.yaml
+      - name: Push kpis charts to registry
+        if: steps.changed-chart-yaml-files-kpis.outputs.all_changed_files != ''
+        shell: bash
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-kpis.outputs.all_changed_files }}
+
+      - name: Get all changed syncer Chart.yaml files
+        id: changed-chart-yaml-files-syncer
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            syncer/dist/chart/Chart.yaml
+      - name: Push syncer charts to registry
+        if: steps.changed-chart-yaml-files-syncer.outputs.all_changed_files != ''
+        shell: bash
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-syncer.outputs.all_changed_files }}
+
       - name: Get all changed decisions Chart.yaml files
         id: changed-chart-yaml-files-decisions
         uses: tj-actions/changed-files@v47
