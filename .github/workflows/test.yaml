@@ -128,10 +128,14 @@ jobs:
         with:
           name: pr-func-coverage
           path: |
-            pr_func_coverage.txt
+            lib/lib_func_coverage.txt
             reservations/reservations_func_coverage.txt
             scheduler/scheduler_func_coverage.txt
             decisions/decisions_func_coverage.txt
+            descheduler/descheduler_func_coverage.txt
+            extractor/extractor_func_coverage.txt
+            kpis/kpis_func_coverage.txt
+            sync/sync_func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
@@ -168,11 +172,18 @@ jobs:
             const path = require('path');
 
             // Read lib module coverage report
-            const libCoverageReport = fs.readFileSync('lib_func_coverage.txt', 'utf8');
-            const libLines = libCoverageReport.trim().split('\n');
-            const libLastLine = libLines[libLines.length - 1];
-            const libCoverageMatch = libLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-            const libCoveragePercentage = libCoverageMatch ? libCoverageMatch[1] : 'unknown';
+            let libCoverageReport = '';
+            let libCoveragePercentage = 'unknown';
+            try {
+              libCoverageReport = fs.readFileSync('lib/lib_func_coverage.txt', 'utf8');
+              const libLines = libCoverageReport.trim().split('\n');
+              const libLastLine = libLines[libLines.length - 1];
+              const libCoverageMatch = libLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              libCoveragePercentage = libCoverageMatch ? libCoverageMatch[1] : 'unknown';
+              libCoveragePercentage = libCoverageMatch ? libCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              libCoverageReport = 'No coverage data available';
+            }
 
             // Read reservations module coverage report
             let reservationsCoverageReport = '';
