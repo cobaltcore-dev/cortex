@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/tools"
 	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

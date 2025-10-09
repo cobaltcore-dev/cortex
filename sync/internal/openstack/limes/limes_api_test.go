@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/identity"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"

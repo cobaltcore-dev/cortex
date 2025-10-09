@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/sso"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"
 	"github.com/prometheus/client_golang/prometheus"

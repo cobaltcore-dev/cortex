@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"

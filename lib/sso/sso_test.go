@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
 func TestNewHTTPClient(t *testing.T) {

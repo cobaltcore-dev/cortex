@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/cinder"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"

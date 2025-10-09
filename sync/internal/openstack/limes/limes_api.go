@@ -12,7 +12,7 @@ import (
 	gosync "sync"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/limes"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"

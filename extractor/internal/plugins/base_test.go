@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
-	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 

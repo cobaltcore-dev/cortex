@@ -12,8 +12,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
 	"github.com/cobaltcore-dev/cortex/descheduler/internal/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
 )

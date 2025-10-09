@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	gosync "sync"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
-	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"
 	"github.com/cobaltcore-dev/cortex/sync/internal/openstack/cinder"

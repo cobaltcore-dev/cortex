@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/db/containers"
 	"github.com/prometheus/client_golang/prometheus"

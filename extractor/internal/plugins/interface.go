@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 )
 
 // Each feature extractor must conform to this interface.

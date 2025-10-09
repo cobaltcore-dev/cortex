@@ -10,7 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/tools"
+	"github.com/cobaltcore-dev/cortex/lib/tools"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/prometheus/client_golang/prometheus"
 )

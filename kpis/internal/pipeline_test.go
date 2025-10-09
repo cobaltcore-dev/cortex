@@ -7,11 +7,11 @@ import (
 	"errors"
 	"testing"
 
-	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
 	"github.com/cobaltcore-dev/cortex/kpis/internal/conf"
 	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )

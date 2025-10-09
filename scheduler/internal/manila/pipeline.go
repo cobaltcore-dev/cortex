@@ -4,8 +4,8 @@
 package manila
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/manila/api"

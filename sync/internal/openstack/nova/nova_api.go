@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"

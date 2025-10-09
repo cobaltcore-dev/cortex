@@ -10,8 +10,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
-	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"

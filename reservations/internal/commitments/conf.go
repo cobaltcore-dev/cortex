@@ -3,7 +3,7 @@
 
 package commitments
 
-import "github.com/cobaltcore-dev/cortex/internal/conf"
+import "github.com/cobaltcore-dev/cortex/lib/conf"
 
 // Configuration for the commitments module.
 type Config struct {

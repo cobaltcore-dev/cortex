@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/gophercloud/gophercloud/v2"
 )
 

@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"

@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
 func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, conf.KeystoneConfig) {

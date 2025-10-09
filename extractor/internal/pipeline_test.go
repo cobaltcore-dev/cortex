@@ -12,9 +12,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins"
-	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt/containers"
 )
 

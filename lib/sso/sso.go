@@ -11,7 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
 // Custom HTTP round tripper that logs each request.

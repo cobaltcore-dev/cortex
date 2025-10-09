@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )

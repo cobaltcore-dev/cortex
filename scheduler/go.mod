@@ -3,7 +3,8 @@ module github.com/cobaltcore-dev/cortex/scheduler
 go 1.25.0
 
 replace (
-	github.com/cobaltcore-dev/cortex => ../
+	github.com/cobaltcore-dev/cortex/lib => ../lib
+	github.com/cobaltcore-dev/cortex/testlib => ../testlib
 	github.com/cobaltcore-dev/cortex/decisions/api => ../decisions/api
 	github.com/cobaltcore-dev/cortex/extractor/api => ../extractor/api
 	github.com/cobaltcore-dev/cortex/reservations/api => ../reservations/api
@@ -12,7 +13,8 @@ replace (
 )
 
 require (
-	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/decisions/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000

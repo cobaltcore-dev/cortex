@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt/containers"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )

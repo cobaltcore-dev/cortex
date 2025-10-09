@@ -6,7 +6,7 @@ package prometheus
 import (
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 )
 
 // One metric datapoint in the Prometheus timeline.

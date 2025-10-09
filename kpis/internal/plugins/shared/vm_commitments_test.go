@@ -6,8 +6,8 @@ package shared
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/limes"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"

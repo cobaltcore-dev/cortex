@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"

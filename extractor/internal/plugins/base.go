@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
-	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 )
 
 // Common base for all extractors that provides some functionality

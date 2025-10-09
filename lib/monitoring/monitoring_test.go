@@ -6,7 +6,7 @@ package monitoring
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

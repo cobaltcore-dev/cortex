@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sapcc/go-bits/jobloop"
 )

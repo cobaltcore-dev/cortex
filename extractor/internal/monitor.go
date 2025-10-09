@@ -9,8 +9,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

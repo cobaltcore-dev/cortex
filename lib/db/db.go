@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/dlmiddlecote/sqlstats"
 	"github.com/go-gorp/gorp"
 	_ "github.com/lib/pq"

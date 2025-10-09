@@ -3,12 +3,14 @@ module github.com/cobaltcore-dev/cortex/descheduler
 go 1.25.0
 
 replace (
-	github.com/cobaltcore-dev/cortex => ../
+	github.com/cobaltcore-dev/cortex/lib => ../lib
+	github.com/cobaltcore-dev/cortex/testlib => ../testlib
 	github.com/cobaltcore-dev/cortex/sync/api => ../sync/api
 )
 
 require (
-	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/sync/api v0.0.0-00010101000000-000000000000
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/sapcc/go-api-declarations v1.17.4

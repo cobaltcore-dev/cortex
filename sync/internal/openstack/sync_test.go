@@ -7,11 +7,11 @@ import (
 	"context"
 	"testing"
 
-	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"

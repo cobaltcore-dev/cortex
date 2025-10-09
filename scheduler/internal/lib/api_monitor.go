@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

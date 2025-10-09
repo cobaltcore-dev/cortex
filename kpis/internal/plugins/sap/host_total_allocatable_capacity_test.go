@@ -9,8 +9,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/sap"
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/internal/conf"
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"

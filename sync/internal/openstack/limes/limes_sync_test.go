@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/db"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/limes"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"

@@ -15,8 +15,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/extractor/internal/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/internal/db"
-	"github.com/cobaltcore-dev/cortex/internal/mqtt"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 
 	pahomqtt "github.com/eclipse/paho.mqtt.golang"
 )

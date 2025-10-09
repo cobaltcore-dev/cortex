@@ -4,7 +4,7 @@
 package conf
 
 import (
-	libconf "github.com/cobaltcore-dev/cortex/internal/conf"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
 type FeatureExtractorConfig struct {
