@@ -158,37 +158,43 @@ def new_port_mapping(component, local_port, remote_port):
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
     k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values]))
-    k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
+        new_port_mapping('cortex-nova-postgresql', 8000, 5432),
+    ])
     k8s_resource('cortex-nova-mqtt', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-syncer', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-extractor', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-kpis', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-descheduler', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-scheduler', labels=['Cortex-Nova'], port_forwards=[
-        new_port_mapping('cortex-nova-scheduler-api', 8000, 8080),
+        new_port_mapping('cortex-nova-scheduler-api', 8001, 8080),
     ])
 
 if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")
     k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=[tilt_values]))
-    k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
+        new_port_mapping('cortex-manila-postgresql', 8002, 5432),
+    ])
     k8s_resource('cortex-manila-mqtt', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-syncer', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-extractor', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-kpis', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-scheduler', labels=['Cortex-Manila'], port_forwards=[
-        new_port_mapping('cortex-manila-scheduler-api', 8001, 8080),
+        new_port_mapping('cortex-manila-scheduler-api', 8003, 8080),
     ])
 
 if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=[tilt_values]))
-    k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
+        new_port_mapping('cortex-cinder-postgresql', 8004, 5432),
+    ])
     k8s_resource('cortex-cinder-mqtt', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-syncer', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-extractor', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-kpis', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-scheduler', labels=['Cortex-Cinder'], port_forwards=[
-        new_port_mapping('cortex-cinder-scheduler-api', 8002, 8080),
+        new_port_mapping('cortex-cinder-scheduler-api', 8005, 8080),
     ])
 
 ########### Dev Dependencies
