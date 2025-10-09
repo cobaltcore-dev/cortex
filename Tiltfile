@@ -35,7 +35,7 @@ def kubebuilder_binary_files(path):
 
 ########### Cortex Scheduler
 docker_build('ghcr.io/cobaltcore-dev/cortex-scheduler', '.',
-    dockerfile='Dockerfile.kubebuilder',
+    dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'scheduler'},
     only=kubebuilder_binary_files('scheduler') + ['reservations/', 'decisions/', 'extractor/', 'sync/', 'internal/', 'go.mod', 'go.sum'],
 )
@@ -44,7 +44,7 @@ local('sh helm/sync.sh scheduler/dist/chart')
 
 ########### Cortex Descheduler
 docker_build('ghcr.io/cobaltcore-dev/cortex-descheduler', '.',
-    dockerfile='Dockerfile.kubebuilder',
+    dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'descheduler'},
     only=kubebuilder_binary_files('descheduler') + ['internal/', 'sync/', 'go.mod', 'go.sum'],
 )
@@ -53,7 +53,7 @@ local('sh helm/sync.sh descheduler/dist/chart')
 
 ########### Cortex Extractor
 docker_build('ghcr.io/cobaltcore-dev/cortex-extractor', '.',
-    dockerfile='Dockerfile.kubebuilder',
+    dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'extractor'},
     only=kubebuilder_binary_files('extractor') + ['internal/', 'sync/', 'go.mod', 'go.sum'],
 )
@@ -62,7 +62,7 @@ local('sh helm/sync.sh extractor/dist/chart')
 
 ########### Cortex KPIs
 docker_build('ghcr.io/cobaltcore-dev/cortex-kpis', '.',
-    dockerfile='Dockerfile.kubebuilder',
+    dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'kpis'},
     only=kubebuilder_binary_files('kpis') + ['internal/', 'sync/', 'extractor/', 'go.mod', 'go.sum'],
 )
@@ -71,7 +71,7 @@ local('sh helm/sync.sh kpis/dist/chart')
 
 ########### Cortex Syncer
 docker_build('ghcr.io/cobaltcore-dev/cortex-syncer', '.',
-    dockerfile='Dockerfile.kubebuilder',
+    dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'sync'},
     only=kubebuilder_binary_files('sync') + ['internal/', 'go.mod', 'go.sum'],
 )
@@ -80,7 +80,7 @@ local('sh helm/sync.sh sync/dist/chart')
 
 ########### Reservations Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
-    dockerfile='Dockerfile.kubebuilder',
+    dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'reservations'},
     only=kubebuilder_binary_files('reservations') + ['scheduler/', 'decisions/', 'internal/', 'go.mod', 'go.sum'],
 )
@@ -90,7 +90,7 @@ k8s_resource('reservations-controller-manager', labels=['Reservations'])
 
 ########### Decisions Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-decisions-operator', '.',
-    dockerfile='Dockerfile.kubebuilder',
+    dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'decisions'},
     only=kubebuilder_binary_files('decisions') + ['internal/', 'go.mod', 'go.sum'],
 )
