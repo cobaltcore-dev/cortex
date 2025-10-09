@@ -2,10 +2,14 @@ module github.com/cobaltcore-dev/cortex/sync
 
 go 1.25.0
 
-replace github.com/cobaltcore-dev/cortex => ../
+replace (
+	github.com/cobaltcore-dev/cortex => ../
+	github.com/cobaltcore-dev/cortex/sync/api => ./api
+)
 
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/sync/api v0.0.0-00010101000000-000000000000
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/sapcc/go-api-declarations v1.17.4

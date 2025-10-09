@@ -189,6 +189,39 @@ type SchedulerAPIConfig struct {
 	LogRequestBodies bool `json:"logRequestBodies"`
 }
 
+// Configuration for the nova service.
+type SyncOpenStackNovaConfig struct {
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+}
+
+// Configuration for the identity service.
+type SyncOpenStackIdentityConfig struct {
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+}
+
+// Configuration for the manila service.
+type SyncOpenStackManilaConfig struct {
+	// Availability of the service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+}
+
+// Configuration for the sync/openstack module.
+type SyncOpenStackConfig struct {
+	// Configuration for the nova service.
+	Nova SyncOpenStackNovaConfig `json:"nova"`
+	// Configuration for the identity service.
+	Identity SyncOpenStackIdentityConfig `json:"identity"`
+	// Configuration for the manila service.
+	Manila SyncOpenStackManilaConfig `json:"manila"`
+}
+
+// Configuration for the sync module.
+type SyncConfig struct {
+	OpenStack SyncOpenStackConfig `json:"openstack"`
+}
+
 type Config struct {
 	SchedulerConfig `json:"scheduler"`
 
@@ -200,6 +233,6 @@ type Config struct {
 
 	// Required for e2e tests.
 	libconf.KeystoneConfig `json:"keystone"`
-	libconf.SyncConfig     `json:"sync"`
 	libconf.APIConfig      `json:"api"`
+	SyncConfig             `json:"sync"`
 }

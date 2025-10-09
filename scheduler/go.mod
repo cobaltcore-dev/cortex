@@ -4,18 +4,20 @@ go 1.25.0
 
 replace (
 	github.com/cobaltcore-dev/cortex => ../
-	github.com/cobaltcore-dev/cortex/extractor/api => ../extractor/api
 	github.com/cobaltcore-dev/cortex/decisions/api => ../decisions/api
+	github.com/cobaltcore-dev/cortex/extractor/api => ../extractor/api
 	github.com/cobaltcore-dev/cortex/reservations/api => ../reservations/api
 	github.com/cobaltcore-dev/cortex/scheduler/api => ./api
+	github.com/cobaltcore-dev/cortex/sync/api => ../sync/api
 )
 
 require (
 	github.com/cobaltcore-dev/cortex v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/decisions/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/scheduler/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/sync/api v0.0.0-00010101000000-000000000000
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/majewsky/gg v1.3.0
