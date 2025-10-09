@@ -25,7 +25,7 @@ type DeletedServer struct {
 	OSEXTSRVATTRInstanceName       string  `json:"OS-EXT-SRV-ATTR:instance_name" db:"os_ext_srv_attr_instance_name"`
 	OSEXTSRVATTRHypervisorHostname string  `json:"OS-EXT-SRV-ATTR:hypervisor_hostname" db:"os_ext_srv_attr_hypervisor_hostname"`
 
-	// From nested JSON
+	// From nested JSON.
 	FlavorName string `json:"-" db:"flavor_name"`
 
 	// Note: there are some more fields that are omitted. To include them again, add

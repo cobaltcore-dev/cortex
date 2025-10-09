@@ -329,7 +329,7 @@ jobs:
         uses: tj-actions/changed-files@v47
         with:
           files: |
-            syncer/**
+            sync/**
       - name: Docker Meta (Cortex Syncer)
         if: steps.changed_syncer_files.outputs.all_changed_files != ''
         id: meta_cortex_syncer
@@ -353,7 +353,7 @@ jobs:
           tags: ${{ steps.meta_cortex_syncer.outputs.tags }}
           labels: ${{ steps.meta_cortex_syncer.outputs.labels }}
           build-args: |
-            GO_MOD_PATH=syncer
+            GO_MOD_PATH=sync
             GIT_TAG=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation for Cortex Syncer
