@@ -123,7 +123,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // Restore the body for further processing
+	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // Restore the body for further processing.
 
 	err = json.NewDecoder(resp.Body).Decode(&prometheusData)
 	if err != nil {
