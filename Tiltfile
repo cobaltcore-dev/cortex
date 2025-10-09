@@ -37,7 +37,7 @@ def kubebuilder_binary_files(path):
 docker_build('ghcr.io/cobaltcore-dev/cortex-scheduler', '.',
     dockerfile='Dockerfile.kubebuilder',
     build_args={'GO_MOD_PATH': 'scheduler'},
-    only=kubebuilder_binary_files('scheduler') + ['reservations/', 'decisions/', 'internal/', 'go.mod', 'go.sum'],
+    only=kubebuilder_binary_files('scheduler') + ['reservations/', 'decisions/', 'extractor/', 'sync/', 'internal/', 'go.mod', 'go.sum'],
 )
 local('sh helm/sync.sh scheduler/dist/chart')
 # Deployed as part of bundles below.
@@ -46,7 +46,7 @@ local('sh helm/sync.sh scheduler/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-descheduler', '.',
     dockerfile='Dockerfile.kubebuilder',
     build_args={'GO_MOD_PATH': 'descheduler'},
-    only=kubebuilder_binary_files('descheduler') + ['internal/', 'go.mod', 'go.sum'],
+    only=kubebuilder_binary_files('descheduler') + ['internal/', 'sync/', 'go.mod', 'go.sum'],
 )
 local('sh helm/sync.sh descheduler/dist/chart')
 # Deployed as part of bundles below.
@@ -55,7 +55,7 @@ local('sh helm/sync.sh descheduler/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-extractor', '.',
     dockerfile='Dockerfile.kubebuilder',
     build_args={'GO_MOD_PATH': 'extractor'},
-    only=kubebuilder_binary_files('extractor') + ['internal/', 'go.mod', 'go.sum'],
+    only=kubebuilder_binary_files('extractor') + ['internal/', 'sync/', 'go.mod', 'go.sum'],
 )
 local('sh helm/sync.sh extractor/dist/chart')
 # Deployed as part of bundles below.
@@ -64,9 +64,18 @@ local('sh helm/sync.sh extractor/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-kpis', '.',
     dockerfile='Dockerfile.kubebuilder',
     build_args={'GO_MOD_PATH': 'kpis'},
-    only=kubebuilder_binary_files('kpis') + ['internal/', 'go.mod', 'go.sum'],
+    only=kubebuilder_binary_files('kpis') + ['internal/', 'sync/', 'extractor/', 'go.mod', 'go.sum'],
 )
 local('sh helm/sync.sh kpis/dist/chart')
+# Deployed as part of bundles below.
+
+########### Cortex Syncer
+docker_build('ghcr.io/cobaltcore-dev/cortex-syncer', '.',
+    dockerfile='Dockerfile.kubebuilder',
+    build_args={'GO_MOD_PATH': 'sync'},
+    only=kubebuilder_binary_files('sync') + ['internal/', 'go.mod', 'go.sum'],
+)
+local('sh helm/sync.sh sync/dist/chart')
 # Deployed as part of bundles below.
 
 ########### Reservations Operator & CRDs
@@ -90,43 +99,55 @@ k8s_yaml(helm('decisions/dist/chart', name='cortex-decisions', values=[tilt_valu
 k8s_resource('decisions-controller-manager', labels=['Decisions'])
 
 ########### Cortex Bundles
-docker_build('ghcr.io/cobaltcore-dev/cortex', '.', only=[
-    'internal/', 'commands/', 'main.go', 'go.mod', 'go.sum', 'Makefile',
-    'reservations/api/', # API module of the reservations operator needed for the scheduler.
-    'decisions/api/', # API module of the decisions operator needed for the scheduler.
-])
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 
 # Package the lib charts locally and sync them to the bundle charts. In this way
 # we can bump the lib charts locally and test them before pushing them to the OCI registry.
 
-dep_charts = [
-    ('helm/library/cortex-core', 'cortex-core'),
+dep_charts = lambda bundle_chart_name: [
+    ('helm/library/cortex-alerts', 'cortex-alerts'),
     ('helm/library/cortex-postgres', 'cortex-postgres'),
     ('helm/library/cortex-mqtt', 'cortex-mqtt'),
+
     ('scheduler/dist/chart', 'cortex-scheduler'),
-]
+    ('extractor/dist/chart', 'cortex-extractor'),
+    ('kpis/dist/chart', 'cortex-kpis'),
+    ('sync/dist/chart', 'cortex-syncer'),
+] + ([
+    ('descheduler/dist/chart', 'cortex-descheduler'),
+] if bundle_chart_name in ['cortex-nova'] else [])
+
 bundle_charts = [
     ('helm/bundles/cortex-nova', 'cortex-nova'),
     ('helm/bundles/cortex-manila', 'cortex-manila'),
     ('helm/bundles/cortex-cinder', 'cortex-cinder'),
 ]
 
-for (dep_chart_path, dep_chart_name) in dep_charts:
-    watch_file(dep_chart_path)
-    local('sh helm/sync.sh ' + dep_chart_path)
-    for (bundle_chart_path, bundle_chart_name) in bundle_charts:
+for (bundle_chart_path, bundle_chart_name) in bundle_charts:
+    for (dep_chart_path, dep_chart_name) in dep_charts(bundle_chart_name):
+        print('--- Syncing dependency ' + dep_chart_name + ' into bundle ' + bundle_chart_name)
+        watch_file(dep_chart_path)
+        local('sh helm/sync.sh ' + dep_chart_path)
         local('helm package ' + dep_chart_path)
         gen_tgz = str(local('ls ' + dep_chart_name + '-*.tgz')).strip()
+        # If the file isn't there yet, copy it over.
+        if not os.path.exists(bundle_chart_path + '/charts/' + gen_tgz):
+            print('Adding ' + dep_chart_name + ' to ' + bundle_chart_name)
+            local('mkdir -p helm/bundles/' + bundle_chart_name + '/charts/')
+            local('mv -f ' + gen_tgz + ' ' + bundle_chart_path + '/charts/')
+            continue
+        # If it is there, compare the files and only copy if they differ.
         cmp = 'sh helm/cmp.sh ' + gen_tgz + ' ' + bundle_chart_path + '/charts/' + gen_tgz
         cmp_result = str(local(cmp)).strip()
         if cmp_result == 'true':
             print('Skipping ' + dep_chart_name + ' as it is already up to date in ' + bundle_chart_name)
             local('rm -f ' + gen_tgz)
         else:
+            print('Updating ' + dep_chart_name + ' in ' + bundle_chart_name)
             local('mkdir -p helm/bundles/' + bundle_chart_name + '/charts/')
             local('mv -f ' + gen_tgz + ' ' + bundle_chart_path + '/charts/')
 for (bundle_chart_path, _) in bundle_charts:
+    print('--- Final sync of bundle chart: ' + bundle_chart_path)
     local('sh helm/sync.sh ' + bundle_chart_path)
 
 port_mappings = {}
@@ -139,7 +160,6 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values]))
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-mqtt', labels=['Cortex-Nova'])
-    k8s_resource('cortex-nova-migrations', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-syncer', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-extractor', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-kpis', labels=['Cortex-Nova'])
@@ -153,7 +173,6 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=[tilt_values]))
     k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-mqtt', labels=['Cortex-Manila'])
-    k8s_resource('cortex-manila-migrations', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-syncer', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-extractor', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-kpis', labels=['Cortex-Manila'])
@@ -165,7 +184,6 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=[tilt_values]))
     k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-mqtt', labels=['Cortex-Cinder'])
-    k8s_resource('cortex-cinder-migrations', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-syncer', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-extractor', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-kpis', labels=['Cortex-Cinder'])

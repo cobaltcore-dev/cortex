@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v2
-name: cortex-core
-description: A Helm chart deploying Cortex core services.
+name: cortex-alerts
+description: A Helm chart deploying Cortex alerts services.
 type: application
 appVersion: "sha-9c48755"
-version: 0.26.0
+version: 0.0.1

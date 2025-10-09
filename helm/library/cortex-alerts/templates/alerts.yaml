@@ -4,13 +4,13 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: {{ include "cortex.fullname" . }}-core-alerts
+  name: {{ include "cortex.fullname" . }}-lib-alerts
   labels:
     type: alerting-rules
     prometheus: {{ .Values.alerts.prometheus | quote }}
 spec:
   groups:
-  - name: cortex-core-alerts
+  - name: cortex-lib-alerts
     rules:
     - alert: CortexHttpRequest400sTooHigh
       expr: rate(cortex_scheduler_api_request_duration_seconds_count {component=~"{{ $componentPrefix }}-scheduler", status=~"4.+", namespace="{{ $namespaceSelector }}" }[5m]) > 0.1

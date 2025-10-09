@@ -7,7 +7,7 @@ This directory contains the Helm Charts required to install Cortex.
 
 Helm charts are organized into three main directories:
 - `bundles`: Contain the Helm charts for each supported scheduling domain, such as `cortex-manila`, `cortex-nova`. They are the highest level of abstraction and part of the Cortex release.
-- `library`: Contain shared library and common Helm charts, such as `cortex-core`, `cortex-postgres` used in the bundles.
+- `library`: Contain shared library and common Helm charts, such as `cortex-alerts`, `cortex-postgres` used in the bundles.
 - `dev`: Contain development-specific Helm charts. These are not bundles into releases but are used for local development and testing.
 
 ```
@@ -17,7 +17,7 @@ Helm charts are organized into three main directories:
     ├── bundles
     │       ├── cortex-nova
     │       │       ├── Chart.yaml
-    │       │       │       ├── lib/cortex-core
+    │       │       │       ├── lib/cortex-alerts
     │       │       │       ├── lib/cortex-postgres
     │       │       │       └── ...
     │       │       └── < Scheduling domain specific configuration, alerts, dashboards, etc. >
@@ -25,7 +25,7 @@ Helm charts are organized into three main directories:
     │       │       └── ...
     │       └── ...
     ├── library
-    │       ├── cortex-core
+    │       ├── cortex-alerts
     │       ├── cortex-postgres
     │       └── ...
     └── dev
