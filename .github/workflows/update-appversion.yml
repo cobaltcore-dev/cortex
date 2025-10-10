@@ -44,6 +44,13 @@ jobs:
           files: |
             decisions/**
 
+      - name: Get all changed machines/ files
+        id: changed_machines_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            machines/**
+
       - name: Get all changed scheduler/ files
         id: changed_scheduler_files
         uses: tj-actions/changed-files@v47
@@ -189,4 +196,18 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add decisions/dist/chart/Chart.yaml
           git commit -m "Bump cortex-decisions chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main
+
+      # Only bumped if there are changes in the machines directory.
+      - name: Update appVersion in cortex-machines Chart.yaml
+        if: steps.changed_machines_files.outputs.all_changed_files != ''
+        run: |
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' machines/dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex-machines
+        if: steps.changed_machines_files.outputs.all_changed_files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add machines/dist/chart/Chart.yaml
+          git commit -m "Bump cortex-machines chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main

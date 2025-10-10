@@ -11,7 +11,6 @@ replace (
 require (
 	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/machines/api v0.0.0-00010101000000-000000000000
-	github.com/ironcore-dev/ironcore v0.2.4
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
@@ -59,6 +58,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/ironcore-dev/ironcore v0.2.4 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lib/pq v1.10.9 // indirect

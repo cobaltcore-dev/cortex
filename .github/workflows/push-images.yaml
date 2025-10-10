@@ -154,6 +154,48 @@ jobs:
           subject-digest: ${{ steps.push_cortex_decisions.outputs.digest }}
           push-to-registry: true
 
+      # Only build and push the machines operator image if there are changes
+      # in the machines directory.
+      - name: Get all changed machines/ files
+        id: changed_machines_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            machines/**
+      - name: Docker Meta (Cortex Machines)
+        if: steps.changed_machines_files.outputs.all_changed_files != ''
+        id: meta_cortex_machines
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-machines-operator
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            latest
+      - name: Build and Push Cortex Machines Operator
+        if: steps.changed_machines_files.outputs.all_changed_files != ''
+        id: push_cortex_machines
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_cortex_machines.outputs.tags }}
+          labels: ${{ steps.meta_cortex_machines.outputs.labels }}
+          build-args: |
+            GO_MOD_PATH=machines
+            GIT_TAG=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+      - name: Generate Artifact Attestation for Cortex Machines
+        if: steps.changed_machines_files.outputs.all_changed_files != ''
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-machines-operator
+          subject-digest: ${{ steps.push_cortex_machines.outputs.digest }}
+          push-to-registry: true
+
       # Only build and push the scheduler image if there are changes
       # in the scheduler directory.
       - name: Get all changed scheduler/ files
