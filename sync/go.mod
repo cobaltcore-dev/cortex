@@ -9,7 +9,7 @@ replace (
 )
 
 require (
-	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/lib v0.0.0-20251009112047-8ec59e4f0e57
 	github.com/cobaltcore-dev/cortex/sync/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/go-gorp/gorp v2.2.0+incompatible
