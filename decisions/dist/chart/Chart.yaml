@@ -3,6 +3,6 @@ name: cortex-decisions-operator
 description: A Helm chart to distribute the cortex decisions operator.
 type: application
 version: 0.2.0
-appVersion: "sha-5a66c04"
+appVersion: "sha-8ed27b0"
 icon: "https://example.com/icon.png"
 dependencies: []
