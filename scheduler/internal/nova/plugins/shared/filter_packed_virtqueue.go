@@ -7,21 +7,21 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/placement"
 )
 
 type FilterPackedVirtqueueStep struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, scheduling.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
 func (s *FilterPackedVirtqueueStep) GetName() string { return "filter_packed_virtqueue" }
 
 // If requested, only get hosts with packed virtqueues.
-func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	// We don't care about the value.
 	_, reqInSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs["hw:virtio_packed_ring"]

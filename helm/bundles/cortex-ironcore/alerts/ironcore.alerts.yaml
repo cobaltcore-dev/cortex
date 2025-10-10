@@ -1,0 +1,3 @@
+groups:
+- name: cortex-ironcore-alerts
+  rules: []

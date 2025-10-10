@@ -7,21 +7,21 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/placement"
 )
 
 type FilterDisabledStep struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, scheduling.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
 func (s *FilterDisabledStep) GetName() string { return "filter_disabled" }
 
 // Only get hosts that are not disabled or down.
-func (s *FilterDisabledStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterDisabledStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	var computeHostsActive []string
 	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsActive, `

@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/vmware"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 )
 
@@ -42,7 +42,7 @@ func (o AvoidShortTermContendedHostsStepOpts) Validate() error {
 // Step to avoid recently contended hosts by downvoting them.
 type AvoidShortTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.PipelineRequest, AvoidShortTermContendedHostsStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, AvoidShortTermContendedHostsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -51,7 +51,7 @@ func (s *AvoidShortTermContendedHostsStep) GetName() string {
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
@@ -71,14 +71,14 @@ func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request ap
 		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
-		activationAvg := lib.MinMaxScale(
+		activationAvg := scheduling.MinMaxScale(
 			host.AvgCPUContention,
 			s.Options.AvgCPUContentionLowerBound,
 			s.Options.AvgCPUContentionUpperBound,
 			s.Options.AvgCPUContentionActivationLowerBound,
 			s.Options.AvgCPUContentionActivationUpperBound,
 		)
-		activationMax := lib.MinMaxScale(
+		activationMax := scheduling.MinMaxScale(
 			host.MaxCPUContention,
 			s.Options.MaxCPUContentionLowerBound,
 			s.Options.MaxCPUContentionUpperBound,

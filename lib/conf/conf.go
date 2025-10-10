@@ -87,6 +87,44 @@ type APIConfig struct {
 	Port int `json:"port"`
 }
 
+type SchedulerStepConfig[Extra any] struct {
+	// The name of the step implementation.
+	Name string `json:"name"`
+	// The alias of this step, if any.
+	//
+	// The alias can be used to distinguish between different configurations
+	// of the same step, or use a more specific name.
+	Alias string `json:"alias,omitempty"`
+	// Custom options for the step, as a raw yaml map.
+	Options RawOpts `json:"options,omitempty"`
+	// The dependencies this step needs.
+	DependencyConfig `json:"dependencies,omitempty"`
+	// The validations to use for this step.
+	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
+
+	// Additional configuration for the step, if needed.
+	Extra *Extra `json:"extra,omitempty"`
+}
+
+// Config for which validations to disable for a scheduler step.
+type SchedulerStepDisabledValidationsConfig struct {
+	// Whether to validate that no subjects are removed or added from the scheduler
+	// step. This should only be disabled for scheduler steps that remove subjects.
+	// Thus, if no value is provided, the default is false.
+	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
+	// Whether to validate that, after running the step, there are remaining subjects.
+	// This should only be disabled for scheduler steps that are expected to
+	// remove all subjects.
+	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
+}
+
+// Configuration for the scheduler API.
+type SchedulerAPIConfig struct {
+	// If request bodies should be logged out.
+	// This feature is intended for debugging purposes only.
+	LogRequestBodies bool `json:"logRequestBodies"`
+}
+
 // Configuration for the keystone authentication.
 type KeystoneConfig struct {
 	// The URL of the keystone service.

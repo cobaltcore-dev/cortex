@@ -12,9 +12,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/manila/api"
 )
 
@@ -22,7 +22,7 @@ type mockPipeline struct {
 	runFunc func(api.PipelineRequest) ([]string, error)
 }
 
-func (p *mockPipeline) SetConsumer(consumer lib.SchedulingDecisionConsumer[api.PipelineRequest]) {
+func (p *mockPipeline) SetConsumer(consumer scheduling.SchedulingDecisionConsumer[api.PipelineRequest]) {
 
 }
 
@@ -100,11 +100,11 @@ func TestManilaExternalScheduler_Success(t *testing.T) {
 		},
 	}
 	a := &httpAPI{
-		pipelines: map[string]lib.Pipeline[api.PipelineRequest]{
+		pipelines: map[string]scheduling.Pipeline[api.PipelineRequest]{
 			"default": pipeline,
 		},
 		config:  conf.SchedulerAPIConfig{},
-		monitor: lib.APIMonitor{},
+		monitor: scheduling.APIMonitor{},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(validRequestBody()))
@@ -130,7 +130,7 @@ func TestManilaExternalScheduler_InvalidMethod(t *testing.T) {
 	api := &httpAPI{
 		pipelines: nil,
 		config:    conf.SchedulerAPIConfig{},
-		monitor:   lib.APIMonitor{},
+		monitor:   scheduling.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/scheduler/manila/external", http.NoBody)
 	w := httptest.NewRecorder()
@@ -141,7 +141,7 @@ func TestManilaExternalScheduler_InvalidJSON(t *testing.T) {
 	api := &httpAPI{
 		pipelines: nil,
 		config:    conf.SchedulerAPIConfig{},
-		monitor:   lib.APIMonitor{},
+		monitor:   scheduling.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader([]byte(`{invalid json}`)))
 	w := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestManilaExternalScheduler_MissingWeight(t *testing.T) {
 	api := &httpAPI{
 		pipelines: nil,
 		config:    conf.SchedulerAPIConfig{},
-		monitor:   lib.APIMonitor{},
+		monitor:   scheduling.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(missingWeightBody()))
 	w := httptest.NewRecorder()
@@ -168,7 +168,7 @@ func TestManilaExternalScheduler_UnknownWeight(t *testing.T) {
 	api := &httpAPI{
 		pipelines: nil,
 		config:    conf.SchedulerAPIConfig{},
-		monitor:   lib.APIMonitor{},
+		monitor:   scheduling.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(unknownWeightBody()))
 	w := httptest.NewRecorder()
@@ -187,11 +187,11 @@ func TestManilaExternalScheduler_PipelineError(t *testing.T) {
 		},
 	}
 	api := &httpAPI{
-		pipelines: map[string]lib.Pipeline[api.PipelineRequest]{
+		pipelines: map[string]scheduling.Pipeline[api.PipelineRequest]{
 			"default": pipeline,
 		},
 		config:  conf.SchedulerAPIConfig{},
-		monitor: lib.APIMonitor{},
+		monitor: scheduling.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(validRequestBody()))
 	w := httptest.NewRecorder()
@@ -205,7 +205,7 @@ func TestManilaExternalScheduler_PipelineError(t *testing.T) {
 
 func TestManilaExternalScheduler_BodyReadError(t *testing.T) {
 	api := &httpAPI{
-		pipelines: map[string]lib.Pipeline[api.PipelineRequest]{
+		pipelines: map[string]scheduling.Pipeline[api.PipelineRequest]{
 			"default": &mockPipeline{
 				runFunc: func(req api.PipelineRequest) ([]string, error) {
 					return nil, nil // No need to run pipeline for this test
@@ -213,7 +213,7 @@ func TestManilaExternalScheduler_BodyReadError(t *testing.T) {
 			},
 		},
 		config:  conf.SchedulerAPIConfig{LogRequestBodies: true},
-		monitor: lib.APIMonitor{},
+		monitor: scheduling.APIMonitor{},
 	}
 	// Simulate a body that returns error on Read
 	r := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", io.NopCloser(badReader{}))
@@ -230,7 +230,7 @@ func TestManilaExternalScheduler_EmptyBody(t *testing.T) {
 	api := &httpAPI{
 		pipelines: nil,
 		config:    conf.SchedulerAPIConfig{},
-		monitor:   lib.APIMonitor{},
+		monitor:   scheduling.APIMonitor{},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", http.NoBody)
 	w := httptest.NewRecorder()

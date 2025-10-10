@@ -10,14 +10,14 @@ import (
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 )
 
 type StepScoper struct {
 	// The wrapped step to scope.
-	Step lib.Step[api.PipelineRequest]
+	Step scheduling.Step[api.PipelineRequest]
 	// The scope for this step.
 	Scope conf.NovaSchedulerStepScope
 	// The database to use for querying host capabilities.
@@ -41,11 +41,11 @@ func (s *StepScoper) Init(alias string, db db.DB, opts libconf.RawOpts) error {
 	return s.Step.Init(alias, db, opts)
 }
 
-// Run the step and sRun(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error)
-func (s *StepScoper) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+// Run the step and sRun(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error)
+func (s *StepScoper) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	// If the spec is not in scope, skip it.
 	if !s.isSpecInScope(traceLog, request) {
-		return nil, lib.ErrStepSkipped
+		return nil, scheduling.ErrStepSkipped
 	}
 
 	result, err := s.Step.Run(traceLog, request)
@@ -59,7 +59,7 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.PipelineRequest) (*l
 		return nil, err
 	}
 	// For all hosts not in scope, reset their activations to the no-effect value.
-	activationFunction := lib.ActivationFunction{}
+	activationFunction := scheduling.ActivationFunction{}
 	for host := range result.Activations {
 		// We can use the in-scope or the not-in-scope map here.
 		// Its more likely that the hosts out of scope are fewer than

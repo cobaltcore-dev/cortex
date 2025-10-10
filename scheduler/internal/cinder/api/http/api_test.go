@@ -12,18 +12,18 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
+	scheduler "github.com/cobaltcore-dev/cortex/lib/scheduling"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/cinder"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/cinder/api"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
-	scheduler "github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 )
 
 type mockPipeline struct {
 	runFunc func(api.PipelineRequest) ([]string, error)
 }
 
-func (p *mockPipeline) SetConsumer(consumer lib.SchedulingDecisionConsumer[api.PipelineRequest]) {
+func (p *mockPipeline) SetConsumer(consumer scheduling.SchedulingDecisionConsumer[api.PipelineRequest]) {
 
 }
 

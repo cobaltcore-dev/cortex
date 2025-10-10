@@ -7,21 +7,21 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/placement"
 )
 
 type FilterHasAcceleratorsStep struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, scheduling.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
 func (s *FilterHasAcceleratorsStep) GetName() string { return "filter_has_accelerators" }
 
 // If requested, only get hosts with accelerators.
-func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if _, ok := extraSpecs["accel:device_profile"]; !ok {

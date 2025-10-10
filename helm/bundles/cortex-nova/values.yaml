@@ -428,23 +428,24 @@ cortex-scheduler:
               # Binpack hana vmware vms on hana hosts.
               - name: shared_resource_balancing
                 alias: vmware_hana_binpacking
-                scope:
-                  hostSelectors:
-                    # Note: due to the vmware spec selector, it is expected that
-                    # this step is only executed for VMware hosts.
-                    - subject: trait
-                      type: infix
-                      value: "HANA_EXCLUSIVE"
-                      operation: intersection
-                  specSelectors:
-                    - subject: flavor
-                      type: infix
-                      value: "hana"
-                      action: continue
-                    - subject: vmware
-                      type: bool
-                      value: true
-                      action: continue
+                extra:
+                  scope:
+                    hostSelectors:
+                      # Note: due to the vmware spec selector, it is expected that
+                      # this step is only executed for VMware hosts.
+                      - subject: trait
+                        type: infix
+                        value: "HANA_EXCLUSIVE"
+                        operation: intersection
+                    specSelectors:
+                      - subject: flavor
+                        type: infix
+                        value: "hana"
+                        action: continue
+                      - subject: vmware
+                        type: bool
+                        value: true
+                        action: continue
                 options:
                   # In this configuration, we only consider the memory usage
                   # after the flavor has been placed.
@@ -462,25 +463,26 @@ cortex-scheduler:
               # we only execute it for VMware vms.
               - name: shared_resource_balancing
                 alias: vmware_general_purpose_balancing
-                scope:
-                  hostSelectors:
-                    # Note: due to the vmware spec selector, it is expected that
-                    # this step is only executed for VMware hosts. However,
-                    # we don't want to balance on HANA exclusive hosts.
-                    - subject: trait
-                      type: infix
-                      value: "HANA_EXCLUSIVE"
-                      operation: difference
-                  specSelectors:
-                    # Don't balance HANA vms.
-                    - subject: flavor
-                      type: infix
-                      value: "hana"
-                      action: skip
-                    - subject: vmware
-                      type: bool
-                      value: true
-                      action: continue
+                extra:
+                  scope:
+                    hostSelectors:
+                      # Note: due to the vmware spec selector, it is expected that
+                      # this step is only executed for VMware hosts. However,
+                      # we don't want to balance on HANA exclusive hosts.
+                      - subject: trait
+                        type: infix
+                        value: "HANA_EXCLUSIVE"
+                        operation: difference
+                    specSelectors:
+                      # Don't balance HANA vms.
+                      - subject: flavor
+                        type: infix
+                        value: "hana"
+                        action: skip
+                      - subject: vmware
+                        type: bool
+                        value: true
+                        action: continue
                 options:
                   # In this configuration, we only consider the memory usage.
                   ramEnabled: true
@@ -495,12 +497,13 @@ cortex-scheduler:
               # period of time. This step depends on vrops metrics and is thus only
               # executed for VMware vms.
               - name: vmware_avoid_long_term_contended_hosts
-                scope:
-                  specSelectors:
-                    - subject: vmware
-                      type: bool
-                      value: true
-                      action: continue
+                extra:
+                  scope:
+                    specSelectors:
+                      - subject: vmware
+                        type: bool
+                        value: true
+                        action: continue
                 options:
                   avgCPUContentionLowerBound: 0 # pct
                   avgCPUContentionUpperBound: 10 # pct
@@ -517,12 +520,13 @@ cortex-scheduler:
               # period of time. This step depends on vrops metrics and is thus only
               # executed for VMware vms.
               - name: vmware_avoid_short_term_contended_hosts
-                scope:
-                  specSelectors:
-                    - subject: vmware
-                      type: bool
-                      value: true
-                      action: continue
+                extra:
+                  scope:
+                    specSelectors:
+                      - subject: vmware
+                        type: bool
+                        value: true
+                        action: continue
                 options:
                   avgCPUContentionLowerBound: 0 # pct
                   avgCPUContentionUpperBound: 10 # pct
@@ -659,23 +663,24 @@ cortex-scheduler:
               # Binpack hana vmware vms on hana hosts.
               - name: shared_resource_balancing
                 alias: vmware_hana_binpacking
-                scope:
-                  hostSelectors:
-                    # Note: due to the vmware spec selector, it is expected that
-                    # this step is only executed for VMware hosts.
-                    - subject: trait
-                      type: infix
-                      value: "HANA_EXCLUSIVE"
-                      operation: intersection
-                  specSelectors:
-                    - subject: flavor
-                      type: infix
-                      value: "hana"
-                      action: continue
-                    - subject: vmware
-                      type: bool
-                      value: true
-                      action: continue
+                extra:
+                  scope:
+                    hostSelectors:
+                      # Note: due to the vmware spec selector, it is expected that
+                      # this step is only executed for VMware hosts.
+                      - subject: trait
+                        type: infix
+                        value: "HANA_EXCLUSIVE"
+                        operation: intersection
+                    specSelectors:
+                      - subject: flavor
+                        type: infix
+                        value: "hana"
+                        action: continue
+                      - subject: vmware
+                        type: bool
+                        value: true
+                        action: continue
                 options:
                   # In this configuration, we only consider the memory usage
                   # after the flavor has been placed.
@@ -693,25 +698,26 @@ cortex-scheduler:
               # we only execute it for VMware vms.
               - name: shared_resource_balancing
                 alias: vmware_general_purpose_balancing
-                scope:
-                  hostSelectors:
-                    # Note: due to the vmware spec selector, it is expected that
-                    # this step is only executed for VMware hosts. However,
-                    # we don't want to balance on HANA exclusive hosts.
-                    - subject: trait
-                      type: infix
-                      value: "HANA_EXCLUSIVE"
-                      operation: difference
-                  specSelectors:
-                    # Don't balance HANA vms.
-                    - subject: flavor
-                      type: infix
-                      value: "hana"
-                      action: skip
-                    - subject: vmware
-                      type: bool
-                      value: true
-                      action: continue
+                extra:
+                  scope:
+                    hostSelectors:
+                      # Note: due to the vmware spec selector, it is expected that
+                      # this step is only executed for VMware hosts. However,
+                      # we don't want to balance on HANA exclusive hosts.
+                      - subject: trait
+                        type: infix
+                        value: "HANA_EXCLUSIVE"
+                        operation: difference
+                    specSelectors:
+                      # Don't balance HANA vms.
+                      - subject: flavor
+                        type: infix
+                        value: "hana"
+                        action: skip
+                      - subject: vmware
+                        type: bool
+                        value: true
+                        action: continue
                 options:
                   # In this configuration, we only consider the memory usage.
                   ramEnabled: true
@@ -726,12 +732,13 @@ cortex-scheduler:
               # period of time. This step depends on vrops metrics and is thus only
               # executed for VMware vms.
               - name: vmware_avoid_long_term_contended_hosts
-                scope:
-                  specSelectors:
-                    - subject: vmware
-                      type: bool
-                      value: true
-                      action: continue
+                extra:
+                  scope:
+                    specSelectors:
+                      - subject: vmware
+                        type: bool
+                        value: true
+                        action: continue
                 options:
                   avgCPUContentionLowerBound: 0 # pct
                   avgCPUContentionUpperBound: 10 # pct
@@ -748,12 +755,13 @@ cortex-scheduler:
               # period of time. This step depends on vrops metrics and is thus only
               # executed for VMware vms.
               - name: vmware_avoid_short_term_contended_hosts
-                scope:
-                  specSelectors:
-                    - subject: vmware
-                      type: bool
-                      value: true
-                      action: continue
+                extra:
+                  scope:
+                    specSelectors:
+                      - subject: vmware
+                        type: bool
+                        value: true
+                        action: continue
                 options:
                   avgCPUContentionLowerBound: 0 # pct
                   avgCPUContentionUpperBound: 10 # pct

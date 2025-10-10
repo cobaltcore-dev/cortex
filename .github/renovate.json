@@ -50,6 +50,7 @@
       "matchFileNames": [
         "reservations/go.mod",
         "decisions/go.mod",
+        "machines/go.mod",
         "lib/go.mod",
         "testlib/go.mod",
         "sync/go.mod",
@@ -61,6 +62,7 @@
         "github.com/cobaltcore-dev/cortex/lib",
         "github.com/cobaltcore-dev/cortex/testlib",
         "github.com/cobaltcore-dev/cortex/decisions/api",
+        "github.com/cobaltcore-dev/cortex/machines/api",
         "github.com/cobaltcore-dev/cortex/sync/api",
         "github.com/cobaltcore-dev/cortex/extractor/api",
         "github.com/cobaltcore-dev/cortex/kpis/api",
@@ -72,7 +74,8 @@
     {
       "matchFileNames": [
         "reservations/config/manager/kustomization.yaml",
-        "decisions/config/manager/kustomization.yaml"
+        "decisions/config/manager/kustomization.yaml",
+        "machines/config/manager/kustomization.yaml"
       ],
       "enabled": false
     }

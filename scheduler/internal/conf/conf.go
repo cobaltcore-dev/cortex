@@ -12,9 +12,11 @@ type CinderSchedulerConfig struct {
 	Pipelines []CinderSchedulerPipelineConfig `json:"pipelines"`
 }
 
+type CinderSchedulerStepConfig = libconf.SchedulerStepConfig[struct{}]
+
 type CinderSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
-	Plugins []SchedulerStepConfig `json:"plugins"`
+	Plugins []CinderSchedulerStepConfig `json:"plugins"`
 
 	// The name of this scheduler pipeline.
 	// The name is used to distinguish and route between multiple pipelines.
@@ -26,9 +28,27 @@ type ManilaSchedulerConfig struct {
 	Pipelines []ManilaSchedulerPipelineConfig `json:"pipelines"`
 }
 
+type ManilaSchedulerStepConfig = libconf.SchedulerStepConfig[struct{}]
+
 type ManilaSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
-	Plugins []SchedulerStepConfig `json:"plugins"`
+	Plugins []ManilaSchedulerStepConfig `json:"plugins"`
+
+	// The name of this scheduler pipeline.
+	// The name is used to distinguish and route between multiple pipelines.
+	Name string `json:"name"`
+}
+
+type MachineSchedulerConfig struct {
+	// Pipelines in this scheduler.
+	Pipelines []MachineSchedulerPipelineConfig `json:"pipelines"`
+}
+
+type MachineSchedulerStepConfig = libconf.SchedulerStepConfig[struct{}]
+
+type MachineSchedulerPipelineConfig struct {
+	// Scheduler step plugins by their name.
+	Plugins []MachineSchedulerStepConfig `json:"plugins"`
 
 	// The name of this scheduler pipeline.
 	// The name is used to distinguish and route between multiple pipelines.
@@ -56,9 +76,16 @@ type NovaSchedulerLiquidAPIConfig struct {
 	Hypervisors []NovaHypervisorType `json:"hypervisors"`
 }
 
+type NovaSchedulerStepExtraConfig struct {
+	// The scope of the step, i.e. which hosts it should be applied to.
+	Scope NovaSchedulerStepScope `json:"scope,omitempty"`
+}
+
+type NovaSchedulerStepConfig = libconf.SchedulerStepConfig[NovaSchedulerStepExtraConfig]
+
 type NovaSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
-	Plugins []SchedulerStepConfig `json:"plugins"`
+	Plugins []NovaSchedulerStepConfig `json:"plugins"`
 
 	// Dependencies needed by all the Nova scheduler steps.
 	libconf.DependencyConfig `json:"dependencies,omitempty"`
@@ -71,27 +98,6 @@ type NovaSchedulerPipelineConfig struct {
 	// regardless of what nova sends us in the request.
 	// By default, this is false (use the hosts nova gives us).
 	PreselectAllHosts bool `json:"preselectAllHosts"`
-}
-
-type SchedulerStepConfig struct {
-	// The name of the step implementation.
-	Name string `json:"name"`
-	// The alias of this step, if any.
-	//
-	// The alias can be used to distinguish between different configurations
-	// of the same step, or use a more specific name.
-	Alias string `json:"alias,omitempty"`
-	// Custom options for the step, as a raw yaml map.
-	Options libconf.RawOpts `json:"options,omitempty"`
-	// The dependencies this step needs.
-	libconf.DependencyConfig `json:"dependencies,omitempty"`
-	// The validations to use for this step.
-	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
-
-	// Additional nova configuration for the step.
-
-	// The scope of the step, i.e. which hosts it should be applied to.
-	Scope *NovaSchedulerStepScope `json:"scope,omitempty"`
 }
 
 // Scope that defines which hosts a scheduler step should be applied to.
@@ -159,18 +165,6 @@ type NovaSchedulerStepSpecScope struct {
 
 func (s NovaSchedulerStepSpecScope) IsUndefined() bool {
 	return len(s.AllOfFlavorNameInfixes) == 0
-}
-
-// Config for which validations to disable for a scheduler step.
-type SchedulerStepDisabledValidationsConfig struct {
-	// Whether to validate that no subjects are removed or added from the scheduler
-	// step. This should only be disabled for scheduler steps that remove subjects.
-	// Thus, if no value is provided, the default is false.
-	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
-	// Whether to validate that, after running the step, there are remaining subjects.
-	// This should only be disabled for scheduler steps that are expected to
-	// remove all subjects.
-	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
 }
 
 // Configuration for the scheduler module.

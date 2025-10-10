@@ -8,19 +8,19 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 )
 
 type FilterCorrectAZStep struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, scheduling.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
 func (s *FilterCorrectAZStep) GetName() string { return "filter_correct_az" }
 
 // Only get hosts in the requested az.
-func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	if request.Spec.Data.AvailabilityZone == "" {
 		traceLog.Debug("no availability zone requested, skipping filter_correct_az step")

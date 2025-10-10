@@ -12,9 +12,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/plugins/shared"
@@ -26,9 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type NovaStep = lib.Step[api.PipelineRequest]
+type NovaStep = scheduling.Step[api.PipelineRequest]
 
-// Configuration of steps supported by the lib.
+// Configuration of steps supported by the scheduling.
 // The steps actually used by the scheduler are defined through the configuration file.
 var supportedSteps = map[string]func() NovaStep{
 	// VMware-specific steps
@@ -59,7 +59,7 @@ const (
 // Specific pipeline for nova.
 type novaPipeline struct {
 	// The underlying shared pipeline logic.
-	lib.Pipeline[api.PipelineRequest]
+	scheduling.Pipeline[api.PipelineRequest]
 	// Database to use for the nova pipeline.
 	database db.DB
 	// Whether the pipeline should preselect all hosts.
@@ -214,29 +214,29 @@ func (c *novaPipelineConsumer) Consume(
 func NewPipeline(
 	config conf.NovaSchedulerPipelineConfig,
 	db db.DB,
-	monitor lib.PipelineMonitor,
+	monitor scheduling.PipelineMonitor,
 	mqttClient mqtt.Client,
-) lib.Pipeline[api.PipelineRequest] {
+) scheduling.Pipeline[api.PipelineRequest] {
 
 	// Wrappers to apply to each step in the pipeline.
-	wrappers := []lib.StepWrapper[api.PipelineRequest]{
+	wrappers := []scheduling.StepWrapper[api.PipelineRequest, conf.NovaSchedulerStepExtraConfig]{
 		// Scope the step to Nova hosts/specs that match the step's scope.
-		func(s NovaStep, c conf.SchedulerStepConfig) NovaStep {
-			if c.Scope == nil {
+		func(s NovaStep, c conf.NovaSchedulerStepConfig) NovaStep {
+			if c.Extra == nil {
 				return s // No Nova configuration, run the step as is.
 			}
-			return &StepScoper{Step: s, Scope: *c.Scope}
+			return &StepScoper{Step: s, Scope: (*c.Extra).Scope}
 		},
 		// Validate that no hosts are removed.
-		func(s NovaStep, conf conf.SchedulerStepConfig) NovaStep {
-			return lib.ValidateStep(s, conf.DisabledValidations)
+		func(s NovaStep, c conf.NovaSchedulerStepConfig) NovaStep {
+			return scheduling.ValidateStep(s, c.DisabledValidations)
 		},
 		// Monitor the step execution.
-		func(s NovaStep, conf conf.SchedulerStepConfig) NovaStep {
-			return lib.MonitorStep(s, monitor)
+		func(s NovaStep, c conf.NovaSchedulerStepConfig) NovaStep {
+			return scheduling.MonitorStep(s, monitor)
 		},
 	}
-	pipeline := lib.NewPipeline(
+	pipeline := scheduling.NewPipeline(
 		supportedSteps, config.Plugins, wrappers,
 		db, monitor, mqttClient, TopicFinished,
 	)

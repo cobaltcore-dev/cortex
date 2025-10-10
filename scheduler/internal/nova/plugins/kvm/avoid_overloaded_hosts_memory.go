@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/kvm"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 )
 
@@ -42,7 +42,7 @@ func (o AvoidOverloadedHostsMemoryStepOpts) Validate() error {
 // Step to avoid high cpu hosts by downvoting them.
 type AvoidOverloadedHostsMemoryStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.PipelineRequest, AvoidOverloadedHostsMemoryStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, AvoidOverloadedHostsMemoryStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -51,7 +51,7 @@ func (s *AvoidOverloadedHostsMemoryStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg memory active"] = s.PrepareStats(request, "%")
 	result.Statistics["max memory active"] = s.PrepareStats(request, "%")
@@ -70,14 +70,14 @@ func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.
 		if _, ok := result.Activations[host.ComputeHost]; !ok {
 			continue
 		}
-		activationAvg := lib.MinMaxScale(
+		activationAvg := scheduling.MinMaxScale(
 			host.AvgMemoryActive,
 			s.Options.AvgMemoryUsageLowerBound,
 			s.Options.AvgMemoryUsageUpperBound,
 			s.Options.AvgMemoryUsageActivationLowerBound,
 			s.Options.AvgMemoryUsageActivationUpperBound,
 		)
-		activationMax := lib.MinMaxScale(
+		activationMax := scheduling.MinMaxScale(
 			host.MaxMemoryActive,
 			s.Options.MaxMemoryUsageLowerBound,
 			s.Options.MaxMemoryUsageUpperBound,

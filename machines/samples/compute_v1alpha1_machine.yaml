@@ -1,0 +1,14 @@
+apiVersion: compute.ironcore.dev/v1alpha1
+kind: Machine
+metadata:
+  name: machine-sample
+spec:
+  machineClassRef:
+    name: machineclass-sample
+  #  machinePoolRef:
+  #    name: default
+  image: my-image
+  ignitionRef:
+    name: my-ignition-secret
+  # This is a custom field added by the cortex integration
+  scheduler: cortex

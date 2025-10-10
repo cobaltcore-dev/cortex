@@ -25,6 +25,8 @@ jobs:
           cd lib && go test -v ./...
           echo "Testing reservations module..."
           cd ../reservations && go test -v ./...
+          echo "Testing machines module..."
+          cd ../machines && go test -v ./...
           echo "Testing decisions module..."
           cd ../decisions && go test -v ./...
           echo "Testing scheduler module..."
@@ -123,6 +125,14 @@ jobs:
             -coverprofile=decisions_profile.cov ./internal/...
           go tool cover -func decisions_profile.cov > decisions_func_coverage.txt
           cd ..
+
+          echo "Running tests for machines module..."
+          cd machines
+          go test -v \
+            -coverpkg=./internal/... \
+            -coverprofile=machines_profile.cov ./internal/...
+          go tool cover -func machines_profile.cov > machines_func_coverage.txt
+          cd ..
       - name: Upload coverage files
         uses: actions/upload-artifact@v4
         with:
@@ -132,6 +142,7 @@ jobs:
             reservations/reservations_func_coverage.txt
             scheduler/scheduler_func_coverage.txt
             decisions/decisions_func_coverage.txt
+            machines/machines_func_coverage.txt
             descheduler/descheduler_func_coverage.txt
             extractor/extractor_func_coverage.txt
             kpis/kpis_func_coverage.txt
@@ -276,6 +287,19 @@ jobs:
               decisionsCoverageReport = 'No coverage data available';
             }
 
+            // Read machines module coverage report
+            let machinesCoverageReport = '';
+            let machinesCoveragePercentage = 'unknown';
+            try {
+              machinesCoverageReport = fs.readFileSync('machines/machines_func_coverage.txt', 'utf8');
+              const machinesLines = machinesCoverageReport.trim().split('\n');
+              const machinesLastLine = machinesLines[machinesLines.length - 1];
+              const machinesCoverageMatch = machinesLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              machinesCoveragePercentage = machinesCoverageMatch ? machinesCoverageMatch[1] : 'unknown';
+            } catch (error) {
+              machinesCoverageReport = 'No coverage data available';
+            }
+
             let commentBody = '<!-- coverage-comment -->\n';
             commentBody += '## Test Coverage Report\n\n';
 
@@ -306,6 +330,16 @@ jobs:
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
             commentBody += decisionsCoverageReport;
+            commentBody += '```\n';
+            commentBody += '</details>\n';
+
+            // Machines module coverage
+            commentBody += '<details>\n';
+            commentBody += '<summary>Coverage in machines module (machines/internal/): ';
+            commentBody += machinesCoveragePercentage;
+            commentBody += '%</summary>\n\n';
+            commentBody += '```text\n';
+            commentBody += machinesCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

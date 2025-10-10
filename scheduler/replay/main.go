@@ -15,7 +15,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/manila"
 	manilaAPI "github.com/cobaltcore-dev/cortex/scheduler/internal/manila/api"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova"
@@ -69,7 +69,7 @@ func main() {
 		"nova":   nova.TopicFinished,
 		"manila": manila.TopicFinished,
 	}[*schedulerType], 2, func(client mqtt.Client, msg mqtt.Message) {
-		var req lib.PipelineRequest
+		var req scheduling.PipelineRequest
 		switch *schedulerType {
 		case "nova":
 			var data struct {

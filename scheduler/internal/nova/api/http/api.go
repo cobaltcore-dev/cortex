@@ -19,9 +19,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	schedulerNova "github.com/cobaltcore-dev/cortex/scheduler/internal/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
@@ -39,9 +39,9 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	pipelines map[string]lib.Pipeline[api.PipelineRequest]
+	pipelines map[string]scheduling.Pipeline[api.PipelineRequest]
 	config    conf.SchedulerConfig // General API config for all schedulers.
-	monitor   lib.APIMonitor
+	monitor   scheduling.APIMonitor
 
 	// Database connection to load specific objects during the scheduling process.
 	DB db.DB
@@ -51,8 +51,8 @@ type httpAPI struct {
 }
 
 func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
-	monitor := lib.NewPipelineMonitor(registry)
-	pipelines := make(map[string]lib.Pipeline[api.PipelineRequest])
+	monitor := scheduling.NewPipelineMonitor(registry)
+	pipelines := make(map[string]scheduling.Pipeline[api.PipelineRequest])
 	for _, pipelineConf := range config.Nova.Pipelines {
 		if _, exists := pipelines[pipelineConf.Name]; exists {
 			panic("duplicate nova pipeline name: " + pipelineConf.Name)
@@ -78,7 +78,7 @@ func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB
 	return &httpAPI{
 		pipelines: pipelines,
 		config:    config,
-		monitor:   lib.NewSchedulerMonitor(registry),
+		monitor:   scheduling.NewSchedulerMonitor(registry),
 		DB:        db,
 		Client:    cl, // TODO
 	}
@@ -128,7 +128,7 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.PipelineRequest) (ok boo
 	return true, ""
 }
 
-// Handle the POST request from the Nova lib.
+// Handle the POST request from the Nova scheduling.
 // The request contains a spec of the VM to be scheduled, a list of hosts and
 // their status, and a map of weights that were calculated by the Nova weigher
 // pipeline. Some additional flags are also included.

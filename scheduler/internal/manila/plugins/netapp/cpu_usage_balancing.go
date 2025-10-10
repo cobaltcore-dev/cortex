@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/netapp"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/manila/api"
 )
 
@@ -42,7 +42,7 @@ func (o CPUUsageBalancingStepOpts) Validate() error {
 // Step to balance CPU usage by avoiding highly used storage pools.
 type CPUUsageBalancingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.PipelineRequest, CPUUsageBalancingStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, CPUUsageBalancingStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -51,7 +51,7 @@ func (s *CPUUsageBalancingStep) GetName() string {
 }
 
 // Downvote hosts that are highly contended.
-func (s *CPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *CPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
@@ -70,14 +70,14 @@ func (s *CPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.PipelineR
 		if _, ok := result.Activations[usage.StoragePoolName]; !ok {
 			continue
 		}
-		activationAvg := lib.MinMaxScale(
+		activationAvg := scheduling.MinMaxScale(
 			usage.AvgCPUUsagePct,
 			s.Options.AvgCPUUsageLowerBound,
 			s.Options.AvgCPUUsageUpperBound,
 			s.Options.AvgCPUUsageActivationLowerBound,
 			s.Options.AvgCPUUsageActivationUpperBound,
 		)
-		activationMax := lib.MinMaxScale(
+		activationMax := scheduling.MinMaxScale(
 			usage.MaxCPUUsagePct,
 			s.Options.MaxCPUUsageLowerBound,
 			s.Options.MaxCPUUsageUpperBound,
