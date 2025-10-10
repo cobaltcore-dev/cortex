@@ -49,17 +49,30 @@
     {
       "matchFileNames": [
         "reservations/go.mod",
-        "go.mod"
+        "decisions/go.mod",
+        "lib/go.mod",
+        "testlib/go.mod",
+        "sync/go.mod",
+        "extractor/go.mod",
+        "kpis/go.mod",
+        "scheduler/go.mod"
       ],
       "matchPackageNames": [
-        "github.com/cobaltcore-dev/cortex",
+        "github.com/cobaltcore-dev/cortex/lib",
+        "github.com/cobaltcore-dev/cortex/testlib",
+        "github.com/cobaltcore-dev/cortex/decisions/api",
+        "github.com/cobaltcore-dev/cortex/sync/api",
+        "github.com/cobaltcore-dev/cortex/extractor/api",
+        "github.com/cobaltcore-dev/cortex/kpis/api",
+        "github.com/cobaltcore-dev/cortex/scheduler/api",
         "github.com/cobaltcore-dev/cortex/reservations/api"
       ],
       "enabled": false
     },
     {
       "matchFileNames": [
-        "reservations/config/manager/kustomization.yaml"
+        "reservations/config/manager/kustomization.yaml",
+        "decisions/config/manager/kustomization.yaml"
       ],
       "enabled": false
     }
