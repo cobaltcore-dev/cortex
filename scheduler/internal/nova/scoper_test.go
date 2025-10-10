@@ -14,17 +14,17 @@ import (
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 )
 
-type MockStep[RequestType lib.PipelineRequest] struct {
+type MockStep[RequestType scheduling.PipelineRequest] struct {
 	Name     string
 	Alias    string
 	InitFunc func(alias string, db db.DB, opts libconf.RawOpts) error
-	RunFunc  func(traceLog *slog.Logger, request RequestType) (*lib.StepResult, error)
+	RunFunc  func(traceLog *slog.Logger, request RequestType) (*scheduling.StepResult, error)
 }
 
 func (m *MockStep[RequestType]) GetName() string {
@@ -36,7 +36,7 @@ func (m *MockStep[RequestType]) GetAlias() string {
 func (m *MockStep[RequestType]) Init(alias string, db db.DB, opts libconf.RawOpts) error {
 	return m.InitFunc(alias, db, opts)
 }
-func (m *MockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*lib.StepResult, error) {
+func (m *MockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*scheduling.StepResult, error) {
 	return m.RunFunc(traceLog, request)
 }
 
@@ -67,8 +67,8 @@ func setupTestDBWithHostCapabilities(t *testing.T) db.DB {
 func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 	mockStep := &MockStep[api.PipelineRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
-			return &lib.StepResult{
+		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+			return &scheduling.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 2.0,
@@ -119,8 +119,8 @@ func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 	mockStep := &MockStep[api.PipelineRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
-			return &lib.StepResult{
+		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+			return &scheduling.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 2.0,
@@ -171,8 +171,8 @@ func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 	mockStep := &MockStep[api.PipelineRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
-			return &lib.StepResult{
+		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+			return &scheduling.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 2.0,
@@ -213,7 +213,7 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 	}
 
 	_, err := scoper.Run(slog.Default(), request)
-	if !errors.Is(err, lib.ErrStepSkipped) {
+	if !errors.Is(err, scheduling.ErrStepSkipped) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -221,8 +221,8 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 func TestStepScoper_Run_NoSelectors_AllInScope(t *testing.T) {
 	mockStep := &MockStep[api.PipelineRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
-			return &lib.StepResult{
+		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+			return &scheduling.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 2.0,

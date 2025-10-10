@@ -1,0 +1,36 @@
+{{- if .Values.rbac.enable }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: machines-manager-role
+rules:
+- apiGroups:
+  - machines.cortex
+  resources:
+  - schedulingmachines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - machines.cortex
+  resources:
+  - schedulingmachines/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - machines.cortex
+  resources:
+  - schedulingmachines/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end -}}

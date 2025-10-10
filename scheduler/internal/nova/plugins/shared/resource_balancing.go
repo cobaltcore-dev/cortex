@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 )
 
@@ -89,7 +89,7 @@ func (o ResourceBalancingStepOpts) Validate() error {
 // Step to balance VMs on hosts based on the host's available resources.
 type ResourceBalancingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.PipelineRequest, ResourceBalancingStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, ResourceBalancingStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -98,7 +98,7 @@ func (s *ResourceBalancingStep) GetName() string {
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	if s.Options.CPUEnabled {
 		result.Statistics["cpu utilized"] = s.PrepareStats(request, "%")
@@ -133,7 +133,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineR
 		}
 		activationCPU := s.NoEffect()
 		if s.Options.CPUEnabled {
-			activationCPU = lib.MinMaxScale(
+			activationCPU = scheduling.MinMaxScale(
 				hostUtilization.VCPUsUtilizedPct,
 				s.Options.CPUUtilizedLowerBoundPct,
 				s.Options.CPUUtilizedUpperBoundPct,
@@ -146,7 +146,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineR
 		}
 		activationRAM := s.NoEffect()
 		if s.Options.RAMEnabled {
-			activationRAM = lib.MinMaxScale(
+			activationRAM = scheduling.MinMaxScale(
 				hostUtilization.RAMUtilizedPct,
 				s.Options.RAMUtilizedLowerBoundPct,
 				s.Options.RAMUtilizedUpperBoundPct,
@@ -159,7 +159,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineR
 		}
 		activationDisk := s.NoEffect()
 		if s.Options.DiskEnabled {
-			activationDisk = lib.MinMaxScale(
+			activationDisk = scheduling.MinMaxScale(
 				hostUtilization.DiskUtilizedPct,
 				s.Options.DiskUtilizedLowerBoundPct,
 				s.Options.DiskUtilizedUpperBoundPct,
@@ -175,7 +175,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineR
 			after := hostUtilization.VCPUsUtilizedPct -
 				(float64(request.Spec.Data.Flavor.Data.VCPUs) /
 					hostUtilization.TotalVCPUsAllocatable * 100)
-			activationAfterCPU = lib.MinMaxScale(
+			activationAfterCPU = scheduling.MinMaxScale(
 				after,
 				s.Options.CPUUtilizedAfterLowerBoundPct,
 				s.Options.CPUUtilizedAfterUpperBoundPct,
@@ -191,7 +191,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineR
 			after := hostUtilization.RAMUtilizedPct -
 				(float64(request.Spec.Data.Flavor.Data.MemoryMB) /
 					hostUtilization.TotalRAMAllocatableMB * 100)
-			activationAfterRAM = lib.MinMaxScale(
+			activationAfterRAM = scheduling.MinMaxScale(
 				after,
 				s.Options.RAMUtilizedAfterLowerBoundPct,
 				s.Options.RAMUtilizedAfterUpperBoundPct,
@@ -207,7 +207,7 @@ func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineR
 			after := hostUtilization.DiskUtilizedPct -
 				(float64(request.Spec.Data.Flavor.Data.RootGB) /
 					hostUtilization.TotalDiskAllocatableGB * 100)
-			activationAfterDisk = lib.MinMaxScale(
+			activationAfterDisk = scheduling.MinMaxScale(
 				after,
 				s.Options.DiskUtilizedAfterLowerBoundPct,
 				s.Options.DiskUtilizedAfterUpperBoundPct,

@@ -8,12 +8,12 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 )
 
 type FilterProjectAggregatesStep struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, scheduling.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -21,7 +21,7 @@ func (s *FilterProjectAggregatesStep) GetName() string { return "filter_project_
 
 // Lock certain hosts for certain projects, based on the aggregate metadata.
 // Note that hosts without aggregate tenant filter are still accessible.
-func (s *FilterProjectAggregatesStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterProjectAggregatesStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	if request.Spec.Data.ProjectID == "" {
 		traceLog.Debug("no project ID in request, skipping filter")

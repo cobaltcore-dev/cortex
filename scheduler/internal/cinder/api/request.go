@@ -6,8 +6,8 @@ package api
 import (
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	api "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/cinder"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 )
 
 // Conform to the PipelineRequest interface.
@@ -35,7 +35,7 @@ func (r PipelineRequest) GetTraceLogArgs() []slog.Attr {
 func (r PipelineRequest) GetPipeline() string {
 	return r.Pipeline
 }
-func (r PipelineRequest) WithPipeline(pipeline string) lib.PipelineRequest {
+func (r PipelineRequest) WithPipeline(pipeline string) scheduling.PipelineRequest {
 	r.Pipeline = pipeline
 	return r
 }

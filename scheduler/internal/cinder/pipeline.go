@@ -6,12 +6,12 @@ package cinder
 import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/cinder/api"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 )
 
-type CinderStep = lib.Step[api.PipelineRequest]
+type CinderStep = scheduling.Step[api.PipelineRequest]
 
 // Configuration of steps supported by the scheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
@@ -25,22 +25,22 @@ const (
 func NewPipeline(
 	config conf.CinderSchedulerPipelineConfig,
 	db db.DB,
-	monitor lib.PipelineMonitor,
+	monitor scheduling.PipelineMonitor,
 	mqttClient mqtt.Client,
-) lib.Pipeline[api.PipelineRequest] {
+) scheduling.Pipeline[api.PipelineRequest] {
 
 	// Wrappers to apply to each step in the pipeline.
-	wrappers := []lib.StepWrapper[api.PipelineRequest]{
+	wrappers := []scheduling.StepWrapper[api.PipelineRequest, struct{}]{
 		// Validate that no hosts are removed.
-		func(s CinderStep, conf conf.SchedulerStepConfig) CinderStep {
-			return lib.ValidateStep(s, conf.DisabledValidations)
+		func(s CinderStep, c conf.CinderSchedulerStepConfig) CinderStep {
+			return scheduling.ValidateStep(s, c.DisabledValidations)
 		},
 		// Monitor the step execution.
-		func(s CinderStep, conf conf.SchedulerStepConfig) CinderStep {
-			return lib.MonitorStep(s, monitor)
+		func(s CinderStep, c conf.CinderSchedulerStepConfig) CinderStep {
+			return scheduling.MonitorStep(s, monitor)
 		},
 	}
-	return lib.NewPipeline(
+	return scheduling.NewPipeline(
 		supportedSteps, config.Plugins, wrappers,
 		db, monitor, mqttClient, TopicFinished,
 	)

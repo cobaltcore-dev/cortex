@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/placement"
@@ -28,7 +28,7 @@ func (opts FilterExternalCustomerStepOpts) Validate() error {
 }
 
 type FilterExternalCustomerStep struct {
-	lib.BaseStep[api.PipelineRequest, FilterExternalCustomerStepOpts]
+	scheduling.BaseStep[api.PipelineRequest, FilterExternalCustomerStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -36,7 +36,7 @@ func (s *FilterExternalCustomerStep) GetName() string { return "filter_external_
 
 // Prefix-match the domain name for external customer domains and filter out hosts
 // that are not intended for external customers.
-func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
 	if err != nil {

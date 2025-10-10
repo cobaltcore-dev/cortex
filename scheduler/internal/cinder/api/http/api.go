@@ -14,11 +14,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/cinder"
 	cinderScheduler "github.com/cobaltcore-dev/cortex/scheduler/internal/cinder"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/cinder/api"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 )
 
 type HTTPAPI interface {
@@ -27,14 +27,14 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	pipelines map[string]lib.Pipeline[api.PipelineRequest]
+	pipelines map[string]scheduling.Pipeline[api.PipelineRequest]
 	config    conf.SchedulerAPIConfig
-	monitor   lib.APIMonitor
+	monitor   scheduling.APIMonitor
 }
 
 func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB, mqttClient mqtt.Client) HTTPAPI {
-	monitor := lib.NewPipelineMonitor(registry)
-	pipelines := make(map[string]lib.Pipeline[api.PipelineRequest])
+	monitor := scheduling.NewPipelineMonitor(registry)
+	pipelines := make(map[string]scheduling.Pipeline[api.PipelineRequest])
 	for _, pipelineConf := range config.Cinder.Pipelines {
 		if _, exists := pipelines[pipelineConf.Name]; exists {
 			panic("duplicate cinder pipeline name: " + pipelineConf.Name)
@@ -46,7 +46,7 @@ func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB
 	return &httpAPI{
 		pipelines: pipelines,
 		config:    config.API,
-		monitor:   lib.NewSchedulerMonitor(registry),
+		monitor:   scheduling.NewSchedulerMonitor(registry),
 	}
 }
 

@@ -15,9 +15,9 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduler/internal/lib"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -32,7 +32,7 @@ func (m *mockExternalSchedulerPipeline) Run(request api.PipelineRequest) ([]stri
 	return []string{"host1"}, nil
 }
 
-func (m *mockExternalSchedulerPipeline) SetConsumer(consumer lib.SchedulingDecisionConsumer[api.PipelineRequest]) {
+func (m *mockExternalSchedulerPipeline) SetConsumer(consumer scheduling.SchedulingDecisionConsumer[api.PipelineRequest]) {
 	// Do nothing
 }
 
@@ -47,7 +47,7 @@ func (m *mockExternalSchedulerPipeline) Consume(
 
 func TestCanRunScheduler(t *testing.T) {
 	httpAPI := &httpAPI{
-		pipelines: map[string]lib.Pipeline[api.PipelineRequest]{
+		pipelines: map[string]scheduling.Pipeline[api.PipelineRequest]{
 			"default": &mockExternalSchedulerPipeline{},
 		},
 	}
@@ -145,7 +145,7 @@ func TestHandleExternalSchedulerRequest(t *testing.T) {
 	mockPipeline := &mockExternalSchedulerPipeline{}
 
 	httpAPI := &httpAPI{
-		pipelines: map[string]lib.Pipeline[api.PipelineRequest]{
+		pipelines: map[string]scheduling.Pipeline[api.PipelineRequest]{
 			"default": mockPipeline,
 		},
 	}
@@ -270,7 +270,7 @@ type mockCommitmentsPipeline struct {
 	shouldError       bool
 }
 
-func (p *mockCommitmentsPipeline) SetConsumer(consumer lib.SchedulingDecisionConsumer[api.PipelineRequest]) {
+func (p *mockCommitmentsPipeline) SetConsumer(consumer scheduling.SchedulingDecisionConsumer[api.PipelineRequest]) {
 
 }
 
@@ -319,11 +319,11 @@ func setupCommitmentsTestAPI(t *testing.T) (*httpAPI, db.DB) {
 	// Create mock pipeline
 	mockPipeline := &mockCommitmentsPipeline{}
 	httpAPI := &httpAPI{
-		pipelines: map[string]lib.Pipeline[api.PipelineRequest]{
+		pipelines: map[string]scheduling.Pipeline[api.PipelineRequest]{
 			"reservations": mockPipeline,
 		},
 		config:  config,
-		monitor: lib.NewSchedulerMonitor(registry),
+		monitor: scheduling.NewSchedulerMonitor(registry),
 		DB:      testDB,
 	}
 
