@@ -29,6 +29,12 @@ global:
       # Must match postgresql settings from the cortex-postgres chart.
       host: cortex-nova-postgresql
 
+# Features in early development that are not ready for production yet.
+cortex-decisions-operator:
+  enabled: false
+cortex-reservations-operator:
+  enabled: false
+
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-nova-postgresql

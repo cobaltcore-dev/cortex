@@ -80,7 +80,7 @@ func NewAPI(config conf.SchedulerConfig, registry *monitoring.Registry, db db.DB
 		config:    config,
 		monitor:   scheduling.NewSchedulerMonitor(registry),
 		DB:        db,
-		Client:    cl, // TODO
+		Client:    cl,
 	}
 }
 

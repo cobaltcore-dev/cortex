@@ -93,11 +93,6 @@ conf:
 #
 # Note: Please only add values here that MUST be overridden using the "secrets:" key.
 secrets:
-  # MQTT broker connection credentials.
-  # TODO Remove the dependency on the mqtt broker for the descheduler.
-  mqtt:
-    username: cortex
-    password: secret
   # Database connection credentials.
   db:
     user: postgres

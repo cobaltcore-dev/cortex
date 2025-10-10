@@ -41,6 +41,16 @@ dependencies:
   - name: cortex-syncer
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
+  # from: file://../../../decisions/dist/chart
+  - name: cortex-decisions-operator
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.2.0
+    condition: cortex-decisions-operator.enabled
+  # from: file://../../../reservations/dist/chart
+  - name: cortex-reservations-operator
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.2.0
+    condition: cortex-reservations-operator.enabled
 
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case

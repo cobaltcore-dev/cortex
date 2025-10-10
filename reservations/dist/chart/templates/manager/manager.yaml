@@ -81,18 +81,20 @@ spec:
             secretName: metrics-server-cert
         {{- end }}
 ---
-# TODO: support globals here and use .conf instead of .reservations.conf
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: reservations-controller-manager-config
 data:
   conf.json: |-
-    {{- if .Values.reservations.conf }}
-    {{ toJson .Values.reservations.conf }}
-    {{- else }}
-    {}
+    {{- $mergedConf := dict }}
+    {{- if .Values.global.conf }}
+    {{- $mergedConf = .Values.global.conf }}
     {{- end }}
+    {{- if .Values.conf }}
+    {{- $mergedConf = mergeOverwrite .Values.conf $mergedConf }}
+    {{- end }}
+    {{ toJson $mergedConf }}
 ---
 apiVersion: v1
 kind: Secret
@@ -101,8 +103,11 @@ metadata:
 type: Opaque
 data:
   secrets.json: |-
-    {{- if .Values.reservations.secrets }}
-    {{ toJson .Values.reservations.secrets | b64enc }}
-    {{- else }}
-    {{ "{}" | b64enc }}
+    {{- $mergedSecrets := dict }}
+    {{- if .Values.global.secrets }}
+    {{- $mergedSecrets = .Values.global.secrets }}
     {{- end }}
+    {{- if .Values.secrets }}
+    {{- $mergedSecrets = mergeOverwrite .Values.secrets $mergedSecrets }}
+    {{- end }}
+    {{ toJson $mergedSecrets | b64enc }}

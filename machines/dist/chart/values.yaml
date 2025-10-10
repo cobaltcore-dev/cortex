@@ -1,16 +1,6 @@
 # This file is safe from kubebuilder edit --plugins=helm/v1-alpha
 # If you want to re-generate, add the --force flag.
 
-owner-info:
-  enabled: true
-  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/machines/dist/chart"
-  maintainers:
-    - "p.matthes@sap.com"
-    - "markus.wieland@sap.com"
-    - "arno.uhlig@sap.com"
-  support-group: "workload-management"
-  service: "cortex-machines"
-
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
   replicas: 1
