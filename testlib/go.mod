@@ -9,7 +9,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/ory/dockertest v3.3.5+incompatible
-	github.com/sapcc/go-bits v0.0.0-20251002190222-32e18bbcae76
+	github.com/sapcc/go-bits v0.0.0-20251009112313-51a4d641ae65
 )
 
 require (
@@ -29,7 +29,7 @@ require (
 	github.com/poy/onpar v1.1.2 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/ziutek/mymysql v1.5.4 // indirect
-	golang.org/x/net v0.44.0 // indirect
+	golang.org/x/net v0.46.0 // indirect
 	gotest.tools v2.2.0+incompatible // indirect
 )
 
@@ -43,5 +43,5 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
 )
