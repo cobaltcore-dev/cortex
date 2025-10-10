@@ -103,29 +103,30 @@ sharedSSOCert: &sharedSSOCert
   # If true, the certificate is not verified.
   selfSigned: false
 
-machines:
-  # Default configuration provided through configmap to the operator.
+# Values shared between other cortex charts.
+global:
+  # Values passed to the service through a configmap.
   conf:
-    # Which hypervisor types should be handled by the operator.
-    hypervisors:
-      - "QEMU"
-      - "CH"
-      # Not supported:
-      # - "VMware vCenter Server"
-      # - "ironic"
-    endpoints:
-      # The URL of the Nova external scheduler service.
-      novaExternalScheduler: "http://cortex-nova-scheduler:8080/scheduler/nova/external"
-    # TTL for scheduling machines after the last decision's RequestedAt timestamp (in seconds)
-    ttlAfterDecisionSeconds: 86400
-  # Config provided here will override the config provided above.
-  secrets:
-    # Override the endpoints and credentials to your OpenStack.
-    keystone:
-      url: https://path-to-keystone/v3
-      sso: *sharedSSOCert
-      username: openstack-user-with-all-project-read-access
-      password: openstack-user-password
-      projectName: openstack-project-of-user
-      userDomainName: openstack-domain-of-user
-      projectDomainName: openstack-domain-of-project-scoped-to
+    # MQTT broker connection parameters.
+    mqtt:
+      url: "tcp://path-to-your-mqtt:1883"
+    # Connection parameters for the database where data is stored.
+    db:
+      host: "your-postgres-host"
+
+# Config for the machines controller.
+conf:
+  scheduler:
+    machines:
+      pipelines:
+        # Note: there needs to be at least one pipeline with the name "default".
+        - name: default
+
+          # Configuration of scheduler steps for ironcore machines.
+          # Each scheduler step can specify its own dependencies on extractors and
+          # synced data.
+          #
+          # The `name` should correspond to a known scheduler plugin.
+          # Note that all scheduler steps will be executed in parallel. However,
+          # the order will be maintained when the weights are applied.
+          plugins: [] # Currently no plugins are implemented.

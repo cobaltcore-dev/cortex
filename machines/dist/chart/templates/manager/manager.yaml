@@ -87,11 +87,14 @@ metadata:
   name: machines-controller-manager-config
 data:
   conf.json: |-
-    {{- if .Values.machines.conf }}
-    {{ toJson .Values.machines.conf }}
-    {{- else }}
-    {}
+    {{- $mergedConf := dict }}
+    {{- if .Values.global.conf }}
+    {{- $mergedConf = .Values.global.conf }}
     {{- end }}
+    {{- if .Values.conf }}
+    {{- $mergedConf = mergeOverwrite .Values.conf $mergedConf }}
+    {{- end }}
+    {{ toJson $mergedConf }}
 ---
 apiVersion: v1
 kind: Secret
@@ -100,8 +103,11 @@ metadata:
 type: Opaque
 data:
   secrets.json: |-
-    {{- if .Values.machines.secrets }}
-    {{ toJson .Values.machines.secrets | b64enc }}
-    {{- else }}
-    {{ "{}" | b64enc }}
+    {{- $mergedSecrets := dict }}
+    {{- if .Values.global.secrets }}
+    {{- $mergedSecrets = .Values.global.secrets }}
     {{- end }}
+    {{- if .Values.secrets }}
+    {{- $mergedSecrets = mergeOverwrite .Values.secrets $mergedSecrets }}
+    {{- end }}
+    {{ toJson $mergedSecrets | b64enc }}

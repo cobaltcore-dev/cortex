@@ -1,8 +1,8 @@
 apiVersion: v2
-name: cortex-machines
+name: cortex-machines-operator
 description: A Helm chart to distribute the cortex machines operator.
 type: application
-version: 0.2.0
+version: 0.0.1
 appVersion: "sha-adb3b9a"
 icon: "https://example.com/icon.png"
 dependencies:

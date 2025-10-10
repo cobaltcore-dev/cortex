@@ -7,7 +7,7 @@
 analytics_settings(False)
 
 # Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
-ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder')
+ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore')
 if ACTIVE_DEPLOYMENTS_ENV == "":
     ACTIVE_DEPLOYMENTS = [] # Catch "".split(",") = [""]
 else:
@@ -98,6 +98,14 @@ local('sh helm/sync.sh decisions/dist/chart')
 k8s_yaml(helm('decisions/dist/chart', name='cortex-decisions', values=[tilt_values]))
 k8s_resource('decisions-controller-manager', labels=['Decisions'])
 
+########### Ironcore Operator & CRDs
+docker_build('ghcr.io/cobaltcore-dev/cortex-ironcore-operator', '.',
+    dockerfile='Dockerfile',
+    build_args={'GO_MOD_PATH': 'ironcore'},
+    only=kubebuilder_binary_files('ironcore') + ['lib/', 'testlib/'],
+)
+local('sh helm/sync.sh ironcore/dist/chart')
+
 ########### Cortex Bundles
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 
@@ -115,12 +123,15 @@ dep_charts = lambda bundle_chart_name: [
     ('sync/dist/chart', 'cortex-syncer'),
 ] + ([
     ('descheduler/dist/chart', 'cortex-descheduler'),
-] if bundle_chart_name in ['cortex-nova'] else [])
+] if bundle_chart_name in ['cortex-nova'] else []) + ([
+    ('machines/dist/chart', 'cortex-machines-operator'),
+] if bundle_chart_name in ['cortex-ironcore'] else [])
 
 bundle_charts = [
     ('helm/bundles/cortex-nova', 'cortex-nova'),
     ('helm/bundles/cortex-manila', 'cortex-manila'),
     ('helm/bundles/cortex-cinder', 'cortex-cinder'),
+    ('helm/bundles/cortex-ironcore', 'cortex-ironcore'),
 ]
 
 for (bundle_chart_path, bundle_chart_name) in bundle_charts:
@@ -196,6 +207,15 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-cinder-scheduler', labels=['Cortex-Cinder'], port_forwards=[
         new_port_mapping('cortex-cinder-scheduler-api', 8005, 8080),
     ])
+
+if 'ironcore' in ACTIVE_DEPLOYMENTS:
+    print("Activating Cortex IronCore bundle")
+    k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=[tilt_values]))
+    k8s_resource('cortex-ironcore-postgresql', labels=['Cortex-IronCore'], port_forwards=[
+        new_port_mapping('cortex-ironcore-postgresql', 8006, 5432),
+    ])
+    k8s_resource('cortex-ironcore-mqtt', labels=['Cortex-IronCore'])
+    k8s_resource('cortex-machines-controller-manager', labels=['Cortex-IronCore'])
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
