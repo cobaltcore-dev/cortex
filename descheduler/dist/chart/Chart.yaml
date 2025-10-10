@@ -5,5 +5,5 @@ apiVersion: v2
 name: cortex-descheduler
 description: A Helm chart deploying Cortex descheduler.
 type: application
-appVersion: "sha-b5b8842"
+appVersion: "sha-5a66c04"
 version: 0.0.1
