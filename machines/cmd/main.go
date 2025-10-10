@@ -48,7 +48,7 @@ func init() {
 }
 
 // nolint:gocyclo
-func Main() {
+func main() {
 	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
