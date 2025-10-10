@@ -47,6 +47,9 @@ const usage = `
   -e2e-manila Run end-to-end tests for manila scheduling.
   -e2e-cinder Run end-to-end tests for cinder scheduling.
 
+  operators:
+  -machine-operator Run the machine scheduler for ironcore.
+
   modes:
   -scheduler-nova   Serve Nova scheduling requests with a http API.
   -scheduler-manila Serve Manila scheduling requests with a http API.

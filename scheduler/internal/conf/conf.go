@@ -35,6 +35,20 @@ type ManilaSchedulerPipelineConfig struct {
 	Name string `json:"name"`
 }
 
+type MachineSchedulerConfig struct {
+	// Pipelines in this scheduler.
+	Pipelines []MachineSchedulerPipelineConfig `json:"pipelines"`
+}
+
+type MachineSchedulerPipelineConfig struct {
+	// Scheduler step plugins by their name.
+	Plugins []SchedulerStepConfig `json:"plugins"`
+
+	// The name of this scheduler pipeline.
+	// The name is used to distinguish and route between multiple pipelines.
+	Name string `json:"name"`
+}
+
 type NovaSchedulerConfig struct {
 	// Pipelines in this scheduler.
 	Pipelines []NovaSchedulerPipelineConfig `json:"pipelines"`
@@ -178,6 +192,9 @@ type SchedulerConfig struct {
 	Nova   NovaSchedulerConfig   `json:"nova"`
 	Manila ManilaSchedulerConfig `json:"manila"`
 	Cinder CinderSchedulerConfig `json:"cinder"`
+
+	// Configuration for the machines scheduler pipeline (IronCore).
+	Machines MachineSchedulerConfig `json:"machines"`
 
 	API SchedulerAPIConfig `json:"api"`
 }
