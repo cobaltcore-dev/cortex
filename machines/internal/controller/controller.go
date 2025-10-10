@@ -7,12 +7,14 @@ import (
 	"context"
 
 	"github.com/cobaltcore-dev/cortex/lib/scheduling"
-	computev1alpha1 "github.com/ironcore-dev/ironcore/api/compute/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/machines/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 type MachineStep = scheduling.Step[MachinePipelineRequest]
@@ -20,7 +22,7 @@ type MachineStep = scheduling.Step[MachinePipelineRequest]
 // Configuration of steps supported by the scheduling.
 // The steps actually used by the scheduler are defined through the configuration file.
 var SupportedSteps = map[string]func() MachineStep{
-	// Currently no steps are implemented.
+	"noop": func() MachineStep { return &NoopFilter{} },
 }
 
 type MachineScheduler struct {
@@ -32,6 +34,16 @@ type MachineScheduler struct {
 	// Scheme for the Kubernetes client.
 	Scheme *runtime.Scheme
 }
+
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machines,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machines/finalizers,verbs=update
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machinepools,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machinepools/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machinepools/finalizers,verbs=update
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machineclasses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machineclasses/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machineclasses/finalizers,verbs=update
 
 // Called by the kubernetes apiserver to handle new or updated Machine resources.
 func (s *MachineScheduler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -46,7 +58,7 @@ func (s *MachineScheduler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	machine := &computev1alpha1.Machine{}
+	machine := &v1alpha1.Machine{}
 	if err := s.Get(ctx, req.NamespacedName, machine); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -58,7 +70,7 @@ func (s *MachineScheduler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Find all available machine pools.
-	pools := &computev1alpha1.MachinePoolList{}
+	pools := &v1alpha1.MachinePoolList{}
 	if err := s.List(ctx, pools); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -95,6 +107,13 @@ func (s *MachineScheduler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (s *MachineScheduler) SetupWithManager(mgr manager.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cortex-machine-scheduler").
-		For(&computev1alpha1.Machine{}).
+		For(
+			&v1alpha1.Machine{},
+			// Only schedule machines that have the custom scheduler set.
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				machine := obj.(*v1alpha1.Machine)
+				return machine.Spec.Scheduler == "cortex"
+			})),
+		).
 		Complete(s)
 }

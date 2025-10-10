@@ -6,5 +6,37 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: machines-manager-role
-rules: []
+rules:
+- apiGroups:
+  - compute.ironcore.dev
+  resources:
+  - machineclasses
+  - machinepools
+  - machines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - compute.ironcore.dev
+  resources:
+  - machineclasses/finalizers
+  - machinepools/finalizers
+  - machines/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - compute.ironcore.dev
+  resources:
+  - machineclasses/status
+  - machinepools/status
+  - machines/status
+  verbs:
+  - get
+  - patch
+  - update
 {{- end -}}

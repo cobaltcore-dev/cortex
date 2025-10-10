@@ -100,6 +100,35 @@ global:
 
 # Config for the machines controller.
 conf:
+  # Configuration of metrics exported to the /metrics endpoint.
+  monitoring:
+    # The port to expose the metrics on.
+    port: 2112
+
+    # Custom labels added to the exported metrics.
+    labels:
+      github_org: cobaltcore-dev
+      github_repo: cortex
+
+  # Connection parameters for the database where data is stored.
+  db:
+    host:
+    port: 5432
+    database: postgres
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
+      livenessPingIntervalSeconds: 5
+
+  # MQTT broker connection parameters.
+  mqtt:
+    # Must match rabbitmq settings from the cortex-mqtt chart.
+    url:
+    # Configure how Cortex should handle lost connections to the MQTT broker.
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
+
   scheduler:
     machines:
       pipelines:
@@ -113,4 +142,23 @@ conf:
           # The `name` should correspond to a known scheduler plugin.
           # Note that all scheduler steps will be executed in parallel. However,
           # the order will be maintained when the weights are applied.
-          plugins: [] # Currently no plugins are implemented.
+          plugins:
+            - name: noop
+              # Options for the scheduler plugin.
+              options: {}
+              # Dependencies needed by this scheduler plugin.
+              dependencies: {} # e.g. {extractors: [my_nova_extractor]}
+
+# Values passed to the service through a kubernetes secret.
+# The keys of these values should correspond to the keys used above in the conf.
+#
+# Note: Please only add values here that MUST be overridden using the "secrets:" key.
+secrets:
+  # MQTT broker connection credentials.
+  mqtt:
+    username: cortex
+    password: secret
+  # Database connection credentials.
+  db:
+    user: postgres
+    password: secret

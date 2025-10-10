@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package machines
+package main
 
 import (
 	"context"
@@ -30,8 +30,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/cobaltcore-dev/cortex/lib/scheduling"
+	"github.com/cobaltcore-dev/cortex/machines/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/machines/internal/controller"
-	computev1alpha1 "github.com/ironcore-dev/ironcore/api/compute/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -43,7 +43,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(computev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

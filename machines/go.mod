@@ -4,11 +4,13 @@ go 1.25.0
 
 replace (
 	github.com/cobaltcore-dev/cortex/lib => ../lib
+	github.com/cobaltcore-dev/cortex/machines/api => ./api
 	github.com/cobaltcore-dev/cortex/testlib => ../testlib
 )
 
 require (
 	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/machines/api v0.0.0-00010101000000-000000000000
 	github.com/ironcore-dev/ironcore v0.2.4
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1

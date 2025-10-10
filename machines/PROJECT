@@ -10,4 +10,27 @@ plugins:
   helm.kubebuilder.io/v1-alpha: {}
 projectName: machines
 repo: github.com/cobaltcore-dev/cortex/machines
+resources:
+- api:
+    crdVersion: v1
+  controller: true
+  domain: ironcore.dev
+  group: compute
+  kind: Machine
+  path: github.com/cobaltcore-dev/cortex/machines/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  domain: ironcore.dev
+  group: compute
+  kind: MachinePool
+  path: github.com/cobaltcore-dev/cortex/machines/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  domain: ironcore.dev
+  group: compute
+  kind: MachineClass
+  path: github.com/cobaltcore-dev/cortex/machines/api/v1alpha1
+  version: v1alpha1
 version: "3"

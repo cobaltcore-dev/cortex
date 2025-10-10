@@ -7,12 +7,12 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/lib/scheduling"
-	computev1alpha1 "github.com/ironcore-dev/ironcore/api/compute/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/machines/api/v1alpha1"
 )
 
 type MachinePipelineRequest struct {
 	// The available machine pools.
-	Pools []computev1alpha1.MachinePool `json:"pools"`
+	Pools []v1alpha1.MachinePool `json:"pools"`
 
 	// The name of the pipeline to execute.
 	// By default the required pipeline with the name "default" will be used.
@@ -27,7 +27,11 @@ func (r MachinePipelineRequest) GetSubjects() []string {
 	return hosts
 }
 func (r MachinePipelineRequest) GetWeights() map[string]float64 {
-	return make(map[string]float64, len(r.Pools))
+	weights := make(map[string]float64, len(r.Pools))
+	for _, pool := range r.Pools {
+		weights[pool.Name] = 0.0
+	}
+	return weights
 }
 func (r MachinePipelineRequest) GetTraceLogArgs() []slog.Attr {
 	return []slog.Attr{}

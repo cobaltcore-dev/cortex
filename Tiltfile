@@ -271,6 +271,10 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
     ])
     k8s_resource('cortex-ironcore-mqtt', labels=['Cortex-IronCore'])
     k8s_resource('machines-controller-manager', labels=['Cortex-IronCore'])
+    # Deploy resources in machines/samples
+    k8s_yaml('machines/samples/compute_v1alpha1_machinepool.yaml')
+    k8s_yaml('machines/samples/compute_v1alpha1_machineclass.yaml')
+    k8s_yaml('machines/samples/compute_v1alpha1_machine.yaml')
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
