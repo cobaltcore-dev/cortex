@@ -14,7 +14,7 @@ replace (
 
 require (
 	github.com/cobaltcore-dev/cortex/decisions/api v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-20251010064411-1f3531e642e6
 	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/scheduler/api v0.0.0-00010101000000-000000000000
