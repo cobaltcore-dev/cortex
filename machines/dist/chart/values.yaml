@@ -87,22 +87,6 @@ certmanager:
 networkPolicy:
   enable: false
 
-# SSO certificate to use.
-sharedSSOCert: &sharedSSOCert
-  # Certificate "public key". (Optional, remove this key if not needed)
-  cert: |
-    -----BEGIN CERTIFICATE-----
-    Your certificate here
-    -----END CERTIFICATE-----
-  # Certificate private key. (Optional, remove this key if not needed)
-  certKey: |
-    -----BEGIN PRIVATE KEY-----
-    Your private key here
-    -----END PRIVATE KEY
-  # Whether the certificate is self-signed.
-  # If true, the certificate is not verified.
-  selfSigned: false
-
 # Values shared between other cortex charts.
 global:
   # Values passed to the service through a configmap.

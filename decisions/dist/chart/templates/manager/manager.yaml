@@ -81,6 +81,7 @@ spec:
             secretName: metrics-server-cert
         {{- end }}
 ---
+# TODO: support globals here and use .conf instead of .decisions.conf
 apiVersion: v1
 kind: ConfigMap
 metadata:
