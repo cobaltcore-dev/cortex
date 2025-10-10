@@ -5,7 +5,7 @@ go 1.25.0
 replace github.com/cobaltcore-dev/cortex/testlib => ../testlib
 
 require (
-	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/testlib v0.0.0-20251009112047-8ec59e4f0e57
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/go-gorp/gorp v2.2.0+incompatible
