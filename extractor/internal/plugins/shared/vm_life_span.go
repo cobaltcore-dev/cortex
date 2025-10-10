@@ -20,6 +20,8 @@ type VMLifeSpanRaw struct {
 	Duration int `db:"duration"`
 	// Flavor name of the virtual machine.
 	FlavorName string `db:"flavor_name"`
+	// Whether the statistic is from a VM that is deleted or still running.
+	Deleted bool `db:"deleted"`
 }
 
 // Extractor that extracts the time elapsed until the vm was deleted.
@@ -39,6 +41,7 @@ func (*VMLifeSpanHistogramExtractor) GetName() string {
 // Get message topics that trigger a re-execution of this extractor.
 func (VMLifeSpanHistogramExtractor) Triggers() []string {
 	return []string{
+		nova.TriggerNovaDeletedServersSynced,
 		nova.TriggerNovaServersSynced,
 		nova.TriggerNovaFlavorsSynced,
 	}
@@ -47,14 +50,17 @@ func (VMLifeSpanHistogramExtractor) Triggers() []string {
 //go:embed vm_life_span.sql
 var vmLifeSpanQuery string
 
-// Extract the time elapsed until the first migration of a virtual machine.
-// Depends on the OpenStack servers and migrations to be synced.
-func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
-	var lifeSpansRaw []VMLifeSpanRaw
-	if _, err := e.DB.Select(&lifeSpansRaw, vmLifeSpanQuery); err != nil {
-		return nil, err
+// Extract histogram buckets from raw life span data based on whether the VMs are deleted or still running.
+func extractHistogramBuckets(lifeSpansRaw []VMLifeSpanRaw, deleted bool) []shared.VMLifeSpanHistogramBucket {
+	// Filter life spans based on the deleted flag.
+	var lifeSpans []VMLifeSpanRaw
+	for _, ls := range lifeSpansRaw {
+		if ls.Deleted == deleted {
+			lifeSpans = append(lifeSpans, ls)
+		}
 	}
-	// Calculate the histogram based on the extracted features.
+
+	// Calculate histogram buckets
 	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
 	keysFunc := func(lifeSpan VMLifeSpanRaw) []string {
 		return []string{lifeSpan.FlavorName, "all"}
@@ -62,7 +68,7 @@ func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
 	valueFunc := func(lifeSpan VMLifeSpanRaw) float64 {
 		return float64(lifeSpan.Duration)
 	}
-	hists, counts, sums := tools.Histogram(lifeSpansRaw, buckets, keysFunc, valueFunc)
+	hists, counts, sums := tools.Histogram(lifeSpans, buckets, keysFunc, valueFunc)
 	var features []shared.VMLifeSpanHistogramBucket
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
@@ -78,8 +84,24 @@ func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
 				Value:      value,
 				Count:      counts[key],
 				Sum:        sums[key],
+				Deleted:    deleted,
 			})
 		}
 	}
+	return features
+}
+
+// Extract the time elapsed until the first migration of a virtual machine.
+// Depends on the OpenStack servers (+ deleted servers) to be synced.
+func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
+	var lifeSpansRaw []VMLifeSpanRaw
+	if _, err := e.DB.Select(&lifeSpansRaw, vmLifeSpanQuery); err != nil {
+		return nil, err
+	}
+
+	deletedVMLifeSpansBuckets := extractHistogramBuckets(lifeSpansRaw, true)
+	runningVMLifeSpansBuckets := extractHistogramBuckets(lifeSpansRaw, false)
+
+	features := append(deletedVMLifeSpansBuckets, runningVMLifeSpansBuckets...)
 	return e.Extracted(features)
 }
