@@ -3,7 +3,7 @@ name: cortex-decisions
 description: A Helm chart to distribute the cortex decisions operator.
 type: application
 version: 0.2.0
-appVersion: "sha-b5b8842"
+appVersion: "sha-5a66c04"
 icon: "https://example.com/icon.png"
 dependencies:
   # Owner info adds a configmap to the kubernetes cluster with information on
