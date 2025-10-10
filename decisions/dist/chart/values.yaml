@@ -1,16 +1,6 @@
 # This file is safe from kubebuilder edit --plugins=helm/v1-alpha
 # If you want to re-generate, add the --force flag.
 
-owner-info:
-  enabled: true
-  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/decisions/dist/chart"
-  maintainers:
-    - "p.matthes@sap.com"
-    - "markus.wieland@sap.com"
-    - "arno.uhlig@sap.com"
-  support-group: "workload-management"
-  service: "cortex-decisions"
-
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
   replicas: 1
@@ -103,29 +93,28 @@ sharedSSOCert: &sharedSSOCert
   # If true, the certificate is not verified.
   selfSigned: false
 
-decisions:
-  # Default configuration provided through configmap to the operator.
-  conf:
-    # Which hypervisor types should be handled by the operator.
-    hypervisors:
-      - "QEMU"
-      - "CH"
-      # Not supported:
-      # - "VMware vCenter Server"
-      # - "ironic"
-    endpoints:
-      # The URL of the Nova external scheduler service.
-      novaExternalScheduler: "http://cortex-nova-scheduler:8080/scheduler/nova/external"
-    # TTL for scheduling decisions after the last decision's RequestedAt timestamp (in seconds)
-    ttlAfterDecisionSeconds: 86400
-  # Config provided here will override the config provided above.
-  secrets:
-    # Override the endpoints and credentials to your OpenStack.
-    keystone:
-      url: https://path-to-keystone/v3
-      sso: *sharedSSOCert
-      username: openstack-user-with-all-project-read-access
-      password: openstack-user-password
-      projectName: openstack-project-of-user
-      userDomainName: openstack-domain-of-user
-      projectDomainName: openstack-domain-of-project-scoped-to
+# Default configuration provided through configmap to the operator.
+conf:
+  # Which hypervisor types should be handled by the operator.
+  hypervisors:
+    - "QEMU"
+    - "CH"
+    # Not supported:
+    # - "VMware vCenter Server"
+    # - "ironic"
+  endpoints:
+    # The URL of the Nova external scheduler service.
+    novaExternalScheduler: "http://cortex-nova-scheduler:8080/scheduler/nova/external"
+  # TTL for scheduling decisions after the last decision's RequestedAt timestamp (in seconds)
+  ttlAfterDecisionSeconds: 86400
+# Config provided here will override the config provided above.
+secrets:
+  # Override the endpoints and credentials to your OpenStack.
+  keystone:
+    url: https://path-to-keystone/v3
+    sso: *sharedSSOCert
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to

@@ -7,8 +7,7 @@
 analytics_settings(False)
 
 # Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
-# TODO Package the decisions and reservations operators into the nova bundle.
-ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore,decisions,reservations')
+ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore')
 if ACTIVE_DEPLOYMENTS_ENV == "":
     ACTIVE_DEPLOYMENTS = [] # Catch "".split(",") = [""]
 else:
@@ -94,11 +93,6 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     only=kubebuilder_binary_files('reservations') + ['scheduler/', 'decisions/', 'lib/', 'testlib/'],
 )
 local('sh helm/sync.sh reservations/dist/chart')
-# TODO only deploy as part of nova bundle.
-if 'reservations' in ACTIVE_DEPLOYMENTS:
-    print("Activating Reservations Operator")
-    k8s_yaml(helm('reservations/dist/chart', name='cortex-reservations', values=[tilt_values]))
-    k8s_resource('reservations-controller-manager', labels=['Reservations'])
 
 ########### Decisions Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-decisions-operator', '.',
@@ -107,11 +101,6 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-decisions-operator', '.',
     only=kubebuilder_binary_files('decisions') + ['lib/', 'testlib/'],
 )
 local('sh helm/sync.sh decisions/dist/chart')
-# TODO only deploy as part of nova bundle.
-if 'decisions' in ACTIVE_DEPLOYMENTS:
-    print("Activating Decisions Operator")
-    k8s_yaml(helm('decisions/dist/chart', name='cortex-decisions', values=[tilt_values]))
-    k8s_resource('decisions-controller-manager', labels=['Decisions'])
 
 ########### Cortex Bundles
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
@@ -136,6 +125,8 @@ dep_charts = {
         ('kpis/dist/chart', 'cortex-kpis'),
         ('sync/dist/chart', 'cortex-syncer'),
         ('descheduler/dist/chart', 'cortex-descheduler'),
+        ('reservations/dist/chart', 'cortex-reservations-operator'),
+        ('decisions/dist/chart', 'cortex-decisions-operator'),
     ],
     'cortex-manila': [
         ('helm/library/cortex-alerts', 'cortex-alerts'),
@@ -199,7 +190,10 @@ def new_port_mapping(component, local_port, remote_port):
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values]))
+    k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values], set=[
+        'cortex-decisions-operator.enabled=true',
+        'cortex-reservations-operator.enabled=true',
+    ]))
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
         new_port_mapping('cortex-nova-postgresql', 8000, 5432),
     ])
@@ -211,6 +205,8 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-nova-scheduler', labels=['Cortex-Nova'], port_forwards=[
         new_port_mapping('cortex-nova-scheduler-api', 8001, 8080),
     ])
+    k8s_resource('reservations-controller-manager', labels=['Cortex-Nova'])
+    k8s_resource('decisions-controller-manager', labels=['Cortex-Nova'])
     local_resource(
         'Scheduler E2E Tests (Nova)',
         '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduler -- /manager e2e-nova"',
