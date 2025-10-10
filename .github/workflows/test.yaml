@@ -5,6 +5,8 @@ name: Test and Report Coverage
 
 on:
   push:
+    branches:
+      - main
   pull_request:
     branches:
       - '*'
