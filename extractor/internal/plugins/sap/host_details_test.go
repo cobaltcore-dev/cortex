@@ -57,13 +57,13 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	}
 
 	hostPinnedProjects := []any{
-		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), ProjectID: testlib.Ptr("project-123")},
-		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), ProjectID: testlib.Ptr("project-456")},
-		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("node001-bb02"), ProjectID: nil},
+		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), Label: testlib.Ptr("project-123")},
+		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), Label: testlib.Ptr("project-456")},
+		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("node001-bb02"), Label: nil},
 		// No entry for ironic-host-1 since it is excluded in the feature host pinned projects
-		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("node002-bb03"), ProjectID: nil},
-		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("node003-bb03"), ProjectID: nil},
-		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("node004-bb03"), ProjectID: nil},
+		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("node002-bb03"), Label: nil},
+		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("node003-bb03"), Label: nil},
+		&sharedapi.HostPinnedProjects{ComputeHost: testlib.Ptr("node004-bb03"), Label: nil},
 	}
 
 	if err := testDB.Insert(hostPinnedProjects...); err != nil {

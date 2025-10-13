@@ -15,8 +15,8 @@ WITH host_traits AS (
 pinned_projects AS (
     SELECT
         compute_host,
-        STRING_AGG(project_id, ',' ORDER BY project_id) AS pinned_projects
-    FROM feature_host_pinned_projects
+        STRING_AGG(label, ',' ORDER BY label) AS pinned_projects
+    FROM feature_host_pinned_projects_v2
     GROUP BY compute_host
 )
 SELECT
