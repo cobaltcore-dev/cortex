@@ -63,12 +63,6 @@ func (s *MachineScheduler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// If the machine pool ref is unset, find a suitable machine pool.
-	if machine.Spec.MachinePoolRef != nil {
-		log.V(1).Info("skipping scheduling for instance with assigned machine pool")
-		return ctrl.Result{}, nil
-	}
-
 	// Find all available machine pools.
 	pools := &v1alpha1.MachinePoolList{}
 	if err := s.List(ctx, pools); err != nil {
@@ -112,7 +106,15 @@ func (s *MachineScheduler) SetupWithManager(mgr manager.Manager) error {
 			// Only schedule machines that have the custom scheduler set.
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				machine := obj.(*v1alpha1.Machine)
-				return machine.Spec.Scheduler == "cortex"
+				if machine.Spec.MachinePoolRef != nil {
+					// Skip machines that already have a machine pool assigned.
+					return false
+				}
+				// The machine spec currently doesn't support this field yet.
+				// Thus the resource will be deserialized to an empty string.
+				// We subscribe to all machines without a scheduler set for now.
+				// Otherwise when deployed the machine scheduler won't do anything.
+				return machine.Spec.Scheduler == ""
 			})),
 		).
 		Complete(s)

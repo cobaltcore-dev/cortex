@@ -18,6 +18,9 @@ resources:
     memory: "4Gi"
     cpu: "4"
 
+prometheus:
+  enable: true
+
 exporter:
   image:
     repository: prometheuscommunity/postgres-exporter

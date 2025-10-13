@@ -10,5 +10,7 @@ spec:
   image: my-image
   ignitionRef:
     name: my-ignition-secret
-  # This is a custom field added by the cortex integration
-  scheduler: cortex
+  # This is a custom field added by the cortex integration.
+  # Note: The machine spec currently doesn't support this field yet.
+  # Thus the machine scheduler doesn't scope to this field yet.
+  scheduler: ""
