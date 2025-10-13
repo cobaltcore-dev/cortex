@@ -4,6 +4,7 @@
 package shared
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/extractor/internal/conf"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -62,6 +64,25 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					ComputeHost: testlib.Ptr("host2"),
 					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
 				},
+
+				&identity.Project{
+					ID:       "project_id_1",
+					Name:     "project_name_1",
+					DomainID: "domain_id_1",
+				},
+				&identity.Project{
+					ID:       "project_id_2",
+					Name:     "project_name_2",
+					DomainID: "domain_id_2",
+				},
+				&identity.Domain{
+					ID:   "domain_id_1",
+					Name: "domain_name_1",
+				},
+				&identity.Domain{
+					ID:   "domain_id_2",
+					Name: "domain_name_2",
+				},
 			},
 			expected: []shared.HostPinnedProjects{
 				{
@@ -69,24 +90,32 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   testlib.Ptr("host1"),
 					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
 				},
 				{
 					AggregateName: testlib.Ptr("agg1"),
 					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   testlib.Ptr("host1"),
 					ProjectID:     testlib.Ptr("project_id_2"),
+					DomainID:      testlib.Ptr("domain_id_2"),
+					Label:         testlib.Ptr("project_name_2 (domain_name_2)"),
 				},
 				{
 					AggregateName: testlib.Ptr("agg1"),
 					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   testlib.Ptr("host2"),
 					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
 				},
 				{
 					AggregateName: testlib.Ptr("agg1"),
 					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   testlib.Ptr("host2"),
 					ProjectID:     testlib.Ptr("project_id_2"),
+					DomainID:      testlib.Ptr("domain_id_2"),
+					Label:         testlib.Ptr("project_name_2 (domain_name_2)"),
 				},
 			},
 		},
@@ -107,43 +136,72 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 			mockData: []any{
 				// This aggregate doesn't have a compute host so project_3 and 4 should have an empty entry for the compute host
 				&nova.Aggregate{
-					Name:        "agg2",
-					UUID:        "agg2",
+					Name:        "agg1",
+					UUID:        "agg1",
 					ComputeHost: nil,
-					Metadata:    `{"filter_tenant_id":"project_id_3, project_id_4"}`,
+					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
 				},
 				// Because of this aggregate project 3 and 4 should additionally have a host-4 as pinned
 				&nova.Aggregate{
-					Name:        "agg3",
-					UUID:        "agg3",
+					Name:        "agg2",
+					UUID:        "agg2",
 					ComputeHost: testlib.Ptr("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_3, project_id_4"}`,
+					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
+				},
+
+				// Projects
+				&identity.Project{
+					ID:       "project_id_1",
+					Name:     "project_name_1",
+					DomainID: "domain_id_1",
+				},
+				&identity.Project{
+					ID:       "project_id_2",
+					Name:     "project_name_2",
+					DomainID: "domain_id_2",
+				},
+				// Domains
+				&identity.Domain{
+					ID:   "domain_id_1",
+					Name: "domain_name_1",
+				},
+				&identity.Domain{
+					ID:   "domain_id_2",
+					Name: "domain_name_2",
 				},
 			},
 			expected: []shared.HostPinnedProjects{
 				{
-					AggregateName: testlib.Ptr("agg3"),
-					AggregateUUID: testlib.Ptr("agg3"),
+					AggregateName: testlib.Ptr("agg2"),
+					AggregateUUID: testlib.Ptr("agg2"),
 					ComputeHost:   testlib.Ptr("host1"),
-					ProjectID:     testlib.Ptr("project_id_3"),
-				},
-				{
-					AggregateName: testlib.Ptr("agg3"),
-					AggregateUUID: testlib.Ptr("agg3"),
-					ComputeHost:   testlib.Ptr("host1"),
-					ProjectID:     testlib.Ptr("project_id_4"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
 				},
 				{
 					AggregateName: testlib.Ptr("agg2"),
 					AggregateUUID: testlib.Ptr("agg2"),
-					ComputeHost:   nil,
-					ProjectID:     testlib.Ptr("project_id_3"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_2"),
+					DomainID:      testlib.Ptr("domain_id_2"),
+					Label:         testlib.Ptr("project_name_2 (domain_name_2)"),
 				},
 				{
-					AggregateName: testlib.Ptr("agg2"),
-					AggregateUUID: testlib.Ptr("agg2"),
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   nil,
-					ProjectID:     testlib.Ptr("project_id_4"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   nil,
+					ProjectID:     testlib.Ptr("project_id_2"),
+					DomainID:      testlib.Ptr("domain_id_2"),
+					Label:         testlib.Ptr("project_name_2 (domain_name_2)"),
 				},
 			},
 		},
@@ -193,12 +251,16 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					AggregateUUID: nil,
 					ComputeHost:   testlib.Ptr("host2"),
 					ProjectID:     nil,
+					DomainID:      nil,
+					Label:         nil,
 				},
 				{
 					AggregateName: nil,
 					AggregateUUID: nil,
 					ComputeHost:   testlib.Ptr("host3"),
 					ProjectID:     nil,
+					DomainID:      nil,
+					Label:         nil,
 				},
 			},
 		},
@@ -254,6 +316,18 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					ComputeHost: testlib.Ptr("host3"),
 					Metadata:    `{"type":"az"}`,
 				},
+
+				// Projects
+				&identity.Project{
+					ID:       "project_id_1",
+					Name:     "project_name_1",
+					DomainID: "domain_id_1",
+				},
+				// Domains
+				&identity.Domain{
+					ID:   "domain_id_1",
+					Name: "domain_name_1",
+				},
 			},
 			expected: []shared.HostPinnedProjects{
 				{
@@ -261,18 +335,24 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   testlib.Ptr("host1"),
 					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
 				},
 				{
 					AggregateName: testlib.Ptr("agg1"),
 					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   testlib.Ptr("host2"),
 					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
 				},
 				{
 					AggregateName: nil,
 					AggregateUUID: nil,
 					ComputeHost:   testlib.Ptr("host3"),
 					ProjectID:     nil,
+					DomainID:      nil,
+					Label:         nil,
 				},
 			},
 		},
@@ -299,6 +379,19 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					ComputeHost: testlib.Ptr("host1"),
 					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
 				},
+
+				// Projects
+				&identity.Project{
+					ID:       "project_id_1",
+					Name:     "project_name_1",
+					DomainID: "domain_id_1",
+				},
+
+				// Domains
+				&identity.Domain{
+					ID:   "domain_id_1",
+					Name: "domain_name_1",
+				},
 			},
 			expected: []shared.HostPinnedProjects{
 				{
@@ -306,6 +399,8 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   testlib.Ptr("host1"),
 					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
 				},
 			},
 		},
@@ -332,6 +427,18 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					ComputeHost: testlib.Ptr("host1"),
 					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
 				},
+
+				// Projects
+				&identity.Project{
+					ID:       "project_id_1",
+					Name:     "project_name_1",
+					DomainID: "domain_id_1",
+				},
+				// Domains
+				&identity.Domain{
+					ID:   "domain_id_1",
+					Name: "domain_name_1",
+				},
 			},
 			expected: []shared.HostPinnedProjects{
 				{
@@ -339,12 +446,78 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 					AggregateUUID: testlib.Ptr("agg1"),
 					ComputeHost:   testlib.Ptr("host1"),
 					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
 				},
 				{
 					AggregateName: testlib.Ptr("agg2"),
 					AggregateUUID: testlib.Ptr("agg2"),
 					ComputeHost:   testlib.Ptr("host1"),
 					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
+				},
+			},
+		},
+		{
+			name: "Expect unknown label if project or domain is missing",
+			mockData: []any{
+				// Hypervisors
+				&nova.Hypervisor{
+					ID:             "1",
+					ServiceHost:    "host1",
+					HypervisorType: "not-ironic",
+				},
+
+				// Aggregates
+				&nova.Aggregate{
+					Name:        "agg1",
+					UUID:        "agg1",
+					ComputeHost: testlib.Ptr("host1"),
+					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_domain_unknown, project_id_unknown"}`,
+				},
+
+				// Projects
+				&identity.Project{
+					ID:       "project_id_1",
+					Name:     "project_name_1",
+					DomainID: "domain_id_1",
+				},
+				&identity.Project{
+					ID:       "project_id_domain_unknown",
+					Name:     "project_name_2",
+					DomainID: "domain_id_unknown",
+				},
+				// Domains
+				&identity.Domain{
+					ID:   "domain_id_1",
+					Name: "domain_name_1",
+				},
+			},
+			expected: []shared.HostPinnedProjects{
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_1"),
+					DomainID:      testlib.Ptr("domain_id_1"),
+					Label:         testlib.Ptr("project_name_1 (domain_name_1)"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_domain_unknown"),
+					DomainID:      testlib.Ptr("domain_id_unknown"),
+					Label:         testlib.Ptr("project_name_2 (unknown)"),
+				},
+				{
+					AggregateName: testlib.Ptr("agg1"),
+					AggregateUUID: testlib.Ptr("agg1"),
+					ComputeHost:   testlib.Ptr("host1"),
+					ProjectID:     testlib.Ptr("project_id_unknown"),
+					DomainID:      nil,
+					Label:         testlib.Ptr("unknown (unknown)"),
 				},
 			},
 		},
@@ -360,6 +533,8 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 			if err := testDB.CreateTable(
 				testDB.AddTable(nova.Aggregate{}),
 				testDB.AddTable(nova.Hypervisor{}),
+				testDB.AddTable(identity.Project{}),
+				testDB.AddTable(identity.Domain{}),
 			); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -392,10 +567,62 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 			if len(hostPinnedProjects) != len(tt.expected) {
 				t.Fatalf("expected %d host pinned projects, got %d", len(tt.expected), len(hostPinnedProjects))
 			}
-			// Compare each expected host with the extracted ones
-			if !reflect.DeepEqual(tt.expected, hostPinnedProjects) {
-				t.Errorf("expected %v, got %v", tt.expected, hostPinnedProjects)
+
+			for _, hpp := range hostPinnedProjects {
+				found := false
+				for _, exp := range tt.expected {
+					if reflect.DeepEqual(hpp, exp) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("unexpected host pinned project found: %s", printHostPinnedProject(hpp))
+				}
 			}
 		})
 	}
+}
+
+func printHostPinnedProject(hpp shared.HostPinnedProjects) string {
+	var aggUUID, aggName, computeHost, projectID, domainID, label string
+
+	if hpp.AggregateUUID != nil {
+		aggUUID = *hpp.AggregateUUID
+	} else {
+		aggUUID = "<nil>"
+	}
+
+	if hpp.AggregateName != nil {
+		aggName = *hpp.AggregateName
+	} else {
+		aggName = "<nil>"
+	}
+
+	if hpp.ComputeHost != nil {
+		computeHost = *hpp.ComputeHost
+	} else {
+		computeHost = "<nil>"
+	}
+
+	if hpp.ProjectID != nil {
+		projectID = *hpp.ProjectID
+	} else {
+		projectID = "<nil>"
+	}
+
+	if hpp.DomainID != nil {
+		domainID = *hpp.DomainID
+	} else {
+		domainID = "<nil>"
+	}
+
+	if hpp.Label != nil {
+		label = *hpp.Label
+	} else {
+		label = "<nil>"
+	}
+
+	return fmt.Sprintf("{AggUUID: %s, AggName: %s, Host: %s, ProjectID: %s, DomainID: %s, Label: %s}",
+		aggUUID, aggName, computeHost, projectID, domainID, label)
 }

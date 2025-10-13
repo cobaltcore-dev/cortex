@@ -15,13 +15,17 @@ type HostPinnedProjects struct {
 	AggregateUUID *string `db:"aggregate_uuid"`
 	// Tenant ID that belongs to the filter
 	ProjectID *string `db:"project_id"`
+	// Domain ID of the project
+	DomainID *string `db:"domain_id"`
+	// Combination of project name and domain name
+	Label *string `db:"label"`
 	// Name of the OpenStack compute host.
 	ComputeHost *string `db:"compute_host"`
 }
 
 // Table under which the feature is stored.
 func (HostPinnedProjects) TableName() string {
-	return "feature_host_pinned_projects"
+	return "feature_host_pinned_projects_v2"
 }
 
 // Indexes for the feature.
