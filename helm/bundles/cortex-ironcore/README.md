@@ -66,7 +66,19 @@ To test the setup, we can create a machine resource. The machine scheduler shoul
 kubectl apply -f https://raw.githubusercontent.com/ironcore-dev/ironcore-in-a-box/refs/heads/main/examples/machine/machine.yaml
 ```
 
-Check the logs of the cortex machine scheduler to see the scheduling in action.
+Watch the resource, and after the cortex setup has started, you should see the machine pool being assigned to the machine.
+
+```bash
+kubectl get machine -w
+```
+
+```log
+NAME     MACHINECLASSREF   IMAGE                                               MACHINEPOOLREF   STATE     AGE
+webapp   t3-small          ghcr.io/ironcore-dev/os-images/gardenlinux:latest   <none>           Pending   10s
+webapp   t3-small          ghcr.io/ironcore-dev/os-images/gardenlinux:latest   ironcore-in-a-box-control-plane   Pending   103s
+```
+
+Also check the logs of the cortex machine scheduler to see the scheduling in action.
 
 ```bash
 kubectl logs deploy/machines-controller-manager
