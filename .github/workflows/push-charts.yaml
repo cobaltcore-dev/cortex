@@ -95,6 +95,13 @@ jobs:
         shell: bash
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-scheduler.outputs.all_changed_files }}
+        run: |
+          for CHART_FILE in ${ALL_CHANGED_FILES}; do
+            CHART_DIR=$(dirname $CHART_FILE)
+            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
+            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
+            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
+          done
 
       - name: Get all changed descheduler Chart.yaml files
         id: changed-chart-yaml-files-descheduler
@@ -107,6 +114,13 @@ jobs:
         shell: bash
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-descheduler.outputs.all_changed_files }}
+        run: |
+          for CHART_FILE in ${ALL_CHANGED_FILES}; do
+            CHART_DIR=$(dirname $CHART_FILE)
+            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
+            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
+            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
+          done
 
       - name: Get all changed extractor Chart.yaml files
         id: changed-chart-yaml-files-extractor
@@ -119,6 +133,13 @@ jobs:
         shell: bash
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-extractor.outputs.all_changed_files }}
+        run: |
+          for CHART_FILE in ${ALL_CHANGED_FILES}; do
+            CHART_DIR=$(dirname $CHART_FILE)
+            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
+            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
+            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
+          done
 
       - name: Get all changed kpis Chart.yaml files
         id: changed-chart-yaml-files-kpis
@@ -131,6 +152,13 @@ jobs:
         shell: bash
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-kpis.outputs.all_changed_files }}
+        run: |
+          for CHART_FILE in ${ALL_CHANGED_FILES}; do
+            CHART_DIR=$(dirname $CHART_FILE)
+            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
+            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
+            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
+          done
 
       - name: Get all changed syncer Chart.yaml files
         id: changed-chart-yaml-files-syncer
@@ -143,6 +171,13 @@ jobs:
         shell: bash
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-syncer.outputs.all_changed_files }}
+        run: |
+          for CHART_FILE in ${ALL_CHANGED_FILES}; do
+            CHART_DIR=$(dirname $CHART_FILE)
+            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
+            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
+            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
+          done
 
       - name: Get all changed decisions Chart.yaml files
         id: changed-chart-yaml-files-decisions
