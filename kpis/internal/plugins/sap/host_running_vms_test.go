@@ -52,6 +52,8 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			RunningVMs:       5,
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
+			Decommissioned:   true,
+			ExternalCustomer: true,
 			PinnedProjects:   testlib.Ptr("project-123,project-456"),
 		},
 		// Should be ignored since its an ironic host
@@ -116,6 +118,8 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 		ComputeHost      string
 		AvailabilityZone string
 		Enabled          string
+		Decommissioned   string
+		ExternalCustomer string
 		CPUArchitecture  string
 		WorkloadType     string
 		HypervisorFamily string
@@ -142,6 +146,8 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			ComputeHost:      labels["compute_host"],
 			AvailabilityZone: labels["availability_zone"],
 			Enabled:          labels["enabled"],
+			Decommissioned:   labels["decommissioned"],
+			ExternalCustomer: labels["external_customer"],
 			CPUArchitecture:  labels["cpu_architecture"],
 			WorkloadType:     labels["workload_type"],
 			HypervisorFamily: labels["hypervisor_family"],
@@ -155,6 +161,8 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			ComputeHost:      "host1",
 			AvailabilityZone: "az1",
 			Enabled:          "true",
+			Decommissioned:   "true",
+			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",

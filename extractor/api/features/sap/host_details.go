@@ -21,6 +21,10 @@ type HostDetails struct {
 	// Type of workload running on the compute host.
 	// Can be "general-purpose" or "hana"
 	WorkloadType string `db:"workload_type"`
+	// Whether the compute host is decommissioned.
+	Decommissioned bool `db:"decommissioned"`
+	// Whether the compute host is reserved for external customers.
+	ExternalCustomer bool `db:"external_customer"`
 	// Whether the compute host can be used for workloads.
 	Enabled bool `db:"enabled"`
 	// Reason why the compute host is disabled, if applicable.
@@ -31,7 +35,7 @@ type HostDetails struct {
 
 // Table under which the feature is stored.
 func (HostDetails) TableName() string {
-	return "feature_sap_host_details_v2"
+	return "feature_sap_host_details_v3"
 }
 
 // Indexes for the feature.

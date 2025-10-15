@@ -41,6 +41,8 @@ func (k *HostTotalAllocatableCapacityKPI) Init(db db.DB, opts conf.RawOpts) erro
 			"workload_type",
 			"hypervisor_family",
 			"enabled",
+			"decommissioned",
+			"external_customer",
 			"pinned_projects",
 		},
 		nil,
@@ -61,6 +63,8 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		HypervisorFamily string `db:"hypervisor_family"`
 		WorkloadType     string `db:"workload_type"`
 		Enabled          bool   `db:"enabled"`
+		Decommissioned   bool   `db:"decommissioned"`
+		ExternalCustomer bool   `db:"external_customer"`
 		PinnedProjects   string `db:"pinned_projects"`
 		shared.HostUtilization
 	}
@@ -76,6 +80,8 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
     		hd.hypervisor_family,
     		hd.workload_type,
     		hd.enabled,
+			hd.decommissioned,
+			hd.external_customer,
 			COALESCE(hd.pinned_projects, '') AS pinned_projects,
 			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
 			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
@@ -104,6 +110,8 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		enabled := strconv.FormatBool(host.Enabled)
+		decommissioned := strconv.FormatBool(host.Decommissioned)
+		externalCustomer := strconv.FormatBool(host.ExternalCustomer)
 
 		ch <- prometheus.MustNewConstMetric(
 			k.hostTotalCapacityPerHost,
@@ -116,6 +124,8 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.PinnedProjects,
 		)
 
@@ -130,6 +140,8 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.PinnedProjects,
 		)
 
@@ -144,6 +156,8 @@ func (k *HostTotalAllocatableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.PinnedProjects,
 		)
 	}

@@ -39,19 +39,23 @@ SELECT
         ELSE 'general-purpose'
     END AS workload_type,
     CASE
-        WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN false
-        WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN false
+        WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN true
+        ELSE false
+    END AS decommissioned,
+    CASE
+        WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN true
+        ELSE false
+    END AS external_customer,
+    CASE
         WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN false
         WHEN ht.status != 'enabled' THEN false
         WHEN ht.state != 'up' THEN false
         ELSE true
     END AS enabled,
     CASE
-        WHEN ht.traits LIKE '%CUSTOM_DECOMMISSIONING%' THEN 'decommissioning'
-        WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN 'external customer'
-        WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN '[compute status disabled trait] ' || COALESCE(ht.service_disabled_reason, '--')
-        WHEN ht.status != 'enabled' THEN '[status: not enabled] ' || COALESCE(ht.service_disabled_reason, '--')
-        WHEN ht.state != 'up' THEN '[state: not up] ' || COALESCE(ht.service_disabled_reason, '--')
+        WHEN ht.traits LIKE '%COMPUTE_STATUS_DISABLED%' THEN '[disabled] ' || COALESCE(ht.service_disabled_reason, '--')
+        WHEN ht.status != 'enabled' THEN '[disabled] ' || COALESCE(ht.service_disabled_reason, '--')
+        WHEN ht.state != 'up' THEN '[down] ' || COALESCE(ht.service_disabled_reason, '--')
         ELSE NULL
     END AS disabled_reason,
     COALESCE(pp.pinned_projects, NULL) AS pinned_projects
