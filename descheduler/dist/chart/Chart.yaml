@@ -1,9 +1,8 @@
-# Copyright 2025 SAP SE
-# SPDX-License-Identifier: Apache-2.0
-
 apiVersion: v2
 name: cortex-descheduler
-description: A Helm chart deploying Cortex descheduler.
+description: A Helm chart to distribute the cortex descheduler.
 type: application
-appVersion: "sha-8ed27b0"
 version: 0.0.1
+appVersion: "sha-8ed27b0"
+icon: "https://example.com/icon.png"
+dependencies: []

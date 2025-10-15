@@ -1,51 +1,84 @@
-# Copyright 2025 SAP SE
-# SPDX-License-Identifier: Apache-2.0
+# This file is safe from kubebuilder edit --plugins=helm/v1-alpha
+# If you want to re-generate, add the --force flag.
 
-image:
-  repository: ghcr.io/cobaltcore-dev/cortex-descheduler
-  pullPolicy: IfNotPresent
+# [MANAGER]: Manager Deployment Configurations
+controllerManager:
+  replicas: 1
+  container:
+    image:
+      repository: ghcr.io/cobaltcore-dev/cortex-descheduler
+    args:
+      - "--leader-elect"
+      - "--metrics-bind-address=:8443"
+      - "--health-probe-bind-address=:8081"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+    livenessProbe:
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      httpGet:
+        path: /healthz
+        port: 8081
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      httpGet:
+        path: /readyz
+        port: 8081
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - "ALL"
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  terminationGracePeriodSeconds: 10
+  serviceAccountName: descheduler-controller-manager
 
-# Can be used to override the chart name.
-fullnameOverride: ""
-nameOverride: ""
+# [RBAC]: To enable RBAC (Permissions) configurations
+rbac:
+  enable: true
 
-# Select the command line args to run the service with.
-args:
+# [CRDs]: To enable the CRDs
+crd:
+  # This option determines whether the CRDs are included
+  # in the installation process.
+  enable: true
 
-service:
-  extraLabels: {} # Additional labels to add to the service.
-serviceMonitor:
-  extraLabels:
-    # The name of the prometheus instance to use for scraping metrics.
-    prometheus: openstack
-  matchLabels: {} # Additional matchers to select the service for scraping metrics.
+  # Enabling this option adds the "helm.sh/resource-policy": keep
+  # annotation to the CRD, ensuring it remains installed even when
+  # the Helm release is uninstalled.
+  # NOTE: Removing the CRDs will also remove all cert-manager CR(s)
+  # (Certificates, Issuers, ...) due to garbage collection.
+  keep: true
 
-resources:
-  requests:
-    memory: "128Mi"
-    cpu: "10m" # Will be increased by the VPA if needed.
-  limits:
-    memory: "6Gi"
-    cpu: "4"
+# [METRICS]: Set to true to generate manifests for exporting metrics.
+# To disable metrics export set false, and ensure that the
+# ControllerManager argument "--metrics-bind-address=:8443" is removed.
+metrics:
+  enable: true
 
-# Liveness and readiness probes for the cortex services.
-livenessProbe:
-  httpGet:
-    path: /up
-    port: api
-readinessProbe:
-  httpGet:
-    path: /up
-    port: api
+# [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
+prometheus:
+  enable: true
 
-# Values passed to the service through a configmap.
+# [CERT-MANAGER]: To enable cert-manager injection to webhooks set true
+certmanager:
+  enable: false
+
+# [NETWORK POLICIES]: To enable NetworkPolicies set true
+networkPolicy:
+  enable: false
+
+# Default configuration provided through configmap to the operator.
 conf:
-  logging:
-    # The log level to use (debug, info, warn, error).
-    level: debug
-    # The log format to use (json, text).
-    format: text
-
   # Configuration of metrics exported to the /metrics endpoint.
   monitoring:
     # The port to expose the metrics on.
@@ -56,10 +89,6 @@ conf:
       github_org: cobaltcore-dev
       github_repo: cortex
 
-  # The port to use for the api serve mux.
-  api:
-    port: 8080
-
   # Connection parameters for the database where data is stored.
   db:
     host:
@@ -69,6 +98,15 @@ conf:
       maxRetries: 20
       retryIntervalSeconds: 1
       livenessPingIntervalSeconds: 5
+
+  # MQTT broker connection parameters.
+  mqtt:
+    # Must match rabbitmq settings from the cortex-mqtt chart.
+    url:
+    # Configure how Cortex should handle lost connections to the MQTT broker.
+    reconnect:
+      maxRetries: 20
+      retryIntervalSeconds: 1
 
   descheduler:
     nova:

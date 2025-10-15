@@ -15,11 +15,40 @@ type PrometheusMetric interface {
 	GetValue() float64
 	// Timestamp of this metric datapoint.
 	GetTimestamp() time.Time
+	// Table name of this metric in the database.
+	TableName() string
+	// Indexes for this metric in the database.
+	Indexes() map[string][]string
 	// Create a new instance of this metric with time and value set
 	// from a prometheus range metric query. Also pass a name attribute
 	// so that multiple different metrics stored in the same table can
 	// be distinguished.
 	With(name string, time time.Time, value float64) PrometheusMetric
+}
+
+// Metric for a KVM domain (virtual machine), result of a max by (domain).
+// See: https://github.com/cobaltcore-dev/kvm-monitoring
+type KVMDomainMetric struct {
+	// The name of the metric.
+	Name string `db:"name"`
+	// Domain (virtual machine) name.
+	Domain string `json:"domain" db:"domain"`
+	// Timestamp of the metric value.
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
+	// The value of the metric.
+	Value float64 `json:"value" db:"value"`
+}
+
+func (m KVMDomainMetric) TableName() string            { return "kvm_libvirt_domain_metrics" }
+func (m KVMDomainMetric) Indexes() map[string][]string { return nil }
+func (m KVMDomainMetric) GetName() string              { return m.Name }
+func (m KVMDomainMetric) GetTimestamp() time.Time      { return m.Timestamp }
+func (m KVMDomainMetric) GetValue() float64            { return m.Value }
+func (m KVMDomainMetric) With(n string, t time.Time, v float64) PrometheusMetric {
+	m.Name = n
+	m.Timestamp = t
+	m.Value = v
+	return m
 }
 
 // VROpsHostMetric represents a single metric value from Prometheus

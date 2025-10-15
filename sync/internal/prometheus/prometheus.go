@@ -16,14 +16,15 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/lib/sso"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/prometheus"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"
-	"github.com/prometheus/client_golang/prometheus"
+	prometheusclient "github.com/prometheus/client_golang/prometheus"
 )
 
 // Metrics fetched from Prometheus with the time window
 // and resolution specified in the query.
-type prometheusTimelineData[M PrometheusMetric] struct {
+type prometheusTimelineData[M prometheus.PrometheusMetric] struct {
 	Metrics  []M
 	Duration time.Duration
 	Start    time.Time
@@ -31,13 +32,13 @@ type prometheusTimelineData[M PrometheusMetric] struct {
 }
 
 // Prometheus range metric returned by the query_range API.
-type prometheusRangeMetric[M PrometheusMetric] struct {
+type prometheusRangeMetric[M prometheus.PrometheusMetric] struct {
 	Metric M       `json:"metric"`
 	Values [][]any `json:"values"`
 }
 
 // Prometheus API to fetch metrics from Prometheus.
-type PrometheusAPI[M PrometheusMetric] interface {
+type PrometheusAPI[M prometheus.PrometheusMetric] interface {
 	FetchMetrics(
 		query string,
 		start time.Time,
@@ -47,7 +48,7 @@ type PrometheusAPI[M PrometheusMetric] interface {
 }
 
 // Prometheus API implementation.
-type prometheusAPI[M PrometheusMetric] struct {
+type prometheusAPI[M prometheus.PrometheusMetric] struct {
 	// Prometheus host from which to fetch metrics.
 	hostConf conf.SyncPrometheusHostConfig
 	// Prometheus metric to fetch.
@@ -57,7 +58,7 @@ type prometheusAPI[M PrometheusMetric] struct {
 }
 
 // Create a new Prometheus API with the given Prometheus metric type.
-func NewPrometheusAPI[M PrometheusMetric](
+func NewPrometheusAPI[M prometheus.PrometheusMetric](
 	hostConf conf.SyncPrometheusHostConfig,
 	metricConf conf.SyncPrometheusMetricConfig,
 	monitor sync.Monitor,
@@ -83,7 +84,7 @@ func (api *prometheusAPI[M]) FetchMetrics(
 		hist := api.monitor.PipelineRequestTimer.WithLabelValues(
 			"prometheus_" + api.metricConf.Alias,
 		)
-		timer := prometheus.NewTimer(hist)
+		timer := prometheusclient.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 

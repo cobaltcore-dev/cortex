@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/prometheus"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"
 )
 
@@ -60,7 +61,7 @@ func TestFetchMetrics(t *testing.T) {
 	end := time.Now()
 	resolutionSeconds := 60
 
-	api := &prometheusAPI[VROpsVMMetric]{
+	api := &prometheusAPI[prometheus.VROpsVMMetric]{
 		hostConf: conf.SyncPrometheusHostConfig{
 			URL: server.URL,
 		},
@@ -99,7 +100,7 @@ func TestFetchMetricsFailure(t *testing.T) {
 	end := time.Now()
 	resolutionSeconds := 60
 
-	api := &prometheusAPI[*VROpsVMMetric]{
+	api := &prometheusAPI[*prometheus.VROpsVMMetric]{
 		hostConf: conf.SyncPrometheusHostConfig{
 			URL: server.URL,
 		},

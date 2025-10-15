@@ -5,64 +5,242 @@ package nova
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
+	"github.com/cobaltcore-dev/cortex/descheduler/internal/nova/plugins"
 )
 
-type mockCycleDetector struct {
-	FilterFunc func(ctx context.Context, vmIDs []string) ([]string, error)
+type mockCycleDetectorNovaAPI struct {
+	migrations map[string][]migration
+	getError   error
 }
 
-func (m *mockCycleDetector) Filter(ctx context.Context, vmIDs []string) ([]string, error) {
-	if m.FilterFunc != nil {
-		return m.FilterFunc(ctx, vmIDs)
+func (m *mockCycleDetectorNovaAPI) Init(ctx context.Context) {}
+
+func (m *mockCycleDetectorNovaAPI) Get(ctx context.Context, id string) (server, error) {
+	return server{}, errors.New("not implemented")
+}
+
+func (m *mockCycleDetectorNovaAPI) LiveMigrate(ctx context.Context, id string) error {
+	return errors.New("not implemented")
+}
+
+func (m *mockCycleDetectorNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
+	if m.getError != nil {
+		return nil, m.getError
 	}
-	return nil, nil
+	if migs, ok := m.migrations[id]; ok {
+		return migs, nil
+	}
+	return []migration{}, nil
 }
 
 func TestCycleDetector_Filter(t *testing.T) {
-	ctx := t.Context()
-	novaAPI := &mockNovaAPI{}
-	config := conf.DeschedulerConfig{}
-	detector := NewCycleDetector(novaAPI, config)
+	tests := []struct {
+		name       string
+		decisions  []plugins.Decision
+		migrations map[string][]migration
+		expected   []plugins.Decision
+		expectErr  bool
+	}{
+		{
+			name: "no cycles - all decisions pass through",
+			decisions: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+				{VMID: "vm-2", Reason: "high memory", Host: "host-b"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+				},
+				"vm-2": {
+					{SourceCompute: "host-b", DestCompute: "host-c"},
+				},
+			},
+			expected: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+				{VMID: "vm-2", Reason: "high memory", Host: "host-b"},
+			},
+		},
+		{
+			name: "simple cycle detected - decision filtered out",
+			decisions: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+					{SourceCompute: "host-b", DestCompute: "host-a"}, // Cycle back to host-a
+				},
+			},
+			expected: []plugins.Decision{}, // Filtered out due to cycle
+		},
+		{
+			name: "three-hop cycle detected",
+			decisions: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+					{SourceCompute: "host-b", DestCompute: "host-c"},
+					{SourceCompute: "host-c", DestCompute: "host-a"}, // Cycle back to host-a
+				},
+			},
+			expected: []plugins.Decision{}, // Filtered out due to cycle
+		},
+		{
+			name: "mixed scenarios - some cycles, some not",
+			decisions: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},    // Has cycle
+				{VMID: "vm-2", Reason: "high memory", Host: "host-x"}, // No cycle
+				{VMID: "vm-3", Reason: "high disk", Host: "host-y"},   // No migrations
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+					{SourceCompute: "host-b", DestCompute: "host-a"}, // Cycle
+				},
+				"vm-2": {
+					{SourceCompute: "host-x", DestCompute: "host-y"},
+					{SourceCompute: "host-y", DestCompute: "host-z"}, // No cycle
+				},
+				"vm-3": {}, // No migrations
+			},
+			expected: []plugins.Decision{
+				{VMID: "vm-2", Reason: "high memory", Host: "host-x"},
+				{VMID: "vm-3", Reason: "high disk", Host: "host-y"},
+			},
+		},
+		{
+			name: "complex cycle with multiple hops",
+			decisions: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+					{SourceCompute: "host-b", DestCompute: "host-c"},
+					{SourceCompute: "host-c", DestCompute: "host-d"},
+					{SourceCompute: "host-d", DestCompute: "host-b"}, // Cycle to host-b (not host-a)
+				},
+			},
+			expected: []plugins.Decision{}, // Filtered out due to cycle
+		},
+		{
+			name: "no migrations - decision passes through",
+			decisions: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {}, // No migrations
+			},
+			expected: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+		},
+		{
+			name: "single migration - no cycle possible",
+			decisions: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+				},
+			},
+			expected: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+		},
+		{
+			name: "API error when getting migrations",
+			decisions: []plugins.Decision{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{},
+			expectErr:  true,
+		},
+	}
 
-	// Test with no VMs
-	_, err := detector.Filter(ctx, []string{})
-	if err != nil {
-		t.Errorf("Filter returned an error: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockAPI := &mockCycleDetectorNovaAPI{
+				migrations: tt.migrations,
+			}
+
+			if tt.expectErr {
+				mockAPI.getError = errors.New("API error")
+			}
+
+			config := conf.DeschedulerConfig{}
+			detector := NewCycleDetector(mockAPI, config)
+
+			ctx := context.Background()
+			result, err := detector.Filter(ctx, tt.decisions)
+
+			if tt.expectErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d decisions, got %d", len(tt.expected), len(result))
+				return
+			}
+
+			// Check if all expected decisions are present
+			expectedMap := make(map[string]plugins.Decision)
+			for _, d := range tt.expected {
+				expectedMap[d.VMID] = d
+			}
+
+			for _, resultDecision := range result {
+				expectedDecision, found := expectedMap[resultDecision.VMID]
+				if !found {
+					t.Errorf("unexpected decision for VM %s", resultDecision.VMID)
+					continue
+				}
+
+				if resultDecision.Reason != expectedDecision.Reason {
+					t.Errorf("expected reason %s for VM %s, got %s",
+						expectedDecision.Reason, resultDecision.VMID, resultDecision.Reason)
+				}
+
+				if resultDecision.Host != expectedDecision.Host {
+					t.Errorf("expected host %s for VM %s, got %s",
+						expectedDecision.Host, resultDecision.VMID, resultDecision.Host)
+				}
+			}
+		})
 	}
 }
 
-func TestCycleDetector_FilterWithCycles(t *testing.T) {
-	ctx := t.Context()
-	novaAPI := &mockNovaAPI{
-		GetServerMigrationsFunc: func(ctx context.Context, id string) ([]migration, error) {
-			if id == "vm-123" {
-				return []migration{
-					{SourceCompute: "host1", DestCompute: "host2"},
-					{SourceCompute: "host2", DestCompute: "host1"}, // Cycle here
-				}, nil
-			}
-			if id == "vm-456" {
-				return []migration{
-					{SourceCompute: "host3", DestCompute: "host4"},
-					{SourceCompute: "host4", DestCompute: "host5"},
-					{SourceCompute: "host5", DestCompute: "host3"}, // Cycle here
-				}, nil
-			}
-			return nil, nil
-		},
+func TestCycleDetector_Filter_EmptyDecisions(t *testing.T) {
+	mockAPI := &mockCycleDetectorNovaAPI{
+		migrations: map[string][]migration{},
 	}
-	config := conf.DeschedulerConfig{}
-	detector := NewCycleDetector(novaAPI, config)
 
-	// Test with VMs that have migration cycles
-	result, err := detector.Filter(ctx, []string{"vm-123", "vm-456"})
+	config := conf.DeschedulerConfig{}
+	detector := NewCycleDetector(mockAPI, config)
+
+	ctx := context.Background()
+	result, err := detector.Filter(ctx, []plugins.Decision{})
+
 	if err != nil {
-		t.Errorf("Filter returned an error: %v", err)
+		t.Errorf("unexpected error: %v", err)
 	}
+
 	if len(result) != 0 {
-		t.Errorf("Expected no VMs to be returned due to cycles, got: %v", result)
+		t.Errorf("expected empty result for empty input, got %d decisions", len(result))
 	}
 }

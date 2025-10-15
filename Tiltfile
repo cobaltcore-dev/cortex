@@ -46,7 +46,7 @@ local('sh helm/sync.sh scheduler/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-descheduler', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'descheduler'},
-    only=kubebuilder_binary_files('descheduler') + ['lib/', 'testlib/', 'sync/'],
+    only=kubebuilder_binary_files('descheduler') + ['lib/', 'testlib/', 'extractor/'],
 )
 local('sh helm/sync.sh descheduler/dist/chart')
 # Deployed as part of bundles below.
@@ -201,10 +201,10 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-nova-syncer', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-extractor', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-kpis', labels=['Cortex-Nova'])
-    k8s_resource('cortex-nova-descheduler', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-scheduler', labels=['Cortex-Nova'], port_forwards=[
         new_port_mapping('cortex-nova-scheduler-api', 8001, 8080),
     ])
+    k8s_resource('descheduler-controller-manager', labels=['Cortex-Nova'])
     k8s_resource('reservations-controller-manager', labels=['Cortex-Nova'])
     k8s_resource('decisions-controller-manager', labels=['Cortex-Nova'])
     local_resource(
