@@ -34,6 +34,8 @@ cortex-decisions-operator:
   enabled: false
 cortex-reservations-operator:
   enabled: false
+cortex-descheduler:
+  enabled: true
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
