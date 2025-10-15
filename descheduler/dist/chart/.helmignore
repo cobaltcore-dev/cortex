@@ -1,27 +1,25 @@
-# Copyright 2025 SAP SE
-# SPDX-License-Identifier: Apache-2.0
-
-# Patterns to ignore when building packages.
-# This supports shell glob matching, relative path matching, and
-# negation (prefixed with !). Only one pattern per line.
+# Patterns to ignore when building Helm packages.
+# Operating system files
 .DS_Store
-# Common VCS dirs
+
+# Version control directories
 .git/
 .gitignore
-charts/.gitignore
 .bzr/
-.bzrignore
 .hg/
 .hgignore
 .svn/
-# Common backup files
+
+# Backup and temporary files
 *.swp
-*.bak
 *.tmp
+*.bak
 *.orig
 *~
-# Various IDEs
-.project
+
+# IDE and editor-related files
 .idea/
-*.tmproj
 .vscode/
+
+# Helm chart artifacts
+dist/chart/*.tgz

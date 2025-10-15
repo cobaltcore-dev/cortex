@@ -25,3 +25,12 @@ func (s *BaseStep[Opts]) Init(db db.DB, opts conf.RawOpts) error {
 	s.DB = db
 	return nil
 }
+
+type Decision struct {
+	// Get the VM ID for which this decision applies.
+	VMID string
+	// Get a human-readable reason for this decision.
+	Reason string
+	// Get the compute host where the vm should be migrated away from.
+	Host string
+}

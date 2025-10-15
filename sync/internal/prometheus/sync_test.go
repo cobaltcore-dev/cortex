@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/prometheus"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
-	"github.com/prometheus/client_golang/prometheus"
+	prometheusclient "github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go" // Correct alias for dto.Metric
 )
 
@@ -41,7 +42,7 @@ func (m *mockSyncer) DatasourceType() string {
 	return "mock"
 }
 
-type mockPrometheusAPI[M PrometheusMetric] struct {
+type mockPrometheusAPI[M prometheus.PrometheusMetric] struct {
 	data prometheusTimelineData[M]
 	err  error
 }
@@ -65,18 +66,18 @@ func TestSyncer_Init(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		MetricConf: conf.SyncPrometheusMetricConfig{
 			Alias: "test_metric",
 			Query: "test_query",
 		},
-		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
+		PrometheusAPI: &mockPrometheusAPI[prometheus.VROpsVMMetric]{},
 		DB:            testDB,
 	}
 	syncer.Init(t.Context())
 
 	// Verify the table was created
-	if !testDB.TableExists(&VROpsVMMetric{}) {
+	if !testDB.TableExists(&prometheus.VROpsVMMetric{}) {
 		t.Error("expected table to be created")
 	}
 }
@@ -88,12 +89,12 @@ func TestSyncer_getSyncWindowStart(t *testing.T) {
 	defer dbEnv.Close()
 
 	// Test case: No metrics in the database
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		MetricConf: conf.SyncPrometheusMetricConfig{
 			Alias: "test_metric",
 			Query: "test_query",
 		},
-		PrometheusAPI: &mockPrometheusAPI[VROpsVMMetric]{},
+		PrometheusAPI: &mockPrometheusAPI[prometheus.VROpsVMMetric]{},
 		DB:            testDB,
 	}
 	syncer.Init(t.Context())
@@ -133,15 +134,15 @@ func TestSyncer_sync(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
-		data: prometheusTimelineData[VROpsVMMetric]{
-			Metrics: []VROpsVMMetric{
+	mockPrometheusAPI := &mockPrometheusAPI[prometheus.VROpsVMMetric]{
+		data: prometheusTimelineData[prometheus.VROpsVMMetric]{
+			Metrics: []prometheus.VROpsVMMetric{
 				{Name: "test_metric", Timestamp: time.Now(), Value: 123.45},
 			},
 		},
 	}
 
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
@@ -158,8 +159,8 @@ func TestSyncer_sync(t *testing.T) {
 	syncer.sync(start)
 
 	// Verify the metrics were inserted
-	var metrics []VROpsVMMetric
-	table := VROpsVMMetric{}.TableName()
+	var metrics []prometheus.VROpsVMMetric
+	table := prometheus.VROpsVMMetric{}.TableName()
 	if _, err := testDB.Select(&metrics, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -181,11 +182,11 @@ func TestSyncer_sync_Failure(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
+	mockPrometheusAPI := &mockPrometheusAPI[prometheus.VROpsVMMetric]{
 		err: errors.New("failed to fetch metrics"),
 	}
 
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
@@ -202,8 +203,8 @@ func TestSyncer_sync_Failure(t *testing.T) {
 	syncer.sync(start)
 
 	// Verify no metrics were inserted
-	var metrics []VROpsVMMetric
-	table := VROpsVMMetric{}.TableName()
+	var metrics []prometheus.VROpsVMMetric
+	table := prometheus.VROpsVMMetric{}.TableName()
 	if _, err := testDB.Select(&metrics, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -218,15 +219,15 @@ func TestSyncer_DeleteOldMetrics(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
-		data: prometheusTimelineData[VROpsVMMetric]{
-			Metrics: []VROpsVMMetric{
+	mockPrometheusAPI := &mockPrometheusAPI[prometheus.VROpsVMMetric]{
+		data: prometheusTimelineData[prometheus.VROpsVMMetric]{
+			Metrics: []prometheus.VROpsVMMetric{
 				{Name: "test_metric", Timestamp: time.Now(), Value: 123.45},
 			},
 		},
 	}
 
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
@@ -261,8 +262,8 @@ func TestSyncer_DeleteOldMetrics(t *testing.T) {
 	syncer.sync(start)
 
 	// Verify old metrics were deleted
-	var metrics []VROpsVMMetric
-	table := VROpsVMMetric{}.TableName()
+	var metrics []prometheus.VROpsVMMetric
+	table := prometheus.VROpsVMMetric{}.TableName()
 	if _, err := testDB.Select(&metrics, "SELECT name, timestamp, value FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -287,20 +288,20 @@ func TestSyncer_BenchmarkMemoryUsage(t *testing.T) {
 
 	// Create a mock Prometheus API that returns a large number of metrics
 	largeMetricCount := 10000
-	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
-		data: prometheusTimelineData[VROpsVMMetric]{
-			Metrics: make([]VROpsVMMetric, largeMetricCount),
+	mockPrometheusAPI := &mockPrometheusAPI[prometheus.VROpsVMMetric]{
+		data: prometheusTimelineData[prometheus.VROpsVMMetric]{
+			Metrics: make([]prometheus.VROpsVMMetric, largeMetricCount),
 		},
 	}
 	for i := range largeMetricCount {
-		mockPrometheusAPI.data.Metrics[i] = VROpsVMMetric{
+		mockPrometheusAPI.data.Metrics[i] = prometheus.VROpsVMMetric{
 			Name:      "test_metric",
 			Timestamp: time.Now().Add(time.Duration(-i) * time.Second),
 			Value:     float64(i),
 		}
 	}
 
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
@@ -330,8 +331,8 @@ func TestSyncer_BenchmarkMemoryUsage(t *testing.T) {
 	t.Logf("Memory used by sync function: %d bytes", allocatedMemory)
 
 	// Verify the metrics were inserted
-	var metrics []VROpsVMMetric
-	table := VROpsVMMetric{}.TableName()
+	var metrics []prometheus.VROpsVMMetric
+	table := prometheus.VROpsVMMetric{}.TableName()
 	if _, err := testDB.Select(&metrics, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -366,7 +367,7 @@ func TestNewCombinedSyncer(t *testing.T) {
 	}
 
 	supportedSyncers := map[string]syncerFunc{
-		"vrops_host_metric": newSyncerOfType[VROpsHostMetric],
+		"vrops_host_metric": newSyncerOfType[prometheus.VROpsHostMetric],
 	}
 
 	combinedSyncer := NewCombinedSyncer(supportedSyncers, config, testDB, mockMonitor, mockMQTTClient)
@@ -402,14 +403,14 @@ func TestNewSyncerOfType(t *testing.T) {
 	hostConf := conf.SyncPrometheusHostConfig{Name: "test_host"}
 	metricConf := conf.SyncPrometheusMetricConfig{Alias: "test_metric"}
 
-	syncer := newSyncerOfType[VROpsHostMetric](testDB, hostConf, metricConf, mockMonitor)
+	syncer := newSyncerOfType[prometheus.VROpsHostMetric](testDB, hostConf, metricConf, mockMonitor)
 	if syncer == nil {
 		t.Fatal("expected newSyncerOfType to return a valid syncer")
 	}
 }
 
 func TestSyncer_Triggers(t *testing.T) {
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		MetricConf: conf.SyncPrometheusMetricConfig{
 			Alias: "test_metric",
 			Type:  "vrops_vm_metric",
@@ -435,8 +436,8 @@ func TestSyncer_CountMetrics(t *testing.T) {
 	defer dbEnv.Close()
 
 	mockMonitor := sync.Monitor{
-		PipelineObjectsGauge: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
+		PipelineObjectsGauge: prometheusclient.NewGaugeVec(
+			prometheusclient.GaugeOpts{
 				Name: "pipeline_objects",
 				Help: "Number of pipeline objects",
 			},
@@ -444,7 +445,7 @@ func TestSyncer_CountMetrics(t *testing.T) {
 		),
 	}
 
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		MetricConf: conf.SyncPrometheusMetricConfig{
 			Alias: "test_metric",
 		},
@@ -478,15 +479,15 @@ func TestSyncer_SyncFunction(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	mockPrometheusAPI := &mockPrometheusAPI[VROpsVMMetric]{
-		data: prometheusTimelineData[VROpsVMMetric]{
-			Metrics: []VROpsVMMetric{
+	mockPrometheusAPI := &mockPrometheusAPI[prometheus.VROpsVMMetric]{
+		data: prometheusTimelineData[prometheus.VROpsVMMetric]{
+			Metrics: []prometheus.VROpsVMMetric{
 				{Name: "test_metric", Timestamp: time.Now(), Value: 123.45},
 			},
 		},
 	}
 
-	syncer := &syncer[VROpsVMMetric]{
+	syncer := &syncer[prometheus.VROpsVMMetric]{
 		SyncTimeRange:         4 * 7 * 24 * time.Hour, // 4 weeks
 		SyncInterval:          24 * time.Hour,
 		SyncResolutionSeconds: 12 * 60 * 60, // 12 hours (2 datapoints per day per metric)
@@ -503,8 +504,8 @@ func TestSyncer_SyncFunction(t *testing.T) {
 	syncer.Sync(t.Context())
 
 	// Verify the metrics were inserted
-	var metrics []VROpsVMMetric
-	table := VROpsVMMetric{}.TableName()
+	var metrics []prometheus.VROpsVMMetric
+	table := prometheus.VROpsVMMetric{}.TableName()
 	if _, err := testDB.Select(&metrics, "SELECT * FROM "+table); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

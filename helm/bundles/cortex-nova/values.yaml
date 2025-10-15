@@ -76,7 +76,7 @@ cortex-syncer:
             query: vrops_hostsystem_cpu_contention_percentage
             type: vrops_host_metric
             timeRangeSeconds: 1200 # 20 minutes
-            intervalSeconds:  300 # 5 minutes
+            intervalSeconds: 300 # 5 minutes
             resolutionSeconds: 60 # 1 minute
           # Node exporter metrics for KVM hosts.
           - alias: node_exporter_cpu_usage_pct
@@ -93,6 +93,15 @@ cortex-syncer:
                 (sum by (node) (node_memory_MemTotal_bytes) / count by (node) (node_memory_MemTotal_bytes))
               )) * 100
             type: node_exporter_metric
+          - alias: kvm_libvirt_domain_steal_pct
+            # This metric is exported by https://github.com/cobaltcore-dev/kvm-monitoring
+            query: |
+              max by (domain) (rate(kvm_libvirt_domain_vcpu_delay_nanoseconds[5m])) / 1e9 * 100
+            type: kvm_libvirt_domain_metric
+            # It's ok to only look at a short time period here.
+            timeRangeSeconds: 1200 # 20 minutes
+            intervalSeconds: 300 # 5 minutes
+            resolutionSeconds: 60 # 1 minute
 
       openstack:
         nova:
@@ -270,6 +279,16 @@ cortex-extractor:
                   - alias: vrops_hostsystem_cpu_contention_short_term_percentage
 
         # KVM-specific extractors.
+        - name: kvm_libvirt_domain_cpu_steal_pct_extractor
+          dependencies:
+            sync:
+              prometheus:
+                metrics:
+                  - alias: kvm_libvirt_domain_steal_pct
+              openstack:
+                nova:
+                  types:
+                    - servers
         - name: node_exporter_host_cpu_usage_extractor
           dependencies:
             sync:
@@ -375,16 +394,12 @@ cortex-descheduler:
         #
         # The `name` should correspond to a known descheduler plugin.
         plugins:
-          - name: demo
+          - name: avoid_high_steal_pct
             options:
-              vmName: "cortex-demo-vm"
+              # Deschedule once vms reach this cpu steal pct over the observed time span.
+              maxStealPctOverObservedTimeSpan: 20.0
             dependencies:
-              sync:
-                openstack:
-                  nova:
-                    types:
-                      - servers
-
+              extractors: [kvm_libvirt_domain_cpu_steal_pct_extractor]
 
 cortex-scheduler:
   fullnameOverride: cortex-nova-scheduler

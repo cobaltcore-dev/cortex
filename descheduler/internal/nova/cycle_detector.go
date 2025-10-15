@@ -7,11 +7,12 @@ import (
 	"context"
 
 	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
+	"github.com/cobaltcore-dev/cortex/descheduler/internal/nova/plugins"
 )
 
 type CycleDetector interface {
 	// Filter descheduling decisions to avoid cycles.
-	Filter(ctx context.Context, vmIDs []string) ([]string, error)
+	Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error)
 }
 
 type cycleDetector struct {
@@ -25,11 +26,11 @@ func NewCycleDetector(novaAPI NovaAPI, config conf.DeschedulerConfig) CycleDetec
 	return &cycleDetector{novaAPI: novaAPI, config: config}
 }
 
-func (c *cycleDetector) Filter(ctx context.Context, vmIDs []string) ([]string, error) {
-	keep := make(map[string]struct{}, len(vmIDs))
-	for _, id := range vmIDs {
+func (c *cycleDetector) Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error) {
+	keep := make(map[string]struct{}, len(decisions))
+	for _, decision := range decisions {
 		// Get the migrations for the VM.
-		migrations, err := c.novaAPI.GetServerMigrations(ctx, id)
+		migrations, err := c.novaAPI.GetServerMigrations(ctx, decision.VMID)
 		if err != nil {
 			return nil, err
 		}
@@ -49,12 +50,14 @@ func (c *cycleDetector) Filter(ctx context.Context, vmIDs []string) ([]string, e
 		}
 		if !cycleDetected {
 			// Keep the VM if there are no cycles.
-			keep[id] = struct{}{}
+			keep[decision.VMID] = struct{}{}
 		}
 	}
-	output := make([]string, 0, len(keep))
-	for id := range keep {
-		output = append(output, id)
+	var output []plugins.Decision
+	for _, decision := range decisions {
+		if _, ok := keep[decision.VMID]; ok {
+			output = append(output, decision)
+		}
 	}
 	return output, nil
 }

@@ -13,9 +13,10 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
+	"github.com/cobaltcore-dev/cortex/sync/api/objects/prometheus"
 	sync "github.com/cobaltcore-dev/cortex/sync/internal"
 	"github.com/cobaltcore-dev/cortex/sync/internal/conf"
-	"github.com/prometheus/client_golang/prometheus"
+	prometheusclient "github.com/prometheus/client_golang/prometheus"
 )
 
 type syncerFunc func(
@@ -27,12 +28,13 @@ type syncerFunc func(
 
 // List of supported metric types that can be specified in the yaml config.
 var SupportedSyncers = map[string]syncerFunc{
-	"vrops_host_metric":                     newSyncerOfType[VROpsHostMetric],
-	"vrops_vm_metric":                       newSyncerOfType[VROpsVMMetric],
-	"node_exporter_metric":                  newSyncerOfType[NodeExporterMetric],
-	"netapp_aggregate_labels_metric":        newSyncerOfType[NetAppAggregateLabelsMetric],
-	"netapp_node_metric":                    newSyncerOfType[NetAppNodeMetric],
-	"netapp_volume_aggregate_labels_metric": newSyncerOfType[NetAppVolumeAggrLabelsMetric],
+	"vrops_host_metric":                     newSyncerOfType[prometheus.VROpsHostMetric],
+	"vrops_vm_metric":                       newSyncerOfType[prometheus.VROpsVMMetric],
+	"node_exporter_metric":                  newSyncerOfType[prometheus.NodeExporterMetric],
+	"netapp_aggregate_labels_metric":        newSyncerOfType[prometheus.NetAppAggregateLabelsMetric],
+	"netapp_node_metric":                    newSyncerOfType[prometheus.NetAppNodeMetric],
+	"netapp_volume_aggregate_labels_metric": newSyncerOfType[prometheus.NetAppVolumeAggrLabelsMetric],
+	"kvm_libvirt_domain_metric":             newSyncerOfType[prometheus.KVMDomainMetric],
 }
 
 // Syncer that syncs all configured metrics.
@@ -87,7 +89,7 @@ func (s CombinedSyncer) Init(ctx context.Context) {
 func (s CombinedSyncer) Sync(context context.Context) {
 	if s.monitor.PipelineRunTimer != nil {
 		hist := s.monitor.PipelineRunTimer.WithLabelValues("prometheus")
-		timer := prometheus.NewTimer(hist)
+		timer := prometheusclient.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
 	var wg gosync.WaitGroup
@@ -109,7 +111,7 @@ type Syncer interface {
 }
 
 // Prometheus syncer for an arbitrary prometheus metric model.
-type syncer[M PrometheusMetric] struct {
+type syncer[M prometheus.PrometheusMetric] struct {
 	// The time range to sync the metrics in.
 	SyncTimeRange time.Duration
 	// The sync interval for the metrics.
@@ -131,7 +133,7 @@ type syncer[M PrometheusMetric] struct {
 
 // Create a new syncer for the given metric type.
 // If no custom metrics granularity is set, the default values are used.
-func newSyncerOfType[M PrometheusMetric](
+func newSyncerOfType[M prometheus.PrometheusMetric](
 	db db.DB,
 	hostConf conf.SyncPrometheusHostConfig,
 	metricConf conf.SyncPrometheusMetricConfig,

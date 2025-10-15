@@ -4,6 +4,7 @@
 package nova
 
 import (
+	"github.com/cobaltcore-dev/cortex/descheduler/internal/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
@@ -92,7 +93,7 @@ func (m StepMonitor) Init(db db.DB, opts conf.RawOpts) error {
 }
 
 // Run the step and measure its execution time.
-func (m StepMonitor) Run() ([]string, error) {
+func (m StepMonitor) Run() ([]plugins.Decision, error) {
 	if m.runTimer != nil {
 		timer := prometheus.NewTimer(m.runTimer)
 		defer timer.ObserveDuration()
