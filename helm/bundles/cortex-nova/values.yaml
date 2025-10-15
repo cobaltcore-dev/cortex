@@ -377,14 +377,6 @@ cortex-extractor:
                     - hypervisors
 
 cortex-descheduler:
-  fullnameOverride: cortex-nova-descheduler
-  service:
-    extraLabels:
-      app: cortex-nova-descheduler # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-nova-descheduler
-  args: []
   conf:
     descheduler:
       nova:
