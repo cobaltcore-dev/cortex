@@ -45,6 +45,8 @@ func (k *HostAvailableCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"workload_type",
 			"hypervisor_family",
 			"enabled",
+			"decommissioned",
+			"external_customer",
 			"disabled_reason",
 			"pinned_projects",
 		},
@@ -61,6 +63,8 @@ func (k *HostAvailableCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"workload_type",
 			"hypervisor_family",
 			"enabled",
+			"decommissioned",
+			"external_customer",
 			"disabled_reason",
 			"pinned_projects",
 		},
@@ -89,6 +93,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		HypervisorFamily string `db:"hypervisor_family"`
 		WorkloadType     string `db:"workload_type"`
 		Enabled          bool   `db:"enabled"`
+		Decommissioned   bool   `db:"decommissioned"`
+		ExternalCustomer bool   `db:"external_customer"`
 		DisabledReason   string `db:"disabled_reason"`
 		PinnedProjects   string `db:"pinned_projects"`
 		shared.HostUtilization
@@ -106,6 +112,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
     		hd.hypervisor_family,
     		hd.workload_type,
     		hd.enabled,
+			hd.decommissioned,
+			hd.external_customer,
     		COALESCE(hd.disabled_reason, '-') AS disabled_reason,
 			COALESCE(hd.pinned_projects, '') AS pinned_projects,
 			COALESCE(hu.ram_used_mb, 0) AS ram_used_mb,
@@ -138,6 +146,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		enabled := strconv.FormatBool(host.Enabled)
+		decommissioned := strconv.FormatBool(host.Decommissioned)
+		externalCustomer := strconv.FormatBool(host.ExternalCustomer)
 
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHost,
@@ -150,6 +160,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.DisabledReason,
 			host.PinnedProjects,
 		)
@@ -164,6 +176,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.DisabledReason,
 			host.PinnedProjects,
 		)
@@ -178,6 +192,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.DisabledReason,
 			host.PinnedProjects,
 		)
@@ -192,6 +208,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.DisabledReason,
 			host.PinnedProjects,
 		)
@@ -206,6 +224,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.DisabledReason,
 			host.PinnedProjects,
 		)
@@ -220,6 +240,8 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.DisabledReason,
 			host.PinnedProjects,
 		)

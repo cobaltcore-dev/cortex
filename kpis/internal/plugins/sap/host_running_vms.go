@@ -23,6 +23,8 @@ type HostRunningVMs struct {
 	HypervisorFamily string  `db:"hypervisor_family"`
 	WorkloadType     string  `db:"workload_type"`
 	Enabled          bool    `db:"enabled"`
+	Decommissioned   bool    `db:"decommissioned"`
+	ExternalCustomer bool    `db:"external_customer"`
 	PinnedProjects   string  `db:"pinned_projects"`
 	RunningVMs       float64 `db:"running_vms"`
 	shared.HostUtilization
@@ -53,6 +55,8 @@ func (k *HostRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
 			"workload_type",
 			"hypervisor_family",
 			"enabled",
+			"decommissioned",
+			"external_customer",
 			"pinned_projects",
 		},
 		nil,
@@ -77,6 +81,8 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
     		hd.hypervisor_family,
     		hd.workload_type,
     		hd.enabled,
+			hd.decommissioned,
+			hd.external_customer,
 			COALESCE(hd.pinned_projects, '') AS pinned_projects,
     		hd.running_vms,
 			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
@@ -106,6 +112,8 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		enabled := strconv.FormatBool(host.Enabled)
+		decommissioned := strconv.FormatBool(host.Decommissioned)
+		externalCustomer := strconv.FormatBool(host.ExternalCustomer)
 
 		ch <- prometheus.MustNewConstMetric(
 			k.hostRunningVMsPerHost,
@@ -117,6 +125,8 @@ func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 			host.WorkloadType,
 			host.HypervisorFamily,
 			enabled,
+			decommissioned,
+			externalCustomer,
 			host.PinnedProjects,
 		)
 	}

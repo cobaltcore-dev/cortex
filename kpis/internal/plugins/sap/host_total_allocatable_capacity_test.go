@@ -51,6 +51,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			HypervisorFamily: "vmware",
 			WorkloadType:     "general-purpose",
 			Enabled:          true,
+			Decommissioned:   true,
+			ExternalCustomer: true,
 			PinnedProjects:   testlib.Ptr("project-123,project-456"),
 		},
 		&sap.HostDetails{
@@ -61,6 +63,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "hana",
 			Enabled:          false,
+			Decommissioned:   false,
+			ExternalCustomer: false,
 			PinnedProjects:   nil,
 		},
 		&sap.HostDetails{
@@ -71,6 +75,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "hana",
 			Enabled:          false,
+			Decommissioned:   false,
+			ExternalCustomer: false,
 		},
 		// Skip this host as it has no usage data
 		&sap.HostDetails{
@@ -81,6 +87,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			HypervisorFamily: "kvm",
 			WorkloadType:     "hana",
 			Enabled:          false,
+			Decommissioned:   false,
+			ExternalCustomer: false,
 			PinnedProjects:   nil,
 		},
 	}
@@ -129,6 +137,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 		Resource         string
 		AvailabilityZone string
 		Enabled          string
+		Decommissioned   string
+		ExternalCustomer string
 		CPUArchitecture  string
 		WorkloadType     string
 		HypervisorFamily string
@@ -156,6 +166,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			Resource:         labels["resource"],
 			AvailabilityZone: labels["availability_zone"],
 			Enabled:          labels["enabled"],
+			Decommissioned:   labels["decommissioned"],
+			ExternalCustomer: labels["external_customer"],
 			CPUArchitecture:  labels["cpu_architecture"],
 			WorkloadType:     labels["workload_type"],
 			HypervisorFamily: labels["hypervisor_family"],
@@ -170,6 +182,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			Resource:         "cpu",
 			AvailabilityZone: "az1",
 			Enabled:          "true",
+			Decommissioned:   "true",
+			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
@@ -181,6 +195,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			Resource:         "ram",
 			AvailabilityZone: "az1",
 			Enabled:          "true",
+			Decommissioned:   "true",
+			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
@@ -192,6 +208,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			Resource:         "disk",
 			AvailabilityZone: "az1",
 			Enabled:          "true",
+			Decommissioned:   "true",
+			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			HypervisorFamily: "vmware",
@@ -203,6 +221,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			Resource:         "cpu",
 			AvailabilityZone: "az2",
 			Enabled:          "false",
+			Decommissioned:   "false",
+			ExternalCustomer: "false",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
@@ -214,6 +234,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			Resource:         "ram",
 			AvailabilityZone: "az2",
 			Enabled:          "false",
+			Decommissioned:   "false",
+			ExternalCustomer: "false",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
@@ -225,6 +247,8 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			Resource:         "disk",
 			AvailabilityZone: "az2",
 			Enabled:          "false",
+			Decommissioned:   "false",
+			ExternalCustomer: "false",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "hana",
 			HypervisorFamily: "kvm",
