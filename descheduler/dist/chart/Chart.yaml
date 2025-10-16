@@ -3,6 +3,6 @@ name: cortex-descheduler
 description: A Helm chart to distribute the cortex descheduler.
 type: application
 version: 0.0.1
-appVersion: "sha-161cd98"
+appVersion: "sha-9212931"
 icon: "https://example.com/icon.png"
 dependencies: []
