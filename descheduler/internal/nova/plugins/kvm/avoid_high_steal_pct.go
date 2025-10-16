@@ -42,7 +42,7 @@ func (s *AvoidHighStealPctStep) Run() ([]plugins.Decision, error) {
 		if f.MaxStealTimePct > s.Options.MaxStealPctOverObservedTimeSpan {
 			decisions = append(decisions, plugins.Decision{
 				VMID:   f.InstanceUUID,
-				Reason: fmt.Sprintf("high cpu steal pct %.2f%% > %.2f%% over observed time span", f.MaxStealTimePct, s.Options.MaxStealPctOverObservedTimeSpan),
+				Reason: fmt.Sprintf("kvm monitoring indicates cpu steal pct %.2f%% which is above %.2f%% threshold", f.MaxStealTimePct, s.Options.MaxStealPctOverObservedTimeSpan),
 				Host:   f.Host,
 			})
 			slog.Info("vm marked for descheduling due to high cpu steal pct",
