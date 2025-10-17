@@ -12,7 +12,7 @@ replace (
 require (
 	github.com/cobaltcore-dev/cortex/descheduler/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/extractor/api v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/lib v0.0.0-20251017083911-79533d232cd5
 	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	k8s.io/apimachinery v0.34.1
