@@ -9,7 +9,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/ory/dockertest v3.3.5+incompatible
-	github.com/sapcc/go-bits v0.0.0-20251009112313-51a4d641ae65
+	github.com/sapcc/go-bits v0.0.0-20251016133802-c2d049e762e6
 )
 
 require (
