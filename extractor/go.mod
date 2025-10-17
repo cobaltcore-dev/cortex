@@ -54,7 +54,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.1 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/sapcc/go-bits v0.0.0-20251009112313-51a4d641ae65
+	github.com/sapcc/go-bits v0.0.0-20251016133802-c2d049e762e6
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
