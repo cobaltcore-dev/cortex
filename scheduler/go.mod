@@ -26,7 +26,7 @@ require (
 	github.com/sapcc/go-api-declarations v1.17.4
 	go.uber.org/automaxprocs v1.6.0
 	k8s.io/apimachinery v0.34.1
-	sigs.k8s.io/controller-runtime v0.22.2
+	sigs.k8s.io/controller-runtime v0.22.3
 )
 
 require (
