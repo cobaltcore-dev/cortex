@@ -3,6 +3,6 @@ name: cortex-reservations-operator
 description: A Helm chart to distribute the cortex reservations operator.
 type: application
 version: 0.2.0
-appVersion: "sha-a7da993"
+appVersion: "sha-79533d2"
 icon: "https://example.com/icon.png"
 dependencies: []
