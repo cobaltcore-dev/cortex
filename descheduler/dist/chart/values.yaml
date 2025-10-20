@@ -3,6 +3,7 @@
 
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
+  enable: true
   replicas: 1
   container:
     image:
@@ -41,6 +42,9 @@ controllerManager:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
   serviceAccountName: descheduler-controller-manager
+
+# Use this to unambiguate multiple cortex deployments in the same cluster.
+namePrefix: cortex
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:

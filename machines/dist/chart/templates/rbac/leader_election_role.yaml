@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   namespace: {{ .Release.Namespace }}
-  name: machines-leader-election-role
+  name: {{ .Values.namePrefix }}-machines-leader-election-role
 rules:
 - apiGroups:
   - ""

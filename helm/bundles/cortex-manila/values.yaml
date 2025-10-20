@@ -66,7 +66,11 @@ cortex-kpis:
             extractors:
               - netapp_storage_pool_cpu_usage_extractor
 
-cortex-knowledge:
+cortex-knowledge-operator:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-manila
   conf:
     datasources:
       prometheus:

@@ -11,7 +11,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: computereservation-viewer-role
+  name: {{ .Values.namePrefix }}-computereservation-viewer-role
 rules:
 - apiGroups:
   - reservations.cortex

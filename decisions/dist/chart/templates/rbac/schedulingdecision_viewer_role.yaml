@@ -11,7 +11,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: schedulingdecision-viewer-role
+  name: {{ .Values.namePrefix }}-schedulingdecision-viewer-role
 rules:
 - apiGroups:
   - decisions.cortex

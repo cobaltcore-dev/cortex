@@ -61,7 +61,11 @@ cortex-kpis:
       # The `name` should correspond to a known KPI extractor plugin.
       plugins: []
 
-cortex-cinder:
+cortex-knowledge-operator:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-cinder
   conf:
     datasources:
       prometheus:

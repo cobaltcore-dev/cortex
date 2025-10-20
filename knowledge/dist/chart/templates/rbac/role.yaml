@@ -5,7 +5,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: knowledge-manager-role
+  name: {{ .Values.namePrefix }}-knowledge-manager-role
 rules:
 - apiGroups:
   - knowledge.cortex

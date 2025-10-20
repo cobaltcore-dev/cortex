@@ -5,7 +5,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: descheduler-manager-role
+  name: {{ .Values.namePrefix }}-descheduler-manager-role
 rules:
 - apiGroups:
   - descheduler.cortex

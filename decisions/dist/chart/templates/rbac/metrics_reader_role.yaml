@@ -4,7 +4,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: decisions-metrics-reader
+  name: {{ .Values.namePrefix }}-decisions-metrics-reader
 rules:
 - nonResourceURLs:
   - "/metrics"

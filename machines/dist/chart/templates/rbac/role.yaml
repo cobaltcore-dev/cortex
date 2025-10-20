@@ -5,7 +5,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: machines-manager-role
+  name: {{ .Values.namePrefix }}-machines-manager-role
 rules:
 - apiGroups:
   - compute.ironcore.dev

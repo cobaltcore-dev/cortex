@@ -1,0 +1,35 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+owner-info:
+  enabled: true
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-cinder"
+  maintainers:
+    - "p.matthes@sap.com"
+    - "markus.wieland@sap.com"
+    - "arno.uhlig@sap.com"
+  support-group: "workload-management"
+  service: "cortex-cinder"
+
+common: &common
+  # Deploy crds and cluster-rbac (clusterroles)
+  crd: {enable: true}
+  # Stuff we don't need in the CRD chart.
+  rbac: {enable: false}
+  controllerManager: {enable: false}
+  metrics: {enable: false}
+  prometheus: {enable: false}
+  certmanager: {enable: false}
+  networkPolicy: {enable: false}
+
+cortex-knowledge-operator:
+  <<: *common
+cortex-decisions-operator:
+  <<: *common
+cortex-reservations-operator:
+  <<: *common
+cortex-machines-operator:
+  <<: *common
+# TODO: Rename this and the path to cortex-deschedulings-operator for consistency.
+cortex-descheduler:
+  <<: *common

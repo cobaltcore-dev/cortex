@@ -4,13 +4,13 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: knowledge-metrics-auth-rolebinding
+  name: {{ .Values.namePrefix }}-knowledge-metrics-auth-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: knowledge-metrics-auth-role
+  name: {{ .Values.namePrefix }}-knowledge-metrics-auth-role
 subjects:
 - kind: ServiceAccount
-  name: {{ .Values.controllerManager.serviceAccountName }}
+  name: {{ .Values.namePrefix }}-{{ .Values.controllerManager.serviceAccountName }}
   namespace: {{ .Release.Namespace }}
 {{- end -}}

@@ -1,10 +1,11 @@
 # This file is safe from kubebuilder edit --plugins=helm/v1-alpha
 # If you want to re-generate, add the --force flag.
 
+{{- if .Values.controllerManager.enable }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: machines-controller-manager
+  name: {{ .Values.namePrefix }}-machines-controller-manager
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
@@ -65,16 +66,16 @@ spec:
             {{- end }}
       securityContext:
         {{- toYaml .Values.controllerManager.securityContext | nindent 8 }}
-      serviceAccountName: {{ .Values.controllerManager.serviceAccountName }}
+      serviceAccountName: {{ .Values.namePrefix }}-{{ .Values.controllerManager.serviceAccountName }}
       terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
       volumes:
         # Custom values to configure the controller-manager.
         - name: machines-controller-manager-config-volume
           configMap:
-            name: machines-controller-manager-config
+            name: {{ .Values.namePrefix }}-machines-controller-manager-config
         - name: machines-controller-manager-secrets-volume
           secret:
-            secretName: machines-controller-manager-secrets
+            secretName: {{ .Values.namePrefix }}-machines-controller-manager-secrets
         {{- if and .Values.metrics.enable .Values.certmanager.enable }}
         - name: metrics-certs
           secret:
@@ -84,7 +85,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: machines-controller-manager-config
+  name: {{ .Values.namePrefix }}-machines-controller-manager-config
 data:
   conf.json: |-
     {{- $mergedConf := dict }}
@@ -99,7 +100,7 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: machines-controller-manager-secrets
+  name: {{ .Values.namePrefix }}-machines-controller-manager-secrets
 type: Opaque
 data:
   secrets.json: |-
@@ -111,3 +112,4 @@ data:
     {{- $mergedSecrets = mergeOverwrite .Values.secrets $mergedSecrets }}
     {{- end }}
     {{ toJson $mergedSecrets | b64enc }}
+{{- end }}

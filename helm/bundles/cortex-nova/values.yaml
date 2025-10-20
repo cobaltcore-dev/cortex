@@ -32,10 +32,37 @@ global:
 # Features in early development that are not ready for production yet.
 cortex-decisions-operator:
   enabled: false
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
 cortex-reservations-operator:
   enabled: false
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
 cortex-descheduler:
   enabled: false
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
+  conf:
+    descheduler:
+      nova:
+        # Configuration of the descheduler that runs periodically to de-schedule
+        # VMs based on the configured plugins.
+        # Each plugin can specify its own dependencies on extractors and synced data.
+        #
+        # The `name` should correspond to a known descheduler plugin.
+        plugins:
+          - name: avoid_high_steal_pct
+            options:
+              # Deschedule once vms reach this cpu steal pct over the observed time span.
+              maxStealPctOverObservedTimeSpan: 20.0
+            dependencies:
+              extractors: [kvm_libvirt_domain_cpu_steal_pct_extractor]
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
@@ -112,24 +139,11 @@ cortex-kpis:
                   types:
                     - flavors
 
-cortex-descheduler:
-  conf:
-    descheduler:
-      nova:
-        # Configuration of the descheduler that runs periodically to de-schedule
-        # VMs based on the configured plugins.
-        # Each plugin can specify its own dependencies on extractors and synced data.
-        #
-        # The `name` should correspond to a known descheduler plugin.
-        plugins:
-          - name: avoid_high_steal_pct
-            options:
-              # Deschedule once vms reach this cpu steal pct over the observed time span.
-              maxStealPctOverObservedTimeSpan: 20.0
-            dependencies:
-              extractors: [kvm_libvirt_domain_cpu_steal_pct_extractor]
-
-cortex-knowledge:
+cortex-knowledge-operator:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
   conf:
     datasources:
       prometheus:
