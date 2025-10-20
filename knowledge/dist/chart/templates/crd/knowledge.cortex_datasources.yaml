@@ -1,0 +1,309 @@
+{{- if .Values.crd.enable }}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.crd.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: datasources.knowledge.cortex
+spec:
+  group: knowledge.cortex
+  names:
+    kind: Datasource
+    listKind: DatasourceList
+    plural: datasources
+    singular: datasource
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Created
+      type: date
+    - jsonPath: .status.lastSynced
+      name: Last Synced
+      type: date
+    - jsonPath: .status.rowCount
+      name: Row Count
+      type: integer
+    - jsonPath: .status.error
+      name: Error
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Datasource is the Schema for the datasources API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of Datasource
+            properties:
+              databaseSecretRef:
+                description: |-
+                  Database credentials to use for the datasource.
+                  The secret should contain the following keys:
+                  - "username": The database username.
+                  - "password": The database password.
+                  - "host": The database host.
+                  - "port": The database port.
+                  - "database": The database name.
+                properties:
+                  name:
+                    description: name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              openstack:
+                description: If given, configures an OpenStack datasource to fetch.
+                properties:
+                  cinder:
+                    description: Datasource for openstack cinder.
+                    properties:
+                      availability:
+                        description: Availability of the service, such as "public",
+                          "internal", or "admin".
+                        type: string
+                      types:
+                        description: The types of resources to sync.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - availability
+                    - types
+                    type: object
+                  identity:
+                    description: Datasource for openstack identity.
+                    properties:
+                      availability:
+                        description: Availability of the service, such as "public",
+                          "internal", or "admin".
+                        type: string
+                      types:
+                        description: The types of resources to sync.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - availability
+                    - types
+                    type: object
+                  keystoneSecretRef:
+                    description: |-
+                      Keystone credentials secret ref for authenticating with openstack.
+                      The secret should contain the following keys:
+                      - "username": The keystone username.
+                      - "password": The keystone password.
+                      - "userDomainName": The keystone user domain name.
+                      - "projectName": The keystone project name.
+                      - "projectDomainName": The keystone project domain name.
+                      - "authURL": The keystone auth URL.
+                    properties:
+                      name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
+                        type: string
+                      namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  limes:
+                    description: Datasource for openstack limes.
+                    properties:
+                      availability:
+                        description: Availability of the service, such as "public",
+                          "internal", or "admin".
+                        type: string
+                      types:
+                        description: The types of resources to sync.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - availability
+                    - types
+                    type: object
+                  manila:
+                    description: Datasource for openstack manila.
+                    properties:
+                      availability:
+                        description: Availability of the service, such as "public",
+                          "internal", or "admin".
+                        type: string
+                      types:
+                        description: The types of resources to sync.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - availability
+                    - types
+                    type: object
+                  nova:
+                    description: Datasource for openstack nova.
+                    properties:
+                      availability:
+                        description: Availability of the service, such as "public",
+                          "internal", or "admin".
+                        type: string
+                      deletedServersChangesSinceMinutes:
+                        description: Time frame in minutes for the changes-since parameter
+                          when fetching deleted servers.
+                        type: integer
+                      types:
+                        description: The types of resources to sync.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - availability
+                    - types
+                    type: object
+                  placement:
+                    description: Datasource for openstack placement.
+                    properties:
+                      availability:
+                        description: Availability of the service, such as "public",
+                          "internal", or "admin".
+                        type: string
+                      types:
+                        description: The types of resources to sync.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - availability
+                    - types
+                    type: object
+                  syncIntervalSeconds:
+                    description: How often to sync the datasource in seconds.
+                    format: int64
+                    type: integer
+                required:
+                - cinder
+                - identity
+                - keystoneSecretRef
+                - limes
+                - manila
+                - nova
+                - placement
+                - syncIntervalSeconds
+                type: object
+              prometheus:
+                description: If given, configures a Prometheus datasource to fetch.
+                properties:
+                  alias:
+                    description: |-
+                      Especially when a more complex query is used, we need an alias
+                      under which the table will be stored in the database.
+                      Additionally, this alias is used to reference the metric in the
+                      feature extractors as dependency.
+                    type: string
+                  hostName:
+                    description: The name of the prometheus host.
+                    type: string
+                  hostURL:
+                    description: The URL of the prometheus host.
+                    type: string
+                  intervalSeconds:
+                    description: The interval at which to query the data.
+                    type: integer
+                  query:
+                    description: The query to use to fetch the metric.
+                    type: string
+                  resolutionSeconds:
+                    description: The resolution of the data in seconds.
+                    type: integer
+                  timeRangeSeconds:
+                    description: Time range in seconds to query the data for.
+                    type: integer
+                  type:
+                    description: |-
+                      The type of the metric, mapping directly to a metric model supported
+                      by cortex. Note that the metrics are fetched as time series, not instant.
+                    type: string
+                required:
+                - alias
+                - hostName
+                - hostURL
+                - query
+                - type
+                type: object
+              ssoSecretRef:
+                description: |-
+                  Kubernetes secret ref for an optional sso certificate to access the host.
+                  The secret should contain two keys: "cert" and "key".
+                properties:
+                  name:
+                    description: name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+            required:
+            - databaseSecretRef
+            - prometheus
+            type: object
+          status:
+            description: status defines the observed state of Datasource
+            properties:
+              error:
+                description: If there was an error during the last sync, it is recorded
+                  here.
+                type: string
+              lastSyncDurationSeconds:
+                description: The time it took to perform the last sync.
+                format: int64
+                type: integer
+              lastSynced:
+                description: When the datasource was last successfully synced.
+                format: date-time
+                type: string
+              nextSyncTime:
+                description: Planned time for the next sync.
+                format: date-time
+                type: string
+              rowCount:
+                description: The number of rows currently stored for this datasource.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+{{- end -}}
