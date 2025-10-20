@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
@@ -24,7 +25,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
 	schedulerNova "github.com/cobaltcore-dev/cortex/scheduler/internal/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"

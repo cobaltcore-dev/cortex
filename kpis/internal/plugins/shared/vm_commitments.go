@@ -8,11 +8,11 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

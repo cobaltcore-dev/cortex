@@ -122,25 +122,6 @@ jobs:
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
 
-      - name: Get all changed extractor Chart.yaml files
-        id: changed-chart-yaml-files-extractor
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            extractor/dist/chart/Chart.yaml
-      - name: Push extractor charts to registry
-        if: steps.changed-chart-yaml-files-extractor.outputs.all_changed_files != ''
-        shell: bash
-        env:
-          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-extractor.outputs.all_changed_files }}
-        run: |
-          for CHART_FILE in ${ALL_CHANGED_FILES}; do
-            CHART_DIR=$(dirname $CHART_FILE)
-            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
-            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
-            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
-          done
-
       - name: Get all changed kpis Chart.yaml files
         id: changed-chart-yaml-files-kpis
         uses: tj-actions/changed-files@v47
@@ -160,17 +141,17 @@ jobs:
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
 
-      - name: Get all changed syncer Chart.yaml files
-        id: changed-chart-yaml-files-syncer
+      - name: Get all changed knowledge Chart.yaml files
+        id: changed-chart-yaml-files-knowledge
         uses: tj-actions/changed-files@v47
         with:
           files: |
-            syncer/dist/chart/Chart.yaml
-      - name: Push syncer charts to registry
-        if: steps.changed-chart-yaml-files-syncer.outputs.all_changed_files != ''
+            knowledge/dist/chart/Chart.yaml
+      - name: Push knowledge charts to registry
+        if: steps.changed-chart-yaml-files-knowledge.outputs.all_changed_files != ''
         shell: bash
         env:
-          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-syncer.outputs.all_changed_files }}
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-knowledge.outputs.all_changed_files }}
         run: |
           for CHART_FILE in ${ALL_CHANGED_FILES}; do
             CHART_DIR=$(dirname $CHART_FILE)

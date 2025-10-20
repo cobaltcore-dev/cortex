@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/placement"
 )
 
 type FilterExternalCustomerStepOpts struct {

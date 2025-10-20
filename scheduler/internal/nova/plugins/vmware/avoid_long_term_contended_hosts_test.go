@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/extractor/api/features/vmware"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/vmware"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"

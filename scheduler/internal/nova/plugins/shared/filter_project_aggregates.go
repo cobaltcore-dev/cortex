@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/lib/scheduling"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
 )

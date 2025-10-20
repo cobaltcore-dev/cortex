@@ -1,9 +1,0 @@
-# Copyright 2025 SAP SE
-# SPDX-License-Identifier: Apache-2.0
-
-apiVersion: v2
-name: cortex-syncer
-description: A Helm chart deploying Cortex syncer.
-type: application
-appVersion: "sha-79533d2"
-version: 0.0.1

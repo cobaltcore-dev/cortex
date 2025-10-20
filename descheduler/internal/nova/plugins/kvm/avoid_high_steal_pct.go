@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/descheduler/internal/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/extractor/api/features/kvm"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/kvm"
 )
 
 type AvoidHighStealPctStepOpts struct {

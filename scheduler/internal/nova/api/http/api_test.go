@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
@@ -19,7 +20,6 @@ import (
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/api"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"

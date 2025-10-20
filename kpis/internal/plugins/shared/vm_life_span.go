@@ -6,7 +6,7 @@ package shared
 import (
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"

@@ -78,14 +78,6 @@ jobs:
           go tool cover -func descheduler_profile.cov > descheduler_func_coverage.txt
           cd ..
 
-          echo "Running tests for the extractor module..."
-          cd extractor
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=extractor_profile.cov ./internal/...
-          go tool cover -func extractor_profile.cov > extractor_func_coverage.txt
-          cd ..
-
           echo "Running tests for the kpis module..."
           cd kpis
           go test -v \
@@ -94,12 +86,12 @@ jobs:
           go tool cover -func kpis_profile.cov > kpis_func_coverage.txt
           cd ..
 
-          echo "Running tests for the sync module..."
-          cd sync
+          echo "Running tests for the knowledge module..."
+          cd knowledge
           go test -v \
             -coverpkg=./internal/... \
-            -coverprofile=sync_profile.cov ./internal/...
-          go tool cover -func sync_profile.cov > sync_func_coverage.txt
+            -coverprofile=knowledge_profile.cov ./internal/...
+          go tool cover -func knowledge_profile.cov > knowledge_func_coverage.txt
           cd ..
 
           echo "Running tests for decisions module..."
@@ -128,9 +120,8 @@ jobs:
             decisions/decisions_func_coverage.txt
             machines/machines_func_coverage.txt
             descheduler/descheduler_func_coverage.txt
-            extractor/extractor_func_coverage.txt
             kpis/kpis_func_coverage.txt
-            sync/sync_func_coverage.txt
+            knowledge/knowledge_func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
@@ -219,19 +210,6 @@ jobs:
               deschedulerCoverageReport = 'No coverage data available';
             }
 
-            // Read extractor module coverage report
-            let extractorCoverageReport = '';
-            let extractorCoveragePercentage = 'unknown';
-            try {
-              extractorCoverageReport = fs.readFileSync('extractor/extractor_func_coverage.txt', 'utf8');
-              const extractorLines = extractorCoverageReport.trim().split('\n');
-              const extractorLastLine = extractorLines[extractorLines.length - 1];
-              const extractorCoverageMatch = extractorLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              extractorCoveragePercentage = extractorCoverageMatch ? extractorCoverageMatch[1] : 'unknown';
-            } catch (error) {
-              extractorCoverageReport = 'No coverage data available';
-            }
-
             // Read kpis module coverage report
             let kpisCoverageReport = '';
             let kpisCoveragePercentage = 'unknown';
@@ -245,17 +223,17 @@ jobs:
               kpisCoverageReport = 'No coverage data available';
             }
 
-            // Read sync module coverage report
-            let syncCoverageReport = '';
-            let syncCoveragePercentage = 'unknown';
+            // Read knowledge module coverage report
+            let knowledgeCoverageReport = '';
+            let knowledgeCoveragePercentage = 'unknown';
             try {
-              syncCoverageReport = fs.readFileSync('sync/sync_func_coverage.txt', 'utf8');
-              const syncLines = syncCoverageReport.trim().split('\n');
-              const syncLastLine = syncLines[syncLines.length - 1];
-              const syncCoverageMatch = syncLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              syncCoveragePercentage = syncCoverageMatch ? syncCoverageMatch[1] : 'unknown';
+              knowledgeCoverageReport = fs.readFileSync('knowledge/knowledge_func_coverage.txt', 'utf8');
+              const knowledgeLines = knowledgeCoverageReport.trim().split('\n');
+              const knowledgeLastLine = knowledgeLines[knowledgeLines.length - 1];
+              const knowledgeCoverageMatch = knowledgeLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              knowledgeCoveragePercentage = knowledgeCoverageMatch ? knowledgeCoverageMatch[1] : 'unknown';
             } catch (error) {
-              syncCoverageReport = 'No coverage data available';
+              knowledgeCoverageReport = 'No coverage data available';
             }
 
             // Read decisions module coverage report
@@ -347,16 +325,6 @@ jobs:
             commentBody += '```\n';
             commentBody += '</details>\n';
 
-            // Extractor module coverage
-            commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in extractor module (extractor/internal/): ';
-            commentBody += extractorCoveragePercentage;
-            commentBody += '%</summary>\n\n';
-            commentBody += '```text\n';
-            commentBody += extractorCoverageReport;
-            commentBody += '```\n';
-            commentBody += '</details>\n';
-
             // KPIs module coverage
             commentBody += '<details>\n';
             commentBody += '<summary>Coverage in KPIs module (kpis/internal/): ';
@@ -367,13 +335,13 @@ jobs:
             commentBody += '```\n';
             commentBody += '</details>\n';
 
-            // Sync module coverage
+            // Knowledge module coverage
             commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in sync module (sync/internal/): ';
-            commentBody += syncCoveragePercentage;
+            commentBody += '<summary>Coverage in knowledge module (knowledge/internal/): ';
+            commentBody += knowledgeCoveragePercentage;
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
-            commentBody += syncCoverageReport;
+            commentBody += knowledgeCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

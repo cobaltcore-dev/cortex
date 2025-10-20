@@ -9,8 +9,9 @@ import (
 )
 
 // Configuration that is passed in the config file to specify dependencies.
+// TODO This should be part of the knowledge config because it is only relevant for execution order.
 type DependencyConfig struct {
-	Sync struct {
+	Datasources struct {
 		OpenStack struct {
 			Nova struct {
 				ObjectTypes []string `json:"types,omitempty"`
@@ -25,7 +26,7 @@ type DependencyConfig struct {
 				Type  string `json:"type,omitempty"`
 			} `json:"metrics,omitempty"`
 		} `json:"prometheus,omitempty"`
-	}
+	} `json:"datasources,omitempty"`
 	Extractors []string `json:"extractors,omitempty"`
 }
 

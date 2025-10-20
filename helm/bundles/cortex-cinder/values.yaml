@@ -43,17 +43,27 @@ cortex-alerts:
   alerts:
     componentPrefix: cortex-cinder
 
-cortex-syncer:
-  fullnameOverride: cortex-cinder-syncer
+cortex-kpis:
+  fullnameOverride: cortex-cinder-kpis
   service:
     extraLabels:
-      app: cortex-cinder-syncer # See below, used for the service monitor.
+      app: cortex-cinder-kpis # See below, used for the service monitor.
   serviceMonitor:
     matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-cinder-syncer
+      app: cortex-cinder-kpis
   args: []
   conf:
-    sync:
+    kpis:
+      # Configuration of KPIs that should be extracted from the synced data.
+      # Each KPI can specify its own dependencies on other extractors and
+      # synced data.
+      #
+      # The `name` should correspond to a known KPI extractor plugin.
+      plugins: []
+
+cortex-cinder:
+  conf:
+    datasources:
       prometheus:
         # Prometheus metrics to sync into the database.
         # Each metric can be synced from a different Prometheus instance.
@@ -77,49 +87,6 @@ cortex-syncer:
           types:
             - storage_pools
 
-  # Values passed to the service through a kubernetes secret.
-  # The keys of these values should correspond to the keys used above in the conf.
-  secrets:
-    sync:
-      prometheus:
-        # Prometheus hosts to consider when syncing the metrics.
-        hosts:
-          - name: netapp_prometheus
-            url: "" # e.g. "https://netapp-prometheus:9090"
-            provides: [
-              netapp_aggregate_labels_metric,
-              netapp_node_metric,
-              netapp_volume_aggregate_labels_metric
-            ]
-
-cortex-kpis:
-  fullnameOverride: cortex-cinder-kpis
-  service:
-    extraLabels:
-      app: cortex-cinder-kpis # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-cinder-kpis
-  args: []
-  conf:
-    kpis:
-      # Configuration of KPIs that should be extracted from the synced data.
-      # Each KPI can specify its own dependencies on other extractors and
-      # synced data.
-      #
-      # The `name` should correspond to a known KPI extractor plugin.
-      plugins: []
-
-cortex-extractor:
-  fullnameOverride: cortex-cinder-extractor
-  service:
-    extraLabels:
-      app: cortex-cinder-extractor # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-cinder-extractor
-  args: []
-  conf:
     extractor:
       # Configuration of features that should be extracted from the synced data.
       # Each extractor can specify its own dependencies on other extractors or
@@ -134,7 +101,7 @@ cortex-extractor:
         - name: netapp_storage_pool_cpu_usage_extractor
           recencySeconds: 60 # 1 minute
           dependencies:
-            sync:
+            datasources:
               prometheus:
                 metrics:
                   - alias: netapp_node_cpu_busy
