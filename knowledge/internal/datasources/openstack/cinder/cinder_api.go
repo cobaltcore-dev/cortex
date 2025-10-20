@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/cinder"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/gophercloud/gophercloud/v2"
@@ -30,12 +30,12 @@ type cinderAPI struct {
 	// Keystone api to authenticate against.
 	keystoneAPI keystone.KeystoneAPI
 	// Cinder configuration.
-	conf conf.DatasourceOpenStackCinderConfig
+	conf v1alpha1.CinderDatasource
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
 }
 
-func NewCinderAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf conf.DatasourceOpenStackCinderConfig) CinderAPI {
+func NewCinderAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.CinderDatasource) CinderAPI {
 	return &cinderAPI{
 		mon:         mon,
 		keystoneAPI: k,

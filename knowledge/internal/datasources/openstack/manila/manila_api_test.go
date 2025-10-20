@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
@@ -30,7 +30,7 @@ func setupManilaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone
 func TestNewManilaAPI(t *testing.T) {
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackManilaConfig{}
+	conf := v1alpha1.ManilaDatasource{}
 
 	api := NewManilaAPI(mon, k, conf)
 	if api == nil {
@@ -83,7 +83,7 @@ func TestManilaAPI_GetAllStoragePools(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackManilaConfig{}
+	conf := v1alpha1.ManilaDatasource{}
 
 	api := NewManilaAPI(mon, k, conf).(*manilaAPI)
 	api.Init(t.Context())
@@ -109,7 +109,7 @@ func TestManilaAPI_GetAllStoragePools_Error(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackManilaConfig{}
+	conf := v1alpha1.ManilaDatasource{}
 
 	api := NewManilaAPI(mon, k, conf).(*manilaAPI)
 	api.Init(t.Context())

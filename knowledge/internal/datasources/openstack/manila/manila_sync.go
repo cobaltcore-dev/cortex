@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/manila"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
@@ -22,7 +22,7 @@ type ManilaSyncer struct {
 	// Monitor to track the syncer.
 	Mon datasources.Monitor
 	// Configuration for the manila syncer.
-	Conf conf.DatasourceOpenStackManilaConfig
+	Conf v1alpha1.ManilaDatasource
 	// Manila API client to fetch the data.
 	API ManilaAPI
 	// MQTT client to publish mqtt data.

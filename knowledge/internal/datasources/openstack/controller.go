@@ -1,15 +1,15 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package prometheus
+package openstack
 
 import (
 	"context"
 	"net/http"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/sso"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-type PrometheusDatasourceReconciler struct {
+type OpenStackDatasourceReconciler struct {
 	// Client for the kubernetes API.
 	client.Client
 	// Kubernetes scheme to use for the deschedulings.
@@ -30,7 +30,7 @@ type PrometheusDatasourceReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	datasource := &v1alpha1.Datasource{}
 	if err := r.Get(ctx, req.NamespacedName, datasource); err != nil {
@@ -38,40 +38,17 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Sanity checks.
-	if datasource.Spec.Type != v1alpha1.DatasourceTypePrometheus {
-		log.Info("skipping datasource, not a prometheus datasource", "name", datasource.Name)
+	if datasource.Spec.Type != v1alpha1.DatasourceTypeOpenStack {
+		log.Info("skipping datasource, not an openstack datasource", "name", datasource.Name)
 		return ctrl.Result{}, nil
 	}
-	if datasource.Spec.Prometheus == nil {
-		log.Info("skipping datasource, prometheus datasource spec empty", "name", datasource.Name)
+	if datasource.Spec.OpenStack == nil {
+		log.Info("skipping datasource, openstack datasource spec empty", "name", datasource.Name)
 		return ctrl.Result{}, nil
 	}
 	if datasource.Status.NextSyncTime.Time.After(time.Now()) {
 		log.Info("skipping datasource sync, not yet time", "name", datasource.Name)
 		return ctrl.Result{RequeueAfter: time.Until(datasource.Status.NextSyncTime.Time)}, nil
-	}
-
-	newSyncerFunc, ok := map[string]func(
-		ds v1alpha1.Datasource,
-		authenticatedDB *db.DB,
-		authenticatedHTTP *http.Client,
-	) typedSyncer{
-		"vrops_host_metric":                     newTypedSyncer[prometheus.VROpsHostMetric],
-		"vrops_vm_metric":                       newTypedSyncer[prometheus.VROpsVMMetric],
-		"node_exporter_metric":                  newTypedSyncer[prometheus.NodeExporterMetric],
-		"netapp_aggregate_labels_metric":        newTypedSyncer[prometheus.NetAppAggregateLabelsMetric],
-		"netapp_node_metric":                    newTypedSyncer[prometheus.NetAppNodeMetric],
-		"netapp_volume_aggregate_labels_metric": newTypedSyncer[prometheus.NetAppVolumeAggrLabelsMetric],
-		"kvm_libvirt_domain_metric":             newTypedSyncer[prometheus.KVMDomainMetric],
-	}[datasource.Spec.Prometheus.Type]
-	if !ok {
-		log.Info("skipping datasource, unsupported metric type", "metricType", datasource.Spec.Prometheus.Type)
-		datasource.Status.Error = "unsupported metric type: " + datasource.Spec.Prometheus.Type
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
 	}
 
 	// Authenticate with the database based on the secret provided in the datasource.
@@ -103,11 +80,22 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
-	syncer := newSyncerFunc(*datasource, authenticatedDB, authenticatedHTTP)
+	var syncer Syncer
+	switch datasource.Spec.OpenStack.Type {
+	case v1alpha1.OpenStackDatasourceTypeNova:
+		syncer = &nova.NovaSyncer{
+			DB:         db,
+			Mon:        monitor,
+			Conf:       config.Nova,
+			API:        nova.NewNovaAPI(monitor, keystoneAPI, config.Nova),
+			MqttClient: mqttClient,
+		}
+	}
+	// TODO
 	success, err := syncer.Sync(ctx)
 	if err != nil {
-		log.Error(err, "failed to sync prometheus datasource", "name", datasource.Name)
-		datasource.Status.Error = "failed to sync prometheus datasource: " + err.Error()
+		log.Error(err, "failed to sync openstack datasource", "name", datasource.Name)
+		datasource.Status.Error = "failed to sync openstack datasource: " + err.Error()
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -126,14 +114,14 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	return ctrl.Result{RequeueAfter: time.Until(success.NextSyncTime.Time)}, nil
 }
 
-func (r *PrometheusDatasourceReconciler) SetupWithManager(mgr manager.Manager) error {
+func (r *OpenStackDatasourceReconciler) SetupWithManager(mgr manager.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("cortex-prometheus-datasource").
+		Named("cortex-openstack-datasource").
 		For(
 			&v1alpha1.Datasource{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to prometheus datasources.
-				return obj.(*v1alpha1.Datasource).Spec.Type == v1alpha1.DatasourceTypePrometheus
+				// Only react to openstack datasources.
+				return obj.(*v1alpha1.Datasource).Spec.Type == v1alpha1.DatasourceTypeOpenStack
 			})),
 		).
 		Complete(r)

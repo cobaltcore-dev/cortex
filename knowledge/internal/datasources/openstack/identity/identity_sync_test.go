@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -37,7 +37,7 @@ func TestIdentitySyncer_Init(t *testing.T) {
 	syncer := &IdentitySyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackIdentityConfig{Types: []string{"projects", "domains"}},
+		Conf: v1alpha1.IdentityDatasource{Types: []string{"projects", "domains"}},
 		API:  &mockIdentityAPI{},
 	}
 	syncer.Init(t.Context())
@@ -53,7 +53,7 @@ func TestIdentitySyncer_Sync(t *testing.T) {
 	syncer := &IdentitySyncer{
 		DB:         testDB,
 		Mon:        mon,
-		Conf:       conf.DatasourceOpenStackIdentityConfig{Types: []string{"projects", "domains"}},
+		Conf:       v1alpha1.IdentityDatasource{Types: []string{"projects", "domains"}},
 		API:        &mockIdentityAPI{},
 		MqttClient: &mqtt.MockClient{},
 	}
@@ -76,7 +76,7 @@ func TestIdentitySyncer_SyncProjects(t *testing.T) {
 	syncer := &IdentitySyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackIdentityConfig{Types: []string{"projects", "domains"}},
+		Conf: v1alpha1.IdentityDatasource{Types: []string{"projects", "domains"}},
 		API:  &mockIdentityAPI{},
 	}
 
@@ -102,7 +102,7 @@ func TestIdentitySyncer_SyncDomains(t *testing.T) {
 	syncer := &IdentitySyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackIdentityConfig{Types: []string{"projects", "domains"}},
+		Conf: v1alpha1.IdentityDatasource{Types: []string{"projects", "domains"}},
 		API:  &mockIdentityAPI{},
 	}
 

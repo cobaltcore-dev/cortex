@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/testlib"
@@ -68,7 +68,7 @@ func TestNovaSyncer_Init(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackNovaConfig{Types: []string{"servers", "hypervisors"}},
+		Conf: v1alpha1.NovaDatasource{Types: []string{"servers", "hypervisors"}},
 		API:  &mockNovaAPI{},
 	}
 	syncer.Init(t.Context())
@@ -84,7 +84,7 @@ func TestNovaSyncer_Sync(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:         testDB,
 		Mon:        mon,
-		Conf:       conf.DatasourceOpenStackNovaConfig{Types: []string{"servers", "hypervisors"}},
+		Conf:       v1alpha1.NovaDatasource{Types: []string{"servers", "hypervisors"}},
 		API:        &mockNovaAPI{},
 		MqttClient: &mqtt.MockClient{},
 	}
@@ -107,7 +107,7 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackNovaConfig{Types: []string{"servers"}},
+		Conf: v1alpha1.NovaDatasource{Types: []string{"servers"}},
 		API:  &mockNovaAPI{},
 	}
 
@@ -150,7 +150,7 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 			syncer := &NovaSyncer{
 				DB:  testDB,
 				Mon: mon,
-				Conf: conf.DatasourceOpenStackNovaConfig{
+				Conf: v1alpha1.NovaDatasource{
 					Types:                             []string{"deleted_servers"},
 					DeletedServersChangesSinceMinutes: tt.DeletedServersChangesSinceMinutes,
 				},
@@ -180,7 +180,7 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackNovaConfig{Types: []string{"hypervisors"}},
+		Conf: v1alpha1.NovaDatasource{Types: []string{"hypervisors"}},
 		API:  &mockNovaAPI{},
 	}
 
@@ -205,7 +205,7 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackNovaConfig{Types: []string{"flavors"}},
+		Conf: v1alpha1.NovaDatasource{Types: []string{"flavors"}},
 		API:  &mockNovaAPI{},
 	}
 
@@ -230,7 +230,7 @@ func TestNovaSyncer_SyncMigrations(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackNovaConfig{Types: []string{"migrations"}},
+		Conf: v1alpha1.NovaDatasource{Types: []string{"migrations"}},
 		API:  &mockNovaAPI{},
 	}
 
@@ -255,7 +255,7 @@ func TestNovaSyncer_SyncAggregates(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: conf.DatasourceOpenStackNovaConfig{Types: []string{"aggregates"}},
+		Conf: v1alpha1.NovaDatasource{Types: []string{"aggregates"}},
 		API:  &mockNovaAPI{},
 	}
 

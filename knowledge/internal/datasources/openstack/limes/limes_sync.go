@@ -9,7 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
@@ -23,7 +23,7 @@ type LimesSyncer struct {
 	// Monitor to track the syncer.
 	Mon datasources.Monitor
 	// Configuration for the limes syncer.
-	Conf conf.DatasourceOpenStackLimesConfig
+	Conf v1alpha1.LimesDatasource
 	// Limes API client to fetch the data.
 	API LimesAPI
 	// MQTT client to publish mqtt data.

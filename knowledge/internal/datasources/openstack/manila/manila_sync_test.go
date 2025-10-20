@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/manila"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -30,7 +30,7 @@ func TestManilaSyncer_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackManilaConfig{Types: []string{"storage_pools"}}
+	conf := v1alpha1.ManilaDatasource{Types: []string{"storage_pools"}}
 
 	syncer := &ManilaSyncer{
 		DB:   testDB,
@@ -48,7 +48,7 @@ func TestManilaSyncer_Sync(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackManilaConfig{Types: []string{"storage_pools"}}
+	conf := v1alpha1.ManilaDatasource{Types: []string{"storage_pools"}}
 
 	syncer := &ManilaSyncer{
 		DB:         testDB,
@@ -72,7 +72,7 @@ func TestManilaSyncer_SyncAllStoragePools(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackManilaConfig{Types: []string{"storage_pools"}}
+	conf := v1alpha1.ManilaDatasource{Types: []string{"storage_pools"}}
 
 	syncer := &ManilaSyncer{
 		DB:   testDB,

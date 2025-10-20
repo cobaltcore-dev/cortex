@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
@@ -20,7 +20,7 @@ type IdentitySyncer struct {
 	Mon        datasources.Monitor
 	API        IdentityAPI
 	MqttClient mqtt.Client
-	Conf       conf.DatasourceOpenStackIdentityConfig
+	Conf       v1alpha1.IdentityDatasource
 }
 
 func (s *IdentitySyncer) Init(ctx context.Context) {

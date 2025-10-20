@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/gophercloud/gophercloud/v2"
@@ -47,13 +47,13 @@ type novaAPI struct {
 	// Keystone api to authenticate against.
 	keystoneAPI keystone.KeystoneAPI
 	// Nova configuration.
-	conf conf.DatasourceOpenStackNovaConfig
+	conf v1alpha1.NovaDatasource
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
 }
 
 // Create a new OpenStack server syncer.
-func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf conf.DatasourceOpenStackNovaConfig) NovaAPI {
+func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.NovaDatasource) NovaAPI {
 	return &novaAPI{mon: mon, keystoneAPI: k, conf: conf}
 }
 

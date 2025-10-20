@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
@@ -23,7 +23,7 @@ func setupLimesMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.
 func TestNewLimesAPI(t *testing.T) {
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackLimesConfig{}
+	conf := v1alpha1.LimesDatasource{}
 
 	api := NewLimesAPI(mon, k, conf)
 	if api == nil {
@@ -43,7 +43,7 @@ func TestLimesAPI_GetAllCommitments(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackLimesConfig{}
+	conf := v1alpha1.LimesDatasource{}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)
 	api.Init(t.Context())
@@ -78,7 +78,7 @@ func TestLimesAPI_GetAllCommitments_Error(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackLimesConfig{}
+	conf := v1alpha1.LimesDatasource{}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)
 	api.Init(t.Context())
@@ -103,7 +103,7 @@ func TestLimesAPI_GetAllCommitments_EmptyResponse(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackLimesConfig{}
+	conf := v1alpha1.LimesDatasource{}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)
 	api.Init(t.Context())
@@ -144,7 +144,7 @@ func TestLimesAPI_GetAllCommitments_MultipleProjects(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackLimesConfig{}
+	conf := v1alpha1.LimesDatasource{}
 	k := &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)

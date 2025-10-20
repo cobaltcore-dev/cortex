@@ -14,7 +14,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/gophercloud/gophercloud/v2"
@@ -35,7 +35,7 @@ type limesAPI struct {
 	// Keystone api to authenticate against.
 	keystoneAPI keystone.KeystoneAPI
 	// Limes configuration.
-	conf conf.DatasourceOpenStackLimesConfig
+	conf v1alpha1.LimesDatasource
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
 	// Sleep interval to avoid overloading the API.
@@ -43,7 +43,7 @@ type limesAPI struct {
 }
 
 // Create a new OpenStack limes api.
-func NewLimesAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf conf.DatasourceOpenStackLimesConfig) LimesAPI {
+func NewLimesAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.LimesDatasource) LimesAPI {
 	return &limesAPI{mon: mon, keystoneAPI: k, conf: conf, sleepInterval: 50 * time.Millisecond}
 }
 

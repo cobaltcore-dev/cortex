@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -40,7 +40,7 @@ func TestPlacementSyncer_Init(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackPlacementConfig{Types: []string{"resource_providers", "traits"}}
+	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits"}}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
@@ -59,7 +59,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackPlacementConfig{Types: []string{"resource_providers", "traits"}}
+	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits"}}
 
 	syncer := &PlacementSyncer{
 		DB:         testDB,
@@ -85,7 +85,7 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackPlacementConfig{Types: []string{"resource_providers", "traits"}}
+	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits"}}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
@@ -113,7 +113,7 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackPlacementConfig{Types: []string{"resource_providers", "traits"}}
+	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits"}}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
@@ -142,7 +142,7 @@ func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackPlacementConfig{Types: []string{"resource_providers", "traits", "inventory_usages"}}
+	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits", "inventory_usages"}}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,

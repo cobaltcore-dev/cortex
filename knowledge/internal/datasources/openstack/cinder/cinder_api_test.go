@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
@@ -30,7 +30,7 @@ func setupCinderMockServer(handler http.HandlerFunc) (*httptest.Server, keystone
 func TestNewCinderAPI(t *testing.T) {
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackCinderConfig{}
+	conf := v1alpha1.CinderDatasource{}
 
 	api := NewCinderAPI(mon, k, conf)
 	if api == nil {
@@ -79,7 +79,7 @@ func TestCinderAPI_GetAllStoragePools(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackCinderConfig{}
+	conf := v1alpha1.CinderDatasource{}
 
 	api := NewCinderAPI(mon, k, conf).(*cinderAPI)
 	api.Init(t.Context())
@@ -105,7 +105,7 @@ func TestCinderAPI_GetAllStoragePools_Error(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackCinderConfig{}
+	conf := v1alpha1.CinderDatasource{}
 
 	api := NewCinderAPI(mon, k, conf).(*cinderAPI)
 	api.Init(t.Context())

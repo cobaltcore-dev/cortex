@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
@@ -23,7 +23,7 @@ type NovaSyncer struct {
 	// Monitor to track the syncer.
 	Mon datasources.Monitor
 	// Configuration for the nova syncer.
-	Conf conf.DatasourceOpenStackNovaConfig
+	Conf v1alpha1.NovaDatasource
 	// Nova API client to fetch the data.
 	API NovaAPI
 	// MQTT client to publish mqtt data.

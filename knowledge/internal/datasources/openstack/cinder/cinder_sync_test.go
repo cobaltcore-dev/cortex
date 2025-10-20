@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/cinder"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -30,7 +30,7 @@ func TestCinderSyncer_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackCinderConfig{Types: []string{"storage_pools"}}
+	conf := v1alpha1.CinderDatasource{Types: []string{"storage_pools"}}
 
 	syncer := &CinderSyncer{
 		DB:   testDB,
@@ -48,7 +48,7 @@ func TestCinderSyncer_Sync(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackCinderConfig{Types: []string{"storage_pools"}}
+	conf := v1alpha1.CinderDatasource{Types: []string{"storage_pools"}}
 
 	syncer := &CinderSyncer{
 		DB:         testDB,
@@ -72,7 +72,7 @@ func TestCinderSyncer_SyncAllStoragePools(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackCinderConfig{Types: []string{"storage_pools"}}
+	conf := v1alpha1.CinderDatasource{Types: []string{"storage_pools"}}
 
 	syncer := &CinderSyncer{
 		DB:   testDB,

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 
@@ -42,7 +42,7 @@ func TestIdentityAPI_GetAllDomains(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackIdentityConfig{Availability: "public"}
+	conf := v1alpha1.IdentityDatasource{Availability: "public"}
 
 	api := NewIdentityAPI(mon, k, conf).(*identityAPI)
 	api.Init(t.Context())
@@ -94,7 +94,7 @@ func TestIdentityAPI_GetAllProjects(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackIdentityConfig{Availability: "public"}
+	conf := v1alpha1.IdentityDatasource{Availability: "public"}
 
 	api := NewIdentityAPI(mon, k, conf).(*identityAPI)
 	api.Init(t.Context())

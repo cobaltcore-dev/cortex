@@ -77,18 +77,44 @@ type CinderDatasource struct {
 	Types []string `json:"types"`
 }
 
+type OpenStackDatasourceType string
+
+const (
+	// OpenStackDatasourceTypeNova indicates a Nova datasource.
+	OpenStackDatasourceTypeNova OpenStackDatasourceType = "nova"
+	// OpenStackDatasourceTypePlacement indicates a Placement datasource.
+	OpenStackDatasourceTypePlacement OpenStackDatasourceType = "placement"
+	// OpenStackDatasourceTypeManila indicates a Manila datasource.
+	OpenStackDatasourceTypeManila OpenStackDatasourceType = "manila"
+	// OpenStackDatasourceTypeIdentity indicates an Identity datasource.
+	OpenStackDatasourceTypeIdentity OpenStackDatasourceType = "identity"
+	// OpenStackDatasourceTypeLimes indicates a Limes datasource.
+	OpenStackDatasourceTypeLimes OpenStackDatasourceType = "limes"
+	// OpenStackDatasourceTypeCinder indicates a Cinder datasource.
+	OpenStackDatasourceTypeCinder OpenStackDatasourceType = "cinder"
+)
+
 type OpenStackDatasource struct {
+	// The type of the OpenStack datasource.
+	Type OpenStackDatasourceType `json:"type"`
+
 	// Datasource for openstack nova.
+	// Only required if Type is "nova".
 	Nova *NovaDatasource `json:"nova"`
 	// Datasource for openstack placement.
+	// Only required if Type is "placement".
 	Placement *PlacementDatasource `json:"placement"`
 	// Datasource for openstack manila.
+	// Only required if Type is "manila".
 	Manila *ManilaDatasource `json:"manila"`
 	// Datasource for openstack identity.
+	// Only required if Type is "identity".
 	Identity *IdentityDatasource `json:"identity"`
 	// Datasource for openstack limes.
+	// Only required if Type is "limes".
 	Limes *LimesDatasource `json:"limes"`
 	// Datasource for openstack cinder.
+	// Only required if Type is "cinder".
 	Cinder *CinderDatasource `json:"cinder"`
 
 	// How often to sync the datasource in seconds.
@@ -105,11 +131,25 @@ type OpenStackDatasource struct {
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 }
 
+type DatasourceType string
+
+const (
+	// DatasourceTypePrometheus indicates a Prometheus datasource.
+	DatasourceTypePrometheus DatasourceType = "prometheus"
+	// DatasourceTypeOpenStack indicates an OpenStack datasource.
+	DatasourceTypeOpenStack DatasourceType = "openstack"
+)
+
 type DatasourceSpec struct {
 	// If given, configures a Prometheus datasource to fetch.
+	// Type must be set to "prometheus" if this is used.
 	Prometheus *PrometheusDatasource `json:"prometheus"`
+	// Type must be set to "openstack" if this is used.
 	// If given, configures an OpenStack datasource to fetch.
 	OpenStack *OpenStackDatasource `json:"openstack,omitempty"`
+
+	// The type of the datasource.
+	Type DatasourceType `json:"type"`
 
 	// Database credentials to use for the datasource.
 	// The secret should contain the following keys:
@@ -142,6 +182,7 @@ type DatasourceStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Last Synced",type="date",JSONPath=".status.lastSynced"
 // +kubebuilder:printcolumn:name="Row Count",type="integer",JSONPath=".status.rowCount"

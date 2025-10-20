@@ -6,6 +6,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/url"
 	"reflect"
@@ -21,6 +22,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Wrapper around gorp.DbMap that adds some convenience functions.
@@ -37,6 +40,78 @@ type Table interface {
 	Indexes() map[string][]string
 }
 
+type Authenticator struct{ client.Client }
+
+// Create a new database client with authentication from the provided secret reference.
+func (a Authenticator) FromSecretRef(ctx context.Context, ref corev1.SecretReference) (*DB, error) {
+	authSecret := &corev1.Secret{}
+	if err := a.Get(ctx, client.ObjectKey{
+		Namespace: ref.Namespace,
+		Name:      ref.Name,
+	}, authSecret); err != nil {
+		return nil, err
+	}
+	host, ok := authSecret.Data["host"]
+	if !ok {
+		return nil, errors.New("missing host in secret data")
+	}
+	user, ok := authSecret.Data["user"]
+	if !ok {
+		return nil, errors.New("missing user in secret data")
+	}
+	password, ok := authSecret.Data["password"]
+	if !ok {
+		return nil, errors.New("missing password in secret data")
+	}
+	database, ok := authSecret.Data["database"]
+	if !ok {
+		return nil, errors.New("missing database in secret data")
+	}
+	port, ok := authSecret.Data["port"]
+	if !ok {
+		return nil, errors.New("missing port in secret data")
+	}
+	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
+	dbURL, err := easypg.URLFrom(easypg.URLParts{
+		HostName:          strip(string(host)),
+		Port:              strip(string(port)),
+		UserName:          strip(string(user)),
+		Password:          strip(string(password)),
+		DatabaseName:      strip(string(database)),
+		ConnectionOptions: "sslmode=disable",
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Strip the password from the URL for logging.
+	urlForLog := strings.ReplaceAll(dbURL.String(), strip(string(password)), "****")
+	slog.Info("connecting to database", "url", urlForLog)
+	db, err := sql.Open("postgres", dbURL.String())
+	if err != nil {
+		panic(err)
+	}
+
+	// If the wait time exceeds 10 seconds, we will panic.
+	maxRetries := 10
+	for i := range maxRetries {
+		err := db.PingContext(ctx)
+		if err == nil {
+			break
+		}
+		if i == maxRetries-1 {
+			panic("giving up connecting to database")
+		}
+		slog.Error("failed to connect to database, retrying...", "error", err)
+		time.Sleep(1 * time.Second)
+	}
+
+	db.SetMaxOpenConns(16)
+	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
+	slog.Info("database is ready")
+	// TODO: Connect the db monitor here.
+	return &DB{DbMap: dbMap}, nil
+}
+
 // Create a new postgres database and wait until it is connected.
 func NewPostgresDB(
 	ctx context.Context,
@@ -44,7 +119,6 @@ func NewPostgresDB(
 	registry *monitoring.Registry,
 	monitor Monitor,
 ) DB {
-
 	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          strip(c.Host),

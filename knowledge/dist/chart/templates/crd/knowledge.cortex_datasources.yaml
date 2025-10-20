@@ -21,6 +21,9 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
@@ -79,7 +82,9 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               openstack:
-                description: If given, configures an OpenStack datasource to fetch.
+                description: |-
+                  Type must be set to "openstack" if this is used.
+                  If given, configures an OpenStack datasource to fetch.
                 properties:
                   cinder:
                     description: Datasource for openstack cinder.
@@ -217,7 +222,9 @@ spec:
                 - syncIntervalSeconds
                 type: object
               prometheus:
-                description: If given, configures a Prometheus datasource to fetch.
+                description: |-
+                  If given, configures a Prometheus datasource to fetch.
+                  Type must be set to "prometheus" if this is used.
                 properties:
                   alias:
                     description: |-
@@ -271,9 +278,13 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              type:
+                description: The type of the datasource.
+                type: string
             required:
             - databaseSecretRef
             - prometheus
+            - type
             type: object
           status:
             description: status defines the observed state of Datasource

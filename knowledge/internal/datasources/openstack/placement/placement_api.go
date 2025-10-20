@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/gophercloud/gophercloud/v2"
@@ -38,7 +38,7 @@ type placementAPI struct {
 	// Keystone api to authenticate against.
 	keystoneAPI keystone.KeystoneAPI
 	// Placement configuration.
-	conf conf.DatasourceOpenStackPlacementConfig
+	conf v1alpha1.PlacementDatasource
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
 	// Sleep interval to avoid overloading the API.
@@ -46,7 +46,7 @@ type placementAPI struct {
 }
 
 // Create a new OpenStack placement api.
-func NewPlacementAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf conf.DatasourceOpenStackPlacementConfig) PlacementAPI {
+func NewPlacementAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.PlacementDatasource) PlacementAPI {
 	return &placementAPI{mon: mon, keystoneAPI: k, conf: conf, sleepInterval: 50 * time.Millisecond}
 }
 

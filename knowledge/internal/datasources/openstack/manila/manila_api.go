@@ -9,7 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/manila"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/gophercloud/gophercloud/v2"
@@ -33,13 +33,13 @@ type manilaAPI struct {
 	// Keystone api to authenticate against.
 	keystoneAPI keystone.KeystoneAPI
 	// Manila configuration.
-	conf conf.DatasourceOpenStackManilaConfig
+	conf v1alpha1.ManilaDatasource
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
 }
 
 // Create a new OpenStack Manila api.
-func NewManilaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf conf.DatasourceOpenStackManilaConfig) ManilaAPI {
+func NewManilaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.ManilaDatasource) ManilaAPI {
 	return &manilaAPI{mon: mon, keystoneAPI: k, conf: conf}
 }
 

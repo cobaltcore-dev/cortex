@@ -9,7 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -53,7 +53,7 @@ func TestLimesSyncer_Init(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackLimesConfig{Types: []string{"commitments"}}
+	conf := v1alpha1.LimesDatasource{Types: []string{"commitments"}}
 
 	syncer := &LimesSyncer{
 		DB:   testDB,
@@ -86,7 +86,7 @@ func TestLimesSyncer_Sync(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackLimesConfig{Types: []string{"commitments"}}
+	conf := v1alpha1.LimesDatasource{Types: []string{"commitments"}}
 
 	syncer := &LimesSyncer{
 		DB:         testDB,
@@ -129,7 +129,7 @@ func TestLimesSyncer_SyncCommitments(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackLimesConfig{Types: []string{"commitments"}}
+	conf := v1alpha1.LimesDatasource{Types: []string{"commitments"}}
 
 	syncer := &LimesSyncer{
 		DB:   testDB,
@@ -167,7 +167,7 @@ func TestLimesSyncer_SyncCommitments_NoProjects(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackLimesConfig{Types: []string{"commitments"}}
+	conf := v1alpha1.LimesDatasource{Types: []string{"commitments"}}
 
 	syncer := &LimesSyncer{
 		DB:   testDB,
@@ -195,7 +195,7 @@ func TestLimesSyncer_Sync_CommitmentsNotConfigured(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackLimesConfig{Types: []string{}} // No types configured
+	conf := v1alpha1.LimesDatasource{Types: []string{}} // No types configured
 
 	syncer := &LimesSyncer{
 		DB:         testDB,

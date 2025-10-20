@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
@@ -25,7 +25,7 @@ func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.K
 func TestNewNovaAPI(t *testing.T) {
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackNovaConfig{}
+	conf := v1alpha1.NovaDatasource{}
 
 	api := NewNovaAPI(mon, k, conf)
 	if api == nil {
@@ -67,7 +67,7 @@ func TestNovaAPI_GetDeletedServers(t *testing.T) {
 		defer server.Close()
 
 		mon := datasources.Monitor{}
-		conf := conf.DatasourceOpenStackNovaConfig{Availability: "public"}
+		conf := v1alpha1.NovaDatasource{Availability: "public"}
 
 		api := NewNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
@@ -104,7 +104,7 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackNovaConfig{Availability: "public"}
+	conf := v1alpha1.NovaDatasource{Availability: "public"}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())
@@ -141,7 +141,7 @@ func TestNovaAPI_GetAllHypervisors(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackNovaConfig{Availability: "public"}
+	conf := v1alpha1.NovaDatasource{Availability: "public"}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())
@@ -178,7 +178,7 @@ func TestNovaAPI_GetAllFlavors(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackNovaConfig{Availability: "public"}
+	conf := v1alpha1.NovaDatasource{Availability: "public"}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())
@@ -218,7 +218,7 @@ func TestNovaAPI_GetAllMigrations(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackNovaConfig{Availability: "public"}
+	conf := v1alpha1.NovaDatasource{Availability: "public"}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())

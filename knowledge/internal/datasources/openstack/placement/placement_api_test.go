@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
@@ -23,7 +23,7 @@ func setupPlacementMockServer(handler http.HandlerFunc) (*httptest.Server, keyst
 func TestNewPlacementAPI(t *testing.T) {
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.DatasourceOpenStackPlacementConfig{}
+	conf := v1alpha1.PlacementDatasource{}
 
 	api := NewPlacementAPI(mon, k, conf)
 	if api == nil {
@@ -43,7 +43,7 @@ func TestPlacementAPI_GetAllResourceProviders(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackPlacementConfig{}
+	conf := v1alpha1.PlacementDatasource{}
 
 	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
 	api.Init(t.Context())
@@ -73,7 +73,7 @@ func TestPlacementAPI_GetAllTraits(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackPlacementConfig{}
+	conf := v1alpha1.PlacementDatasource{}
 
 	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
@@ -104,7 +104,7 @@ func TestPlacementAPI_GetAllTraits_Error(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackPlacementConfig{}
+	conf := v1alpha1.PlacementDatasource{}
 
 	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
 	api.Init(t.Context())
@@ -151,7 +151,7 @@ func TestPlacementAPI_GetAllInventoryUsages(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := conf.DatasourceOpenStackPlacementConfig{}
+	conf := v1alpha1.PlacementDatasource{}
 	k := &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
 
 	api := NewPlacementAPI(mon, k, conf).(*placementAPI)

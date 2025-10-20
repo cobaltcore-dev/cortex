@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/gophercloud/gophercloud/v2"
@@ -29,10 +29,10 @@ type identityAPI struct {
 	mon         datasources.Monitor
 	keystoneAPI keystone.KeystoneAPI
 	sc          *gophercloud.ServiceClient
-	conf        conf.DatasourceOpenStackIdentityConfig
+	conf        v1alpha1.IdentityDatasource
 }
 
-func NewIdentityAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf conf.DatasourceOpenStackIdentityConfig) IdentityAPI {
+func NewIdentityAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.IdentityDatasource) IdentityAPI {
 	return &identityAPI{mon: mon, keystoneAPI: k, conf: conf}
 }
 
