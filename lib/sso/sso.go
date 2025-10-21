@@ -28,12 +28,12 @@ func (lrt *requestLogger) RoundTrip(req *http.Request) (*http.Response, error) {
 	return lrt.T.RoundTrip(req)
 }
 
-type Authenticator struct{ client.Client }
+type Connector struct{ client.Client }
 
 // Create a new http client with SSO configuration given in a kubernetes secret.
-func (a Authenticator) FromSecretRef(ctx context.Context, ref corev1.SecretReference) (*http.Client, error) {
+func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference) (*http.Client, error) {
 	authSecret := &corev1.Secret{}
-	if err := a.Get(ctx, client.ObjectKey{
+	if err := c.Get(ctx, client.ObjectKey{
 		Namespace: ref.Namespace,
 		Name:      ref.Name,
 	}, authSecret); err != nil {

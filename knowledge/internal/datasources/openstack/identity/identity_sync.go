@@ -5,79 +5,87 @@ package identity
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/go-gorp/gorp"
 )
 
 type IdentitySyncer struct {
-	DB         db.DB
-	Mon        datasources.Monitor
-	API        IdentityAPI
-	MqttClient mqtt.Client
-	Conf       v1alpha1.IdentityDatasource
+	// Database to store the identity objects in.
+	DB db.DB
+	// Monitor to track the syncer.
+	Mon datasources.Monitor
+	// Configuration for the identity syncer.
+	Conf v1alpha1.IdentityDatasource
+	// Identity API client to fetch the data.
+	API IdentityAPI
 }
 
-func (s *IdentitySyncer) Init(ctx context.Context) {
+func (s *IdentitySyncer) Init(ctx context.Context) error {
 	s.API.Init(ctx)
 	var tables = []*gorp.TableMap{}
-
-	if slices.Contains(s.Conf.Types, "domains") {
+	// Only add the tables that are configured in the yaml conf.
+	switch s.Conf.Type {
+	case v1alpha1.IdentityDatasourceTypeDomains:
 		tables = append(tables, s.DB.AddTable(identity.Domain{}))
-	}
-	if slices.Contains(s.Conf.Types, "projects") {
+	case v1alpha1.IdentityDatasourceTypeProjects:
 		tables = append(tables, s.DB.AddTable(identity.Project{}))
 	}
-	if err := s.DB.CreateTable(tables...); err != nil {
-		panic(err)
-	}
+	return s.DB.CreateTable(tables...)
 }
 
-func (s *IdentitySyncer) Sync(ctx context.Context) error {
-	if slices.Contains(s.Conf.Types, "domains") {
-		domains, err := s.SyncDomains(ctx)
-		if err != nil {
-			return err
-		}
-		if len(domains) > 0 {
-			go s.MqttClient.Publish(identity.TriggerIdentityDomainsSynced, "")
-		}
+func (s *IdentitySyncer) Sync(ctx context.Context) (int64, error) {
+	// Only sync the objects that are configured in the yaml conf.
+	var err error
+	var nResults int64
+	switch s.Conf.Type {
+	case v1alpha1.IdentityDatasourceTypeDomains:
+		nResults, err = s.SyncDomains(ctx)
+	case v1alpha1.IdentityDatasourceTypeProjects:
+		nResults, err = s.SyncProjects(ctx)
 	}
-	if slices.Contains(s.Conf.Types, "projects") {
-		projects, err := s.SyncProjects(ctx)
-		if err != nil {
-			return err
-		}
-		if len(projects) > 0 {
-			go s.MqttClient.Publish(identity.TriggerIdentityProjectsSynced, "")
-		}
-	}
-	return nil
+	return nResults, err
 }
 
-func (s *IdentitySyncer) SyncDomains(ctx context.Context) ([]identity.Domain, error) {
+func (s *IdentitySyncer) SyncDomains(ctx context.Context) (int64, error) {
 	domains, err := s.API.GetAllDomains(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if err := db.ReplaceAll(s.DB, domains...); err != nil {
-		return nil, err
+		return 0, err
 	}
-	return domains, nil
+	label := identity.Domain{}.TableName()
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(domains)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(domains)), nil
 }
 
-func (s *IdentitySyncer) SyncProjects(ctx context.Context) ([]identity.Project, error) {
+func (s *IdentitySyncer) SyncProjects(ctx context.Context) (int64, error) {
 	projects, err := s.API.GetAllProjects(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if err := db.ReplaceAll(s.DB, projects...); err != nil {
-		return nil, err
+		return 0, err
 	}
-	return projects, nil
+	label := identity.Project{}.TableName()
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(projects)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(projects)), nil
 }

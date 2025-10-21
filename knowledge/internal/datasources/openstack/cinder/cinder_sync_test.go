@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockCinderAPI struct{}
@@ -30,7 +29,7 @@ func TestCinderSyncer_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.CinderDatasource{Types: []string{"storage_pools"}}
+	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 
 	syncer := &CinderSyncer{
 		DB:   testDB,
@@ -38,7 +37,10 @@ func TestCinderSyncer_Init(t *testing.T) {
 		Conf: conf,
 		API:  &mockCinderAPI{},
 	}
-	syncer.Init(t.Context())
+	err := syncer.Init(t.Context())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 }
 
 func TestCinderSyncer_Sync(t *testing.T) {
@@ -48,18 +50,17 @@ func TestCinderSyncer_Sync(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.CinderDatasource{Types: []string{"storage_pools"}}
+	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 
 	syncer := &CinderSyncer{
-		DB:         testDB,
-		Mon:        mon,
-		Conf:       conf,
-		API:        &mockCinderAPI{},
-		MqttClient: &mqtt.MockClient{},
+		DB:   testDB,
+		Mon:  mon,
+		Conf: conf,
+		API:  &mockCinderAPI{},
 	}
 
 	ctx := t.Context()
-	err := syncer.Sync(ctx)
+	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -72,7 +73,7 @@ func TestCinderSyncer_SyncAllStoragePools(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.CinderDatasource{Types: []string{"storage_pools"}}
+	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 
 	syncer := &CinderSyncer{
 		DB:   testDB,
@@ -82,11 +83,11 @@ func TestCinderSyncer_SyncAllStoragePools(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	pools, err := syncer.SyncAllStoragePools(ctx)
+	n, err := syncer.SyncAllStoragePools(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(pools) != 1 {
-		t.Fatalf("expected 1 storage pool, got %d", len(pools))
+	if n != 1 {
+		t.Fatalf("expected 1 storage pool, got %d", n)
 	}
 }

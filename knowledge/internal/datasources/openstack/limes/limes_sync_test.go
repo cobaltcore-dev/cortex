@@ -5,6 +5,7 @@ package limes
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
@@ -14,7 +15,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
-	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockLimesAPI struct{}
@@ -53,7 +53,7 @@ func TestLimesSyncer_Init(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.LimesDatasource{Types: []string{"commitments"}}
+	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
 		DB:   testDB,
@@ -61,7 +61,10 @@ func TestLimesSyncer_Init(t *testing.T) {
 		Conf: conf,
 		API:  NewLimesAPI(mon, k, conf),
 	}
-	syncer.Init(t.Context())
+	err := syncer.Init(t.Context())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 }
 
 func TestLimesSyncer_Sync(t *testing.T) {
@@ -86,14 +89,13 @@ func TestLimesSyncer_Sync(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.LimesDatasource{Types: []string{"commitments"}}
+	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
-		DB:         testDB,
-		Mon:        mon,
-		Conf:       conf,
-		API:        NewLimesAPI(mon, k, conf),
-		MqttClient: &mqtt.MockClient{},
+		DB:   testDB,
+		Mon:  mon,
+		Conf: conf,
+		API:  NewLimesAPI(mon, k, conf),
 	}
 	syncer.API = &mockLimesAPI{}
 
@@ -101,7 +103,7 @@ func TestLimesSyncer_Sync(t *testing.T) {
 	syncer.Init(t.Context())
 
 	ctx := t.Context()
-	err := syncer.Sync(ctx)
+	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -129,7 +131,7 @@ func TestLimesSyncer_SyncCommitments(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.LimesDatasource{Types: []string{"commitments"}}
+	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
 		DB:   testDB,
@@ -140,16 +142,12 @@ func TestLimesSyncer_SyncCommitments(t *testing.T) {
 	syncer.API = &mockLimesAPI{}
 
 	ctx := t.Context()
-	commitments, err := syncer.SyncCommitments(ctx)
+	n, err := syncer.SyncCommitments(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(commitments) != 1 {
-		t.Fatalf("expected 1 commitment, got %d", len(commitments))
-	}
-	commitment := commitments[0]
-	if commitment.ID != 1 || commitment.UUID != "test-uuid-1" || commitment.ServiceType != "compute" {
-		t.Errorf("unexpected commitment: %+v", commitment)
+	if n != 1 {
+		t.Fatalf("expected 1 commitment, got %d", n)
 	}
 }
 
@@ -167,7 +165,7 @@ func TestLimesSyncer_SyncCommitments_NoProjects(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.LimesDatasource{Types: []string{"commitments"}}
+	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
 		DB:   testDB,
@@ -178,37 +176,8 @@ func TestLimesSyncer_SyncCommitments_NoProjects(t *testing.T) {
 	syncer.API = &mockLimesAPI{}
 
 	ctx := t.Context()
-	commitments, err := syncer.SyncCommitments(ctx)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if len(commitments) != 0 {
-		t.Fatalf("expected 0 commitments, got %d", len(commitments))
-	}
-}
-
-func TestLimesSyncer_Sync_CommitmentsNotConfigured(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.LimesDatasource{Types: []string{}} // No types configured
-
-	syncer := &LimesSyncer{
-		DB:         testDB,
-		Mon:        mon,
-		Conf:       conf,
-		API:        NewLimesAPI(mon, k, conf),
-		MqttClient: &mqtt.MockClient{},
-	}
-	syncer.API = &mockLimesAPI{}
-
-	ctx := t.Context()
-	err := syncer.Sync(ctx)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	_, err := syncer.SyncCommitments(ctx)
+	if !errors.Is(err, v1alpha1.ErrWaitingForDependencyDatasource) {
+		t.Fatalf("expected ErrWaitingForDependencyDatasource, got %v", err)
 	}
 }

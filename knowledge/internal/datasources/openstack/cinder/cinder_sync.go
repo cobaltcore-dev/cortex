@@ -5,13 +5,11 @@ package cinder
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/cinder"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/go-gorp/gorp"
 )
 
@@ -24,48 +22,42 @@ type CinderSyncer struct {
 	Conf v1alpha1.CinderDatasource
 	// Cinder API client to fetch the data.
 	API CinderAPI
-	// MQTT client to publish mqtt data.
-	MqttClient mqtt.Client
 }
 
 // Init the OpenStack cinder syncer.
-func (s *CinderSyncer) Init(ctx context.Context) {
+func (s *CinderSyncer) Init(ctx context.Context) error {
 	s.API.Init(ctx)
 	tables := []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
-	if slices.Contains(s.Conf.Types, "storage_pools") {
+	switch s.Conf.Type {
+	case v1alpha1.CinderDatasourceTypeStoragePools:
 		tables = append(tables, s.DB.AddTable(cinder.StoragePool{}))
 	}
-	if err := s.DB.CreateTable(tables...); err != nil {
-		panic(err)
-	}
+	return s.DB.CreateTable(tables...)
 }
 
 // Sync the OpenStack cinder objects and publish triggers.
-func (s *CinderSyncer) Sync(ctx context.Context) error {
+func (s *CinderSyncer) Sync(ctx context.Context) (int64, error) {
 	// Only sync the objects that are configured in the yaml conf.
-	if slices.Contains(s.Conf.Types, "storage_pools") {
-		changedPools, err := s.SyncAllStoragePools(ctx)
-		if err != nil {
-			return err
-		}
-		go s.MqttClient.Publish(cinder.TriggerCinderStoragePoolsSynced, "")
-		// Publish additional information required for the visualizer.
-		go s.MqttClient.Publish("cortex/sync/openstack/cinder/storage_pools", changedPools)
+	var err error
+	var nResults int64
+	switch s.Conf.Type {
+	case v1alpha1.CinderDatasourceTypeStoragePools:
+		nResults, err = s.SyncAllStoragePools(ctx)
 	}
-	return nil
+	return nResults, err
 }
 
 // Sync the OpenStack resource providers into the database.
-func (s *CinderSyncer) SyncAllStoragePools(ctx context.Context) ([]cinder.StoragePool, error) {
-	label := cinder.StoragePool{}.TableName()
+func (s *CinderSyncer) SyncAllStoragePools(ctx context.Context) (int64, error) {
 	pools, err := s.API.GetAllStoragePools(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if err := db.ReplaceAll(s.DB, pools...); err != nil {
-		return nil, err
+		return 0, err
 	}
+	label := cinder.StoragePool{}.TableName()
 	if s.Mon.PipelineObjectsGauge != nil {
 		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(pools)))
@@ -74,5 +66,5 @@ func (s *CinderSyncer) SyncAllStoragePools(ctx context.Context) ([]cinder.Storag
 		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
-	return pools, nil
+	return int64(len(pools)), nil
 }

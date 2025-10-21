@@ -52,7 +52,6 @@ type novaAPI struct {
 	sc *gophercloud.ServiceClient
 }
 
-// Create a new OpenStack server syncer.
 func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.NovaDatasource) NovaAPI {
 	return &novaAPI{mon: mon, keystoneAPI: k, conf: conf}
 }

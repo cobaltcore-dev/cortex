@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockManilaAPI struct{}
@@ -30,7 +29,7 @@ func TestManilaSyncer_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.ManilaDatasource{Types: []string{"storage_pools"}}
+	conf := v1alpha1.ManilaDatasource{Type: v1alpha1.ManilaDatasourceTypeStoragePools}
 
 	syncer := &ManilaSyncer{
 		DB:   testDB,
@@ -38,7 +37,10 @@ func TestManilaSyncer_Init(t *testing.T) {
 		Conf: conf,
 		API:  &mockManilaAPI{},
 	}
-	syncer.Init(t.Context())
+	err := syncer.Init(t.Context())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 }
 
 func TestManilaSyncer_Sync(t *testing.T) {
@@ -48,18 +50,17 @@ func TestManilaSyncer_Sync(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.ManilaDatasource{Types: []string{"storage_pools"}}
+	conf := v1alpha1.ManilaDatasource{Type: v1alpha1.ManilaDatasourceTypeStoragePools}
 
 	syncer := &ManilaSyncer{
-		DB:         testDB,
-		Mon:        mon,
-		Conf:       conf,
-		API:        &mockManilaAPI{},
-		MqttClient: &mqtt.MockClient{},
+		DB:   testDB,
+		Mon:  mon,
+		Conf: conf,
+		API:  &mockManilaAPI{},
 	}
 
 	ctx := t.Context()
-	err := syncer.Sync(ctx)
+	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -72,7 +73,7 @@ func TestManilaSyncer_SyncAllStoragePools(t *testing.T) {
 	defer dbEnv.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.ManilaDatasource{Types: []string{"storage_pools"}}
+	conf := v1alpha1.ManilaDatasource{Type: v1alpha1.ManilaDatasourceTypeStoragePools}
 
 	syncer := &ManilaSyncer{
 		DB:   testDB,
@@ -82,11 +83,11 @@ func TestManilaSyncer_SyncAllStoragePools(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	pools, err := syncer.SyncAllStoragePools(ctx)
+	n, err := syncer.SyncAllStoragePools(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(pools) != 1 {
-		t.Fatalf("expected 1 storage pool, got %d", len(pools))
+	if n != 1 {
+		t.Fatalf("expected 1 storage pool, got %d", n)
 	}
 }

@@ -30,8 +30,8 @@ spec:
     - jsonPath: .status.lastSynced
       name: Last Synced
       type: date
-    - jsonPath: .status.rowCount
-      name: Row Count
+    - jsonPath: .status.numberOfObjects
+      name: N Objects
       type: integer
     - jsonPath: .status.error
       name: Error
@@ -83,11 +83,13 @@ spec:
                 x-kubernetes-map-type: atomic
               openstack:
                 description: |-
-                  Type must be set to "openstack" if this is used.
                   If given, configures an OpenStack datasource to fetch.
+                  Type must be set to "openstack" if this is used.
                 properties:
                   cinder:
-                    description: Datasource for openstack cinder.
+                    description: |-
+                      Datasource for openstack cinder.
+                      Only required if Type is "cinder".
                     properties:
                       availability:
                         description: Availability of the service, such as "public",
@@ -95,28 +97,26 @@ spec:
                         type: string
                       types:
                         description: The types of resources to sync.
-                        items:
-                          type: string
-                        type: array
+                        type: string
                     required:
                     - availability
                     - types
                     type: object
                   identity:
-                    description: Datasource for openstack identity.
+                    description: |-
+                      Datasource for openstack identity.
+                      Only required if Type is "identity".
                     properties:
                       availability:
                         description: Availability of the service, such as "public",
                           "internal", or "admin".
                         type: string
-                      types:
-                        description: The types of resources to sync.
-                        items:
-                          type: string
-                        type: array
+                      type:
+                        description: The type of resource to sync.
+                        type: string
                     required:
                     - availability
-                    - types
+                    - type
                     type: object
                   keystoneSecretRef:
                     description: |-
@@ -140,77 +140,81 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   limes:
-                    description: Datasource for openstack limes.
+                    description: |-
+                      Datasource for openstack limes.
+                      Only required if Type is "limes".
                     properties:
                       availability:
                         description: Availability of the service, such as "public",
                           "internal", or "admin".
                         type: string
-                      types:
-                        description: The types of resources to sync.
-                        items:
-                          type: string
-                        type: array
+                      type:
+                        description: The type of resource to sync.
+                        type: string
                     required:
                     - availability
-                    - types
+                    - type
                     type: object
                   manila:
-                    description: Datasource for openstack manila.
+                    description: |-
+                      Datasource for openstack manila.
+                      Only required if Type is "manila".
                     properties:
                       availability:
                         description: Availability of the service, such as "public",
                           "internal", or "admin".
                         type: string
-                      types:
-                        description: The types of resources to sync.
-                        items:
-                          type: string
-                        type: array
+                      type:
+                        description: The type of resource to sync.
+                        type: string
                     required:
                     - availability
-                    - types
+                    - type
                     type: object
                   nova:
-                    description: Datasource for openstack nova.
+                    description: |-
+                      Datasource for openstack nova.
+                      Only required if Type is "nova".
                     properties:
                       availability:
                         description: Availability of the service, such as "public",
                           "internal", or "admin".
                         type: string
                       deletedServersChangesSinceMinutes:
-                        description: Time frame in minutes for the changes-since parameter
-                          when fetching deleted servers.
+                        description: |-
+                          Time frame in minutes for the changes-since parameter when fetching
+                          deleted servers. Set if the Type is "deletedServers".
                         type: integer
-                      types:
-                        description: The types of resources to sync.
-                        items:
-                          type: string
-                        type: array
+                      type:
+                        description: The type of resource to sync.
+                        type: string
                     required:
                     - availability
-                    - types
+                    - type
                     type: object
                   placement:
-                    description: Datasource for openstack placement.
+                    description: |-
+                      Datasource for openstack placement.
+                      Only required if Type is "placement".
                     properties:
                       availability:
                         description: Availability of the service, such as "public",
                           "internal", or "admin".
                         type: string
-                      types:
-                        description: The types of resources to sync.
-                        items:
-                          type: string
-                        type: array
+                      type:
+                        description: The type of resource to sync.
+                        type: string
                     required:
                     - availability
-                    - types
+                    - type
                     type: object
                   syncIntervalSeconds:
                     description: How often to sync the datasource in seconds.
                     format: int64
                     type: integer
+                  type:
+                    description: The type of the OpenStack datasource.
+                    type: string
                 required:
                 - cinder
                 - identity
@@ -220,6 +224,7 @@ spec:
                 - nova
                 - placement
                 - syncIntervalSeconds
+                - type
                 type: object
               prometheus:
                 description: |-
@@ -305,8 +310,8 @@ spec:
                 description: Planned time for the next sync.
                 format: date-time
                 type: string
-              rowCount:
-                description: The number of rows currently stored for this datasource.
+              numberOfObjects:
+                description: The number of objects currently stored for this datasource.
                 format: int64
                 type: integer
             type: object

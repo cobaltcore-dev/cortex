@@ -13,7 +13,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
-	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockPlacementAPI struct{}
@@ -40,7 +39,7 @@ func TestPlacementSyncer_Init(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits"}}
+	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
@@ -48,7 +47,10 @@ func TestPlacementSyncer_Init(t *testing.T) {
 		Conf: conf,
 		API:  NewPlacementAPI(mon, pc, conf),
 	}
-	syncer.Init(t.Context())
+	err := syncer.Init(t.Context())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 }
 
 func TestPlacementSyncer_Sync(t *testing.T) {
@@ -59,19 +61,18 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits"}}
+	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
-		DB:         testDB,
-		Mon:        mon,
-		Conf:       conf,
-		API:        NewPlacementAPI(mon, pc, conf),
-		MqttClient: &mqtt.MockClient{},
+		DB:   testDB,
+		Mon:  mon,
+		Conf: conf,
+		API:  NewPlacementAPI(mon, pc, conf),
 	}
 	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
-	err := syncer.Sync(ctx)
+	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -85,7 +86,7 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits"}}
+	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
@@ -96,12 +97,12 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
-	rps, err := syncer.SyncResourceProviders(ctx)
+	n, err := syncer.SyncResourceProviders(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(rps) != 1 {
-		t.Fatalf("expected 1 resource provider, got %d", len(rps))
+	if n != 1 {
+		t.Fatalf("expected 1 resource provider, got %d", n)
 	}
 }
 
@@ -113,7 +114,14 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits"}}
+	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderTraits}
+
+	rps := []placement.ResourceProvider{{UUID: "1", Name: "rp1"}}
+	testDB.CreateTable(testDB.AddTable(placement.ResourceProvider{}))
+	err := db.ReplaceAll(testDB, rps...)
+	if err != nil {
+		t.Fatalf("failed to insert resource providers: %v", err)
+	}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
@@ -124,13 +132,13 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
-	rps := []placement.ResourceProvider{{UUID: "1", Name: "rp1"}}
-	traits, err := syncer.SyncTraits(ctx, rps)
+	// First, we need to sync resource providers to have them in the DB.
+	n, err := syncer.SyncTraits(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(traits) != 1 {
-		t.Fatalf("expected 1 trait, got %d", len(traits))
+	if n != 1 {
+		t.Fatalf("expected 1 trait, got %d", n)
 	}
 }
 
@@ -142,7 +150,14 @@ func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
-	conf := v1alpha1.PlacementDatasource{Types: []string{"resource_providers", "traits", "inventory_usages"}}
+	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderInventoryUsages}
+
+	rps := []placement.ResourceProvider{{UUID: "1", Name: "rp1"}}
+	testDB.CreateTable(testDB.AddTable(placement.ResourceProvider{}))
+	err := db.ReplaceAll(testDB, rps...)
+	if err != nil {
+		t.Fatalf("failed to insert resource providers: %v", err)
+	}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
@@ -153,15 +168,11 @@ func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
 	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
-	rps := []placement.ResourceProvider{{UUID: "1", Name: "rp1"}}
-	invUsages, err := syncer.SyncInventoryUsages(ctx, rps)
+	n, err := syncer.SyncInventoryUsages(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(invUsages) != 1 {
-		t.Fatalf("expected 1 inventory usage, got %d", len(invUsages))
-	}
-	if invUsages[0].ResourceProviderUUID != "1" || invUsages[0].InventoryClassName != "vcpu" {
-		t.Fatalf("unexpected inventory usage: %+v", invUsages[0])
+	if n != 1 {
+		t.Fatalf("expected 1 inventory usage, got %d", n)
 	}
 }

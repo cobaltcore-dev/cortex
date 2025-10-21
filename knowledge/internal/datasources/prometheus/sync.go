@@ -20,11 +20,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/sapcc/go-bits/jobloop"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type typedSyncer interface {
-	Sync(context.Context) (*v1alpha1.DatasourceStatus, error)
+	Sync(context.Context) (nResults int64, nextSync time.Time, err error)
 }
 
 // Create a new prometheus metric syncer with a connected database
@@ -279,37 +278,29 @@ func (s *syncer[M]) sync(start time.Time) {
 }
 
 // Sync the Prometheus metrics with the database.
-func (s *syncer[M]) Sync(context.Context) (*v1alpha1.DatasourceStatus, error) {
+func (s *syncer[M]) Sync(context.Context) (nResults int64, nextSync time.Time, err error) {
 	var model M
 	if err := s.db.CreateTable(s.db.AddTable(model)); err != nil {
-		return nil, err
+		return 0, time.Time{}, err
 	}
 
 	slog.Info("syncing metrics", "metricAlias", s.alias)
-	startedAt := time.Now()
 	// Sync this metric until we are caught up.
 	start, err := s.getSyncWindowStart()
 	if err != nil {
 		slog.Error("failed to get sync window start", "error", err)
-		return nil, err
+		return 0, time.Time{}, err
 	}
 	s.sync(start)
-	duration := time.Since(startedAt)
 	slog.Info("synced metrics", "metricAlias", s.alias)
 
-	nRows, err := s.db.SelectInt(
+	nResults, err = s.db.SelectInt(
 		"SELECT COUNT(*) FROM "+model.TableName()+" WHERE name = :name",
 		map[string]any{"name": s.alias},
 	)
 	if err != nil {
-		return nil, err
+		return 0, time.Time{}, err
 	}
-
-	success := &v1alpha1.DatasourceStatus{}
-	success.Error = ""
-	success.LastSynced = metav1.NewTime(time.Now())
-	success.NextSyncTime = metav1.NewTime(time.Now().Add(s.syncInterval))
-	success.RowCount = nRows
-	success.LastSyncDurationSeconds = int64(duration.Seconds())
-	return success, nil
+	nextSync = time.Now().Add(s.syncInterval)
+	return nResults, nextSync, nil
 }

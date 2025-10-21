@@ -14,7 +14,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockNovaAPI struct{}
@@ -68,10 +67,13 @@ func TestNovaSyncer_Init(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.NovaDatasource{Types: []string{"servers", "hypervisors"}},
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers},
 		API:  &mockNovaAPI{},
 	}
-	syncer.Init(t.Context())
+	err := syncer.Init(t.Context())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 }
 
 func TestNovaSyncer_Sync(t *testing.T) {
@@ -82,16 +84,15 @@ func TestNovaSyncer_Sync(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
-		DB:         testDB,
-		Mon:        mon,
-		Conf:       v1alpha1.NovaDatasource{Types: []string{"servers", "hypervisors"}},
-		API:        &mockNovaAPI{},
-		MqttClient: &mqtt.MockClient{},
+		DB:   testDB,
+		Mon:  mon,
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers},
+		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	err := syncer.Sync(ctx)
+	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -107,18 +108,18 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.NovaDatasource{Types: []string{"servers"}},
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers},
 		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	servers, err := syncer.SyncAllServers(ctx)
+	n, err := syncer.SyncAllServers(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(servers) != 1 {
-		t.Fatalf("expected 1 server, got %d", len(servers))
+	if n != 1 {
+		t.Fatalf("expected 1 server, got %d", n)
 	}
 }
 
@@ -126,7 +127,7 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 	tests := []struct {
 		Name                              string
 		DeletedServersChangesSinceMinutes *int
-		ExpectedAmountOfDeletedServers    int
+		ExpectedAmountOfDeletedServers    int64
 	}{
 		{
 			Name:                              "default time",
@@ -151,7 +152,7 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 				DB:  testDB,
 				Mon: mon,
 				Conf: v1alpha1.NovaDatasource{
-					Types:                             []string{"deleted_servers"},
+					Type:                              v1alpha1.NovaDatasourceTypeDeletedServers,
 					DeletedServersChangesSinceMinutes: tt.DeletedServersChangesSinceMinutes,
 				},
 				API: &mockNovaAPI{},
@@ -159,12 +160,12 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 
 			ctx := t.Context()
 			syncer.Init(ctx)
-			servers, err := syncer.SyncDeletedServers(ctx)
+			n, err := syncer.SyncDeletedServers(ctx)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
-			if len(servers) != tt.ExpectedAmountOfDeletedServers {
-				t.Fatalf("expected %d server, got %d", tt.ExpectedAmountOfDeletedServers, len(servers))
+			if n != tt.ExpectedAmountOfDeletedServers {
+				t.Fatalf("expected %d server, got %d", tt.ExpectedAmountOfDeletedServers, n)
 			}
 		})
 	}
@@ -180,18 +181,18 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.NovaDatasource{Types: []string{"hypervisors"}},
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeHypervisors},
 		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	hypervisors, err := syncer.SyncAllHypervisors(ctx)
+	n, err := syncer.SyncAllHypervisors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(hypervisors) != 1 {
-		t.Fatalf("expected 1 hypervisor, got %d", len(hypervisors))
+	if n != 1 {
+		t.Fatalf("expected 1 hypervisor, got %d", n)
 	}
 }
 
@@ -205,18 +206,18 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.NovaDatasource{Types: []string{"flavors"}},
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeFlavors},
 		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	flavors, err := syncer.SyncAllFlavors(ctx)
+	n, err := syncer.SyncAllFlavors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(flavors) != 1 {
-		t.Fatalf("expected 1 flavor, got %d", len(flavors))
+	if n != 1 {
+		t.Fatalf("expected 1 flavor, got %d", n)
 	}
 }
 
@@ -230,18 +231,18 @@ func TestNovaSyncer_SyncMigrations(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.NovaDatasource{Types: []string{"migrations"}},
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeMigrations},
 		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	migrations, err := syncer.SyncAllMigrations(ctx)
+	n, err := syncer.SyncAllMigrations(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(migrations) != 1 {
-		t.Fatalf("expected 1 migration, got %d", len(migrations))
+	if n != 1 {
+		t.Fatalf("expected 1 migration, got %d", n)
 	}
 }
 
@@ -255,17 +256,17 @@ func TestNovaSyncer_SyncAggregates(t *testing.T) {
 	syncer := &NovaSyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.NovaDatasource{Types: []string{"aggregates"}},
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeAggregates},
 		API:  &mockNovaAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	aggregates, err := syncer.SyncAllAggregates(ctx)
+	n, err := syncer.SyncAllAggregates(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(aggregates) != 1 {
-		t.Fatalf("expected 1 aggregate, got %d", len(aggregates))
+	if n != 1 {
+		t.Fatalf("expected 1 aggregate, got %d", n)
 	}
 }

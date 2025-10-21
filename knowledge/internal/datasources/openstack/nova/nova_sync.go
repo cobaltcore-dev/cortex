@@ -5,14 +5,12 @@ package nova
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/go-gorp/gorp"
 )
 
@@ -26,102 +24,77 @@ type NovaSyncer struct {
 	Conf v1alpha1.NovaDatasource
 	// Nova API client to fetch the data.
 	API NovaAPI
-	// MQTT client to publish mqtt data.
-	MqttClient mqtt.Client
 }
 
 // Init the OpenStack nova syncer.
-func (s *NovaSyncer) Init(ctx context.Context) {
+func (s *NovaSyncer) Init(ctx context.Context) error {
 	s.API.Init(ctx)
 	tables := []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
-	if slices.Contains(s.Conf.Types, "servers") {
+	switch s.Conf.Type {
+	case v1alpha1.NovaDatasourceTypeServers:
 		tables = append(tables, s.DB.AddTable(nova.Server{}))
-	}
-	if slices.Contains(s.Conf.Types, "deleted_servers") {
+	case v1alpha1.NovaDatasourceTypeDeletedServers:
 		tables = append(tables, s.DB.AddTable(nova.DeletedServer{}))
-	}
-	if slices.Contains(s.Conf.Types, "hypervisors") {
+	case v1alpha1.NovaDatasourceTypeHypervisors:
 		tables = append(tables, s.DB.AddTable(nova.Hypervisor{}))
-	}
-	if slices.Contains(s.Conf.Types, "flavors") {
+	case v1alpha1.NovaDatasourceTypeFlavors:
 		tables = append(tables, s.DB.AddTable(nova.Flavor{}))
-	}
-	if slices.Contains(s.Conf.Types, "migrations") {
+	case v1alpha1.NovaDatasourceTypeMigrations:
 		tables = append(tables, s.DB.AddTable(nova.Migration{}))
-	}
-	if slices.Contains(s.Conf.Types, "aggregates") {
+	case v1alpha1.NovaDatasourceTypeAggregates:
 		tables = append(tables, s.DB.AddTable(nova.Aggregate{}))
 	}
-	if err := s.DB.CreateTable(tables...); err != nil {
-		panic(err)
-	}
+	return s.DB.CreateTable(tables...)
 }
 
 // Sync the OpenStack nova objects and publish triggers.
-func (s *NovaSyncer) Sync(ctx context.Context) error {
+func (s *NovaSyncer) Sync(ctx context.Context) (int64, error) {
 	// Only sync the objects that are configured in the yaml conf.
-	if slices.Contains(s.Conf.Types, "servers") {
-		_, err := s.SyncAllServers(ctx)
-		if err != nil {
-			return err
-		}
-		go s.MqttClient.Publish(nova.TriggerNovaServersSynced, "")
+	var err error
+	var nResults int64
+	switch s.Conf.Type {
+	case v1alpha1.NovaDatasourceTypeServers:
+		nResults, err = s.SyncAllServers(ctx)
+	case v1alpha1.NovaDatasourceTypeDeletedServers:
+		nResults, err = s.SyncDeletedServers(ctx)
+	case v1alpha1.NovaDatasourceTypeHypervisors:
+		nResults, err = s.SyncAllHypervisors(ctx)
+	case v1alpha1.NovaDatasourceTypeFlavors:
+		nResults, err = s.SyncAllFlavors(ctx)
+	case v1alpha1.NovaDatasourceTypeMigrations:
+		nResults, err = s.SyncAllMigrations(ctx)
+	case v1alpha1.NovaDatasourceTypeAggregates:
+		nResults, err = s.SyncAllAggregates(ctx)
 	}
-	if slices.Contains(s.Conf.Types, "deleted_servers") {
-		_, err := s.SyncDeletedServers(ctx)
-		if err != nil {
-			return err
-		}
-		go s.MqttClient.Publish(nova.TriggerNovaDeletedServersSynced, "")
-	}
-	if slices.Contains(s.Conf.Types, "hypervisors") {
-		_, err := s.SyncAllHypervisors(ctx)
-		if err != nil {
-			return err
-		}
-		go s.MqttClient.Publish(nova.TriggerNovaHypervisorsSynced, "")
-	}
-	if slices.Contains(s.Conf.Types, "flavors") {
-		_, err := s.SyncAllFlavors(ctx)
-		if err != nil {
-			return err
-		}
-		go s.MqttClient.Publish(nova.TriggerNovaFlavorsSynced, "")
-	}
-	if slices.Contains(s.Conf.Types, "migrations") {
-		_, err := s.SyncAllMigrations(ctx)
-		if err != nil {
-			return err
-		}
-		go s.MqttClient.Publish(nova.TriggerNovaMigrationsSynced, "")
-	}
-	if slices.Contains(s.Conf.Types, "aggregates") {
-		_, err := s.SyncAllAggregates(ctx)
-		if err != nil {
-			return err
-		}
-		go s.MqttClient.Publish(nova.TriggerNovaAggregatesSynced, "")
-	}
-	return nil
+	return nResults, err
 }
 
 // Sync all the active OpenStack servers into the database. (Includes ERROR, SHUTOFF, etc. state)
-func (s *NovaSyncer) SyncAllServers(ctx context.Context) ([]nova.Server, error) {
+func (s *NovaSyncer) SyncAllServers(ctx context.Context) (int64, error) {
 	allServers, err := s.API.GetAllServers(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	err = db.ReplaceAll(s.DB, allServers...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	return allServers, nil
+	label := nova.Server{}.TableName()
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(allServers)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(allServers)), nil
 }
 
 // Sync all the deleted OpenStack servers into the database.
 // Only fetch servers that were deleted since the last sync run.
-func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) ([]nova.DeletedServer, error) {
+func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) (int64, error) {
 	// Default time frame is the last 6 hours
 	since := time.Now().Add(-6 * time.Hour)
 
@@ -132,65 +105,110 @@ func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) ([]nova.DeletedServ
 
 	deletedServers, err := s.API.GetDeletedServers(ctx, since)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	err = db.ReplaceAll(s.DB, deletedServers...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	return deletedServers, nil
+	label := nova.DeletedServer{}.TableName()
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(deletedServers)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(deletedServers)), nil
 }
 
 // Sync the OpenStack hypervisors into the database.
-func (s *NovaSyncer) SyncAllHypervisors(ctx context.Context) ([]nova.Hypervisor, error) {
+func (s *NovaSyncer) SyncAllHypervisors(ctx context.Context) (int64, error) {
 	allHypervisors, err := s.API.GetAllHypervisors(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	// Since the nova api doesn't support only returning changed
 	// hypervisors, we can just replace all hypervisors in the database.
 	err = db.ReplaceAll(s.DB, allHypervisors...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	return allHypervisors, nil
+	label := nova.Hypervisor{}.TableName()
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(allHypervisors)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(allHypervisors)), nil
 }
 
 // Sync the OpenStack flavors into the database.
-func (s *NovaSyncer) SyncAllFlavors(ctx context.Context) ([]nova.Flavor, error) {
+func (s *NovaSyncer) SyncAllFlavors(ctx context.Context) (int64, error) {
 	allFlavors, err := s.API.GetAllFlavors(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	err = db.ReplaceAll(s.DB, allFlavors...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	return allFlavors, nil
+	label := nova.Flavor{}.TableName()
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(allFlavors)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(allFlavors)), nil
 }
 
 // Sync the OpenStack migrations into the database.
-func (s *NovaSyncer) SyncAllMigrations(ctx context.Context) ([]nova.Migration, error) {
+func (s *NovaSyncer) SyncAllMigrations(ctx context.Context) (int64, error) {
 	allMigrations, err := s.API.GetAllMigrations(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	err = db.ReplaceAll(s.DB, allMigrations...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	return allMigrations, nil
+	label := nova.Migration{}.TableName()
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(allMigrations)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(allMigrations)), nil
 }
 
 // Sync the OpenStack aggregates into the database.
-func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) ([]nova.Aggregate, error) {
+func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) (int64, error) {
 	allAggregates, err := s.API.GetAllAggregates(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	err = db.ReplaceAll(s.DB, allAggregates...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	return allAggregates, nil
+	label := nova.Aggregate{}.TableName()
+	if s.Mon.PipelineObjectsGauge != nil {
+		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(allAggregates)))
+	}
+	if s.Mon.PipelineRequestProcessedCounter != nil {
+		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(allAggregates)), nil
 }

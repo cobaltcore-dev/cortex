@@ -40,12 +40,12 @@ type Table interface {
 	Indexes() map[string][]string
 }
 
-type Authenticator struct{ client.Client }
+type Connector struct{ client.Client }
 
 // Create a new database client with authentication from the provided secret reference.
-func (a Authenticator) FromSecretRef(ctx context.Context, ref corev1.SecretReference) (*DB, error) {
+func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference) (*DB, error) {
 	authSecret := &corev1.Secret{}
-	if err := a.Get(ctx, client.ObjectKey{
+	if err := c.Get(ctx, client.ObjectKey{
 		Namespace: ref.Namespace,
 		Name:      ref.Name,
 	}, authSecret); err != nil {

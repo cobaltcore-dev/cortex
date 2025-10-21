@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/cobaltcore-dev/cortex/testlib/mqtt"
 )
 
 type mockIdentityAPI struct{}
@@ -37,10 +36,13 @@ func TestIdentitySyncer_Init(t *testing.T) {
 	syncer := &IdentitySyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.IdentityDatasource{Types: []string{"projects", "domains"}},
+		Conf: v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeDomains},
 		API:  &mockIdentityAPI{},
 	}
-	syncer.Init(t.Context())
+	err := syncer.Init(t.Context())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 }
 
 func TestIdentitySyncer_Sync(t *testing.T) {
@@ -51,16 +53,15 @@ func TestIdentitySyncer_Sync(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
-		DB:         testDB,
-		Mon:        mon,
-		Conf:       v1alpha1.IdentityDatasource{Types: []string{"projects", "domains"}},
-		API:        &mockIdentityAPI{},
-		MqttClient: &mqtt.MockClient{},
+		DB:   testDB,
+		Mon:  mon,
+		Conf: v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeProjects},
+		API:  &mockIdentityAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	err := syncer.Sync(ctx)
+	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -76,19 +77,18 @@ func TestIdentitySyncer_SyncProjects(t *testing.T) {
 	syncer := &IdentitySyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.IdentityDatasource{Types: []string{"projects", "domains"}},
+		Conf: v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeProjects},
 		API:  &mockIdentityAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	projects, err := syncer.SyncProjects(ctx)
+	n, err := syncer.SyncProjects(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	amountProjects := len(projects)
-	if amountProjects != 1 {
-		t.Fatalf("expected 1 server, got %d", amountProjects)
+	if n != 1 {
+		t.Fatalf("expected 1 server, got %d", n)
 	}
 }
 
@@ -102,18 +102,17 @@ func TestIdentitySyncer_SyncDomains(t *testing.T) {
 	syncer := &IdentitySyncer{
 		DB:   testDB,
 		Mon:  mon,
-		Conf: v1alpha1.IdentityDatasource{Types: []string{"projects", "domains"}},
+		Conf: v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeDomains},
 		API:  &mockIdentityAPI{},
 	}
 
 	ctx := t.Context()
 	syncer.Init(ctx)
-	domains, err := syncer.SyncDomains(ctx)
+	n, err := syncer.SyncDomains(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	amountDomains := len(domains)
-	if amountDomains != 1 {
-		t.Fatalf("expected 1 server, got %d", amountDomains)
+	if n != 1 {
+		t.Fatalf("expected 1 server, got %d", n)
 	}
 }

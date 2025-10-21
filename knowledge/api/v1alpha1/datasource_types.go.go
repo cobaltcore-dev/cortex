@@ -4,8 +4,16 @@
 package v1alpha1
 
 import (
+	"errors"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+var (
+	// Some datasources may depend on other datasources to be present.
+	// If these aren't yet available, this will be the returned error.
+	ErrWaitingForDependencyDatasource = errors.New("waiting for dependency datasource to become available")
 )
 
 type PrometheusDatasource struct {
@@ -33,48 +41,93 @@ type PrometheusDatasource struct {
 	ResolutionSeconds *int `json:"resolutionSeconds,omitempty"`
 }
 
+type NovaDatasourceType string
+
+const (
+	NovaDatasourceTypeServers        NovaDatasourceType = "servers"
+	NovaDatasourceTypeDeletedServers NovaDatasourceType = "deletedServers"
+	NovaDatasourceTypeHypervisors    NovaDatasourceType = "hypervisors"
+	NovaDatasourceTypeFlavors        NovaDatasourceType = "flavors"
+	NovaDatasourceTypeMigrations     NovaDatasourceType = "migrations"
+	NovaDatasourceTypeAggregates     NovaDatasourceType = "aggregates"
+)
+
 type NovaDatasource struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
-	// The types of resources to sync.
-	Types []string `json:"types"`
-	// Time frame in minutes for the changes-since parameter when fetching deleted servers.
+	// The type of resource to sync.
+	Type NovaDatasourceType `json:"type"`
+	// Time frame in minutes for the changes-since parameter when fetching
+	// deleted servers. Set if the Type is "deletedServers".
 	DeletedServersChangesSinceMinutes *int `json:"deletedServersChangesSinceMinutes,omitempty"`
 }
+
+type PlacementDatasourceType string
+
+const (
+	PlacementDatasourceTypeResourceProviders               PlacementDatasourceType = "resourceProviders"
+	PlacementDatasourceTypeResourceProviderInventoryUsages PlacementDatasourceType = "resourceProviderInventoryUsages"
+	PlacementDatasourceTypeResourceProviderTraits          PlacementDatasourceType = "resourceProviderTraits"
+)
 
 type PlacementDatasource struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
-	// The types of resources to sync.
-	Types []string `json:"types"`
+	// The type of resource to sync.
+	Type PlacementDatasourceType `json:"type"`
 }
+
+type ManilaDatasourceType string
+
+const (
+	ManilaDatasourceTypeStoragePools ManilaDatasourceType = "storagePools"
+)
 
 type ManilaDatasource struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
-	// The types of resources to sync.
-	Types []string `json:"types"`
+	// The type of resource to sync.
+	Type ManilaDatasourceType `json:"type"`
 }
+
+type IdentityDatasourceType string
+
+const (
+	IdentityDatasourceTypeProjects IdentityDatasourceType = "projects"
+	IdentityDatasourceTypeDomains  IdentityDatasourceType = "domains"
+)
 
 type IdentityDatasource struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
-	// The types of resources to sync.
-	Types []string `json:"types"`
+	// The type of resource to sync.
+	Type IdentityDatasourceType `json:"type"`
 }
+
+type LimesDatasourceType string
+
+const (
+	LimesDatasourceTypeProjectCommitments LimesDatasourceType = "projectCommitments"
+)
 
 type LimesDatasource struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
-	// The types of resources to sync.
-	Types []string `json:"types"`
+	// The type of resource to sync.
+	Type LimesDatasourceType `json:"type"`
 }
+
+type CinderDatasourceType string
+
+const (
+	CinderDatasourceTypeStoragePools CinderDatasourceType = "storagePools"
+)
 
 type CinderDatasource struct {
 	// Availability of the service, such as "public", "internal", or "admin".
 	Availability string `json:"availability"`
 	// The types of resources to sync.
-	Types []string `json:"types"`
+	Type CinderDatasourceType `json:"types"`
 }
 
 type OpenStackDatasourceType string
@@ -100,22 +153,22 @@ type OpenStackDatasource struct {
 
 	// Datasource for openstack nova.
 	// Only required if Type is "nova".
-	Nova *NovaDatasource `json:"nova"`
+	Nova NovaDatasource `json:"nova"`
 	// Datasource for openstack placement.
 	// Only required if Type is "placement".
-	Placement *PlacementDatasource `json:"placement"`
+	Placement PlacementDatasource `json:"placement"`
 	// Datasource for openstack manila.
 	// Only required if Type is "manila".
-	Manila *ManilaDatasource `json:"manila"`
+	Manila ManilaDatasource `json:"manila"`
 	// Datasource for openstack identity.
 	// Only required if Type is "identity".
-	Identity *IdentityDatasource `json:"identity"`
+	Identity IdentityDatasource `json:"identity"`
 	// Datasource for openstack limes.
 	// Only required if Type is "limes".
-	Limes *LimesDatasource `json:"limes"`
+	Limes LimesDatasource `json:"limes"`
 	// Datasource for openstack cinder.
 	// Only required if Type is "cinder".
-	Cinder *CinderDatasource `json:"cinder"`
+	Cinder CinderDatasource `json:"cinder"`
 
 	// How often to sync the datasource in seconds.
 	SyncIntervalSeconds *int64 `json:"syncIntervalSeconds"`
@@ -143,10 +196,10 @@ const (
 type DatasourceSpec struct {
 	// If given, configures a Prometheus datasource to fetch.
 	// Type must be set to "prometheus" if this is used.
-	Prometheus *PrometheusDatasource `json:"prometheus"`
-	// Type must be set to "openstack" if this is used.
+	Prometheus PrometheusDatasource `json:"prometheus"`
 	// If given, configures an OpenStack datasource to fetch.
-	OpenStack *OpenStackDatasource `json:"openstack,omitempty"`
+	// Type must be set to "openstack" if this is used.
+	OpenStack OpenStackDatasource `json:"openstack,omitempty"`
 
 	// The type of the datasource.
 	Type DatasourceType `json:"type"`
@@ -168,8 +221,8 @@ type DatasourceSpec struct {
 type DatasourceStatus struct {
 	// When the datasource was last successfully synced.
 	LastSynced metav1.Time `json:"lastSynced,omitempty"`
-	// The number of rows currently stored for this datasource.
-	RowCount int64 `json:"rowCount,omitempty"`
+	// The number of objects currently stored for this datasource.
+	NumberOfObjects int64 `json:"numberOfObjects,omitempty"`
 	// The time it took to perform the last sync.
 	LastSyncDurationSeconds int64 `json:"lastSyncDurationSeconds,omitempty"`
 	// Planned time for the next sync.
@@ -185,7 +238,7 @@ type DatasourceStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Last Synced",type="date",JSONPath=".status.lastSynced"
-// +kubebuilder:printcolumn:name="Row Count",type="integer",JSONPath=".status.rowCount"
+// +kubebuilder:printcolumn:name="N Objects",type="integer",JSONPath=".status.numberOfObjects"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Datasource is the Schema for the datasources API

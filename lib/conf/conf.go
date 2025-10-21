@@ -129,9 +129,6 @@ type SchedulerAPIConfig struct {
 type KeystoneConfig struct {
 	// The URL of the keystone service.
 	URL string `json:"url"`
-	// The SSO certificate to use. If none is given, we won't
-	// use SSO to connect to the openstack services.
-	SSO SSOConfig `json:"sso,omitempty"`
 	// The OpenStack username (OS_USERNAME in openstack cli).
 	OSUsername string `json:"username"`
 	// The OpenStack password (OS_PASSWORD in openstack cli).
