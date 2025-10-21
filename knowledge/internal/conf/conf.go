@@ -29,6 +29,9 @@ type ExtractorConfig struct {
 type Config struct {
 	ExtractorConfig `json:"extractor"`
 
+	// The operator will only touch CRs with this operator name.
+	Operator string `json:"operator"`
+
 	// Lib modules configs.
 	libconf.MonitoringConfig `json:"monitoring"`
 	libconf.LoggingConfig    `json:"logging"`

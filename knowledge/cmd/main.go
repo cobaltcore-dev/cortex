@@ -26,9 +26,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/openstack"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/prometheus"
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -194,11 +196,13 @@ func main() {
 
 	monitor := datasources.NewSyncMonitor()
 	metrics.Registry.MustRegister(&monitor)
+	config := libconf.GetConfigOrDie[conf.Config]()
 
 	if err := (&openstack.OpenStackDatasourceReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Monitor: monitor,
+		Conf:    config,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenStackDatasourceReconciler")
 		os.Exit(1)
@@ -206,6 +210,7 @@ func main() {
 	if err := (&prometheus.PrometheusDatasourceReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Conf:   config,
 		// TODO: Monitor
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/openstack/cinder"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/openstack/identity"
@@ -45,6 +46,8 @@ type OpenStackDatasourceReconciler struct {
 	Scheme *runtime.Scheme
 	// Datasources monitor.
 	Monitor datasources.Monitor
+	// Config for the reconciler.
+	Conf conf.Config
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -79,6 +82,7 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		return ctrl.Result{}, err
 	}
+	defer authenticatedDB.Close()
 
 	// Authenticate with the datasource host if SSO is configured.
 	var authenticatedHTTP = http.DefaultClient
@@ -166,7 +170,7 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	nResults, err := syncer.Sync(ctx)
 	if errors.Is(err, v1alpha1.ErrWaitingForDependencyDatasource) {
 		log.Info("datasource sync waiting for dependency datasource", "name", datasource.Name)
-		datasource.Status.Error = "waiting for dependency datasource: " + err.Error()
+		datasource.Status.Error = "waiting for dependency datasource"
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -208,8 +212,13 @@ func (r *OpenStackDatasourceReconciler) SetupWithManager(mgr manager.Manager) er
 		For(
 			&v1alpha1.Datasource{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				// Only react to datasources matching the operator.
+				ds := obj.(*v1alpha1.Datasource)
+				if ds.Spec.Operator != r.Conf.Operator {
+					return false
+				}
 				// Only react to openstack datasources.
-				return obj.(*v1alpha1.Datasource).Spec.Type == v1alpha1.DatasourceTypeOpenStack
+				return ds.Spec.Type == v1alpha1.DatasourceTypeOpenStack
 			})),
 		).
 		Complete(r)

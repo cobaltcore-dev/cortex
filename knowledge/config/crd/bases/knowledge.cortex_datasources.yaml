@@ -18,14 +18,23 @@ spec:
     - jsonPath: .spec.type
       name: Type
       type: string
+    - jsonPath: .spec.operator
+      name: Operator
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
     - jsonPath: .status.lastSynced
-      name: Last Synced
+      name: Synced
       type: date
+    - jsonPath: .status.lastSyncDurationSeconds
+      name: Took [s]
+      type: integer
+    - jsonPath: .status.nextSyncTime
+      name: Next
+      type: string
     - jsonPath: .status.numberOfObjects
-      name: N Objects
+      name: Objects
       type: integer
     - jsonPath: .status.error
       name: Error
@@ -187,6 +196,9 @@ spec:
                 - syncIntervalSeconds
                 - type
                 type: object
+              operator:
+                description: The operator by which this datasource should be synced.
+                type: string
               prometheus:
                 description: |-
                   If given, configures a Prometheus datasource to fetch.

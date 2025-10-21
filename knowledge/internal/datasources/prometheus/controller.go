@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/sso"
 	corev1 "k8s.io/api/core/v1"
@@ -28,6 +29,8 @@ type PrometheusDatasourceReconciler struct {
 	client.Client
 	// Kubernetes scheme to use for the deschedulings.
 	Scheme *runtime.Scheme
+	// Config for the reconciler.
+	Conf conf.Config
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -155,8 +158,13 @@ func (r *PrometheusDatasourceReconciler) SetupWithManager(mgr manager.Manager) e
 		For(
 			&v1alpha1.Datasource{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				// Only react to datasources matching the operator.
+				ds := obj.(*v1alpha1.Datasource)
+				if ds.Spec.Operator != r.Conf.Operator {
+					return false
+				}
 				// Only react to prometheus datasources.
-				return obj.(*v1alpha1.Datasource).Spec.Type == v1alpha1.DatasourceTypePrometheus
+				return ds.Spec.Type == v1alpha1.DatasourceTypePrometheus
 			})),
 		).
 		Complete(r)

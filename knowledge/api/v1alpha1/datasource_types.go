@@ -196,6 +196,9 @@ const (
 )
 
 type DatasourceSpec struct {
+	// The operator by which this datasource should be synced.
+	Operator string `json:"operator,omitempty"`
+
 	// If given, configures a Prometheus datasource to fetch.
 	// Type must be set to "prometheus" if this is used.
 	// +kubebuilder:validation:Optional
@@ -241,9 +244,12 @@ type DatasourceStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
+// +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="Last Synced",type="date",JSONPath=".status.lastSynced"
-// +kubebuilder:printcolumn:name="N Objects",type="integer",JSONPath=".status.numberOfObjects"
+// +kubebuilder:printcolumn:name="Synced",type="date",JSONPath=".status.lastSynced"
+// +kubebuilder:printcolumn:name="Took [s]",type="integer",JSONPath=".status.lastSyncDurationSeconds"
+// +kubebuilder:printcolumn:name="Next",type="string",JSONPath=".status.nextSyncTime"
+// +kubebuilder:printcolumn:name="Objects",type="integer",JSONPath=".status.numberOfObjects"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Datasource is the Schema for the datasources API
