@@ -170,13 +170,14 @@ func main() {
 		})
 	}
 
+	config := libconf.GetConfigOrDie[conf.Config]()
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "knowledge.cortex",
+		LeaderElectionID:       config.Operator + "-knowledge-controller-leader-election-id",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -196,7 +197,6 @@ func main() {
 
 	monitor := datasources.NewSyncMonitor()
 	metrics.Registry.MustRegister(&monitor)
-	config := libconf.GetConfigOrDie[conf.Config]()
 
 	if err := (&openstack.OpenStackDatasourceReconciler{
 		Client:  mgr.GetClient(),
