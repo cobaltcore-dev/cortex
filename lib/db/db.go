@@ -24,12 +24,13 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
 	*gorp.DbMap
-	conf conf.DBConfig
+	retryConf conf.DBReconnectConfig
 	// Monitor for database related metrics like connection attempts.
 	monitor Monitor
 }
@@ -40,6 +41,7 @@ type Table interface {
 	Indexes() map[string][]string
 }
 
+// Kubernetes connector which initializes the database connection from a secret.
 type Connector struct{ client.Client }
 
 // Create a new database client with authentication from the provided secret reference.
@@ -108,8 +110,15 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	db.SetMaxOpenConns(16)
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	slog.Info("database is ready")
-	// TODO: Connect the db monitor here.
-	return &DB{DbMap: dbMap}, nil
+	dbMonitor := NewUnregisteredDBMonitor()
+	metrics.Registry.MustRegister(&dbMonitor)
+	metrics.Registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
+	reconnectConfig := conf.DBReconnectConfig{
+		MaxRetries:                  5,
+		RetryIntervalSeconds:        2,
+		LivenessPingIntervalSeconds: 30,
+	}
+	return &DB{DbMap: dbMap, monitor: dbMonitor, retryConf: reconnectConfig}, nil
 }
 
 // Create a new postgres database and wait until it is connected.
@@ -159,7 +168,7 @@ func NewPostgresDB(
 		// Expose metrics for the database connection pool.
 		registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
 	}
-	return DB{DbMap: dbMap, monitor: monitor, conf: c}
+	return DB{DbMap: dbMap, monitor: monitor, retryConf: c.Reconnect}
 }
 
 // Check periodically if the database is alive. If not, panic.
@@ -167,7 +176,7 @@ func (d *DB) CheckLivenessPeriodically(ctx context.Context) {
 	var failures int
 	for {
 		if err := d.Db.PingContext(ctx); err != nil {
-			if failures >= d.conf.Reconnect.MaxRetries {
+			if failures >= d.retryConf.MaxRetries {
 				slog.Error("database is unreachable, giving up", "error", err)
 				panic(err)
 			}
@@ -177,13 +186,13 @@ func (d *DB) CheckLivenessPeriodically(ctx context.Context) {
 			}
 
 			slog.Error("failed to ping database", "error", err, "attempt", failures)
-			interval := time.Duration(d.conf.Reconnect.RetryIntervalSeconds) * time.Second
+			interval := time.Duration(d.retryConf.RetryIntervalSeconds) * time.Second
 			time.Sleep(jobloop.DefaultJitter(interval))
 			continue
 		}
 		failures = 0
 		slog.Debug("check ok: database is reachable")
-		sleepTime := time.Duration(d.conf.Reconnect.LivenessPingIntervalSeconds) * time.Second
+		sleepTime := time.Duration(d.retryConf.LivenessPingIntervalSeconds) * time.Second
 		time.Sleep(jobloop.DefaultJitter(sleepTime))
 	}
 }

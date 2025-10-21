@@ -28,6 +28,7 @@ func (lrt *requestLogger) RoundTrip(req *http.Request) (*http.Response, error) {
 	return lrt.T.RoundTrip(req)
 }
 
+// Kubernetes connector which initializes the sso connection from a secret.
 type Connector struct{ client.Client }
 
 // Create a new http client with SSO configuration given in a kubernetes secret.

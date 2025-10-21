@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// Kubernetes connector which initializes the openstack connection from a secret.
 type Connector struct {
 	// Kubernetes API client to use.
 	client.Client
