@@ -32,6 +32,7 @@ func newTypedSyncer[M prometheus.PrometheusMetric](
 	ds v1alpha1.Datasource,
 	db *db.DB,
 	httpClient *http.Client,
+	prometheusURL string,
 ) typedSyncer {
 	// Set default values if none are provided.
 	var timeRangeSeconds = 2419200 // 4 weeks
@@ -49,7 +50,7 @@ func newTypedSyncer[M prometheus.PrometheusMetric](
 	return &syncer[M]{
 		db:                    db,
 		httpClient:            httpClient,
-		host:                  ds.Spec.Prometheus.HostURL,
+		host:                  prometheusURL,
 		query:                 ds.Spec.Prometheus.Query,
 		alias:                 ds.Spec.Prometheus.Alias,
 		syncTimeRange:         time.Duration(timeRangeSeconds) * time.Second,

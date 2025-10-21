@@ -15,6 +15,24 @@ alerts:
   enabled: true
   prometheus: openstack
 
+datasources:
+  prometheus:
+    url: "https://path-to-your-prometheus"
+    sso:
+      enabled: false
+      <<: *sharedSSOCert
+  openstack:
+    url: "https://path-to-keystone/v3"
+    availability: public
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to
+    sso:
+      enabled: false
+      <<: *sharedSSOCert
+
 # Values shared between all subcharts.
 global:
   # Values passed to the service through a configmap.
@@ -145,86 +163,6 @@ cortex-knowledge-operator:
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-nova
   conf:
-    datasources:
-      prometheus:
-        # Prometheus metrics to sync into the database.
-        # Each metric can be synced from a different Prometheus instance.
-        # The `type` parameter should map to a known metric model in the database.
-        metrics:
-          # VROps metrics for VMware hosts.
-          - alias: vrops_virtualmachine_cpu_demand_ratio
-            query: vrops_virtualmachine_cpu_demand_ratio
-            type: vrops_vm_metric
-          - alias: vrops_hostsystem_cpu_contention_long_term_percentage
-            query: vrops_hostsystem_cpu_contention_percentage
-            type: vrops_host_metric
-          - alias: vrops_hostsystem_cpu_contention_short_term_percentage
-            query: vrops_hostsystem_cpu_contention_percentage
-            type: vrops_host_metric
-            timeRangeSeconds: 1200 # 20 minutes
-            intervalSeconds: 300 # 5 minutes
-            resolutionSeconds: 60 # 1 minute
-          # Node exporter metrics for KVM hosts.
-          - alias: node_exporter_cpu_usage_pct
-            query: |
-              (1 - (
-                sum by (node) (rate(node_cpu_seconds_total{mode="idle"}[1m])) /
-                count by (node) (rate(node_cpu_seconds_total{mode="idle"}[1m]))
-              )) * 100
-            type: node_exporter_metric
-          - alias: node_exporter_memory_active_pct
-            query: |
-              (1 - (
-                (sum by (node) (node_memory_Active_bytes) / count by (node) (node_memory_Active_bytes)) /
-                (sum by (node) (node_memory_MemTotal_bytes) / count by (node) (node_memory_MemTotal_bytes))
-              )) * 100
-            type: node_exporter_metric
-          - alias: kvm_libvirt_domain_steal_pct
-            # This metric is exported by https://github.com/cobaltcore-dev/kvm-monitoring
-            query: |
-              max by (domain) (rate(kvm_libvirt_domain_vcpu_delay_nanoseconds[5m])) / 1e9 * 100
-            type: kvm_libvirt_domain_metric
-            # It's ok to only look at a short time period here.
-            timeRangeSeconds: 1200 # 20 minutes
-            intervalSeconds: 300 # 5 minutes
-            resolutionSeconds: 60 # 1 minute
-
-      openstack:
-        nova:
-          # One of admin, public, or internal
-          availability: public
-          # Nova objects to sync into the database.
-          types:
-            - hypervisors
-            - servers
-            - deleted_servers
-            - flavors
-            - migrations
-            - aggregates
-        placement:
-          # One of admin, public, or internal
-          availability: public
-          # Placement objects to sync into the database.
-          types:
-            - resource_providers
-            # Needs resource_providers.
-            - traits
-            - inventory_usages
-        identity:
-          # One of admin, public, or internal
-          availability: public
-          # Identity objects to sync into the database.
-          types:
-            - domains
-            - projects
-        limes:
-          # One of admin, public, or internal
-          availability: public
-          # Limes objects to sync into the database.
-          types:
-            # Needs projects.
-            - commitments
-
     extractor:
       # Configuration of features that should be extracted from the synced data.
       # Each extractor can specify its own dependencies on other extractors or

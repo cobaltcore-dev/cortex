@@ -112,27 +112,6 @@ spec:
                     - availability
                     - type
                     type: object
-                  keystoneSecretRef:
-                    description: |-
-                      Keystone credentials secret ref for authenticating with openstack.
-                      The secret should contain the following keys:
-                      - "username": The keystone username.
-                      - "password": The keystone password.
-                      - "userDomainName": The keystone user domain name.
-                      - "projectName": The keystone project name.
-                      - "projectDomainName": The keystone project domain name.
-                      - "authURL": The keystone auth URL.
-                    properties:
-                      name:
-                        description: name is unique within a namespace to reference
-                          a secret resource.
-                        type: string
-                      namespace:
-                        description: namespace defines the space within which the
-                          secret name must be unique.
-                        type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
                   limes:
                     description: |-
                       Datasource for openstack limes.
@@ -202,6 +181,28 @@ spec:
                     - availability
                     - type
                     type: object
+                  secretRef:
+                    description: |-
+                      Keystone credentials secret ref for authenticating with openstack.
+                      The secret should contain the following keys:
+                      - "availability": The service availability, e.g. "public", "internal", or "admin".
+                      - "url": The keystone auth URL.
+                      - "username": The keystone username.
+                      - "password": The keystone password.
+                      - "userDomainName": The keystone user domain name.
+                      - "projectName": The keystone project name.
+                      - "projectDomainName": The keystone project domain name.
+                    properties:
+                      name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
+                        type: string
+                      namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   syncIntervalSeconds:
                     description: How often to sync the datasource in seconds.
                     format: int64
@@ -212,11 +213,11 @@ spec:
                 required:
                 - cinder
                 - identity
-                - keystoneSecretRef
                 - limes
                 - manila
                 - nova
                 - placement
+                - secretRef
                 - syncIntervalSeconds
                 - type
                 type: object
@@ -232,12 +233,6 @@ spec:
                       Additionally, this alias is used to reference the metric in the
                       feature extractors as dependency.
                     type: string
-                  hostName:
-                    description: The name of the prometheus host.
-                    type: string
-                  hostURL:
-                    description: The URL of the prometheus host.
-                    type: string
                   intervalSeconds:
                     description: The interval at which to query the data.
                     type: integer
@@ -247,6 +242,21 @@ spec:
                   resolutionSeconds:
                     description: The resolution of the data in seconds.
                     type: integer
+                  secretRef:
+                    description: |-
+                      Secret containing the following keys:
+                      - "url": The prometheus URL.
+                    properties:
+                      name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
+                        type: string
+                      namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   timeRangeSeconds:
                     description: Time range in seconds to query the data for.
                     type: integer
@@ -257,9 +267,8 @@ spec:
                     type: string
                 required:
                 - alias
-                - hostName
-                - hostURL
                 - query
+                - secretRef
                 - type
                 type: object
               ssoSecretRef:

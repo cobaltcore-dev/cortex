@@ -98,9 +98,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Authenticate with keystone.
 	authenticatedKeystone, err := keystone.Connector{Client: r.Client, HTTPClient: authenticatedHTTP}.
-		FromSecretRef(ctx, datasource.Spec.OpenStack.KeystoneSecretRef)
+		FromSecretRef(ctx, datasource.Spec.OpenStack.SecretRef)
 	if err != nil {
-		log.Error(err, "failed to authenticate with keystone", "secretRef", datasource.Spec.OpenStack.KeystoneSecretRef)
+		log.Error(err, "failed to authenticate with keystone", "secretRef", datasource.Spec.OpenStack.SecretRef)
 		datasource.Status.Error = "failed to authenticate with keystone: " + err.Error()
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)

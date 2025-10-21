@@ -1,0 +1,361 @@
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-vrops-virtualmachine-cpu-demand-ratio
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.datasources.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-nova-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: vrops_virtualmachine_cpu_demand_ratio
+    query: vrops_virtualmachine_cpu_demand_ratio
+    type: vrops_vm_metric
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-vrops-hostsystem-cpu-contention-long-term-percentage
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.datasources.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-nova-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: vrops_hostsystem_cpu_contention_long_term_percentage
+    query: vrops_hostsystem_cpu_contention_percentage
+    type: vrops_host_metric
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-vrops-hostsystem-cpu-contention-short-term-percentage
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.datasources.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-nova-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: vrops_hostsystem_cpu_contention_short_term_percentage
+    query: vrops_hostsystem_cpu_contention_percentage
+    type: vrops_host_metric
+    timeRangeSeconds: 1200 # 20 minutes
+    intervalSeconds: 300 # 5 minutes
+    resolutionSeconds: 60 # 1 minute
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-kvm-libvirt-domain-steal-pct
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.datasources.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-nova-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: kvm_libvirt_domain_steal_pct
+    # This metric is exported by https://github.com/cobaltcore-dev/kvm-monitoring
+    query: |
+      max by (domain) (rate(kvm_libvirt_domain_vcpu_delay_nanoseconds[5m])) / 1e9 * 100
+    type: kvm_libvirt_domain_metric
+    # It's ok to only look at a short time period here.
+    timeRangeSeconds: 1200 # 20 minutes
+    intervalSeconds: 300 # 5 minutes
+    resolutionSeconds: 60 # 1 minute
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-servers
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: nova
+    nova:
+      type: servers
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-deleted-servers
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: nova
+    nova:
+      type: deletedServers
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-hypervisors
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: nova
+    nova:
+      type: hypervisors
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-flavors
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: nova
+    nova:
+      type: flavors
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-migrations
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: nova
+    nova:
+      type: migrations
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-nova-aggregates
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: nova
+    nova:
+      type: aggregates
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-placement-resource-providers
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: placement
+    placement:
+      type: resourceProviders
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-placement-resource-provider-traits
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: placement
+    placement:
+      type: resourceProviderTraits
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-placement-resource-provider-inventory-usages
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: placement
+    placement:
+      type: resourceProviderInventoryUsages
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-identity-domains
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: identity
+    identity:
+      type: domains
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-identity-projects
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: identity
+    identity:
+      type: projects
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Datasource
+metadata:
+  name: cortex-limes-project-commitments
+spec:
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.sso.openstack.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: limes
+    limes:
+      type: commitments

@@ -28,17 +28,16 @@ type PrometheusDatasource struct {
 	// by cortex. Note that the metrics are fetched as time series, not instant.
 	Type string `json:"type"`
 
-	// The name of the prometheus host.
-	HostName string `json:"hostName"`
-	// The URL of the prometheus host.
-	HostURL string `json:"hostURL"`
-
 	// Time range in seconds to query the data for.
 	TimeRangeSeconds *int `json:"timeRangeSeconds,omitempty"`
 	// The interval at which to query the data.
 	IntervalSeconds *int `json:"intervalSeconds,omitempty"`
 	// The resolution of the data in seconds.
 	ResolutionSeconds *int `json:"resolutionSeconds,omitempty"`
+
+	// Secret containing the following keys:
+	// - "url": The prometheus URL.
+	SecretRef corev1.SecretReference `json:"secretRef"`
 }
 
 type NovaDatasourceType string
@@ -175,13 +174,14 @@ type OpenStackDatasource struct {
 
 	// Keystone credentials secret ref for authenticating with openstack.
 	// The secret should contain the following keys:
+	// - "availability": The service availability, e.g. "public", "internal", or "admin".
+	// - "url": The keystone auth URL.
 	// - "username": The keystone username.
 	// - "password": The keystone password.
 	// - "userDomainName": The keystone user domain name.
 	// - "projectName": The keystone project name.
 	// - "projectDomainName": The keystone project domain name.
-	// - "authURL": The keystone auth URL.
-	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+	SecretRef corev1.SecretReference `json:"secretRef"`
 }
 
 type DatasourceType string

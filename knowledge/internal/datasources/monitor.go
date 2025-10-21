@@ -4,7 +4,6 @@
 package datasources
 
 import (
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -21,7 +20,7 @@ type Monitor struct {
 }
 
 // NewSyncMonitor creates a new sync monitor and registers the necessary Prometheus metrics.
-func NewSyncMonitor(registry *monitoring.Registry) Monitor {
+func NewSyncMonitor() Monitor {
 	pipelineRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_sync_run_duration_seconds",
 		Help:    "Duration of sync run",
@@ -40,16 +39,24 @@ func NewSyncMonitor(registry *monitoring.Registry) Monitor {
 		Name: "cortex_sync_request_processed_total",
 		Help: "Number of processed sync requests",
 	}, []string{"datasource"})
-	registry.MustRegister(
-		pipelineRunTimer,
-		pipelineObjectsGauge,
-		pipelineRequestTimer,
-		pipelineRequestProcessedCounter,
-	)
 	return Monitor{
 		PipelineRunTimer:                pipelineRunTimer,
 		PipelineObjectsGauge:            pipelineObjectsGauge,
 		PipelineRequestTimer:            pipelineRequestTimer,
 		PipelineRequestProcessedCounter: pipelineRequestProcessedCounter,
 	}
+}
+
+func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
+	m.PipelineRunTimer.Describe(ch)
+	m.PipelineObjectsGauge.Describe(ch)
+	m.PipelineRequestTimer.Describe(ch)
+	m.PipelineRequestProcessedCounter.Describe(ch)
+}
+
+func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
+	m.PipelineRunTimer.Collect(ch)
+	m.PipelineObjectsGauge.Collect(ch)
+	m.PipelineRequestTimer.Collect(ch)
+	m.PipelineRequestProcessedCounter.Collect(ch)
 }

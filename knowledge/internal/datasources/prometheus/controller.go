@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/sso"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -53,6 +54,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		ds v1alpha1.Datasource,
 		authenticatedDB *db.DB,
 		authenticatedHTTP *http.Client,
+		prometheusURL string,
 	) typedSyncer{
 		"vrops_host_metric":                     newTypedSyncer[prometheus.VROpsHostMetric],
 		"vrops_vm_metric":                       newTypedSyncer[prometheus.VROpsVMMetric],
@@ -101,7 +103,26 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
-	syncer := newSyncerFunc(*datasource, authenticatedDB, authenticatedHTTP)
+	// Get the prometheus URL from the secret ref.
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: datasource.Spec.Prometheus.SecretRef.Namespace,
+		Name:      datasource.Spec.Prometheus.SecretRef.Name,
+	}, secret); err != nil {
+		return ctrl.Result{}, err
+	}
+	prometheusURL, ok := secret.Data["url"]
+	if !ok {
+		log.Error(err, "missing 'url' in prometheus secret", "secretRef", datasource.Spec.Prometheus.SecretRef)
+		datasource.Status.Error = "missing 'url' in prometheus secret"
+		if err := r.Status().Update(ctx, datasource); err != nil {
+			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+	}
+
+	syncer := newSyncerFunc(*datasource, authenticatedDB, authenticatedHTTP, string(prometheusURL))
 	nResults, nextSync, err := syncer.Sync(ctx)
 	if err != nil {
 		log.Error(err, "failed to sync prometheus datasource", "name", datasource.Name)
