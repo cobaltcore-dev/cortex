@@ -95,7 +95,7 @@ func TestFeatureExtractorPipeline_InitDependencyGraph(t *testing.T) {
 			{
 				Name:    "extractor1",
 				Options: libconf.RawOpts{},
-				DependencyConfig: libconf.DependencyConfig{
+				DependencyConfig: conf.DependencyConfig{
 					// Extractor 1 depends on Extractor 2
 					Extractors: []string{"extractor2"},
 				},
@@ -107,7 +107,7 @@ func TestFeatureExtractorPipeline_InitDependencyGraph(t *testing.T) {
 			{
 				Name:    "extractor3",
 				Options: libconf.RawOpts{},
-				DependencyConfig: libconf.DependencyConfig{
+				DependencyConfig: conf.DependencyConfig{
 					// Extractor 1 depends on Extractor 2
 					Extractors: []string{"extractor2"},
 				},

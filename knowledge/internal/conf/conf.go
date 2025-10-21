@@ -7,13 +7,18 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
+type DependencyConfig struct {
+	Datasources []string `json:"datasources,omitempty"`
+	Extractors  []string `json:"extractors,omitempty"`
+}
+
 type FeatureExtractorConfig struct {
 	// The name of the extractor.
 	Name string `json:"name"`
 	// Custom options for the extractor, as a raw yaml map.
 	Options libconf.RawOpts `json:"options,omitempty"`
 	// The dependencies this extractor needs.
-	libconf.DependencyConfig `json:"dependencies,omitempty"`
+	DependencyConfig `json:"dependencies,omitempty"`
 	// Recency that tells how old a feature needs to be to be recalculated
 	RecencySeconds *int `json:"recencySeconds,omitempty"`
 	// MQTT topic to publish the features to.

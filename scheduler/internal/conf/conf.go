@@ -87,9 +87,6 @@ type NovaSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
 	Plugins []NovaSchedulerStepConfig `json:"plugins"`
 
-	// Dependencies needed by all the Nova scheduler steps.
-	libconf.DependencyConfig `json:"dependencies,omitempty"`
-
 	// The name of this scheduler pipeline.
 	// The name is used to distinguish and route between multiple pipelines.
 	Name string `json:"name"`

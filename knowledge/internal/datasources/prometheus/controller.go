@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/sso"
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +32,8 @@ type PrometheusDatasourceReconciler struct {
 	Scheme *runtime.Scheme
 	// Config for the reconciler.
 	Conf conf.Config
+	// Monitor for tracking the datasource syncs.
+	Monitor datasources.Monitor
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -58,6 +61,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		authenticatedDB *db.DB,
 		authenticatedHTTP *http.Client,
 		prometheusURL string,
+		monitor datasources.Monitor,
 	) typedSyncer{
 		"vrops_host_metric":                     newTypedSyncer[prometheus.VROpsHostMetric],
 		"vrops_vm_metric":                       newTypedSyncer[prometheus.VROpsVMMetric],
@@ -125,7 +129,13 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 
-	syncer := newSyncerFunc(*datasource, authenticatedDB, authenticatedHTTP, string(prometheusURL))
+	syncer := newSyncerFunc(
+		*datasource,
+		authenticatedDB,
+		authenticatedHTTP,
+		string(prometheusURL),
+		r.Monitor,
+	)
 	nResults, nextSync, err := syncer.Sync(ctx)
 	if err != nil {
 		log.Error(err, "failed to sync prometheus datasource", "name", datasource.Name)

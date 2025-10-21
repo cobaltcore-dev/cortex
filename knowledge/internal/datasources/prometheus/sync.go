@@ -18,7 +18,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	prometheusclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
 )
 
@@ -33,11 +35,13 @@ func newTypedSyncer[M prometheus.PrometheusMetric](
 	db *db.DB,
 	httpClient *http.Client,
 	prometheusURL string,
+	monitor datasources.Monitor,
 ) typedSyncer {
 	return &syncer[M]{
 		db:                    db,
 		httpClient:            httpClient,
 		host:                  prometheusURL,
+		monitor:               monitor,
 		query:                 ds.Spec.Prometheus.Query,
 		alias:                 ds.Spec.Prometheus.Alias,
 		syncTimeRange:         time.Duration(ds.Spec.Prometheus.TimeRangeSeconds) * time.Second,
@@ -54,6 +58,9 @@ type syncer[M prometheus.PrometheusMetric] struct {
 	query string
 	// Metric alias under which to store the metrics.
 	alias string
+
+	// Monitor to track the syncer.
+	monitor datasources.Monitor
 
 	// Time range to sync in each operation.
 	syncTimeRange time.Duration
@@ -86,6 +93,14 @@ type prometheusRangeMetric[M prometheus.PrometheusMetric] struct {
 // Fetch metrics from Prometheus. The query is executed in the time window
 // [start, end] with the specified resolution.
 func (s *syncer[M]) fetch(start time.Time, end time.Time) (*prometheusTimelineData[M], error) {
+	if s.monitor.PipelineRequestTimer != nil {
+		hist := s.monitor.PipelineRequestTimer.WithLabelValues(
+			"prometheus_" + s.alias,
+		)
+		timer := prometheusclient.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
 	// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
 	urlStr := s.host + "/api/v1/query_range"
 	urlStr += "?query=" + url.QueryEscape(s.query)
@@ -164,6 +179,12 @@ func (s *syncer[M]) fetch(start time.Time, end time.Time) (*prometheusTimelineDa
 			metric := rangeMetric.Metric.With(s.alias, valTime, valContent)
 			flatMetrics = append(flatMetrics, metric.(M))
 		}
+	}
+
+	if s.monitor.PipelineRequestProcessedCounter != nil {
+		s.monitor.PipelineRequestProcessedCounter.WithLabelValues(
+			"prometheus_" + s.alias,
+		).Inc()
 	}
 	return &prometheusTimelineData[M]{
 		Metrics:  flatMetrics,
@@ -288,6 +309,11 @@ func (s *syncer[M]) Sync(context.Context) (nResults int64, nextSync time.Time, e
 	)
 	if err != nil {
 		return 0, time.Time{}, err
+	}
+	if s.monitor.PipelineObjectsGauge != nil {
+		s.monitor.PipelineObjectsGauge.
+			WithLabelValues("prometheus_" + s.alias).
+			Set(float64(nResults))
 	}
 	nextSync = time.Now().Add(s.syncInterval)
 	return nResults, nextSync, nil

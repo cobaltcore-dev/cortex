@@ -97,8 +97,6 @@ type SchedulerStepConfig[Extra any] struct {
 	Alias string `json:"alias,omitempty"`
 	// Custom options for the step, as a raw yaml map.
 	Options RawOpts `json:"options,omitempty"`
-	// The dependencies this step needs.
-	DependencyConfig `json:"dependencies,omitempty"`
 	// The validations to use for this step.
 	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
 

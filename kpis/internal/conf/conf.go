@@ -19,8 +19,6 @@ type KPIPluginConfig struct {
 	Name string `json:"name"`
 	// Custom options for the KPI plugin, as a raw json map.
 	Options libconf.RawOpts `json:"options,omitempty"`
-	// The dependencies this KPI plugin needs.
-	libconf.DependencyConfig `json:"dependencies,omitempty"`
 }
 
 type Config struct {

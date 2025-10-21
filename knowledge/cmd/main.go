@@ -208,10 +208,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&prometheus.PrometheusDatasourceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Conf:   config,
-		// TODO: Monitor
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Monitor: monitor,
+		Conf:    config,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")
 		os.Exit(1)
