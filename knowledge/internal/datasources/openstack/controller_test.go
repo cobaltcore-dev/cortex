@@ -131,8 +131,7 @@ func TestPlacementDatasourceTypeConstants(t *testing.T) {
 func TestOpenStackDatasourceSpec(t *testing.T) {
 	// Test creating a complete Nova datasource spec
 	spec := v1alpha1.DatasourceSpec{
-		Operator: "test-operator",
-		Type:     v1alpha1.DatasourceTypeOpenStack,
+		Type: v1alpha1.DatasourceTypeOpenStack,
 		OpenStack: v1alpha1.OpenStackDatasource{
 			Type: v1alpha1.OpenStackDatasourceTypeNova,
 			Nova: v1alpha1.NovaDatasource{
@@ -173,7 +172,6 @@ func TestOpenStackDatasourceSpec(t *testing.T) {
 
 func TestManilaDatasourceSpec(t *testing.T) {
 	spec := v1alpha1.DatasourceSpec{
-		Type: v1alpha1.DatasourceTypeOpenStack,
 		OpenStack: v1alpha1.OpenStackDatasource{
 			Type: v1alpha1.OpenStackDatasourceTypeManila,
 			Manila: v1alpha1.ManilaDatasource{
@@ -198,7 +196,6 @@ func TestManilaDatasourceSpec(t *testing.T) {
 
 func TestPlacementDatasourceSpec(t *testing.T) {
 	spec := v1alpha1.DatasourceSpec{
-		Type: v1alpha1.DatasourceTypeOpenStack,
 		OpenStack: v1alpha1.OpenStackDatasource{
 			Type: v1alpha1.OpenStackDatasourceTypePlacement,
 			Placement: v1alpha1.PlacementDatasource{
@@ -223,7 +220,6 @@ func TestPlacementDatasourceSpec(t *testing.T) {
 
 func TestIdentityDatasourceSpec(t *testing.T) {
 	spec := v1alpha1.DatasourceSpec{
-		Type: v1alpha1.DatasourceTypeOpenStack,
 		OpenStack: v1alpha1.OpenStackDatasource{
 			Type: v1alpha1.OpenStackDatasourceTypeIdentity,
 			Identity: v1alpha1.IdentityDatasource{
@@ -248,7 +244,6 @@ func TestIdentityDatasourceSpec(t *testing.T) {
 
 func TestLimesDatasourceSpec(t *testing.T) {
 	spec := v1alpha1.DatasourceSpec{
-		Type: v1alpha1.DatasourceTypeOpenStack,
 		OpenStack: v1alpha1.OpenStackDatasource{
 			Type: v1alpha1.OpenStackDatasourceTypeLimes,
 			Limes: v1alpha1.LimesDatasource{
@@ -273,7 +268,6 @@ func TestLimesDatasourceSpec(t *testing.T) {
 
 func TestCinderDatasourceSpec(t *testing.T) {
 	spec := v1alpha1.DatasourceSpec{
-		Type: v1alpha1.DatasourceTypeOpenStack,
 		OpenStack: v1alpha1.OpenStackDatasource{
 			Type: v1alpha1.OpenStackDatasourceTypeCinder,
 			Cinder: v1alpha1.CinderDatasource{

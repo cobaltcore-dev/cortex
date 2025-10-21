@@ -82,6 +82,13 @@ func TestMonitorDescribe(t *testing.T) {
 
 func TestMonitorCollect(t *testing.T) {
 	monitor := NewSyncMonitor()
+
+	// Add some data to the metrics so they will be collected
+	monitor.PipelineRunTimer.WithLabelValues("test").Observe(1.0)
+	monitor.PipelineObjectsGauge.WithLabelValues("test").Set(10)
+	monitor.PipelineRequestTimer.WithLabelValues("test").Observe(0.5)
+	monitor.PipelineRequestProcessedCounter.WithLabelValues("test").Inc()
+
 	ch := make(chan prometheus.Metric, 20)
 
 	go func() {
@@ -280,6 +287,12 @@ func TestMultipleDatasourceLabels(t *testing.T) {
 
 func TestMonitorMetricNames(t *testing.T) {
 	monitor := NewSyncMonitor()
+
+	// Add some data to the metrics so they will show up in the registry
+	monitor.PipelineRunTimer.WithLabelValues("test").Observe(1.0)
+	monitor.PipelineObjectsGauge.WithLabelValues("test").Set(10)
+	monitor.PipelineRequestTimer.WithLabelValues("test").Observe(0.5)
+	monitor.PipelineRequestProcessedCounter.WithLabelValues("test").Inc()
 
 	// Test that all metrics have the expected names by checking metric families
 	registry := prometheus.NewRegistry()
