@@ -24,7 +24,6 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 // Wrapper around gorp.DbMap that adds some convenience functions.
@@ -110,15 +109,12 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	db.SetMaxOpenConns(16)
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	slog.Info("database is ready")
-	dbMonitor := NewUnregisteredDBMonitor()
-	metrics.Registry.MustRegister(&dbMonitor)
-	metrics.Registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
 	reconnectConfig := conf.DBReconnectConfig{
 		MaxRetries:                  5,
 		RetryIntervalSeconds:        2,
 		LivenessPingIntervalSeconds: 30,
 	}
-	return &DB{DbMap: dbMap, monitor: dbMonitor, retryConf: reconnectConfig}, nil
+	return &DB{DbMap: dbMap, retryConf: reconnectConfig}, nil
 }
 
 // Create a new postgres database and wait until it is connected.

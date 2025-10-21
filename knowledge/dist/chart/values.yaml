@@ -15,7 +15,7 @@ controllerManager:
     resources:
       limits:
         cpu: 500m
-        memory: 512Mi
+        memory: 2048Mi
       requests:
         cpu: 10m
         memory: 64Mi
@@ -92,74 +92,6 @@ conf:
     labels:
       github_org: cobaltcore-dev
       github_repo: cortex
-
-  # Connection parameters for the database where data is stored.
-  db:
-    host:
-    port: 5432
-    database: postgres
-    reconnect:
-      maxRetries: 20
-      retryIntervalSeconds: 1
-      livenessPingIntervalSeconds: 5
-
-  # Datasource plugins config.
-  datasources:
-    prometheus:
-      # Prometheus metrics to sync into the database.
-      # Each metric can be synced from a different Prometheus instance.
-      # The `type` parameter should map to a known metric model in the database.
-      metrics:
-        # - alias:
-        #   query:
-        #   type:
-      # Prometheus hosts to consider when syncing the metrics.
-      hosts:
-        # - name:
-        #   # Prometheus URL to scrape metrics from.
-        #   url:
-        #   # The metric types to scrape from this Prometheus instance.
-        #   provides: []
-        #   # Optional, only required if Prometheus is configured with SSO.
-        #   sso:
-        #     # Certificate "public key".
-        #     cert: ""
-        #     # Certificate private key.
-        #     certKey: ""
-        #     # Whether the certificate is self-signed.
-        #     # If true, the certificate is not verified.
-        #     selfSigned: false
-    openstack:
-      nova:
-        # One of admin, public, or internal
-        availability: public
-        # Nova objects to sync into the database.
-        types: [] # e.g. servers
-      placement:
-        # One of admin, public, or internal
-        availability: public
-        # Placement objects to sync into the database.
-        types: [] # e.g. resource_providers
-      cinder:
-        # One of admin, public, or internal
-        availability: public
-        # Cinder objects to sync into the database.
-        types: [] # e.g. storage_pools
-      identity:
-        # One of admin, public, or internal
-        availability: public
-        # Identity objects to sync into the database.
-        types: [] # e.g. projects
-      manila:
-        # One of admin, public, or internal
-        availability: public
-        # Manila objects to sync into the database.
-        types: [] # e.g. storage_pools
-      limes:
-        # One of admin, public, or internal
-        availability: public
-        # Limes objects to sync into the database.
-        types: [] # e.g. commitments
 
   extractor:
     # Configuration of features that should be extracted from the synced data.

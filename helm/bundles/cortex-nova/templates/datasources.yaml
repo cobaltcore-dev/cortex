@@ -374,4 +374,4 @@ spec:
       namespace: {{ .Release.Namespace }}
     type: limes
     limes:
-      type: commitments
+      type: projectCommitments

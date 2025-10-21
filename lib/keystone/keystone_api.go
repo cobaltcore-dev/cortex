@@ -134,13 +134,13 @@ func (api *keystoneAPI) Authenticate(ctx context.Context) error {
 	}
 	provider, err := openstack.NewClient(authOptions.IdentityEndpoint)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if api.httpClient != nil {
 		provider.HTTPClient = *api.httpClient
 	}
 	if err = openstack.Authenticate(ctx, provider, authOptions); err != nil {
-		panic(err)
+		return err
 	}
 	api.client = provider
 	slog.Info("authenticated against openstack")

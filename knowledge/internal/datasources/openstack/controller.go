@@ -167,6 +167,17 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	// Initialize the syncer before syncing.
+	if err := syncer.Init(ctx); err != nil {
+		log.Error(err, "failed to init openstack datasource", "name", datasource.Name)
+		datasource.Status.Error = "failed to init openstack datasource: " + err.Error()
+		if err := r.Status().Update(ctx, datasource); err != nil {
+			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+	}
+
 	nResults, err := syncer.Sync(ctx)
 	if errors.Is(err, v1alpha1.ErrWaitingForDependencyDatasource) {
 		log.Info("datasource sync waiting for dependency datasource", "name", datasource.Name)
@@ -196,7 +207,7 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	nextTime := time.Now().Add(duration)
 	datasource.Status.NextSyncTime = metav1.NewTime(nextTime)
 	datasource.Status.NumberOfObjects = nResults
-	datasource.Status.LastSyncDurationSeconds = int64(time.Since(startedAt).Seconds())
+	datasource.Status.LastSyncDurationMs = int64(time.Since(startedAt).Milliseconds())
 	if err := r.Status().Update(ctx, datasource); err != nil {
 		log.Error(err, "failed to update datasource status", "name", datasource.Name)
 		return ctrl.Result{}, err

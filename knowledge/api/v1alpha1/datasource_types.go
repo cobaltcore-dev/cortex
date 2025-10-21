@@ -232,7 +232,7 @@ type DatasourceStatus struct {
 	// The number of objects currently stored for this datasource.
 	NumberOfObjects int64 `json:"numberOfObjects,omitempty"`
 	// The time it took to perform the last sync.
-	LastSyncDurationSeconds int64 `json:"lastSyncDurationSeconds,omitempty"`
+	LastSyncDurationMs int64 `json:"lastSyncDurationMs,omitempty"`
 	// Planned time for the next sync.
 	NextSyncTime metav1.Time `json:"nextSyncTime,omitempty"`
 
@@ -247,7 +247,7 @@ type DatasourceStatus struct {
 // +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Synced",type="date",JSONPath=".status.lastSynced"
-// +kubebuilder:printcolumn:name="Took [s]",type="integer",JSONPath=".status.lastSyncDurationSeconds"
+// +kubebuilder:printcolumn:name="Took [ms]",type="integer",JSONPath=".status.lastSyncDurationMs"
 // +kubebuilder:printcolumn:name="Next",type="string",JSONPath=".status.nextSyncTime"
 // +kubebuilder:printcolumn:name="Objects",type="integer",JSONPath=".status.numberOfObjects"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"

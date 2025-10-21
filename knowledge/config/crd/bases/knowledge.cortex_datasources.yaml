@@ -27,8 +27,8 @@ spec:
     - jsonPath: .status.lastSynced
       name: Synced
       type: date
-    - jsonPath: .status.lastSyncDurationSeconds
-      name: Took [s]
+    - jsonPath: .status.lastSyncDurationMs
+      name: Took [ms]
       type: integer
     - jsonPath: .status.nextSyncTime
       name: Next
@@ -284,7 +284,7 @@ spec:
                 description: If there was an error during the last sync, it is recorded
                   here.
                 type: string
-              lastSyncDurationSeconds:
+              lastSyncDurationMs:
                 description: The time it took to perform the last sync.
                 format: int64
                 type: integer

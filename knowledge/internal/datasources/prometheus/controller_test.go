@@ -162,17 +162,17 @@ func TestDatasourceSpec(t *testing.T) {
 func TestDatasourceStatus(t *testing.T) {
 	// Test that datasource status struct works correctly
 	status := v1alpha1.DatasourceStatus{
-		NumberOfObjects:         100,
-		LastSyncDurationSeconds: 30,
-		Error:                   "",
+		NumberOfObjects:    100,
+		LastSyncDurationMs: 30,
+		Error:              "",
 	}
 
 	if status.NumberOfObjects != 100 {
 		t.Errorf("Expected NumberOfObjects 100, got %d", status.NumberOfObjects)
 	}
 
-	if status.LastSyncDurationSeconds != 30 {
-		t.Errorf("Expected LastSyncDurationSeconds 30, got %d", status.LastSyncDurationSeconds)
+	if status.LastSyncDurationMs != 30 {
+		t.Errorf("Expected LastSyncDurationMs 30, got %d", status.LastSyncDurationMs)
 	}
 
 	if status.Error != "" {
