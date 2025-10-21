@@ -56,7 +56,8 @@ func (api *limesAPI) Init(ctx context.Context) {
 	// See: https://github.com/sapcc/limes/blob/5ea068b/docs/users/api-example.md?plain=1#L23
 	provider := api.keystoneAPI.Client()
 	serviceType := "resources"
-	url, err := api.keystoneAPI.FindEndpoint(api.conf.Availability, serviceType)
+	sameAsKeystone := api.keystoneAPI.Availability()
+	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
 		panic(err)
 	}

@@ -129,6 +129,8 @@ type SchedulerAPIConfig struct {
 type KeystoneConfig struct {
 	// The URL of the keystone service.
 	URL string `json:"url"`
+	// Availability of the keystone service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
 	// The OpenStack username (OS_USERNAME in openstack cli).
 	OSUsername string `json:"username"`
 	// The OpenStack password (OS_PASSWORD in openstack cli).

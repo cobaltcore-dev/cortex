@@ -29,11 +29,17 @@ type PrometheusDatasource struct {
 	Type string `json:"type"`
 
 	// Time range in seconds to query the data for.
-	TimeRangeSeconds *int `json:"timeRangeSeconds,omitempty"`
+	// +kubebuilder:default=2419200
+	// +kubebuilder:validation:Minimum=1
+	TimeRangeSeconds int `json:"timeRangeSeconds,omitempty"`
 	// The interval at which to query the data.
-	IntervalSeconds *int `json:"intervalSeconds,omitempty"`
+	// +kubebuilder:default=86400
+	// +kubebuilder:validation:Minimum=1
+	IntervalSeconds int `json:"intervalSeconds,omitempty"`
 	// The resolution of the data in seconds.
-	ResolutionSeconds *int `json:"resolutionSeconds,omitempty"`
+	// +kubebuilder:default=43200
+	// +kubebuilder:validation:Minimum=1
+	ResolutionSeconds int `json:"resolutionSeconds,omitempty"`
 
 	// Secret containing the following keys:
 	// - "url": The prometheus URL.
@@ -52,8 +58,6 @@ const (
 )
 
 type NovaDatasource struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
 	// The type of resource to sync.
 	Type NovaDatasourceType `json:"type"`
 	// Time frame in minutes for the changes-since parameter when fetching
@@ -70,8 +74,6 @@ const (
 )
 
 type PlacementDatasource struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
 	// The type of resource to sync.
 	Type PlacementDatasourceType `json:"type"`
 }
@@ -83,8 +85,6 @@ const (
 )
 
 type ManilaDatasource struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
 	// The type of resource to sync.
 	Type ManilaDatasourceType `json:"type"`
 }
@@ -97,8 +97,6 @@ const (
 )
 
 type IdentityDatasource struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
 	// The type of resource to sync.
 	Type IdentityDatasourceType `json:"type"`
 }
@@ -110,8 +108,6 @@ const (
 )
 
 type LimesDatasource struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
 	// The type of resource to sync.
 	Type LimesDatasourceType `json:"type"`
 }
@@ -123,10 +119,8 @@ const (
 )
 
 type CinderDatasource struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
-	// The types of resources to sync.
-	Type CinderDatasourceType `json:"types"`
+	// The type of resource to sync.
+	Type CinderDatasourceType `json:"type"`
 }
 
 type OpenStackDatasourceType string
@@ -152,25 +146,33 @@ type OpenStackDatasource struct {
 
 	// Datasource for openstack nova.
 	// Only required if Type is "nova".
+	// +kubebuilder:validation:Optional
 	Nova NovaDatasource `json:"nova"`
 	// Datasource for openstack placement.
 	// Only required if Type is "placement".
+	// +kubebuilder:validation:Optional
 	Placement PlacementDatasource `json:"placement"`
 	// Datasource for openstack manila.
 	// Only required if Type is "manila".
+	// +kubebuilder:validation:Optional
 	Manila ManilaDatasource `json:"manila"`
 	// Datasource for openstack identity.
 	// Only required if Type is "identity".
+	// +kubebuilder:validation:Optional
 	Identity IdentityDatasource `json:"identity"`
 	// Datasource for openstack limes.
 	// Only required if Type is "limes".
+	// +kubebuilder:validation:Optional
 	Limes LimesDatasource `json:"limes"`
 	// Datasource for openstack cinder.
 	// Only required if Type is "cinder".
+	// +kubebuilder:validation:Optional
 	Cinder CinderDatasource `json:"cinder"`
 
 	// How often to sync the datasource in seconds.
-	SyncIntervalSeconds *int64 `json:"syncIntervalSeconds"`
+	// +kubebuilder:default=60
+	// +kubebuilder:validation:Minimum=1
+	SyncIntervalSeconds int64 `json:"syncIntervalSeconds"`
 
 	// Keystone credentials secret ref for authenticating with openstack.
 	// The secret should contain the following keys:
@@ -196,9 +198,11 @@ const (
 type DatasourceSpec struct {
 	// If given, configures a Prometheus datasource to fetch.
 	// Type must be set to "prometheus" if this is used.
+	// +kubebuilder:validation:Optional
 	Prometheus PrometheusDatasource `json:"prometheus"`
 	// If given, configures an OpenStack datasource to fetch.
 	// Type must be set to "openstack" if this is used.
+	// +kubebuilder:validation:Optional
 	OpenStack OpenStackDatasource `json:"openstack,omitempty"`
 
 	// The type of the datasource.
@@ -215,6 +219,7 @@ type DatasourceSpec struct {
 
 	// Kubernetes secret ref for an optional sso certificate to access the host.
 	// The secret should contain two keys: "cert" and "key".
+	// +kubebuilder:validation:Optional
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef,omitempty"`
 }
 

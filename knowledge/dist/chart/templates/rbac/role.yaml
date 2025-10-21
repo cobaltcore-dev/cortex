@@ -10,6 +10,32 @@ rules:
 - apiGroups:
   - knowledge.cortex
   resources:
+  - datasources
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - knowledge.cortex
+  resources:
+  - datasources/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - knowledge.cortex
+  resources:
+  - datasources/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - knowledge.cortex
+  resources:
   - knowledges
   verbs:
   - create

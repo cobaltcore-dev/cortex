@@ -91,31 +91,21 @@ spec:
                       Datasource for openstack cinder.
                       Only required if Type is "cinder".
                     properties:
-                      availability:
-                        description: Availability of the service, such as "public",
-                          "internal", or "admin".
-                        type: string
-                      types:
-                        description: The types of resources to sync.
+                      type:
+                        description: The type of resource to sync.
                         type: string
                     required:
-                    - availability
-                    - types
+                    - type
                     type: object
                   identity:
                     description: |-
                       Datasource for openstack identity.
                       Only required if Type is "identity".
                     properties:
-                      availability:
-                        description: Availability of the service, such as "public",
-                          "internal", or "admin".
-                        type: string
                       type:
                         description: The type of resource to sync.
                         type: string
                     required:
-                    - availability
                     - type
                     type: object
                   limes:
@@ -123,15 +113,10 @@ spec:
                       Datasource for openstack limes.
                       Only required if Type is "limes".
                     properties:
-                      availability:
-                        description: Availability of the service, such as "public",
-                          "internal", or "admin".
-                        type: string
                       type:
                         description: The type of resource to sync.
                         type: string
                     required:
-                    - availability
                     - type
                     type: object
                   manila:
@@ -139,15 +124,10 @@ spec:
                       Datasource for openstack manila.
                       Only required if Type is "manila".
                     properties:
-                      availability:
-                        description: Availability of the service, such as "public",
-                          "internal", or "admin".
-                        type: string
                       type:
                         description: The type of resource to sync.
                         type: string
                     required:
-                    - availability
                     - type
                     type: object
                   nova:
@@ -155,10 +135,6 @@ spec:
                       Datasource for openstack nova.
                       Only required if Type is "nova".
                     properties:
-                      availability:
-                        description: Availability of the service, such as "public",
-                          "internal", or "admin".
-                        type: string
                       deletedServersChangesSinceMinutes:
                         description: |-
                           Time frame in minutes for the changes-since parameter when fetching
@@ -168,7 +144,6 @@ spec:
                         description: The type of resource to sync.
                         type: string
                     required:
-                    - availability
                     - type
                     type: object
                   placement:
@@ -176,15 +151,10 @@ spec:
                       Datasource for openstack placement.
                       Only required if Type is "placement".
                     properties:
-                      availability:
-                        description: Availability of the service, such as "public",
-                          "internal", or "admin".
-                        type: string
                       type:
                         description: The type of resource to sync.
                         type: string
                     required:
-                    - availability
                     - type
                     type: object
                   secretRef:
@@ -210,19 +180,15 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   syncIntervalSeconds:
+                    default: 60
                     description: How often to sync the datasource in seconds.
                     format: int64
+                    minimum: 1
                     type: integer
                   type:
                     description: The type of the OpenStack datasource.
                     type: string
                 required:
-                - cinder
-                - identity
-                - limes
-                - manila
-                - nova
-                - placement
                 - secretRef
                 - syncIntervalSeconds
                 - type
@@ -240,13 +206,17 @@ spec:
                       feature extractors as dependency.
                     type: string
                   intervalSeconds:
+                    default: 86400
                     description: The interval at which to query the data.
+                    minimum: 1
                     type: integer
                   query:
                     description: The query to use to fetch the metric.
                     type: string
                   resolutionSeconds:
+                    default: 43200
                     description: The resolution of the data in seconds.
+                    minimum: 1
                     type: integer
                   secretRef:
                     description: |-
@@ -264,7 +234,9 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   timeRangeSeconds:
+                    default: 2419200
                     description: Time range in seconds to query the data for.
+                    minimum: 1
                     type: integer
                   type:
                     description: |-
@@ -297,7 +269,6 @@ spec:
                 type: string
             required:
             - databaseSecretRef
-            - prometheus
             - type
             type: object
           status:

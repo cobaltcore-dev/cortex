@@ -59,12 +59,14 @@ func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.N
 // Init the nova API.
 func (api *novaAPI) Init(ctx context.Context) {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
+		// TODO: Don't panic, bubble up the error.
 		panic(err)
 	}
 	// Automatically fetch the nova endpoint from the keystone service catalog.
 	provider := api.keystoneAPI.Client()
 	serviceType := "compute"
-	url, err := api.keystoneAPI.FindEndpoint(api.conf.Availability, serviceType)
+	sameAsKeystone := api.keystoneAPI.Availability()
+	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
 		panic(err)
 	}

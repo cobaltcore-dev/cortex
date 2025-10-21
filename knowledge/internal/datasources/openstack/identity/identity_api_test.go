@@ -42,7 +42,7 @@ func TestIdentityAPI_GetAllDomains(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.IdentityDatasource{Availability: "public"}
+	conf := v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeDomains}
 
 	api := NewIdentityAPI(mon, k, conf).(*identityAPI)
 	api.Init(t.Context())
@@ -94,7 +94,7 @@ func TestIdentityAPI_GetAllProjects(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.IdentityDatasource{Availability: "public"}
+	conf := v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeProjects}
 
 	api := NewIdentityAPI(mon, k, conf).(*identityAPI)
 	api.Init(t.Context())

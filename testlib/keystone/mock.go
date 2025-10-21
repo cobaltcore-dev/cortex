@@ -27,3 +27,7 @@ func (m *MockKeystoneAPI) Client() *gophercloud.ProviderClient {
 func (m *MockKeystoneAPI) FindEndpoint(availability, serviceType string) (string, error) {
 	return m.Url, nil
 }
+
+func (m *MockKeystoneAPI) Availability() string {
+	return "" // Mock does not have a specific availability
+}

@@ -67,7 +67,7 @@ func TestNovaAPI_GetDeletedServers(t *testing.T) {
 		defer server.Close()
 
 		mon := datasources.Monitor{}
-		conf := v1alpha1.NovaDatasource{Availability: "public"}
+		conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers}
 
 		api := NewNovaAPI(mon, k, conf).(*novaAPI)
 		api.Init(t.Context())
@@ -104,7 +104,7 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.NovaDatasource{Availability: "public"}
+	conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())
@@ -141,7 +141,7 @@ func TestNovaAPI_GetAllHypervisors(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.NovaDatasource{Availability: "public"}
+	conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeHypervisors}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())
@@ -178,7 +178,7 @@ func TestNovaAPI_GetAllFlavors(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.NovaDatasource{Availability: "public"}
+	conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeFlavors}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())
@@ -218,7 +218,7 @@ func TestNovaAPI_GetAllMigrations(t *testing.T) {
 	defer server.Close()
 
 	mon := datasources.Monitor{}
-	conf := v1alpha1.NovaDatasource{Availability: "public"}
+	conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeMigrations}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
 	api.Init(t.Context())

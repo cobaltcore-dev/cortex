@@ -34,28 +34,15 @@ func newTypedSyncer[M prometheus.PrometheusMetric](
 	httpClient *http.Client,
 	prometheusURL string,
 ) typedSyncer {
-	// Set default values if none are provided.
-	var timeRangeSeconds = 2419200 // 4 weeks
-	if ds.Spec.Prometheus.TimeRangeSeconds != nil {
-		timeRangeSeconds = *ds.Spec.Prometheus.TimeRangeSeconds
-	}
-	var intervalSeconds = 86400 // 1 day
-	if ds.Spec.Prometheus.IntervalSeconds != nil {
-		intervalSeconds = *ds.Spec.Prometheus.IntervalSeconds
-	}
-	var resolutionSeconds = 43200 // 12 hours
-	if ds.Spec.Prometheus.ResolutionSeconds != nil {
-		resolutionSeconds = *ds.Spec.Prometheus.ResolutionSeconds
-	}
 	return &syncer[M]{
 		db:                    db,
 		httpClient:            httpClient,
 		host:                  prometheusURL,
 		query:                 ds.Spec.Prometheus.Query,
 		alias:                 ds.Spec.Prometheus.Alias,
-		syncTimeRange:         time.Duration(timeRangeSeconds) * time.Second,
-		syncInterval:          time.Duration(intervalSeconds) * time.Second,
-		syncResolutionSeconds: resolutionSeconds,
+		syncTimeRange:         time.Duration(ds.Spec.Prometheus.TimeRangeSeconds) * time.Second,
+		syncInterval:          time.Duration(ds.Spec.Prometheus.IntervalSeconds) * time.Second,
+		syncResolutionSeconds: ds.Spec.Prometheus.ResolutionSeconds,
 	}
 }
 

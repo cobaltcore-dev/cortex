@@ -36,6 +36,10 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	if !ok {
 		return nil, errors.New("missing url in auth secret")
 	}
+	availability, ok := authSecret.Data["availability"]
+	if !ok {
+		return nil, errors.New("missing availability in auth secret")
+	}
 	osUsername, ok := authSecret.Data["username"]
 	if !ok {
 		return nil, errors.New("missing username in auth secret")
@@ -58,6 +62,7 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	}
 	keystoneConf := conf.KeystoneConfig{
 		URL:                 string(url),
+		Availability:        string(availability),
 		OSUsername:          string(osUsername),
 		OSPassword:          string(osPassword),
 		OSProjectName:       string(osProjectName),
@@ -84,6 +89,8 @@ type KeystoneAPI interface {
 	Client() *gophercloud.ProviderClient
 	// Find the endpoint for the given service type and availability.
 	FindEndpoint(availability, serviceType string) (string, error)
+	// Get the configured availability for keystone.
+	Availability() string
 }
 
 // KeystoneAPI implementation.
@@ -145,6 +152,10 @@ func (api *keystoneAPI) FindEndpoint(availability, serviceType string) (string, 
 		Type:         serviceType,
 		Availability: gophercloud.Availability(availability),
 	})
+}
+
+func (api *keystoneAPI) Availability() string {
+	return api.keystoneConf.Availability
 }
 
 // Get the OpenStack provider client.

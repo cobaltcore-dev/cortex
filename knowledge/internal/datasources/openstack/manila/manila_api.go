@@ -53,9 +53,10 @@ func (api *manilaAPI) Init(ctx context.Context) {
 	// Workaround to find the v2 service of manila.
 	// See: https://github.com/gophercloud/gophercloud/issues/3347
 	gophercloud.ServiceTypeAliases["shared-file-system"] = []string{"sharev2"}
+	sameAsKeystone := api.keystoneAPI.Availability()
 	sc, err := openstack.NewSharedFileSystemV2(provider, gophercloud.EndpointOpts{
 		Type:         "sharev2",
-		Availability: gophercloud.Availability(api.conf.Availability),
+		Availability: gophercloud.Availability(sameAsKeystone),
 	})
 	if err != nil {
 		panic(fmt.Errorf("failed to create OpenStack Manila service client: %w", err))

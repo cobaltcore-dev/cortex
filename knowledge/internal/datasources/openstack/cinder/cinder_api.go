@@ -51,7 +51,8 @@ func (api *cinderAPI) Init(ctx context.Context) {
 	// Automatically fetch the cinder endpoint from the keystone service catalog
 	provider := api.keystoneAPI.Client()
 	serviceType := "volumev3"
-	url, err := api.keystoneAPI.FindEndpoint(api.conf.Availability, serviceType)
+	sameAsKeystone := api.keystoneAPI.Availability()
+	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
 		panic(err)
 	}
