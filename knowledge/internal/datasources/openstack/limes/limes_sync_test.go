@@ -19,7 +19,7 @@ import (
 
 type mockLimesAPI struct{}
 
-func (m *mockLimesAPI) Init(ctx context.Context) {}
+func (m *mockLimesAPI) Init(ctx context.Context) error { return nil }
 
 func (m *mockLimesAPI) GetAllCommitments(ctx context.Context, projects []identity.Project) ([]limes.Commitment, error) {
 	if len(projects) == 0 {

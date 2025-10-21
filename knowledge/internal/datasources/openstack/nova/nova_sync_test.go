@@ -18,7 +18,7 @@ import (
 
 type mockNovaAPI struct{}
 
-func (m *mockNovaAPI) Init(ctx context.Context) {}
+func (m *mockNovaAPI) Init(ctx context.Context) error { return nil }
 
 func (m *mockNovaAPI) GetAllServers(ctx context.Context) ([]nova.Server, error) {
 	return []nova.Server{{ID: "1", Name: "server1"}}, nil

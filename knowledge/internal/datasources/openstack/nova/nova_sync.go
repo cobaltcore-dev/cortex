@@ -28,7 +28,9 @@ type NovaSyncer struct {
 
 // Init the OpenStack nova syncer.
 func (s *NovaSyncer) Init(ctx context.Context) error {
-	s.API.Init(ctx)
+	if err := s.API.Init(ctx); err != nil {
+		return err
+	}
 	tables := []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
 	switch s.Conf.Type {

@@ -16,7 +16,7 @@ import (
 
 type mockIdentityAPI struct{}
 
-func (m *mockIdentityAPI) Init(ctx context.Context) {}
+func (m *mockIdentityAPI) Init(ctx context.Context) error { return nil }
 
 func (m *mockIdentityAPI) GetAllDomains(ctx context.Context) ([]identity.Domain, error) {
 	return []identity.Domain{{ID: "1", Name: "domain1", Enabled: true}}, nil

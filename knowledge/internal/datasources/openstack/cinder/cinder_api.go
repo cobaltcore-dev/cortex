@@ -19,7 +19,7 @@ import (
 
 type CinderAPI interface {
 	// Int the cinder API.
-	Init(ctx context.Context)
+	Init(ctx context.Context) error
 	// Get all cinder storage pools.
 	GetAllStoragePools(ctx context.Context) ([]cinder.StoragePool, error)
 }
@@ -43,9 +43,9 @@ func NewCinderAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1
 	}
 }
 
-func (api *cinderAPI) Init(ctx context.Context) {
+func (api *cinderAPI) Init(ctx context.Context) error {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		panic(err)
+		return err
 	}
 
 	// Automatically fetch the cinder endpoint from the keystone service catalog
@@ -54,7 +54,7 @@ func (api *cinderAPI) Init(ctx context.Context) {
 	sameAsKeystone := api.keystoneAPI.Availability()
 	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	slog.Info("using cinder endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
@@ -63,6 +63,7 @@ func (api *cinderAPI) Init(ctx context.Context) {
 		Type:           serviceType,
 		Microversion:   "3.70",
 	}
+	return nil
 }
 
 func (api *cinderAPI) GetAllStoragePools(ctx context.Context) ([]cinder.StoragePool, error) {

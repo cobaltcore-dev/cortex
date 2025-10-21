@@ -16,7 +16,7 @@ import (
 
 type mockCinderAPI struct{}
 
-func (m *mockCinderAPI) Init(ctx context.Context) {}
+func (m *mockCinderAPI) Init(ctx context.Context) error { return nil }
 
 func (m *mockCinderAPI) GetAllStoragePools(ctx context.Context) ([]cinder.StoragePool, error) {
 	return []cinder.StoragePool{{Name: "pool1"}}, nil

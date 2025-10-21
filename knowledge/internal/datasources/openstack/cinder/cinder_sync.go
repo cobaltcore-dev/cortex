@@ -26,7 +26,9 @@ type CinderSyncer struct {
 
 // Init the OpenStack cinder syncer.
 func (s *CinderSyncer) Init(ctx context.Context) error {
-	s.API.Init(ctx)
+	if err := s.API.Init(ctx); err != nil {
+		return err
+	}
 	tables := []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
 	switch s.Conf.Type {

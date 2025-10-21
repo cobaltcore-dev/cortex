@@ -25,7 +25,7 @@ import (
 
 type NovaAPI interface {
 	// Init the nova API.
-	Init(ctx context.Context)
+	Init(ctx context.Context) error
 	// Get all nova servers that are NOT deleted. (Includes ERROR, SHUTOFF etc)
 	GetAllServers(ctx context.Context) ([]nova.Server, error)
 	// Get all deleted nova servers since the timestamp.
@@ -57,10 +57,9 @@ func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.N
 }
 
 // Init the nova API.
-func (api *novaAPI) Init(ctx context.Context) {
+func (api *novaAPI) Init(ctx context.Context) error {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		// TODO: Don't panic, bubble up the error.
-		panic(err)
+		return err
 	}
 	// Automatically fetch the nova endpoint from the keystone service catalog.
 	provider := api.keystoneAPI.Client()
@@ -68,7 +67,7 @@ func (api *novaAPI) Init(ctx context.Context) {
 	sameAsKeystone := api.keystoneAPI.Availability()
 	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	slog.Info("using nova endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
@@ -80,6 +79,7 @@ func (api *novaAPI) Init(ctx context.Context) {
 		// Since 2.61, the extra_specs are returned in the flavor details.
 		Microversion: "2.61",
 	}
+	return nil
 }
 
 // Get all Nova servers that are NOT deleted. (Includes ERROR, SHUTOFF etc)

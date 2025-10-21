@@ -22,7 +22,7 @@ import (
 
 type PlacementAPI interface {
 	// Init the placement API.
-	Init(ctx context.Context)
+	Init(ctx context.Context) error
 	// Fetch all resource providers from the placement API.
 	GetAllResourceProviders(ctx context.Context) ([]placement.ResourceProvider, error)
 	// Fetch all traits for the given resource providers from the placement API.
@@ -51,9 +51,9 @@ func NewPlacementAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alp
 }
 
 // Init the placement API.
-func (api *placementAPI) Init(ctx context.Context) {
+func (api *placementAPI) Init(ctx context.Context) error {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		panic(err)
+		return err
 	}
 	// Automatically fetch the placement endpoint from the keystone service catalog.
 	provider := api.keystoneAPI.Client()
@@ -61,7 +61,7 @@ func (api *placementAPI) Init(ctx context.Context) {
 	sameAsKeystone := api.keystoneAPI.Availability()
 	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	slog.Info("using placement endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
@@ -71,6 +71,7 @@ func (api *placementAPI) Init(ctx context.Context) {
 		// Needed, otherwise openstack will return 404s for traits.
 		Microversion: "1.29",
 	}
+	return nil
 }
 
 // Fetch all resource providers from the placement API.

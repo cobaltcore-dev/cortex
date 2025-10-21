@@ -16,7 +16,7 @@ import (
 
 type mockManilaAPI struct{}
 
-func (m *mockManilaAPI) Init(ctx context.Context) {}
+func (m *mockManilaAPI) Init(ctx context.Context) error { return nil }
 
 func (m *mockManilaAPI) GetAllStoragePools(ctx context.Context) ([]manila.StoragePool, error) {
 	return []manila.StoragePool{{Name: "pool1", Host: "host1", Backend: "backend1", Pool: "poolA"}}, nil

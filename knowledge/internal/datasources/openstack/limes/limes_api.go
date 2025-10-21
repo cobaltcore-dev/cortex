@@ -23,7 +23,7 @@ import (
 
 type LimesAPI interface {
 	// Init the limes API.
-	Init(ctx context.Context)
+	Init(ctx context.Context) error
 	// Fetch all commitments for the given projects.
 	GetAllCommitments(ctx context.Context, projects []identity.Project) ([]limes.Commitment, error)
 }
@@ -48,9 +48,9 @@ func NewLimesAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.
 }
 
 // Init the limes API.
-func (api *limesAPI) Init(ctx context.Context) {
+func (api *limesAPI) Init(ctx context.Context) error {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		panic(err)
+		return err
 	}
 	// Automatically fetch the limes endpoint from the keystone service catalog.
 	// See: https://github.com/sapcc/limes/blob/5ea068b/docs/users/api-example.md?plain=1#L23
@@ -59,7 +59,7 @@ func (api *limesAPI) Init(ctx context.Context) {
 	sameAsKeystone := api.keystoneAPI.Availability()
 	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	slog.Info("using limes endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
@@ -67,6 +67,7 @@ func (api *limesAPI) Init(ctx context.Context) {
 		Endpoint:       url,
 		Type:           serviceType,
 	}
+	return nil
 }
 
 // Resolve the commitments for the given projects.

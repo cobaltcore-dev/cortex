@@ -21,7 +21,7 @@ import (
 
 type ManilaAPI interface {
 	// Init the manila API.
-	Init(ctx context.Context)
+	Init(ctx context.Context) error
 	// Get all manila storage pools.
 	GetAllStoragePools(ctx context.Context) ([]manila.StoragePool, error)
 }
@@ -44,9 +44,9 @@ func NewManilaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1
 }
 
 // Init the manila API.
-func (api *manilaAPI) Init(ctx context.Context) {
+func (api *manilaAPI) Init(ctx context.Context) error {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		panic(err)
+		return err
 	}
 	// Automatically fetch the manila endpoint from the keystone service catalog.
 	provider := api.keystoneAPI.Client()
@@ -59,10 +59,11 @@ func (api *manilaAPI) Init(ctx context.Context) {
 		Availability: gophercloud.Availability(sameAsKeystone),
 	})
 	if err != nil {
-		panic(fmt.Errorf("failed to create OpenStack Manila service client: %w", err))
+		return fmt.Errorf("failed to create manila service client: %w", err)
 	}
 	sc.Microversion = "2.65"
 	api.sc = sc
+	return nil
 }
 
 // Get all Manila storage pools.

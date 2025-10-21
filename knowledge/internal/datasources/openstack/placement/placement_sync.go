@@ -27,7 +27,9 @@ type PlacementSyncer struct {
 
 // Init the OpenStack resource provider and trait syncer.
 func (s *PlacementSyncer) Init(ctx context.Context) error {
-	s.API.Init(ctx)
+	if err := s.API.Init(ctx); err != nil {
+		return err
+	}
 	var tables = []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
 	switch s.Conf.Type {

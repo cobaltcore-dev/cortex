@@ -18,7 +18,7 @@ import (
 )
 
 type IdentityAPI interface {
-	Init(ctx context.Context)
+	Init(ctx context.Context) error
 	// Retrieves all domains from the OpenStack identity service.
 	GetAllDomains(ctx context.Context) ([]identity.Domain, error)
 	// Retrieves all projects from the OpenStack identity service.
@@ -36,15 +36,15 @@ func NewIdentityAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alph
 	return &identityAPI{mon: mon, keystoneAPI: k, conf: conf}
 }
 
-func (api *identityAPI) Init(ctx context.Context) {
+func (api *identityAPI) Init(ctx context.Context) error {
 	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		panic(err)
+		return err
 	}
 	provider := api.keystoneAPI.Client()
 	serviceType := "identity"
 	url, err := api.keystoneAPI.FindEndpoint("public", serviceType)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	slog.Info("using identity endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
@@ -52,6 +52,7 @@ func (api *identityAPI) Init(ctx context.Context) {
 		Endpoint:       url,
 		Type:           serviceType,
 	}
+	return nil
 }
 
 // Get all the domains from the OpenStack identity service.

@@ -17,7 +17,7 @@ import (
 
 type mockPlacementAPI struct{}
 
-func (m *mockPlacementAPI) Init(ctx context.Context) {}
+func (m *mockPlacementAPI) Init(ctx context.Context) error { return nil }
 
 func (m *mockPlacementAPI) GetAllResourceProviders(ctx context.Context) ([]placement.ResourceProvider, error) {
 	return []placement.ResourceProvider{{UUID: "1", Name: "rp1"}}, nil
