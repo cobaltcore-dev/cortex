@@ -15,6 +15,47 @@ alerts:
   enabled: true
   prometheus: openstack
 
+# SSO certificate to use.
+sharedSSOCert: &sharedSSOCert
+  # Certificate "public key". (Optional, remove this key if not needed)
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    Your certificate here
+    -----END CERTIFICATE-----
+  # Certificate private key. (Optional, remove this key if not needed)
+  key: |
+    -----BEGIN PRIVATE KEY-----
+    Your private key here
+    -----END PRIVATE KEY
+  # Whether the certificate is self-signed.
+  # If true, the certificate is not verified.
+  selfSigned: "false"
+
+postgres:
+  host: cortex-cinder-postgresql
+  user: postgres
+  password: secret
+  database: postgres
+  port: "5432"
+
+datasources:
+  prometheus:
+    url: "https://path-to-your-prometheus"
+    sso:
+      enabled: false
+      <<: *sharedSSOCert
+  openstack:
+    url: "https://path-to-keystone/v3"
+    availability: public
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to
+    sso:
+      enabled: false
+      <<: *sharedSSOCert
+
 # Values accessible to all subcharts.
 global:
   # Values passed to the service through a configmap.
@@ -55,8 +96,6 @@ cortex-kpis:
   conf:
     kpis:
       # Configuration of KPIs that should be extracted from the synced data.
-      # Each KPI can specify its own dependencies on other extractors and
-      # synced data.
       #
       # The `name` should correspond to a known KPI extractor plugin.
       plugins: []
@@ -67,34 +106,8 @@ cortex-knowledge-operator:
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-cinder
   conf:
-    datasources:
-      prometheus:
-        # Prometheus metrics to sync into the database.
-        # Each metric can be synced from a different Prometheus instance.
-        # The `type` parameter should map to a known metric model in the database.
-        metrics:
-          # NetApp harvest exporter metrics for Cinder storage pools.
-        - alias: netapp_aggr_labels
-          query: netapp_aggr_labels
-          type: netapp_aggregate_labels_metric
-        - alias: netapp_node_cpu_busy
-          query: netapp_node_cpu_busy
-          type: netapp_node_metric
-        - alias: netapp_volume_aggr_labels
-          query: netapp_volume_aggr_labels
-          type: netapp_volume_aggregate_labels_metric
-
-      openstack:
-        cinder:
-          # One of admin, public, or internal
-          availability: public
-          types:
-            - storage_pools
-
     extractor:
       # Configuration of features that should be extracted from the synced data.
-      # Each extractor can specify its own dependencies on other extractors or
-      # synced data.
       #
       # The `name` should correspond to a known feature extractor plugin.
       # Note that the order defined here will also be the order in which the
@@ -104,12 +117,6 @@ cortex-knowledge-operator:
         # NetApp-specific extractors.
         - name: netapp_storage_pool_cpu_usage_extractor
           recencySeconds: 60 # 1 minute
-          dependencies:
-            datasources:
-              prometheus:
-                metrics:
-                  - alias: netapp_node_cpu_busy
-                  - alias: netapp_aggr_labels
 
 cortex-scheduler:
   fullnameOverride: cortex-cinder-scheduler
@@ -127,8 +134,6 @@ cortex-scheduler:
           # Note: there needs to be at least one pipeline with the name "default".
           - name: default
             # Configuration of scheduler steps that modify the Cinder scheduler weights.
-            # Each scheduler step can specify its own dependencies on extractors and
-            # synced data.
             #
             # The `name` should correspond to a known scheduler plugin.
             plugins: []
