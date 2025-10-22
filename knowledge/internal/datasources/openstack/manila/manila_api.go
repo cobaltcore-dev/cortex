@@ -72,8 +72,8 @@ func (api *manilaAPI) GetAllStoragePools(ctx context.Context) ([]manila.StorageP
 	slog.Info("fetching manila data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
-		if api.mon.PipelineRequestTimer != nil {
-			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		if api.mon.RequestTimer != nil {
+			hist := api.mon.RequestTimer.WithLabelValues(label)
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}

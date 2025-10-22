@@ -30,6 +30,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/openstack"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	// +kubebuilder:scaffold:imports
 )
@@ -195,13 +196,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	monitor := datasources.NewSyncMonitor()
-	metrics.Registry.MustRegister(&monitor)
-
+	datasourceMonitor := datasources.NewSyncMonitor()
+	metrics.Registry.MustRegister(&datasourceMonitor)
 	if err := (&openstack.OpenStackDatasourceReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
-		Monitor: monitor,
+		Monitor: datasourceMonitor,
 		Conf:    config,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenStackDatasourceReconciler")
@@ -210,7 +210,19 @@ func main() {
 	if err := (&prometheus.PrometheusDatasourceReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
-		Monitor: monitor,
+		Monitor: datasourceMonitor,
+		Conf:    config,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")
+		os.Exit(1)
+	}
+
+	extractorMonitor := extractor.NewMonitor()
+	metrics.Registry.MustRegister(&extractorMonitor)
+	if err := (&extractor.KnowledgeReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Monitor: extractorMonitor,
 		Conf:    config,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")

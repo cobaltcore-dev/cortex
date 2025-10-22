@@ -61,12 +61,12 @@ func (s *IdentitySyncer) SyncDomains(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := identity.Domain{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(domains)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(domains)), nil
@@ -81,12 +81,12 @@ func (s *IdentitySyncer) SyncProjects(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := identity.Project{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(projects)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(projects)), nil

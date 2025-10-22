@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins/netapp"
@@ -20,8 +21,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 type KnowledgeReconciler struct {
@@ -29,8 +33,10 @@ type KnowledgeReconciler struct {
 	client.Client
 	// Kubernetes scheme to use for the deschedulings.
 	Scheme *runtime.Scheme
-	// Monitor to use for tracking the pipeline.
-	monitor Monitor
+	// Monitor to use for tracking the reconciler.
+	Monitor Monitor
+	// Config for the reconciler.
+	Conf conf.Config
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -143,8 +149,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Initialize and run the extractor.
-	// TODO: Wrap the monitor.
-	if err := extractor.Init(authenticatedDatasourceDB, authenticatedExtractorDB, knowledge.Spec); err != nil {
+	wrapped := monitorFeatureExtractor(knowledge.Spec.Extractor.Name, extractor, r.Monitor)
+	if err := wrapped.Init(authenticatedDatasourceDB, authenticatedExtractorDB, knowledge.Spec); err != nil {
 		log.Error(err, "failed to initialize feature extractor", "name", knowledge.Spec)
 		knowledge.Status.Error = "failed to initialize feature extractor: " + err.Error()
 		if err := r.Status().Update(ctx, knowledge); err != nil {
@@ -188,4 +194,18 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	log.Info("successfully extracted knowledge", "name", knowledge.Name, "took", knowledge.Status.Took.Duration)
 	return ctrl.Result{}, nil
+}
+
+func (r *KnowledgeReconciler) SetupWithManager(mgr manager.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		Named("cortex-knowledge").
+		For(
+			&v1alpha1.Knowledge{},
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				// Only react to datasources matching the operator.
+				ds := obj.(*v1alpha1.Knowledge)
+				return ds.Spec.Operator != r.Conf.Operator
+			})),
+		).
+		Complete(r)
 }

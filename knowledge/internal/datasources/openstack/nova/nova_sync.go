@@ -83,12 +83,12 @@ func (s *NovaSyncer) SyncAllServers(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := nova.Server{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(allServers)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(allServers)), nil
@@ -114,12 +114,12 @@ func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := nova.DeletedServer{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(deletedServers)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(deletedServers)), nil
@@ -138,12 +138,12 @@ func (s *NovaSyncer) SyncAllHypervisors(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := nova.Hypervisor{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(allHypervisors)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(allHypervisors)), nil
@@ -160,12 +160,12 @@ func (s *NovaSyncer) SyncAllFlavors(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := nova.Flavor{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(allFlavors)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(allFlavors)), nil
@@ -182,12 +182,12 @@ func (s *NovaSyncer) SyncAllMigrations(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := nova.Migration{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(allMigrations)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(allMigrations)), nil
@@ -204,12 +204,12 @@ func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := nova.Aggregate{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(allAggregates)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(allAggregates)), nil

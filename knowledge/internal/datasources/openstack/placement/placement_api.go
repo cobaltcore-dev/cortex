@@ -80,8 +80,8 @@ func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]placeme
 	slog.Info("fetching placement data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
-		if api.mon.PipelineRequestTimer != nil {
-			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		if api.mon.RequestTimer != nil {
+			hist := api.mon.RequestTimer.WithLabelValues(label)
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
@@ -106,8 +106,8 @@ func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]placeme
 func (api *placementAPI) GetAllTraits(ctx context.Context, providers []placement.ResourceProvider) ([]placement.Trait, error) {
 	label := placement.Trait{}.TableName()
 	slog.Info("fetching placement data", "label", label)
-	if api.mon.PipelineRequestTimer != nil {
-		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
@@ -180,8 +180,8 @@ func (api *placementAPI) getTraits(ctx context.Context, provider placement.Resou
 func (api *placementAPI) GetAllInventoryUsages(ctx context.Context, providers []placement.ResourceProvider) ([]placement.InventoryUsage, error) {
 	label := placement.InventoryUsage{}.TableName()
 	slog.Info("fetching placement data", "label", label)
-	if api.mon.PipelineRequestTimer != nil {
-		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}

@@ -9,7 +9,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -19,15 +18,11 @@ type Monitor struct {
 	stepRunTimer *prometheus.HistogramVec
 	// A counter to measure how many features are extracted by each step.
 	stepFeatureCounter *prometheus.GaugeVec
-	// A histogram to measure how long the pipeline takes to run in total.
-	pipelineRunTimer prometheus.Histogram
 	// A counter to measure how many steps are skipped.
 	stepSkipCounter *prometheus.CounterVec
 }
 
-// Create a new feature extraction monitor and register the
-// necessary Prometheus metrics.
-func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
+func NewMonitor() Monitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_feature_pipeline_step_run_duration_seconds",
 		Help:    "Duration of feature pipeline step run",
@@ -37,28 +32,27 @@ func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
 		Name: "cortex_feature_pipeline_step_features",
 		Help: "Number of features extracted by a feature pipeline step",
 	}, []string{"step"})
-	pipelineRunTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_feature_pipeline_run_duration_seconds",
-		Help:    "Duration of feature pipeline run",
-		Buckets: prometheus.DefBuckets,
-	})
 	stepSkipCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "cortex_feature_pipeline_step_skipped",
 		Help: "Number of times a feature pipeline step was skipped",
 	}, []string{"step"})
-
-	registry.MustRegister(
-		stepRunTimer,
-		stepFeatureCounter,
-		pipelineRunTimer,
-		stepSkipCounter,
-	)
 	return Monitor{
 		stepRunTimer:       stepRunTimer,
 		stepFeatureCounter: stepFeatureCounter,
-		pipelineRunTimer:   pipelineRunTimer,
 		stepSkipCounter:    stepSkipCounter,
 	}
+}
+
+func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
+	m.stepRunTimer.Describe(ch)
+	m.stepFeatureCounter.Describe(ch)
+	m.stepSkipCounter.Describe(ch)
+}
+
+func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
+	m.stepRunTimer.Collect(ch)
+	m.stepFeatureCounter.Collect(ch)
+	m.stepSkipCounter.Collect(ch)
 }
 
 // Wrapper for a feature extraction step that monitors the step's execution.

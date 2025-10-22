@@ -61,12 +61,12 @@ func (s *ManilaSyncer) SyncAllStoragePools(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := manila.StoragePool{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(pools)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(pools)), nil

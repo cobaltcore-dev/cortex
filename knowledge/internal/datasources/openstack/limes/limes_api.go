@@ -75,8 +75,8 @@ func (api *limesAPI) Init(ctx context.Context) error {
 func (api *limesAPI) GetAllCommitments(ctx context.Context, projects []identity.Project) ([]limes.Commitment, error) {
 	label := limes.Commitment{}.TableName()
 	slog.Info("fetching limes data", "label", label)
-	if api.mon.PipelineRequestTimer != nil {
-		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}

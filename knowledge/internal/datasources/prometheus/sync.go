@@ -93,8 +93,8 @@ type prometheusRangeMetric[M prometheus.PrometheusMetric] struct {
 // Fetch metrics from Prometheus. The query is executed in the time window
 // [start, end] with the specified resolution.
 func (s *syncer[M]) fetch(start time.Time, end time.Time) (*prometheusTimelineData[M], error) {
-	if s.monitor.PipelineRequestTimer != nil {
-		hist := s.monitor.PipelineRequestTimer.WithLabelValues(
+	if s.monitor.RequestTimer != nil {
+		hist := s.monitor.RequestTimer.WithLabelValues(
 			"prometheus_" + s.alias,
 		)
 		timer := prometheusclient.NewTimer(hist)
@@ -181,8 +181,8 @@ func (s *syncer[M]) fetch(start time.Time, end time.Time) (*prometheusTimelineDa
 		}
 	}
 
-	if s.monitor.PipelineRequestProcessedCounter != nil {
-		s.monitor.PipelineRequestProcessedCounter.WithLabelValues(
+	if s.monitor.RequestProcessedCounter != nil {
+		s.monitor.RequestProcessedCounter.WithLabelValues(
 			"prometheus_" + s.alias,
 		).Inc()
 	}
@@ -310,8 +310,8 @@ func (s *syncer[M]) Sync(context.Context) (nResults int64, nextSync time.Time, e
 	if err != nil {
 		return 0, time.Time{}, err
 	}
-	if s.monitor.PipelineObjectsGauge != nil {
-		s.monitor.PipelineObjectsGauge.
+	if s.monitor.ObjectsGauge != nil {
+		s.monitor.ObjectsGauge.
 			WithLabelValues("prometheus_" + s.alias).
 			Set(float64(nResults))
 	}

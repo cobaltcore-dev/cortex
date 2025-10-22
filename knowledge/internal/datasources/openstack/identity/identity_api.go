@@ -15,6 +15,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type IdentityAPI interface {
@@ -57,7 +58,13 @@ func (api *identityAPI) Init(ctx context.Context) error {
 
 // Get all the domains from the OpenStack identity service.
 func (api *identityAPI) GetAllDomains(ctx context.Context) ([]identity.Domain, error) {
+	label := identity.Domain{}.TableName()
 	slog.Info("fetching identity data", "label", "domains")
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
 	client := api.sc
 	allPages, err := domains.List(client, nil).AllPages(ctx)
 	if err != nil {
@@ -75,7 +82,13 @@ func (api *identityAPI) GetAllDomains(ctx context.Context) ([]identity.Domain, e
 
 // Get all the projects from the OpenStack identity service.
 func (api *identityAPI) GetAllProjects(ctx context.Context) ([]identity.Project, error) {
+	label := identity.Project{}.TableName()
 	slog.Info("fetching identity data", "label", "projects")
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
 	client := api.sc
 	allPages, err := projects.List(client, nil).AllPages(ctx)
 	if err != nil {

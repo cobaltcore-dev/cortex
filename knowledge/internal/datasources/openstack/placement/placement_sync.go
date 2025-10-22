@@ -69,12 +69,12 @@ func (s *PlacementSyncer) SyncResourceProviders(ctx context.Context) (int64, err
 		return 0, err
 	}
 	label := placement.ResourceProvider{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(rps)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(rps)), nil
@@ -98,12 +98,12 @@ func (s *PlacementSyncer) SyncTraits(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	label := placement.Trait{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(traits)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(traits)), err
@@ -127,12 +127,12 @@ func (s *PlacementSyncer) SyncInventoryUsages(ctx context.Context) (int64, error
 		return 0, err
 	}
 	label := placement.InventoryUsage{}.TableName()
-	if s.Mon.PipelineObjectsGauge != nil {
-		gauge := s.Mon.PipelineObjectsGauge.WithLabelValues(label)
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
 		gauge.Set(float64(len(inventoryUsages)))
 	}
-	if s.Mon.PipelineRequestProcessedCounter != nil {
-		counter := s.Mon.PipelineRequestProcessedCounter.WithLabelValues(label)
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
 	return int64(len(inventoryUsages)), err

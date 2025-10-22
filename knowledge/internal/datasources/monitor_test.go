@@ -4,6 +4,7 @@
 package datasources
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,18 +15,14 @@ import (
 func TestNewSyncMonitor(t *testing.T) {
 	monitor := NewSyncMonitor()
 
-	// Test that all metrics are properly initialized
-	if monitor.PipelineRunTimer == nil {
-		t.Error("PipelineRunTimer should not be nil")
+	if monitor.ObjectsGauge == nil {
+		t.Error("ObjectsGauge should not be nil")
 	}
-	if monitor.PipelineObjectsGauge == nil {
-		t.Error("PipelineObjectsGauge should not be nil")
+	if monitor.RequestTimer == nil {
+		t.Error("RequestTimer should not be nil")
 	}
-	if monitor.PipelineRequestTimer == nil {
-		t.Error("PipelineRequestTimer should not be nil")
-	}
-	if monitor.PipelineRequestProcessedCounter == nil {
-		t.Error("PipelineRequestProcessedCounter should not be nil")
+	if monitor.RequestProcessedCounter == nil {
+		t.Error("RequestProcessedCounter should not be nil")
 	}
 }
 
@@ -43,17 +40,14 @@ func TestMonitorDescribe(t *testing.T) {
 		descs = append(descs, desc)
 	}
 
-	// We expect at least 4 descriptors (one for each metric)
-	if len(descs) < 4 {
-		t.Errorf("Expected at least 4 descriptors, got %d", len(descs))
+	// We expect at least 3 descriptors (one for each metric)
+	if len(descs) < 3 {
+		t.Errorf("Expected at least 3 descriptors, got %d", len(descs))
 	}
 
 	// Check that we have descriptors for all our metrics
 	var foundMetrics []string
 	for _, desc := range descs {
-		if strings.Contains(desc.String(), "cortex_sync_run_duration_seconds") {
-			foundMetrics = append(foundMetrics, "run_timer")
-		}
 		if strings.Contains(desc.String(), "cortex_sync_objects") {
 			foundMetrics = append(foundMetrics, "objects_gauge")
 		}
@@ -65,15 +59,9 @@ func TestMonitorDescribe(t *testing.T) {
 		}
 	}
 
-	expectedMetrics := []string{"run_timer", "objects_gauge", "request_timer", "request_counter"}
+	expectedMetrics := []string{"objects_gauge", "request_timer", "request_counter"}
 	for _, expected := range expectedMetrics {
-		found := false
-		for _, actual := range foundMetrics {
-			if actual == expected {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(foundMetrics, expected)
 		if !found {
 			t.Errorf("Expected to find metric %s in descriptors", expected)
 		}
@@ -84,10 +72,9 @@ func TestMonitorCollect(t *testing.T) {
 	monitor := NewSyncMonitor()
 
 	// Add some data to the metrics so they will be collected
-	monitor.PipelineRunTimer.WithLabelValues("test").Observe(1.0)
-	monitor.PipelineObjectsGauge.WithLabelValues("test").Set(10)
-	monitor.PipelineRequestTimer.WithLabelValues("test").Observe(0.5)
-	monitor.PipelineRequestProcessedCounter.WithLabelValues("test").Inc()
+	monitor.ObjectsGauge.WithLabelValues("test").Set(10)
+	monitor.RequestTimer.WithLabelValues("test").Observe(0.5)
+	monitor.RequestProcessedCounter.WithLabelValues("test").Inc()
 
 	ch := make(chan prometheus.Metric, 20)
 
@@ -107,58 +94,7 @@ func TestMonitorCollect(t *testing.T) {
 	}
 }
 
-func TestPipelineRunTimerMetric(t *testing.T) {
-	monitor := NewSyncMonitor()
-
-	// Test that the histogram has the correct name and help
-	expected := `
-		# HELP cortex_sync_run_duration_seconds Duration of sync run
-		# TYPE cortex_sync_run_duration_seconds histogram
-	`
-
-	if err := testutil.CollectAndCompare(monitor.PipelineRunTimer, strings.NewReader(expected)); err != nil {
-		t.Errorf("Unexpected metric output: %v", err)
-	}
-
-	// Test observing a value
-	monitor.PipelineRunTimer.WithLabelValues("test-datasource").Observe(1.5)
-
-	// Check that the observation was recorded
-	expectedWithValue := `
-		# HELP cortex_sync_run_duration_seconds Duration of sync run
-		# TYPE cortex_sync_run_duration_seconds histogram
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.001"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.002"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.004"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.008"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.016"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.032"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.064"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.128"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.256"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="0.512"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="1.024"} 0
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="2.048"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="4.096"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="8.192"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="16.384"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="32.768"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="65.536"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="131.072"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="262.144"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="524.288"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="1048.576"} 1
-		cortex_sync_run_duration_seconds_bucket{datasource="test-datasource",le="+Inf"} 1
-		cortex_sync_run_duration_seconds_sum{datasource="test-datasource"} 1.5
-		cortex_sync_run_duration_seconds_count{datasource="test-datasource"} 1
-	`
-
-	if err := testutil.CollectAndCompare(monitor.PipelineRunTimer, strings.NewReader(expectedWithValue)); err != nil {
-		t.Errorf("Unexpected metric output after observation: %v", err)
-	}
-}
-
-func TestPipelineObjectsGaugeMetric(t *testing.T) {
+func TestObjectsGaugeMetric(t *testing.T) {
 	monitor := NewSyncMonitor()
 
 	// Test that the gauge has the correct name and help
@@ -167,12 +103,12 @@ func TestPipelineObjectsGaugeMetric(t *testing.T) {
 		# TYPE cortex_sync_objects gauge
 	`
 
-	if err := testutil.CollectAndCompare(monitor.PipelineObjectsGauge, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(monitor.ObjectsGauge, strings.NewReader(expected)); err != nil {
 		t.Errorf("Unexpected metric output: %v", err)
 	}
 
 	// Test setting a value
-	monitor.PipelineObjectsGauge.WithLabelValues("test-datasource").Set(42)
+	monitor.ObjectsGauge.WithLabelValues("test-datasource").Set(42)
 
 	expectedWithValue := `
 		# HELP cortex_sync_objects Number of objects synced
@@ -180,12 +116,12 @@ func TestPipelineObjectsGaugeMetric(t *testing.T) {
 		cortex_sync_objects{datasource="test-datasource"} 42
 	`
 
-	if err := testutil.CollectAndCompare(monitor.PipelineObjectsGauge, strings.NewReader(expectedWithValue)); err != nil {
+	if err := testutil.CollectAndCompare(monitor.ObjectsGauge, strings.NewReader(expectedWithValue)); err != nil {
 		t.Errorf("Unexpected metric output after setting value: %v", err)
 	}
 }
 
-func TestPipelineRequestTimerMetric(t *testing.T) {
+func TestRequestTimerMetric(t *testing.T) {
 	monitor := NewSyncMonitor()
 
 	// Test that the histogram has the correct name and help
@@ -194,12 +130,12 @@ func TestPipelineRequestTimerMetric(t *testing.T) {
 		# TYPE cortex_sync_request_duration_seconds histogram
 	`
 
-	if err := testutil.CollectAndCompare(monitor.PipelineRequestTimer, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(monitor.RequestTimer, strings.NewReader(expected)); err != nil {
 		t.Errorf("Unexpected metric output: %v", err)
 	}
 
 	// Test observing a value
-	monitor.PipelineRequestTimer.WithLabelValues("test-datasource").Observe(0.5)
+	monitor.RequestTimer.WithLabelValues("test-datasource").Observe(0.5)
 
 	// Check that the observation was recorded (using default buckets)
 	expectedWithValue := `
@@ -221,12 +157,12 @@ func TestPipelineRequestTimerMetric(t *testing.T) {
 		cortex_sync_request_duration_seconds_count{datasource="test-datasource"} 1
 	`
 
-	if err := testutil.CollectAndCompare(monitor.PipelineRequestTimer, strings.NewReader(expectedWithValue)); err != nil {
+	if err := testutil.CollectAndCompare(monitor.RequestTimer, strings.NewReader(expectedWithValue)); err != nil {
 		t.Errorf("Unexpected metric output after observation: %v", err)
 	}
 }
 
-func TestPipelineRequestProcessedCounterMetric(t *testing.T) {
+func TestRequestProcessedCounterMetric(t *testing.T) {
 	monitor := NewSyncMonitor()
 
 	// Test that the counter has the correct name and help
@@ -235,12 +171,12 @@ func TestPipelineRequestProcessedCounterMetric(t *testing.T) {
 		# TYPE cortex_sync_request_processed_total counter
 	`
 
-	if err := testutil.CollectAndCompare(monitor.PipelineRequestProcessedCounter, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(monitor.RequestProcessedCounter, strings.NewReader(expected)); err != nil {
 		t.Errorf("Unexpected metric output: %v", err)
 	}
 
 	// Test incrementing the counter
-	monitor.PipelineRequestProcessedCounter.WithLabelValues("test-datasource").Inc()
+	monitor.RequestProcessedCounter.WithLabelValues("test-datasource").Inc()
 
 	expectedWithValue := `
 		# HELP cortex_sync_request_processed_total Number of processed sync requests
@@ -248,7 +184,7 @@ func TestPipelineRequestProcessedCounterMetric(t *testing.T) {
 		cortex_sync_request_processed_total{datasource="test-datasource"} 1
 	`
 
-	if err := testutil.CollectAndCompare(monitor.PipelineRequestProcessedCounter, strings.NewReader(expectedWithValue)); err != nil {
+	if err := testutil.CollectAndCompare(monitor.RequestProcessedCounter, strings.NewReader(expectedWithValue)); err != nil {
 		t.Errorf("Unexpected metric output after increment: %v", err)
 	}
 }
@@ -257,10 +193,10 @@ func TestMultipleDatasourceLabels(t *testing.T) {
 	monitor := NewSyncMonitor()
 
 	// Test with multiple datasource labels
-	monitor.PipelineObjectsGauge.WithLabelValues("prometheus").Set(10)
-	monitor.PipelineObjectsGauge.WithLabelValues("openstack").Set(20)
-	monitor.PipelineRequestProcessedCounter.WithLabelValues("prometheus").Inc()
-	monitor.PipelineRequestProcessedCounter.WithLabelValues("openstack").Add(5)
+	monitor.ObjectsGauge.WithLabelValues("prometheus").Set(10)
+	monitor.ObjectsGauge.WithLabelValues("openstack").Set(20)
+	monitor.RequestProcessedCounter.WithLabelValues("prometheus").Inc()
+	monitor.RequestProcessedCounter.WithLabelValues("openstack").Add(5)
 
 	expectedGauge := `
 		# HELP cortex_sync_objects Number of objects synced
@@ -269,7 +205,7 @@ func TestMultipleDatasourceLabels(t *testing.T) {
 		cortex_sync_objects{datasource="prometheus"} 10
 	`
 
-	if err := testutil.CollectAndCompare(monitor.PipelineObjectsGauge, strings.NewReader(expectedGauge)); err != nil {
+	if err := testutil.CollectAndCompare(monitor.ObjectsGauge, strings.NewReader(expectedGauge)); err != nil {
 		t.Errorf("Unexpected gauge output with multiple labels: %v", err)
 	}
 
@@ -280,7 +216,7 @@ func TestMultipleDatasourceLabels(t *testing.T) {
 		cortex_sync_request_processed_total{datasource="prometheus"} 1
 	`
 
-	if err := testutil.CollectAndCompare(monitor.PipelineRequestProcessedCounter, strings.NewReader(expectedCounter)); err != nil {
+	if err := testutil.CollectAndCompare(monitor.RequestProcessedCounter, strings.NewReader(expectedCounter)); err != nil {
 		t.Errorf("Unexpected counter output with multiple labels: %v", err)
 	}
 }
@@ -289,10 +225,9 @@ func TestMonitorMetricNames(t *testing.T) {
 	monitor := NewSyncMonitor()
 
 	// Add some data to the metrics so they will show up in the registry
-	monitor.PipelineRunTimer.WithLabelValues("test").Observe(1.0)
-	monitor.PipelineObjectsGauge.WithLabelValues("test").Set(10)
-	monitor.PipelineRequestTimer.WithLabelValues("test").Observe(0.5)
-	monitor.PipelineRequestProcessedCounter.WithLabelValues("test").Inc()
+	monitor.ObjectsGauge.WithLabelValues("test").Set(10)
+	monitor.RequestTimer.WithLabelValues("test").Observe(0.5)
+	monitor.RequestProcessedCounter.WithLabelValues("test").Inc()
 
 	// Test that all metrics have the expected names by checking metric families
 	registry := prometheus.NewRegistry()
@@ -304,7 +239,6 @@ func TestMonitorMetricNames(t *testing.T) {
 	}
 
 	expectedNames := map[string]bool{
-		"cortex_sync_run_duration_seconds":     false,
 		"cortex_sync_objects":                  false,
 		"cortex_sync_request_duration_seconds": false,
 		"cortex_sync_request_processed_total":  false,
@@ -337,7 +271,6 @@ func TestMonitorMetricTypes(t *testing.T) {
 	}
 
 	expectedTypes := map[string]string{
-		"cortex_sync_run_duration_seconds":     "HISTOGRAM",
 		"cortex_sync_objects":                  "GAUGE",
 		"cortex_sync_request_duration_seconds": "HISTOGRAM",
 		"cortex_sync_request_processed_total":  "COUNTER",
@@ -357,16 +290,10 @@ func TestMonitorMetricTypes(t *testing.T) {
 func TestMonitorBucketConfiguration(t *testing.T) {
 	monitor := NewSyncMonitor()
 
-	// Test that PipelineRunTimer uses exponential buckets
-	// This is harder to test directly, but we can observe values and check bucket distribution
-	monitor.PipelineRunTimer.WithLabelValues("test").Observe(0.0005) // Should be in first bucket
-	monitor.PipelineRunTimer.WithLabelValues("test").Observe(2.0)    // Should be in middle bucket
-	monitor.PipelineRunTimer.WithLabelValues("test").Observe(1000.0) // Should be in last bucket
-
-	// Test that PipelineRequestTimer uses default buckets
-	monitor.PipelineRequestTimer.WithLabelValues("test").Observe(0.001) // Should be in first bucket
-	monitor.PipelineRequestTimer.WithLabelValues("test").Observe(1.0)   // Should be in middle bucket
-	monitor.PipelineRequestTimer.WithLabelValues("test").Observe(15.0)  // Should be in last bucket
+	// Test that RequestTimer uses default buckets
+	monitor.RequestTimer.WithLabelValues("test").Observe(0.001) // Should be in first bucket
+	monitor.RequestTimer.WithLabelValues("test").Observe(1.0)   // Should be in middle bucket
+	monitor.RequestTimer.WithLabelValues("test").Observe(15.0)  // Should be in last bucket
 
 	// We can't easily assert the exact bucket configuration without access to internal data,
 	// but we can verify that observations are recorded correctly by checking the metrics output
@@ -427,10 +354,9 @@ func TestMonitorLabels(t *testing.T) {
 	datasources := []string{"prometheus", "openstack-nova", "openstack-cinder", "custom-ds"}
 
 	for _, ds := range datasources {
-		monitor.PipelineRunTimer.WithLabelValues(ds).Observe(1.0)
-		monitor.PipelineObjectsGauge.WithLabelValues(ds).Set(100)
-		monitor.PipelineRequestTimer.WithLabelValues(ds).Observe(0.5)
-		monitor.PipelineRequestProcessedCounter.WithLabelValues(ds).Inc()
+		monitor.ObjectsGauge.WithLabelValues(ds).Set(100)
+		monitor.RequestTimer.WithLabelValues(ds).Observe(0.5)
+		monitor.RequestProcessedCounter.WithLabelValues(ds).Inc()
 	}
 
 	// Verify all metrics were created with the correct labels

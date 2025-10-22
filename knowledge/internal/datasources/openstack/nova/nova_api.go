@@ -88,8 +88,8 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]nova.Server, error) {
 	slog.Info("fetching nova data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
-		if api.mon.PipelineRequestTimer != nil {
-			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		if api.mon.RequestTimer != nil {
+			hist := api.mon.RequestTimer.WithLabelValues(label)
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
@@ -124,8 +124,8 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]n
 	slog.Info("fetching nova data", "label", label, "changedSince", since)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
-		if api.mon.PipelineRequestTimer != nil {
-			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		if api.mon.RequestTimer != nil {
+			hist := api.mon.RequestTimer.WithLabelValues(label)
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
@@ -159,8 +159,8 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]nova.Hypervisor, e
 	// Note: currently we need to fetch this without gophercloud.
 	// Gophercloud will just assume the request is a single page even when
 	// the response is paginated, returning only the first page.
-	if api.mon.PipelineRequestTimer != nil {
-		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
@@ -212,8 +212,8 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]nova.Flavor, error) {
 	slog.Info("fetching nova data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
-		if api.mon.PipelineRequestTimer != nil {
-			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		if api.mon.RequestTimer != nil {
+			hist := api.mon.RequestTimer.WithLabelValues(label)
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
@@ -249,8 +249,8 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]nova.Migration, err
 	slog.Info("fetching nova data", "label", label)
 	// Note: currently we need to fetch this without gophercloud.
 	// See: https://github.com/gophercloud/gophercloud/pull/3244
-	if api.mon.PipelineRequestTimer != nil {
-		hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
@@ -302,8 +302,8 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]nova.Aggregate, err
 	slog.Info("fetching nova data", "label", label)
 
 	pages, err := func() (pagination.Page, error) {
-		if api.mon.PipelineRequestTimer != nil {
-			hist := api.mon.PipelineRequestTimer.WithLabelValues(label)
+		if api.mon.RequestTimer != nil {
+			hist := api.mon.RequestTimer.WithLabelValues(label)
 			timer := prometheus.NewTimer(hist)
 			defer timer.ObserveDuration()
 		}
