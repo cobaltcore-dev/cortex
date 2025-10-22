@@ -71,23 +71,12 @@ type FeatureExtractorMonitor[F plugins.FeatureExtractor] struct {
 	runTimer prometheus.Observer
 	// A counter to measure how many features are extracted by the step.
 	featureCounter prometheus.Gauge
-	// A counter to measure how often an extractor is skipped.
-	skipCounter prometheus.Counter
 }
 
 // Initialize the wrapped feature extractor with the database and options.
-func (m FeatureExtractorMonitor[F]) Init(db *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (m FeatureExtractorMonitor[F]) Init(datasourceDB *db.DB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
 	// Configure the wrapped feature extractor.
-	return m.FeatureExtractor.Init(db, spec)
-}
-
-func (m FeatureExtractorMonitor[F]) NotifySkip() {
-	// If the extractor is skipped, increment the skip counter if it exists.
-	if m.skipCounter != nil {
-		m.skipCounter.Inc()
-	}
-	m.FeatureExtractor.NotifySkip()
-	slog.Info("features: skipping", "extractor", m.label)
+	return m.FeatureExtractor.Init(datasourceDB, extractorDB, spec)
 }
 
 // Extract features using the wrapped feature extractor and measure the time it takes.
@@ -101,17 +90,11 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](label string, f F, m Mo
 		featureCounter = m.stepFeatureCounter.WithLabelValues(label)
 	}
 
-	var skipCounter prometheus.Counter
-	if m.stepSkipCounter != nil {
-		skipCounter = m.stepSkipCounter.WithLabelValues(label)
-	}
-
 	return FeatureExtractorMonitor[F]{
 		FeatureExtractor: f,
 		label:            label,
 		runTimer:         runTimer,
 		featureCounter:   featureCounter,
-		skipCounter:      skipCounter,
 	}
 }
 

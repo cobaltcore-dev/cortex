@@ -22,7 +22,7 @@ func TestVMHostResidencyExtractor_Init(t *testing.T) {
 
 	extractor := &VMHostResidencyExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
@@ -77,7 +77,7 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 
 	extractor := &VMHostResidencyExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 

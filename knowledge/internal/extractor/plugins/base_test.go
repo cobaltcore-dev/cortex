@@ -51,7 +51,7 @@ func TestBaseExtractor_Init(t *testing.T) {
 	}
 
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(&testDB, config)
+	err := extractor.Init(&testDB, &testDB, config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -87,7 +87,7 @@ func TestBaseExtractor_InitWithRecency(t *testing.T) {
 		Recency: metav1.Duration{Duration: time.Duration(recencySeconds) * time.Second},
 	}
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(&testDB, config)
+	err := extractor.Init(&testDB, &testDB, config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -115,7 +115,7 @@ func TestBaseExtractor_NeedsUpdate(t *testing.T) {
 	}
 
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(&testDB, config)
+	err := extractor.Init(&testDB, &testDB, config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -153,7 +153,7 @@ func TestBaseExtractor_Extracted(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	extractor := BaseExtractor[MockOptions, MockFeature]{DB: &testDB}
+	extractor := BaseExtractor[MockOptions, MockFeature]{DB: &testDB, extractorDB: &testDB}
 
 	// Insert mock data into the mock_feature table
 	mockFeatures := []MockFeature{
@@ -165,6 +165,28 @@ func TestBaseExtractor_Extracted(t *testing.T) {
 	extractedFeatures, err := extractor.Extracted(mockFeatures)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify the data was replaced in the mock_feature table
+	var features []MockFeature
+	table := MockFeature{}.TableName()
+	_, err = testDB.Select(&features, "SELECT * FROM "+table)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(features) != 2 {
+		t.Errorf("expected 2 rows, got %d", len(features))
+	}
+
+	expected := map[int]string{
+		1: "feature1",
+		2: "feature2",
+	}
+	for _, f := range features {
+		if expected[f.ID] != f.Name {
+			t.Errorf("expected name for ID %d to be %s, got %s", f.ID, expected[f.ID], f.Name)
+		}
 	}
 
 	// Verify the returned slice of features

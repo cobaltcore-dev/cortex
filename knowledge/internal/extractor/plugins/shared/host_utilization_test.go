@@ -23,7 +23,7 @@ func TestHostUtilizationExtractor_Init(t *testing.T) {
 
 	extractor := &HostUtilizationExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 			extractor := &HostUtilizationExtractor{}
 			config := v1alpha1.KnowledgeSpec{}
 
-			if err := extractor.Init(&testDB, config); err != nil {
+			if err := extractor.Init(&testDB, &testDB, config); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 

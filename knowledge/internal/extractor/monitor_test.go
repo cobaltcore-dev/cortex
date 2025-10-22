@@ -19,7 +19,7 @@ type mockFeatureExtractor struct {
 	extractFunc func() ([]plugins.Feature, error)
 }
 
-func (m *mockFeatureExtractor) Init(db *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (m *mockFeatureExtractor) Init(datasourceDB *db.DB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
 	return nil
 }
 

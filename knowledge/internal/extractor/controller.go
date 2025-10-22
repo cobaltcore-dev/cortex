@@ -111,9 +111,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 	// When we have datasources reading from a database, connect to it.
-	var authenticatedDB *db.DB
+	var authenticatedDatasourceDB *db.DB
 	if databaseSecretRef != nil {
-		authenticatedDB, err := db.Connector{Client: r.Client}.FromSecretRef(ctx, *databaseSecretRef)
+		authenticatedDatasourceDB, err := db.Connector{Client: r.Client}.FromSecretRef(ctx, *databaseSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with database", "secretRef", *databaseSecretRef)
 			knowledge.Status.Error = "failed to authenticate with database: " + err.Error()
@@ -123,12 +123,28 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 			return ctrl.Result{}, err
 		}
-		defer authenticatedDB.Close()
+		defer authenticatedDatasourceDB.Close()
+	}
+
+	// Connect to the extractor database if specified.
+	var authenticatedExtractorDB *db.DB
+	if knowledge.Spec.DatabaseSecretRef != nil {
+		authenticatedExtractorDB, err := db.Connector{Client: r.Client}.FromSecretRef(ctx, *knowledge.Spec.DatabaseSecretRef)
+		if err != nil {
+			log.Error(err, "failed to authenticate with extractor database", "secretRef", *knowledge.Spec.DatabaseSecretRef)
+			knowledge.Status.Error = "failed to authenticate with extractor database: " + err.Error()
+			if err := r.Status().Update(ctx, knowledge); err != nil {
+				log.Error(err, "failed to update knowledge status")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, err
+		}
+		defer authenticatedExtractorDB.Close()
 	}
 
 	// Initialize and run the extractor.
 	// TODO: Wrap the monitor.
-	if err := extractor.Init(authenticatedDB, knowledge.Spec); err != nil {
+	if err := extractor.Init(authenticatedDatasourceDB, authenticatedExtractorDB, knowledge.Spec); err != nil {
 		log.Error(err, "failed to initialize feature extractor", "name", knowledge.Spec)
 		knowledge.Status.Error = "failed to initialize feature extractor: " + err.Error()
 		if err := r.Status().Update(ctx, knowledge); err != nil {

@@ -10,12 +10,10 @@ import (
 
 // Each feature extractor must conform to this interface.
 type FeatureExtractor interface {
-	// Configure the feature extractor with a spec and (optional) database.
-	Init(db *db.DB, spec v1alpha1.KnowledgeSpec) error
+	// Configure the feature extractor with a spec and (optional) databases.
+	Init(datasourceDB *db.DB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error
 	// Extract features from the given data.
 	Extract() ([]Feature, error)
-	// Skip the extractor if it is not needed.
-	NotifySkip()
 }
 
 type Feature any

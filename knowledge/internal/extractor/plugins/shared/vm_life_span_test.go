@@ -25,7 +25,7 @@ func TestVMLifeSpanExtractor_Init(t *testing.T) {
 
 	extractor := &VMLifeSpanHistogramExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 
 	extractor := &VMLifeSpanHistogramExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 

@@ -29,7 +29,7 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 			Config: runtime.RawExtension{Raw: []byte(`{}`)},
 		},
 	}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -91,7 +91,7 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 		},
 	}
 
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {

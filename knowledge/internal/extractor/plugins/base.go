@@ -17,14 +17,17 @@ import (
 type BaseExtractor[Opts any, Feature db.Table] struct {
 	// Options to pass via yaml to this step.
 	libconf.JsonOpts[Opts]
-	// Database connection.
-	DB             *db.DB
+	// Database connection where the datasources are stored.
+	DB *db.DB
+	// Database connection where the features will be stored.
+	// TODO: Remove this once we don't fetch features from the DB anymore.
+	extractorDB    *db.DB
 	RecencySeconds int
 	UpdatedAt      *time.Time
 }
 
 // Init the extractor with the database and options.
-func (e *BaseExtractor[Opts, Feature]) Init(db *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (e *BaseExtractor[Opts, Feature]) Init(datasourceDB *db.DB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
 	rawOpts := libconf.NewRawOpts(`{}`)
 	if len(spec.Extractor.Config.Raw) > 0 {
 		rawOpts = libconf.NewRawOptsBytes(spec.Extractor.Config.Raw)
@@ -32,13 +35,14 @@ func (e *BaseExtractor[Opts, Feature]) Init(db *db.DB, spec v1alpha1.KnowledgeSp
 	if err := e.Load(rawOpts); err != nil {
 		return err
 	}
-	e.DB = db
+	e.DB = datasourceDB
+	e.extractorDB = extractorDB
 	e.RecencySeconds = 0
 	if int(spec.Recency.Seconds()) != 0 {
 		e.RecencySeconds = int(spec.Recency.Seconds())
 	}
 	var f Feature
-	return db.CreateTable(db.AddTable(f))
+	return e.DB.CreateTable(e.DB.AddTable(f))
 }
 
 // Extract the features directly from an sql query.
@@ -52,6 +56,12 @@ func (e *BaseExtractor[Opts, F]) ExtractSQL(query string) ([]Feature, error) {
 
 // Return the extracted features as a slice of generic features for counting.
 func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {
+	// TODO: Remove this once we don't fetch features from the DB anymore.
+	if e.extractorDB != nil {
+		if err := db.ReplaceAll(*e.extractorDB, fs...); err != nil {
+			return nil, err
+		}
+	}
 	output := make([]Feature, len(fs))
 	for i, f := range fs {
 		output[i] = f
@@ -89,8 +99,4 @@ func (e *BaseExtractor[Opts, F]) NextPossibleExecution() time.Time {
 		return time.Now()
 	}
 	return e.UpdatedAt.Add(time.Duration(e.RecencySeconds) * time.Second)
-}
-
-func (e *BaseExtractor[Opts, F]) NotifySkip() {
-	// Currently only needed for the feature extractor monitor, to count skips.
 }

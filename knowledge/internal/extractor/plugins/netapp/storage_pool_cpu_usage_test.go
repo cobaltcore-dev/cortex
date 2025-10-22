@@ -22,7 +22,7 @@ func TestStoragePoolCPUUsageExtractor_Init(t *testing.T) {
 
 	extractor := &StoragePoolCPUUsageExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -75,7 +75,7 @@ func TestStoragePoolCPUUsageExtractor_Extract(t *testing.T) {
 
 	extractor := &StoragePoolCPUUsageExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	features, err := extractor.Extract()

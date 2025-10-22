@@ -5,6 +5,9 @@ metadata:
   name: vmware-resolved-hostsystems
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: vrops_hostsystem_resolver
   description: |
@@ -25,6 +28,9 @@ metadata:
   name: vmware-project-noisiness
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: vrops_project_noisiness_extractor
   description: |
@@ -43,6 +49,9 @@ metadata:
   name: vmware-long-term-contended-hosts
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: vrops_hostsystem_contention_long_term_extractor
   description: |
@@ -59,6 +68,9 @@ metadata:
   name: vmware-short-term-contended-hosts
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: vrops_hostsystem_contention_short_term_extractor
   description: |
@@ -75,6 +87,9 @@ metadata:
   name: kvm-libvirt-domain-cpu-steal-pct
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: kvm_libvirt_domain_cpu_steal_pct_extractor
   description: |
@@ -90,6 +105,9 @@ metadata:
   name: host-pinned-projects
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: host_pinned_projects_extractor
   description: |
@@ -106,6 +124,9 @@ metadata:
   name: host-utilization
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: host_utilization_extractor
   description: |
@@ -122,6 +143,9 @@ metadata:
   name: host-capabilities
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: host_capabilities_extractor
   description: |
@@ -138,6 +162,9 @@ metadata:
   name: vm-residency
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: vm_residency_extractor
   description: |
@@ -155,6 +182,9 @@ metadata:
   name: vm-life-span
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: vm_life_span_histogram_extractor
   description: |
@@ -171,6 +201,9 @@ metadata:
   name: host-az
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: host_az_extractor
   description: |
@@ -187,6 +220,9 @@ metadata:
   name: sap-host-details
 spec:
   operator: cortex-nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   extractor:
     name: sap_host_details_extractor
   description: |

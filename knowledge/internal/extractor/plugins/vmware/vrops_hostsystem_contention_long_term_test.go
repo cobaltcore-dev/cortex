@@ -22,7 +22,7 @@ func TestVROpsHostsystemContentionLongTermExtractor_Init(t *testing.T) {
 	extractor := &VROpsHostsystemContentionLongTermExtractor{}
 
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -64,7 +64,7 @@ func TestVROpsHostsystemContentionLongTermExtractor_Extract(t *testing.T) {
 
 	extractor := &VROpsHostsystemContentionLongTermExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, config); err != nil {
+	if err := extractor.Init(&testDB, &testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {
