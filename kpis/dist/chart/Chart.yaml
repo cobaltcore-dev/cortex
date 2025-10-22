@@ -5,5 +5,5 @@ apiVersion: v2
 name: cortex-kpis
 description: A Helm chart deploying Cortex kpis.
 type: application
-appVersion: "sha-79533d2"
+appVersion: "sha-1d4f627"
 version: 0.0.1
