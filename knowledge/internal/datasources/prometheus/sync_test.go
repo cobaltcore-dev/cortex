@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Mock metric implementation for testing
@@ -36,11 +37,11 @@ func TestNewTypedSyncer(t *testing.T) {
 	ds := v1alpha1.Datasource{
 		Spec: v1alpha1.DatasourceSpec{
 			Prometheus: v1alpha1.PrometheusDatasource{
-				Query:             "up",
-				Alias:             "test_metric",
-				TimeRangeSeconds:  3600,
-				IntervalSeconds:   60,
-				ResolutionSeconds: 15,
+				Query:      "up",
+				Alias:      "test_metric",
+				TimeRange:  metav1.Duration{Duration: 604800 * time.Second}, // 7 days
+				Interval:   metav1.Duration{Duration: 60 * time.Second},
+				Resolution: metav1.Duration{Duration: 15 * time.Second},
 			},
 		},
 	}

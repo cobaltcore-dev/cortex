@@ -67,9 +67,9 @@ spec:
     alias: vrops_hostsystem_cpu_contention_short_term_percentage
     query: vrops_hostsystem_cpu_contention_percentage
     type: vrops_host_metric
-    timeRangeSeconds: 1200 # 20 minutes
-    intervalSeconds: 300 # 5 minutes
-    resolutionSeconds: 60 # 1 minute
+    timeRange: "1200s" # 20 minutes
+    interval: "300s" # 5 minutes
+    resolution: "60s" # 1 minute
 ---
 apiVersion: knowledge.cortex/v1alpha1
 kind: Datasource
@@ -96,9 +96,9 @@ spec:
       max by (domain) (rate(kvm_libvirt_domain_vcpu_delay_nanoseconds[5m])) / 1e9 * 100
     type: kvm_libvirt_domain_metric
     # It's ok to only look at a short time period here.
-    timeRangeSeconds: 1200 # 20 minutes
-    intervalSeconds: 300 # 5 minutes
-    resolutionSeconds: 60 # 1 minute
+    timeRange: "1200s" # 20 minutes
+    interval: "300s" # 5 minutes
+    resolution: "60s" # 1 minute
 ---
 apiVersion: knowledge.cortex/v1alpha1
 kind: Datasource

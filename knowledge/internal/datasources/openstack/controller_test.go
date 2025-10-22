@@ -6,11 +6,13 @@ package openstack
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -137,7 +139,7 @@ func TestOpenStackDatasourceSpec(t *testing.T) {
 			Nova: v1alpha1.NovaDatasource{
 				Type: v1alpha1.NovaDatasourceTypeServers,
 			},
-			SyncIntervalSeconds: 3600,
+			SyncInterval: metav1.Duration{Duration: 3600 * time.Second},
 			SecretRef: corev1.SecretReference{
 				Name:      "keystone-credentials",
 				Namespace: "openstack",
@@ -161,8 +163,8 @@ func TestOpenStackDatasourceSpec(t *testing.T) {
 		t.Errorf("Expected Nova type %s, got %s", v1alpha1.NovaDatasourceTypeServers, spec.OpenStack.Nova.Type)
 	}
 
-	if spec.OpenStack.SyncIntervalSeconds != 3600 {
-		t.Errorf("Expected SyncIntervalSeconds 3600, got %d", spec.OpenStack.SyncIntervalSeconds)
+	if spec.OpenStack.SyncInterval.Duration.Seconds() != 3600 {
+		t.Errorf("Expected SyncInterval 3600, got %f", spec.OpenStack.SyncInterval.Duration.Seconds())
 	}
 
 	if spec.OpenStack.SecretRef.Name != "keystone-credentials" {
@@ -177,7 +179,7 @@ func TestManilaDatasourceSpec(t *testing.T) {
 			Manila: v1alpha1.ManilaDatasource{
 				Type: v1alpha1.ManilaDatasourceTypeStoragePools,
 			},
-			SyncIntervalSeconds: 1800,
+			SyncInterval: metav1.Duration{Duration: 1800 * time.Second},
 			SecretRef: corev1.SecretReference{
 				Name:      "keystone-secret",
 				Namespace: "manila",
@@ -201,7 +203,7 @@ func TestPlacementDatasourceSpec(t *testing.T) {
 			Placement: v1alpha1.PlacementDatasource{
 				Type: v1alpha1.PlacementDatasourceTypeResourceProviders,
 			},
-			SyncIntervalSeconds: 900,
+			SyncInterval: metav1.Duration{Duration: 900 * time.Second},
 			SecretRef: corev1.SecretReference{
 				Name:      "keystone-secret",
 				Namespace: "placement",
@@ -225,7 +227,7 @@ func TestIdentityDatasourceSpec(t *testing.T) {
 			Identity: v1alpha1.IdentityDatasource{
 				Type: v1alpha1.IdentityDatasourceTypeProjects,
 			},
-			SyncIntervalSeconds: 7200,
+			SyncInterval: metav1.Duration{Duration: 7200 * time.Second},
 			SecretRef: corev1.SecretReference{
 				Name:      "keystone-secret",
 				Namespace: "identity",
@@ -249,7 +251,7 @@ func TestLimesDatasourceSpec(t *testing.T) {
 			Limes: v1alpha1.LimesDatasource{
 				Type: v1alpha1.LimesDatasourceTypeProjectCommitments,
 			},
-			SyncIntervalSeconds: 14400,
+			SyncInterval: metav1.Duration{Duration: 14400 * time.Second},
 			SecretRef: corev1.SecretReference{
 				Name:      "keystone-secret",
 				Namespace: "limes",
@@ -273,7 +275,7 @@ func TestCinderDatasourceSpec(t *testing.T) {
 			Cinder: v1alpha1.CinderDatasource{
 				Type: v1alpha1.CinderDatasourceTypeStoragePools,
 			},
-			SyncIntervalSeconds: 1800,
+			SyncInterval: metav1.Duration{Duration: 1800 * time.Second},
 			SecretRef: corev1.SecretReference{
 				Name:      "keystone-secret",
 				Namespace: "cinder",
@@ -321,7 +323,7 @@ func TestOpenStackDatasourceValidation(t *testing.T) {
 						Nova: v1alpha1.NovaDatasource{
 							Type: v1alpha1.NovaDatasourceTypeServers,
 						},
-						SyncIntervalSeconds: 3600,
+						SyncInterval: metav1.Duration{Duration: 3600 * time.Second},
 						SecretRef: corev1.SecretReference{
 							Name:      "keystone-secret",
 							Namespace: "default",
@@ -341,7 +343,7 @@ func TestOpenStackDatasourceValidation(t *testing.T) {
 						Placement: v1alpha1.PlacementDatasource{
 							Type: v1alpha1.PlacementDatasourceTypeResourceProviders,
 						},
-						SyncIntervalSeconds: 1800,
+						SyncInterval: metav1.Duration{Duration: 1800 * time.Second},
 						SecretRef: corev1.SecretReference{
 							Name:      "keystone-secret",
 							Namespace: "default",
@@ -361,7 +363,7 @@ func TestOpenStackDatasourceValidation(t *testing.T) {
 						Nova: v1alpha1.NovaDatasource{
 							Type: v1alpha1.NovaDatasourceTypeServers,
 						},
-						SyncIntervalSeconds: 3600,
+						SyncInterval: metav1.Duration{Duration: 3600 * time.Second},
 						// Missing SecretRef
 					},
 				},
@@ -381,7 +383,7 @@ func TestOpenStackDatasourceValidation(t *testing.T) {
 				t.Errorf("Expected valid datasource to have secret reference")
 			}
 
-			if tt.valid && tt.datasource.Spec.OpenStack.SyncIntervalSeconds <= 0 {
+			if tt.valid && tt.datasource.Spec.OpenStack.SyncInterval.Duration.Seconds() <= 0 {
 				t.Errorf("Expected valid datasource to have positive sync interval")
 			}
 		})

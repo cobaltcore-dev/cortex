@@ -5,12 +5,14 @@ package prometheus
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -49,12 +51,12 @@ func TestPrometheusDatasourceReconciler_Creation(t *testing.T) {
 func TestPrometheusDatasourceTypes(t *testing.T) {
 	// Test that the prometheus datasource struct has the expected fields
 	ds := v1alpha1.PrometheusDatasource{
-		Query:             "up",
-		Alias:             "test_metric",
-		Type:              "node_exporter_metric",
-		TimeRangeSeconds:  3600,
-		IntervalSeconds:   60,
-		ResolutionSeconds: 15,
+		Query:      "up",
+		Alias:      "test_metric",
+		Type:       "node_exporter_metric",
+		TimeRange:  metav1.Duration{Duration: 3600 * time.Second},
+		Interval:   metav1.Duration{Duration: 60 * time.Second},
+		Resolution: metav1.Duration{Duration: 15 * time.Second},
 		SecretRef: corev1.SecretReference{
 			Name:      "prometheus-secret",
 			Namespace: "default",
@@ -73,16 +75,16 @@ func TestPrometheusDatasourceTypes(t *testing.T) {
 		t.Errorf("Expected type 'node_exporter_metric', got %s", ds.Type)
 	}
 
-	if ds.TimeRangeSeconds != 3600 {
-		t.Errorf("Expected TimeRangeSeconds 3600, got %d", ds.TimeRangeSeconds)
+	if ds.TimeRange.Duration.Seconds() != 3600 {
+		t.Errorf("Expected TimeRange 3600, got %f", ds.TimeRange.Duration.Seconds())
 	}
 
-	if ds.IntervalSeconds != 60 {
-		t.Errorf("Expected IntervalSeconds 60, got %d", ds.IntervalSeconds)
+	if ds.Interval.Duration.Seconds() != 60 {
+		t.Errorf("Expected Interval 60, got %f", ds.Interval.Duration.Seconds())
 	}
 
-	if ds.ResolutionSeconds != 15 {
-		t.Errorf("Expected ResolutionSeconds 15, got %d", ds.ResolutionSeconds)
+	if ds.Resolution.Duration.Seconds() != 15 {
+		t.Errorf("Expected Resolution 15, got %f", ds.Resolution.Duration.Seconds())
 	}
 
 	if ds.SecretRef.Name != "prometheus-secret" {
@@ -111,12 +113,12 @@ func TestDatasourceSpec(t *testing.T) {
 		Operator: "test-operator",
 		Type:     v1alpha1.DatasourceTypePrometheus,
 		Prometheus: v1alpha1.PrometheusDatasource{
-			Query:             "node_cpu_seconds_total",
-			Alias:             "node_exporter_host_cpu_usage",
-			Type:              "node_exporter_metric",
-			TimeRangeSeconds:  2419200, // default value
-			IntervalSeconds:   86400,   // default value
-			ResolutionSeconds: 43200,   // default value
+			Query:      "node_cpu_seconds_total",
+			Alias:      "node_exporter_host_cpu_usage",
+			Type:       "node_exporter_metric",
+			TimeRange:  metav1.Duration{Duration: 2419200 * time.Second}, // default value
+			Interval:   metav1.Duration{Duration: 86400 * time.Second},   // default value
+			Resolution: metav1.Duration{Duration: 43200 * time.Second},   // default value
 			SecretRef: corev1.SecretReference{
 				Name:      "prometheus-config",
 				Namespace: "monitoring",
@@ -162,17 +164,17 @@ func TestDatasourceSpec(t *testing.T) {
 func TestDatasourceStatus(t *testing.T) {
 	// Test that datasource status struct works correctly
 	status := v1alpha1.DatasourceStatus{
-		NumberOfObjects:    100,
-		LastSyncDurationMs: 30,
-		Error:              "",
+		NumberOfObjects: 100,
+		Took:            metav1.Duration{Duration: 30 * time.Second},
+		Error:           "",
 	}
 
 	if status.NumberOfObjects != 100 {
 		t.Errorf("Expected NumberOfObjects 100, got %d", status.NumberOfObjects)
 	}
 
-	if status.LastSyncDurationMs != 30 {
-		t.Errorf("Expected LastSyncDurationMs 30, got %d", status.LastSyncDurationMs)
+	if status.Took.Duration.Seconds() != 30 {
+		t.Errorf("Expected Took 30, got %f", status.Took.Duration.Seconds())
 	}
 
 	if status.Error != "" {
@@ -231,12 +233,12 @@ func TestNewTypedSyncerFunctionExists(t *testing.T) {
 		Spec: v1alpha1.DatasourceSpec{
 			Type: v1alpha1.DatasourceTypePrometheus,
 			Prometheus: v1alpha1.PrometheusDatasource{
-				Query:             "up",
-				Alias:             "test_metric",
-				Type:              "node_exporter_metric",
-				TimeRangeSeconds:  3600,
-				IntervalSeconds:   60,
-				ResolutionSeconds: 15,
+				Query:      "up",
+				Alias:      "test_metric",
+				Type:       "node_exporter_metric",
+				TimeRange:  metav1.Duration{Duration: 3600 * time.Second},
+				Interval:   metav1.Duration{Duration: 60 * time.Second},
+				Resolution: metav1.Duration{Duration: 15 * time.Second},
 				SecretRef: corev1.SecretReference{
 					Name:      "prometheus-secret",
 					Namespace: "default",

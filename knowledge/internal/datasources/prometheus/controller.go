@@ -152,7 +152,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	datasource.Status.LastSynced = metav1.NewTime(time.Now())
 	datasource.Status.NextSyncTime = metav1.NewTime(nextSync)
 	datasource.Status.NumberOfObjects = nResults
-	datasource.Status.LastSyncDurationMs = int64(time.Since(startedAt).Milliseconds())
+	datasource.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	if err := r.Status().Update(ctx, datasource); err != nil {
 		log.Error(err, "failed to update datasource status", "name", datasource.Name)
 		return ctrl.Result{}, err

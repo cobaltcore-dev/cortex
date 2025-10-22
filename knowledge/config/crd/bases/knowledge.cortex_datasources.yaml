@@ -27,9 +27,9 @@ spec:
     - jsonPath: .status.lastSynced
       name: Synced
       type: date
-    - jsonPath: .status.lastSyncDurationMs
-      name: Took [ms]
-      type: integer
+    - jsonPath: .status.took
+      name: Took
+      type: string
     - jsonPath: .status.nextSyncTime
       name: Next
       type: string
@@ -182,18 +182,16 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
-                  syncIntervalSeconds:
-                    default: 60
-                    description: How often to sync the datasource in seconds.
-                    format: int64
-                    minimum: 1
-                    type: integer
+                  syncInterval:
+                    default: 60s
+                    description: How often to sync the datasource.
+                    type: string
                   type:
                     description: The type of the OpenStack datasource.
                     type: string
                 required:
                 - secretRef
-                - syncIntervalSeconds
+                - syncInterval
                 - type
                 type: object
               operator:
@@ -211,19 +209,17 @@ spec:
                       Additionally, this alias is used to reference the metric in the
                       feature extractors as dependency.
                     type: string
-                  intervalSeconds:
-                    default: 86400
+                  interval:
+                    default: 86400s
                     description: The interval at which to query the data.
-                    minimum: 1
-                    type: integer
+                    type: string
                   query:
                     description: The query to use to fetch the metric.
                     type: string
-                  resolutionSeconds:
-                    default: 43200
-                    description: The resolution of the data in seconds.
-                    minimum: 1
-                    type: integer
+                  resolution:
+                    default: 43200s
+                    description: The resolution of the data.
+                    type: string
                   secretRef:
                     description: |-
                       Secret containing the following keys:
@@ -239,11 +235,10 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
-                  timeRangeSeconds:
-                    default: 2419200
-                    description: Time range in seconds to query the data for.
-                    minimum: 1
-                    type: integer
+                  timeRange:
+                    default: 2419200s
+                    description: Time range to query the data for.
+                    type: string
                   type:
                     description: |-
                       The type of the metric, mapping directly to a metric model supported
@@ -251,8 +246,11 @@ spec:
                     type: string
                 required:
                 - alias
+                - interval
                 - query
+                - resolution
                 - secretRef
+                - timeRange
                 - type
                 type: object
               ssoSecretRef:
@@ -284,10 +282,6 @@ spec:
                 description: If there was an error during the last sync, it is recorded
                   here.
                 type: string
-              lastSyncDurationMs:
-                description: The time it took to perform the last sync.
-                format: int64
-                type: integer
               lastSynced:
                 description: When the datasource was last successfully synced.
                 format: date-time
@@ -300,6 +294,11 @@ spec:
                 description: The number of objects currently stored for this datasource.
                 format: int64
                 type: integer
+              took:
+                description: The time it took to perform the last sync.
+                type: string
+            required:
+            - took
             type: object
         required:
         - spec

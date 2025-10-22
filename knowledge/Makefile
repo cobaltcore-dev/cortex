@@ -15,7 +15,34 @@ cleanup:
 
 .PHONY: dekustomize
 dekustomize:
-	kubebuilder edit --plugins=helm/v1-alpha
+	@echo "Backing up stuff that shouldn't be overridden by kubebuilder-helm..."
+	@TEMP_DIR=$$(mktemp -d); \
+	if [ -d "dist/chart/templates/rbac" ]; then \
+		cp -r dist/chart/templates/rbac "$$TEMP_DIR/rbac"; \
+	fi; \
+	if [ -d "dist/chart/templates/prometheus" ]; then \
+		cp -r dist/chart/templates/prometheus "$$TEMP_DIR/prometheus"; \
+	fi; \
+	if [ -d "dist/chart/templates/metrics" ]; then \
+		cp -r dist/chart/templates/metrics "$$TEMP_DIR/metrics"; \
+	fi; \
+	echo "Generating helm chart..."; \
+	kubebuilder edit --plugins=helm/v1-alpha; \
+	echo "Restoring stuff that shouldn't be overridden by kubebuilder-helm..."; \
+	if [ -d "$$TEMP_DIR/rbac" ]; then \
+		rm -rf dist/chart/templates/rbac; \
+		cp -r "$$TEMP_DIR/rbac" dist/chart/templates/rbac; \
+	fi; \
+	if [ -d "$$TEMP_DIR/prometheus" ]; then \
+		rm -rf dist/chart/templates/prometheus; \
+		cp -r "$$TEMP_DIR/prometheus" dist/chart/templates/prometheus; \
+	fi; \
+	if [ -d "$$TEMP_DIR/metrics" ]; then \
+		rm -rf dist/chart/templates/metrics; \
+		cp -r "$$TEMP_DIR/metrics" dist/chart/templates/metrics; \
+	fi; \
+	rm -rf "$$TEMP_DIR"; \
+	echo "Directories restored successfully."
 
 ##@ Build
 

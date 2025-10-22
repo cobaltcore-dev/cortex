@@ -28,18 +28,15 @@ type PrometheusDatasource struct {
 	// by cortex. Note that the metrics are fetched as time series, not instant.
 	Type string `json:"type"`
 
-	// Time range in seconds to query the data for.
-	// +kubebuilder:default=2419200
-	// +kubebuilder:validation:Minimum=1
-	TimeRangeSeconds int `json:"timeRangeSeconds,omitempty"`
+	// Time range to query the data for.
+	// +kubebuilder:default="2419200s"
+	TimeRange metav1.Duration `json:"timeRange"`
 	// The interval at which to query the data.
-	// +kubebuilder:default=86400
-	// +kubebuilder:validation:Minimum=1
-	IntervalSeconds int `json:"intervalSeconds,omitempty"`
-	// The resolution of the data in seconds.
-	// +kubebuilder:default=43200
-	// +kubebuilder:validation:Minimum=1
-	ResolutionSeconds int `json:"resolutionSeconds,omitempty"`
+	// +kubebuilder:default="86400s"
+	Interval metav1.Duration `json:"interval"`
+	// The resolution of the data.
+	// +kubebuilder:default="43200s"
+	Resolution metav1.Duration `json:"resolution"`
 
 	// Secret containing the following keys:
 	// - "url": The prometheus URL.
@@ -169,10 +166,9 @@ type OpenStackDatasource struct {
 	// +kubebuilder:validation:Optional
 	Cinder CinderDatasource `json:"cinder"`
 
-	// How often to sync the datasource in seconds.
-	// +kubebuilder:default=60
-	// +kubebuilder:validation:Minimum=1
-	SyncIntervalSeconds int64 `json:"syncIntervalSeconds"`
+	// How often to sync the datasource.
+	// +kubebuilder:default="60s"
+	SyncInterval metav1.Duration `json:"syncInterval"`
 
 	// Keystone credentials secret ref for authenticating with openstack.
 	// The secret should contain the following keys:
@@ -232,7 +228,7 @@ type DatasourceStatus struct {
 	// The number of objects currently stored for this datasource.
 	NumberOfObjects int64 `json:"numberOfObjects,omitempty"`
 	// The time it took to perform the last sync.
-	LastSyncDurationMs int64 `json:"lastSyncDurationMs,omitempty"`
+	Took metav1.Duration `json:"took"`
 	// Planned time for the next sync.
 	NextSyncTime metav1.Time `json:"nextSyncTime,omitempty"`
 
@@ -247,7 +243,7 @@ type DatasourceStatus struct {
 // +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Synced",type="date",JSONPath=".status.lastSynced"
-// +kubebuilder:printcolumn:name="Took [ms]",type="integer",JSONPath=".status.lastSyncDurationMs"
+// +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Next",type="string",JSONPath=".status.nextSyncTime"
 // +kubebuilder:printcolumn:name="Objects",type="integer",JSONPath=".status.numberOfObjects"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"

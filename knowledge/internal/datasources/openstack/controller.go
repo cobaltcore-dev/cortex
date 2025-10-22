@@ -203,11 +203,10 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	// Update the datasource status to reflect successful sync.
 	datasource.Status.Error = ""
 	datasource.Status.LastSynced = metav1.NewTime(time.Now())
-	duration := time.Duration(datasource.Spec.OpenStack.SyncIntervalSeconds) * time.Second
-	nextTime := time.Now().Add(duration)
+	nextTime := time.Now().Add(datasource.Spec.OpenStack.SyncInterval.Duration)
 	datasource.Status.NextSyncTime = metav1.NewTime(nextTime)
 	datasource.Status.NumberOfObjects = nResults
-	datasource.Status.LastSyncDurationMs = int64(time.Since(startedAt).Milliseconds())
+	datasource.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	if err := r.Status().Update(ctx, datasource); err != nil {
 		log.Error(err, "failed to update datasource status", "name", datasource.Name)
 		return ctrl.Result{}, err

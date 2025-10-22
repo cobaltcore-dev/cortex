@@ -4,17 +4,90 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-type KnowledgeSpec struct{}
+// Dependencies required for extracting the knowledge.
+type KnowledgeDependenciesSpec struct {
+	// Datasources required for extracting this knowledge.
+	// If provided, all datasources must have the same database secret reference
+	// so the knowledge can be joined across multiple database tables.
+	// +kubebuilder:validation:Optional
+	Datasources []corev1.ObjectReference `json:"datasources,omitempty"`
 
-type KnowledgeStatus struct{}
+	// Other knowledges this knowledge depends on.
+	// +kubebuilder:validation:Optional
+	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
+}
+
+type KnowledgeExtractorSpec struct {
+	// The name of the extractor.
+	Name string `json:"name,omitempty"`
+
+	// Additional configuration for the extractor.
+	// +kubebuilder:validation:Optional
+	Config runtime.RawExtension `json:"config"`
+}
+
+type KnowledgeSpec struct {
+	// The operator by which this knowledge should be extracted.
+	Operator string `json:"operator,omitempty"`
+
+	// The feature extractor to use for extracting this knowledge.
+	Extractor KnowledgeExtractorSpec `json:"extractor,omitempty"`
+
+	// The desired recency of this knowledge, i.e. how old it can be until
+	// it needs to be re-extracted.
+	// +kubebuilder:default="60s"
+	Recency metav1.Duration `json:"recency"`
+
+	// A human-readable description of the knowledge to be extracted.
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
+
+	// Dependencies required for extracting this knowledge.
+	// +kubebuilder:validation:Optional
+	Dependencies KnowledgeDependenciesSpec `json:"dependencies"`
+}
+
+// Convert raw features to a list of strongly typed feature structs.
+func UnmarshalRaw[T any](raw runtime.RawExtension) (T, error) {
+	var t T
+	if len(raw.Raw) == 0 {
+		return t, nil
+	}
+	err := json.Unmarshal(raw.Raw, &t)
+	return t, err
+}
+
+type KnowledgeStatus struct {
+	// When the knowledge was last successfully extracted.
+	LastExtracted metav1.Time `json:"lastExtracted"`
+	// The time it took to perform the last extraction.
+	Took metav1.Duration `json:"took"`
+
+	// The raw data behind the extracted knowledge, e.g. a list of features.
+	Raw runtime.RawExtension `json:"raw"`
+	// The number of features extracted, or 1 if the knowledge is not a list.
+	RawLength int `json:"rawLength,omitempty"`
+
+	// If there was an error during the last extraction, it is recorded here.
+	Error string `json:"error,omitempty"`
+}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Extracted",type="date",JSONPath=".status.lastExtracted"
+// +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
+// +kubebuilder:printcolumn:name="Features",type="integer",JSONPath=".status.rawLength"
+// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Knowledge is the Schema for the knowledges API
 type Knowledge struct {

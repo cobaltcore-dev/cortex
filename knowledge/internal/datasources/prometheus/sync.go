@@ -44,9 +44,9 @@ func newTypedSyncer[M prometheus.PrometheusMetric](
 		monitor:               monitor,
 		query:                 ds.Spec.Prometheus.Query,
 		alias:                 ds.Spec.Prometheus.Alias,
-		syncTimeRange:         time.Duration(ds.Spec.Prometheus.TimeRangeSeconds) * time.Second,
-		syncInterval:          time.Duration(ds.Spec.Prometheus.IntervalSeconds) * time.Second,
-		syncResolutionSeconds: ds.Spec.Prometheus.ResolutionSeconds,
+		syncTimeRange:         ds.Spec.Prometheus.TimeRange.Duration,
+		syncInterval:          ds.Spec.Prometheus.Interval.Duration,
+		syncResolutionSeconds: int(ds.Spec.Prometheus.Resolution.Duration.Seconds()),
 	}
 }
 

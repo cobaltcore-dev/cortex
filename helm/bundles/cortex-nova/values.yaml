@@ -151,45 +151,6 @@ cortex-knowledge-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-nova
-    extractor:
-      # Configuration of features that should be extracted from the synced data.
-      #
-      # The `name` should correspond to a known feature extractor plugin.
-      # Note that the order defined here will also be the order in which the
-      # extractors are executed. If possible, extractors whose dependencies have
-      # been executed will be executed in parallel to speed up the process.
-      plugins:
-        # VMware-specific extractors.
-        - name: vrops_hostsystem_resolver
-          recencySeconds: 3600 # 1 hour
-        - name: vrops_project_noisiness_extractor
-          recencySeconds: 21600 # 6 hours
-        - name: vrops_hostsystem_contention_long_term_extractor
-        - name: vrops_hostsystem_contention_short_term_extractor
-
-        # KVM-specific extractors.
-        - name: kvm_libvirt_domain_cpu_steal_pct_extractor
-        - name: node_exporter_host_cpu_usage_extractor
-        - name: node_exporter_host_memory_active_extractor
-
-        # Shared extractors.
-        - name: host_pinned_projects_extractor
-          recencySeconds: 300
-        - name: host_utilization_extractor
-          recencySeconds: 60 # 1 minute
-          # Publish the features to mqtt, so that they can be used by the visualizer.
-          mqttTopic: "cortex/extraction/host_utilization_extractor"
-        - name: host_capabilities_extractor
-          recencySeconds: 60 # 1 minute
-        - name: vm_host_residency_extractor
-          recencySeconds: 60 # 1 minute
-        - name: vm_life_span_histogram_extractor
-          recencySeconds: 60 # 1 minute
-        - name: host_az_extractor
-          recencySeconds: 60 # 1 minute
-        # SAP-specific extractors.
-        - name: sap_host_details_extractor
-          recencySeconds: 60 # 1 minute
 
 cortex-scheduler:
   fullnameOverride: cortex-nova-scheduler
