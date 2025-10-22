@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/tools"
@@ -29,19 +28,6 @@ type VMLifeSpanHistogramExtractor struct {
 		struct{},                         // No options passed through yaml config
 		shared.VMLifeSpanHistogramBucket, // Feature model
 	]
-}
-
-// Name of this feature extractor that is used in the yaml config, for logging etc.
-func (*VMLifeSpanHistogramExtractor) GetName() string {
-	return "vm_life_span_histogram_extractor"
-}
-
-// Get message topics that trigger a re-execution of this extractor.
-func (VMLifeSpanHistogramExtractor) Triggers() []string {
-	return []string{
-		nova.TriggerNovaServersSynced,
-		nova.TriggerNovaFlavorsSynced,
-	}
 }
 
 //go:embed vm_life_span.sql

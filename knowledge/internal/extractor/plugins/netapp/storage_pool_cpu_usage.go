@@ -6,8 +6,6 @@ package netapp
 import (
 	_ "embed"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/manila"
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/netapp"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 )
@@ -19,20 +17,6 @@ type StoragePoolCPUUsageExtractor struct {
 		struct{},                   // No options passed through yaml config
 		netapp.StoragePoolCPUUsage, // Feature model
 	]
-}
-
-// Name of this feature extractor that is used in the yaml config, for logging etc.
-func (*StoragePoolCPUUsageExtractor) GetName() string {
-	return "netapp_storage_pool_cpu_usage_extractor"
-}
-
-// Get message topics that trigger a re-execution of this extractor.
-func (StoragePoolCPUUsageExtractor) Triggers() []string {
-	return []string{
-		manila.TriggerManilaStoragePoolsSynced,
-		prometheus.TriggerMetricTypeSynced("netapp_aggregate_labels_metric"),
-		prometheus.TriggerMetricAliasSynced("netapp_node_cpu_busy"),
-	}
 }
 
 //go:embed storage_pool_cpu_usage.sql

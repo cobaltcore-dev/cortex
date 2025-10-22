@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 )
@@ -18,20 +18,24 @@ type BaseExtractor[Opts any, Feature db.Table] struct {
 	// Options to pass via yaml to this step.
 	libconf.JsonOpts[Opts]
 	// Database connection.
-	DB             db.DB
+	DB             *db.DB
 	RecencySeconds int
 	UpdatedAt      *time.Time
 }
 
 // Init the extractor with the database and options.
-func (e *BaseExtractor[Opts, Feature]) Init(db db.DB, conf conf.FeatureExtractorConfig) error {
-	if err := e.Load(conf.Options); err != nil {
+func (e *BaseExtractor[Opts, Feature]) Init(db *db.DB, spec v1alpha1.KnowledgeSpec) error {
+	rawOpts := libconf.NewRawOpts(`{}`)
+	if len(spec.Extractor.Config.Raw) > 0 {
+		rawOpts = libconf.NewRawOptsBytes(spec.Extractor.Config.Raw)
+	}
+	if err := e.Load(rawOpts); err != nil {
 		return err
 	}
 	e.DB = db
 	e.RecencySeconds = 0
-	if conf.RecencySeconds != nil {
-		e.RecencySeconds = *conf.RecencySeconds
+	if int(spec.Recency.Seconds()) != 0 {
+		e.RecencySeconds = int(spec.Recency.Seconds())
 	}
 	var f Feature
 	return db.CreateTable(db.AddTable(f))
@@ -46,12 +50,8 @@ func (e *BaseExtractor[Opts, F]) ExtractSQL(query string) ([]Feature, error) {
 	return e.Extracted(features)
 }
 
-// Replace all features of the given model in the database and
-// return them as a slice of generic features for counting.
+// Return the extracted features as a slice of generic features for counting.
 func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {
-	if err := db.ReplaceAll(e.DB, fs...); err != nil {
-		return nil, err
-	}
 	output := make([]Feature, len(fs))
 	for i, f := range fs {
 		output[i] = f

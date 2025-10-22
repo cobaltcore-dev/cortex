@@ -9,10 +9,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/vmware"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
@@ -23,12 +23,13 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 
 	extractor := &VROpsProjectNoisinessExtractor{}
 
-	config := conf.FeatureExtractorConfig{
-		Name:           "vrops_project_noisiness_extractor",
-		Options:        libconf.NewRawOpts("{}"),
-		RecencySeconds: nil,
+	config := v1alpha1.KnowledgeSpec{
+		Extractor: v1alpha1.KnowledgeExtractorSpec{
+			Name:   "vrops_project_noisiness_extractor",
+			Config: runtime.RawExtension{Raw: []byte(`{}`)},
+		},
 	}
-	if err := extractor.Init(testDB, config); err != nil {
+	if err := extractor.Init(&testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -83,13 +84,14 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 
 	extractor := &VROpsProjectNoisinessExtractor{}
 
-	config := conf.FeatureExtractorConfig{
-		Name:           "vrops_project_noisiness_extractor",
-		Options:        libconf.NewRawOpts("{}"),
-		RecencySeconds: nil,
+	config := v1alpha1.KnowledgeSpec{
+		Extractor: v1alpha1.KnowledgeExtractorSpec{
+			Name:   "vrops_project_noisiness_extractor",
+			Config: runtime.RawExtension{Raw: []byte(`{}`)},
+		},
 	}
 
-	if err := extractor.Init(testDB, config); err != nil {
+	if err := extractor.Init(&testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, err := extractor.Extract(); err != nil {

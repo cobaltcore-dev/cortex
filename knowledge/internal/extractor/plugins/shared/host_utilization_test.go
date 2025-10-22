@@ -10,8 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
@@ -23,12 +22,8 @@ func TestHostUtilizationExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &HostUtilizationExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_utilization_extractor",
-		Options:        libconf.NewRawOpts("{}"),
-		RecencySeconds: nil, // No recency for this test
-	}
-	if err := extractor.Init(testDB, config); err != nil {
+	config := v1alpha1.KnowledgeSpec{}
+	if err := extractor.Init(&testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -218,13 +213,9 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 			}
 
 			extractor := &HostUtilizationExtractor{}
-			config := conf.FeatureExtractorConfig{
-				Name:           "host_utilization_extractor",
-				Options:        libconf.NewRawOpts("{}"),
-				RecencySeconds: nil,
-			}
+			config := v1alpha1.KnowledgeSpec{}
 
-			if err := extractor.Init(testDB, config); err != nil {
+			if err := extractor.Init(&testDB, config); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 

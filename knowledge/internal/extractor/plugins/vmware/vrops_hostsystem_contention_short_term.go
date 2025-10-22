@@ -6,7 +6,6 @@ package vmware
 import (
 	_ "embed"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/vmware"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 )
@@ -19,18 +18,6 @@ type VROpsHostsystemContentionShortTermExtractor struct {
 		struct{}, // No options passed through yaml config
 		vmware.VROpsHostsystemContentionShortTerm, // Feature model
 	]
-}
-
-// Name of this feature extractor that is used in the yaml config, for logging etc.
-func (*VROpsHostsystemContentionShortTermExtractor) GetName() string {
-	return "vrops_hostsystem_contention_short_term_extractor"
-}
-
-// Get message topics that trigger a re-execution of this extractor.
-func (VROpsHostsystemContentionShortTermExtractor) Triggers() []string {
-	return []string{
-		prometheus.TriggerMetricAliasSynced("vrops_hostsystem_cpu_contention_short_term_percentage"),
-	}
 }
 
 //go:embed vrops_hostsystem_contention_short_term.sql

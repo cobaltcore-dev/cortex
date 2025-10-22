@@ -6,11 +6,30 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
+
+type mockFeatureExtractor struct {
+	plugins.FeatureExtractor
+	extractFunc func() ([]plugins.Feature, error)
+}
+
+func (m *mockFeatureExtractor) Init(db *db.DB, spec v1alpha1.KnowledgeSpec) error {
+	return nil
+}
+
+func (m *mockFeatureExtractor) Extract() ([]plugins.Feature, error) {
+	return m.extractFunc()
+}
+
+func (m *mockFeatureExtractor) NotifySkip() {
+	// No-op for mock
+}
 
 func TestFeatureExtractorMonitor(t *testing.T) {
 	registry := &monitoring.Registry{Registry: prometheus.NewRegistry()}
@@ -18,7 +37,6 @@ func TestFeatureExtractorMonitor(t *testing.T) {
 
 	// Mock feature extractor
 	mockExtractor := &mockFeatureExtractor{
-		name: "mock_extractor",
 		// Usually the features are a struct, but it doesn't matter for this test
 		extractFunc: func() ([]plugins.Feature, error) {
 			return []plugins.Feature{"1", "2"}, nil
@@ -26,7 +44,7 @@ func TestFeatureExtractorMonitor(t *testing.T) {
 	}
 
 	// Wrap the mock extractor with the monitor
-	extractorMonitor := monitorFeatureExtractor(mockExtractor, monitor)
+	extractorMonitor := monitorFeatureExtractor("mock_extractor", mockExtractor, monitor)
 
 	// Test stepRunTimer
 	expectedStepRunTimer := `

@@ -5,9 +5,8 @@ package extractor
 
 import (
 	"log/slog"
-	"time"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
@@ -66,6 +65,8 @@ func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
 type FeatureExtractorMonitor[F plugins.FeatureExtractor] struct {
 	// The wrapped feature extractor to monitor.
 	FeatureExtractor F
+	// The label (name) of the extractor.
+	label string
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
 	// A counter to measure how many features are extracted by the step.
@@ -74,37 +75,10 @@ type FeatureExtractorMonitor[F plugins.FeatureExtractor] struct {
 	skipCounter prometheus.Counter
 }
 
-// Get the name of the wrapped feature extractor.
-func (m FeatureExtractorMonitor[F]) GetName() string {
-	// Return the name of the wrapped feature extractor.
-	return m.FeatureExtractor.GetName()
-}
-
-// Get the message topics that trigger a re-execution of the wrapped feature extractor.
-func (m FeatureExtractorMonitor[F]) Triggers() []string {
-	// Return the triggers of the wrapped feature extractor.
-	return m.FeatureExtractor.Triggers()
-}
-
 // Initialize the wrapped feature extractor with the database and options.
-func (m FeatureExtractorMonitor[F]) Init(db db.DB, conf conf.FeatureExtractorConfig) error {
+func (m FeatureExtractorMonitor[F]) Init(db *db.DB, spec v1alpha1.KnowledgeSpec) error {
 	// Configure the wrapped feature extractor.
-	return m.FeatureExtractor.Init(db, conf)
-}
-
-func (m FeatureExtractorMonitor[F]) NeedsUpdate() bool {
-	// Check if the wrapped feature extractor needs an update.
-	return m.FeatureExtractor.NeedsUpdate()
-}
-
-func (m FeatureExtractorMonitor[F]) MarkAsUpdated() {
-	// Mark the wrapped feature extractor as updated.
-	m.FeatureExtractor.MarkAsUpdated()
-}
-
-func (m FeatureExtractorMonitor[F]) NextPossibleExecution() time.Time {
-	// Return the next update timestamp of the wrapped feature extractor.
-	return m.FeatureExtractor.NextPossibleExecution()
+	return m.FeatureExtractor.Init(db, spec)
 }
 
 func (m FeatureExtractorMonitor[F]) NotifySkip() {
@@ -113,28 +87,28 @@ func (m FeatureExtractorMonitor[F]) NotifySkip() {
 		m.skipCounter.Inc()
 	}
 	m.FeatureExtractor.NotifySkip()
-	slog.Info("features: skipping", "extractor", m.GetName())
+	slog.Info("features: skipping", "extractor", m.label)
 }
 
 // Extract features using the wrapped feature extractor and measure the time it takes.
-func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) FeatureExtractorMonitor[F] {
-	featureExtractorName := f.GetName()
+func monitorFeatureExtractor[F plugins.FeatureExtractor](label string, f F, m Monitor) FeatureExtractorMonitor[F] {
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
-		runTimer = m.stepRunTimer.WithLabelValues(featureExtractorName)
+		runTimer = m.stepRunTimer.WithLabelValues(label)
 	}
 	var featureCounter prometheus.Gauge
 	if m.stepFeatureCounter != nil {
-		featureCounter = m.stepFeatureCounter.WithLabelValues(featureExtractorName)
+		featureCounter = m.stepFeatureCounter.WithLabelValues(label)
 	}
 
 	var skipCounter prometheus.Counter
 	if m.stepSkipCounter != nil {
-		skipCounter = m.stepSkipCounter.WithLabelValues(featureExtractorName)
+		skipCounter = m.stepSkipCounter.WithLabelValues(label)
 	}
 
 	return FeatureExtractorMonitor[F]{
 		FeatureExtractor: f,
+		label:            label,
 		runTimer:         runTimer,
 		featureCounter:   featureCounter,
 		skipCounter:      skipCounter,
@@ -143,14 +117,8 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](f F, m Monitor) Feature
 
 // Run the wrapped feature extractor and measure the time it takes.
 func (m FeatureExtractorMonitor[F]) Extract() ([]plugins.Feature, error) {
-	slog.Info("features: extracting", "extractor", m.GetName())
+	slog.Info("features: extracting", "extractor", m.label)
 
-	// Only measure and record extraction duration if an update is actually needed.
-	// This prevents unnecessary measurements from skewing the average and minimum values of the timing metric.
-	if m.runTimer != nil && m.NeedsUpdate() {
-		timer := prometheus.NewTimer(m.runTimer)
-		defer timer.ObserveDuration()
-	}
 	features, err := m.FeatureExtractor.Extract()
 	if err != nil {
 		return nil, err

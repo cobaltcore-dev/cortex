@@ -6,8 +6,6 @@ package vmware
 import (
 	_ "embed"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/vmware"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 )
@@ -20,20 +18,6 @@ type VROpsHostsystemResolver struct {
 		struct{},                       // No options passed through yaml config
 		vmware.ResolvedVROpsHostsystem, // Feature model
 	]
-}
-
-// Get message topics that trigger a re-execution of this extractor.
-func (VROpsHostsystemResolver) Triggers() []string {
-	return []string{
-		nova.TriggerNovaServersSynced,
-		nova.TriggerNovaHypervisorsSynced,
-		prometheus.TriggerMetricTypeSynced("vrops_vm_metrics"),
-	}
-}
-
-// Name of this feature extractor that is used in the yaml config, for logging etc.
-func (e *VROpsHostsystemResolver) GetName() string {
-	return "vrops_hostsystem_resolver"
 }
 
 //go:embed vrops_hostsystem_resolver.sql

@@ -4,31 +4,16 @@
 package plugins
 
 import (
-	"time"
-
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 )
 
 // Each feature extractor must conform to this interface.
 type FeatureExtractor interface {
-	// Configure the feature extractor with a database and options.
-	// This function should also create the needed database structures.
-	Init(db db.DB, conf conf.FeatureExtractorConfig) error
+	// Configure the feature extractor with a spec and (optional) database.
+	Init(db *db.DB, spec v1alpha1.KnowledgeSpec) error
 	// Extract features from the given data.
 	Extract() ([]Feature, error)
-	// Get the name of this feature extractor.
-	// This name is used to identify the extractor in metrics, config, logs, etc.
-	// Should be something like: "my_cool_feature_extractor".
-	GetName() string
-	// Get message topics that trigger a re-execution of this extractor.
-	Triggers() []string
-	// Check if the extractors last update is older than the configured recency.
-	NeedsUpdate() bool
-	// Update the last update timestamp of the extractor.
-	MarkAsUpdated()
-	// Earliest time when this extractor can be executed again.
-	NextPossibleExecution() time.Time
 	// Skip the extractor if it is not needed.
 	NotifySkip()
 }

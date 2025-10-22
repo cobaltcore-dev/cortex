@@ -12,7 +12,6 @@ require (
 	github.com/cobaltcore-dev/cortex/knowledge/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
-	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/prometheus/client_golang v1.23.2
@@ -109,7 +108,6 @@ require (
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
-	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect

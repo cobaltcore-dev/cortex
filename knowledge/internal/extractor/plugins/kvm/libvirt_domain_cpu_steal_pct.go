@@ -6,7 +6,6 @@ package kvm
 import (
 	_ "embed"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/kvm"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 )
@@ -19,18 +18,6 @@ type LibvirtDomainCPUStealPctExtractor struct {
 		struct{},                     // No options passed through yaml config
 		kvm.LibvirtDomainCPUStealPct, // Feature model
 	]
-}
-
-// Name of this feature extractor that is used in the yaml config, for logging etc.
-func (*LibvirtDomainCPUStealPctExtractor) GetName() string {
-	return "kvm_libvirt_domain_cpu_steal_pct_extractor"
-}
-
-// Get message topics that trigger a re-execution of this extractor.
-func (LibvirtDomainCPUStealPctExtractor) Triggers() []string {
-	return []string{
-		prometheus.TriggerMetricAliasSynced("kvm_libvirt_domain_steal_pct"),
-	}
 }
 
 //go:embed libvirt_domain_cpu_steal_pct.sql

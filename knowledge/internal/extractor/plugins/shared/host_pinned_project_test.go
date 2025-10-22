@@ -12,8 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -26,12 +25,8 @@ func TestHostPinnedProjectsExtractor_Init(t *testing.T) {
 	defer dbEnv.Close()
 
 	extractor := &HostPinnedProjectsExtractor{}
-	config := conf.FeatureExtractorConfig{
-		Name:           "host_pinned_projects_extractor",
-		Options:        libconf.NewRawOpts("{}"),
-		RecencySeconds: nil,
-	}
-	if err := extractor.Init(testDB, config); err != nil {
+	config := v1alpha1.KnowledgeSpec{}
+	if err := extractor.Init(&testDB, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -543,13 +538,9 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 			}
 
 			extractor := &HostPinnedProjectsExtractor{}
-			config := conf.FeatureExtractorConfig{
-				Name:           "host_pinned_projects_extractor",
-				Options:        libconf.NewRawOpts("{}"),
-				RecencySeconds: nil,
-			}
+			config := v1alpha1.KnowledgeSpec{}
 
-			if err := extractor.Init(testDB, config); err != nil {
+			if err := extractor.Init(&testDB, config); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 

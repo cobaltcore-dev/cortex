@@ -6,7 +6,6 @@ package shared
 import (
 	_ "embed"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
 )
@@ -18,19 +17,6 @@ type HostPinnedProjectsExtractor struct {
 		struct{},                  // No options passed through yaml config
 		shared.HostPinnedProjects, // Feature model
 	]
-}
-
-// Name of this feature extractor that is used in the yaml config, for logging etc.
-func (*HostPinnedProjectsExtractor) GetName() string {
-	return "host_pinned_projects_extractor"
-}
-
-// Get message topics that trigger a re-execution of this extractor.
-func (HostPinnedProjectsExtractor) Triggers() []string {
-	return []string{
-		nova.TriggerNovaHypervisorsSynced,
-		nova.TriggerNovaAggregatesSynced,
-	}
 }
 
 //go:embed host_pinned_projects.sql

@@ -17,8 +17,12 @@ type RawOpts struct {
 
 // Create a new RawOpts instance with the given json string.
 func NewRawOpts(rawJson string) RawOpts {
+	return NewRawOptsBytes([]byte(rawJson))
+}
+
+func NewRawOptsBytes(rawJson []byte) RawOpts {
 	return RawOpts{unmarshal: func(v any) error {
-		return json.Unmarshal([]byte(rawJson), v)
+		return json.Unmarshal(rawJson, v)
 	}}
 }
 
