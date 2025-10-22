@@ -131,6 +131,7 @@ type KnowledgeStatus struct {
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Extracted",type="date",JSONPath=".status.lastExtracted"
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
+// +kubebuilder:printcolumn:name="Recency",type="string",JSONPath=".spec.recency"
 // +kubebuilder:printcolumn:name="Features",type="integer",JSONPath=".status.rawLength"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
