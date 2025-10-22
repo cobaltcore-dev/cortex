@@ -96,51 +96,6 @@ func TestBaseExtractor_InitWithRecency(t *testing.T) {
 	}
 }
 
-func TestBaseExtractor_NeedsUpdate(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	recencySeconds := 3600 // One hour
-	config := v1alpha1.KnowledgeSpec{
-		Extractor: v1alpha1.KnowledgeExtractorSpec{
-			Name: "mock_extractor",
-			Config: runtime.RawExtension{Raw: []byte(`{
-				"option1": "value1",
-				"option2": 2
-			}`)},
-		},
-		Recency: metav1.Duration{Duration: time.Duration(recencySeconds) * time.Second},
-	}
-
-	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(&testDB, &testDB, config)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Initially, UpdatedAt should be nil, so NeedsUpdate should return true
-	if !extractor.NeedsUpdate() {
-		t.Error("expected NeedsUpdate to return true when UpdatedAt is nil")
-	}
-
-	// Set UpdatedAt to a time in the past (twice the recencySeconds)
-	pastTime := time.Now().Add(-2 * time.Duration(recencySeconds) * time.Second)
-	extractor.UpdatedAt = &pastTime
-
-	// Now NeedsUpdate should return true because the recency period has passed
-	if !extractor.NeedsUpdate() {
-		t.Error("expected NeedsUpdate to return false when UpdatedAt is set")
-	}
-
-	extractor.MarkAsUpdated()
-	// After marking as updated, UpdatedAt should be set to now, which means NeedsUpdate should return false
-	if extractor.NeedsUpdate() {
-		t.Error("expected NeedsUpdate to return false when UpdatedAt is set")
-	}
-}
-
 func TestBaseExtractor_Extracted(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}

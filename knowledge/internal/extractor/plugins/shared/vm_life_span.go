@@ -5,6 +5,7 @@ package shared
 
 import (
 	_ "embed"
+	"errors"
 	"log/slog"
 	"strings"
 
@@ -36,6 +37,10 @@ var vmLifeSpanQuery string
 // Extract the time elapsed until the first migration of a virtual machine.
 // Depends on the OpenStack servers and migrations to be synced.
 func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
+	// This can happen when no datasource is provided that connects to a database.
+	if e.DB == nil {
+		return nil, errors.New("database connection is not initialized")
+	}
 	var lifeSpansRaw []VMLifeSpanRaw
 	if _, err := e.DB.Select(&lifeSpansRaw, vmLifeSpanQuery); err != nil {
 		return nil, err
