@@ -5,7 +5,6 @@ package extractor
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
@@ -119,7 +118,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// When we have datasources reading from a database, connect to it.
 	var authenticatedDatasourceDB *db.DB
 	if databaseSecretRef != nil {
-		authenticatedDatasourceDB, err := db.Connector{Client: r.Client}.FromSecretRef(ctx, *databaseSecretRef)
+		var err error
+		authenticatedDatasourceDB, err = db.Connector{Client: r.Client}.
+			FromSecretRef(ctx, *databaseSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with database", "secretRef", *databaseSecretRef)
 			knowledge.Status.Error = "failed to authenticate with database: " + err.Error()
@@ -135,7 +136,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Connect to the extractor database if specified.
 	var authenticatedExtractorDB *db.DB
 	if knowledge.Spec.DatabaseSecretRef != nil {
-		authenticatedExtractorDB, err := db.Connector{Client: r.Client}.FromSecretRef(ctx, *knowledge.Spec.DatabaseSecretRef)
+		var err error
+		authenticatedExtractorDB, err = db.Connector{Client: r.Client}.
+			FromSecretRef(ctx, *knowledge.Spec.DatabaseSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with extractor database", "secretRef", *knowledge.Spec.DatabaseSecretRef)
 			knowledge.Status.Error = "failed to authenticate with extractor database: " + err.Error()
@@ -172,20 +175,23 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Update the knowledge status.
-	raw := runtime.RawExtension{}
-	raw.Raw, err = json.Marshal(features)
-	if err != nil {
-		log.Error(err, "failed to marshal extracted features", "name", knowledge.Spec.Extractor.Name)
-		knowledge.Status.Error = "failed to marshal extracted features: " + err.Error()
-		if err := r.Status().Update(ctx, knowledge); err != nil {
-			log.Error(err, "failed to update knowledge status")
+	// TODO: Remove StoreInDatabaseOnly option in future release.
+	if !knowledge.Spec.StoreInDatabaseOnly {
+		raw, err := v1alpha1.BoxFeatureList(features)
+		if err != nil {
+			log.Error(err, "failed to marshal extracted features", "name", knowledge.Spec.Extractor.Name)
+			knowledge.Status.Error = "failed to marshal extracted features: " + err.Error()
+			if err := r.Status().Update(ctx, knowledge); err != nil {
+				log.Error(err, "failed to update knowledge status")
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
+		knowledge.Status.Raw = raw
 	}
+
 	knowledge.Status.LastExtracted = metav1.NewTime(time.Now())
 	knowledge.Status.Error = ""
-	knowledge.Status.Raw = raw
 	knowledge.Status.RawLength = len(features)
 	knowledge.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	if err := r.Status().Update(ctx, knowledge); err != nil {
@@ -204,7 +210,7 @@ func (r *KnowledgeReconciler) SetupWithManager(mgr manager.Manager) error {
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only react to datasources matching the operator.
 				ds := obj.(*v1alpha1.Knowledge)
-				return ds.Spec.Operator != r.Conf.Operator
+				return ds.Spec.Operator == r.Conf.Operator
 			})),
 		).
 		Complete(r)

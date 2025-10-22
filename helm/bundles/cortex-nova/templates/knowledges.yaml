@@ -159,14 +159,16 @@ spec:
 apiVersion: knowledge.cortex/v1alpha1
 kind: Knowledge
 metadata:
-  name: vm-residency
+  name: vm-host-residency
 spec:
   operator: cortex-nova
+  # TODO: This feature is currently too large to fit in the CR status.
+  storeInDatabaseOnly: true
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
   extractor:
-    name: vm_residency_extractor
+    name: vm_host_residency_extractor
   description: |
     Extract VM residency information.
   recency: "60s"

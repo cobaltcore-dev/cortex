@@ -4,6 +4,7 @@
 package plugins
 
 import (
+	"errors"
 	"log/slog"
 	"time"
 
@@ -36,17 +37,27 @@ func (e *BaseExtractor[Opts, Feature]) Init(datasourceDB *db.DB, extractorDB *db
 		return err
 	}
 	e.DB = datasourceDB
-	e.extractorDB = extractorDB
 	e.RecencySeconds = 0
 	if int(spec.Recency.Seconds()) != 0 {
 		e.RecencySeconds = int(spec.Recency.Seconds())
 	}
 	var f Feature
-	return e.DB.CreateTable(e.DB.AddTable(f))
+	// TODO: Remove this once we don't fetch features from the DB anymore.
+	if extractorDB != nil {
+		if err := extractorDB.CreateTable(extractorDB.AddTable(f)); err != nil {
+			return err
+		}
+	}
+	e.extractorDB = extractorDB
+	return nil
 }
 
 // Extract the features directly from an sql query.
 func (e *BaseExtractor[Opts, F]) ExtractSQL(query string) ([]Feature, error) {
+	// This can happen when no datasource is provided that connects to a database.
+	if e.DB == nil {
+		return nil, errors.New("database connection is not initialized")
+	}
 	var features []F
 	if _, err := e.DB.Select(&features, query); err != nil {
 		return nil, err

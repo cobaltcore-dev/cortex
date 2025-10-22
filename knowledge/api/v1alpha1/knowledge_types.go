@@ -66,30 +66,61 @@ type KnowledgeSpec struct {
 	// - "port": The database port.
 	// - "database": The database name.
 	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef"`
+
+	// Whether the knowledge should only be stored in the database and not
+	// in the CR status.
+	//
+	// Note: this is a legacy feature. Features should always contain condensed
+	// knowledge in the CR status for easy access.
+	// +kubebuilder:default=false
+	StoreInDatabaseOnly bool `json:"storeInDatabaseOnly,omitempty"`
 }
 
 // Convert raw features to a list of strongly typed feature structs.
-func UnmarshalRaw[T any](raw runtime.RawExtension) (T, error) {
-	var t T
+func UnboxFeatureList[T any](raw runtime.RawExtension) ([]T, error) {
+	var t []T
 	if len(raw.Raw) == 0 {
 		return t, nil
 	}
-	err := json.Unmarshal(raw.Raw, &t)
-	return t, err
+	var rawSerialized struct {
+		Features []T `json:"features"`
+	}
+	if err := json.Unmarshal(raw.Raw, &rawSerialized); err != nil {
+		return t, err
+	}
+	return rawSerialized.Features, nil
+}
+
+// Convert a list of strongly typed feature structs to raw features.
+func BoxFeatureList[T any](features []T) (runtime.RawExtension, error) {
+	raw := runtime.RawExtension{}
+	var err error
+	rawSerialized := struct {
+		Features []T `json:"features"`
+	}{
+		Features: features,
+	}
+	raw.Raw, err = json.Marshal(rawSerialized)
+	return raw, err
 }
 
 type KnowledgeStatus struct {
 	// When the knowledge was last successfully extracted.
+	// +kubebuilder:validation:Optional
 	LastExtracted metav1.Time `json:"lastExtracted"`
 	// The time it took to perform the last extraction.
+	// +kubebuilder:validation:Optional
 	Took metav1.Duration `json:"took"`
 
 	// The raw data behind the extracted knowledge, e.g. a list of features.
+	// +kubebuilder:validation:Optional
 	Raw runtime.RawExtension `json:"raw"`
 	// The number of features extracted, or 1 if the knowledge is not a list.
+	// +kubebuilder:validation:Optional
 	RawLength int `json:"rawLength,omitempty"`
 
 	// If there was an error during the last extraction, it is recorded here.
+	// +kubebuilder:validation:Optional
 	Error string `json:"error,omitempty"`
 }
 
