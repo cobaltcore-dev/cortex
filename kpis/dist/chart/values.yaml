@@ -88,7 +88,7 @@ conf:
     plugins:
       # - name:
       #   # Dependencies needed by this KPI.
-      #   dependencies: # e.g. {sync: {openstack: {nova: {types: ["servers"]}}}}
+      #   dependencies: # e.g. {datasources: {openstack: {nova: {types: ["servers"]}}}}
 
 # Values passed to the service through a kubernetes secret.
 # The keys of these values should correspond to the keys used above in the conf.

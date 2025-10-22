@@ -1,0 +1,62 @@
+{{- if .Values.rbac.enable }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-knowledge-manager-role
+rules:
+- apiGroups:
+  - knowledge.cortex
+  resources:
+  - datasources
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - knowledge.cortex
+  resources:
+  - datasources/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - knowledge.cortex
+  resources:
+  - datasources/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - knowledge.cortex
+  resources:
+  - knowledges
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - knowledge.cortex
+  resources:
+  - knowledges/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - knowledge.cortex
+  resources:
+  - knowledges/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end -}}

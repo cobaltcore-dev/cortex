@@ -25,16 +25,12 @@ dependencies:
   - name: cortex-scheduler
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
-  # from: file://../../../extractor/dist/chart
-  - name: cortex-extractor
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.1
   # from: file://../../../kpis/dist/chart
   - name: cortex-kpis
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
-  # from: file://../../../sync/dist/chart
-  - name: cortex-syncer
+  # from: file://../../../knowledge/dist/chart
+  - name: cortex-knowledge-operator
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
   # from: file://../../../decisions/dist/chart

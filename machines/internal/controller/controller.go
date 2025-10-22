@@ -35,16 +35,6 @@ type MachineScheduler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machines,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machines/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machines/finalizers,verbs=update
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machinepools,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machinepools/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machinepools/finalizers,verbs=update
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machineclasses,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machineclasses/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=compute.ironcore.dev,resources=machineclasses/finalizers,verbs=update
-
 // Called by the kubernetes apiserver to handle new or updated Machine resources.
 func (s *MachineScheduler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)

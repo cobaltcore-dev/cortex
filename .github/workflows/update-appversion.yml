@@ -65,13 +65,6 @@ jobs:
           files: |
             descheduler/**
 
-      - name: Get all changed extractor/ files
-        id: changed_extractor_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            extractor/**
-
       - name: Get all changed kpis/ files
         id: changed_kpis_files
         uses: tj-actions/changed-files@v47
@@ -79,12 +72,12 @@ jobs:
           files: |
             kpis/**
 
-      - name: Get all changed sync/ files
-        id: changed_sync_files
+      - name: Get all changed knowledge/ files
+        id: changed_knowledge_files
         uses: tj-actions/changed-files@v47
         with:
           files: |
-            sync/**
+            knowledge/**
 
       # Only bumped if there are changes in the postgres directory.
       - name: Update appVersion in cortex-postgres Chart.yaml
@@ -142,20 +135,6 @@ jobs:
           git commit -m "Bump cortex-descheduler chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
 
-      # Only bumped if there are changes in the extractor directory.
-      - name: Update appVersion in cortex-extractor Chart.yaml
-        if: steps.changed_extractor_files.outputs.all_changed_files != ''
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' extractor/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-extractor
-        if: steps.changed_extractor_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add extractor/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-extractor chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
-
       # Only bumped if there are changes in the kpis directory.
       - name: Update appVersion in cortex-kpis Chart.yaml
         if: steps.changed_kpis_files.outputs.all_changed_files != ''
@@ -170,18 +149,18 @@ jobs:
           git commit -m "Bump cortex-kpis chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
 
-      # Only bumped if there are changes in the sync directory.
-      - name: Update appVersion in cortex-sync Chart.yaml
-        if: steps.changed_sync_files.outputs.all_changed_files != ''
+      # Only bumped if there are changes in the knowledge directory.
+      - name: Update appVersion in cortex-knowledge Chart.yaml
+        if: steps.changed_knowledge_files.outputs.all_changed_files != ''
         run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' sync/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-sync
-        if: steps.changed_sync_files.outputs.all_changed_files != ''
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' knowledge/dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex-knowledge
+        if: steps.changed_knowledge_files.outputs.all_changed_files != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sync/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-sync chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git add knowledge/dist/chart/Chart.yaml
+          git commit -m "Bump cortex-knowledge chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
 
       # Only bumped if there are changes in the decisions directory.

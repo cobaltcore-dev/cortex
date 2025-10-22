@@ -97,8 +97,6 @@ type SchedulerStepConfig[Extra any] struct {
 	Alias string `json:"alias,omitempty"`
 	// Custom options for the step, as a raw yaml map.
 	Options RawOpts `json:"options,omitempty"`
-	// The dependencies this step needs.
-	DependencyConfig `json:"dependencies,omitempty"`
 	// The validations to use for this step.
 	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
 
@@ -129,9 +127,8 @@ type SchedulerAPIConfig struct {
 type KeystoneConfig struct {
 	// The URL of the keystone service.
 	URL string `json:"url"`
-	// The SSO certificate to use. If none is given, we won't
-	// use SSO to connect to the openstack services.
-	SSO SSOConfig `json:"sso,omitempty"`
+	// Availability of the keystone service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
 	// The OpenStack username (OS_USERNAME in openstack cli).
 	OSUsername string `json:"username"`
 	// The OpenStack password (OS_PASSWORD in openstack cli).

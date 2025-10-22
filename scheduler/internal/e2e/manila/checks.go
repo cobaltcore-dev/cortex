@@ -28,7 +28,6 @@ func RunChecks(ctx context.Context, config conf.Config) {
 // Check that the Manila external scheduler returns a valid set of share hosts.
 func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
 	keystoneConf := config.KeystoneConfig
-	osConf := config.SyncConfig.OpenStack
 	slog.Info("authenticating against openstack", "url", keystoneConf.URL)
 	authOptions := gophercloud.AuthOptions{
 		IdentityEndpoint: keystoneConf.URL,
@@ -48,7 +47,7 @@ func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 	gophercloud.ServiceTypeAliases["shared-file-system"] = []string{"sharev2"}
 	sc := must.Return(openstack.NewSharedFileSystemV2(pc, gophercloud.EndpointOpts{
 		Type:         "sharev2",
-		Availability: gophercloud.Availability(osConf.Manila.Availability),
+		Availability: gophercloud.Availability(keystoneConf.Availability),
 	}))
 	sc.Microversion = "2.65"
 	slog.Info("authenticated against openstack", "url", sc.Endpoint)

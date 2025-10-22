@@ -8,27 +8,6 @@ import (
 	"strings"
 )
 
-// Configuration that is passed in the config file to specify dependencies.
-type DependencyConfig struct {
-	Sync struct {
-		OpenStack struct {
-			Nova struct {
-				ObjectTypes []string `json:"types,omitempty"`
-			} `json:"nova,omitempty"`
-			Placement struct {
-				ObjectTypes []string `json:"types,omitempty"`
-			} `json:"placement,omitempty"`
-		} `json:"openstack,omitempty"`
-		Prometheus struct {
-			Metrics []struct {
-				Alias string `json:"alias,omitempty"`
-				Type  string `json:"type,omitempty"`
-			} `json:"metrics,omitempty"`
-		} `json:"prometheus,omitempty"`
-	}
-	Extractors []string `json:"extractors,omitempty"`
-}
-
 // Check if all dependencies are satisfied.
 func (c *SharedConfig) Validate() error {
 	// Check the keystone URL.

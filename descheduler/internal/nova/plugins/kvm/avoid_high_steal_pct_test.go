@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/extractor/api/features/kvm"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/kvm"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"

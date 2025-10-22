@@ -280,48 +280,6 @@ jobs:
           subject-digest: ${{ steps.push_cortex_descheduler.outputs.digest }}
           push-to-registry: true
 
-      # Only build and push the extractor image if there are changes
-      # in the extractor directory.
-      - name: Get all changed extractor/ files
-        id: changed_extractor_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            extractor/**
-      - name: Docker Meta (Cortex Extractor)
-        if: steps.changed_extractor_files.outputs.all_changed_files != ''
-        id: meta_cortex_extractor
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}-extractor
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-            latest
-      - name: Build and Push Cortex Extractor
-        if: steps.changed_extractor_files.outputs.all_changed_files != ''
-        id: push_cortex_extractor
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta_cortex_extractor.outputs.tags }}
-          labels: ${{ steps.meta_cortex_extractor.outputs.labels }}
-          build-args: |
-            GO_MOD_PATH=extractor
-            GIT_TAG=${{ github.ref_name }}
-            GIT_COMMIT=${{ github.sha }}
-      - name: Generate Artifact Attestation for Cortex Extractor
-        if: steps.changed_extractor_files.outputs.all_changed_files != ''
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-extractor
-          subject-digest: ${{ steps.push_cortex_extractor.outputs.digest }}
-          push-to-registry: true
-
       # Only build and push the kpis image if there are changes
       # in the kpis directory.
       - name: Get all changed kpis/ files
@@ -364,44 +322,44 @@ jobs:
           subject-digest: ${{ steps.push_cortex_kpis.outputs.digest }}
           push-to-registry: true
 
-      # Only build and push the syncer image if there are changes
-      # in the syncer directory.
-      - name: Get all changed syncer/ files
-        id: changed_syncer_files
+      # Only build and push the knowledge operator image if there are changes
+      # in the knowledge operator directory.
+      - name: Get all changed knowledge/ files
+        id: changed_knowledge_files
         uses: tj-actions/changed-files@v47
         with:
           files: |
-            sync/**
-      - name: Docker Meta (Cortex Syncer)
-        if: steps.changed_syncer_files.outputs.all_changed_files != ''
-        id: meta_cortex_syncer
+            knowledge/**
+      - name: Docker Meta (Cortex Knowledge Operator)
+        if: steps.changed_knowledge_files.outputs.all_changed_files != ''
+        id: meta_cortex_knowledge
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}-syncer
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-knowledge-operator
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
             latest
-      - name: Build and Push Cortex Syncer
-        if: steps.changed_syncer_files.outputs.all_changed_files != ''
-        id: push_cortex_syncer
+      - name: Build and Push Cortex Knowledge Operator
+        if: steps.changed_knowledge_files.outputs.all_changed_files != ''
+        id: push_cortex_knowledge
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta_cortex_syncer.outputs.tags }}
-          labels: ${{ steps.meta_cortex_syncer.outputs.labels }}
+          tags: ${{ steps.meta_cortex_knowledge.outputs.tags }}
+          labels: ${{ steps.meta_cortex_knowledge.outputs.labels }}
           build-args: |
-            GO_MOD_PATH=sync
+            GO_MOD_PATH=knowledge
             GIT_TAG=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
-      - name: Generate Artifact Attestation for Cortex Syncer
-        if: steps.changed_syncer_files.outputs.all_changed_files != ''
+      - name: Generate Artifact Attestation for Cortex Knowledge Operator
+        if: steps.changed_knowledge_files.outputs.all_changed_files != ''
         uses: actions/attest-build-provenance@v3
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-syncer
-          subject-digest: ${{ steps.push_cortex_syncer.outputs.digest }}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-knowledge-operator
+          subject-digest: ${{ steps.push_cortex_knowledge.outputs.digest }}
           push-to-registry: true

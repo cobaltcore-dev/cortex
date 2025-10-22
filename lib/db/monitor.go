@@ -14,7 +14,7 @@ type Monitor struct {
 	selectTimer *prometheus.HistogramVec
 }
 
-func NewDBMonitor(registry *monitoring.Registry) Monitor {
+func NewUnregisteredDBMonitor() Monitor {
 	connectionAttempts := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "cortex_db_connection_attempts_total",
 		Help: "Total number of attempts to connect to the database",
@@ -24,12 +24,27 @@ func NewDBMonitor(registry *monitoring.Registry) Monitor {
 		Help:    "Duration of SELECT queries in seconds",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"group", "query"})
-	registry.MustRegister(
-		connectionAttempts,
-		selectTimer,
-	)
 	return Monitor{
 		connectionAttempts: connectionAttempts,
 		selectTimer:        selectTimer,
 	}
+}
+
+func NewDBMonitor(registry *monitoring.Registry) Monitor {
+	monitor := NewUnregisteredDBMonitor()
+	registry.MustRegister(
+		monitor.connectionAttempts,
+		monitor.selectTimer,
+	)
+	return monitor
+}
+
+func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
+	m.connectionAttempts.Describe(ch)
+	m.selectTimer.Describe(ch)
+}
+
+func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
+	m.connectionAttempts.Collect(ch)
+	m.selectTimer.Collect(ch)
 }

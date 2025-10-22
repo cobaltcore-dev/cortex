@@ -4,13 +4,13 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: decisions-manager-rolebinding
+  name: {{ .Values.namePrefix }}-decisions-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: decisions-manager-role
+  name: {{ .Values.namePrefix }}-decisions-manager-role
 subjects:
 - kind: ServiceAccount
-  name: {{ .Values.controllerManager.serviceAccountName }}
+  name: {{ .Values.namePrefix }}-{{ .Values.controllerManager.serviceAccountName }}
   namespace: {{ .Release.Namespace }}
 {{- end -}}

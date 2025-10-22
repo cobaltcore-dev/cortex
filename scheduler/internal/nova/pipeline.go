@@ -10,6 +10,7 @@ import (
 	"math"
 
 	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/cobaltcore-dev/cortex/lib/scheduling"
@@ -19,7 +20,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/nova/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"

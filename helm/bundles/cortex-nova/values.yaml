@@ -15,6 +15,47 @@ alerts:
   enabled: true
   prometheus: openstack
 
+# SSO certificate to use.
+sharedSSOCert: &sharedSSOCert
+  # Certificate "public key". (Optional, remove this key if not needed)
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    Your certificate here
+    -----END CERTIFICATE-----
+  # Certificate private key. (Optional, remove this key if not needed)
+  key: |
+    -----BEGIN PRIVATE KEY-----
+    Your private key here
+    -----END PRIVATE KEY
+  # Whether the certificate is self-signed.
+  # If true, the certificate is not verified.
+  selfSigned: "false"
+
+postgres:
+  host: cortex-nova-postgresql
+  user: postgres
+  password: secret
+  database: postgres
+  port: "5432"
+
+datasources:
+  prometheus:
+    url: "https://path-to-your-prometheus"
+    sso:
+      enabled: false
+      <<: *sharedSSOCert
+  openstack:
+    url: "https://path-to-keystone/v3"
+    availability: public
+    username: openstack-user-with-all-project-read-access
+    password: openstack-user-password
+    projectName: openstack-project-of-user
+    userDomainName: openstack-domain-of-user
+    projectDomainName: openstack-domain-of-project-scoped-to
+    sso:
+      enabled: false
+      <<: *sharedSSOCert
+
 # Values shared between all subcharts.
 global:
   # Values passed to the service through a configmap.
@@ -32,10 +73,34 @@ global:
 # Features in early development that are not ready for production yet.
 cortex-decisions-operator:
   enabled: false
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
 cortex-reservations-operator:
   enabled: false
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
 cortex-descheduler:
   enabled: false
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
+  conf:
+    descheduler:
+      nova:
+        # Configuration of the descheduler that runs periodically to de-schedule
+        # VMs based on the configured plugins.
+        #
+        # The `name` should correspond to a known descheduler plugin.
+        plugins:
+          - name: avoid_high_steal_pct
+            options:
+              # Deschedule once vms reach this cpu steal pct over the observed time span.
+              maxStealPctOverObservedTimeSpan: 20.0
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
@@ -51,110 +116,6 @@ cortex-alerts:
   alerts:
     componentPrefix: cortex-nova
 
-cortex-syncer:
-  fullnameOverride: cortex-nova-syncer
-  service:
-    extraLabels:
-      app: cortex-nova-syncer # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-nova-syncer
-  args: []
-  conf:
-    sync:
-      prometheus:
-        # Prometheus metrics to sync into the database.
-        # Each metric can be synced from a different Prometheus instance.
-        # The `type` parameter should map to a known metric model in the database.
-        metrics:
-          # VROps metrics for VMware hosts.
-          - alias: vrops_virtualmachine_cpu_demand_ratio
-            query: vrops_virtualmachine_cpu_demand_ratio
-            type: vrops_vm_metric
-          - alias: vrops_hostsystem_cpu_contention_long_term_percentage
-            query: vrops_hostsystem_cpu_contention_percentage
-            type: vrops_host_metric
-          - alias: vrops_hostsystem_cpu_contention_short_term_percentage
-            query: vrops_hostsystem_cpu_contention_percentage
-            type: vrops_host_metric
-            timeRangeSeconds: 1200 # 20 minutes
-            intervalSeconds: 300 # 5 minutes
-            resolutionSeconds: 60 # 1 minute
-          # Node exporter metrics for KVM hosts.
-          - alias: node_exporter_cpu_usage_pct
-            query: |
-              (1 - (
-                sum by (node) (rate(node_cpu_seconds_total{mode="idle"}[1m])) /
-                count by (node) (rate(node_cpu_seconds_total{mode="idle"}[1m]))
-              )) * 100
-            type: node_exporter_metric
-          - alias: node_exporter_memory_active_pct
-            query: |
-              (1 - (
-                (sum by (node) (node_memory_Active_bytes) / count by (node) (node_memory_Active_bytes)) /
-                (sum by (node) (node_memory_MemTotal_bytes) / count by (node) (node_memory_MemTotal_bytes))
-              )) * 100
-            type: node_exporter_metric
-          - alias: kvm_libvirt_domain_steal_pct
-            # This metric is exported by https://github.com/cobaltcore-dev/kvm-monitoring
-            query: |
-              max by (domain) (rate(kvm_libvirt_domain_vcpu_delay_nanoseconds[5m])) / 1e9 * 100
-            type: kvm_libvirt_domain_metric
-            # It's ok to only look at a short time period here.
-            timeRangeSeconds: 1200 # 20 minutes
-            intervalSeconds: 300 # 5 minutes
-            resolutionSeconds: 60 # 1 minute
-
-      openstack:
-        nova:
-          # One of admin, public, or internal
-          availability: public
-          # Nova objects to sync into the database.
-          types:
-            - hypervisors
-            - servers
-            - deleted_servers
-            - flavors
-            - migrations
-            - aggregates
-        placement:
-          # One of admin, public, or internal
-          availability: public
-          # Placement objects to sync into the database.
-          types:
-            - resource_providers
-            # Needs resource_providers.
-            - traits
-            - inventory_usages
-        identity:
-          # One of admin, public, or internal
-          availability: public
-          # Identity objects to sync into the database.
-          types:
-            - domains
-            - projects
-        limes:
-          # One of admin, public, or internal
-          availability: public
-          # Limes objects to sync into the database.
-          types:
-            # Needs projects.
-            - commitments
-
-  # Values passed to the service through a kubernetes secret.
-  # The keys of these values should correspond to the keys used above in the conf.
-  secrets:
-    sync:
-      prometheus:
-        # Prometheus hosts to consider when syncing the metrics.
-        hosts:
-          - name: vmware_prometheus
-            url: "" # e.g. "https://vmware-prometheus:9090"
-            provides: [vrops_vm_metric, vrops_host_metric]
-          - name: kvm_prometheus
-            url: "" # e.g. "https://kvm-prometheus:9090"
-            provides: [node_exporter_metric]
-
 cortex-kpis:
   fullnameOverride: cortex-nova-kpis
   service:
@@ -167,233 +128,29 @@ cortex-kpis:
   conf:
     kpis:
       # Configuration of KPIs that should be extracted from the synced data.
-      # Each KPI can specify its own dependencies on other extractors and
-      # synced data.
       #
       # The `name` should correspond to a known KPI extractor plugin.
       plugins:
         # VMware-specific KPIs.
         - name: vmware_host_contention_kpi
-          dependencies:
-            extractors:
-              - vrops_hostsystem_contention_long_term_extractor
         - name: vmware_project_noisiness_kpi
-          dependencies:
-            extractors:
-              - vrops_project_noisiness_extractor
         # SAP specific KPIs.
         - name: sap_host_total_allocatable_capacity_kpi
-          dependencies:
-            extractors:
-              - host_utilization_extractor
-              - sap_host_details_extractor
         - name: sap_host_capacity_kpi
-          dependencies:
-            extractors:
-              - host_utilization_extractor
-              - sap_host_details_extractor
         - name: sap_host_running_vms_kpi
-          dependencies:
-            extractors:
-              - sap_host_details_extractor
         # Shared KPIs.
         - name: vm_migration_statistics_kpi
-          dependencies:
-            extractors:
-                - vm_host_residency_extractor
         - name: vm_life_span_kpi
-          dependencies:
-            extractors:
-              - vm_life_span_histogram_extractor
         - name: vm_commitments_kpi
-          dependencies:
-            sync:
-              openstack:
-                limes:
-                  types:
-                    - commitments
-                nova:
-                  types:
-                    - flavors
 
-cortex-extractor:
-  fullnameOverride: cortex-nova-extractor
-  service:
-    extraLabels:
-      app: cortex-nova-extractor # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-nova-extractor
-  args: []
+cortex-knowledge-operator:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
   conf:
-    extractor:
-      # Configuration of features that should be extracted from the synced data.
-      # Each extractor can specify its own dependencies on other extractors or
-      # synced data.
-      #
-      # The `name` should correspond to a known feature extractor plugin.
-      # Note that the order defined here will also be the order in which the
-      # extractors are executed. If possible, extractors whose dependencies have
-      # been executed will be executed in parallel to speed up the process.
-      plugins:
-        # VMware-specific extractors.
-        - name: vrops_hostsystem_resolver
-          recencySeconds: 3600 # 1 hour
-          dependencies:
-            sync:
-              prometheus:
-                metrics:
-                  # Any vrops vm metric suffices.
-                  - type: vrops_vm_metric
-              openstack:
-                nova:
-                  types:
-                    - hypervisors
-                    - servers
-                    - deleted_servers
-        - name: vrops_project_noisiness_extractor
-          recencySeconds: 21600 # 6 hours
-          dependencies:
-            sync:
-              prometheus:
-                metrics:
-                  - alias: vrops_virtualmachine_cpu_demand_ratio
-              openstack:
-                nova:
-                  types:
-                    - hypervisors
-                    - servers
-        - name: vrops_hostsystem_contention_long_term_extractor
-          dependencies:
-            extractors:
-              - vrops_hostsystem_resolver
-            sync:
-              prometheus:
-                metrics:
-                  - alias: vrops_hostsystem_cpu_contention_long_term_percentage
-        - name: vrops_hostsystem_contention_short_term_extractor
-          dependencies:
-            extractors:
-              - vrops_hostsystem_resolver
-            sync:
-              prometheus:
-                metrics:
-                  - alias: vrops_hostsystem_cpu_contention_short_term_percentage
-
-        # KVM-specific extractors.
-        - name: kvm_libvirt_domain_cpu_steal_pct_extractor
-          dependencies:
-            sync:
-              prometheus:
-                metrics:
-                  - alias: kvm_libvirt_domain_steal_pct
-              openstack:
-                nova:
-                  types:
-                    - servers
-        - name: node_exporter_host_cpu_usage_extractor
-          dependencies:
-            sync:
-              prometheus:
-                metrics:
-                  - alias: node_exporter_cpu_usage_pct
-        - name: node_exporter_host_memory_active_extractor
-          dependencies:
-            sync:
-              prometheus:
-                metrics:
-                  - alias: node_exporter_memory_active_pct
-
-        # Shared extractors.
-        - name: host_pinned_projects_extractor
-          recencySeconds: 300
-          dependencies:
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - aggregates
-                    - hypervisors
-        - name: host_utilization_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - hypervisors
-          # Publish the features to mqtt, so that they can be used by the visualizer.
-          mqttTopic: "cortex/extraction/host_utilization_extractor"
-        - name: host_capabilities_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - hypervisors
-                placement:
-                  types:
-                    - traits
-        - name: vm_host_residency_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - flavors
-                    - servers
-                    - migrations
-        - name: vm_life_span_histogram_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - flavors
-                    - deleted_servers
-        - name: host_az_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              openstack:
-                nova:
-                  types:
-                    - hypervisors
-                    - aggregates
-        # SAP-specific extractors.
-        - name: sap_host_details_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            extractors:
-              - host_az_extractor
-            sync:
-              openstack:
-                placement:
-                  types:
-                    - traits
-                nova:
-                  types:
-                    - hypervisors
-
-cortex-descheduler:
-  conf:
-    descheduler:
-      nova:
-        # Configuration of the descheduler that runs periodically to de-schedule
-        # VMs based on the configured plugins.
-        # Each plugin can specify its own dependencies on extractors and synced data.
-        #
-        # The `name` should correspond to a known descheduler plugin.
-        plugins:
-          - name: avoid_high_steal_pct
-            options:
-              # Deschedule once vms reach this cpu steal pct over the observed time span.
-              maxStealPctOverObservedTimeSpan: 20.0
-            dependencies:
-              extractors: [kvm_libvirt_domain_cpu_steal_pct_extractor]
+    # The operator will only touch CRs with this operator name.
+    operator: cortex-nova
 
 cortex-scheduler:
   fullnameOverride: cortex-nova-scheduler
@@ -424,16 +181,7 @@ cortex-scheduler:
         pipelines:
           # Note: there needs to be at least one pipeline with the name "default".
           - name: default
-            # Dependencies needed by all the Nova scheduler steps.
-            dependencies:
-              extractors:
-                # Needed for the step scoper which checks stuff like the hypervisor
-                # type and traits as well as the vm flavor in the request spec.
-                - host_capabilities_extractor
-
             # Configuration of scheduler steps that modify the Nova scheduler weights.
-            # Each scheduler step can specify its own dependencies on extractors and
-            # synced data.
             #
             # The `name` should correspond to a known scheduler plugin.
             # Note that all scheduler steps will be executed in parallel. However,
@@ -469,8 +217,6 @@ cortex-scheduler:
                   ramUtilizedAfterUpperBoundPct: 100
                   ramUtilizedAfterActivationLowerBound: 0.0
                   ramUtilizedAfterActivationUpperBound: 1.0
-                dependencies:
-                  extractors: [host_utilization_extractor]
 
               # Balance non-hana vmware vms on non-hana hosts.
               # This step only depends on openstack data and is thus available for
@@ -505,8 +251,6 @@ cortex-scheduler:
                   ramUtilizedUpperBoundPct: 100
                   ramUtilizedActivationLowerBound: 1.0
                   ramUtilizedActivationUpperBound: 0.0
-                dependencies:
-                  extractors: [host_utilization_extractor]
 
               # Avoid placing vms on hosts with a high CPU contention over a longer
               # period of time. This step depends on vrops metrics and is thus only
@@ -528,8 +272,6 @@ cortex-scheduler:
                   maxCPUContentionUpperBound: 10 # pct
                   maxCPUContentionActivationLowerBound: 0.0
                   maxCPUContentionActivationUpperBound: -0.25
-                dependencies:
-                  extractors: [vrops_hostsystem_contention_long_term_extractor]
 
               # Avoid placing vms on hosts with a high CPU contention over a shorter
               # period of time. This step depends on vrops metrics and is thus only
@@ -551,23 +293,13 @@ cortex-scheduler:
                   maxCPUContentionUpperBound: 10 # pct
                   maxCPUContentionActivationLowerBound: 0.0
                   maxCPUContentionActivationUpperBound: -0.25
-                dependencies:
-                  extractors: [vrops_hostsystem_contention_short_term_extractor]
 
           # Pipeline for initial placement of reservations which needs all filters.
           - name: reservations
             # This pipeline needs to preselect all hosts to get a valid placement.
             preselectAllHosts: true
-            # Dependencies needed by all the Nova scheduler steps.
-            dependencies:
-              extractors:
-                # Needed for the step scoper which checks stuff like the hypervisor
-                # type and traits as well as the vm flavor in the request spec.
-                - host_capabilities_extractor
 
             # Configuration of scheduler steps that modify the Nova scheduler weights.
-            # Each scheduler step can specify its own dependencies on extractors and
-            # synced data.
             #
             # The `name` should correspond to a known scheduler plugin.
             # Note that all scheduler steps will be executed in parallel. However,
@@ -594,7 +326,6 @@ cortex-scheduler:
                 disabledValidations:
                   sameSubjectNumberInOut: true
                   someSubjectsRemain: true
-                dependencies: {extractors: [host_utilization_extractor]}
 
               # Check if the traits required/forbidden in the flavor extra spec
               # match the host's assigned traits.
@@ -602,33 +333,23 @@ cortex-scheduler:
                 disabledValidations:
                   sameSubjectNumberInOut: true
                   someSubjectsRemain: true
-                dependencies: {extractors: [host_capabilities_extractor]}
 
               # If requested, only get hosts with accelerators.
               - name: filter_has_accelerators
                 disabledValidations:
                   sameSubjectNumberInOut: true
                   someSubjectsRemain: true
-                dependencies: {sync: { openstack: {
-                  nova: {types: [servers]},
-                  placement: {types: [traits] },
-                }}}
 
               # Only get hosts in the requested az.
               - name: filter_correct_az
                 disabledValidations:
                   sameSubjectNumberInOut: true
-                dependencies: {extractors: [host_az_extractor]}
 
               # Only get hosts that are not disabled.
               - name: filter_disabled
                 disabledValidations:
                   sameSubjectNumberInOut: true
                   someSubjectsRemain: true
-                dependencies: {sync: { openstack: {
-                  nova: {types: [servers]},
-                  placement: {types: [traits] },
-                }}}
 
               # Prefix-match the domain name for external customer domains and
               # filter out hosts that are not intended for external customers.
@@ -638,20 +359,12 @@ cortex-scheduler:
                   someSubjectsRemain: true
                 options:
                   domainNamePrefixes: ["iaas-"]
-                dependencies: {sync: { openstack: {
-                  nova: {types: [servers]},
-                  placement: {types: [traits] },
-                }}}
 
               # If requested, only get hosts with packed virtqueues.
               - name: filter_packed_virtqueue
                 disabledValidations:
                   sameSubjectNumberInOut: true
                   someSubjectsRemain: true
-                dependencies: {sync: { openstack: {
-                  nova: {types: [servers]},
-                  placement: {types: [traits] },
-                }}}
 
               # Lock certain hosts for certain projects, based on the aggregate metadata.
               # Note that hosts without aggregate tenant filter are still accessible.
@@ -659,9 +372,6 @@ cortex-scheduler:
                 disabledValidations:
                   sameSubjectNumberInOut: true
                   someSubjectsRemain: true
-                dependencies: {sync: { openstack: {
-                  nova: {types: [aggregates]},
-                }}}
 
               # Check the capabilities of each host and if they match the extra spec
               # provided in the request spec flavor.
@@ -669,9 +379,6 @@ cortex-scheduler:
                 disabledValidations:
                   sameSubjectNumberInOut: true
                   someSubjectsRemain: true
-                dependencies: {sync: { openstack: {
-                  nova: {types: [hypervisors]},
-                }}}
 
               # Weighers below.
 
@@ -704,8 +411,6 @@ cortex-scheduler:
                   ramUtilizedAfterUpperBoundPct: 100
                   ramUtilizedAfterActivationLowerBound: 0.0
                   ramUtilizedAfterActivationUpperBound: 1.0
-                dependencies:
-                  extractors: [host_utilization_extractor]
 
               # Balance non-hana vmware vms on non-hana hosts.
               # This step only depends on openstack data and is thus available for
@@ -740,8 +445,6 @@ cortex-scheduler:
                   ramUtilizedUpperBoundPct: 100
                   ramUtilizedActivationLowerBound: 1.0
                   ramUtilizedActivationUpperBound: 0.0
-                dependencies:
-                  extractors: [host_utilization_extractor]
 
               # Avoid placing vms on hosts with a high CPU contention over a longer
               # period of time. This step depends on vrops metrics and is thus only
@@ -763,8 +466,6 @@ cortex-scheduler:
                   maxCPUContentionUpperBound: 10 # pct
                   maxCPUContentionActivationLowerBound: 0.0
                   maxCPUContentionActivationUpperBound: -0.25
-                dependencies:
-                  extractors: [vrops_hostsystem_contention_long_term_extractor]
 
               # Avoid placing vms on hosts with a high CPU contention over a shorter
               # period of time. This step depends on vrops metrics and is thus only
@@ -786,5 +487,3 @@ cortex-scheduler:
                   maxCPUContentionUpperBound: 10 # pct
                   maxCPUContentionActivationLowerBound: 0.0
                   maxCPUContentionActivationUpperBound: -0.25
-                dependencies:
-                  extractors: [vrops_hostsystem_contention_short_term_extractor]

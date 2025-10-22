@@ -36,3 +36,10 @@ cortex-postgres:
 # Custom configuration for the cortex mqtt chart.
 cortex-mqtt:
   fullnameOverride: cortex-ironcore-mqtt
+
+cortex-machines-operator:
+  enabled: false
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-ironcore

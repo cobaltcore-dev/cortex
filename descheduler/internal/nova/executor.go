@@ -34,10 +34,6 @@ type Executor struct {
 	Monitor Monitor
 }
 
-// +kubebuilder:rbac:groups=descheduler.cortex,resources=deschedulings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=descheduler.cortex,resources=deschedulings/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=descheduler.cortex,resources=deschedulings/finalizers,verbs=update
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

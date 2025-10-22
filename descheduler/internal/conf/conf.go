@@ -27,8 +27,6 @@ type DeschedulerStepConfig struct {
 	Name string `json:"name"`
 	// Custom options for the step, as a raw yaml map.
 	Options libconf.RawOpts `json:"options,omitempty"`
-	// The dependencies this step needs.
-	libconf.DependencyConfig `json:"dependencies,omitempty"`
 }
 
 type Config struct {

@@ -87,9 +87,6 @@ type NovaSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
 	Plugins []NovaSchedulerStepConfig `json:"plugins"`
 
-	// Dependencies needed by all the Nova scheduler steps.
-	libconf.DependencyConfig `json:"dependencies,omitempty"`
-
 	// The name of this scheduler pipeline.
 	// The name is used to distinguish and route between multiple pipelines.
 	Name string `json:"name"`
@@ -183,39 +180,6 @@ type SchedulerAPIConfig struct {
 	LogRequestBodies bool `json:"logRequestBodies"`
 }
 
-// Configuration for the nova service.
-type SyncOpenStackNovaConfig struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
-}
-
-// Configuration for the identity service.
-type SyncOpenStackIdentityConfig struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
-}
-
-// Configuration for the manila service.
-type SyncOpenStackManilaConfig struct {
-	// Availability of the service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
-}
-
-// Configuration for the sync/openstack module.
-type SyncOpenStackConfig struct {
-	// Configuration for the nova service.
-	Nova SyncOpenStackNovaConfig `json:"nova"`
-	// Configuration for the identity service.
-	Identity SyncOpenStackIdentityConfig `json:"identity"`
-	// Configuration for the manila service.
-	Manila SyncOpenStackManilaConfig `json:"manila"`
-}
-
-// Configuration for the sync module.
-type SyncConfig struct {
-	OpenStack SyncOpenStackConfig `json:"openstack"`
-}
-
 type Config struct {
 	SchedulerConfig `json:"scheduler"`
 
@@ -228,5 +192,4 @@ type Config struct {
 	// Required for e2e tests.
 	libconf.KeystoneConfig `json:"keystone"`
 	libconf.APIConfig      `json:"api"`
-	SyncConfig             `json:"sync"`
 }

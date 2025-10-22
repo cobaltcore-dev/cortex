@@ -35,10 +35,6 @@ type ComputeReservationReconciler struct {
 	Conf Config
 }
 
-// +kubebuilder:rbac:groups=reservations.cortex,resources=computereservations,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=reservations.cortex,resources=computereservations/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=reservations.cortex,resources=computereservations/finalizers,verbs=update
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

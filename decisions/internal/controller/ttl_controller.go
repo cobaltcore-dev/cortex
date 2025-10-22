@@ -43,9 +43,6 @@ type SchedulingDecisionTTLController struct {
 	Conf Config
 }
 
-// +kubebuilder:rbac:groups=decisions.cortex,resources=schedulingdecisions,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=decisions.cortex,resources=schedulingdecisions/status,verbs=get
-
 func (r *SchedulingDecisionTTLController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithName("ttl-controller")
 

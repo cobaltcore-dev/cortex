@@ -11,7 +11,7 @@ import (
 
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 
-	"github.com/cobaltcore-dev/cortex/extractor/api/features/shared"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/scheduling"

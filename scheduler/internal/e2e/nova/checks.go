@@ -15,10 +15,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	api "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
@@ -92,7 +92,6 @@ func getHypervisors(ctx context.Context, sc *gophercloud.ServiceClient) ([]nova.
 // Prepare the test by fetching the necessary data from OpenStack.
 func prepare(ctx context.Context, config conf.Config) datacenter {
 	keystoneConf := config.KeystoneConfig
-	osConf := config.SyncConfig.OpenStack
 	slog.Info("authenticating against openstack", "url", keystoneConf.URL)
 	authOptions := gophercloud.AuthOptions{
 		IdentityEndpoint: keystoneConf.URL,
@@ -112,7 +111,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 	slog.Info("locating nova endpoint")
 	novaURL := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "compute",
-		Availability: gophercloud.Availability(osConf.Nova.Availability),
+		Availability: gophercloud.Availability(keystoneConf.Availability),
 	}))
 	novaSC := &gophercloud.ServiceClient{
 		ProviderClient: pc,
@@ -169,7 +168,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 	slog.Info("locating keystone endpoint")
 	keystoneURL := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "identity",
-		Availability: gophercloud.Availability(osConf.Identity.Availability),
+		Availability: gophercloud.Availability(keystoneConf.Availability),
 	}))
 	keystoneSC := &gophercloud.ServiceClient{
 		ProviderClient: pc,

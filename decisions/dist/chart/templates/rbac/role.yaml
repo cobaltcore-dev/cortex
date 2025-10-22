@@ -5,7 +5,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: decisions-manager-role
+  name: {{ .Values.namePrefix }}-decisions-manager-role
 rules:
 - apiGroups:
   - decisions.cortex

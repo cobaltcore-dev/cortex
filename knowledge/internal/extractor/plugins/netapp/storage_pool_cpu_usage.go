@@ -1,0 +1,28 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package netapp
+
+import (
+	_ "embed"
+
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/netapp"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
+)
+
+// Extractor that extracts the CPU usage of a storage pool.
+type StoragePoolCPUUsageExtractor struct {
+	// Common base for all extractors that provides standard functionality.
+	plugins.BaseExtractor[
+		struct{},                   // No options passed through yaml config
+		netapp.StoragePoolCPUUsage, // Feature model
+	]
+}
+
+//go:embed storage_pool_cpu_usage.sql
+var storagePoolCPUUsageQuery string
+
+// Extract the CPU usage of a storage pool.
+func (e *StoragePoolCPUUsageExtractor) Extract() ([]plugins.Feature, error) {
+	return e.ExtractSQL(storagePoolCPUUsageQuery)
+}

@@ -5,7 +5,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: reservations-manager-role
+  name: {{ .Values.namePrefix }}-reservations-manager-role
 rules:
 - apiGroups:
   - reservations.cortex

@@ -6,10 +6,10 @@ package shared
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/sync/api/objects/openstack/nova"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"github.com/prometheus/client_golang/prometheus"
 )

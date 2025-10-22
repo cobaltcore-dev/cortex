@@ -58,9 +58,6 @@ type Cleanup struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=descheduler.cortex,resources=deschedulings,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=descheduler.cortex,resources=deschedulings/status,verbs=get
-
 func (r *Cleanup) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithName("cleanup")
 

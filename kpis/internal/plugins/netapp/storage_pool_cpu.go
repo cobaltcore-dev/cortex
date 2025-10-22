@@ -6,7 +6,7 @@ package netapp
 import (
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/extractor/api/features/netapp"
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/netapp"
 	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
