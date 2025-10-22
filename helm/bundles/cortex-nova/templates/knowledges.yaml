@@ -13,7 +13,7 @@ spec:
   description: |
     Resolves the hostsystem label provided to the vrops prometheus metrics to
     the associated nova hypervisor compute host.
-  recency: "3600s" # 1 hour
+  recency: "1h"
   dependencies:
     datasources:
       - name: nova-hypervisors
@@ -36,7 +36,7 @@ spec:
   description: |
     Calculates how noisy projects are in terms of CPU contention on their VMs'
     hostsystems.
-  recency: "21600s" # 6 hours
+  recency: "6h"
   dependencies:
     datasources:
       - name: nova-hypervisors
@@ -112,7 +112,7 @@ spec:
     name: host_pinned_projects_extractor
   description: |
     Extract host-to-project pinning relationships from Nova aggregates.
-  recency: "300s" # 5 minutes
+  recency: "5m"
   dependencies:
     datasources:
       - name: nova-aggregates

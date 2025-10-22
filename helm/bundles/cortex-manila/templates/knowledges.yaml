@@ -1,0 +1,20 @@
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: Knowledge
+metadata:
+  name: netapp-storage-pool-cpu-usage-manila
+spec:
+  operator: cortex-manila
+  databaseSecretRef:
+    name: cortex-manila-postgres
+    namespace: {{ .Release.Namespace }}
+  extractor:
+    name: netapp_storage_pool_cpu_usage_extractor
+  description: |
+    Extracts CPU usage information for NetApp storage pools.
+  recency: "60s"
+  dependencies:
+    datasources:
+      - name: manila-storage-pools
+      - name: netapp-node-cpu-busy-manila
+      - name: netapp-aggr-labels-manila
