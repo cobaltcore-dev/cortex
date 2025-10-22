@@ -176,7 +176,7 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Update the knowledge status.
 	// TODO: Remove StoreInDatabaseOnly option in future release.
-	if !knowledge.Spec.StoreInDatabaseOnly {
+	if knowledge.Spec.StoreInDatabaseOnly {
 		raw, err := v1alpha1.BoxFeatureList(features)
 		if err != nil {
 			log.Error(err, "failed to marshal extracted features", "name", knowledge.Spec.Extractor.Name)
@@ -188,8 +188,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 		knowledge.Status.Raw = raw
+	} else {
+		knowledge.Status.Raw = runtime.RawExtension{}
 	}
-
 	knowledge.Status.LastExtracted = metav1.NewTime(time.Now())
 	knowledge.Status.Error = ""
 	knowledge.Status.RawLength = len(features)
