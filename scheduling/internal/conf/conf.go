@@ -7,6 +7,28 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
+// Configuration for the descheduler module.
+type DeschedulerConfig struct {
+	Nova NovaDeschedulerConfig `json:"nova"`
+}
+
+// Configuration for the nova descheduler.
+type NovaDeschedulerConfig struct {
+	// The availability of the nova service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+	// The steps to execute in the descheduler.
+	Plugins []DeschedulerStepConfig `json:"plugins"`
+	// If dry-run is disabled (by default its enabled).
+	DisableDryRun bool `json:"disableDryRun,omitempty"`
+}
+
+type DeschedulerStepConfig struct {
+	// The name of the step.
+	Name string `json:"name"`
+	// Custom options for the step, as a raw yaml map.
+	Options libconf.RawOpts `json:"options,omitempty"`
+}
+
 type CinderSchedulerConfig struct {
 	// Pipelines in this scheduler.
 	Pipelines []CinderSchedulerPipelineConfig `json:"pipelines"`
@@ -184,7 +206,9 @@ type Config struct {
 	// The operator will only touch CRs with this operator name.
 	Operator string `json:"operator"`
 
-	SchedulerConfig `json:"scheduler"`
+	SchedulerConfig   `json:"scheduler"`
+	DeschedulerConfig `json:"descheduler"`
+	Machines          MachineSchedulerConfig `json:"machines"`
 
 	// Lib modules configs.
 	libconf.MonitoringConfig `json:"monitoring"`
