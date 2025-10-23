@@ -1,0 +1,249 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package http
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/cobaltcore-dev/cortex/lib/scheduling"
+	scheduler "github.com/cobaltcore-dev/cortex/lib/scheduling"
+	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/cinder/api"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+)
+
+type mockPipeline struct {
+	runFunc func(api.PipelineRequest) ([]string, error)
+}
+
+func (p *mockPipeline) SetConsumer(consumer scheduling.SchedulingDecisionConsumer[api.PipelineRequest]) {
+
+}
+
+func (p *mockPipeline) Consume(
+	request api.PipelineRequest,
+	applicationOrder []string,
+	inWeights map[string]float64,
+	stepWeights map[string]map[string]float64,
+) {
+}
+
+func (m *mockPipeline) Run(req api.PipelineRequest) ([]string, error) {
+	return m.runFunc(req)
+}
+
+func validRequestBody() []byte {
+	req := api.PipelineRequest{
+		Spec: map[string]any{"foo": "bar"},
+		Hosts: []delegationAPI.ExternalSchedulerHost{
+			{VolumeHost: "host1"},
+			{VolumeHost: "host2"},
+		},
+		Weights: map[string]float64{
+			"host1": 1.0,
+			"host2": 2.0,
+		},
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		panic("failed to marshal valid request body: " + err.Error())
+	}
+	return b
+}
+
+func missingWeightBody() []byte {
+	req := api.PipelineRequest{
+		Spec: map[string]any{"foo": "bar"},
+		Hosts: []delegationAPI.ExternalSchedulerHost{
+			{VolumeHost: "host1"},
+			{VolumeHost: "host2"},
+		},
+		Weights: map[string]float64{
+			"host1": 1.0,
+		},
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		panic("failed to marshal valid request body: " + err.Error())
+	}
+	return b
+}
+
+func unknownWeightBody() []byte {
+	req := api.PipelineRequest{
+		Spec: map[string]any{"foo": "bar"},
+		Hosts: []delegationAPI.ExternalSchedulerHost{
+			{VolumeHost: "host1"},
+		},
+		Weights: map[string]float64{
+			"host1": 1.0,
+			"host2": 2.0,
+		},
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		panic("failed to marshal valid request body: " + err.Error())
+	}
+	return b
+}
+
+func TestCinderExternalScheduler_Success(t *testing.T) {
+	pipeline := &mockPipeline{
+		runFunc: func(req api.PipelineRequest) ([]string, error) {
+			return []string{"host2", "host1"}, nil
+		},
+	}
+	a := &httpAPI{
+		pipelines: map[string]scheduler.Pipeline[api.PipelineRequest]{
+			"default": pipeline,
+		},
+		config:  conf.SchedulerAPIConfig{},
+		monitor: scheduler.APIMonitor{},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/cinder/external", bytes.NewReader(validRequestBody()))
+	w := httptest.NewRecorder()
+
+	a.CinderExternalScheduler(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	var out delegationAPI.ExternalSchedulerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(out.Hosts) != 2 || out.Hosts[0] != "host2" {
+		t.Errorf("unexpected hosts order: %+v", out.Hosts)
+	}
+}
+
+func TestCinderExternalScheduler_InvalidMethod(t *testing.T) {
+	api := &httpAPI{
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/scheduler/cinder/external", http.NoBody)
+	w := httptest.NewRecorder()
+	api.CinderExternalScheduler(w, req)
+}
+
+func TestCinderExternalScheduler_InvalidJSON(t *testing.T) {
+	api := &httpAPI{
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/cinder/external", bytes.NewReader([]byte(`{invalid json}`)))
+	w := httptest.NewRecorder()
+	api.CinderExternalScheduler(w, req)
+}
+
+func TestCinderExternalScheduler_MissingWeight(t *testing.T) {
+	api := &httpAPI{
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/cinder/external", bytes.NewReader(missingWeightBody()))
+	w := httptest.NewRecorder()
+	api.CinderExternalScheduler(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected status 400 for missing weight, got %d", resp.StatusCode)
+	}
+}
+
+func TestCinderExternalScheduler_UnknownWeight(t *testing.T) {
+	api := &httpAPI{
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/cinder/external", bytes.NewReader(unknownWeightBody()))
+	w := httptest.NewRecorder()
+	api.CinderExternalScheduler(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected status 400 for unknown weight, got %d", resp.StatusCode)
+	}
+}
+
+func TestCinderExternalScheduler_PipelineError(t *testing.T) {
+	pipeline := &mockPipeline{
+		runFunc: func(req api.PipelineRequest) ([]string, error) {
+			return nil, errors.New("pipeline error")
+		},
+	}
+	api := &httpAPI{
+		pipelines: map[string]scheduler.Pipeline[api.PipelineRequest]{
+			"default": pipeline,
+		},
+		config:  conf.SchedulerAPIConfig{},
+		monitor: scheduler.APIMonitor{},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/cinder/external", bytes.NewReader(validRequestBody()))
+	w := httptest.NewRecorder()
+	api.CinderExternalScheduler(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected status 500 for pipeline error, got %d", resp.StatusCode)
+	}
+}
+
+func TestCinderExternalScheduler_BodyReadError(t *testing.T) {
+	api := &httpAPI{
+		pipelines: map[string]scheduler.Pipeline[api.PipelineRequest]{
+			"default": &mockPipeline{
+				runFunc: func(req api.PipelineRequest) ([]string, error) {
+					return nil, nil // No need to run pipeline for this test
+				},
+			},
+		},
+		config:  conf.SchedulerAPIConfig{LogRequestBodies: true},
+		monitor: scheduler.APIMonitor{},
+	}
+	// Simulate a body that returns error on Read
+	r := httptest.NewRequest(http.MethodPost, "/scheduler/cinder/external", io.NopCloser(badReader{}))
+	w := httptest.NewRecorder()
+	api.CinderExternalScheduler(w, r)
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected status 500 for body read error, got %d", resp.StatusCode)
+	}
+}
+
+func TestCinderExternalScheduler_EmptyBody(t *testing.T) {
+	api := &httpAPI{
+		pipelines: nil,
+		config:    conf.SchedulerAPIConfig{},
+		monitor:   scheduler.APIMonitor{},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/cinder/external", http.NoBody)
+	w := httptest.NewRecorder()
+	api.CinderExternalScheduler(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected status 400 for empty body, got %d", resp.StatusCode)
+	}
+}
+
+type badReader struct{}
+
+func (badReader) Read([]byte) (int, error) { return 0, errors.New("read error") }
+func (badReader) Close() error             { return nil }

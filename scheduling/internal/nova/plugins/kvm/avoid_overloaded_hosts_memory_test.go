@@ -1,0 +1,110 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package kvm
+
+import (
+	"log/slog"
+	"testing"
+
+	"github.com/cobaltcore-dev/cortex/knowledge/api/features/kvm"
+	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+)
+
+func TestAvoidOverloadedHostsMemoryStep_Run(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer testDB.Close()
+	defer dbEnv.Close()
+
+	// Create dependency tables
+	err := testDB.CreateTable(testDB.AddTable(kvm.NodeExporterHostMemoryActive{}))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	hostMemoryActive := []any{
+		&kvm.NodeExporterHostMemoryActive{ComputeHost: "host1", AvgMemoryActive: 15.0, MaxMemoryActive: 25.0},
+		&kvm.NodeExporterHostMemoryActive{ComputeHost: "host2", AvgMemoryActive: 5.0, MaxMemoryActive: 10.0},
+		&kvm.NodeExporterHostMemoryActive{ComputeHost: "host3", AvgMemoryActive: 20.0, MaxMemoryActive: 30.0},
+	}
+	if err := testDB.Insert(hostMemoryActive...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Create an instance of the step
+	opts := conf.NewRawOpts(`{
+        "avgMemoryUsageLowerBound": 10,
+        "avgMemoryUsageUpperBound": 100,
+        "avgMemoryUsageActivationLowerBound": 0.0,
+        "avgMemoryUsageActivationUpperBound": -0.5,
+        "maxMemoryUsageLowerBound": 20,
+        "maxMemoryUsageUpperBound": 100,
+        "maxMemoryUsageActivationLowerBound": 0.0,
+        "maxMemoryUsageActivationUpperBound": -0.5
+    }`)
+	step := &AvoidOverloadedHostsMemoryStep{}
+	if err := step.Init("", testDB, opts); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		request        api.PipelineRequest
+		downvotedHosts map[string]struct{}
+	}{
+		{
+			name: "Non-vmware vm",
+			request: api.PipelineRequest{
+				VMware: false,
+				Hosts: []delegationAPI.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			// Should downvote hosts with high CPU usage
+			downvotedHosts: map[string]struct{}{
+				"host1": {},
+				"host3": {},
+			},
+		},
+		{
+			name: "No overloaded hosts",
+			request: api.PipelineRequest{
+				VMware: false,
+				Hosts: []delegationAPI.ExternalSchedulerHost{
+					{ComputeHost: "host4"},
+					{ComputeHost: "host5"},
+				},
+			},
+			// Should not downvote any hosts
+			downvotedHosts: map[string]struct{}{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := step.Run(slog.Default(), tt.request)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			// Check that the weights have decreased
+			for host, weight := range result.Activations {
+				if _, ok := tt.downvotedHosts[host]; ok {
+					if weight >= 0 {
+						t.Errorf("expected weight for host %s to be less than 0, got %f", host, weight)
+					}
+				} else {
+					if weight != 0 {
+						t.Errorf("expected weight for host %s to be 0, got %f", host, weight)
+					}
+				}
+			}
+		})
+	}
+}
