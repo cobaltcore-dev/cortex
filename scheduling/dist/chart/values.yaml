@@ -1,0 +1,104 @@
+# This file is safe from kubebuilder edit --plugins=helm/v1-alpha
+# If you want to re-generate, add the --force flag.
+
+# [MANAGER]: Manager Deployment Configurations
+controllerManager:
+  enable: true
+  replicas: 1
+  container:
+    image:
+      repository: ghcr.io/cobaltcore-dev/cortex-scheduling-operator
+    args:
+      - "--leader-elect"
+      - "--metrics-bind-address=:8443"
+      - "--health-probe-bind-address=:8081"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 2048Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+    livenessProbe:
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      httpGet:
+        path: /healthz
+        port: 8081
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      httpGet:
+        path: /readyz
+        port: 8081
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - "ALL"
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  terminationGracePeriodSeconds: 10
+  serviceAccountName: scheduling-controller-manager
+
+# Use this to unambiguate multiple cortex deployments in the same cluster.
+namePrefix: cortex
+
+# [RBAC]: To enable RBAC (Permissions) configurations
+rbac:
+  enable: true
+
+# [CRDs]: To enable the CRDs
+crd:
+  # This option determines whether the CRDs are included
+  # in the installation process.
+  enable: true
+
+  # Enabling this option adds the "helm.sh/resource-policy": keep
+  # annotation to the CRD, ensuring it remains installed even when
+  # the Helm release is uninstalled.
+  # NOTE: Removing the CRDs will also remove all cert-manager CR(s)
+  # (Certificates, Issuers, ...) due to garbage collection.
+  keep: true
+
+# [METRICS]: Set to true to generate manifests for exporting metrics.
+# To disable metrics export set false, and ensure that the
+# ControllerManager argument "--metrics-bind-address=:8443" is removed.
+metrics:
+  enable: true
+
+# [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
+prometheus:
+  enable: true
+
+# [CERT-MANAGER]: To enable cert-manager injection to webhooks set true
+certmanager:
+  enable: false
+
+# [NETWORK POLICIES]: To enable NetworkPolicies set true
+networkPolicy:
+  enable: false
+
+# Default configuration provided through configmap to the operator.
+conf:
+  # Configuration of metrics exported to the /metrics endpoint.
+  monitoring:
+    # The port to expose the metrics on.
+    port: 2112
+
+    # Custom labels added to the exported metrics.
+    labels:
+      github_org: cobaltcore-dev
+      github_repo: cortex
+
+# Values passed to the service through a kubernetes secret.
+# The keys of these values should correspond to the keys used above in the conf.
+#
+# Note: Please only add values here that MUST be overridden using the "secrets:" key.
+secrets:
+  # Database connection credentials.
+  db:
+    user: postgres
+    password: secret

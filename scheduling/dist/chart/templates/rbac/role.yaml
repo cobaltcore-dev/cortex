@@ -1,0 +1,36 @@
+{{- if .Values.rbac.enable }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-scheduling-manager-role
+rules:
+- apiGroups:
+  - scheduling.cortex
+  resources:
+  - schedulings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - scheduling.cortex
+  resources:
+  - schedulings/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - scheduling.cortex
+  resources:
+  - schedulings/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end -}}
