@@ -28,8 +28,6 @@ status:
         compute-node-1: 0.8
         compute-node-2: 0.5
         compute-node-3: 0.2
-  history:
-  - name: nova-server-abc12345-initial-placement
   explanation: Initial placement on compute-node-3 preferred by step "weight".
 ---
 apiVersion: scheduling.cortex/v1alpha1
