@@ -1,0 +1,67 @@
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Scheduling
+metadata:
+  name: nova-server-abc12345-initial-placement
+spec:
+  operator: cortex-nova
+  pipelineRef:
+    name: default
+  resourceID: "abc12345-1234-1234-1234-123456789abc"
+  type: nova
+  novaRaw: {} # This will be the raw nova external scheduler request payload
+status:
+  took: 10ms
+  targetHost: compute-node-3
+  decisionType: nova
+  novaDecision:
+    computeHosts:
+    - compute-node-1
+    - compute-node-3
+    stepResults:
+    - stepName: filter
+      activations:
+        compute-node-1: 1.0
+        compute-node-3: 1.0
+    - stepName: weight
+      activations:
+        compute-node-1: 0.8
+        compute-node-2: 0.5
+        compute-node-3: 0.2
+  history:
+  - name: nova-server-abc12345-initial-placement
+  explanation: Initial placement on compute-node-3 preferred by step "weight".
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Scheduling
+metadata:
+  name: nova-server-abc12345-live-migration-1
+spec:
+  operator: cortex-nova
+  pipelineRef:
+    name: default
+  sourceHost: compute-node-3
+  resourceID: "abc12345-1234-1234-1234-123456789abc"
+  type: nova
+  novaRaw: {} # This will be the raw nova external scheduler request payload
+status:
+  took: 10ms
+  targetHost: compute-node-2
+  decisionType: nova
+  novaDecision:
+    computeHosts:
+    - compute-node-2
+    - compute-node-3
+    stepResults:
+    - stepName: filter
+      activations:
+        compute-node-2: 1.0
+        compute-node-3: 1.0
+    - stepName: weight
+      activations:
+        compute-node-2: 0.8
+        compute-node-3: 0.5
+        compute-node-4: 0.2
+  history:
+  - name: nova-server-abc12345-initial-placement
+  explanation: After initial placement on compute-node-3, live migrated to compute-node-2.

@@ -75,6 +75,13 @@ const (
 	SchedulingDecisionTypeMachine SchedulingDecisionType = "machine"
 )
 
+type StepResult struct {
+	// Name of the scheduler step.
+	StepName string `json:"stepName"`
+	// Activations of the step for each host.
+	Activations map[string]float64 `json:"activations"`
+}
+
 type NovaSchedulingDecision struct {
 	// Sorted list of compute hosts from more preferred to least preferred.
 	ComputeHosts []string `json:"computeHosts"`
@@ -88,7 +95,7 @@ type CinderSchedulingDecision struct {
 	StoragePools []string `json:"storagePools"`
 	// Outputs of the scheduling pipeline including the activations used
 	// to make the final ordering of storage hosts.
-	Activations map[string]float64 `json:"activations,omitempty"`
+	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
 type ManilaSchedulingDecision struct {
@@ -96,7 +103,7 @@ type ManilaSchedulingDecision struct {
 	StoragePools []string `json:"storagePools"`
 	// Outputs of the scheduling pipeline including the activations used
 	// to make the final ordering of share hosts.
-	Activations map[string]float64 `json:"activations,omitempty"`
+	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
 type MachineSchedulingDecision struct {
@@ -104,7 +111,7 @@ type MachineSchedulingDecision struct {
 	MachinePools []string `json:"machinePools"`
 	// Outputs of the scheduling pipeline including the activations used
 	// to make the final ordering of machine pools.
-	Activations map[string]float64 `json:"activations,omitempty"`
+	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
 type SchedulingStatus struct {

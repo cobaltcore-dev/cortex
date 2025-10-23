@@ -196,13 +196,25 @@ spec:
                   If the scheduling decision type is "cinder", this field contains the
                   cinder scheduling decision.
                 properties:
-                  activations:
-                    additionalProperties:
-                      type: number
+                  stepResults:
                     description: |-
                       Outputs of the scheduling pipeline including the activations used
                       to make the final ordering of storage hosts.
-                    type: object
+                    items:
+                      properties:
+                        activations:
+                          additionalProperties:
+                            type: number
+                          description: Activations of the step for each host.
+                          type: object
+                        stepName:
+                          description: Name of the scheduler step.
+                          type: string
+                      required:
+                      - activations
+                      - stepName
+                      type: object
+                    type: array
                   storagePools:
                     description: Sorted list of storage hosts from more preferred
                       to least preferred.
@@ -276,18 +288,30 @@ spec:
                   If the scheduling decision type is "machine", this field contains the
                   machine scheduling decision.
                 properties:
-                  activations:
-                    additionalProperties:
-                      type: number
-                    description: |-
-                      Outputs of the scheduling pipeline including the activations used
-                      to make the final ordering of machine pools.
-                    type: object
                   machinePools:
                     description: Sorted list of machine pools from more preferred
                       to least preferred.
                     items:
                       type: string
+                    type: array
+                  stepResults:
+                    description: |-
+                      Outputs of the scheduling pipeline including the activations used
+                      to make the final ordering of machine pools.
+                    items:
+                      properties:
+                        activations:
+                          additionalProperties:
+                            type: number
+                          description: Activations of the step for each host.
+                          type: object
+                        stepName:
+                          description: Name of the scheduler step.
+                          type: string
+                      required:
+                      - activations
+                      - stepName
+                      type: object
                     type: array
                 required:
                 - machinePools
@@ -297,13 +321,25 @@ spec:
                   If the scheduling decision type is "manila", this field contains the
                   manila scheduling decision.
                 properties:
-                  activations:
-                    additionalProperties:
-                      type: number
+                  stepResults:
                     description: |-
                       Outputs of the scheduling pipeline including the activations used
                       to make the final ordering of share hosts.
-                    type: object
+                    items:
+                      properties:
+                        activations:
+                          additionalProperties:
+                            type: number
+                          description: Activations of the step for each host.
+                          type: object
+                        stepName:
+                          description: Name of the scheduler step.
+                          type: string
+                      required:
+                      - activations
+                      - stepName
+                      type: object
+                    type: array
                   storagePools:
                     description: Sorted list of share hosts from more preferred to
                       least preferred.
