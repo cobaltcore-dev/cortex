@@ -1,6 +1,0 @@
-dependencies:
-- name: owner-info
-  repository: oci://ghcr.io/sapcc/helm-charts
-  version: 1.0.0
-digest: sha256:7643f231cc4ebda347fd12ec62fe4445c280e2b71d27eec555f3025290f5038f
-generated: "2025-08-26T10:55:05.888651+02:00"

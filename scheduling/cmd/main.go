@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -25,8 +26,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	schedulingv1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
+	"github.com/cobaltcore-dev/cortex/lib/mqtt"
+	lib "github.com/cobaltcore-dev/cortex/lib/scheduling"
+	"github.com/cobaltcore-dev/cortex/machines/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -38,7 +42,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(schedulingv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -166,14 +170,13 @@ func main() {
 		})
 	}
 
-	config := libconf.GetConfigOrDie[conf.Config]()
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       config.Operator + "-scheduling-controller-leader-election-id",
+		LeaderElectionID:       "machines.cortex",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -191,8 +194,54 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO
+	ctx := context.Background()
+	config := libconf.GetConfigOrDie[controller.Config]()
+	// Our custom monitoring registry can add prometheus labels to all metrics.
+	// This is useful to distinguish metrics from different deployments.
+	registry := monitoring.NewRegistry(config.MonitoringConfig)
 
+	// Currently the scheduler pipeline will always need a database and mqtt client.
+	// In the future we will no longer need the mqtt client since events will be
+	// exchanged through kubernetes resources. The database might also be optional
+	// in the future, depending on the steps used in the pipeline.
+	database := db.NewPostgresDB(ctx, config.DBConfig, registry, db.NewDBMonitor(registry))
+	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
+	// MQTT Topic on which the pipeline will publish when it has finished.
+	const topicFinished = "cortex/scheduler/machines/pipeline/finished"
+	if err := mqttClient.Connect(); err != nil {
+		panic("failed to connect to mqtt broker: " + err.Error())
+	}
+
+	// The pipeline monitor is a bucket for all metrics produced during the
+	// execution of individual steps (see step monitor below) and the overall
+	// pipeline.
+	monitor := lib.NewPipelineMonitor(registry)
+	// Step wrappers can be used to perform actions before or after each step.
+	wrappers := []lib.StepWrapper[controller.MachinePipelineRequest, struct{}]{
+		// Monitor the step execution.
+		func(s controller.MachineStep, c controller.MachineSchedulerStepConfig) controller.MachineStep {
+			// This monitor calculates detailed impact metrics for each step.
+			return lib.MonitorStep(s, monitor)
+		},
+	}
+	// We can execute different pipelines, e.g. depending on the machine spec.
+	pipelines := make(
+		map[string]lib.Pipeline[controller.MachinePipelineRequest],
+		len(config.Machines.Pipelines),
+	)
+	for _, pipelineConf := range config.Machines.Pipelines {
+		plugins := pipelineConf.Plugins
+		pipelines[pipelineConf.Name] = lib.NewPipeline(controller.SupportedSteps, plugins, wrappers, database, monitor)
+	}
+
+	if err := (&controller.MachineScheduler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Pipelines: pipelines,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MachineScheduler")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

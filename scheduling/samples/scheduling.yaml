@@ -2,7 +2,7 @@
 apiVersion: scheduling.cortex/v1alpha1
 kind: Scheduling
 metadata:
-  name: nova-server-abc12345-initial-placement
+  name: nova-server-abc12345-0-initial-placement
 spec:
   operator: cortex-nova
   pipelineRef:
@@ -33,7 +33,7 @@ status:
 apiVersion: scheduling.cortex/v1alpha1
 kind: Scheduling
 metadata:
-  name: nova-server-abc12345-live-migration-1
+  name: nova-server-abc12345-1-live-migration
 spec:
   operator: cortex-nova
   pipelineRef:
@@ -61,5 +61,5 @@ status:
         compute-node-3: 0.5
         compute-node-4: 0.2
   history:
-  - name: nova-server-abc12345-initial-placement
+  - name: nova-server-abc12345-0-initial-placement
   explanation: After initial placement on compute-node-3, live migrated to compute-node-2.
