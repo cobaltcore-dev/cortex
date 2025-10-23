@@ -93,24 +93,6 @@ conf:
       github_org: cobaltcore-dev
       github_repo: cortex
 
-  extractor:
-    # Configuration of features that should be extracted from the synced data.
-    # Each extractor can specify its own dependencies on other extractors or
-    # synced data.
-    #
-    # The `name` should correspond to a known feature extractor plugin.
-    # Note that the order defined here will also be the order in which the
-    # extractors are executed. If possible, extractors whose dependencies have
-    # been executed will be executed in parallel to speed up the process.
-    plugins:
-      # - name:
-      #   # How recent the last execution should have been.
-      #   recencySeconds: # 1 hour
-      #   # Dependencies needed by this extractor.
-      #   dependencies: # e.g. {datasources: {openstack: {nova: {types: ["servers"]}}}}
-      #   # Optionally, you can specify a custom MQTT topic to publish the extracted data to.
-      #   mqttTopic: # e.g. "cortex/extraction/feature_name"
-
 # Values passed to the service through a kubernetes secret.
 # The keys of these values should correspond to the keys used above in the conf.
 #
