@@ -3,6 +3,6 @@ name: cortex-knowledge-operator
 description: A Helm chart to distribute the cortex knowledge operator.
 type: application
 version: 0.0.1
-appVersion: "sha-1d4f627"
+appVersion: "sha-5773dfe"
 icon: "https://example.com/icon.png"
 dependencies: []
