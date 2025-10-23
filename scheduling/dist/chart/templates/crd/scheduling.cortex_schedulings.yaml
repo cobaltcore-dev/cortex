@@ -58,16 +58,294 @@ spec:
           spec:
             description: spec defines the desired state of Scheduling
             properties:
+              cinderRaw:
+                description: If the type is "cinder", this field contains the raw
+                  cinder scheduling request.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              machineRef:
+                description: If the type is "machine", this field contains the machine
+                  reference.
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              manilaRaw:
+                description: If the type is "manila", this field contains the raw
+                  manila scheduling request.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              novaRaw:
+                description: If the type is "nova", this field contains the raw nova
+                  scheduling request.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
               operator:
                 description: The operator by which this scheduling should be extracted.
                 type: string
+              pipelineRef:
+                description: |-
+                  A reference to the pipeline that should be used for this scheduling.
+                  This reference can be used to look up the pipeline definition and its
+                  scheduler step configuration for additional context.
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              resourceID:
+                description: |-
+                  An identifier for the underlying resource to be scheduled.
+                  For example, this can be the UUID of a nova instance or cinder volume.
+                  This can be used to correlate multiple schedulings for the same resource.
+                type: string
+              sourceHost:
+                description: |-
+                  When there is a source host for the scheduling, it is recorded here.
+
+                  Note: for initial placements, this will be empty. However, for migrations
+                  or resizes, this will contain the source host.
+                type: string
+              type:
+                description: The type of scheduling, indicating what has initiated
+                  this scheduling.
+                type: string
+            required:
+            - pipelineRef
+            - resourceID
+            - type
             type: object
           status:
             description: status defines the observed state of Scheduling
             properties:
+              cinderDecision:
+                description: |-
+                  If the scheduling decision type is "cinder", this field contains the
+                  cinder scheduling decision.
+                properties:
+                  activations:
+                    additionalProperties:
+                      type: number
+                    description: |-
+                      Outputs of the scheduling pipeline including the activations used
+                      to make the final ordering of storage hosts.
+                    type: object
+                  storagePools:
+                    description: Sorted list of storage hosts from more preferred
+                      to least preferred.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - storagePools
+                type: object
+              decisionType:
+                description: The type of scheduling decision made.
+                type: string
               error:
                 description: If there was an error during the last scheduling, it
                   is recorded here.
+                type: string
+              explanation:
+                description: A human-readable explanation of the scheduling result.
+                type: string
+              history:
+                description: |-
+                  If there were previous schedulings for the underlying resource, they will
+                  be resolved here to provide historical context for the scheduling.
+                items:
+                  description: ObjectReference contains enough information to let
+                    you inspect or modify the referred object.
+                  properties:
+                    apiVersion:
+                      description: API version of the referent.
+                      type: string
+                    fieldPath:
+                      description: |-
+                        If referring to a piece of an object instead of an entire object, this string
+                        should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                        For example, if the object reference is to a container within a pod, this would take on a value like:
+                        "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                        the event) or if no container name is specified "spec.containers[2]" (container with
+                        index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                        referencing a part of an object.
+                      type: string
+                    kind:
+                      description: |-
+                        Kind of the referent.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                      type: string
+                    name:
+                      description: |-
+                        Name of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                    namespace:
+                      description: |-
+                        Namespace of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                      type: string
+                    resourceVersion:
+                      description: |-
+                        Specific resourceVersion to which this reference is made, if any.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                      type: string
+                    uid:
+                      description: |-
+                        UID of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
+              machineDecision:
+                description: |-
+                  If the scheduling decision type is "machine", this field contains the
+                  machine scheduling decision.
+                properties:
+                  activations:
+                    additionalProperties:
+                      type: number
+                    description: |-
+                      Outputs of the scheduling pipeline including the activations used
+                      to make the final ordering of machine pools.
+                    type: object
+                  machinePools:
+                    description: Sorted list of machine pools from more preferred
+                      to least preferred.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - machinePools
+                type: object
+              manilaDecision:
+                description: |-
+                  If the scheduling decision type is "manila", this field contains the
+                  manila scheduling decision.
+                properties:
+                  activations:
+                    additionalProperties:
+                      type: number
+                    description: |-
+                      Outputs of the scheduling pipeline including the activations used
+                      to make the final ordering of share hosts.
+                    type: object
+                  storagePools:
+                    description: Sorted list of share hosts from more preferred to
+                      least preferred.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - storagePools
+                type: object
+              novaDecision:
+                description: |-
+                  If the scheduling decision type is "nova", this field contains the
+                  nova scheduling decision.
+                properties:
+                  activations:
+                    additionalProperties:
+                      type: number
+                    description: |-
+                      Outputs of the scheduling pipeline including the activations used
+                      to make the final ordering of compute hosts.
+                    type: object
+                  computeHosts:
+                    description: Sorted list of compute hosts from more preferred
+                      to least preferred.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - computeHosts
+                type: object
+              targetHost:
+                description: |-
+                  When there is a designated target host for the scheduling, it is recorded
+                  here.
+
+                  Note: for external scheduler requests, this will be the first host from
+                  the list of returned hosts -- meaning there is no guarantee this is
+                  actually the host where the resource will be spawned on. Please check
+                  the decision details to see the full list of hosts and their scores.
+
+                  For deschedulings, this will be empty, indicating there is no specific
+                  target host.
                 type: string
               took:
                 description: The time it took to schedule.
