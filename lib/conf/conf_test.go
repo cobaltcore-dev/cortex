@@ -28,10 +28,6 @@ func createTempConfigFile(t *testing.T, content string) string {
 func TestGetConfigOrDie(t *testing.T) {
 	content := `
 {
-  "logging": {
-    "level": "debug",
-    "format": "text"
-  },
   "db": {
     "host": "cortex-postgresql",
     "port": 5432,
@@ -57,15 +53,6 @@ func TestGetConfigOrDie(t *testing.T) {
 		t.Fatalf("Failed to read config: %v", err)
 	}
 	config := newConfigFromMaps[*SharedConfig](rawConfig, nil)
-
-	// Test LoggingConfig
-	loggingConfig := config.GetLoggingConfig()
-	if loggingConfig.LevelStr == "" {
-		t.Errorf("Expected non-empty log level, got empty string")
-	}
-	if loggingConfig.Format == "" {
-		t.Errorf("Expected non-empty log format, got empty string")
-	}
 
 	// Test DBConfig
 	dbConfig := config.GetDBConfig()

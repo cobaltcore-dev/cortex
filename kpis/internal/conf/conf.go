@@ -26,7 +26,6 @@ type Config struct {
 
 	// Lib modules configs.
 	libconf.MonitoringConfig `json:"monitoring"`
-	libconf.LoggingConfig    `json:"logging"`
 	libconf.DBConfig         `json:"db"`
 
 	// Generally needed to expose an /up endpoint.

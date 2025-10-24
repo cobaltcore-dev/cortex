@@ -18,14 +18,6 @@ type SSOConfig struct {
 	SelfSigned bool `json:"selfSigned,omitempty"`
 }
 
-// Configuration for structured logging.
-type LoggingConfig struct {
-	// The log level to use (debug, info, warn, error).
-	LevelStr string `json:"level"`
-	// The log format to use (json, text).
-	Format string `json:"format"`
-}
-
 type DBReconnectConfig struct {
 	// The interval between liveness pings to the database.
 	LivenessPingIntervalSeconds int `json:"livenessPingIntervalSeconds"`
@@ -125,7 +117,6 @@ type KeystoneConfig struct {
 
 // Configuration for the cortex service.
 type Config interface {
-	GetLoggingConfig() LoggingConfig
 	GetDBConfig() DBConfig
 	GetMonitoringConfig() MonitoringConfig
 	GetAPIConfig() APIConfig
@@ -136,7 +127,6 @@ type Config interface {
 
 // TODO: Strip this off everything we don't need anymore.
 type SharedConfig struct {
-	LoggingConfig    `json:"logging"`
 	DBConfig         `json:"db"`
 	MonitoringConfig `json:"monitoring"`
 	APIConfig        `json:"api"`
@@ -227,7 +217,6 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 	return result
 }
 
-func (c *SharedConfig) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
 func (c *SharedConfig) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
 func (c *SharedConfig) GetAPIConfig() APIConfig               { return c.APIConfig }

@@ -198,7 +198,6 @@ type Config struct {
 
 	// Lib modules configs.
 	libconf.MonitoringConfig `json:"monitoring"`
-	libconf.LoggingConfig    `json:"logging"`
 	libconf.DBConfig         `json:"db"`
 
 	libconf.KeystoneConfig `json:"keystone"`

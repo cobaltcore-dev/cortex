@@ -43,7 +43,6 @@ func main() {
 	}
 
 	config := libconf.GetConfigOrDie[*conf.Config]()
-	config.LoggingConfig.SetDefaultLogger()
 
 	// Set runtime concurrency to match CPU limit imposed by Kubernetes
 	undoMaxprocs, err := maxprocs.Set(maxprocs.Logger(slog.Debug))
