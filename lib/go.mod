@@ -12,7 +12,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20251016133802-c2d049e762e6
+	github.com/sapcc/go-bits v0.0.0-20251023170348-b4bcd3ab3925
 	k8s.io/api v0.34.1
 	sigs.k8s.io/controller-runtime v0.22.3
 )
