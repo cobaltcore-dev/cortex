@@ -1,4 +1,4 @@
-apiVersion: descheduler.cortex/v1alpha1
+apiVersion: scheduling.cortex/v1alpha1
 kind: Descheduling
 spec:
   prevHost: my-compute-host

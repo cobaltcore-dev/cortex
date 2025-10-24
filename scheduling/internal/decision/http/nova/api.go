@@ -121,18 +121,21 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	}
 
 	// Create the decision object in kubernetes.
+	sourceHost := ""
+	if requestData.CurrentHost != nil {
+		sourceHost = *requestData.CurrentHost
+	}
 	unstructuredDecision, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&v1alpha1.Decision{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Decision",
 			APIVersion: "scheduling.cortex/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			// TODO: smart naming (initial placement, migration, ...) based on the vm id.
 			GenerateName: "nova-",
 		},
 		Spec: v1alpha1.DecisionSpec{
 			Operator:   httpAPI.config.Operator,
-			SourceHost: "", // TODO pass this info from the external scheduler call
+			SourceHost: sourceHost,
 			PipelineRef: corev1.ObjectReference{
 				Name: requestData.Pipeline,
 			},
@@ -177,7 +180,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeNovaServer {
 				return
 			}
-			if updated.Status.Error != "" || updated.Status.Nova != nil {
+			if updated.Status.Error != "" || updated.Status.Result != nil {
 				resultChan <- updated
 				return
 			}
@@ -194,11 +197,11 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// Wait for the scheduling decision to be processed and return the result
 	select {
 	case result := <-resultChan:
-		if result.Status.Error != "" || result.Status.Nova == nil {
+		if result.Status.Error != "" || result.Status.Result == nil {
 			c.Respond(http.StatusInternalServerError, errors.New(result.Status.Error), "decision failed")
 			return
 		}
-		hosts := (*result.Status.Nova).ComputeHosts
+		hosts := (*result.Status.Result).OrderedHosts
 		response := delegationAPI.ExternalSchedulerResponse{Hosts: hosts}
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(response); err != nil {

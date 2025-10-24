@@ -57,13 +57,7 @@ func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.Error(err, "failed to run pipeline")
 		return ctrl.Result{}, err
 	}
-
-	// TODO: Update the step weights and pipeline details.
-	decision.Status.Nova = &v1alpha1.NovaDecision{ComputeHosts: result}
-	decision.Status.TargetHost = ""
-	if len(result) > 0 {
-		decision.Status.TargetHost = result[0]
-	}
+	decision.Status.Result = &result
 	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	if err := s.Status().Update(ctx, decision); err != nil {
 		log.Error(err, "failed to update decision status")
@@ -81,7 +75,7 @@ func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
 				// Ignore already decided schedulings.
-				if decision.Status.Error != "" || decision.Status.Nova != nil {
+				if decision.Status.Error != "" || decision.Status.Result != nil {
 					return false
 				}
 				// Only handle nova decisions.

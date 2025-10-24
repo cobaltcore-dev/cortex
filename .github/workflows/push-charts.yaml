@@ -84,36 +84,17 @@ jobs:
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
 
-      - name: Get all changed scheduler Chart.yaml files
-        id: changed-chart-yaml-files-scheduler
+      - name: Get all changed scheduling Chart.yaml files
+        id: changed-chart-yaml-files-scheduling
         uses: tj-actions/changed-files@v47
         with:
           files: |
-            scheduler/dist/chart/Chart.yaml
-      - name: Push scheduler charts to registry
-        if: steps.changed-chart-yaml-files-scheduler.outputs.all_changed_files != ''
+            scheduling/dist/chart/Chart.yaml
+      - name: Push scheduling charts to registry
+        if: steps.changed-chart-yaml-files-scheduling.outputs.all_changed_files != ''
         shell: bash
         env:
-          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-scheduler.outputs.all_changed_files }}
-        run: |
-          for CHART_FILE in ${ALL_CHANGED_FILES}; do
-            CHART_DIR=$(dirname $CHART_FILE)
-            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
-            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
-            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
-          done
-
-      - name: Get all changed descheduler Chart.yaml files
-        id: changed-chart-yaml-files-descheduler
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            descheduler/dist/chart/Chart.yaml
-      - name: Push descheduler charts to registry
-        if: steps.changed-chart-yaml-files-descheduler.outputs.all_changed_files != ''
-        shell: bash
-        env:
-          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-descheduler.outputs.all_changed_files }}
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-scheduling.outputs.all_changed_files }}
         run: |
           for CHART_FILE in ${ALL_CHANGED_FILES}; do
             CHART_DIR=$(dirname $CHART_FILE)
@@ -152,44 +133,6 @@ jobs:
         shell: bash
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-knowledge.outputs.all_changed_files }}
-        run: |
-          for CHART_FILE in ${ALL_CHANGED_FILES}; do
-            CHART_DIR=$(dirname $CHART_FILE)
-            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
-            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
-            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
-          done
-
-      - name: Get all changed decisions Chart.yaml files
-        id: changed-chart-yaml-files-decisions
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            decisions/dist/chart/Chart.yaml
-      - name: Push decisions charts to registry
-        if: steps.changed-chart-yaml-files-decisions.outputs.all_changed_files != ''
-        shell: bash
-        env:
-          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-decisions.outputs.all_changed_files }}
-        run: |
-          for CHART_FILE in ${ALL_CHANGED_FILES}; do
-            CHART_DIR=$(dirname $CHART_FILE)
-            helm package $CHART_DIR --dependency-update --destination $CHART_DIR
-            CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
-            helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
-          done
-
-      - name: Get all changed machines Chart.yaml files
-        id: changed-chart-yaml-files-machines
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            machines/dist/chart/Chart.yaml
-      - name: Push machines charts to registry
-        if: steps.changed-chart-yaml-files-machines.outputs.all_changed_files != ''
-        shell: bash
-        env:
-          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-machines.outputs.all_changed_files }}
         run: |
           for CHART_FILE in ${ALL_CHANGED_FILES}; do
             CHART_DIR=$(dirname $CHART_FILE)

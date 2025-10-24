@@ -62,20 +62,12 @@ jobs:
           go tool cover -func reservations_profile.cov > reservations_func_coverage.txt
           cd ..
 
-          echo "Running tests for the scheduler module..."
-          cd scheduler
+          echo "Running tests for the scheduling module..."
+          cd scheduling
           go test -v \
             -coverpkg=./internal/... \
-            -coverprofile=scheduler_profile.cov ./internal/...
-          go tool cover -func scheduler_profile.cov > scheduler_func_coverage.txt
-          cd ..
-
-          echo "Running tests for the descheduler module..."
-          cd descheduler
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=descheduler_profile.cov ./internal/...
-          go tool cover -func descheduler_profile.cov > descheduler_func_coverage.txt
+            -coverprofile=scheduling_profile.cov ./internal/...
+          go tool cover -func scheduling_profile.cov > scheduling_func_coverage.txt
           cd ..
 
           echo "Running tests for the kpis module..."
@@ -94,21 +86,6 @@ jobs:
           go tool cover -func knowledge_profile.cov > knowledge_func_coverage.txt
           cd ..
 
-          echo "Running tests for decisions module..."
-          cd decisions
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=decisions_profile.cov ./internal/...
-          go tool cover -func decisions_profile.cov > decisions_func_coverage.txt
-          cd ..
-
-          echo "Running tests for machines module..."
-          cd machines
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=machines_profile.cov ./internal/...
-          go tool cover -func machines_profile.cov > machines_func_coverage.txt
-          cd ..
       - name: Upload coverage files
         uses: actions/upload-artifact@v4
         with:
@@ -116,10 +93,7 @@ jobs:
           path: |
             lib/lib_func_coverage.txt
             reservations/reservations_func_coverage.txt
-            scheduler/scheduler_func_coverage.txt
-            decisions/decisions_func_coverage.txt
-            machines/machines_func_coverage.txt
-            descheduler/descheduler_func_coverage.txt
+            scheduling/scheduling_func_coverage.txt
             kpis/kpis_func_coverage.txt
             knowledge/knowledge_func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
@@ -184,30 +158,17 @@ jobs:
               reservationsCoverageReport = 'No coverage data available';
             }
 
-            // Read scheduler module coverage report
-            let schedulerCoverageReport = '';
-            let schedulerCoveragePercentage = 'unknown';
+            // Read scheduling module coverage report
+            let schedulingCoverageReport = '';
+            let schedulingCoveragePercentage = 'unknown';
             try {
-              schedulerCoverageReport = fs.readFileSync('scheduler/scheduler_func_coverage.txt', 'utf8');
-              const schedulerLines = schedulerCoverageReport.trim().split('\n');
-              const schedulerLastLine = schedulerLines[schedulerLines.length - 1];
-              const schedulerCoverageMatch = schedulerLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              schedulerCoveragePercentage = schedulerCoverageMatch ? schedulerCoverageMatch[1] : 'unknown';
+              schedulingCoverageReport = fs.readFileSync('scheduling/scheduling_func_coverage.txt', 'utf8');
+              const schedulingLines = schedulingCoverageReport.trim().split('\n');
+              const schedulingLastLine = schedulingLines[schedulingLines.length - 1];
+              const schedulingCoverageMatch = schedulingLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              schedulingCoveragePercentage = schedulingCoverageMatch ? schedulingCoverageMatch[1] : 'unknown';
             } catch (error) {
-              schedulerCoverageReport = 'No coverage data available';
-            }
-
-            // Read descheduler module coverage report
-            let deschedulerCoverageReport = '';
-            let deschedulerCoveragePercentage = 'unknown';
-            try {
-              deschedulerCoverageReport = fs.readFileSync('descheduler/descheduler_func_coverage.txt', 'utf8');
-              const deschedulerLines = deschedulerCoverageReport.trim().split('\n');
-              const deschedulerLastLine = deschedulerLines[deschedulerLines.length - 1];
-              const deschedulerCoverageMatch = deschedulerLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              deschedulerCoveragePercentage = deschedulerCoverageMatch ? deschedulerCoverageMatch[1] : 'unknown';
-            } catch (error) {
-              deschedulerCoverageReport = 'No coverage data available';
+              schedulingCoverageReport = 'No coverage data available';
             }
 
             // Read kpis module coverage report
@@ -236,32 +197,6 @@ jobs:
               knowledgeCoverageReport = 'No coverage data available';
             }
 
-            // Read decisions module coverage report
-            let decisionsCoverageReport = '';
-            let decisionsCoveragePercentage = 'unknown';
-            try {
-              decisionsCoverageReport = fs.readFileSync('decisions/decisions_func_coverage.txt', 'utf8');
-              const decisionsLines = decisionsCoverageReport.trim().split('\n');
-              const decisionsLastLine = decisionsLines[decisionsLines.length - 1];
-              const decisionsCoverageMatch = decisionsLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              decisionsCoveragePercentage = decisionsCoverageMatch ? decisionsCoverageMatch[1] : 'unknown';
-            } catch (error) {
-              decisionsCoverageReport = 'No coverage data available';
-            }
-
-            // Read machines module coverage report
-            let machinesCoverageReport = '';
-            let machinesCoveragePercentage = 'unknown';
-            try {
-              machinesCoverageReport = fs.readFileSync('machines/machines_func_coverage.txt', 'utf8');
-              const machinesLines = machinesCoverageReport.trim().split('\n');
-              const machinesLastLine = machinesLines[machinesLines.length - 1];
-              const machinesCoverageMatch = machinesLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              machinesCoveragePercentage = machinesCoverageMatch ? machinesCoverageMatch[1] : 'unknown';
-            } catch (error) {
-              machinesCoverageReport = 'No coverage data available';
-            }
-
             let commentBody = '<!-- coverage-comment -->\n';
             commentBody += '## Test Coverage Report\n\n';
 
@@ -285,43 +220,13 @@ jobs:
             commentBody += '```\n';
             commentBody += '</details>\n\n';
 
-            // Decisions module coverage
+            // Scheduling module coverage
             commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in decisions module (decisions/internal/): ';
-            commentBody += decisionsCoveragePercentage;
+            commentBody += '<summary>Coverage in scheduling module (scheduling/internal/): ';
+            commentBody += schedulingCoveragePercentage;
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
-            commentBody += decisionsCoverageReport;
-            commentBody += '```\n';
-            commentBody += '</details>\n';
-
-            // Machines module coverage
-            commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in machines module (machines/internal/): ';
-            commentBody += machinesCoveragePercentage;
-            commentBody += '%</summary>\n\n';
-            commentBody += '```text\n';
-            commentBody += machinesCoverageReport;
-            commentBody += '```\n';
-            commentBody += '</details>\n';
-
-            // Scheduler module coverage
-            commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in scheduler module (scheduler/internal/): ';
-            commentBody += schedulerCoveragePercentage;
-            commentBody += '%</summary>\n\n';
-            commentBody += '```text\n';
-            commentBody += schedulerCoverageReport;
-            commentBody += '```\n';
-            commentBody += '</details>\n';
-
-            // Descheduler module coverage
-            commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in descheduler module (descheduler/internal/): ';
-            commentBody += deschedulerCoveragePercentage;
-            commentBody += '%</summary>\n\n';
-            commentBody += '```text\n';
-            commentBody += deschedulerCoverageReport;
+            commentBody += schedulingCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 

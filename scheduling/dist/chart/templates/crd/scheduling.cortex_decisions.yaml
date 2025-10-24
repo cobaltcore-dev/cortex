@@ -42,7 +42,7 @@ spec:
     - jsonPath: .status.sourceHost
       name: SourceHost
       type: string
-    - jsonPath: .status.targetHost
+    - jsonPath: .status.result.targetHost
       name: TargetHost
       type: string
     - jsonPath: .status.error
@@ -206,37 +206,6 @@ spec:
           status:
             description: status defines the observed state of Decision
             properties:
-              cinder:
-                description: |-
-                  If the decision decision type is "cinder", this field contains the
-                  cinder decision decision.
-                properties:
-                  stepResults:
-                    description: |-
-                      Outputs of the decision pipeline including the activations used
-                      to make the final ordering of storage hosts.
-                    items:
-                      properties:
-                        activations:
-                          additionalProperties:
-                            type: number
-                          description: Activations of the step for each host.
-                          type: object
-                        stepName:
-                          description: Name of the scheduler step.
-                          type: string
-                      required:
-                      - activations
-                      - stepName
-                      type: object
-                    type: array
-                  storagePools:
-                    description: Sorted list of storage hosts from more preferred
-                      to least preferred.
-                    items:
-                      type: string
-                    type: array
-                type: object
               error:
                 description: If there was an error during the last decision, it is
                   recorded here.
@@ -293,79 +262,30 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              machine:
-                description: |-
-                  If the decision decision type is "machine", this field contains the
-                  machine decision decision.
+              result:
+                description: The result of this decision.
                 properties:
-                  machinePools:
-                    description: Sorted list of machine pools from more preferred
-                      to least preferred.
-                    items:
-                      type: string
-                    type: array
-                  stepResults:
-                    description: |-
-                      Outputs of the decision pipeline including the activations used
-                      to make the final ordering of machine pools.
-                    items:
-                      properties:
-                        activations:
-                          additionalProperties:
-                            type: number
-                          description: Activations of the step for each host.
-                          type: object
-                        stepName:
-                          description: Name of the scheduler step.
-                          type: string
-                      required:
-                      - activations
-                      - stepName
-                      type: object
-                    type: array
-                type: object
-              manila:
-                description: |-
-                  If the decision decision type is "manila", this field contains the
-                  manila decision decision.
-                properties:
-                  stepResults:
-                    description: |-
-                      Outputs of the decision pipeline including the activations used
-                      to make the final ordering of share hosts.
-                    items:
-                      properties:
-                        activations:
-                          additionalProperties:
-                            type: number
-                          description: Activations of the step for each host.
-                          type: object
-                        stepName:
-                          description: Name of the scheduler step.
-                          type: string
-                      required:
-                      - activations
-                      - stepName
-                      type: object
-                    type: array
-                  storagePools:
-                    description: Sorted list of share hosts from more preferred to
+                  aggregatedOutWeights:
+                    additionalProperties:
+                      type: number
+                    description: Aggregated output weights from the pipeline.
+                    type: object
+                  normalizedInWeights:
+                    additionalProperties:
+                      type: number
+                    description: Normalized input weights to the pipeline.
+                    type: object
+                  orderedHosts:
+                    description: Final ordered list of hosts from most preferred to
                       least preferred.
                     items:
                       type: string
                     type: array
-                type: object
-              nova:
-                description: |-
-                  If the decision decision type is "nova", this field contains the
-                  nova decision decision.
-                properties:
-                  computeHosts:
-                    description: Sorted list of compute hosts from more preferred
-                      to least preferred.
-                    items:
-                      type: string
-                    type: array
+                  rawInWeights:
+                    additionalProperties:
+                      type: number
+                    description: Raw input weights to the pipeline.
+                    type: object
                   stepResults:
                     description: |-
                       Outputs of the decision pipeline including the activations used
@@ -385,20 +305,11 @@ spec:
                       - stepName
                       type: object
                     type: array
+                  targetHost:
+                    description: The first element of the ordered hosts is considered
+                      the target host.
+                    type: string
                 type: object
-              targetHost:
-                description: |-
-                  When there is a designated target host for the decision, it is recorded
-                  here.
-
-                  Note: for external scheduler requests, this will be the first host from
-                  the list of returned hosts -- meaning there is no guarantee this is
-                  actually the host where the resource will be spawned on. Please check
-                  the decision details to see the full list of hosts and their scores.
-
-                  For dedecisions, this will be empty, indicating there is no specific
-                  target host.
-                type: string
               took:
                 description: The time it took to schedule.
                 type: string

@@ -69,44 +69,26 @@ type StepResult struct {
 	Activations map[string]float64 `json:"activations"`
 }
 
-type NovaDecision struct {
-	// Sorted list of compute hosts from more preferred to least preferred.
+type DecisionResult struct {
+	// Raw input weights to the pipeline.
 	// +kubebuilder:validation:Optional
-	ComputeHosts []string `json:"computeHosts"`
+	RawInWeights map[string]float64 `json:"rawInWeights"`
+	// Normalized input weights to the pipeline.
+	// +kubebuilder:validation:Optional
+	NormalizedInWeights map[string]float64 `json:"normalizedInWeights"`
 	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of compute hosts.
 	// +kubebuilder:validation:Optional
 	StepResults []StepResult `json:"stepResults,omitempty"`
-}
-
-type CinderDecision struct {
-	// Sorted list of storage hosts from more preferred to least preferred.
+	// Aggregated output weights from the pipeline.
 	// +kubebuilder:validation:Optional
-	StoragePools []string `json:"storagePools"`
-	// Outputs of the decision pipeline including the activations used
-	// to make the final ordering of storage hosts.
+	AggregatedOutWeights map[string]float64 `json:"aggregatedOutWeights"`
+	// Final ordered list of hosts from most preferred to least preferred.
 	// +kubebuilder:validation:Optional
-	StepResults []StepResult `json:"stepResults,omitempty"`
-}
-
-type ManilaDecision struct {
-	// Sorted list of share hosts from more preferred to least preferred.
+	OrderedHosts []string `json:"orderedHosts,omitempty"`
+	// The first element of the ordered hosts is considered the target host.
 	// +kubebuilder:validation:Optional
-	StoragePools []string `json:"storagePools"`
-	// Outputs of the decision pipeline including the activations used
-	// to make the final ordering of share hosts.
-	// +kubebuilder:validation:Optional
-	StepResults []StepResult `json:"stepResults,omitempty"`
-}
-
-type MachineDecision struct {
-	// Sorted list of machine pools from more preferred to least preferred.
-	// +kubebuilder:validation:Optional
-	MachinePools []string `json:"machinePools"`
-	// Outputs of the decision pipeline including the activations used
-	// to make the final ordering of machine pools.
-	// +kubebuilder:validation:Optional
-	StepResults []StepResult `json:"stepResults,omitempty"`
+	TargetHost *string `json:"targetHost,omitempty"`
 }
 
 type DecisionStatus struct {
@@ -114,35 +96,9 @@ type DecisionStatus struct {
 	// +kubebuilder:validation:Optional
 	Took metav1.Duration `json:"took"`
 
-	// When there is a designated target host for the decision, it is recorded
-	// here.
-	//
-	// Note: for external scheduler requests, this will be the first host from
-	// the list of returned hosts -- meaning there is no guarantee this is
-	// actually the host where the resource will be spawned on. Please check
-	// the decision details to see the full list of hosts and their scores.
-	//
-	// For dedecisions, this will be empty, indicating there is no specific
-	// target host.
+	// The result of this decision.
 	// +kubebuilder:validation:Optional
-	TargetHost string `json:"targetHost,omitempty"`
-
-	// If the decision decision type is "nova", this field contains the
-	// nova decision decision.
-	// +kubebuilder:validation:Optional
-	Nova *NovaDecision `json:"nova,omitempty"`
-	// If the decision decision type is "cinder", this field contains the
-	// cinder decision decision.
-	// +kubebuilder:validation:Optional
-	Cinder *CinderDecision `json:"cinder,omitempty"`
-	// If the decision decision type is "manila", this field contains the
-	// manila decision decision.
-	// +kubebuilder:validation:Optional
-	Manila *ManilaDecision `json:"manila,omitempty"`
-	// If the decision decision type is "machine", this field contains the
-	// machine decision decision.
-	// +kubebuilder:validation:Optional
-	Machine *MachineDecision `json:"machine,omitempty"`
+	Result *DecisionResult `json:"result,omitempty"`
 
 	// If there were previous decisions for the underlying resource, they can
 	// be resolved here to provide historical context for the decision.
@@ -168,7 +124,7 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
 // +kubebuilder:printcolumn:name="SourceHost",type="string",JSONPath=".status.sourceHost"
-// +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.targetHost"
+// +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Decision is the Schema for the decisions API

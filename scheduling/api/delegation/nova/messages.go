@@ -28,6 +28,9 @@ type ExternalSchedulerRequest struct {
 	// Request context from Nova that contains additional meta information.
 	Context NovaRequestContext `json:"context"`
 
+	// Optional: if the virtual machine exists, on which host it is currently running.
+	CurrentHost *string `json:"host,omitempty"`
+
 	// Whether the Nova scheduling request is a rebuild request.
 	Rebuild bool `json:"rebuild"`
 	// Whether the Nova scheduling request is a resize request.

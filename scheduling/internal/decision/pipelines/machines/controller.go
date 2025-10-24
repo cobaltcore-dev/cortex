@@ -69,23 +69,23 @@ func (s *MachineScheduler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		Pools:    pools.Items,
 		Pipeline: pipelineName,
 	}
-	names, err := pipeline.Run(request)
+	result, err := pipeline.Run(request)
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return ctrl.Result{}, err
 	}
-	if len(names) == 0 {
+	if result.TargetHost == nil {
 		log.V(1).Info("skipping scheduling, no suitable machine pool found")
 		return ctrl.Result{}, nil
 	}
 
 	// Assign the first machine pool returned by the pipeline.
-	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: names[0]}
+	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: *result.TargetHost}
 	if err := s.Update(ctx, machine); err != nil {
 		log.V(1).Error(err, "failed to assign machine pool to instance")
 		return ctrl.Result{}, err
 	}
-	log.V(1).Info("assigned machine pool to instance", "machinePool", names[0])
+	log.V(1).Info("assigned machine pool to instance", "machinePool", *result.TargetHost)
 	return ctrl.Result{}, nil
 }
 

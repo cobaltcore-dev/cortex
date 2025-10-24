@@ -57,13 +57,7 @@ func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.Error(err, "failed to run pipeline")
 		return ctrl.Result{}, err
 	}
-
-	// TODO: Update the step weights and pipeline details.
-	decision.Status.Cinder = &v1alpha1.CinderDecision{StoragePools: result}
-	decision.Status.TargetHost = ""
-	if len(result) > 0 {
-		decision.Status.TargetHost = result[0]
-	}
+	decision.Status.Result = &result
 	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	if err := s.Status().Update(ctx, decision); err != nil {
 		log.Error(err, "failed to update decision status")
@@ -81,7 +75,7 @@ func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
 				// Ignore already decided schedulings.
-				if decision.Status.Error != "" || decision.Status.Cinder != nil {
+				if decision.Status.Error != "" || decision.Status.Result != nil {
 					return false
 				}
 				// Only handle cinder decisions.

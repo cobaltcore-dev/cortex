@@ -14,14 +14,12 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 )
 
 type Pipeline[RequestType PipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
-	Run(request RequestType) ([]string, error)
-
-	// Set the consumer that will receive the decisions.
-	SetConsumer(consumer SchedulingDecisionConsumer[RequestType])
+	Run(request RequestType) (v1alpha1.DecisionResult, error)
 }
 
 type Premodifier[RequestType PipelineRequest] interface {
@@ -40,13 +38,6 @@ type pipeline[RequestType PipelineRequest] struct {
 	applicationOrder []string
 	// Monitor to observe the pipeline.
 	monitor PipelineMonitor
-
-	// Optional consumer to listen for the decisions.
-	Consumer SchedulingDecisionConsumer[RequestType]
-}
-
-func (p *pipeline[RequestType]) SetConsumer(consumer SchedulingDecisionConsumer[RequestType]) {
-	p.Consumer = consumer
 }
 
 type StepWrapper[RequestType PipelineRequest, StepExtraConfType any] func(
@@ -186,27 +177,8 @@ func (s *pipeline[RequestType]) sortSubjectsByWeights(weights map[string]float64
 	return subjects
 }
 
-// Telemetry message as will be published to the mqtt broker.
-type TelemetryMessage[RequestType PipelineRequest] struct {
-	Time    int64                         `json:"time"`
-	Request RequestType                   `json:"request"`
-	Order   []string                      `json:"order"`
-	In      map[string]float64            `json:"in"`
-	Steps   map[string]map[string]float64 `json:"steps"`
-	Out     map[string]float64            `json:"out"`
-}
-
-type SchedulingDecisionConsumer[RequestType PipelineRequest] interface {
-	Consume(
-		request RequestType,
-		applicationOrder []string,
-		inWeights map[string]float64,
-		stepWeights map[string]map[string]float64,
-	)
-}
-
 // Evaluate the pipeline and return a list of subjects in order of preference.
-func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
+func (p *pipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResult, error) {
 	slogArgs := request.GetTraceLogArgs()
 	slogArgsAny := make([]any, 0, len(slogArgs))
 	for _, arg := range slogArgs {
@@ -232,9 +204,22 @@ func (p *pipeline[RequestType]) Run(request RequestType) ([]string, error) {
 	// Collect some metrics about the pipeline execution.
 	go p.monitor.observePipelineResult(request, subjects)
 
-	if p.Consumer != nil {
-		go p.Consumer.Consume(request, p.applicationOrder, inWeights, stepWeights)
+	result := v1alpha1.DecisionResult{
+		RawInWeights:         request.GetWeights(),
+		NormalizedInWeights:  inWeights,
+		AggregatedOutWeights: outWeights,
+		OrderedHosts:         subjects,
 	}
-
-	return subjects, nil
+	if len(subjects) > 0 {
+		result.TargetHost = &subjects[0]
+	}
+	for _, stepKey := range p.applicationOrder {
+		if activations, ok := stepWeights[stepKey]; ok {
+			result.StepResults = append(result.StepResults, v1alpha1.StepResult{
+				StepName:    stepKey,
+				Activations: activations,
+			})
+		}
+	}
+	return result, nil
 }

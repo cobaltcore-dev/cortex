@@ -123,7 +123,6 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 	// Create the decision object in kubernetes.
 	unstructuredDecision, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&v1alpha1.Decision{
 		ObjectMeta: metav1.ObjectMeta{
-			// TODO: smart naming (initial placement, migration, ...) based on the volume id.
 			GenerateName: "cinder-",
 		},
 		Spec: v1alpha1.DecisionSpec{
@@ -173,7 +172,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeCinderVolume {
 				return
 			}
-			if updated.Status.Error != "" || updated.Status.Cinder != nil {
+			if updated.Status.Error != "" || updated.Status.Result != nil {
 				resultChan <- updated
 				return
 			}
@@ -190,11 +189,11 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 	// Wait for the scheduling decision to be processed and return the result
 	select {
 	case result := <-resultChan:
-		if result.Status.Error != "" || result.Status.Cinder == nil {
+		if result.Status.Error != "" || result.Status.Result == nil {
 			c.Respond(http.StatusInternalServerError, errors.New(result.Status.Error), "decision failed")
 			return
 		}
-		hosts := (*result.Status.Cinder).StoragePools
+		hosts := (*result.Status.Result).OrderedHosts
 		response := delegationAPI.ExternalSchedulerResponse{Hosts: hosts}
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(response); err != nil {

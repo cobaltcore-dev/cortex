@@ -22,6 +22,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/sapcc/go-bits/must"
@@ -34,6 +35,7 @@ const (
 
 // Data necessary to generate a somewhat valid nova scheduler request.
 type datacenter struct {
+	servers     []nova.Server
 	hypervisors []nova.Hypervisor
 	flavors     []nova.Flavor
 	aggregates  []nova.RawAggregate
@@ -129,9 +131,22 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 	}
 	slog.Info("found hypervisors", "count", len(hypervisors))
 
+	slog.Info("listing servers")
+	slo := servers.ListOpts{AllTenants: true, Limit: 100}
+	pages := must.Return(servers.List(novaSC, slo).AllPages(ctx))
+	dataServers := &struct {
+		Servers []nova.Server `json:"servers"`
+	}{}
+	must.Succeed(pages.(servers.ServerPage).ExtractInto(dataServers))
+	servers := dataServers.Servers
+	if len(servers) == 0 {
+		panic("no servers found")
+	}
+	slog.Info("found servers", "count", len(servers))
+
 	slog.Info("listing flavors")
 	flo := flavors.ListOpts{AccessType: flavors.AllAccess}
-	pages := must.Return(flavors.ListDetail(novaSC, flo).AllPages(ctx))
+	pages = must.Return(flavors.ListDetail(novaSC, flo).AllPages(ctx))
 	dataFlavors := &struct {
 		Flavors []nova.Flavor `json:"flavors"`
 	}{}
@@ -217,6 +232,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 	slog.Info("found availability zones", "count", len(azsSlice))
 
 	return datacenter{
+		servers:     servers,
 		hypervisors: hypervisors,
 		flavors:     flavors,
 		aggregates:  aggregates,
@@ -241,6 +257,9 @@ func randomRequest(dc datacenter, seed int, config conf.Config) api.ExternalSche
 			HypervisorHostname: h.Hostname,
 		})
 	}
+	// Take a random server. If we don't use an existing server the decision will be cleaned up.
+	server := dc.servers[randSource.Intn(len(dc.servers))]
+	slog.Info("using server", "serverID", server.ID, "serverName", server.Name)
 	// Get a random az.
 	az := dc.azs[randSource.Intn(len(dc.azs))]
 	slog.Info("using availability zone", "az", az)
@@ -272,7 +291,8 @@ func randomRequest(dc datacenter, seed int, config conf.Config) api.ExternalSche
 	request := api.ExternalSchedulerRequest{
 		Pipeline: pipelineName,
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
-			InstanceUUID:     "cortex-e2e-tests",
+			// Actual server that exists in nova but with mocked random properties.
+			InstanceUUID:     server.ID,
 			AvailabilityZone: az,
 			ProjectID:        project.ID,
 			Flavor: api.NovaObject[api.NovaFlavor]{Data: api.NovaFlavor{
