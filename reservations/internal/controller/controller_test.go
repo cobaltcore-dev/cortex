@@ -317,8 +317,8 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		}
 
 		// Verify request structure
-		if req.Pipeline != "reservations" {
-			t.Errorf("Expected Pipeline to be 'reservations', got %q", req.Pipeline)
+		if req.Pipeline != "all-filters-enabled" {
+			t.Errorf("Expected Pipeline to be 'all-filters-enabled', got %q", req.Pipeline)
 		}
 		if req.Spec.Data.NumInstances != 1 {
 			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)
@@ -339,6 +339,28 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		Client: client,
 		Scheme: scheme,
 		Conf:   config,
+		HypervisorClient: &mockHypervisorClient{
+			hypervisorsToReturn: []Hypervisor{
+				{
+					Hostname: "test-host-1",
+					Type:     "kvm",
+					Service: struct {
+						Host string `json:"host"`
+					}{
+						Host: "compute1",
+					},
+				},
+				{
+					Hostname: "test-host-2",
+					Type:     "kvm",
+					Service: struct {
+						Host string `json:"host"`
+					}{
+						Host: "compute2",
+					},
+				},
+			},
+		},
 	}
 
 	req := ctrl.Request{

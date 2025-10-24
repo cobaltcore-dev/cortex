@@ -35,6 +35,13 @@ func TestGetConfigOrDie(t *testing.T) {
     "password": "secret",
     "database": "postgres"
   },
+  "monitoring": {
+    "port": 2112,
+    "labels": {
+      "github_org": "cobaltcore-dev",
+      "github_repo": "cortex"
+    }
+  },
   "api": {
     "port": 8080
   }
