@@ -140,20 +140,6 @@ cortex-scheduling-operator:
               maxStealPctOverObservedTimeSpan: 20.0
     scheduler:
       nova:
-        # Configuration for the Liquid API.
-        liquidAPI:
-          # Which hypervisor types should be handled by the commitments
-          # acceptance endpoint of the scheduler.
-          #
-          # Please note that the strings here must match exactly with the
-          # `capabilities:hypervisor_type` extra spec in the flavors.
-          hypervisors:
-            - "QEMU"
-            - "CH" # Cloud hypervisor
-            # Not supported:
-            # - "VMware vCenter Server"
-            # - "ironic"
-
         pipelines:
           # Note: there needs to be at least one pipeline with the name "default".
           - name: default

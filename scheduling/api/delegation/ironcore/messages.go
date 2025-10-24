@@ -12,10 +12,6 @@ import (
 type MachinePipelineRequest struct {
 	// The available machine pools.
 	Pools []v1alpha1.MachinePool `json:"pools"`
-
-	// The name of the pipeline to execute.
-	// By default the required pipeline with the name "default" will be used.
-	Pipeline string `json:"pipeline"`
 }
 
 func (r MachinePipelineRequest) GetSubjects() []string {

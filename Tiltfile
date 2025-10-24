@@ -149,7 +149,10 @@ def new_port_mapping(component, local_port, remote_port):
     port_mappings[component] = {'local': local_port, 'remote': remote_port}
     return port_forward(local_port, remote_port, name=component)
 
-k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds'))
+k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=[
+    # Locally enable IronCore CRDs (these are not deployed by default).
+    'cortex-scheduling-operator.crd.ironcore.enable=true',
+]))
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")

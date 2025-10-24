@@ -4,6 +4,11 @@
 
 To deploy the cortex machine scheduler with [ironcore in a box](https://github.com/ironcore-dev/ironcore-in-a-box), follow these steps.
 
+This guide was made with the following tag:
+```bash
+git checkout c2385066a45b036a0d0dedc19acc43e738cbcbdf
+```
+
 ### Deploying IronCore-in-a-Box and Disabling the Machine Scheduler
 
 First, follow the instructions in [this section](https://github.com/ironcore-dev/ironcore-in-a-box?tab=readme-ov-file#installation) to set up your kind cluster with ironcore in a box.
@@ -24,7 +29,7 @@ git clone https://github.com/cobaltcore-dev/cortex.git && cd cortex
 
 #### Deploying from Upstream
 
-Currently not supported yet, as the cortex-machines-operator chart is not published yet on our [ghcr.io](https://github.com/orgs/cobaltcore-dev/packages?repo_name=cortex) registry.
+Currently not supported yet, as the cortex-scheduling-operator chart is not published yet on our [ghcr.io](https://github.com/orgs/cobaltcore-dev/packages?repo_name=cortex) registry.
 
 #### Deploying from Local
 
@@ -37,11 +42,11 @@ helm dependency update helm/bundles/cortex-ironcore
 Build the cortex machine scheduler docker image and load it into the kind cluster.
 
 ```bash
-docker build --build-arg GO_MOD_PATH=machines -t cortex-machines-operator:dev .
+docker build --build-arg GO_MOD_PATH=scheduling -t cortex-scheduling-operator:dev .
 ```
 
 ```bash
-kind load docker-image cortex-machines-operator:dev --name ironcore-in-a-box
+kind load docker-image cortex-scheduling-operator:dev --name ironcore-in-a-box
 ```
 
 Now we can deploy our custom cortex machine scheduler. `values.iiab.yaml` contains the necessary overrides to work with ironcore-in-a-box.
@@ -53,9 +58,9 @@ helm upgrade --install cortex-ironcore ./helm/bundles/cortex-ironcore \
 ```
 
 > [!TIP]
-> If you made changes to the machines/ helm chart, you can update it in the bundle and run helm upgrade again:
+> If you made changes to the scheduling/ helm chart, you can update it in the bundle and run helm upgrade again:
 > ```bash
-> helm package ./machines/dist/chart --destination ./helm/bundles/cortex-ironcore/charts
+> helm package ./scheduling/dist/chart --destination ./helm/bundles/cortex-ironcore/charts
 > ```
 
 ### Demo
@@ -81,7 +86,7 @@ webapp   t3-small          ghcr.io/ironcore-dev/os-images/gardenlinux:latest   i
 Also check the logs of the cortex machine scheduler to see the scheduling in action.
 
 ```bash
-kubectl logs deploy/machines-controller-manager
+kubectl logs deploy/cortex-ironcore-scheduling-controller-manager
 ```
 
 The logs show that the cortex scheduler pipeline has been executed and a machine pool has been assigned to the machine:

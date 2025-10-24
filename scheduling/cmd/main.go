@@ -30,6 +30,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	cinderapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
+	machinesapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	manilaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	novaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
@@ -42,6 +43,7 @@ import (
 	novahttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/cinder"
 	lib "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
+	machines "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/machines"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova"
 	"github.com/sapcc/go-bits/httpext"
@@ -227,7 +229,7 @@ func main() {
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
-	registry := monitoring.NewRegistry(config.MonitoringConfig)
+	registry := monitoring.NewRegistry(libconf.MonitoringConfig{})
 
 	// Currently the scheduler pipeline will always need a database.
 	// TODO: Scheduler steps should not use the database, instead only CRs.
@@ -286,6 +288,20 @@ func main() {
 			os.Exit(1)
 		}
 		cinderhttp.NewAPI(config).Init(mux)
+	}
+	if len(config.SchedulerConfig.Machines.Pipelines) > 0 {
+		pipelines := map[string]lib.Pipeline[machinesapi.MachinePipelineRequest]{}
+		for _, pipelineConf := range config.SchedulerConfig.Machines.Pipelines {
+			pipelines[pipelineConf.Name] = machines.NewPipeline(pipelineConf, database, pipelineMonitor)
+		}
+		if err := (&machines.DecisionReconciler{
+			Client:    mgr.GetClient(),
+			Scheme:    mgr.GetScheme(),
+			Pipelines: pipelines,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
+			os.Exit(1)
+		}
 	}
 	// TODO: Add machines scheduler back in.
 

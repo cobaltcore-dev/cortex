@@ -73,7 +73,6 @@ type Config interface {
 	Validate() error
 }
 
-// TODO: Strip this off everything we don't need anymore.
 type SharedConfig struct {
 	DBConfig         `json:"db"`
 	MonitoringConfig `json:"monitoring"`

@@ -109,8 +109,6 @@ type MachineSchedulerPipelineConfig struct {
 type NovaSchedulerConfig struct {
 	// Pipelines in this scheduler.
 	Pipelines []NovaSchedulerPipelineConfig `json:"pipelines"`
-	// Configuration for the Liquid API.
-	LiquidAPI NovaSchedulerLiquidAPIConfig `json:"liquidAPI"`
 }
 
 type NovaHypervisorType = string
@@ -212,9 +210,10 @@ func (s NovaSchedulerStepSpecScope) IsUndefined() bool {
 
 // Configuration for the scheduler module.
 type SchedulerConfig struct {
-	Nova   NovaSchedulerConfig   `json:"nova"`
-	Manila ManilaSchedulerConfig `json:"manila"`
-	Cinder CinderSchedulerConfig `json:"cinder"`
+	Nova     NovaSchedulerConfig    `json:"nova"`
+	Manila   ManilaSchedulerConfig  `json:"manila"`
+	Cinder   CinderSchedulerConfig  `json:"cinder"`
+	Machines MachineSchedulerConfig `json:"machines"`
 }
 
 type Config struct {
@@ -223,11 +222,9 @@ type Config struct {
 
 	SchedulerConfig   `json:"scheduler"`
 	DeschedulerConfig `json:"descheduler"`
-	Machines          MachineSchedulerConfig `json:"machines"`
 
 	// Lib modules configs.
-	libconf.MonitoringConfig `json:"monitoring"`
-	libconf.DBConfig         `json:"db"`
+	libconf.DBConfig `json:"db"`
 
 	libconf.KeystoneConfig `json:"keystone"`
 }
