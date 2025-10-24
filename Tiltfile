@@ -33,24 +33,6 @@ def kubebuilder_binary_files(path):
     """
     return [path + '/cmd', path + '/api', path + '/internal', path + '/go.mod', path + '/go.sum']
 
-########### Cortex Scheduler
-docker_build('ghcr.io/cobaltcore-dev/cortex-scheduler', '.',
-    dockerfile='Dockerfile',
-    build_args={'GO_MOD_PATH': 'scheduler'},
-    only=kubebuilder_binary_files('scheduler') + ['reservations/', 'decisions/', 'knowledge/', 'lib/', 'testlib/'],
-)
-local('sh helm/sync.sh scheduler/dist/chart')
-# Deployed as part of bundles below.
-
-########### Cortex Descheduler
-docker_build('ghcr.io/cobaltcore-dev/cortex-descheduler', '.',
-    dockerfile='Dockerfile',
-    build_args={'GO_MOD_PATH': 'descheduler'},
-    only=kubebuilder_binary_files('descheduler') + ['lib/', 'testlib/', 'knowledge/'],
-)
-local('sh helm/sync.sh descheduler/dist/chart')
-# Deployed as part of bundles below.
-
 ########### Cortex KPIs
 docker_build('ghcr.io/cobaltcore-dev/cortex-kpis', '.',
     dockerfile='Dockerfile',
@@ -68,29 +50,21 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-knowledge-operator', '.',
 )
 local('sh helm/sync.sh knowledge/dist/chart')
 
-########### Machines Operator & CRDs
-docker_build('ghcr.io/cobaltcore-dev/cortex-machines-operator', '.',
+########### Scheduling Operator & CRDs
+docker_build('ghcr.io/cobaltcore-dev/cortex-scheduling-operator', '.',
     dockerfile='Dockerfile',
-    build_args={'GO_MOD_PATH': 'machines'},
-    only=kubebuilder_binary_files('machines') + ['lib/', 'testlib/'],
+    build_args={'GO_MOD_PATH': 'scheduling'},
+    only=kubebuilder_binary_files('scheduling') + ['lib/', 'testlib/', 'knowledge/', 'reservations/'],
 )
-local('sh helm/sync.sh machines/dist/chart')
+local('sh helm/sync.sh scheduling/dist/chart')
 
 ########### Reservations Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'reservations'},
-    only=kubebuilder_binary_files('reservations') + ['scheduler/', 'decisions/', 'lib/', 'testlib/'],
+    only=kubebuilder_binary_files('reservations') + ['scheduler/', 'lib/', 'testlib/'],
 )
 local('sh helm/sync.sh reservations/dist/chart')
-
-########### Decisions Operator & CRDs
-docker_build('ghcr.io/cobaltcore-dev/cortex-decisions-operator', '.',
-    dockerfile='Dockerfile',
-    build_args={'GO_MOD_PATH': 'decisions'},
-    only=kubebuilder_binary_files('decisions') + ['lib/', 'testlib/'],
-)
-local('sh helm/sync.sh decisions/dist/chart')
 
 ########### Cortex Bundles
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
@@ -107,22 +81,18 @@ bundle_charts = [
 ]
 dep_charts = {
     'cortex-crds': [
-        ('descheduler/dist/chart', 'cortex-descheduler'),
         ('reservations/dist/chart', 'cortex-reservations-operator'),
-        ('decisions/dist/chart', 'cortex-decisions-operator'),
         ('knowledge/dist/chart', 'cortex-knowledge-operator'),
-        ('machines/dist/chart', 'cortex-machines-operator'),
+        ('scheduling/dist/chart', 'cortex-scheduling-operator'),
     ],
     'cortex-nova': [
         ('helm/library/cortex-alerts', 'cortex-alerts'),
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex-mqtt', 'cortex-mqtt'),
 
-        ('scheduler/dist/chart', 'cortex-scheduler'),
         ('kpis/dist/chart', 'cortex-kpis'),
-        ('descheduler/dist/chart', 'cortex-descheduler'),
         ('reservations/dist/chart', 'cortex-reservations-operator'),
-        ('decisions/dist/chart', 'cortex-decisions-operator'),
+        ('scheduling/dist/chart', 'cortex-scheduling-operator'),
         ('knowledge/dist/chart', 'cortex-knowledge-operator'),
     ],
     'cortex-manila': [
@@ -130,7 +100,7 @@ dep_charts = {
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex-mqtt', 'cortex-mqtt'),
 
-        ('scheduler/dist/chart', 'cortex-scheduler'),
+        ('scheduling/dist/chart', 'cortex-scheduling-operator'),
         ('kpis/dist/chart', 'cortex-kpis'),
         ('knowledge/dist/chart', 'cortex-knowledge-operator'),
     ],
@@ -139,7 +109,7 @@ dep_charts = {
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex-mqtt', 'cortex-mqtt'),
 
-        ('scheduler/dist/chart', 'cortex-scheduler'),
+        ('scheduling/dist/chart', 'cortex-scheduling-operator'),
         ('kpis/dist/chart', 'cortex-kpis'),
         ('knowledge/dist/chart', 'cortex-knowledge-operator'),
     ],
@@ -147,7 +117,7 @@ dep_charts = {
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex-mqtt', 'cortex-mqtt'),
 
-        ('machines/dist/chart', 'cortex-machines-operator'),
+        ('scheduling/dist/chart', 'cortex-scheduling-operator'),
     ],
 }
 
@@ -188,22 +158,18 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds'))
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
     k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values], set=[
-        'cortex-decisions-operator.enabled=true',
         'cortex-reservations-operator.enabled=true',
-        'cortex-descheduler.enabled=true',
     ]))
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
         new_port_mapping('cortex-nova-postgresql', 8000, 5432),
     ])
     k8s_resource('cortex-nova-mqtt', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-kpis', labels=['Cortex-Nova'])
-    k8s_resource('cortex-nova-scheduler', labels=['Cortex-Nova'], port_forwards=[
-        new_port_mapping('cortex-nova-scheduler-api', 8001, 8080),
-    ])
     k8s_resource('cortex-nova-knowledge-controller-manager', labels=['Cortex-Nova'])
-    k8s_resource('cortex-nova-descheduler-controller-manager', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-scheduling-controller-manager', labels=['Cortex-Nova'], port_forwards=[
+        new_port_mapping('cortex-nova-scheduling-controller-manager-api', 8001, 8080),
+    ])
     k8s_resource('cortex-nova-reservations-controller-manager', labels=['Cortex-Nova'])
-    k8s_resource('cortex-nova-decisions-controller-manager', labels=['Cortex-Nova'])
     local_resource(
         'Scheduler E2E Tests (Nova)',
         '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduler -- /manager e2e-nova"',
@@ -221,10 +187,10 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     ])
     k8s_resource('cortex-manila-mqtt', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-kpis', labels=['Cortex-Manila'])
-    k8s_resource('cortex-manila-scheduler', labels=['Cortex-Manila'], port_forwards=[
-        new_port_mapping('cortex-manila-scheduler-api', 8003, 8080),
-    ])
     k8s_resource('cortex-manila-knowledge-controller-manager', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-scheduling-controller-manager', labels=['Cortex-Manila'], port_forwards=[
+        new_port_mapping('cortex-manila-scheduling-controller-manager-api', 8003, 8080),
+    ])
     local_resource(
         'Scheduler E2E Tests (Manila)',
         '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduler -- /manager e2e-manila"',
@@ -241,10 +207,10 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
     ])
     k8s_resource('cortex-cinder-mqtt', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-kpis', labels=['Cortex-Cinder'])
-    k8s_resource('cortex-cinder-scheduler', labels=['Cortex-Cinder'], port_forwards=[
-        new_port_mapping('cortex-cinder-scheduler-api', 8005, 8080),
-    ])
     k8s_resource('cortex-cinder-knowledge-controller-manager', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-scheduling-controller-manager', labels=['Cortex-Cinder'], port_forwards=[
+        new_port_mapping('cortex-cinder-scheduling-controller-manager-api', 8005, 8080),
+    ])
     local_resource(
         'Scheduler E2E Tests (Cinder)',
         '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduler -- /manager e2e-cinder"',
@@ -261,7 +227,7 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
         new_port_mapping('cortex-ironcore-postgresql', 8006, 5432),
     ])
     k8s_resource('cortex-ironcore-mqtt', labels=['Cortex-IronCore'])
-    k8s_resource('cortex-ironcore-machines-controller-manager', labels=['Cortex-IronCore'])
+    k8s_resource('cortex-ironcore-scheduling-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
     k8s_yaml('machines/samples/compute_v1alpha1_machinepool.yaml')
     k8s_yaml('machines/samples/compute_v1alpha1_machineclass.yaml')

@@ -21,10 +21,6 @@ dependencies:
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.1.0
 
-  # from: file://../../../scheduler/dist/chart
-  - name: cortex-scheduler
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.1
   # from: file://../../../kpis/dist/chart
   - name: cortex-kpis
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
@@ -33,21 +29,15 @@ dependencies:
   - name: cortex-knowledge-operator
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
-  # from: file://../../../decisions/dist/chart
-  - name: cortex-decisions-operator
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.2.0
-    condition: cortex-decisions-operator.enabled
   # from: file://../../../reservations/dist/chart
   - name: cortex-reservations-operator
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.2.0
     condition: cortex-reservations-operator.enabled
-  # from: file://../../../descheduler/dist/chart
-  - name: cortex-descheduler
+  # from: file://../../../scheduling/dist/chart
+  - name: cortex-scheduling-operator
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
-    condition: cortex-descheduler.enabled
 
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
