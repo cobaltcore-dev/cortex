@@ -14,8 +14,8 @@ require (
 	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.8.0
-	github.com/onsi/ginkgo/v2 v2.22.0
-	github.com/onsi/gomega v1.36.1
+	github.com/onsi/ginkgo/v2 v2.27.1
+	github.com/onsi/gomega v1.38.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-bits v0.0.0-20251016133802-c2d049e762e6
@@ -101,6 +101,7 @@ require (
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
+	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -112,7 +113,7 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
-	github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db // indirect
+	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -129,6 +130,8 @@ require (
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/sapcc/go-api-declarations v1.17.4 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
+	go.uber.org/automaxprocs v1.6.0 // indirect
+	golang.org/x/mod v0.28.0 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/tools v0.37.0 // indirect
