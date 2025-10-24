@@ -60,11 +60,6 @@ datasources:
 global:
   # Values passed to the service through a configmap.
   conf:
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-nova-mqtt:1883"
-
     # Connection parameters for the database where data is stored.
     db:
       # Must match postgresql settings from the cortex-postgres chart.
@@ -81,10 +76,6 @@ cortex-reservations-operator:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-nova-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-nova-mqtt
 
 # Custom configuration for the cortex core chart.
 cortex-alerts:

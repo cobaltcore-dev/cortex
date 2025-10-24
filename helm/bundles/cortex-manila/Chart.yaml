@@ -16,10 +16,6 @@ dependencies:
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.5.4
-  # from: file://../../library/cortex-mqtt
-  - name: cortex-mqtt
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.1.0
 
   # from: file://../../../kpis/dist/chart
   - name: cortex-kpis

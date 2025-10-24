@@ -97,6 +97,4 @@ The logs show that the cortex scheduler pipeline has been executed and a machine
 2025/10/13 11:11:08 INFO scheduler: input weights weights=map[ironcore-in-a-box-control-plane:0]
 2025/10/13 11:11:08 INFO scheduler: output weights weights=map[ironcore-in-a-box-control-plane:0.7615941559557649]
 2025/10/13 11:11:08 INFO scheduler: sorted subjects subjects=[ironcore-in-a-box-control-plane]
-2025/10/13 11:11:08 INFO published mqtt data topic=cortex/scheduler/machines/pipeline/finished
-2025-10-13T11:11:08Z	DEBUG	assigned machine pool to instance	{"controller": "cortex-machine-scheduler", "controllerGroup": "compute.ironcore.dev", "controllerKind": "Machine", "Machine": {"name":"webapp","namespace":"default"}, "namespace": "default", "name": "webapp", "reconcileID": "a00611ba-dddd-4a7e-a3af-01f0698697e3", "machinePool": "ironcore-in-a-box-control-plane"}
 ```

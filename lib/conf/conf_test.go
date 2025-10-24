@@ -46,11 +46,6 @@ func TestGetConfigOrDie(t *testing.T) {
       "github_repo": "cortex"
     }
   },
-  "mqtt": {
-    "url": "tcp://cortex-mqtt:1883",
-    "username": "cortex",
-    "password": "secret"
-  },
   "api": {
     "port": 8080
   }
@@ -97,18 +92,6 @@ func TestGetConfigOrDie(t *testing.T) {
 	}
 	if monitoringConfig.Port == 0 {
 		t.Errorf("Expected non-zero monitoring port, got 0")
-	}
-
-	// Test MQTTConfig
-	mqttConfig := config.GetMQTTConfig()
-	if mqttConfig.URL == "" {
-		t.Errorf("Expected non-empty MQTT URL, got empty string")
-	}
-	if mqttConfig.Username == "" {
-		t.Errorf("Expected non-empty MQTT username, got empty string")
-	}
-	if mqttConfig.Password == "" {
-		t.Errorf("Expected non-empty MQTT password, got empty string")
 	}
 
 	// Test APIConfig

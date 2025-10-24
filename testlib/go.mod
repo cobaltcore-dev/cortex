@@ -3,7 +3,6 @@ module github.com/cobaltcore-dev/cortex/testlib
 go 1.25.0
 
 require (
-	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/lib/pq v1.10.9
@@ -36,12 +35,10 @@ require (
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
-	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/sapcc/go-api-declarations v1.17.4 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 )

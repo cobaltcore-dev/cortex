@@ -88,7 +88,6 @@ dep_charts = {
     'cortex-nova': [
         ('helm/library/cortex-alerts', 'cortex-alerts'),
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('helm/library/cortex-mqtt', 'cortex-mqtt'),
 
         ('kpis/dist/chart', 'cortex-kpis'),
         ('reservations/dist/chart', 'cortex-reservations-operator'),
@@ -98,7 +97,6 @@ dep_charts = {
     'cortex-manila': [
         ('helm/library/cortex-alerts', 'cortex-alerts'),
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('helm/library/cortex-mqtt', 'cortex-mqtt'),
 
         ('scheduling/dist/chart', 'cortex-scheduling-operator'),
         ('kpis/dist/chart', 'cortex-kpis'),
@@ -107,7 +105,6 @@ dep_charts = {
     'cortex-cinder': [
         ('helm/library/cortex-alerts', 'cortex-alerts'),
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('helm/library/cortex-mqtt', 'cortex-mqtt'),
 
         ('scheduling/dist/chart', 'cortex-scheduling-operator'),
         ('kpis/dist/chart', 'cortex-kpis'),
@@ -115,7 +112,6 @@ dep_charts = {
     ],
     'cortex-ironcore': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('helm/library/cortex-mqtt', 'cortex-mqtt'),
 
         ('scheduling/dist/chart', 'cortex-scheduling-operator'),
     ],
@@ -163,7 +159,6 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
         new_port_mapping('cortex-nova-postgresql', 8000, 5432),
     ])
-    k8s_resource('cortex-nova-mqtt', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-kpis', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-knowledge-controller-manager', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-scheduling-controller-manager', labels=['Cortex-Nova'], port_forwards=[
@@ -184,7 +179,6 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
         new_port_mapping('cortex-manila-postgresql', 8002, 5432),
     ])
-    k8s_resource('cortex-manila-mqtt', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-kpis', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-knowledge-controller-manager', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-scheduling-controller-manager', labels=['Cortex-Manila'], port_forwards=[
@@ -203,7 +197,6 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
         new_port_mapping('cortex-cinder-postgresql', 8004, 5432),
     ])
-    k8s_resource('cortex-cinder-mqtt', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-kpis', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-knowledge-controller-manager', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-scheduling-controller-manager', labels=['Cortex-Cinder'], port_forwards=[
@@ -224,7 +217,6 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-ironcore-postgresql', labels=['Cortex-IronCore'], port_forwards=[
         new_port_mapping('cortex-ironcore-postgresql', 8006, 5432),
     ])
-    k8s_resource('cortex-ironcore-mqtt', labels=['Cortex-IronCore'])
     k8s_resource('cortex-ironcore-scheduling-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
     k8s_yaml('machines/samples/compute_v1alpha1_machinepool.yaml')

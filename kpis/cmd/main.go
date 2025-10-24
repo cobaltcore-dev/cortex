@@ -16,7 +16,6 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
-	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -79,11 +78,6 @@ func main() {
 	mux.HandleFunc("/up", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-
-	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
-	if err := mqttClient.Connect(); err != nil {
-		panic("failed to connect to mqtt broker: " + err.Error())
-	}
 
 	pipeline := kpis.NewPipeline(config.KPIsConfig)
 	if err := pipeline.Init(kpis.SupportedKPIs, database, registry); err != nil {

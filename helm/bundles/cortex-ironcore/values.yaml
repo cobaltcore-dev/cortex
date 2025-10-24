@@ -19,11 +19,6 @@ alerts:
 global:
   # Values passed to the service through a configmap.
   conf:
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-ironcore-mqtt:1883"
-
     # Connection parameters for the database where data is stored.
     db:
       # Must match postgresql settings from the cortex-postgres chart.
@@ -32,10 +27,6 @@ global:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-ironcore-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-ironcore-mqtt
 
 cortex-scheduling-operator:
   enabled: false

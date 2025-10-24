@@ -63,24 +63,6 @@ type MonitoringConfig struct {
 	Port int `json:"port"`
 }
 
-type MQTTReconnectConfig struct {
-	// The interval between reconnection attempts on connection loss.
-	RetryIntervalSeconds int `json:"retryIntervalSeconds"`
-
-	// The maximum number of reconnection attempts on connection loss before panic.
-	MaxRetries int `json:"maxRetries"`
-}
-
-// Configuration for the mqtt client.
-type MQTTConfig struct {
-	// The URL of the MQTT broker to use for mqtt.
-	URL string `json:"url"`
-	// Credentials for the MQTT broker.
-	Username  string              `json:"username"`
-	Password  string              `json:"password"`
-	Reconnect MQTTReconnectConfig `json:"reconnect"`
-}
-
 // Configuration for the api port.
 type APIConfig struct {
 	// The port to expose the API on.
@@ -146,7 +128,6 @@ type Config interface {
 	GetLoggingConfig() LoggingConfig
 	GetDBConfig() DBConfig
 	GetMonitoringConfig() MonitoringConfig
-	GetMQTTConfig() MQTTConfig
 	GetAPIConfig() APIConfig
 	GetKeystoneConfig() KeystoneConfig
 	// Check if the configuration is valid.
@@ -158,7 +139,6 @@ type SharedConfig struct {
 	LoggingConfig    `json:"logging"`
 	DBConfig         `json:"db"`
 	MonitoringConfig `json:"monitoring"`
-	MQTTConfig       `json:"mqtt"`
 	APIConfig        `json:"api"`
 	KeystoneConfig   `json:"keystone"`
 }
@@ -250,6 +230,5 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 func (c *SharedConfig) GetLoggingConfig() LoggingConfig       { return c.LoggingConfig }
 func (c *SharedConfig) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
-func (c *SharedConfig) GetMQTTConfig() MQTTConfig             { return c.MQTTConfig }
 func (c *SharedConfig) GetAPIConfig() APIConfig               { return c.APIConfig }
 func (c *SharedConfig) GetKeystoneConfig() KeystoneConfig     { return c.KeystoneConfig }
