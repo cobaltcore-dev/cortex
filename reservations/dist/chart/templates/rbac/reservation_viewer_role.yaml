@@ -11,12 +11,12 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: {{ .Values.namePrefix }}-computereservation-viewer-role
+  name: {{ .Values.namePrefix }}-reservation-viewer-role
 rules:
 - apiGroups:
   - reservations.cortex
   resources:
-  - computereservations
+  - reservations
   verbs:
   - get
   - list
@@ -24,7 +24,7 @@ rules:
 - apiGroups:
   - reservations.cortex
   resources:
-  - computereservations/status
+  - reservations/status
   verbs:
   - get
 {{- end -}}

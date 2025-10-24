@@ -198,13 +198,13 @@ func main() {
 	config := conf.GetConfigOrDie[controller.Config]()
 	hvClient := controller.NewHypervisorClient(config.Keystone)
 	hvClient.Init(ctx)
-	if err := (&controller.ComputeReservationReconciler{
+	if err := (&controller.ReservationReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
 		Conf:             config,
 		HypervisorClient: hvClient,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ComputeReservation")
+		setupLog.Error(err, "unable to create controller", "controller", "Reservation")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

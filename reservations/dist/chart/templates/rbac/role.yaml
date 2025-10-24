@@ -10,7 +10,7 @@ rules:
 - apiGroups:
   - reservations.cortex
   resources:
-  - computereservations
+  - reservations
   verbs:
   - create
   - delete
@@ -22,13 +22,13 @@ rules:
 - apiGroups:
   - reservations.cortex
   resources:
-  - computereservations/finalizers
+  - reservations/finalizers
   verbs:
   - update
 - apiGroups:
   - reservations.cortex
   resources:
-  - computereservations/status
+  - reservations/status
   verbs:
   - get
   - patch

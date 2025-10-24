@@ -61,7 +61,7 @@ func (s *FilterHasEnoughCapacity) GetName() string { return "filter_has_enough_c
 //
 // This filter takes the capacity of the hosts and subtracts from it:
 //   - The resources currently used by VMs.
-//   - The resources reserved by active ComputeReservations.
+//   - The resources reserved by active Reservations.
 //
 // In case the project and flavor match, space reserved is unlocked (slotting).
 //
@@ -80,7 +80,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	); err != nil {
 		return nil, err
 	}
-	var reservations v1alpha1.ComputeReservationList
+	var reservations v1alpha1.ReservationList
 	ctx := context.Background()
 	if err := s.Client.List(ctx, &reservations); err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	vcpusReserved := make(map[string]uint64)  // in vCPUs
 	memoryReserved := make(map[string]uint64) // in MB
 	for _, reservation := range reservations.Items {
-		if reservation.Status.Phase != v1alpha1.ComputeReservationStatusPhaseActive {
+		if reservation.Status.Phase != v1alpha1.ReservationStatusPhaseActive {
 			continue // Only consider active reservations.
 		}
 		if reservation.Spec.Scheduler.CortexNova == nil {

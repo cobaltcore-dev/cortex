@@ -188,7 +188,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 	}
 
 	// Verify that reservations were created
-	var reservations v1alpha1.ComputeReservationList
+	var reservations v1alpha1.ReservationList
 	err = k8sClient.List(context.Background(), &reservations)
 	if err != nil {
 		t.Errorf("Failed to list reservations: %v", err)
@@ -230,13 +230,13 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 	}
 
 	// Create an existing reservation
-	existingReservation := &v1alpha1.ComputeReservation{
+	existingReservation := &v1alpha1.Reservation{
 		ObjectMeta: ctrl.ObjectMeta{
 			Name: "commitment-12345-0", // Instance commitments have -0 suffix
 		},
-		Spec: v1alpha1.ComputeReservationSpec{
-			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+		Spec: v1alpha1.ReservationSpec{
+			Scheduler: v1alpha1.ReservationSchedulerSpec{
+				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 					ProjectID:  "old-project",
 					FlavorName: "old-flavor",
 				},
@@ -317,7 +317,7 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 	}
 
 	// Verify that the reservation was updated
-	var updatedReservation v1alpha1.ComputeReservation
+	var updatedReservation v1alpha1.Reservation
 	err = k8sClient.Get(context.Background(), client.ObjectKey{Name: "commitment-12345-0"}, &updatedReservation)
 	if err != nil {
 		t.Errorf("Failed to get updated reservation: %v", err)
@@ -408,7 +408,7 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 	}
 
 	// Verify that no reservations were created due to short UUID
-	var reservations v1alpha1.ComputeReservationList
+	var reservations v1alpha1.ReservationList
 	err = k8sClient.List(context.Background(), &reservations)
 	if err != nil {
 		t.Errorf("Failed to list reservations: %v", err)

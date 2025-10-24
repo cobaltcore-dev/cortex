@@ -10,16 +10,16 @@ metadata:
     "helm.sh/resource-policy": keep
     {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: computereservations.reservations.cortex
+  name: reservations.reservations.cortex
 spec:
   group: reservations.cortex
   names:
-    kind: ComputeReservation
-    listKind: ComputeReservationList
-    plural: computereservations
+    kind: Reservation
+    listKind: ReservationList
+    plural: reservations
     shortNames:
     - cres
-    singular: computereservation
+    singular: reservation
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -35,7 +35,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ComputeReservation is the Schema for the computereservations
+        description: Reservation is the Schema for the reservations
           API
         properties:
           apiVersion:
@@ -56,7 +56,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of ComputeReservation
+            description: spec defines the desired state of Reservation
             properties:
               creator:
                 description: |-
@@ -100,7 +100,7 @@ spec:
                 type: object
             type: object
           status:
-            description: status defines the observed state of ComputeReservation
+            description: status defines the observed state of Reservation
             properties:
               error:
                 description: An error explaining why the reservation is failed, if

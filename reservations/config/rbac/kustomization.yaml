@@ -22,7 +22,7 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the reservations itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- computereservation_admin_role.yaml
-- computereservation_editor_role.yaml
-- computereservation_viewer_role.yaml
+- reservation_admin_role.yaml
+- reservation_editor_role.yaml
+- reservation_viewer_role.yaml
 

@@ -163,7 +163,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		return err
 	}
 	// Map commitments to reservations.
-	var reservationsByName = make(map[string]v1alpha1.ComputeReservation)
+	var reservationsByName = make(map[string]v1alpha1.Reservation)
 	for _, commitment := range commitments {
 		// Get only the 5 first characters from the uuid. This should be safe enough.
 		if len(commitment.UUID) < 5 {
@@ -172,10 +172,10 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 			continue
 		}
 		commitmentUUIDShort := commitment.UUID[:5]
-		spec := v1alpha1.ComputeReservationSpec{
+		spec := v1alpha1.ReservationSpec{
 			Creator: Creator,
-			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+			Scheduler: v1alpha1.ReservationSchedulerSpec{
+				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 					ProjectID:        commitment.ProjectID,
 					DomainID:         commitment.DomainID,
 					FlavorName:       commitment.Flavor.Name,
@@ -200,7 +200,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 				)
 				continue
 			}
-			reservationsByName[meta.Name] = v1alpha1.ComputeReservation{
+			reservationsByName[meta.Name] = v1alpha1.Reservation{
 				ObjectMeta: meta,
 				Spec:       spec,
 			}
@@ -211,7 +211,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	for _, res := range reservationsByName {
 		// Check if the reservation already exists.
 		nn := types.NamespacedName{Name: res.Name, Namespace: res.Namespace}
-		var existing v1alpha1.ComputeReservation
+		var existing v1alpha1.Reservation
 		if err := s.Get(ctx, nn, &existing); err != nil {
 			if !k8serrors.IsNotFound(err) {
 				syncLog.Error(err, "failed to get reservation", "name", nn.Name)
@@ -234,7 +234,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	}
 
 	// Delete reservations that are not in the commitments anymore.
-	var existingReservations v1alpha1.ComputeReservationList
+	var existingReservations v1alpha1.ReservationList
 	if err := s.List(ctx, &existingReservations); err != nil {
 		syncLog.Error(err, "failed to list existing reservations")
 		return err

@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: reservations
     app.kubernetes.io/managed-by: kustomize
-  name: computereservation-editor-role
+  name: reservation-editor-role
 rules:
 - apiGroups:
   - reservations.cortex
   resources:
-  - computereservations
+  - reservations
   verbs:
   - create
   - delete
@@ -28,6 +28,6 @@ rules:
 - apiGroups:
   - reservations.cortex
   resources:
-  - computereservations/status
+  - reservations/status
   verbs:
   - get

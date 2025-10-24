@@ -25,8 +25,8 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 )
 
-// ComputeReservationReconciler reconciles a ComputeReservation object
-type ComputeReservationReconciler struct {
+// ReservationReconciler reconciles a Reservation object
+type ReservationReconciler struct {
 	// Client to fetch hypervisors.
 	HypervisorClient
 	// Client for the kubernetes API.
@@ -39,16 +39,16 @@ type ComputeReservationReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	// Fetch the reservation object.
-	var res v1alpha1.ComputeReservation
+	var res v1alpha1.Reservation
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
 		// Can happen when the resource was just deleted.
 		return ctrl.Result{}, err
 	}
 	// If the reservation is already active, skip it.
-	if res.Status.Phase == v1alpha1.ComputeReservationStatusPhaseActive {
+	if res.Status.Phase == v1alpha1.ReservationStatusPhaseActive {
 		log.Info("reservation is already active, skipping", "reservation", req.Name)
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
@@ -57,7 +57,7 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if res.Spec.Scheduler.CortexNova == nil {
 		log.Info("reservation is not a cortex-nova reservation, skipping", "reservation", req.Name)
 		res.Status.Error = "reservation is not a cortex-nova reservation"
-		res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed
+		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
 			return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
@@ -70,7 +70,7 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if !ok || !slices.Contains(r.Conf.Hypervisors, hvType) {
 		log.Info("hypervisor type is not supported", "reservation", req.Name)
 		res.Status.Error = fmt.Sprintf("hypervisor type is not supported: %s", hvType)
-		res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseFailed
+		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
 			return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
@@ -169,7 +169,7 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Update the reservation with the found host (idx 0)
 	host := externalSchedulerResponse.Hosts[0]
 	log.Info("found host for reservation", "reservation", req.Name, "host", host)
-	res.Status.Phase = v1alpha1.ComputeReservationStatusPhaseActive
+	res.Status.Phase = v1alpha1.ReservationStatusPhaseActive
 	res.Status.Host = host
 	res.Status.Error = "" // Clear any previous error.
 	if err := r.Status().Update(ctx, &res); err != nil {
@@ -180,10 +180,10 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ComputeReservationReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.ComputeReservation{}).
-		Named("computereservation").
+		For(&v1alpha1.Reservation{}).
+		Named("reservation").
 		WithOptions(controller.Options{
 			// We want to process reservations one at a time to avoid overbooking.
 			MaxConcurrentReconciles: 1,

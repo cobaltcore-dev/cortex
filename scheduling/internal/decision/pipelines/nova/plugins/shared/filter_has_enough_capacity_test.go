@@ -489,15 +489,15 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 	}
 
 	// Create active reservations that consume resources on hosts
-	reservations := []v1alpha1.ComputeReservation{
+	reservations := []v1alpha1.Reservation{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "reservation-host1-1",
 				Namespace: "test-namespace",
 			},
-			Spec: v1alpha1.ComputeReservationSpec{
-				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+			Spec: v1alpha1.ReservationSpec{
+				Scheduler: v1alpha1.ReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 						FlavorName: "test-flavor",
 						ProjectID:  "test-project",
 						DomainID:   "test-domain",
@@ -508,8 +508,8 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 					"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
 				},
 			},
-			Status: v1alpha1.ComputeReservationStatus{
-				Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+			Status: v1alpha1.ReservationStatus{
+				Phase: v1alpha1.ReservationStatusPhaseActive,
 				Host:  "host1",
 			},
 		},
@@ -518,9 +518,9 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				Name:      "reservation-host2-1",
 				Namespace: "test-namespace",
 			},
-			Spec: v1alpha1.ComputeReservationSpec{
-				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+			Spec: v1alpha1.ReservationSpec{
+				Scheduler: v1alpha1.ReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 						FlavorName: "test-flavor",
 						ProjectID:  "test-project",
 						DomainID:   "test-domain",
@@ -531,8 +531,8 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 					"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
 				},
 			},
-			Status: v1alpha1.ComputeReservationStatus{
-				Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+			Status: v1alpha1.ReservationStatus{
+				Phase: v1alpha1.ReservationStatusPhaseActive,
 				Host:  "host2",
 			},
 		},
@@ -541,9 +541,9 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 				Name:      "reservation-inactive",
 				Namespace: "test-namespace",
 			},
-			Spec: v1alpha1.ComputeReservationSpec{
-				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+			Spec: v1alpha1.ReservationSpec{
+				Scheduler: v1alpha1.ReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 						FlavorName: "test-flavor",
 						ProjectID:  "test-project",
 						DomainID:   "test-domain",
@@ -554,8 +554,8 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 					"cpu":    *resource.NewQuantity(8, resource.DecimalSI),
 				},
 			},
-			Status: v1alpha1.ComputeReservationStatus{
-				Phase: v1alpha1.ComputeReservationStatusPhaseFailed, // Not active, should be ignored
+			Status: v1alpha1.ReservationStatus{
+				Phase: v1alpha1.ReservationStatusPhaseFailed, // Not active, should be ignored
 				Host:  "host1",
 			},
 		},
@@ -676,22 +676,22 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		reservations        []v1alpha1.ComputeReservation
+		reservations        []v1alpha1.Reservation
 		request             api.ExternalSchedulerRequest
 		expectedHostPresent bool
 		description         string
 	}{
 		{
 			name: "Reservation matches request - resources should be unlocked",
-			reservations: []v1alpha1.ComputeReservation{
+			reservations: []v1alpha1.Reservation{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "matching-reservation",
 						Namespace: "test-namespace",
 					},
-					Spec: v1alpha1.ComputeReservationSpec{
-						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 								FlavorName: "test-flavor",  // Matches request
 								ProjectID:  "test-project", // Matches request
 								DomainID:   "test-domain",
@@ -702,8 +702,8 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs - consumes half vCPUs
 						},
 					},
-					Status: v1alpha1.ComputeReservationStatus{
-						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
 						Host:  "host1",
 					},
 				},
@@ -732,15 +732,15 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 		},
 		{
 			name: "Reservation does not match ProjectID - resources remain reserved",
-			reservations: []v1alpha1.ComputeReservation{
+			reservations: []v1alpha1.Reservation{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "non-matching-project-reservation",
 						Namespace: "test-namespace",
 					},
-					Spec: v1alpha1.ComputeReservationSpec{
-						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 								FlavorName: "test-flavor",       // Matches request
 								ProjectID:  "different-project", // Does NOT match request
 								DomainID:   "test-domain",
@@ -751,8 +751,8 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs
 						},
 					},
-					Status: v1alpha1.ComputeReservationStatus{
-						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
 						Host:  "host1",
 					},
 				},
@@ -781,15 +781,15 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 		},
 		{
 			name: "Reservation does not match FlavorName - resources remain reserved",
-			reservations: []v1alpha1.ComputeReservation{
+			reservations: []v1alpha1.Reservation{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "non-matching-flavor-reservation",
 						Namespace: "test-namespace",
 					},
-					Spec: v1alpha1.ComputeReservationSpec{
-						Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-							CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 								FlavorName: "different-flavor", // Does NOT match request
 								ProjectID:  "test-project",     // Matches request
 								DomainID:   "test-domain",
@@ -800,8 +800,8 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 							"cpu":    *resource.NewQuantity(4, resource.DecimalSI),               // 4 vCPUs
 						},
 					},
-					Status: v1alpha1.ComputeReservationStatus{
-						Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
 						Host:  "host1",
 					},
 				},
