@@ -83,6 +83,48 @@ webapp   t3-small          ghcr.io/ironcore-dev/os-images/gardenlinux:latest   <
 webapp   t3-small          ghcr.io/ironcore-dev/os-images/gardenlinux:latest   ironcore-in-a-box-control-plane   Pending   103s
 ```
 
+You can see cortex' decision like this:
+
+```bash
+kubectl describe decision
+```
+
+Which will show something like this:
+
+```
+Name:         machine-twt4h
+Namespace:
+Labels:       <none>
+Annotations:  <none>
+API Version:  scheduling.cortex/v1alpha1
+Kind:         Decision
+Spec:
+  Machine Ref:
+    Name:       webapp
+    Namespace:  default
+  Operator:     cortex-ironcore
+  Pipeline Ref:
+    Name:       default
+  Resource ID:  webapp
+  Type:         ironcore-machine
+Status:
+  Result:
+    Aggregated Out Weights:
+      Ironcore - In - A - Box - Control - Plane:  0.7615941559557649
+    Normalized In Weights:
+      Ironcore - In - A - Box - Control - Plane:  0
+    Ordered Hosts:
+      ironcore-in-a-box-control-plane
+    Raw In Weights:
+      Ironcore - In - A - Box - Control - Plane:  0
+    Step Results:
+      Activations:
+        Ironcore - In - A - Box - Control - Plane:  1
+      Step Name:                                    noop
+    Target Host:                                    ironcore-in-a-box-control-plane
+  Took:                                             101.80875ms
+```
+
 Also check the logs of the cortex machine scheduler to see the scheduling in action.
 
 ```bash
