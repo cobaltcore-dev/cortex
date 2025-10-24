@@ -31,6 +31,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	cinderapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
 	machinesapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
+	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	manilaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	novaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
@@ -59,6 +60,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -253,6 +255,7 @@ func main() {
 			Client:    mgr.GetClient(),
 			Scheme:    mgr.GetScheme(),
 			Pipelines: pipelines,
+			Conf:      config,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -268,6 +271,7 @@ func main() {
 			Client:    mgr.GetClient(),
 			Scheme:    mgr.GetScheme(),
 			Pipelines: pipelines,
+			Conf:      config,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -283,6 +287,7 @@ func main() {
 			Client:    mgr.GetClient(),
 			Scheme:    mgr.GetScheme(),
 			Pipelines: pipelines,
+			Conf:      config,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -298,6 +303,7 @@ func main() {
 			Client:    mgr.GetClient(),
 			Scheme:    mgr.GetScheme(),
 			Pipelines: pipelines,
+			Conf:      config,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)

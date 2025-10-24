@@ -10,21 +10,27 @@ import (
 	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type DecisionReconciler struct {
 	// Available pipelines by their name.
 	Pipelines map[string]lib.Pipeline[ironcore.MachinePipelineRequest]
-
+	// Config for the scheduling operator.
+	Conf conf.Config
 	// Kubernetes client to manage/fetch resources.
 	client.Client
 	// Scheme for the Kubernetes client.
@@ -32,32 +38,14 @@ type DecisionReconciler struct {
 }
 
 func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	startedAt := time.Now() // So we can measure sync duration.
 	log := ctrl.LoggerFrom(ctx)
 
 	// Determine if this is a decision or machine reconciliation.
 	decision := &v1alpha1.Decision{}
-	if err := s.Get(ctx, req.NamespacedName, decision); err == nil {
-		// This is a decision reconciliation.
-		return s.reconcileDecision(ctx, req, decision)
+	if err := s.Get(ctx, req.NamespacedName, decision); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	machine := &ironcorev1alpha1.Machine{}
-	if err := s.Get(ctx, req.NamespacedName, machine); err == nil {
-		// This is a machine reconciliation.
-		return s.reconcileMachine(ctx, req, machine)
-	}
-
-	log.Error(nil, "neither decision nor machine found for reconciliation")
-	return ctrl.Result{}, nil
-}
-
-// Called by the kubernetes apiserver to handle new or updated Machine resources.
-func (s *DecisionReconciler) reconcileDecision(
-	ctx context.Context,
-	req ctrl.Request,
-	decision *v1alpha1.Decision,
-) (ctrl.Result, error) {
-	startedAt := time.Now() // So we can measure sync duration.
-	log := ctrl.LoggerFrom(ctx)
 
 	pipeline, ok := s.Pipelines[decision.Spec.PipelineRef.Name]
 	if !ok {
@@ -110,45 +98,68 @@ func (s *DecisionReconciler) reconcileDecision(
 	return ctrl.Result{}, nil
 }
 
-// Called by the kubernetes apiserver to handle new or updated Machine resources.
-func (s *DecisionReconciler) reconcileMachine(
-	ctx context.Context,
-	req ctrl.Request,
-	machine *ironcorev1alpha1.Machine,
-) (ctrl.Result, error) {
-	log := ctrl.LoggerFrom(ctx)
-
-	// Create a decision resource to schedule the machine.
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "machine-schedule-",
-			Namespace:    req.Namespace,
+func (s *DecisionReconciler) handleMachine() handler.EventHandler {
+	handle := func(ctx context.Context, new *ironcorev1alpha1.Machine) {
+		log := ctrl.LoggerFrom(ctx)
+		// Create a decision resource to schedule the machine.
+		decision := &v1alpha1.Decision{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "machine-schedule-",
+			},
+			Spec: v1alpha1.DecisionSpec{
+				Operator:   s.Conf.Operator,
+				Type:       v1alpha1.DecisionTypeIroncoreMachine,
+				ResourceID: new.ObjectMeta.Name,
+				PipelineRef: corev1.ObjectReference{
+					Name: "default",
+				},
+				MachineRef: &corev1.ObjectReference{
+					Name:      new.ObjectMeta.Name,
+					Namespace: new.ObjectMeta.Namespace,
+				},
+			},
+		}
+		if err := s.Create(ctx, decision); err != nil {
+			log.Error(err, "failed to create decision for machine scheduling")
+		}
+	}
+	return handler.Funcs{
+		CreateFunc: func(ctx context.Context, evt event.CreateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			machine := evt.Object.(*ironcorev1alpha1.Machine)
+			handle(ctx, machine)
 		},
-		Spec: v1alpha1.DecisionSpec{
-			Type:       v1alpha1.DecisionTypeIroncoreMachine,
-			ResourceID: machine.Name,
-			PipelineRef: corev1.ObjectReference{
-				Name: "default",
-			},
-			MachineRef: &corev1.ObjectReference{
-				Name:      req.Name,
-				Namespace: req.Namespace,
-			},
+		UpdateFunc: func(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			new := evt.ObjectNew.(*ironcorev1alpha1.Machine)
+			if new.Spec.MachinePoolRef != nil {
+				// Machine is already scheduled, no need to create a decision.
+				return
+			}
+			handle(ctx, new)
 		},
 	}
-	if err := s.Create(ctx, decision); err != nil {
-		log.Error(err, "failed to create decision for machine scheduling")
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("created decision for machine scheduling", "decisionName", decision.Name)
-	return ctrl.Result{}, nil
 }
 
 func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cortex-machine-scheduler").
 		For(
+			&v1alpha1.Decision{},
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				decision := obj.(*v1alpha1.Decision)
+				if decision.Spec.Operator != s.Conf.Operator {
+					return false
+				}
+				// Ignore already decided schedulings.
+				if decision.Status.Error != "" || decision.Status.Result != nil {
+					return false
+				}
+				// Only handle ironcore machine decisions.
+				return decision.Spec.Type == v1alpha1.DecisionTypeIroncoreMachine
+			})),
+		).
+		Watches(
 			&ironcorev1alpha1.Machine{},
+			s.handleMachine(),
 			// Only schedule machines that have the custom scheduler set.
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				machine := obj.(*ironcorev1alpha1.Machine)
@@ -161,18 +172,6 @@ func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
 				// We subscribe to all machines without a scheduler set for now.
 				// Otherwise when deployed the machine scheduler won't do anything.
 				return machine.Spec.Scheduler == ""
-			})),
-		).
-		For(
-			&v1alpha1.Decision{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				decision := obj.(*v1alpha1.Decision)
-				// Ignore already decided schedulings.
-				if decision.Status.Error != "" || decision.Status.Result != nil {
-					return false
-				}
-				// Only handle ironcore machine decisions.
-				return decision.Spec.Type == v1alpha1.DecisionTypeIroncoreMachine
 			})),
 		).
 		Complete(s)

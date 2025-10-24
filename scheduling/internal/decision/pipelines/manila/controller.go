@@ -10,6 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +24,8 @@ import (
 type DecisionReconciler struct {
 	// Available pipelines by their name.
 	Pipelines map[string]lib.Pipeline[api.ExternalSchedulerRequest]
+	// Config for the scheduling operator.
+	Conf conf.Config
 	// Kubernetes client to manage/fetch resources.
 	client.Client
 	// Scheme for the Kubernetes client.
@@ -74,6 +77,9 @@ func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
+				if decision.Spec.Operator != s.Conf.Operator {
+					return false
+				}
 				// Ignore already decided schedulings.
 				if decision.Status.Error != "" || decision.Status.Result != nil {
 					return false

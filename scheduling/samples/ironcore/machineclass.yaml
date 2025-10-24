@@ -1,0 +1,7 @@
+apiVersion: compute.ironcore.dev/v1alpha1
+kind: MachineClass
+metadata:
+  name: machineclass-sample
+capabilities:
+  cpu: 4
+  memory: 16Gi

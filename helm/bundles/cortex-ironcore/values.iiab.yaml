@@ -5,11 +5,6 @@
 # See README.md for details.
 
 cortex-scheduling-operator:
-  # Disable the crds which can be used to develop cortex without the ironcore
-  # aggregated api server. The crds are provided by ironcore-in-a-box and
-  # shouldn't be re-mounted.
-  crd:
-    enable: false
   # Use our locally built image.
   controllerManager:
     container:

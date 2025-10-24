@@ -49,6 +49,9 @@ namePrefix: cortex
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
   enable: true
+  # Whether the ironcore roles should be deployed as well.
+  ironcore:
+    enable: false
 
 # [CRDs]: To enable the CRDs
 crd:

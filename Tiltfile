@@ -150,8 +150,9 @@ def new_port_mapping(component, local_port, remote_port):
     return port_forward(local_port, remote_port, name=component)
 
 k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=[
-    # Locally enable IronCore CRDs (these are not deployed by default).
+    # Locally enable IronCore CRDs and rolebindings (these are not deployed by default).
     'cortex-scheduling-operator.crd.ironcore.enable=true',
+    'cortex-scheduling-operator.rbac.ironcore.enable=true',
 ]))
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
@@ -222,9 +223,9 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
     ])
     k8s_resource('cortex-ironcore-scheduling-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
-    k8s_yaml('machines/samples/compute_v1alpha1_machinepool.yaml')
-    k8s_yaml('machines/samples/compute_v1alpha1_machineclass.yaml')
-    k8s_yaml('machines/samples/compute_v1alpha1_machine.yaml')
+    k8s_yaml('scheduling/samples/ironcore/machinepool.yaml')
+    k8s_yaml('scheduling/samples/ironcore/machineclass.yaml')
+    k8s_yaml('scheduling/samples/ironcore/machine.yaml')
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
