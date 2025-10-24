@@ -5,7 +5,6 @@ package manila
 
 import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
@@ -25,7 +24,6 @@ func NewPipeline(
 	config conf.ManilaSchedulerPipelineConfig,
 	db db.DB,
 	monitor scheduling.PipelineMonitor,
-	mqttClient mqtt.Client,
 ) scheduling.Pipeline[api.ExternalSchedulerRequest] {
 
 	// Wrappers to apply to each step in the pipeline.

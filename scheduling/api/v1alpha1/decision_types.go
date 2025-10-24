@@ -29,6 +29,11 @@ type DecisionSpec struct {
 	// The operator by which this decision should be extracted.
 	Operator string `json:"operator,omitempty"`
 
+	// If there were previous decisions for the underlying resource, they can
+	// be provided here to provide historical context for the decision.
+	// +kubebuilder:validation:Optional
+	History []corev1.ObjectReference `json:"history,omitempty"`
+
 	// When there is a source host for the decision, it is recorded here.
 	//
 	// Note: for initial placements, this will be empty. However, for migrations
@@ -74,7 +79,7 @@ type NovaDecision struct {
 	ComputeHosts []string `json:"computeHosts"`
 	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of compute hosts.
-	Activations map[string]float64 `json:"activations,omitempty"`
+	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
 type CinderDecision struct {
@@ -135,11 +140,6 @@ type DecisionStatus struct {
 	// machine decision decision.
 	// +kubebuilder:validation:Optional
 	Machine *MachineDecision `json:"machine,omitempty"`
-
-	// If there were previous decisions for the underlying resource, they will
-	// be resolved here to provide historical context for the decision.
-	// +kubebuilder:validation:Optional
-	History []corev1.ObjectReference `json:"history,omitempty"`
 
 	// A human-readable explanation of the decision result.
 	// +kubebuilder:validation:Optional

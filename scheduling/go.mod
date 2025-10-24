@@ -110,10 +110,8 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/eclipse/paho.mqtt.golang v1.5.1 // indirect
 	github.com/go-gorp/gorp v2.2.0+incompatible // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
-	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/ironcore-dev/ironcore v0.2.4 // indirect
