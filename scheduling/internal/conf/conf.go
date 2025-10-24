@@ -191,15 +191,6 @@ type SchedulerConfig struct {
 	Nova   NovaSchedulerConfig   `json:"nova"`
 	Manila ManilaSchedulerConfig `json:"manila"`
 	Cinder CinderSchedulerConfig `json:"cinder"`
-
-	API SchedulerAPIConfig `json:"api"`
-}
-
-// Configuration for the scheduler API.
-type SchedulerAPIConfig struct {
-	// If request bodies should be logged out.
-	// This feature is intended for debugging purposes only.
-	LogRequestBodies bool `json:"logRequestBodies"`
 }
 
 type Config struct {

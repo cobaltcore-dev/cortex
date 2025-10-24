@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 

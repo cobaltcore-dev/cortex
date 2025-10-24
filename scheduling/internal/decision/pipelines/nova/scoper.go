@@ -11,7 +11,7 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
+	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 

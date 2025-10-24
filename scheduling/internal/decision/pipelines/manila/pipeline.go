@@ -4,13 +4,43 @@
 package manila
 
 import (
+	"log/slog"
+
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
+	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/manila/api"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/manila/plugins/netapp"
 )
+
+type PipelineRequest api.ExternalSchedulerRequest
+
+func (r PipelineRequest) GetSubjects() []string {
+	hosts := make([]string, len(r.Hosts))
+	for i, host := range r.Hosts {
+		hosts[i] = host.ShareHost
+	}
+	return hosts
+}
+func (r PipelineRequest) GetWeights() map[string]float64 {
+	return r.Weights
+}
+func (r PipelineRequest) GetTraceLogArgs() []slog.Attr {
+	return []slog.Attr{
+		slog.String("greq", r.Context.GlobalRequestID),
+		slog.String("req", r.Context.RequestID),
+		slog.String("user", r.Context.UserID),
+		slog.String("project", r.Context.ProjectID),
+	}
+}
+func (r PipelineRequest) GetPipeline() string {
+	return r.Pipeline
+}
+func (r PipelineRequest) WithPipeline(pipeline string) scheduling.PipelineRequest {
+	r.Pipeline = pipeline
+	return r
+}
 
 type ManilaStep = scheduling.Step[api.PipelineRequest]
 

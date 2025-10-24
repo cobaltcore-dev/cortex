@@ -1,0 +1,208 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package http
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/tools/cache"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
+)
+
+type HTTPAPI interface {
+	// Bind the server handlers.
+	Init(*http.ServeMux)
+}
+
+type httpAPI struct {
+	config  conf.Config
+	monitor scheduling.APIMonitor
+	client  *dynamic.DynamicClient
+}
+
+func NewAPI(config conf.Config) HTTPAPI {
+	return &httpAPI{
+		config:  config,
+		monitor: scheduling.NewSchedulerMonitor(),
+	}
+}
+
+// Init the API mux and bind the handlers.
+func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
+	metrics.Registry.MustRegister(&httpAPI.monitor)
+	mux.HandleFunc("/scheduler/nova/external", httpAPI.NovaExternalScheduler)
+	restConfig := ctrl.GetConfigOrDie()
+	httpAPI.client = dynamic.NewForConfigOrDie(restConfig)
+}
+
+// Check if the scheduler can run based on the request data.
+// Note: messages returned here are user-facing and should not contain internal details.
+func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest) (ok bool, reason string) {
+	// Check that all hosts have a weight.
+	for _, host := range requestData.Hosts {
+		if _, ok := requestData.Weights[host.ComputeHost]; !ok {
+			return false, "missing weight for host"
+		}
+	}
+	// Check that all weights are assigned to a host in the request.
+	vmHostNames := make(map[string]bool)
+	for _, host := range requestData.Hosts {
+		vmHostNames[host.ComputeHost] = true
+	}
+	for vmHost := range requestData.Weights {
+		if _, ok := vmHostNames[vmHost]; !ok {
+			return false, "weight assigned to unknown host"
+		}
+	}
+	return true, ""
+}
+
+// Handle the POST request from the Nova scheduler.
+// The request contains a spec of the vm to be scheduled, a list of hosts,
+// and a map of weights that were calculated by the Nova weigher pipeline.
+// The response contains an ordered list of hosts that the vm should be
+// scheduled on.
+func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Request) {
+	c := httpAPI.monitor.Callback(w, r, "/scheduler/nova/external")
+
+	// Exit early if the request method is not POST.
+	if r.Method != http.MethodPost {
+		internalErr := fmt.Errorf("invalid request method: %s", r.Method)
+		c.Respond(http.StatusMethodNotAllowed, internalErr, "invalid request method")
+		return
+	}
+
+	// Ensure body is closed after reading.
+	defer r.Body.Close()
+
+	// If configured, log out the complete request body.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		c.Respond(http.StatusInternalServerError, err, "failed to read request body")
+		return
+	}
+	raw := runtime.RawExtension{Raw: body}
+	var requestData api.ExternalSchedulerRequest
+	// Copy the raw body to a io.Reader for json deserialization.
+	copy := body
+	reader := bytes.NewReader(copy)
+	if err := json.NewDecoder(reader).Decode(&requestData); err != nil {
+		c.Respond(http.StatusBadRequest, err, "failed to decode request body")
+		return
+	}
+	slog.Info(
+		"handling POST request", "url", "/scheduler/nova/external",
+		"hosts", len(requestData.Hosts), "spec", requestData.Spec,
+	)
+
+	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
+		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
+		c.Respond(http.StatusBadRequest, internalErr, reason)
+		return
+	}
+
+	// Create the scheduling object in kubernetes.
+	unstructuredScheduling, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&v1alpha1.Scheduling{
+		ObjectMeta: metav1.ObjectMeta{
+			// TODO: smart naming (initial placement, migration, ...) based on the vm id.
+			GenerateName: "nova-scheduling-",
+		},
+		Spec: v1alpha1.SchedulingSpec{
+			Operator:   httpAPI.config.Operator,
+			SourceHost: "", // TODO pass this info from the external scheduler call
+			PipelineRef: corev1.ObjectReference{
+				Name: requestData.Pipeline,
+			},
+			ResourceID: requestData.Spec.Data.InstanceUUID,
+			Type:       v1alpha1.SchedulingTypeNova,
+			NovaRaw:    &raw,
+		},
+	})
+	if err != nil {
+		c.Respond(http.StatusInternalServerError, err, "failed to convert scheduling to unstructured")
+		return
+	}
+	resource := v1alpha1.GroupVersion.WithResource("schedulings")
+	obj, err := httpAPI.client.
+		Resource(resource).
+		Create(r.Context(), &unstructured.Unstructured{Object: unstructuredScheduling}, metav1.CreateOptions{})
+	if err != nil {
+		c.Respond(http.StatusInternalServerError, err, "failed to create scheduling resource")
+		return
+	}
+
+	// Make an informer for the scheduling resource.
+	resultChan := make(chan *v1alpha1.Scheduling, 1)
+	informer := dynamicinformer.
+		NewFilteredDynamicSharedInformerFactory(httpAPI.client, 0, metav1.NamespaceAll, nil).
+		ForResource(resource).
+		Informer()
+	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			unstructuredObj, ok := newObj.(*unstructured.Unstructured)
+			if !ok {
+				slog.Error("failed to convert to unstructured object")
+				return
+			}
+
+			updated := &v1alpha1.Scheduling{}
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj.Object, updated); err != nil {
+				slog.Error("failed to convert scheduling object", "error", err)
+				return
+			}
+			// Only process updates for our specific scheduling resource
+			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.SchedulingTypeNova {
+				return
+			}
+			if updated.Status.Error != "" || updated.Status.NovaDecision != nil {
+				resultChan <- updated
+				return
+			}
+		},
+	})
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+	go informer.Run(stopCh)
+	if !cache.WaitForCacheSync(stopCh, informer.HasSynced) {
+		c.Respond(http.StatusInternalServerError, fmt.Errorf("failed to sync cache"), "failed to sync cache")
+		return
+	}
+
+	// Wait for the scheduling decision to be processed and return the result
+	select {
+	case result := <-resultChan:
+		if result.Status.Error != "" || result.Status.NovaDecision == nil {
+			c.Respond(http.StatusInternalServerError, fmt.Errorf(result.Status.Error), "scheduling failed")
+			return
+		}
+		hosts := (*result.Status.NovaDecision).ComputeHosts
+		response := delegationAPI.ExternalSchedulerResponse{Hosts: hosts}
+		w.Header().Set("Content-Type", "application/json")
+		if err = json.NewEncoder(w).Encode(response); err != nil {
+			c.Respond(http.StatusInternalServerError, err, "failed to encode response")
+			return
+		}
+		c.Respond(http.StatusOK, nil, "Success")
+	case <-r.Context().Done():
+		c.Respond(http.StatusRequestTimeout, r.Context().Err(), "request timeout")
+		return
+	}
+}

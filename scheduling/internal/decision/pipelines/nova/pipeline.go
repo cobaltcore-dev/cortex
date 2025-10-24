@@ -12,20 +12,51 @@ import (
 	"github.com/cobaltcore-dev/cortex/decisions/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/plugins/kvm"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova/plugins/vmware"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type NovaStep = scheduling.Step[api.PipelineRequest]
+type PipelineRequest api.ExternalSchedulerRequest
+
+func (r PipelineRequest) GetSubjects() []string {
+	hosts := make([]string, len(r.Hosts))
+	for i, host := range r.Hosts {
+		hosts[i] = host.ComputeHost
+	}
+	return hosts
+}
+func (r PipelineRequest) GetWeights() map[string]float64 {
+	return r.Weights
+}
+func (r PipelineRequest) GetTraceLogArgs() []slog.Attr {
+	greq := ""
+	if r.Context.GlobalRequestID != nil {
+		greq = *r.Context.GlobalRequestID
+	}
+	return []slog.Attr{
+		slog.String("greq", greq),
+		slog.String("req", r.Context.RequestID),
+		slog.String("user", r.Context.UserID),
+		slog.String("project", r.Context.ProjectID),
+	}
+}
+func (r PipelineRequest) GetPipeline() string {
+	return r.Pipeline
+}
+func (r PipelineRequest) WithPipeline(pipeline string) lib.PipelineRequest {
+	r.Pipeline = pipeline
+	return r
+}
+
+type NovaStep = lib.Step[PipelineRequest]
 
 // Configuration of steps supported by the scheduling.
 // The steps actually used by the scheduler are defined through the configuration file.
@@ -54,7 +85,7 @@ var supportedSteps = map[string]func() NovaStep{
 // Specific pipeline for nova.
 type novaPipeline struct {
 	// The underlying shared pipeline logic.
-	scheduling.Pipeline[api.PipelineRequest]
+	lib.Pipeline[api.PipelineRequest]
 	// Database to use for the nova pipeline.
 	database db.DB
 	// Whether the pipeline should preselect all hosts.

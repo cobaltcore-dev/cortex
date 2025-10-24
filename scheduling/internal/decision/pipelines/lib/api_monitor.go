@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -20,18 +19,23 @@ type APIMonitor struct {
 }
 
 // Create a new scheduler monitor and register the necessary Prometheus metrics.
-func NewSchedulerMonitor(registry *monitoring.Registry) APIMonitor {
+func NewSchedulerMonitor() APIMonitor {
 	apiRequestsTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_api_request_duration_seconds",
 		Help:    "Duration of API requests",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "path", "status", "error"})
-	registry.MustRegister(
-		apiRequestsTimer,
-	)
 	return APIMonitor{
 		ApiRequestsTimer: apiRequestsTimer,
 	}
+}
+
+func (m *APIMonitor) Describe(ch chan<- *prometheus.Desc) {
+	m.ApiRequestsTimer.Describe(ch)
+}
+
+func (m *APIMonitor) Collect(ch chan<- prometheus.Metric) {
+	m.ApiRequestsTimer.Collect(ch)
 }
 
 // Helper to respond to the request with the given code and error.

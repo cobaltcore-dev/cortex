@@ -16,7 +16,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
+	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
