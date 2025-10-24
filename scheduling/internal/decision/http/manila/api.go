@@ -126,8 +126,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 			GenerateName: "manila-",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator:   httpAPI.config.Operator,
-			SourceHost: "", // TODO model out the spec or pass this info from the external scheduler call
+			Operator: httpAPI.config.Operator,
 			PipelineRef: corev1.ObjectReference{
 				Name: requestData.Pipeline,
 			},

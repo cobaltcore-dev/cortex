@@ -121,10 +121,6 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	}
 
 	// Create the decision object in kubernetes.
-	sourceHost := ""
-	if requestData.CurrentHost != nil {
-		sourceHost = *requestData.CurrentHost
-	}
 	unstructuredDecision, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&v1alpha1.Decision{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Decision",
@@ -134,8 +130,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			GenerateName: "nova-",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator:   httpAPI.config.Operator,
-			SourceHost: sourceHost,
+			Operator: httpAPI.config.Operator,
 			PipelineRef: corev1.ObjectReference{
 				Name: requestData.Pipeline,
 			},

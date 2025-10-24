@@ -29,13 +29,6 @@ type DecisionSpec struct {
 	// The operator by which this decision should be extracted.
 	Operator string `json:"operator,omitempty"`
 
-	// When there is a source host for the decision, it is recorded here.
-	//
-	// Note: for initial placements, this will be empty. However, for migrations
-	// or resizes, this will contain the source host.
-	// +kubebuilder:validation:Optional
-	SourceHost string `json:"sourceHost,omitempty"`
-
 	// A reference to the pipeline that should be used for this decision.
 	// This reference can be used to look up the pipeline definition and its
 	// scheduler step configuration for additional context.
@@ -123,7 +116,6 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
-// +kubebuilder:printcolumn:name="SourceHost",type="string",JSONPath=".status.sourceHost"
 // +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 

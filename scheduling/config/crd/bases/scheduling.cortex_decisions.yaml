@@ -33,9 +33,6 @@ spec:
     - jsonPath: .spec.pipelineRef.name
       name: Pipeline
       type: string
-    - jsonPath: .status.sourceHost
-      name: SourceHost
-      type: string
     - jsonPath: .status.result.targetHost
       name: TargetHost
       type: string
@@ -180,13 +177,6 @@ spec:
                   An identifier for the underlying resource to be scheduled.
                   For example, this can be the UUID of a nova instance or cinder volume.
                   This can be used to correlate multiple decisions for the same resource.
-                type: string
-              sourceHost:
-                description: |-
-                  When there is a source host for the decision, it is recorded here.
-
-                  Note: for initial placements, this will be empty. However, for migrations
-                  or resizes, this will contain the source host.
                 type: string
               type:
                 description: The type of decision, indicating what has initiated this
