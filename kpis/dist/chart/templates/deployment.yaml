@@ -34,10 +34,10 @@ spec:
               cpu: {{ .Values.resources.limits.cpu }}
           ports:
             - name: api
-              containerPort: {{ $.Values.conf.api.port }}
+              containerPort: 8080
               protocol: TCP
             - name: metrics
-              containerPort: {{ $.Values.conf.monitoring.port }}
+              containerPort: 2112
               protocol: TCP
           livenessProbe:
             {{- toYaml $.Values.livenessProbe | nindent 12 }}

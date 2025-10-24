@@ -27,6 +27,8 @@ import (
 
 // ComputeReservationReconciler reconciles a ComputeReservation object
 type ComputeReservationReconciler struct {
+	// Client to fetch hypervisors.
+	HypervisorClient
 	// Client for the kubernetes API.
 	client.Client
 	// Kubernetes scheme to use for the reservations.
@@ -95,11 +97,39 @@ func (r *ComputeReservationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		cpu = uint64(cpuValue)
 	}
 
+	// Get all supported hosts and assign zero-weights to them.
+	hypervisors, err := r.HypervisorClient.ListHypervisors(ctx)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list hypervisors: %w", err)
+	}
+	var eligibleHosts []schedulerdelegationapi.ExternalSchedulerHost
+	for _, hv := range hypervisors {
+		if hv.Type != hvType {
+			continue
+		}
+		eligibleHosts = append(eligibleHosts, schedulerdelegationapi.ExternalSchedulerHost{
+			ComputeHost:        hv.Service.Host,
+			HypervisorHostname: hv.Hostname,
+		})
+	}
+	if len(eligibleHosts) == 0 {
+		log.Info("no eligible hosts found for reservation", "reservation", req.Name, "hypervisor_type", hvType)
+		return ctrl.Result{}, errors.New("no eligible hosts found for reservation")
+	}
+	weights := make(map[string]float64, len(eligibleHosts))
+	for _, host := range eligibleHosts {
+		weights[host.ComputeHost] = 0.0
+	}
+
+	// Call the external scheduler delegation API to get a host for the reservation.
 	externalSchedulerRequest := schedulerdelegationapi.ExternalSchedulerRequest{
 		// Pipeline with all filters enabled + preselects all hosts.
-		Pipeline: "reservations",
+		Pipeline: "all-filters-enabled",
+		Hosts:    eligibleHosts,
+		Weights:  weights,
 		Spec: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaSpec]{
 			Data: schedulerdelegationapi.NovaSpec{
+				InstanceUUID: res.Name,
 				NumInstances: 1, // One for each reservation.
 				ProjectID:    schedulerSpec.ProjectID,
 				Flavor: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaFlavor]{

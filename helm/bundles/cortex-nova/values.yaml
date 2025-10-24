@@ -256,11 +256,8 @@ cortex-scheduling-operator:
                   maxCPUContentionActivationLowerBound: 0.0
                   maxCPUContentionActivationUpperBound: -0.25
 
-          # Pipeline for initial placement of reservations which needs all filters.
-          - name: reservations
-            # This pipeline needs to preselect all hosts to get a valid placement.
-            preselectAllHosts: true
-
+          # Pipeline for initial placement which needs all filters.
+          - name: all-filters-enabled
             # Configuration of scheduler steps that modify the Nova scheduler weights.
             #
             # The `name` should correspond to a known scheduler plugin.

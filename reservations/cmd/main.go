@@ -193,10 +193,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx := context.Background()
+
+	config := conf.GetConfigOrDie[controller.Config]()
+	hvClient := controller.NewHypervisorClient(config.Keystone)
+	hvClient.Init(ctx)
 	if err := (&controller.ComputeReservationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Conf:   conf.GetConfigOrDie[controller.Config](),
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Conf:             config,
+		HypervisorClient: hvClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ComputeReservation")
 		os.Exit(1)
@@ -234,7 +240,6 @@ func main() {
 	metrics.Registry.MustRegister(&monitor)
 
 	setupLog.Info("starting commitments syncer")
-	ctx := context.Background()
 	syncer := commitments.NewSyncer(mgr.GetClient())
 	syncer.Init(ctx)
 	go syncer.Run(ctx)
