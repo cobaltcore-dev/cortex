@@ -227,7 +227,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 }
 
 // Generate external scheduler requests with the given datacenter data.
-func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
+func randomRequest(dc datacenter, seed int, config conf.Config) api.ExternalSchedulerRequest {
 	// Create a new random source with the given seed.
 	//nolint:gosec // We don't care if the random source is cryptographically secure.
 	randSource := rand.New(rand.NewSource(int64(seed)))
@@ -267,8 +267,10 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 		panic(err)
 	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
+	//nolint:gosec // We don't care if the random source is cryptographically secure.
+	pipelineName := config.SchedulerConfig.Nova.Pipelines[randSource.Intn(len(config.SchedulerConfig.Nova.Pipelines))].Name
 	request := api.ExternalSchedulerRequest{
-		Pipeline: "default",
+		Pipeline: pipelineName,
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
 			InstanceUUID:     "cortex-e2e-tests",
 			AvailabilityZone: az,
@@ -322,11 +324,15 @@ func checkNovaSchedulerReturnsValidHosts(
 
 // Run all checks.
 func RunChecks(ctx context.Context, config conf.Config) {
+	if len(config.SchedulerConfig.Nova.Pipelines) == 0 {
+		slog.Info("nova scheduling not configured, skipping check")
+		return
+	}
 	datacenter := prepare(ctx, config)
 	requestsWithHostsReturned := 0
 	requestsWithNoHostsReturned := 0
 	for i := range nRandomRequestsToSend {
-		request := randomRequest(datacenter, i)
+		request := randomRequest(datacenter, i, config)
 		hosts := checkNovaSchedulerReturnsValidHosts(ctx, config, request)
 		if len(hosts) > 0 {
 			requestsWithHostsReturned++

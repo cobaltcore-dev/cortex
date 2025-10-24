@@ -133,7 +133,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 				Name: requestData.Pipeline,
 			},
 			ResourceID: "", // TODO
-			Type:       v1alpha1.DecisionTypeCinder,
+			Type:       v1alpha1.DecisionTypeCinderVolume,
 			CinderRaw:  &raw,
 		},
 	})
@@ -170,7 +170,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 				return
 			}
 			// Only process updates for our specific decision resource
-			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeCinder {
+			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeCinderVolume {
 				return
 			}
 			if updated.Status.Error != "" || updated.Status.Cinder != nil {

@@ -133,7 +133,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 				Name: requestData.Pipeline,
 			},
 			ResourceID: "", // TODO model out the spec.
-			Type:       v1alpha1.DecisionTypeManila,
+			Type:       v1alpha1.DecisionTypeManilaShare,
 			ManilaRaw:  &raw,
 		},
 	})
@@ -170,7 +170,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 				return
 			}
 			// Only process updates for our specific decision resource
-			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeManila {
+			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeManilaShare {
 				return
 			}
 			if updated.Status.Error != "" || updated.Status.Manila != nil {

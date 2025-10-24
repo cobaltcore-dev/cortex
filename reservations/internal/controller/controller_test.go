@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
-	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
+	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 )
 
 func TestComputeReservationReconciler_Reconcile(t *testing.T) {

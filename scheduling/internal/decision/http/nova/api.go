@@ -137,7 +137,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 				Name: requestData.Pipeline,
 			},
 			ResourceID: requestData.Spec.Data.InstanceUUID,
-			Type:       v1alpha1.DecisionTypeNova,
+			Type:       v1alpha1.DecisionTypeNovaServer,
 			NovaRaw:    &raw,
 		},
 	})
@@ -174,7 +174,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 				return
 			}
 			// Only process updates for our specific decision resource
-			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeNova {
+			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeNovaServer {
 				return
 			}
 			if updated.Status.Error != "" || updated.Status.Nova != nil {

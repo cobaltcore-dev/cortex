@@ -18,11 +18,26 @@ spec:
     - jsonPath: .spec.operator
       name: Operator
       type: string
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.resourceID
+      name: Resource ID
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
     - jsonPath: .status.took
       name: Took
+      type: string
+    - jsonPath: .spec.pipelineRef.name
+      name: Pipeline
+      type: string
+    - jsonPath: .status.sourceHost
+      name: SourceHost
+      type: string
+    - jsonPath: .status.targetHost
+      name: TargetHost
       type: string
     - jsonPath: .status.error
       name: Error
@@ -57,55 +72,6 @@ spec:
                   cinder decision request.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
-              history:
-                description: |-
-                  If there were previous decisions for the underlying resource, they can
-                  be provided here to provide historical context for the decision.
-                items:
-                  description: ObjectReference contains enough information to let
-                    you inspect or modify the referred object.
-                  properties:
-                    apiVersion:
-                      description: API version of the referent.
-                      type: string
-                    fieldPath:
-                      description: |-
-                        If referring to a piece of an object instead of an entire object, this string
-                        should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                        For example, if the object reference is to a container within a pod, this would take on a value like:
-                        "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                        the event) or if no container name is specified "spec.containers[2]" (container with
-                        index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                        referencing a part of an object.
-                      type: string
-                    kind:
-                      description: |-
-                        Kind of the referent.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                      type: string
-                    name:
-                      description: |-
-                        Name of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      type: string
-                    namespace:
-                      description: |-
-                        Namespace of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                      type: string
-                    resourceVersion:
-                      description: |-
-                        Specific resourceVersion to which this reference is made, if any.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                      type: string
-                    uid:
-                      description: |-
-                        UID of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                      type: string
-                  type: object
-                  x-kubernetes-map-type: atomic
-                type: array
               machineRef:
                 description: If the type is "machine", this field contains the machine
                   reference.
@@ -264,8 +230,6 @@ spec:
                     items:
                       type: string
                     type: array
-                required:
-                - storagePools
                 type: object
               error:
                 description: If there was an error during the last decision, it is
@@ -274,6 +238,55 @@ spec:
               explanation:
                 description: A human-readable explanation of the decision result.
                 type: string
+              history:
+                description: |-
+                  If there were previous decisions for the underlying resource, they can
+                  be resolved here to provide historical context for the decision.
+                items:
+                  description: ObjectReference contains enough information to let
+                    you inspect or modify the referred object.
+                  properties:
+                    apiVersion:
+                      description: API version of the referent.
+                      type: string
+                    fieldPath:
+                      description: |-
+                        If referring to a piece of an object instead of an entire object, this string
+                        should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                        For example, if the object reference is to a container within a pod, this would take on a value like:
+                        "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                        the event) or if no container name is specified "spec.containers[2]" (container with
+                        index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                        referencing a part of an object.
+                      type: string
+                    kind:
+                      description: |-
+                        Kind of the referent.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                      type: string
+                    name:
+                      description: |-
+                        Name of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                    namespace:
+                      description: |-
+                        Namespace of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                      type: string
+                    resourceVersion:
+                      description: |-
+                        Specific resourceVersion to which this reference is made, if any.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                      type: string
+                    uid:
+                      description: |-
+                        UID of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
               machine:
                 description: |-
                   If the decision decision type is "machine", this field contains the
@@ -304,8 +317,6 @@ spec:
                       - stepName
                       type: object
                     type: array
-                required:
-                - machinePools
                 type: object
               manila:
                 description: |-
@@ -337,8 +348,6 @@ spec:
                     items:
                       type: string
                     type: array
-                required:
-                - storagePools
                 type: object
               nova:
                 description: |-
@@ -370,8 +379,6 @@ spec:
                       - stepName
                       type: object
                     type: array
-                required:
-                - computeHosts
                 type: object
               targetHost:
                 description: |-

@@ -16,23 +16,18 @@ const (
 	// The decision was created by the nova external scheduler call.
 	// Usually we refer to this as nova initial placement, it also includes
 	// migrations or resizes.
-	DecisionTypeNova DecisionType = "nova"
+	DecisionTypeNovaServer DecisionType = "nova-server"
 	// The decision was created by the cinder external scheduler call.
-	DecisionTypeCinder DecisionType = "cinder"
+	DecisionTypeCinderVolume DecisionType = "cinder-volume"
 	// The decision was created by the manila external scheduler call.
-	DecisionTypeManila DecisionType = "manila"
+	DecisionTypeManilaShare DecisionType = "manila-share"
 	// The decision was created by spawning an ironcore machine.
-	DecisionTypeMachine DecisionType = "machine"
+	DecisionTypeIroncoreMachine DecisionType = "ironcore-machine"
 )
 
 type DecisionSpec struct {
 	// The operator by which this decision should be extracted.
 	Operator string `json:"operator,omitempty"`
-
-	// If there were previous decisions for the underlying resource, they can
-	// be provided here to provide historical context for the decision.
-	// +kubebuilder:validation:Optional
-	History []corev1.ObjectReference `json:"history,omitempty"`
 
 	// When there is a source host for the decision, it is recorded here.
 	//
@@ -76,33 +71,41 @@ type StepResult struct {
 
 type NovaDecision struct {
 	// Sorted list of compute hosts from more preferred to least preferred.
+	// +kubebuilder:validation:Optional
 	ComputeHosts []string `json:"computeHosts"`
 	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of compute hosts.
+	// +kubebuilder:validation:Optional
 	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
 type CinderDecision struct {
 	// Sorted list of storage hosts from more preferred to least preferred.
+	// +kubebuilder:validation:Optional
 	StoragePools []string `json:"storagePools"`
 	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of storage hosts.
+	// +kubebuilder:validation:Optional
 	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
 type ManilaDecision struct {
 	// Sorted list of share hosts from more preferred to least preferred.
+	// +kubebuilder:validation:Optional
 	StoragePools []string `json:"storagePools"`
 	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of share hosts.
+	// +kubebuilder:validation:Optional
 	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
 type MachineDecision struct {
 	// Sorted list of machine pools from more preferred to least preferred.
+	// +kubebuilder:validation:Optional
 	MachinePools []string `json:"machinePools"`
 	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of machine pools.
+	// +kubebuilder:validation:Optional
 	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
@@ -141,6 +144,11 @@ type DecisionStatus struct {
 	// +kubebuilder:validation:Optional
 	Machine *MachineDecision `json:"machine,omitempty"`
 
+	// If there were previous decisions for the underlying resource, they can
+	// be resolved here to provide historical context for the decision.
+	// +kubebuilder:validation:Optional
+	History *[]corev1.ObjectReference `json:"history,omitempty"`
+
 	// A human-readable explanation of the decision result.
 	// +kubebuilder:validation:Optional
 	Explanation string `json:"explanation,omitempty"`
@@ -154,8 +162,13 @@ type DecisionStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
+// +kubebuilder:printcolumn:name="Resource ID",type="string",JSONPath=".spec.resourceID"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
+// +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
+// +kubebuilder:printcolumn:name="SourceHost",type="string",JSONPath=".status.sourceHost"
+// +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.targetHost"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Decision is the Schema for the decisions API

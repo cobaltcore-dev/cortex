@@ -80,8 +80,12 @@ func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
+				// Ignore already decided schedulings.
+				if decision.Status.Error != "" || decision.Status.Cinder != nil {
+					return false
+				}
 				// Only handle cinder decisions.
-				return decision.Spec.Type == v1alpha1.DecisionTypeCinder
+				return decision.Spec.Type == v1alpha1.DecisionTypeCinderVolume
 			})),
 		).
 		Complete(s)

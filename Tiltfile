@@ -62,7 +62,7 @@ local('sh helm/sync.sh scheduling/dist/chart')
 docker_build('ghcr.io/cobaltcore-dev/cortex-reservations-operator', '.',
     dockerfile='Dockerfile',
     build_args={'GO_MOD_PATH': 'reservations'},
-    only=kubebuilder_binary_files('reservations') + ['scheduler/', 'lib/', 'testlib/'],
+    only=kubebuilder_binary_files('reservations') + ['scheduling/', 'lib/', 'testlib/'],
 )
 local('sh helm/sync.sh reservations/dist/chart')
 

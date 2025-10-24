@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
@@ -27,9 +28,17 @@ func checkCinderSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 
 	//
 
+	if len(config.Manila.Pipelines) == 0 {
+		slog.Info("manila scheduling not configured, skipping check")
+		return
+	}
+	//nolint:gosec // We don't care if the random source is cryptographically secure.
+	randSource := rand.New(rand.NewSource(int64(42)))
+	pipelineName := config.Cinder.Pipelines[randSource.Intn(len(config.Cinder.Pipelines))].Name
 	request := api.ExternalSchedulerRequest{
-		Hosts:   []api.ExternalSchedulerHost{},
-		Weights: map[string]float64{},
+		Pipeline: pipelineName,
+		Hosts:    []api.ExternalSchedulerHost{},
+		Weights:  map[string]float64{},
 	}
 	apiURL := "http://cortex-cinder-scheduler:8080/scheduler/cinder/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
