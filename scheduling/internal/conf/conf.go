@@ -7,6 +7,35 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
+type SchedulerStepConfig[Extra any] struct {
+	// The name of the step implementation.
+	Name string `json:"name"`
+	// The alias of this step, if any.
+	//
+	// The alias can be used to distinguish between different configurations
+	// of the same step, or use a more specific name.
+	Alias string `json:"alias,omitempty"`
+	// Custom options for the step, as a raw yaml map.
+	Options libconf.RawOpts `json:"options,omitempty"`
+	// The validations to use for this step.
+	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
+
+	// Additional configuration for the step, if needed.
+	Extra *Extra `json:"extra,omitempty"`
+}
+
+// Config for which validations to disable for a scheduler step.
+type SchedulerStepDisabledValidationsConfig struct {
+	// Whether to validate that no subjects are removed or added from the scheduler
+	// step. This should only be disabled for scheduler steps that remove subjects.
+	// Thus, if no value is provided, the default is false.
+	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
+	// Whether to validate that, after running the step, there are remaining subjects.
+	// This should only be disabled for scheduler steps that are expected to
+	// remove all subjects.
+	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
+}
+
 // Configuration for the descheduler module.
 type DeschedulerConfig struct {
 	Nova NovaDeschedulerConfig `json:"nova"`
@@ -34,7 +63,7 @@ type CinderSchedulerConfig struct {
 	Pipelines []CinderSchedulerPipelineConfig `json:"pipelines"`
 }
 
-type CinderSchedulerStepConfig = libconf.SchedulerStepConfig[struct{}]
+type CinderSchedulerStepConfig = SchedulerStepConfig[struct{}]
 
 type CinderSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
@@ -50,7 +79,7 @@ type ManilaSchedulerConfig struct {
 	Pipelines []ManilaSchedulerPipelineConfig `json:"pipelines"`
 }
 
-type ManilaSchedulerStepConfig = libconf.SchedulerStepConfig[struct{}]
+type ManilaSchedulerStepConfig = SchedulerStepConfig[struct{}]
 
 type ManilaSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
@@ -66,7 +95,7 @@ type MachineSchedulerConfig struct {
 	Pipelines []MachineSchedulerPipelineConfig `json:"pipelines"`
 }
 
-type MachineSchedulerStepConfig = libconf.SchedulerStepConfig[struct{}]
+type MachineSchedulerStepConfig = SchedulerStepConfig[struct{}]
 
 type MachineSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.
@@ -103,7 +132,7 @@ type NovaSchedulerStepExtraConfig struct {
 	Scope NovaSchedulerStepScope `json:"scope,omitempty"`
 }
 
-type NovaSchedulerStepConfig = libconf.SchedulerStepConfig[NovaSchedulerStepExtraConfig]
+type NovaSchedulerStepConfig = SchedulerStepConfig[NovaSchedulerStepExtraConfig]
 
 type NovaSchedulerPipelineConfig struct {
 	// Scheduler step plugins by their name.

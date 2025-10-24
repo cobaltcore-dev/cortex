@@ -85,12 +85,10 @@ func main() {
 
 	// Run the api server after all other tasks have been started and
 	// all http handlers have been registered to the mux.
-	apiConf := config.APIConfig
-	addr := fmt.Sprintf(":%d", apiConf.Port)
-	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
+	if err := httpext.ListenAndServeContext(ctx, ":2112", mux); err != nil {
 		panic(err)
 	}
-	slog.Info("api listening", "port", apiConf.Port)
+	slog.Info("api listening", "port", 2112)
 
 	select {}
 }

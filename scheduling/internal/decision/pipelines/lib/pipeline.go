@@ -12,9 +12,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 )
 
 type Pipeline[RequestType PipelineRequest] interface {

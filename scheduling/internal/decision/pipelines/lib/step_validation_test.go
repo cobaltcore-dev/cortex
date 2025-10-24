@@ -10,6 +10,7 @@ import (
 
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 )
 
 func TestStepValidator_GetName(t *testing.T) {
@@ -63,7 +64,7 @@ func TestStepValidator_Run_ValidHosts(t *testing.T) {
 
 	validator := StepValidator[mockPipelineRequest]{
 		Step: mockStep,
-		DisabledValidations: libconf.SchedulerStepDisabledValidationsConfig{
+		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
 			SameSubjectNumberInOut: false,
 		},
 	}
@@ -100,7 +101,7 @@ func TestStepValidator_Run_HostNumberMismatch(t *testing.T) {
 
 	validator := StepValidator[mockPipelineRequest]{
 		Step: mockStep,
-		DisabledValidations: libconf.SchedulerStepDisabledValidationsConfig{
+		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
 			SameSubjectNumberInOut: false,
 		},
 	}
@@ -137,7 +138,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 
 	validator := StepValidator[mockPipelineRequest]{
 		Step: mockStep,
-		DisabledValidations: libconf.SchedulerStepDisabledValidationsConfig{
+		DisabledValidations: conf.SchedulerStepDisabledValidationsConfig{
 			SameSubjectNumberInOut: true, // Validation is disabled
 		},
 	}
@@ -158,7 +159,7 @@ func TestStepValidator_Run_DisabledValidation(t *testing.T) {
 
 func TestValidateStep(t *testing.T) {
 	mockStep := &mockStep[mockPipelineRequest]{}
-	disabledValidations := libconf.SchedulerStepDisabledValidationsConfig{
+	disabledValidations := conf.SchedulerStepDisabledValidationsConfig{
 		SameSubjectNumberInOut: true,
 	}
 

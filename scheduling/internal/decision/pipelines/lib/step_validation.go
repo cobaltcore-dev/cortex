@@ -7,9 +7,9 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 )
 
 // The config type has a long name, so we use a shorter alias here.

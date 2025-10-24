@@ -35,13 +35,6 @@ func TestGetConfigOrDie(t *testing.T) {
     "password": "secret",
     "database": "postgres"
   },
-  "monitoring": {
-    "port": 2112,
-    "labels": {
-      "github_org": "cobaltcore-dev",
-      "github_repo": "cortex"
-    }
-  },
   "api": {
     "port": 8080
   }
@@ -79,12 +72,6 @@ func TestGetConfigOrDie(t *testing.T) {
 	}
 	if monitoringConfig.Port == 0 {
 		t.Errorf("Expected non-zero monitoring port, got 0")
-	}
-
-	// Test APIConfig
-	apiConfig := config.GetAPIConfig()
-	if apiConfig.Port == 0 {
-		t.Errorf("Expected non-zero API port, got 0")
 	}
 }
 

@@ -37,15 +37,6 @@ type DBConfig struct {
 	Reconnect DBReconnectConfig `json:"reconnect"`
 }
 
-type NovaHypervisorType = string
-
-const (
-	NovaHypervisorTypeQEMU   NovaHypervisorType = "QEMU"
-	NovaHypervisorTypeCH     NovaHypervisorType = "CH" // Cloud hypervisor
-	NovaHypervisorTypeVMware NovaHypervisorType = "VMware vCenter Server"
-	NovaHypervisorTypeIronic NovaHypervisorType = "ironic"
-)
-
 // Configuration for the monitoring module.
 type MonitoringConfig struct {
 	// The labels to add to all metrics.
@@ -53,48 +44,6 @@ type MonitoringConfig struct {
 
 	// The port to expose the metrics on.
 	Port int `json:"port"`
-}
-
-// Configuration for the api port.
-type APIConfig struct {
-	// The port to expose the API on.
-	Port int `json:"port"`
-}
-
-type SchedulerStepConfig[Extra any] struct {
-	// The name of the step implementation.
-	Name string `json:"name"`
-	// The alias of this step, if any.
-	//
-	// The alias can be used to distinguish between different configurations
-	// of the same step, or use a more specific name.
-	Alias string `json:"alias,omitempty"`
-	// Custom options for the step, as a raw yaml map.
-	Options RawOpts `json:"options,omitempty"`
-	// The validations to use for this step.
-	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
-
-	// Additional configuration for the step, if needed.
-	Extra *Extra `json:"extra,omitempty"`
-}
-
-// Config for which validations to disable for a scheduler step.
-type SchedulerStepDisabledValidationsConfig struct {
-	// Whether to validate that no subjects are removed or added from the scheduler
-	// step. This should only be disabled for scheduler steps that remove subjects.
-	// Thus, if no value is provided, the default is false.
-	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
-	// Whether to validate that, after running the step, there are remaining subjects.
-	// This should only be disabled for scheduler steps that are expected to
-	// remove all subjects.
-	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
-}
-
-// Configuration for the scheduler API.
-type SchedulerAPIConfig struct {
-	// If request bodies should be logged out.
-	// This feature is intended for debugging purposes only.
-	LogRequestBodies bool `json:"logRequestBodies"`
 }
 
 // Configuration for the keystone authentication.
@@ -119,7 +68,6 @@ type KeystoneConfig struct {
 type Config interface {
 	GetDBConfig() DBConfig
 	GetMonitoringConfig() MonitoringConfig
-	GetAPIConfig() APIConfig
 	GetKeystoneConfig() KeystoneConfig
 	// Check if the configuration is valid.
 	Validate() error
@@ -129,7 +77,6 @@ type Config interface {
 type SharedConfig struct {
 	DBConfig         `json:"db"`
 	MonitoringConfig `json:"monitoring"`
-	APIConfig        `json:"api"`
 	KeystoneConfig   `json:"keystone"`
 }
 
@@ -219,5 +166,4 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 
 func (c *SharedConfig) GetDBConfig() DBConfig                 { return c.DBConfig }
 func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
-func (c *SharedConfig) GetAPIConfig() APIConfig               { return c.APIConfig }
 func (c *SharedConfig) GetKeystoneConfig() KeystoneConfig     { return c.KeystoneConfig }

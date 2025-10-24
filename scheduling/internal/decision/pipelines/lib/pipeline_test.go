@@ -10,6 +10,7 @@ import (
 
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"k8s.io/client-go/rest"
 )
 
@@ -241,7 +242,7 @@ func TestNewPipeline(t *testing.T) {
 	type extraStepOpts struct{}
 	pipeline := NewPipeline(
 		supportedSteps,
-		[]libconf.SchedulerStepConfig[extraStepOpts]{{Name: "mock_pipeline_step", Options: libconf.RawOpts{}}},
+		[]conf.SchedulerStepConfig[extraStepOpts]{{Name: "mock_pipeline_step", Options: libconf.RawOpts{}}},
 		[]StepWrapper[mockPipelineRequest, extraStepOpts]{},
 		database, monitor,
 	).(*pipeline[mockPipelineRequest])
@@ -272,7 +273,7 @@ func TestNewPipeline_SameStepMultipleAliases(t *testing.T) {
 	type extraStepOpts struct{}
 	pipeline := NewPipeline(
 		supportedSteps,
-		[]libconf.SchedulerStepConfig[extraStepOpts]{
+		[]conf.SchedulerStepConfig[extraStepOpts]{
 			{Name: "mock_pipeline_step", Alias: "mock_step_1", Options: libconf.RawOpts{}},
 			{Name: "mock_pipeline_step", Alias: "mock_step_2", Options: libconf.RawOpts{}},
 		},
