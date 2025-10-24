@@ -29,6 +29,7 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
+	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	cinderapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
 	machinesapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
@@ -36,6 +37,7 @@ import (
 	novaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/cleanup"
 	cindere2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/manila"
 	novae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/nova"
@@ -61,6 +63,7 @@ func init() {
 
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(reservationsv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -261,6 +264,7 @@ func main() {
 			os.Exit(1)
 		}
 		novahttp.NewAPI(config).Init(mux)
+		go cleanup.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	}
 	if len(config.SchedulerConfig.Manila.Pipelines) > 0 {
 		pipelines := map[string]lib.Pipeline[manilaapi.ExternalSchedulerRequest]{}
@@ -277,6 +281,7 @@ func main() {
 			os.Exit(1)
 		}
 		manilahttp.NewAPI(config).Init(mux)
+		// TODO: Implement cleanup for manila decisions.
 	}
 	if len(config.SchedulerConfig.Cinder.Pipelines) > 0 {
 		pipelines := map[string]lib.Pipeline[cinderapi.ExternalSchedulerRequest]{}
@@ -293,12 +298,14 @@ func main() {
 			os.Exit(1)
 		}
 		cinderhttp.NewAPI(config).Init(mux)
+		// TODO: Implement cleanup for cinder decisions.
 	}
 	if len(config.SchedulerConfig.Machines.Pipelines) > 0 {
 		pipelines := map[string]lib.Pipeline[machinesapi.MachinePipelineRequest]{}
 		for _, pipelineConf := range config.SchedulerConfig.Machines.Pipelines {
 			pipelines[pipelineConf.Name] = machines.NewPipeline(pipelineConf, database, pipelineMonitor)
 		}
+		// TODO: Implement cleanup for machine decisions (on delete of the machine).
 		if err := (&machines.DecisionReconciler{
 			Client:    mgr.GetClient(),
 			Scheme:    mgr.GetScheme(),

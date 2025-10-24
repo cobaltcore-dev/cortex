@@ -59,4 +59,30 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - reservations.cortex
+  resources:
+  - reservations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - reservations.cortex
+  resources:
+  - reservations/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - reservations.cortex
+  resources:
+  - reservations/status
+  verbs:
+  - get
+  - patch
+  - update
 {{- end -}}
