@@ -104,7 +104,7 @@ func (s *DecisionReconciler) handleMachine() handler.EventHandler {
 		// Create a decision resource to schedule the machine.
 		decision := &v1alpha1.Decision{
 			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "machine-schedule-",
+				GenerateName: "machine-",
 			},
 			Spec: v1alpha1.DecisionSpec{
 				Operator:   s.Conf.Operator,

@@ -153,6 +153,8 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=[
     # Locally enable IronCore CRDs and rolebindings (these are not deployed by default).
     'cortex-scheduling-operator.crd.ironcore.enable=true',
     'cortex-scheduling-operator.rbac.ironcore.enable=true',
+    # Tilt is weird and thus we need to set this here even when its provided in the values.
+    'cortex-scheduling-operator.namePrefix=cortex-ironcore',
 ]))
 
 if 'nova' in ACTIVE_DEPLOYMENTS:

@@ -309,7 +309,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	// TODO: Add machines scheduler back in.
 
 	// +kubebuilder:scaffold:builder
 
