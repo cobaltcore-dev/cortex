@@ -60,55 +60,22 @@ datasources:
 global:
   # Values passed to the service through a configmap.
   conf:
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-nova-mqtt:1883"
-
     # Connection parameters for the database where data is stored.
     db:
       # Must match postgresql settings from the cortex-postgres chart.
       host: cortex-nova-postgresql
 
 # Features in early development that are not ready for production yet.
-cortex-decisions-operator:
-  enabled: false
-  # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-nova
 cortex-reservations-operator:
   enabled: false
   # CRDs are deployed in the cortex-crds chart.
   crd: {enable: false}
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-nova
-cortex-descheduler:
-  enabled: false
-  # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-nova
-  conf:
-    descheduler:
-      nova:
-        # Configuration of the descheduler that runs periodically to de-schedule
-        # VMs based on the configured plugins.
-        #
-        # The `name` should correspond to a known descheduler plugin.
-        plugins:
-          - name: avoid_high_steal_pct
-            options:
-              # Deschedule once vms reach this cpu steal pct over the observed time span.
-              maxStealPctOverObservedTimeSpan: 20.0
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-nova-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-nova-mqtt
 
 # Custom configuration for the cortex core chart.
 cortex-alerts:
@@ -152,32 +119,27 @@ cortex-knowledge-operator:
     # The operator will only touch CRs with this operator name.
     operator: cortex-nova
 
-cortex-scheduler:
-  fullnameOverride: cortex-nova-scheduler
-  service:
-    extraLabels:
-      app: cortex-nova-scheduler # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-nova-scheduler
-  args: ["scheduler-nova"]
+cortex-scheduling-operator:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-nova
   conf:
+    # The operator will only touch CRs with this operator name.
+    operator: cortex-nova
+    descheduler:
+      nova:
+        # Configuration of the descheduler that runs periodically to de-schedule
+        # VMs based on the configured plugins.
+        #
+        # The `name` should correspond to a known descheduler plugin.
+        plugins:
+          - name: avoid_high_steal_pct
+            options:
+              # Deschedule once vms reach this cpu steal pct over the observed time span.
+              maxStealPctOverObservedTimeSpan: 20.0
     scheduler:
       nova:
-        # Configuration for the Liquid API.
-        liquidAPI:
-          # Which hypervisor types should be handled by the commitments
-          # acceptance endpoint of the scheduler.
-          #
-          # Please note that the strings here must match exactly with the
-          # `capabilities:hypervisor_type` extra spec in the flavors.
-          hypervisors:
-            - "QEMU"
-            - "CH" # Cloud hypervisor
-            # Not supported:
-            # - "VMware vCenter Server"
-            # - "ironic"
-
         pipelines:
           # Note: there needs to be at least one pipeline with the name "default".
           - name: default
@@ -294,11 +256,8 @@ cortex-scheduler:
                   maxCPUContentionActivationLowerBound: 0.0
                   maxCPUContentionActivationUpperBound: -0.25
 
-          # Pipeline for initial placement of reservations which needs all filters.
-          - name: reservations
-            # This pipeline needs to preselect all hosts to get a valid placement.
-            preselectAllHosts: true
-
+          # Pipeline for initial placement which needs all filters.
+          - name: all-filters-enabled
             # Configuration of scheduler steps that modify the Nova scheduler weights.
             #
             # The `name` should correspond to a known scheduler plugin.

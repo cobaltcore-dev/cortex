@@ -37,33 +37,12 @@ jobs:
           files: |
             reservations/**
 
-      - name: Get all changed decisions/ files
-        id: changed_decisions_files
+      - name: Get all changed scheduling/ files
+        id: changed_scheduling_files
         uses: tj-actions/changed-files@v47
         with:
           files: |
-            decisions/**
-
-      - name: Get all changed machines/ files
-        id: changed_machines_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            machines/**
-
-      - name: Get all changed scheduler/ files
-        id: changed_scheduler_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            scheduler/**
-
-      - name: Get all changed descheduler/ files
-        id: changed_descheduler_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            descheduler/**
+            scheduling/**
 
       - name: Get all changed kpis/ files
         id: changed_kpis_files
@@ -107,32 +86,18 @@ jobs:
           git commit -m "Bump cortex-reservations chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
 
-      # Only bumped if there are changes in the scheduler directory.
-      - name: Update appVersion in cortex-scheduler Chart.yaml
-        if: steps.changed_scheduler_files.outputs.all_changed_files != ''
+      # Only bumped if there are changes in the scheduling directory.
+      - name: Update appVersion in cortex-scheduling Chart.yaml
+        if: steps.changed_scheduling_files.outputs.all_changed_files != ''
         run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' scheduler/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-scheduler
-        if: steps.changed_scheduler_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add scheduler/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-scheduler chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
-
-      # Only bumped if there are changes in the descheduler directory.
-      - name: Update appVersion in cortex-descheduler Chart.yaml
-        if: steps.changed_descheduler_files.outputs.all_changed_files != ''
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' descheduler/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-descheduler
-        if: steps.changed_descheduler_files.outputs.all_changed_files != ''
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' scheduling/dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex-scheduling
+        if: steps.changed_scheduling_files.outputs.all_changed_files != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add descheduler/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-descheduler chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git add scheduling/dist/chart/Chart.yaml
+          git commit -m "Bump cortex-scheduling chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
 
       # Only bumped if there are changes in the kpis directory.
@@ -161,32 +126,4 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add knowledge/dist/chart/Chart.yaml
           git commit -m "Bump cortex-knowledge chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
-
-      # Only bumped if there are changes in the decisions directory.
-      - name: Update appVersion in cortex-decisions Chart.yaml
-        if: steps.changed_decisions_files.outputs.all_changed_files != ''
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' decisions/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-decisions
-        if: steps.changed_decisions_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add decisions/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-decisions chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
-
-      # Only bumped if there are changes in the machines directory.
-      - name: Update appVersion in cortex-machines Chart.yaml
-        if: steps.changed_machines_files.outputs.all_changed_files != ''
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' machines/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-machines
-        if: steps.changed_machines_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add machines/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-machines chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main

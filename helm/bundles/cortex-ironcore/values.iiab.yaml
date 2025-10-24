@@ -4,17 +4,18 @@
 # Custom values to deploy the cortex-ironcore bundle in ironcore-in-a-box.
 # See README.md for details.
 
-cortex-machines-operator:
-  # Disable the crds which can be used to develop cortex without the ironcore
-  # aggregated api server. The crds are provided by ironcore-in-a-box and
-  # shouldn't be re-mounted.
+cortex-scheduling-operator:
+  # Grant cortex access to ironcore resources.
   crd:
-    enable: false
+    enable: true
+  rbac:
+    ironcore:
+      enable: true
   # Use our locally built image.
   controllerManager:
     container:
       image:
-        repository: cortex-machines-operator
+        repository: cortex-scheduling-operator
         tag: dev
         pullPolicy: IfNotPresent
 

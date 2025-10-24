@@ -17,10 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
-	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/scheduler/api/delegation/nova"
+	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 )
 
-func TestComputeReservationReconciler_Reconcile(t *testing.T) {
+func TestReservationReconciler_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -28,43 +28,43 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		reservation   *v1alpha1.ComputeReservation
-		expectedPhase v1alpha1.ComputeReservationStatusPhase
+		reservation   *v1alpha1.Reservation
+		expectedPhase v1alpha1.ReservationStatusPhase
 		expectedError string
 		shouldRequeue bool
 	}{
 		{
 			name: "skip already active reservation",
-			reservation: &v1alpha1.ComputeReservation{
+			reservation: &v1alpha1.Reservation{
 				ObjectMeta: ctrl.ObjectMeta{
 					Name: "test-reservation",
 				},
-				Spec: v1alpha1.ComputeReservationSpec{
-					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+				Spec: v1alpha1.ReservationSpec{
+					Scheduler: v1alpha1.ReservationSchedulerSpec{
+						CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 							ProjectID:  "test-project",
 							FlavorName: "test-flavor",
 						},
 					},
 				},
-				Status: v1alpha1.ComputeReservationStatus{
-					Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+				Status: v1alpha1.ReservationStatus{
+					Phase: v1alpha1.ReservationStatusPhaseActive,
 				},
 			},
-			expectedPhase: v1alpha1.ComputeReservationStatusPhaseActive,
+			expectedPhase: v1alpha1.ReservationStatusPhaseActive,
 			shouldRequeue: false,
 		},
 		{
 			name: "skip unsupported reservation scheduler",
-			reservation: &v1alpha1.ComputeReservation{
+			reservation: &v1alpha1.Reservation{
 				ObjectMeta: ctrl.ObjectMeta{
 					Name: "test-reservation",
 				},
-				Spec: v1alpha1.ComputeReservationSpec{
-					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{},
+				Spec: v1alpha1.ReservationSpec{
+					Scheduler: v1alpha1.ReservationSchedulerSpec{},
 				},
 			},
-			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
+			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
 			expectedError: "reservation is not a cortex-nova reservation",
 			shouldRequeue: false,
 		},
@@ -75,10 +75,10 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tt.reservation).
-				WithStatusSubresource(&v1alpha1.ComputeReservation{}).
+				WithStatusSubresource(&v1alpha1.Reservation{}).
 				Build()
 
-			reconciler := &ComputeReservationReconciler{
+			reconciler := &ReservationReconciler{
 				Client: client,
 				Scheme: scheme,
 				Conf: Config{
@@ -109,7 +109,7 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 
 			// Verify the reservation status if expected
 			if tt.expectedPhase != "" {
-				var updated v1alpha1.ComputeReservation
+				var updated v1alpha1.Reservation
 				err := client.Get(context.Background(), req.NamespacedName, &updated)
 				if err != nil {
 					t.Errorf("Failed to get updated reservation: %v", err)
@@ -128,7 +128,7 @@ func TestComputeReservationReconciler_Reconcile(t *testing.T) {
 	}
 }
 
-func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T) {
+func TestReservationReconciler_reconcileInstanceReservation(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -136,22 +136,22 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 
 	tests := []struct {
 		name          string
-		reservation   *v1alpha1.ComputeReservation
+		reservation   *v1alpha1.Reservation
 		config        Config
 		mockResponse  *schedulerdelegationapi.ExternalSchedulerResponse
-		expectedPhase v1alpha1.ComputeReservationStatusPhase
+		expectedPhase v1alpha1.ReservationStatusPhase
 		expectedError string
 		shouldRequeue bool
 	}{
 		{
 			name: "unsupported hypervisor type",
-			reservation: &v1alpha1.ComputeReservation{
+			reservation: &v1alpha1.Reservation{
 				ObjectMeta: ctrl.ObjectMeta{
 					Name: "test-reservation",
 				},
-				Spec: v1alpha1.ComputeReservationSpec{
-					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+				Spec: v1alpha1.ReservationSpec{
+					Scheduler: v1alpha1.ReservationSchedulerSpec{
+						CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 							ProjectID:  "test-project",
 							FlavorName: "test-flavor",
 							FlavorExtraSpecs: map[string]string{
@@ -168,19 +168,19 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 			config: Config{
 				Hypervisors: []string{"kvm", "vmware"},
 			},
-			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
+			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
 			expectedError: "hypervisor type is not supported: unsupported",
 			shouldRequeue: false,
 		},
 		{
 			name: "missing hypervisor type",
-			reservation: &v1alpha1.ComputeReservation{
+			reservation: &v1alpha1.Reservation{
 				ObjectMeta: ctrl.ObjectMeta{
 					Name: "test-reservation",
 				},
-				Spec: v1alpha1.ComputeReservationSpec{
-					Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-						CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+				Spec: v1alpha1.ReservationSpec{
+					Scheduler: v1alpha1.ReservationSchedulerSpec{
+						CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 							ProjectID:        "test-project",
 							FlavorName:       "test-flavor",
 							FlavorExtraSpecs: map[string]string{
@@ -197,7 +197,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 			config: Config{
 				Hypervisors: []string{"kvm", "vmware"},
 			},
-			expectedPhase: v1alpha1.ComputeReservationStatusPhaseFailed,
+			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
 			expectedError: "hypervisor type is not supported: ",
 			shouldRequeue: false,
 		},
@@ -208,7 +208,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tt.reservation).
-				WithStatusSubresource(&v1alpha1.ComputeReservation{}).
+				WithStatusSubresource(&v1alpha1.Reservation{}).
 				Build()
 
 			// Create a mock server for the external scheduler
@@ -223,7 +223,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 
 			tt.config.Endpoints.NovaExternalScheduler = server.URL
 
-			reconciler := &ComputeReservationReconciler{
+			reconciler := &ReservationReconciler{
 				Client: client,
 				Scheme: scheme,
 				Conf:   tt.config,
@@ -251,7 +251,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 			}
 
 			// Verify the reservation status
-			var updated v1alpha1.ComputeReservation
+			var updated v1alpha1.Reservation
 			err = client.Get(context.Background(), req.NamespacedName, &updated)
 			if err != nil {
 				t.Errorf("Failed to get updated reservation: %v", err)
@@ -269,19 +269,19 @@ func TestComputeReservationReconciler_reconcileInstanceReservation(t *testing.T)
 	}
 }
 
-func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *testing.T) {
+func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
-	reservation := &v1alpha1.ComputeReservation{
+	reservation := &v1alpha1.Reservation{
 		ObjectMeta: ctrl.ObjectMeta{
 			Name: "test-reservation",
 		},
-		Spec: v1alpha1.ComputeReservationSpec{
-			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{
+		Spec: v1alpha1.ReservationSpec{
+			Scheduler: v1alpha1.ReservationSchedulerSpec{
+				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
 					ProjectID:  "test-project",
 					FlavorName: "test-flavor",
 					FlavorExtraSpecs: map[string]string{
@@ -299,7 +299,7 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(reservation).
-		WithStatusSubresource(&v1alpha1.ComputeReservation{}).
+		WithStatusSubresource(&v1alpha1.Reservation{}).
 		Build()
 
 	// Create a mock server that returns a successful response
@@ -317,8 +317,8 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 		}
 
 		// Verify request structure
-		if req.Pipeline != "reservations" {
-			t.Errorf("Expected Pipeline to be 'reservations', got %q", req.Pipeline)
+		if req.Pipeline != "all-filters-enabled" {
+			t.Errorf("Expected Pipeline to be 'all-filters-enabled', got %q", req.Pipeline)
 		}
 		if req.Spec.Data.NumInstances != 1 {
 			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)
@@ -335,10 +335,32 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 		},
 	}
 
-	reconciler := &ComputeReservationReconciler{
+	reconciler := &ReservationReconciler{
 		Client: client,
 		Scheme: scheme,
 		Conf:   config,
+		HypervisorClient: &mockHypervisorClient{
+			hypervisorsToReturn: []Hypervisor{
+				{
+					Hostname: "test-host-1",
+					Type:     "kvm",
+					Service: struct {
+						Host string `json:"host"`
+					}{
+						Host: "compute1",
+					},
+				},
+				{
+					Hostname: "test-host-2",
+					Type:     "kvm",
+					Service: struct {
+						Host string `json:"host"`
+					}{
+						Host: "compute2",
+					},
+				},
+			},
+		},
 	}
 
 	req := ctrl.Request{
@@ -359,15 +381,15 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 	}
 
 	// Verify the reservation status
-	var updated v1alpha1.ComputeReservation
+	var updated v1alpha1.Reservation
 	err = client.Get(context.Background(), req.NamespacedName, &updated)
 	if err != nil {
 		t.Errorf("Failed to get updated reservation: %v", err)
 		return
 	}
 
-	if updated.Status.Phase != v1alpha1.ComputeReservationStatusPhaseActive {
-		t.Errorf("Expected phase %v, got %v", v1alpha1.ComputeReservationStatusPhaseActive, updated.Status.Phase)
+	if updated.Status.Phase != v1alpha1.ReservationStatusPhaseActive {
+		t.Errorf("Expected phase %v, got %v", v1alpha1.ReservationStatusPhaseActive, updated.Status.Phase)
 	}
 
 	if updated.Status.Host != "test-host-1" {
@@ -379,13 +401,13 @@ func TestComputeReservationReconciler_reconcileInstanceReservation_Success(t *te
 	}
 }
 
-func TestComputeReservationReconciler_SetupWithManager(t *testing.T) {
+func TestReservationReconciler_SetupWithManager(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
-	reconciler := &ComputeReservationReconciler{
+	reconciler := &ReservationReconciler{
 		Scheme: scheme,
 	}
 

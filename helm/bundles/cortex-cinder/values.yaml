@@ -60,11 +60,6 @@ datasources:
 global:
   # Values passed to the service through a configmap.
   conf:
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-cinder-mqtt:1883"
-
     # Connection parameters for the database where data is stored.
     db:
       # Must match postgresql settings from the cortex-postgres chart.
@@ -73,10 +68,6 @@ global:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-cinder-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-cinder-mqtt
 
 # Custom configuration for the cortex core chart.
 cortex-alerts:
@@ -120,16 +111,14 @@ cortex-knowledge-operator:
         - name: netapp_storage_pool_cpu_usage_extractor
           recencySeconds: 60 # 1 minute
 
-cortex-scheduler:
-  fullnameOverride: cortex-cinder-scheduler
-  service:
-    extraLabels:
-      app: cortex-cinder-scheduler # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-cinder-scheduler
-  args: ["scheduler-cinder"]
+cortex-scheduling-operator:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-cinder
   conf:
+    # The operator will only touch CRs with this operator name.
+    operator: cortex-cinder
     scheduler:
       cinder:
         pipelines:

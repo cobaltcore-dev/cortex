@@ -672,7 +672,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(controller_runtime_reconcile_time_seconds_bucket{controller=\"computereservation\"}[2m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(controller_runtime_reconcile_time_seconds_bucket{controller=\"reservation\"}[2m])) by (le))",
           "interval": "",
           "legendFormat": "Compute reservations controller",
           "refId": "A"
@@ -780,14 +780,14 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(controller_runtime_reconcile_errors_total{controller=\"computereservation\"}[2m])",
+          "expr": "rate(controller_runtime_reconcile_errors_total{controller=\"reservation\"}[2m])",
           "interval": "",
           "legendFormat": "Errors compute reservations controller",
           "refId": "A"
         },
         {
           "exemplar": true,
-          "expr": "rate(controller_runtime_reconcile_panics_total{controller=\"computereservation\"}[2m])",
+          "expr": "rate(controller_runtime_reconcile_panics_total{controller=\"reservation\"}[2m])",
           "hide": false,
           "interval": "",
           "legendFormat": "Panics compute reservations controller",

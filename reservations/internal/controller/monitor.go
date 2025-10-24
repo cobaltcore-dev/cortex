@@ -48,7 +48,7 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 // Collect the metrics on-demand and send them to Prometheus.
 func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	// Fetch all reservations from kubernetes.
-	var reservations v1alpha1.ComputeReservationList
+	var reservations v1alpha1.ReservationList
 	if err := m.List(
 		context.Background(),
 		&reservations,

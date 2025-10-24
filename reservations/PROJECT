@@ -16,7 +16,7 @@ resources:
   controller: true
   domain: cortex
   group: reservations
-  kind: ComputeReservation
+  kind: Reservation
   path: github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1
   version: v1alpha1
 version: "3"

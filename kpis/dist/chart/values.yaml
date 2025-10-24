@@ -40,12 +40,6 @@ readinessProbe:
 
 # Values passed to the service through a configmap.
 conf:
-  logging:
-    # The log level to use (debug, info, warn, error).
-    level: debug
-    # The log format to use (json, text).
-    format: text
-
   # Configuration of metrics exported to the /metrics endpoint.
   monitoring:
     # The port to expose the metrics on.
@@ -55,19 +49,6 @@ conf:
     labels:
       github_org: cobaltcore-dev
       github_repo: cortex
-
-  # MQTT broker connection parameters.
-  mqtt:
-    # Must match rabbitmq settings from the cortex-mqtt chart.
-    url:
-    # Configure how Cortex should handle lost connections to the MQTT broker.
-    reconnect:
-      maxRetries: 20
-      retryIntervalSeconds: 1
-
-  # The port to use for the api serve mux.
-  api:
-    port: 8080
 
   # Connection parameters for the database where data is stored.
   db:
@@ -95,10 +76,6 @@ conf:
 #
 # Note: Please only add values here that MUST be overridden using the "secrets:" key.
 secrets:
-  # MQTT broker connection credentials.
-  mqtt:
-    username: cortex
-    password: secret
   # Database connection credentials.
   db:
     user: postgres

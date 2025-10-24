@@ -19,11 +19,6 @@ alerts:
 global:
   # Values passed to the service through a configmap.
   conf:
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-ironcore-mqtt:1883"
-
     # Connection parameters for the database where data is stored.
     db:
       # Must match postgresql settings from the cortex-postgres chart.
@@ -33,13 +28,26 @@ global:
 cortex-postgres:
   fullnameOverride: cortex-ironcore-postgresql
 
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-ironcore-mqtt
-
-cortex-machines-operator:
+cortex-scheduling-operator:
   enabled: false
   # CRDs are deployed in the cortex-crds chart.
   crd: {enable: false}
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-ironcore
+  conf:
+    # The operator will only touch CRs with this operator name.
+    operator: cortex-ironcore
+    scheduler:
+      machines:
+        pipelines:
+          # Note: there needs to be at least one pipeline with the name "default".
+          - name: default
+            # Configuration of scheduler steps that modify the Nova scheduler weights.
+            #
+            # The `name` should correspond to a known scheduler plugin.
+            # Note that all scheduler steps will be executed in parallel. However,
+            # the order will be maintained when the weights are applied to the
+            # input Nova weights.
+            plugins:
+              - name: noop
+                alias: noop

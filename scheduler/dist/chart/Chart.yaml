@@ -1,9 +1,0 @@
-# Copyright 2025 SAP SE
-# SPDX-License-Identifier: Apache-2.0
-
-apiVersion: v2
-name: cortex-scheduler
-description: A Helm chart deploying Cortex scheduler.
-type: application
-appVersion: "sha-1d4f627"
-version: 0.0.1

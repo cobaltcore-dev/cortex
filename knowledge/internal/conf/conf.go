@@ -3,18 +3,7 @@
 
 package conf
 
-import (
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-)
-
 type Config struct {
 	// The operator will only touch CRs with this operator name.
 	Operator string `json:"operator"`
-
-	// Lib modules configs.
-	libconf.MonitoringConfig `json:"monitoring"`
-	libconf.LoggingConfig    `json:"logging"`
-
-	// Generally needed to expose an /up endpoint.
-	libconf.APIConfig `json:"api"`
 }

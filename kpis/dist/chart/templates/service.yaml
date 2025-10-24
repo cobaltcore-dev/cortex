@@ -15,11 +15,11 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: {{ $.Values.conf.api.port }}
+    - port: 8080
       targetPort: api
       protocol: TCP
       name: api
-    - port: {{ $.Values.conf.monitoring.port }}
+    - port: 2112
       targetPort: metrics
       protocol: TCP
       name: metrics

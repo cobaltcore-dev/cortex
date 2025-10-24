@@ -28,10 +28,6 @@ func createTempConfigFile(t *testing.T, content string) string {
 func TestGetConfigOrDie(t *testing.T) {
 	content := `
 {
-  "logging": {
-    "level": "debug",
-    "format": "text"
-  },
   "db": {
     "host": "cortex-postgresql",
     "port": 5432,
@@ -46,11 +42,6 @@ func TestGetConfigOrDie(t *testing.T) {
       "github_repo": "cortex"
     }
   },
-  "mqtt": {
-    "url": "tcp://cortex-mqtt:1883",
-    "username": "cortex",
-    "password": "secret"
-  },
   "api": {
     "port": 8080
   }
@@ -62,15 +53,6 @@ func TestGetConfigOrDie(t *testing.T) {
 		t.Fatalf("Failed to read config: %v", err)
 	}
 	config := newConfigFromMaps[*SharedConfig](rawConfig, nil)
-
-	// Test LoggingConfig
-	loggingConfig := config.GetLoggingConfig()
-	if loggingConfig.LevelStr == "" {
-		t.Errorf("Expected non-empty log level, got empty string")
-	}
-	if loggingConfig.Format == "" {
-		t.Errorf("Expected non-empty log format, got empty string")
-	}
 
 	// Test DBConfig
 	dbConfig := config.GetDBConfig()
@@ -97,24 +79,6 @@ func TestGetConfigOrDie(t *testing.T) {
 	}
 	if monitoringConfig.Port == 0 {
 		t.Errorf("Expected non-zero monitoring port, got 0")
-	}
-
-	// Test MQTTConfig
-	mqttConfig := config.GetMQTTConfig()
-	if mqttConfig.URL == "" {
-		t.Errorf("Expected non-empty MQTT URL, got empty string")
-	}
-	if mqttConfig.Username == "" {
-		t.Errorf("Expected non-empty MQTT username, got empty string")
-	}
-	if mqttConfig.Password == "" {
-		t.Errorf("Expected non-empty MQTT password, got empty string")
-	}
-
-	// Test APIConfig
-	apiConfig := config.GetAPIConfig()
-	if apiConfig.Port == 0 {
-		t.Errorf("Expected non-zero API port, got 0")
 	}
 }
 

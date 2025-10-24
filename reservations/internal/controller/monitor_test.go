@@ -92,22 +92,22 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 	}
 
 	// Create test reservations
-	reservations := []v1alpha1.ComputeReservation{
+	reservations := []v1alpha1.Reservation{
 		{
 			ObjectMeta: ctrl.ObjectMeta{
 				Name: "test-reservation-1",
 			},
-			Spec: v1alpha1.ComputeReservationSpec{
-				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
+			Spec: v1alpha1.ReservationSpec{
+				Scheduler: v1alpha1.ReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
 				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("1Gi"),
 					"cpu":    resource.MustParse("2"),
 				},
 			},
-			Status: v1alpha1.ComputeReservationStatus{
-				Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+			Status: v1alpha1.ReservationStatus{
+				Phase: v1alpha1.ReservationStatusPhaseActive,
 				Host:  "test-host-1",
 			},
 		},
@@ -115,17 +115,17 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 			ObjectMeta: ctrl.ObjectMeta{
 				Name: "test-reservation-2",
 			},
-			Spec: v1alpha1.ComputeReservationSpec{
-				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
+			Spec: v1alpha1.ReservationSpec{
+				Scheduler: v1alpha1.ReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
 				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("2Gi"),
 					"cpu":    resource.MustParse("4"),
 				},
 			},
-			Status: v1alpha1.ComputeReservationStatus{
-				Phase: v1alpha1.ComputeReservationStatusPhaseFailed,
+			Status: v1alpha1.ReservationStatus{
+				Phase: v1alpha1.ReservationStatusPhaseFailed,
 				Error: "test error",
 			},
 		},
@@ -133,17 +133,17 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 			ObjectMeta: ctrl.ObjectMeta{
 				Name: "test-reservation-3",
 			},
-			Spec: v1alpha1.ComputeReservationSpec{
-				Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
+			Spec: v1alpha1.ReservationSpec{
+				Scheduler: v1alpha1.ReservationSchedulerSpec{
+					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
 				},
 				Requests: map[string]resource.Quantity{
 					"memory": resource.MustParse("4Gi"),
 					"cpu":    resource.MustParse("4"),
 				},
 			},
-			Status: v1alpha1.ComputeReservationStatus{
-				Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+			Status: v1alpha1.ReservationStatus{
+				Phase: v1alpha1.ReservationStatusPhaseActive,
 			},
 		},
 	}
@@ -221,21 +221,21 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 	}
 
 	// Create test reservation with specific resource values
-	reservation := &v1alpha1.ComputeReservation{
+	reservation := &v1alpha1.Reservation{
 		ObjectMeta: ctrl.ObjectMeta{
 			Name: "test-reservation",
 		},
-		Spec: v1alpha1.ComputeReservationSpec{
-			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
+		Spec: v1alpha1.ReservationSpec{
+			Scheduler: v1alpha1.ReservationSchedulerSpec{
+				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
 			},
 			Requests: map[string]resource.Quantity{
 				"memory": resource.MustParse("1000Mi"),
 				"cpu":    resource.MustParse("2"),
 			},
 		},
-		Status: v1alpha1.ComputeReservationStatus{
-			Phase: v1alpha1.ComputeReservationStatusPhaseActive,
+		Status: v1alpha1.ReservationStatus{
+			Phase: v1alpha1.ReservationStatusPhaseActive,
 		},
 	}
 
@@ -343,21 +343,21 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 	}
 
 	// Create test reservation with error containing commas
-	reservation := &v1alpha1.ComputeReservation{
+	reservation := &v1alpha1.Reservation{
 		ObjectMeta: ctrl.ObjectMeta{
 			Name: "test-reservation",
 		},
-		Spec: v1alpha1.ComputeReservationSpec{
-			Scheduler: v1alpha1.ComputeReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ComputeReservationSchedulerSpecCortexNova{},
+		Spec: v1alpha1.ReservationSpec{
+			Scheduler: v1alpha1.ReservationSchedulerSpec{
+				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
 			},
 			Requests: map[string]resource.Quantity{
 				"memory": resource.MustParse("1Gi"),
 				"cpu":    resource.MustParse("2"),
 			},
 		},
-		Status: v1alpha1.ComputeReservationStatus{
-			Phase: v1alpha1.ComputeReservationStatusPhaseFailed,
+		Status: v1alpha1.ReservationStatus{
+			Phase: v1alpha1.ReservationStatusPhaseFailed,
 			Error: "error with, commas, in it",
 		},
 	}

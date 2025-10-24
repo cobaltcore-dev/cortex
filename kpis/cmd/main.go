@@ -16,7 +16,6 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
-	"github.com/cobaltcore-dev/cortex/lib/mqtt"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/httpext"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -44,7 +43,6 @@ func main() {
 	}
 
 	config := libconf.GetConfigOrDie[*conf.Config]()
-	config.LoggingConfig.SetDefaultLogger()
 
 	// Set runtime concurrency to match CPU limit imposed by Kubernetes
 	undoMaxprocs, err := maxprocs.Set(maxprocs.Logger(slog.Debug))
@@ -80,11 +78,6 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	mqttClient := mqtt.NewClient(mqtt.NewMQTTMonitor(registry))
-	if err := mqttClient.Connect(); err != nil {
-		panic("failed to connect to mqtt broker: " + err.Error())
-	}
-
 	pipeline := kpis.NewPipeline(config.KPIsConfig)
 	if err := pipeline.Init(kpis.SupportedKPIs, database, registry); err != nil {
 		panic("failed to initialize kpi pipeline: " + err.Error())
@@ -92,12 +85,10 @@ func main() {
 
 	// Run the api server after all other tasks have been started and
 	// all http handlers have been registered to the mux.
-	apiConf := config.APIConfig
-	addr := fmt.Sprintf(":%d", apiConf.Port)
-	if err := httpext.ListenAndServeContext(ctx, addr, mux); err != nil {
+	if err := httpext.ListenAndServeContext(ctx, ":8080", mux); err != nil {
 		panic(err)
 	}
-	slog.Info("api listening", "port", apiConf.Port)
+	slog.Info("api listening", "port", 8080)
 
 	select {}
 }

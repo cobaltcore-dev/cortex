@@ -20,7 +20,7 @@ spec:
     maxReplicas: 1
   resourcePolicy:
     containerPolicies:
-      - containerName: {{ include "cortex-mqtt.fullname" . }}
+      - containerName: {{ include "cortex-postgres.fullname" . }}
         mode: "Auto"
         minAllowed:
           cpu: {{ .Values.resources.requests.cpu }}
@@ -30,7 +30,7 @@ spec:
           memory: {{ .Values.resources.limits.memory }}
         controlledResources: ["cpu", "memory"]
         controlledValues: "RequestsAndLimits"
-      - containerName: {{ include "cortex-mqtt.fullname" . }}-exporter
+      - containerName: {{ include "cortex-postgres.fullname" . }}-exporter
         mode: "Auto"
         minAllowed:
           cpu: {{ .Values.exporter.resources.requests.cpu }}

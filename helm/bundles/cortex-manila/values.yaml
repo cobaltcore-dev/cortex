@@ -60,11 +60,6 @@ datasources:
 global:
   # Values passed to the service through a configmap.
   conf:
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-manila-mqtt:1883"
-
     # Connection parameters for the database where data is stored.
     db:
       # Must match postgresql settings from the cortex-postgres chart.
@@ -73,10 +68,6 @@ global:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-manila-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-manila-mqtt
 
 # Custom configuration for the cortex core chart.
 cortex-alerts:
@@ -111,16 +102,14 @@ cortex-knowledge-operator:
     # The operator will only touch CRs with this operator name.
     operator: cortex-manila
 
-cortex-scheduler:
-  fullnameOverride: cortex-manila-scheduler
-  service:
-    extraLabels:
-      app: cortex-manila-scheduler # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-manila-scheduler
-  args: ["scheduler-manila"]
+cortex-scheduling-operator:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-manila
   conf:
+    # The operator will only touch CRs with this operator name.
+    operator: cortex-manila
     scheduler:
       manila:
         pipelines:

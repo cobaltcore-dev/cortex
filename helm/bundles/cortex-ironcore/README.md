@@ -4,6 +4,11 @@
 
 To deploy the cortex machine scheduler with [ironcore in a box](https://github.com/ironcore-dev/ironcore-in-a-box), follow these steps.
 
+This guide was made with the following tag:
+```bash
+git checkout c2385066a45b036a0d0dedc19acc43e738cbcbdf
+```
+
 ### Deploying IronCore-in-a-Box and Disabling the Machine Scheduler
 
 First, follow the instructions in [this section](https://github.com/ironcore-dev/ironcore-in-a-box?tab=readme-ov-file#installation) to set up your kind cluster with ironcore in a box.
@@ -24,7 +29,7 @@ git clone https://github.com/cobaltcore-dev/cortex.git && cd cortex
 
 #### Deploying from Upstream
 
-Currently not supported yet, as the cortex-machines-operator chart is not published yet on our [ghcr.io](https://github.com/orgs/cobaltcore-dev/packages?repo_name=cortex) registry.
+Currently not supported yet, as the cortex-scheduling-operator chart is not published yet on our [ghcr.io](https://github.com/orgs/cobaltcore-dev/packages?repo_name=cortex) registry.
 
 #### Deploying from Local
 
@@ -37,11 +42,11 @@ helm dependency update helm/bundles/cortex-ironcore
 Build the cortex machine scheduler docker image and load it into the kind cluster.
 
 ```bash
-docker build --build-arg GO_MOD_PATH=machines -t cortex-machines-operator:dev .
+docker build --build-arg GO_MOD_PATH=scheduling -t cortex-scheduling-operator:dev .
 ```
 
 ```bash
-kind load docker-image cortex-machines-operator:dev --name ironcore-in-a-box
+kind load docker-image cortex-scheduling-operator:dev --name ironcore-in-a-box
 ```
 
 Now we can deploy our custom cortex machine scheduler. `values.iiab.yaml` contains the necessary overrides to work with ironcore-in-a-box.
@@ -53,9 +58,9 @@ helm upgrade --install cortex-ironcore ./helm/bundles/cortex-ironcore \
 ```
 
 > [!TIP]
-> If you made changes to the machines/ helm chart, you can update it in the bundle and run helm upgrade again:
+> If you made changes to the scheduling/ helm chart, you can update it in the bundle and run helm upgrade again:
 > ```bash
-> helm package ./machines/dist/chart --destination ./helm/bundles/cortex-ironcore/charts
+> helm package ./scheduling/dist/chart --destination ./helm/bundles/cortex-ironcore/charts
 > ```
 
 ### Demo
@@ -78,10 +83,52 @@ webapp   t3-small          ghcr.io/ironcore-dev/os-images/gardenlinux:latest   <
 webapp   t3-small          ghcr.io/ironcore-dev/os-images/gardenlinux:latest   ironcore-in-a-box-control-plane   Pending   103s
 ```
 
+You can see cortex' decision like this:
+
+```bash
+kubectl describe decision
+```
+
+Which will show something like this:
+
+```
+Name:         machine-twt4h
+Namespace:
+Labels:       <none>
+Annotations:  <none>
+API Version:  scheduling.cortex/v1alpha1
+Kind:         Decision
+Spec:
+  Machine Ref:
+    Name:       webapp
+    Namespace:  default
+  Operator:     cortex-ironcore
+  Pipeline Ref:
+    Name:       default
+  Resource ID:  webapp
+  Type:         ironcore-machine
+Status:
+  Result:
+    Aggregated Out Weights:
+      Ironcore - In - A - Box - Control - Plane:  0.7615941559557649
+    Normalized In Weights:
+      Ironcore - In - A - Box - Control - Plane:  0
+    Ordered Hosts:
+      ironcore-in-a-box-control-plane
+    Raw In Weights:
+      Ironcore - In - A - Box - Control - Plane:  0
+    Step Results:
+      Activations:
+        Ironcore - In - A - Box - Control - Plane:  1
+      Step Name:                                    noop
+    Target Host:                                    ironcore-in-a-box-control-plane
+  Took:                                             101.80875ms
+```
+
 Also check the logs of the cortex machine scheduler to see the scheduling in action.
 
 ```bash
-kubectl logs deploy/machines-controller-manager
+kubectl logs deploy/cortex-ironcore-scheduling-controller-manager
 ```
 
 The logs show that the cortex scheduler pipeline has been executed and a machine pool has been assigned to the machine:
@@ -97,6 +144,4 @@ The logs show that the cortex scheduler pipeline has been executed and a machine
 2025/10/13 11:11:08 INFO scheduler: input weights weights=map[ironcore-in-a-box-control-plane:0]
 2025/10/13 11:11:08 INFO scheduler: output weights weights=map[ironcore-in-a-box-control-plane:0.7615941559557649]
 2025/10/13 11:11:08 INFO scheduler: sorted subjects subjects=[ironcore-in-a-box-control-plane]
-2025/10/13 11:11:08 INFO published mqtt data topic=cortex/scheduler/machines/pipeline/finished
-2025-10-13T11:11:08Z	DEBUG	assigned machine pool to instance	{"controller": "cortex-machine-scheduler", "controllerGroup": "compute.ironcore.dev", "controllerKind": "Machine", "Machine": {"name":"webapp","namespace":"default"}, "namespace": "default", "name": "webapp", "reconcileID": "a00611ba-dddd-4a7e-a3af-01f0698697e3", "machinePool": "ironcore-in-a-box-control-plane"}
 ```
