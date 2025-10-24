@@ -18,7 +18,7 @@ require (
 	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/sapcc/go-bits v0.0.0-20251016133802-c2d049e762e6
+	github.com/sapcc/go-bits v0.0.0-20251023170348-b4bcd3ab3925
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
 	sigs.k8s.io/controller-runtime v0.22.3
