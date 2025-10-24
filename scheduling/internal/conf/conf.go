@@ -112,11 +112,6 @@ type NovaSchedulerPipelineConfig struct {
 	// The name of this scheduler pipeline.
 	// The name is used to distinguish and route between multiple pipelines.
 	Name string `json:"name"`
-
-	// If all available hosts should be selected in the request,
-	// regardless of what nova sends us in the request.
-	// By default, this is false (use the hosts nova gives us).
-	PreselectAllHosts bool `json:"preselectAllHosts"`
 }
 
 // Scope that defines which hosts a scheduler step should be applied to.

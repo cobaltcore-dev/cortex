@@ -4,10 +4,10 @@
 package nova
 
 import (
-	"github.com/cobaltcore-dev/cortex/descheduler/internal/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

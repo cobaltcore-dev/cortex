@@ -8,12 +8,12 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 type FilterHasRequestedTraits struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 func (s *FilterHasRequestedTraits) GetName() string { return "filter_has_requested_traits" }
@@ -21,7 +21,7 @@ func (s *FilterHasRequestedTraits) GetName() string { return "filter_has_request
 // Filter hosts that do not have the requested traits given by the extra spec:
 // - "trait:<trait>": "forbidden" means the host must not have the specified trait.
 // - "trait:<trait>": "required" means the host must have the specified trait.
-func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	var requiredTraits, forbiddenTraits []string
 	for key, value := range request.Spec.Data.Flavor.Data.ExtraSpecs {

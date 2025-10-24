@@ -4,45 +4,15 @@
 package manila
 
 import (
-	"log/slog"
-
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/manila/api"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/manila/plugins/netapp"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/manila/plugins/netapp"
 )
 
-type PipelineRequest api.ExternalSchedulerRequest
-
-func (r PipelineRequest) GetSubjects() []string {
-	hosts := make([]string, len(r.Hosts))
-	for i, host := range r.Hosts {
-		hosts[i] = host.ShareHost
-	}
-	return hosts
-}
-func (r PipelineRequest) GetWeights() map[string]float64 {
-	return r.Weights
-}
-func (r PipelineRequest) GetTraceLogArgs() []slog.Attr {
-	return []slog.Attr{
-		slog.String("greq", r.Context.GlobalRequestID),
-		slog.String("req", r.Context.RequestID),
-		slog.String("user", r.Context.UserID),
-		slog.String("project", r.Context.ProjectID),
-	}
-}
-func (r PipelineRequest) GetPipeline() string {
-	return r.Pipeline
-}
-func (r PipelineRequest) WithPipeline(pipeline string) scheduling.PipelineRequest {
-	r.Pipeline = pipeline
-	return r
-}
-
-type ManilaStep = scheduling.Step[api.PipelineRequest]
+type ManilaStep = scheduling.Step[api.ExternalSchedulerRequest]
 
 // Configuration of steps supported by the scheduling.
 // The steps actually used by the scheduler are defined through the configuration file.
@@ -56,10 +26,10 @@ func NewPipeline(
 	db db.DB,
 	monitor scheduling.PipelineMonitor,
 	mqttClient mqtt.Client,
-) scheduling.Pipeline[api.PipelineRequest] {
+) scheduling.Pipeline[api.ExternalSchedulerRequest] {
 
 	// Wrappers to apply to each step in the pipeline.
-	wrappers := []scheduling.StepWrapper[api.PipelineRequest, struct{}]{
+	wrappers := []scheduling.StepWrapper[api.ExternalSchedulerRequest, struct{}]{
 		// Validate that no hosts are removed.
 		func(s ManilaStep, c conf.ManilaSchedulerStepConfig) ManilaStep {
 			return scheduling.ValidateStep(s, c.DisabledValidations)

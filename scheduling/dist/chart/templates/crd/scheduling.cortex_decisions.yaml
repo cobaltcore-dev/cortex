@@ -1,17 +1,23 @@
+{{- if .Values.crd.enable }}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
   annotations:
+    {{- if .Values.crd.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: schedulings.scheduling.cortex
+  name: decisions.scheduling.cortex
 spec:
   group: scheduling.cortex
   names:
-    kind: Scheduling
-    listKind: SchedulingList
-    plural: schedulings
-    singular: scheduling
+    kind: Decision
+    listKind: DecisionList
+    plural: decisions
+    singular: decision
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -30,7 +36,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Scheduling is the Schema for the schedulings API
+        description: Decision is the Schema for the decisions API
         properties:
           apiVersion:
             description: |-
@@ -50,11 +56,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of Scheduling
+            description: spec defines the desired state of Decision
             properties:
               cinderRaw:
                 description: If the type is "cinder", this field contains the raw
-                  cinder scheduling request.
+                  cinder decision request.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               machineRef:
@@ -103,20 +109,20 @@ spec:
                 x-kubernetes-map-type: atomic
               manilaRaw:
                 description: If the type is "manila", this field contains the raw
-                  manila scheduling request.
+                  manila decision request.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               novaRaw:
                 description: If the type is "nova", this field contains the raw nova
-                  scheduling request.
+                  decision request.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               operator:
-                description: The operator by which this scheduling should be extracted.
+                description: The operator by which this decision should be extracted.
                 type: string
               pipelineRef:
                 description: |-
-                  A reference to the pipeline that should be used for this scheduling.
+                  A reference to the pipeline that should be used for this decision.
                   This reference can be used to look up the pipeline definition and its
                   scheduler step configuration for additional context.
                 properties:
@@ -164,18 +170,18 @@ spec:
                 description: |-
                   An identifier for the underlying resource to be scheduled.
                   For example, this can be the UUID of a nova instance or cinder volume.
-                  This can be used to correlate multiple schedulings for the same resource.
+                  This can be used to correlate multiple decisions for the same resource.
                 type: string
               sourceHost:
                 description: |-
-                  When there is a source host for the scheduling, it is recorded here.
+                  When there is a source host for the decision, it is recorded here.
 
                   Note: for initial placements, this will be empty. However, for migrations
                   or resizes, this will contain the source host.
                 type: string
               type:
-                description: The type of scheduling, indicating what has initiated
-                  this scheduling.
+                description: The type of decision, indicating what has initiated this
+                  decision.
                 type: string
             required:
             - pipelineRef
@@ -183,16 +189,16 @@ spec:
             - type
             type: object
           status:
-            description: status defines the observed state of Scheduling
+            description: status defines the observed state of Decision
             properties:
-              cinderDecision:
+              cinder:
                 description: |-
-                  If the scheduling decision type is "cinder", this field contains the
-                  cinder scheduling decision.
+                  If the decision decision type is "cinder", this field contains the
+                  cinder decision decision.
                 properties:
                   stepResults:
                     description: |-
-                      Outputs of the scheduling pipeline including the activations used
+                      Outputs of the decision pipeline including the activations used
                       to make the final ordering of storage hosts.
                     items:
                       properties:
@@ -218,20 +224,17 @@ spec:
                 required:
                 - storagePools
                 type: object
-              decisionType:
-                description: The type of scheduling decision made.
-                type: string
               error:
-                description: If there was an error during the last scheduling, it
-                  is recorded here.
+                description: If there was an error during the last decision, it is
+                  recorded here.
                 type: string
               explanation:
-                description: A human-readable explanation of the scheduling result.
+                description: A human-readable explanation of the decision result.
                 type: string
               history:
                 description: |-
-                  If there were previous schedulings for the underlying resource, they will
-                  be resolved here to provide historical context for the scheduling.
+                  If there were previous decisions for the underlying resource, they will
+                  be resolved here to provide historical context for the decision.
                 items:
                   description: ObjectReference contains enough information to let
                     you inspect or modify the referred object.
@@ -277,10 +280,10 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              machineDecision:
+              machine:
                 description: |-
-                  If the scheduling decision type is "machine", this field contains the
-                  machine scheduling decision.
+                  If the decision decision type is "machine", this field contains the
+                  machine decision decision.
                 properties:
                   machinePools:
                     description: Sorted list of machine pools from more preferred
@@ -290,7 +293,7 @@ spec:
                     type: array
                   stepResults:
                     description: |-
-                      Outputs of the scheduling pipeline including the activations used
+                      Outputs of the decision pipeline including the activations used
                       to make the final ordering of machine pools.
                     items:
                       properties:
@@ -310,14 +313,14 @@ spec:
                 required:
                 - machinePools
                 type: object
-              manilaDecision:
+              manila:
                 description: |-
-                  If the scheduling decision type is "manila", this field contains the
-                  manila scheduling decision.
+                  If the decision decision type is "manila", this field contains the
+                  manila decision decision.
                 properties:
                   stepResults:
                     description: |-
-                      Outputs of the scheduling pipeline including the activations used
+                      Outputs of the decision pipeline including the activations used
                       to make the final ordering of share hosts.
                     items:
                       properties:
@@ -343,16 +346,16 @@ spec:
                 required:
                 - storagePools
                 type: object
-              novaDecision:
+              nova:
                 description: |-
-                  If the scheduling decision type is "nova", this field contains the
-                  nova scheduling decision.
+                  If the decision decision type is "nova", this field contains the
+                  nova decision decision.
                 properties:
                   activations:
                     additionalProperties:
                       type: number
                     description: |-
-                      Outputs of the scheduling pipeline including the activations used
+                      Outputs of the decision pipeline including the activations used
                       to make the final ordering of compute hosts.
                     type: object
                   computeHosts:
@@ -366,7 +369,7 @@ spec:
                 type: object
               targetHost:
                 description: |-
-                  When there is a designated target host for the scheduling, it is recorded
+                  When there is a designated target host for the decision, it is recorded
                   here.
 
                   Note: for external scheduler requests, this will be the first host from
@@ -374,7 +377,7 @@ spec:
                   actually the host where the resource will be spawned on. Please check
                   the decision details to see the full list of hosts and their scores.
 
-                  For deschedulings, this will be empty, indicating there is no specific
+                  For dedecisions, this will be empty, indicating there is no specific
                   target host.
                 type: string
               took:
@@ -388,3 +391,4 @@ spec:
     storage: true
     subresources:
       status: {}
+{{- end -}}

@@ -10,12 +10,12 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 type FilterComputeCapabilitiesStep struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -50,7 +50,7 @@ func convertToCapabilities(prefix string, obj map[string]any) map[string]any {
 
 // Check the capabilities of each host and if they match the extra spec provided
 // in the request spec flavor.
-func (s *FilterComputeCapabilitiesStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterComputeCapabilitiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	requestedCapabilities := request.Spec.Data.Flavor.Data.ExtraSpecs
 	// Note: currently advanced operators for the capabilities are not supported

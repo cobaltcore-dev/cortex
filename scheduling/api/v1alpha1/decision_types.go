@@ -9,71 +9,58 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// The type of scheduling.
-type SchedulingType string
+// The type of decision.
+type DecisionType string
 
 const (
-	// The scheduling was created by the nova external scheduler call.
+	// The decision was created by the nova external scheduler call.
 	// Usually we refer to this as nova initial placement, it also includes
 	// migrations or resizes.
-	SchedulingTypeNova SchedulingType = "nova"
-	// The scheduling was created by the cinder external scheduler call.
-	SchedulingTypeCinder SchedulingType = "cinder"
-	// The scheduling was created by the manila external scheduler call.
-	SchedulingTypeManila SchedulingType = "manila"
-	// The scheduling was created by spawning an ironcore machine.
-	SchedulingTypeMachine SchedulingType = "machine"
+	DecisionTypeNova DecisionType = "nova"
+	// The decision was created by the cinder external scheduler call.
+	DecisionTypeCinder DecisionType = "cinder"
+	// The decision was created by the manila external scheduler call.
+	DecisionTypeManila DecisionType = "manila"
+	// The decision was created by spawning an ironcore machine.
+	DecisionTypeMachine DecisionType = "machine"
 )
 
-type SchedulingSpec struct {
-	// The operator by which this scheduling should be extracted.
+type DecisionSpec struct {
+	// The operator by which this decision should be extracted.
 	Operator string `json:"operator,omitempty"`
 
-	// When there is a source host for the scheduling, it is recorded here.
+	// When there is a source host for the decision, it is recorded here.
 	//
 	// Note: for initial placements, this will be empty. However, for migrations
 	// or resizes, this will contain the source host.
 	// +kubebuilder:validation:Optional
 	SourceHost string `json:"sourceHost,omitempty"`
 
-	// A reference to the pipeline that should be used for this scheduling.
+	// A reference to the pipeline that should be used for this decision.
 	// This reference can be used to look up the pipeline definition and its
 	// scheduler step configuration for additional context.
 	PipelineRef corev1.ObjectReference `json:"pipelineRef"`
 
 	// An identifier for the underlying resource to be scheduled.
 	// For example, this can be the UUID of a nova instance or cinder volume.
-	// This can be used to correlate multiple schedulings for the same resource.
+	// This can be used to correlate multiple decisions for the same resource.
 	ResourceID string `json:"resourceID"`
 
-	// The type of scheduling, indicating what has initiated this scheduling.
-	Type SchedulingType `json:"type"`
-	// If the type is "nova", this field contains the raw nova scheduling request.
+	// The type of decision, indicating what has initiated this decision.
+	Type DecisionType `json:"type"`
+	// If the type is "nova", this field contains the raw nova decision request.
 	// +kubebuilder:validation:Optional
 	NovaRaw *runtime.RawExtension `json:"novaRaw,omitempty"`
-	// If the type is "cinder", this field contains the raw cinder scheduling request.
+	// If the type is "cinder", this field contains the raw cinder decision request.
 	// +kubebuilder:validation:Optional
 	CinderRaw *runtime.RawExtension `json:"cinderRaw,omitempty"`
-	// If the type is "manila", this field contains the raw manila scheduling request.
+	// If the type is "manila", this field contains the raw manila decision request.
 	// +kubebuilder:validation:Optional
 	ManilaRaw *runtime.RawExtension `json:"manilaRaw,omitempty"`
 	// If the type is "machine", this field contains the machine reference.
 	// +kubebuilder:validation:Optional
 	MachineRef *corev1.ObjectReference `json:"machineRef,omitempty"`
 }
-
-type SchedulingDecisionType string
-
-const (
-	// Scheduling decision for the nova external scheduler call.
-	SchedulingDecisionTypeNova SchedulingDecisionType = "nova"
-	// Scheduling decision for the cinder external scheduler call.
-	SchedulingDecisionTypeCinder SchedulingDecisionType = "cinder"
-	// Scheduling decision for the manila external scheduler call.
-	SchedulingDecisionTypeManila SchedulingDecisionType = "manila"
-	// Scheduling decision for an ironcore machine.
-	SchedulingDecisionTypeMachine SchedulingDecisionType = "machine"
-)
 
 type StepResult struct {
 	// Name of the scheduler step.
@@ -82,44 +69,44 @@ type StepResult struct {
 	Activations map[string]float64 `json:"activations"`
 }
 
-type NovaSchedulingDecision struct {
+type NovaDecision struct {
 	// Sorted list of compute hosts from more preferred to least preferred.
 	ComputeHosts []string `json:"computeHosts"`
-	// Outputs of the scheduling pipeline including the activations used
+	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of compute hosts.
 	Activations map[string]float64 `json:"activations,omitempty"`
 }
 
-type CinderSchedulingDecision struct {
+type CinderDecision struct {
 	// Sorted list of storage hosts from more preferred to least preferred.
 	StoragePools []string `json:"storagePools"`
-	// Outputs of the scheduling pipeline including the activations used
+	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of storage hosts.
 	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
-type ManilaSchedulingDecision struct {
+type ManilaDecision struct {
 	// Sorted list of share hosts from more preferred to least preferred.
 	StoragePools []string `json:"storagePools"`
-	// Outputs of the scheduling pipeline including the activations used
+	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of share hosts.
 	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
-type MachineSchedulingDecision struct {
+type MachineDecision struct {
 	// Sorted list of machine pools from more preferred to least preferred.
 	MachinePools []string `json:"machinePools"`
-	// Outputs of the scheduling pipeline including the activations used
+	// Outputs of the decision pipeline including the activations used
 	// to make the final ordering of machine pools.
 	StepResults []StepResult `json:"stepResults,omitempty"`
 }
 
-type SchedulingStatus struct {
+type DecisionStatus struct {
 	// The time it took to schedule.
 	// +kubebuilder:validation:Optional
 	Took metav1.Duration `json:"took"`
 
-	// When there is a designated target host for the scheduling, it is recorded
+	// When there is a designated target host for the decision, it is recorded
 	// here.
 	//
 	// Note: for external scheduler requests, this will be the first host from
@@ -127,41 +114,38 @@ type SchedulingStatus struct {
 	// actually the host where the resource will be spawned on. Please check
 	// the decision details to see the full list of hosts and their scores.
 	//
-	// For deschedulings, this will be empty, indicating there is no specific
+	// For dedecisions, this will be empty, indicating there is no specific
 	// target host.
 	// +kubebuilder:validation:Optional
 	TargetHost string `json:"targetHost,omitempty"`
 
-	// The type of scheduling decision made.
+	// If the decision decision type is "nova", this field contains the
+	// nova decision decision.
 	// +kubebuilder:validation:Optional
-	DecisionType SchedulingDecisionType `json:"decisionType,omitempty"`
-	// If the scheduling decision type is "nova", this field contains the
-	// nova scheduling decision.
+	Nova *NovaDecision `json:"nova,omitempty"`
+	// If the decision decision type is "cinder", this field contains the
+	// cinder decision decision.
 	// +kubebuilder:validation:Optional
-	NovaDecision *NovaSchedulingDecision `json:"novaDecision,omitempty"`
-	// If the scheduling decision type is "cinder", this field contains the
-	// cinder scheduling decision.
+	Cinder *CinderDecision `json:"cinder,omitempty"`
+	// If the decision decision type is "manila", this field contains the
+	// manila decision decision.
 	// +kubebuilder:validation:Optional
-	CinderDecision *CinderSchedulingDecision `json:"cinderDecision,omitempty"`
-	// If the scheduling decision type is "manila", this field contains the
-	// manila scheduling decision.
+	Manila *ManilaDecision `json:"manila,omitempty"`
+	// If the decision decision type is "machine", this field contains the
+	// machine decision decision.
 	// +kubebuilder:validation:Optional
-	ManilaDecision *ManilaSchedulingDecision `json:"manilaDecision,omitempty"`
-	// If the scheduling decision type is "machine", this field contains the
-	// machine scheduling decision.
-	// +kubebuilder:validation:Optional
-	MachineDecision *MachineSchedulingDecision `json:"machineDecision,omitempty"`
+	Machine *MachineDecision `json:"machine,omitempty"`
 
-	// If there were previous schedulings for the underlying resource, they will
-	// be resolved here to provide historical context for the scheduling.
+	// If there were previous decisions for the underlying resource, they will
+	// be resolved here to provide historical context for the decision.
 	// +kubebuilder:validation:Optional
 	History []corev1.ObjectReference `json:"history,omitempty"`
 
-	// A human-readable explanation of the scheduling result.
+	// A human-readable explanation of the decision result.
 	// +kubebuilder:validation:Optional
 	Explanation string `json:"explanation,omitempty"`
 
-	// If there was an error during the last scheduling, it is recorded here.
+	// If there was an error during the last decision, it is recorded here.
 	// +kubebuilder:validation:Optional
 	Error string `json:"error,omitempty"`
 }
@@ -174,32 +158,32 @@ type SchedulingStatus struct {
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
-// Scheduling is the Schema for the schedulings API
-type Scheduling struct {
+// Decision is the Schema for the decisions API
+type Decision struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of Scheduling
+	// spec defines the desired state of Decision
 	// +required
-	Spec SchedulingSpec `json:"spec"`
+	Spec DecisionSpec `json:"spec"`
 
-	// status defines the observed state of Scheduling
+	// status defines the observed state of Decision
 	// +optional
-	Status SchedulingStatus `json:"status,omitempty,omitzero"`
+	Status DecisionStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// SchedulingList contains a list of Scheduling
-type SchedulingList struct {
+// DecisionList contains a list of Decision
+type DecisionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Scheduling `json:"items"`
+	Items           []Decision `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Scheduling{}, &SchedulingList{})
+	SchemeBuilder.Register(&Decision{}, &DecisionList{})
 }

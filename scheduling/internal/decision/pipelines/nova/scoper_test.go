@@ -14,10 +14,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 type MockStep[RequestType scheduling.PipelineRequest] struct {
@@ -65,9 +65,9 @@ func setupTestDBWithHostCapabilities(t *testing.T) db.DB {
 }
 
 func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
-	mockStep := &MockStep[api.PipelineRequest]{
+	mockStep := &MockStep[api.ExternalSchedulerRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+		RunFunc: func(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 			return &scheduling.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
@@ -93,8 +93,8 @@ func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 		DB: testDB,
 	}
 
-	request := api.PipelineRequest{
-		Hosts: []delegationAPI.ExternalSchedulerHost{
+	request := api.ExternalSchedulerRequest{
+		Hosts: []api.ExternalSchedulerHost{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 			{ComputeHost: "host3"},
@@ -117,9 +117,9 @@ func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 }
 
 func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
-	mockStep := &MockStep[api.PipelineRequest]{
+	mockStep := &MockStep[api.ExternalSchedulerRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+		RunFunc: func(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 			return &scheduling.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
@@ -145,8 +145,8 @@ func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 		DB: testDB,
 	}
 
-	request := api.PipelineRequest{
-		Hosts: []delegationAPI.ExternalSchedulerHost{
+	request := api.ExternalSchedulerRequest{
+		Hosts: []api.ExternalSchedulerHost{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 			{ComputeHost: "host3"},
@@ -169,9 +169,9 @@ func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 }
 
 func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
-	mockStep := &MockStep[api.PipelineRequest]{
+	mockStep := &MockStep[api.ExternalSchedulerRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+		RunFunc: func(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 			return &scheduling.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
@@ -196,15 +196,15 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 		DB: testDB,
 	}
 
-	request := api.PipelineRequest{
-		Hosts: []delegationAPI.ExternalSchedulerHost{
+	request := api.ExternalSchedulerRequest{
+		Hosts: []api.ExternalSchedulerHost{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 		},
-		Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-			Data: delegationAPI.NovaSpec{
-				Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-					Data: delegationAPI.NovaFlavor{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{
 						Name: "special-flavor",
 					},
 				},
@@ -219,9 +219,9 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 }
 
 func TestStepScoper_Run_NoSelectors_AllInScope(t *testing.T) {
-	mockStep := &MockStep[api.PipelineRequest]{
+	mockStep := &MockStep[api.ExternalSchedulerRequest]{
 		Name: "mock-step",
-		RunFunc: func(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+		RunFunc: func(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 			return &scheduling.StepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
@@ -239,8 +239,8 @@ func TestStepScoper_Run_NoSelectors_AllInScope(t *testing.T) {
 		DB:    testDB,
 	}
 
-	request := api.PipelineRequest{
-		Hosts: []delegationAPI.ExternalSchedulerHost{
+	request := api.ExternalSchedulerRequest{
+		Hosts: []api.ExternalSchedulerHost{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 		},

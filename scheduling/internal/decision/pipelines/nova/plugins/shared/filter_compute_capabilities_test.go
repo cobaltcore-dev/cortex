@@ -10,8 +10,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
+
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -41,17 +42,17 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       api.PipelineRequest
+		request       api.ExternalSchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No capabilities requested",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:cpu_policy": "dedicated",
 								},
@@ -59,7 +60,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -70,11 +71,11 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match x86_64 architecture",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"capabilities:arch": "x86_64",
 								},
@@ -82,7 +83,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -93,11 +94,11 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match hypervisor type",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"capabilities:hypervisor_type": "VMware",
 								},
@@ -105,7 +106,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -116,11 +117,11 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match multiple capabilities",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"capabilities:arch":            "x86_64",
 									"capabilities:hypervisor_type": "QEMU",
@@ -129,7 +130,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -140,11 +141,11 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "No matching capabilities",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"capabilities:arch": "s390x",
 								},
@@ -152,7 +153,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -163,11 +164,11 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host without hypervisor data",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"capabilities:arch": "x86_64",
 								},
@@ -175,7 +176,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host4"}, // Non-existent host
 				},

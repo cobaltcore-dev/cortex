@@ -10,8 +10,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -40,19 +40,19 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		request         api.PipelineRequest
+		request         api.ExternalSchedulerRequest
 		expectedWeights map[string]float64
 		opts            string
 	}{
 		{
 			name: "Single VM",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						NumInstances: 1,
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -82,12 +82,12 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 		},
 		{
 			name: "CPU/RAM/Disk After Enabled",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						NumInstances: 1,
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								VCPUs:    10,  // 1 tenth
 								MemoryMB: 100, // 1 tenth
 								RootGB:   10,  // 1 tenth
@@ -98,7 +98,7 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},

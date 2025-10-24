@@ -12,8 +12,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -26,7 +26,7 @@ type FilterHasEnoughCapacityOpts struct {
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
 
 type FilterHasEnoughCapacity struct {
-	lib.BaseStep[api.PipelineRequest, FilterHasEnoughCapacityOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, FilterHasEnoughCapacityOpts]
 
 	// Kubernetes client.
 	Client client.Client
@@ -71,7 +71,7 @@ func (s *FilterHasEnoughCapacity) GetName() string { return "filter_has_enough_c
 // known at this point.
 //
 // Please also note that disk space is currently not considered by this filter.
-func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	var hostUtilizations []shared.HostUtilization
 	group := "scheduler-nova"

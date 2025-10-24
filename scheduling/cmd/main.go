@@ -29,8 +29,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/cobaltcore-dev/cortex/lib/mqtt"
-	lib "github.com/cobaltcore-dev/cortex/lib/scheduling"
-	"github.com/cobaltcore-dev/cortex/machines/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	lib "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	// +kubebuilder:scaffold:imports
 )
 

@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/descheduler/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"

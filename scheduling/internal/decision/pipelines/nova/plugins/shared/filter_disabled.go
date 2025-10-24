@@ -9,19 +9,20 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
+
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 type FilterDisabledStep struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
 func (s *FilterDisabledStep) GetName() string { return "filter_disabled" }
 
 // Only get hosts that are not disabled or down.
-func (s *FilterDisabledStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterDisabledStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	var computeHostsActive []string
 	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsActive, `

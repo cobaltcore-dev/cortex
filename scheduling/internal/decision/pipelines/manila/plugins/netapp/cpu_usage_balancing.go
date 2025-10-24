@@ -8,8 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/netapp"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/manila/api"
 )
 
 // Options for the scheduling step, given through the step config in the service
@@ -42,7 +42,7 @@ func (o CPUUsageBalancingStepOpts) Validate() error {
 // Step to balance CPU usage by avoiding highly used storage pools.
 type CPUUsageBalancingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	scheduling.BaseStep[api.PipelineRequest, CPUUsageBalancingStepOpts]
+	scheduling.BaseStep[api.ExternalSchedulerRequest, CPUUsageBalancingStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -51,7 +51,7 @@ func (s *CPUUsageBalancingStep) GetName() string {
 }
 
 // Downvote hosts that are highly contended.
-func (s *CPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+func (s *CPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")

@@ -8,8 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/vmware"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 // Options for the scheduling step, given through the
@@ -42,7 +42,7 @@ func (o AvoidLongTermContendedHostsStepOpts) Validate() error {
 // Step to avoid long term contended hosts by downvoting them.
 type AvoidLongTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.PipelineRequest, AvoidLongTermContendedHostsStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, AvoidLongTermContendedHostsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -51,7 +51,7 @@ func (s *AvoidLongTermContendedHostsStep) GetName() string {
 }
 
 // Downvote hosts that are highly contended.
-func (s *AvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *AvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")

@@ -10,8 +10,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
@@ -44,19 +44,19 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       api.PipelineRequest
+		request       api.ExternalSchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "Filter hosts in az-1",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -69,13 +69,13 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter hosts in az-2",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-2",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -87,13 +87,13 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter hosts in az-3",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-3",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -105,13 +105,13 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "No hosts in requested AZ",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-nonexistent",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -122,26 +122,26 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{},
+				Hosts: []api.ExternalSchedulerHost{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
 		},
 		{
 			name: "Host not in database",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},

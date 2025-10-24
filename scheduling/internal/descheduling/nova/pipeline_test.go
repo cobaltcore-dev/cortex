@@ -9,10 +9,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
-	"github.com/cobaltcore-dev/cortex/descheduler/internal/nova/plugins"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 )
 
 // Mock implementations for testing pipeline functionality

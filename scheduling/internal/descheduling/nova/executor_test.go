@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/descheduler/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"

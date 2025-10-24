@@ -8,8 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/vmware"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -33,7 +33,7 @@ func (o AntiAffinityNoisyProjectsStepOpts) Validate() error {
 // Step to avoid noisy projects by downvoting the hosts they are running on.
 type AntiAffinityNoisyProjectsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.PipelineRequest, AntiAffinityNoisyProjectsStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, AntiAffinityNoisyProjectsStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -42,7 +42,7 @@ func (s *AntiAffinityNoisyProjectsStep) GetName() string {
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")
 

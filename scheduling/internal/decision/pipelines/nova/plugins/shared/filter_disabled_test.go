@@ -11,8 +11,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
+
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+
 	"github.com/cobaltcore-dev/cortex/testlib"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
@@ -58,19 +59,19 @@ func TestFilterDisabledStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       api.PipelineRequest
+		request       api.ExternalSchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "Filter enabled hosts only",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -83,13 +84,13 @@ func TestFilterDisabledStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts disabled or down",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host2"}, // disabled
 					{ComputeHost: "host3"}, // down
 					{ComputeHost: "host5"}, // has COMPUTE_STATUS_DISABLED trait
@@ -100,13 +101,13 @@ func TestFilterDisabledStep_Run(t *testing.T) {
 		},
 		{
 			name: "Only enabled hosts",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host4"},
 				},
@@ -116,26 +117,26 @@ func TestFilterDisabledStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{},
+				Hosts: []api.ExternalSchedulerHost{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
 		},
 		{
 			name: "Host not in database",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
 						AvailabilityZone: "az-1",
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},

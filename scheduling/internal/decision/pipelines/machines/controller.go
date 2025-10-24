@@ -6,8 +6,9 @@ package controller
 import (
 	"context"
 
-	"github.com/cobaltcore-dev/cortex/lib/scheduling"
-	"github.com/cobaltcore-dev/cortex/machines/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -17,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-type MachineStep = scheduling.Step[MachinePipelineRequest]
+type MachineStep = lib.Step[ironcore.MachinePipelineRequest]
 
 // Configuration of steps supported by the scheduling.
 // The steps actually used by the scheduler are defined through the configuration file.
@@ -27,7 +28,7 @@ var SupportedSteps = map[string]func() MachineStep{
 
 type MachineScheduler struct {
 	// Available pipelines by their name.
-	Pipelines map[string]scheduling.Pipeline[MachinePipelineRequest]
+	Pipelines map[string]lib.Pipeline[ironcore.MachinePipelineRequest]
 
 	// Kubernetes client to manage/fetch resources.
 	client.Client
@@ -64,7 +65,7 @@ func (s *MachineScheduler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Execute the scheduling pipeline.
-	request := MachinePipelineRequest{
+	request := ironcore.MachinePipelineRequest{
 		Pools:    pools.Items,
 		Pipeline: pipelineName,
 	}

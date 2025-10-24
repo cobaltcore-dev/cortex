@@ -10,14 +10,14 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 type StepScoper struct {
 	// The wrapped step to scope.
-	Step scheduling.Step[api.PipelineRequest]
+	Step scheduling.Step[api.ExternalSchedulerRequest]
 	// The scope for this step.
 	Scope conf.NovaSchedulerStepScope
 	// The database to use for querying host capabilities.
@@ -41,8 +41,7 @@ func (s *StepScoper) Init(alias string, db db.DB, opts libconf.RawOpts) error {
 	return s.Step.Init(alias, db, opts)
 }
 
-// Run the step and sRun(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error)
-func (s *StepScoper) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 	// If the spec is not in scope, skip it.
 	if !s.isSpecInScope(traceLog, request) {
 		return nil, scheduling.ErrStepSkipped
@@ -80,7 +79,7 @@ func (s *StepScoper) Run(traceLog *slog.Logger, request api.PipelineRequest) (*s
 // Based on the provided host selectors, determine which hosts are in scope
 // and which are not. The hosts in scope are returned in the first map,
 // while the hosts not in scope are returned in the second map.
-func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.PipelineRequest) (
+func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (
 	hostsInScope map[string]struct{},
 	hostsNotInScope map[string]struct{},
 	err error,
@@ -188,7 +187,7 @@ func (s *StepScoper) queryHostsInScope(traceLog *slog.Logger, request api.Pipeli
 
 // Check if the spec is in scope based on the spec selectors.
 // If there are no spec selectors, the spec is considered in scope.
-func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.PipelineRequest) bool {
+func (s *StepScoper) isSpecInScope(traceLog *slog.Logger, request api.ExternalSchedulerRequest) bool {
 	// If there is no scope, the spec is in scope.
 	if len(s.Scope.SpecSelectors) == 0 {
 		return true

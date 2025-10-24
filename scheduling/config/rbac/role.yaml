@@ -7,7 +7,7 @@ rules:
 - apiGroups:
   - scheduling.cortex
   resources:
-  - schedulings
+  - decisions
   verbs:
   - create
   - delete
@@ -19,13 +19,39 @@ rules:
 - apiGroups:
   - scheduling.cortex
   resources:
-  - schedulings/finalizers
+  - decisions/finalizers
   verbs:
   - update
 - apiGroups:
   - scheduling.cortex
   resources:
-  - schedulings/status
+  - decisions/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - scheduling.cortex
+  resources:
+  - deschedulings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - scheduling.cortex
+  resources:
+  - deschedulings/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - scheduling.cortex
+  resources:
+  - deschedulings/status
   verbs:
   - get
   - patch

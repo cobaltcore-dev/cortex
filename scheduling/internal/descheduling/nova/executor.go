@@ -8,8 +8,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/descheduler/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/descheduler/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/sapcc/go-bits/jobloop"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -126,7 +126,7 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 		"vmId", vmId, "host", server.ComputeHost,
 	)
 
-	if !e.Conf.Nova.DisableDryRun {
+	if !e.Conf.DeschedulerConfig.Nova.DisableDryRun {
 		log.Info("descheduler: dry-run enabled, skipping execution", "vmId", vmId)
 		return ctrl.Result{}, nil
 	}

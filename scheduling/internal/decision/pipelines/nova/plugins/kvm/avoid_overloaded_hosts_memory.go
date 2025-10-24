@@ -8,8 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/kvm"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -42,7 +42,7 @@ func (o AvoidOverloadedHostsMemoryStepOpts) Validate() error {
 // Step to avoid high cpu hosts by downvoting them.
 type AvoidOverloadedHostsMemoryStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.PipelineRequest, AvoidOverloadedHostsMemoryStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, AvoidOverloadedHostsMemoryStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -51,7 +51,7 @@ func (s *AvoidOverloadedHostsMemoryStep) GetName() string {
 }
 
 // Downvote hosts that have high cpu load.
-func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *AvoidOverloadedHostsMemoryStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg memory active"] = s.PrepareStats(request, "%")
 	result.Statistics["max memory active"] = s.PrepareStats(request, "%")

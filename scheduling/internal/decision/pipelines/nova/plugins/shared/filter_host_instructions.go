@@ -7,12 +7,12 @@ import (
 	"log/slog"
 	"slices"
 
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 type FilterHostInstructionsStep struct {
-	lib.BaseStep[api.PipelineRequest, lib.EmptyStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -21,7 +21,7 @@ func (s *FilterHostInstructionsStep) GetName() string { return "filter_host_inst
 // Filter hosts based on instructions given in the request spec. Supported are:
 // - spec.ignore_hosts: Filter out all hosts in this list.
 // - spec.force_hosts: Include only hosts in this list.
-func (s *FilterHostInstructionsStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*lib.StepResult, error) {
+func (s *FilterHostInstructionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	if request.Spec.Data.IgnoreHosts != nil {
 		for _, host := range *request.Spec.Data.IgnoreHosts {

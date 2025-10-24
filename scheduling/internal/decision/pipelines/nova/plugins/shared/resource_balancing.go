@@ -8,8 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -89,7 +89,7 @@ func (o ResourceBalancingStepOpts) Validate() error {
 // Step to balance VMs on hosts based on the host's available resources.
 type ResourceBalancingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	scheduling.BaseStep[api.PipelineRequest, ResourceBalancingStepOpts]
+	scheduling.BaseStep[api.ExternalSchedulerRequest, ResourceBalancingStepOpts]
 }
 
 // Get the name of this step, used for identification in config, logs, metrics, etc.
@@ -98,7 +98,7 @@ func (s *ResourceBalancingStep) GetName() string {
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.PipelineRequest) (*scheduling.StepResult, error) {
+func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	if s.Options.CPUEnabled {
 		result.Statistics["cpu utilized"] = s.PrepareStats(request, "%")

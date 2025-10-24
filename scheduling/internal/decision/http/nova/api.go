@@ -119,38 +119,38 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Create the scheduling object in kubernetes.
-	unstructuredScheduling, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&v1alpha1.Scheduling{
+	// Create the decision object in kubernetes.
+	unstructuredDecision, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&v1alpha1.Decision{
 		ObjectMeta: metav1.ObjectMeta{
 			// TODO: smart naming (initial placement, migration, ...) based on the vm id.
-			GenerateName: "nova-scheduling-",
+			GenerateName: "nova-",
 		},
-		Spec: v1alpha1.SchedulingSpec{
+		Spec: v1alpha1.DecisionSpec{
 			Operator:   httpAPI.config.Operator,
 			SourceHost: "", // TODO pass this info from the external scheduler call
 			PipelineRef: corev1.ObjectReference{
 				Name: requestData.Pipeline,
 			},
 			ResourceID: requestData.Spec.Data.InstanceUUID,
-			Type:       v1alpha1.SchedulingTypeNova,
+			Type:       v1alpha1.DecisionTypeNova,
 			NovaRaw:    &raw,
 		},
 	})
 	if err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to convert scheduling to unstructured")
+		c.Respond(http.StatusInternalServerError, err, "failed to convert decision to unstructured")
 		return
 	}
-	resource := v1alpha1.GroupVersion.WithResource("schedulings")
+	resource := v1alpha1.GroupVersion.WithResource("decisions")
 	obj, err := httpAPI.client.
 		Resource(resource).
-		Create(r.Context(), &unstructured.Unstructured{Object: unstructuredScheduling}, metav1.CreateOptions{})
+		Create(r.Context(), &unstructured.Unstructured{Object: unstructuredDecision}, metav1.CreateOptions{})
 	if err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to create scheduling resource")
+		c.Respond(http.StatusInternalServerError, err, "failed to create decision resource")
 		return
 	}
 
-	// Make an informer for the scheduling resource.
-	resultChan := make(chan *v1alpha1.Scheduling, 1)
+	// Make an informer for the decision resource.
+	resultChan := make(chan *v1alpha1.Decision, 1)
 	informer := dynamicinformer.
 		NewFilteredDynamicSharedInformerFactory(httpAPI.client, 0, metav1.NamespaceAll, nil).
 		ForResource(resource).
@@ -163,16 +163,16 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 				return
 			}
 
-			updated := &v1alpha1.Scheduling{}
+			updated := &v1alpha1.Decision{}
 			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj.Object, updated); err != nil {
-				slog.Error("failed to convert scheduling object", "error", err)
+				slog.Error("failed to convert decision object", "error", err)
 				return
 			}
-			// Only process updates for our specific scheduling resource
-			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.SchedulingTypeNova {
+			// Only process updates for our specific decision resource
+			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeNova {
 				return
 			}
-			if updated.Status.Error != "" || updated.Status.NovaDecision != nil {
+			if updated.Status.Error != "" || updated.Status.Nova != nil {
 				resultChan <- updated
 				return
 			}
@@ -189,11 +189,11 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// Wait for the scheduling decision to be processed and return the result
 	select {
 	case result := <-resultChan:
-		if result.Status.Error != "" || result.Status.NovaDecision == nil {
-			c.Respond(http.StatusInternalServerError, fmt.Errorf(result.Status.Error), "scheduling failed")
+		if result.Status.Error != "" || result.Status.Nova == nil {
+			c.Respond(http.StatusInternalServerError, fmt.Errorf(result.Status.Error), "decision failed")
 			return
 		}
-		hosts := (*result.Status.NovaDecision).ComputeHosts
+		hosts := (*result.Status.Nova).ComputeHosts
 		response := delegationAPI.ExternalSchedulerResponse{Hosts: hosts}
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(response); err != nil {

@@ -6,9 +6,9 @@ package nova
 import (
 	"errors"
 
-	"github.com/cobaltcore-dev/cortex/descheduler/internal/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 )
 
 var (

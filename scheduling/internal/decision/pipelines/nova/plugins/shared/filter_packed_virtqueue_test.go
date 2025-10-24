@@ -11,8 +11,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/nova/api"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
+
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -55,25 +55,25 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       api.PipelineRequest
+		request       api.ExternalSchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No packed virtqueue requested - no filtering",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:cpu_policy": "dedicated",
 								},
 							},
 						},
-						Image: delegationAPI.NovaObject[delegationAPI.NovaImageMeta]{
-							Data: delegationAPI.NovaImageMeta{
-								Properties: delegationAPI.NovaObject[map[string]any]{
+						Image: api.NovaObject[api.NovaImageMeta]{
+							Data: api.NovaImageMeta{
+								Properties: api.NovaObject[map[string]any]{
 									Data: map[string]any{
 										"hw_disk_bus": "virtio",
 									},
@@ -82,7 +82,7 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -94,26 +94,26 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		},
 		{
 			name: "Packed virtqueue requested in flavor - filter hosts without support",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: delegationAPI.NovaObject[delegationAPI.NovaImageMeta]{
-							Data: delegationAPI.NovaImageMeta{
-								Properties: delegationAPI.NovaObject[map[string]any]{
+						Image: api.NovaObject[api.NovaImageMeta]{
+							Data: api.NovaImageMeta{
+								Properties: api.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -125,17 +125,17 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		},
 		{
 			name: "Packed virtqueue requested in image properties - filter hosts without support",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{},
 							},
 						},
-						Image: delegationAPI.NovaObject[delegationAPI.NovaImageMeta]{
-							Data: delegationAPI.NovaImageMeta{
-								Properties: delegationAPI.NovaObject[map[string]any]{
+						Image: api.NovaObject[api.NovaImageMeta]{
+							Data: api.NovaImageMeta{
+								Properties: api.NovaObject[map[string]any]{
 									Data: map[string]any{
 										"hw_virtio_packed_ring": "true",
 									},
@@ -144,7 +144,7 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -156,19 +156,19 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		},
 		{
 			name: "Packed virtqueue requested in both flavor and image - filter hosts without support",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: delegationAPI.NovaObject[delegationAPI.NovaImageMeta]{
-							Data: delegationAPI.NovaImageMeta{
-								Properties: delegationAPI.NovaObject[map[string]any]{
+						Image: api.NovaObject[api.NovaImageMeta]{
+							Data: api.NovaImageMeta{
+								Properties: api.NovaObject[map[string]any]{
 									Data: map[string]any{
 										"hw_virtio_packed_ring": "true",
 									},
@@ -177,7 +177,7 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -189,26 +189,26 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		},
 		{
 			name: "Packed virtqueue set to false - no filtering",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "false",
 								},
 							},
 						},
-						Image: delegationAPI.NovaObject[delegationAPI.NovaImageMeta]{
-							Data: delegationAPI.NovaImageMeta{
-								Properties: delegationAPI.NovaObject[map[string]any]{
+						Image: api.NovaObject[api.NovaImageMeta]{
+							Data: api.NovaImageMeta{
+								Properties: api.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -220,26 +220,26 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts without packed virtqueue support",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: delegationAPI.NovaObject[delegationAPI.NovaImageMeta]{
-							Data: delegationAPI.NovaImageMeta{
-								Properties: delegationAPI.NovaObject[map[string]any]{
+						Image: api.NovaObject[api.NovaImageMeta]{
+							Data: api.NovaImageMeta{
+								Properties: api.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host4"},
 				},
@@ -249,26 +249,26 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts with packed virtqueue support",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: delegationAPI.NovaObject[delegationAPI.NovaImageMeta]{
-							Data: delegationAPI.NovaImageMeta{
-								Properties: delegationAPI.NovaObject[map[string]any]{
+						Image: api.NovaObject[api.NovaImageMeta]{
+							Data: api.NovaImageMeta{
+								Properties: api.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -278,26 +278,26 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not in database",
-			request: api.PipelineRequest{
-				Spec: delegationAPI.NovaObject[delegationAPI.NovaSpec]{
-					Data: delegationAPI.NovaSpec{
-						Flavor: delegationAPI.NovaObject[delegationAPI.NovaFlavor]{
-							Data: delegationAPI.NovaFlavor{
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
 									"hw:virtio_packed_ring": "true",
 								},
 							},
 						},
-						Image: delegationAPI.NovaObject[delegationAPI.NovaImageMeta]{
-							Data: delegationAPI.NovaImageMeta{
-								Properties: delegationAPI.NovaObject[map[string]any]{
+						Image: api.NovaObject[api.NovaImageMeta]{
+							Data: api.NovaImageMeta{
+								Properties: api.NovaObject[map[string]any]{
 									Data: map[string]any{},
 								},
 							},
 						},
 					},
 				},
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},
