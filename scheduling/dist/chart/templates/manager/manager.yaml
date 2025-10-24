@@ -35,6 +35,10 @@ spec:
             {{- range .Values.controllerManager.container.args }}
             - {{ . }}
             {{- end }}
+          ports:
+            - name: api
+              containerPort: 8080
+              protocol: TCP
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
@@ -112,4 +116,21 @@ data:
     {{- $mergedSecrets = mergeOverwrite .Values.secrets $mergedSecrets }}
     {{- end }}
     {{ toJson $mergedSecrets | b64enc }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.namePrefix }}-scheduler
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: api
+      protocol: TCP
+      name: api
+  selector:
+    {{- include "chart.selectorLabels" . | nindent 4 }}
+    control-plane: controller-manager
 {{- end }}

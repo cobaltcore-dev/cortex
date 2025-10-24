@@ -17,8 +17,8 @@ dependencies:
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.1.0
 
-  # from: file://../../../machines/dist/chart
-  - name: cortex-machines-operator
+  # from: file://../../../scheduling/dist/chart
+  - name: cortex-scheduling-operator
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
 

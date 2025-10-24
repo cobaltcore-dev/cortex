@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -33,10 +34,17 @@ import (
 	novaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	cindere2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/cinder"
+	manilae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/manila"
+	novae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/nova"
+	cinderhttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/cinder"
+	manilahttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/manila"
+	novahttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/cinder"
 	lib "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova"
+	"github.com/sapcc/go-bits/httpext"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -54,6 +62,23 @@ func init() {
 
 // nolint:gocyclo
 func main() {
+	ctx := context.Background()
+	config := libconf.GetConfigOrDie[conf.Config]()
+	// Custom entrypoint for e2e tests.
+	if len(os.Args) == 2 {
+		switch os.Args[1] {
+		case "e2e-nova":
+			novae2e.RunChecks(ctx, config)
+			return
+		case "e2e-cinder":
+			cindere2e.RunChecks(ctx, config)
+			return
+		case "e2e-manila":
+			manilae2e.RunChecks(ctx, config)
+			return
+		}
+	}
+
 	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
@@ -200,8 +225,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
-	config := libconf.GetConfigOrDie[conf.Config]()
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
 	registry := monitoring.NewRegistry(config.MonitoringConfig)
@@ -213,13 +236,16 @@ func main() {
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
 	// pipeline.
-	monitor := lib.NewPipelineMonitor(registry)
+	pipelineMonitor := lib.NewPipelineMonitor(registry)
+
+	// API endpoint.
+	mux := http.NewServeMux()
 
 	// TODO: Handle the configuration of pipelines and steps dynamically (e.g. via CRDs).
 	if len(config.SchedulerConfig.Nova.Pipelines) > 0 {
 		pipelines := map[string]lib.Pipeline[novaapi.ExternalSchedulerRequest]{}
 		for _, pipelineConf := range config.SchedulerConfig.Nova.Pipelines {
-			pipelines[pipelineConf.Name] = nova.NewPipeline(pipelineConf, database, monitor)
+			pipelines[pipelineConf.Name] = nova.NewPipeline(pipelineConf, database, pipelineMonitor)
 		}
 		if err := (&nova.DecisionReconciler{
 			Client:    mgr.GetClient(),
@@ -229,11 +255,12 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+		novahttp.NewAPI(config).Init(mux)
 	}
 	if len(config.SchedulerConfig.Manila.Pipelines) > 0 {
 		pipelines := map[string]lib.Pipeline[manilaapi.ExternalSchedulerRequest]{}
 		for _, pipelineConf := range config.SchedulerConfig.Manila.Pipelines {
-			pipelines[pipelineConf.Name] = manila.NewPipeline(pipelineConf, database, monitor)
+			pipelines[pipelineConf.Name] = manila.NewPipeline(pipelineConf, database, pipelineMonitor)
 		}
 		if err := (&manila.DecisionReconciler{
 			Client:    mgr.GetClient(),
@@ -243,11 +270,12 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+		manilahttp.NewAPI(config).Init(mux)
 	}
 	if len(config.SchedulerConfig.Cinder.Pipelines) > 0 {
 		pipelines := map[string]lib.Pipeline[cinderapi.ExternalSchedulerRequest]{}
 		for _, pipelineConf := range config.SchedulerConfig.Cinder.Pipelines {
-			pipelines[pipelineConf.Name] = cinder.NewPipeline(pipelineConf, database, monitor)
+			pipelines[pipelineConf.Name] = cinder.NewPipeline(pipelineConf, database, pipelineMonitor)
 		}
 		if err := (&cinder.DecisionReconciler{
 			Client:    mgr.GetClient(),
@@ -257,8 +285,10 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+		cinderhttp.NewAPI(config).Init(mux)
 	}
 	// TODO: Add machines scheduler back in.
+
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
@@ -285,6 +315,20 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	errchan := make(chan error)
+	go func() {
+		errchan <- func() error {
+			setupLog.Info("starting api server", "address", ":8080")
+			return httpext.ListenAndServeContext(ctx, ":8080", mux)
+		}()
+	}()
+	go func() {
+		if err := <-errchan; err != nil {
+			setupLog.Error(err, "problem running api server")
+			os.Exit(1)
+		}
+	}()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

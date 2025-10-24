@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
@@ -32,8 +31,7 @@ func checkCinderSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 		Hosts:   []api.ExternalSchedulerHost{},
 		Weights: map[string]float64{},
 	}
-	port := strconv.Itoa(config.APIConfig.Port)
-	apiURL := "http://cortex-cinder-scheduler:" + port + "/scheduler/cinder/external"
+	apiURL := "http://cortex-cinder-scheduler:8080/scheduler/cinder/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(request))

@@ -37,7 +37,7 @@ cortex-postgres:
 cortex-mqtt:
   fullnameOverride: cortex-ironcore-mqtt
 
-cortex-machines-operator:
+cortex-scheduling-operator:
   enabled: false
   # CRDs are deployed in the cortex-crds chart.
   crd: {enable: false}

@@ -201,7 +201,5 @@ type Config struct {
 	libconf.LoggingConfig    `json:"logging"`
 	libconf.DBConfig         `json:"db"`
 
-	// Required for e2e tests.
 	libconf.KeystoneConfig `json:"keystone"`
-	libconf.APIConfig      `json:"api"`
 }

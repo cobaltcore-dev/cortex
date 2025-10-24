@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
@@ -73,8 +72,7 @@ func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 		Hosts:   hosts,
 		Weights: weights,
 	}
-	port := strconv.Itoa(config.APIConfig.Port)
-	apiURL := "http://cortex-manila-scheduler:" + port + "/scheduler/manila/external"
+	apiURL := "http://cortex-manila-scheduler:8080/scheduler/manila/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(request))

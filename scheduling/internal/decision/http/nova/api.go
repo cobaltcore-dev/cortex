@@ -6,6 +6,7 @@ package http
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -121,6 +122,10 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 
 	// Create the decision object in kubernetes.
 	unstructuredDecision, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&v1alpha1.Decision{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Decision",
+			APIVersion: "scheduling.cortex/v1alpha1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			// TODO: smart naming (initial placement, migration, ...) based on the vm id.
 			GenerateName: "nova-",
@@ -190,7 +195,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	select {
 	case result := <-resultChan:
 		if result.Status.Error != "" || result.Status.Nova == nil {
-			c.Respond(http.StatusInternalServerError, fmt.Errorf(result.Status.Error), "decision failed")
+			c.Respond(http.StatusInternalServerError, errors.New(result.Status.Error), "decision failed")
 			return
 		}
 		hosts := (*result.Status.Nova).ComputeHosts

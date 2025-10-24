@@ -102,3 +102,4 @@ secrets:
   db:
     user: postgres
     password: secret
+    port: 5432

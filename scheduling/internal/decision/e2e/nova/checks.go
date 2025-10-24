@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
@@ -269,6 +268,7 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
 	request := api.ExternalSchedulerRequest{
+		Pipeline: "default",
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
 			InstanceUUID:     "cortex-e2e-tests",
 			AvailabilityZone: az,
@@ -296,8 +296,7 @@ func checkNovaSchedulerReturnsValidHosts(
 	req api.ExternalSchedulerRequest,
 ) []string {
 
-	port := strconv.Itoa(config.APIConfig.Port)
-	apiURL := "http://cortex-nova-scheduler:" + port + "/scheduler/nova/external"
+	apiURL := "http://cortex-nova-scheduler:8080/scheduler/nova/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(req))

@@ -172,8 +172,7 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-nova-reservations-controller-manager', labels=['Cortex-Nova'])
     local_resource(
         'Scheduler E2E Tests (Nova)',
-        '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduler -- /manager e2e-nova"',
-        deps=['./scheduler/internal/e2e'],
+        '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /manager e2e-nova"',
         labels=['Cortex-Nova'],
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
@@ -193,8 +192,7 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     ])
     local_resource(
         'Scheduler E2E Tests (Manila)',
-        '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduler -- /manager e2e-manila"',
-        deps=['./scheduler/internal/e2e'],
+        '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduling-controller-manager -- /manager e2e-manila"',
         labels=['Cortex-Manila'],
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
@@ -213,13 +211,13 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
     ])
     local_resource(
         'Scheduler E2E Tests (Cinder)',
-        '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduler -- /manager e2e-cinder"',
-        deps=['./scheduler/internal/e2e'],
+        '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduling-controller-manager -- /manager e2e-cinder"',
         labels=['Cortex-Cinder'],
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
     )
 
+# TODO fix this setup
 if 'ironcore' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex IronCore bundle")
     k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=[tilt_values]))

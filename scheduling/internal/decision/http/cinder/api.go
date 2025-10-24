@@ -6,6 +6,7 @@ package http
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -190,7 +191,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 	select {
 	case result := <-resultChan:
 		if result.Status.Error != "" || result.Status.Cinder == nil {
-			c.Respond(http.StatusInternalServerError, fmt.Errorf(result.Status.Error), "decision failed")
+			c.Respond(http.StatusInternalServerError, errors.New(result.Status.Error), "decision failed")
 			return
 		}
 		hosts := (*result.Status.Cinder).StoragePools
