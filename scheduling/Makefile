@@ -23,9 +23,6 @@ dekustomize:
 	if [ -d "dist/chart/templates/prometheus" ]; then \
 		cp -r dist/chart/templates/prometheus "$$TEMP_DIR/prometheus"; \
 	fi; \
-	if [ -d "dist/chart/templates/ironcore/" ]; then \
-		cp -r dist/chart/templates/ironcore "$$TEMP_DIR/ironcore"; \
-	fi; \
 	if [ -d "dist/chart/templates/metrics" ]; then \
 		cp -r dist/chart/templates/metrics "$$TEMP_DIR/metrics"; \
 	fi; \
@@ -40,15 +37,12 @@ dekustomize:
 		rm -rf dist/chart/templates/prometheus; \
 		cp -r "$$TEMP_DIR/prometheus" dist/chart/templates/prometheus; \
 	fi; \
-	if [ -d "$$TEMP_DIR/ironcore" ]; then \
-		rm -rf dist/chart/templates/ironcore; \
-		cp -r "$$TEMP_DIR/ironcore" dist/chart/templates/ironcore; \
-	fi; \
 	if [ -d "$$TEMP_DIR/metrics" ]; then \
 		rm -rf dist/chart/templates/metrics; \
 		cp -r "$$TEMP_DIR/metrics" dist/chart/templates/metrics; \
 	fi; \
 	rm -rf "$$TEMP_DIR"; \
+	git checkout dist/chart/templates/crd/compute*
 	echo "Directories restored successfully."
 
 ##@ Build

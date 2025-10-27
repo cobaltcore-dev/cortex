@@ -7,23 +7,6 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 )
 
-type SchedulerStepConfig[Extra any] struct {
-	// The name of the step implementation.
-	Name string `json:"name"`
-	// The alias of this step, if any.
-	//
-	// The alias can be used to distinguish between different configurations
-	// of the same step, or use a more specific name.
-	Alias string `json:"alias,omitempty"`
-	// Custom options for the step, as a raw yaml map.
-	Options libconf.RawOpts `json:"options,omitempty"`
-	// The validations to use for this step.
-	DisabledValidations SchedulerStepDisabledValidationsConfig `json:"disabledValidations,omitempty"`
-
-	// Additional configuration for the step, if needed.
-	Extra *Extra `json:"extra,omitempty"`
-}
-
 // Config for which validations to disable for a scheduler step.
 type SchedulerStepDisabledValidationsConfig struct {
 	// Whether to validate that no subjects are removed or added from the scheduler
@@ -34,111 +17,6 @@ type SchedulerStepDisabledValidationsConfig struct {
 	// This should only be disabled for scheduler steps that are expected to
 	// remove all subjects.
 	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
-}
-
-// Configuration for the descheduler module.
-type DeschedulerConfig struct {
-	Nova NovaDeschedulerConfig `json:"nova"`
-}
-
-// Configuration for the nova descheduler.
-type NovaDeschedulerConfig struct {
-	// The availability of the nova service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
-	// The steps to execute in the descheduler.
-	Plugins []DeschedulerStepConfig `json:"plugins"`
-	// If dry-run is disabled (by default its enabled).
-	DisableDryRun bool `json:"disableDryRun,omitempty"`
-}
-
-type DeschedulerStepConfig struct {
-	// The name of the step.
-	Name string `json:"name"`
-	// Custom options for the step, as a raw yaml map.
-	Options libconf.RawOpts `json:"options,omitempty"`
-}
-
-type CinderSchedulerConfig struct {
-	// Pipelines in this scheduler.
-	Pipelines []CinderSchedulerPipelineConfig `json:"pipelines"`
-}
-
-type CinderSchedulerStepConfig = SchedulerStepConfig[struct{}]
-
-type CinderSchedulerPipelineConfig struct {
-	// Scheduler step plugins by their name.
-	Plugins []CinderSchedulerStepConfig `json:"plugins"`
-
-	// The name of this scheduler pipeline.
-	// The name is used to distinguish and route between multiple pipelines.
-	Name string `json:"name"`
-}
-
-type ManilaSchedulerConfig struct {
-	// Pipelines in this scheduler.
-	Pipelines []ManilaSchedulerPipelineConfig `json:"pipelines"`
-}
-
-type ManilaSchedulerStepConfig = SchedulerStepConfig[struct{}]
-
-type ManilaSchedulerPipelineConfig struct {
-	// Scheduler step plugins by their name.
-	Plugins []ManilaSchedulerStepConfig `json:"plugins"`
-
-	// The name of this scheduler pipeline.
-	// The name is used to distinguish and route between multiple pipelines.
-	Name string `json:"name"`
-}
-
-type MachineSchedulerConfig struct {
-	// Pipelines in this scheduler.
-	Pipelines []MachineSchedulerPipelineConfig `json:"pipelines"`
-}
-
-type MachineSchedulerStepConfig = SchedulerStepConfig[struct{}]
-
-type MachineSchedulerPipelineConfig struct {
-	// Scheduler step plugins by their name.
-	Plugins []MachineSchedulerStepConfig `json:"plugins"`
-
-	// The name of this scheduler pipeline.
-	// The name is used to distinguish and route between multiple pipelines.
-	Name string `json:"name"`
-}
-
-type NovaSchedulerConfig struct {
-	// Pipelines in this scheduler.
-	Pipelines []NovaSchedulerPipelineConfig `json:"pipelines"`
-}
-
-type NovaHypervisorType = string
-
-const (
-	NovaHypervisorTypeQEMU   NovaHypervisorType = "QEMU"
-	NovaHypervisorTypeCH     NovaHypervisorType = "CH" // Cloud hypervisor
-	NovaHypervisorTypeVMware NovaHypervisorType = "VMware vCenter Server"
-	NovaHypervisorTypeIronic NovaHypervisorType = "ironic"
-)
-
-type NovaSchedulerLiquidAPIConfig struct {
-	// Hypervisors that should be handled by the api.
-	Hypervisors []NovaHypervisorType `json:"hypervisors"`
-}
-
-type NovaSchedulerStepExtraConfig struct {
-	// The scope of the step, i.e. which hosts it should be applied to.
-	Scope NovaSchedulerStepScope `json:"scope,omitempty"`
-}
-
-type NovaSchedulerStepConfig = SchedulerStepConfig[NovaSchedulerStepExtraConfig]
-
-type NovaSchedulerPipelineConfig struct {
-	// Scheduler step plugins by their name.
-	Plugins []NovaSchedulerStepConfig `json:"plugins"`
-
-	// The name of this scheduler pipeline.
-	// The name is used to distinguish and route between multiple pipelines.
-	Name string `json:"name"`
 }
 
 // Scope that defines which hosts a scheduler step should be applied to.
@@ -208,20 +86,9 @@ func (s NovaSchedulerStepSpecScope) IsUndefined() bool {
 	return len(s.AllOfFlavorNameInfixes) == 0
 }
 
-// Configuration for the scheduler module.
-type SchedulerConfig struct {
-	Nova     NovaSchedulerConfig    `json:"nova"`
-	Manila   ManilaSchedulerConfig  `json:"manila"`
-	Cinder   CinderSchedulerConfig  `json:"cinder"`
-	Machines MachineSchedulerConfig `json:"machines"`
-}
-
 type Config struct {
 	// The operator will only touch CRs with this operator name.
 	Operator string `json:"operator"`
-
-	SchedulerConfig   `json:"scheduler"`
-	DeschedulerConfig `json:"descheduler"`
 
 	// Lib modules configs.
 	libconf.DBConfig `json:"db"`
