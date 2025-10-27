@@ -186,6 +186,9 @@
   </div>
 
   <script>
+
+    const kubernetesAPIServer = 'http://localhost:4000/api'
+
     const state = {
       schedulingDecisions: [],
       selectedDecisions: null,
@@ -282,12 +285,10 @@
     // List scheduling decisions, optionally filtered by vmId.
     async function listSchedulingDecisions(vmId) {
       // Get the port mapping from /portmappings.json
-      const portMappingsResponse = await fetch('portmappings.json')
-      const novaSchedulerAPIPort = JSON.parse(await portMappingsResponse.text())['cortex-nova-scheduler-api']?.local
-      let url = `http://localhost:${novaSchedulerAPIPort}/scheduler/nova/scheduling-decisions`
+      let url = `${kubernetesAPIServer}/apis/scheduling.cortex/v1alpha1/decisions`
 
       if (vmId) {
-        url += `?vm_id=${vmId}`
+        url += `/${vmId}`
       }
       const response = await fetch(url)
       if (!response.ok) {
