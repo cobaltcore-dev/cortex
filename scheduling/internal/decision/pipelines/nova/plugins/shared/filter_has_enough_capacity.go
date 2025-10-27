@@ -32,8 +32,8 @@ type FilterHasEnoughCapacity struct {
 	Client client.Client
 }
 
-func (s *FilterHasEnoughCapacity) Init(alias string, db db.DB, opts conf.RawOpts) error {
-	if err := s.BaseStep.Init(alias, db, opts); err != nil {
+func (s *FilterHasEnoughCapacity) Init(db db.DB, opts conf.RawOpts) error {
+	if err := s.BaseStep.Init(db, opts); err != nil {
 		return err
 	}
 	if s.Client != nil {

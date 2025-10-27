@@ -24,7 +24,7 @@ type StepType string
 
 const (
 	// Step for assigning weights to hosts.
-	StepTypeFilterWeigher StepType = "weigher"
+	StepTypeWeigher StepType = "weigher"
 	// Step for filtering hosts.
 	StepTypeFilter StepType = "filter"
 	// Step for generating descheduling recommendations.

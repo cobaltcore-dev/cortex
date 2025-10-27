@@ -39,21 +39,21 @@ func NewPipelineMonitor(registry *monitoring.Registry) PipelineMonitor {
 		Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline step run",
 		Buckets: prometheus.DefBuckets,
-	}, []string{"pipeline", "step", "alias"})
+	}, []string{"pipeline", "step"})
 	stepSubjectWeight := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cortex_scheduler_pipeline_step_weight_modification",
 		Help: "Modification of subject weight by scheduler pipeline step",
-	}, []string{"pipeline", "subject", "step", "alias"})
+	}, []string{"pipeline", "subject", "step"})
 	stepRemovedSubjectsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_removed_subjects",
 		Help:    "Number of subjects removed by scheduler pipeline step",
 		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
-	}, []string{"pipeline", "step", "alias"})
+	}, []string{"pipeline", "step"})
 	stepImpactObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_impact",
 		Help:    "Impact of the step on the subjects",
 		Buckets: prometheus.ExponentialBucketsRange(0.01, 1000, 20),
-	}, []string{"pipeline", "step", "alias", "stat", "unit"})
+	}, []string{"pipeline", "step", "stat", "unit"})
 	buckets := []float64{}
 	buckets = append(buckets, prometheus.LinearBuckets(0, 1, 10)...)
 	buckets = append(buckets, prometheus.LinearBuckets(10, 10, 4)...)
@@ -62,7 +62,7 @@ func NewPipelineMonitor(registry *monitoring.Registry) PipelineMonitor {
 		Name:    "cortex_scheduler_pipeline_step_shift_origin",
 		Help:    "From which index of the subject list the subject came from originally.",
 		Buckets: buckets,
-	}, []string{"pipeline", "step", "alias", "outidx"})
+	}, []string{"pipeline", "step", "outidx"})
 	pipelineRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline run",

@@ -9,13 +9,8 @@ import (
 
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 )
-
-// The config type has a long name, so we use a shorter alias here.
-// The name is intentionally long to make it explicit that we disable
-// validations for the scheduler step instead of enabling them.
-type disabledValidations = conf.SchedulerStepDisabledValidationsConfig
 
 // Wrapper for scheduler steps that validates them before/after execution.
 type StepValidator[RequestType PipelineRequest] struct {
@@ -23,7 +18,7 @@ type StepValidator[RequestType PipelineRequest] struct {
 	Step Step[RequestType]
 	// By default, we execute all validations. However, through the config,
 	// we can also disable some validations if necessary.
-	DisabledValidations disabledValidations
+	DisabledValidations v1alpha1.DisabledValidationsSpec
 }
 
 // Get the name of the wrapped step.
@@ -31,22 +26,17 @@ func (s *StepValidator[RequestType]) GetName() string {
 	return s.Step.GetName()
 }
 
-// Get the alias of the wrapped step.
-func (s *StepValidator[RequestType]) GetAlias() string {
-	return s.Step.GetAlias()
-}
-
 // Initialize the wrapped step with the database and options.
-func (s *StepValidator[RequestType]) Init(alias string, db db.DB, opts libconf.RawOpts) error {
+func (s *StepValidator[RequestType]) Init(db db.DB, opts libconf.RawOpts) error {
 	slog.Info(
 		"scheduler: init validation for step", "name", s.GetName(),
 		"disabled", s.DisabledValidations,
 	)
-	return s.Step.Init(alias, db, opts)
+	return s.Step.Init(db, opts)
 }
 
 // Validate the wrapped step with the database and options.
-func ValidateStep[RequestType PipelineRequest](step Step[RequestType], disabledValidations disabledValidations) *StepValidator[RequestType] {
+func ValidateStep[RequestType PipelineRequest](step Step[RequestType], disabledValidations v1alpha1.DisabledValidationsSpec) *StepValidator[RequestType] {
 	return &StepValidator[RequestType]{
 		Step:                step,
 		DisabledValidations: disabledValidations,

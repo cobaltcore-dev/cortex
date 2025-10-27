@@ -28,16 +28,11 @@ func (s *StepScoper) GetName() string {
 	return s.Step.GetName()
 }
 
-// Get the alias of the wrapped step.
-func (s *StepScoper) GetAlias() string {
-	return s.Step.GetAlias()
-}
-
 // Initialize the wrapped step with the database and options.
-func (s *StepScoper) Init(alias string, db db.DB, opts libconf.RawOpts) error {
+func (s *StepScoper) Init(db db.DB, opts libconf.RawOpts) error {
 	slog.Info("scheduler: init scope for step", "name", s.GetName())
 	s.DB = db
-	return s.Step.Init(alias, db, opts)
+	return s.Step.Init(db, opts)
 }
 
 func (s *StepScoper) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {

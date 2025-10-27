@@ -41,7 +41,7 @@ type pipeline[RequestType PipelineRequest] struct {
 	monitor PipelineMonitor
 }
 
-type StepWrapper[RequestType PipelineRequest] func(Step[RequestType]) Step[RequestType]
+type StepWrapper[RequestType PipelineRequest] func(Step[RequestType], v1alpha1.Step) (Step[RequestType], error)
 
 // Create a new pipeline with steps contained in the configuration.
 func NewPipeline[RequestType PipelineRequest](
@@ -50,23 +50,26 @@ func NewPipeline[RequestType PipelineRequest](
 	stepWrappers []StepWrapper[RequestType],
 	database db.DB,
 	monitor PipelineMonitor,
-) Pipeline[RequestType] {
+) (Pipeline[RequestType], error) {
 	// Load all steps from the configuration.
 	steps := []Step[RequestType]{}
 	order := []string{}
 	for _, stepConfig := range confedSteps {
 		makeStep, ok := supportedSteps[stepConfig.Name]
 		if !ok {
-			panic("unknown pipeline step: " + stepConfig.Name)
+			return nil, errors.New("unsupported scheduler step: " + stepConfig.Name)
 		}
 		step := makeStep()
 		// Apply the step wrappers to the step.
 		for _, wrapper := range stepWrappers {
-			step = wrapper(step)
+			var err error
+			if step, err = wrapper(step, stepConfig); err != nil {
+				return nil, errors.New("failed to wrap scheduler step: " + err.Error())
+			}
 		}
 		opts := libconf.NewRawOptsBytes(stepConfig.Spec.Opts.Raw)
 		if err := step.Init(stepConfig.Name, database, opts); err != nil {
-			panic("failed to initialize pipeline step: " + err.Error())
+			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
 		steps = append(steps, step)
 		order = append(order, stepConfig.Name)
@@ -87,7 +90,7 @@ func NewPipeline[RequestType PipelineRequest](
 		order:   order,
 		steps:   stepsByName,
 		monitor: monitor,
-	}
+	}, nil
 }
 
 // Execute the scheduler steps in groups of the execution order.

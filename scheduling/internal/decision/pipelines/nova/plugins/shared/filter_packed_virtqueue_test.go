@@ -310,7 +310,7 @@ func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterPackedVirtqueueStep{}
-			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
+			if err := step.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 			result, err := step.Run(slog.Default(), tt.request)

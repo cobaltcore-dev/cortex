@@ -50,7 +50,7 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
         "maxCPUUsageActivationUpperBound": -1.0
     }`)
 	step := &CPUUsageBalancingStep{}
-	if err := step.Init("", testDB, opts); err != nil {
+	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

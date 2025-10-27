@@ -4,9 +4,12 @@
 package nova
 
 import (
+	"encoding/json"
+	"errors"
+
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova/plugins/shared"
@@ -49,29 +52,41 @@ type novaPipeline struct {
 
 // Create a new Nova scheduler pipeline.
 func NewPipeline(
-	config conf.NovaSchedulerPipelineConfig,
+	steps []v1alpha1.Step,
 	db db.DB,
 	monitor lib.PipelineMonitor,
-) lib.Pipeline[api.ExternalSchedulerRequest] {
+) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
 	// Wrappers to apply to each step in the pipeline.
-	wrappers := []lib.StepWrapper[api.ExternalSchedulerRequest, NovaSchedulerOpts]{
+	wrappers := []lib.StepWrapper[api.ExternalSchedulerRequest]{
 		// Scope the step to Nova hosts/specs that match the step's scope.
-		func(s NovaStep, c conf.SchedulerStepConfig[NovaSchedulerOpts]) NovaStep {
-			if c.Extra == nil {
-				return s // No Nova configuration, run the step as is.
+		func(s NovaStep, config v1alpha1.Step) (NovaStep, error) {
+			if len(config.Spec.Opts.Raw) == 0 {
+				return s, nil
 			}
-			return &StepScoper{Step: s, Scope: (*c.Extra).Scope}
+			var c NovaSchedulerOpts
+			if err := json.Unmarshal(config.Spec.Opts.Raw, &c); err != nil {
+				return nil, errors.New("failed to unmarshal nova scheduler step opts: " + err.Error())
+			}
+			return &StepScoper{Step: s, Scope: c.Scope}, nil
 		},
-		// Validate that no hosts are removed.
-		func(s NovaStep, c conf.NovaSchedulerStepConfig) NovaStep {
-			return lib.ValidateStep(s, c.DisabledValidations)
+		func(s NovaStep, config v1alpha1.Step) (NovaStep, error) {
+			if config.Spec.Type != v1alpha1.StepTypeWeigher {
+				return s, nil
+			}
+			if config.Spec.Weigher == nil {
+				return s, nil
+			}
+			return lib.ValidateStep(s, config.Spec.Weigher.DisabledValidations), nil
 		},
 		// Monitor the step execution.
-		func(s NovaStep, c conf.NovaSchedulerStepConfig) NovaStep {
-			return lib.MonitorStep(s, monitor)
+		func(s NovaStep, config v1alpha1.Step) (NovaStep, error) {
+			return lib.MonitorStep(s, monitor), nil
 		},
 	}
-	pipeline := lib.NewPipeline(supportedSteps, config.Plugins, wrappers, db, monitor)
-	return &novaPipeline{pipeline, db}
+	pipeline, err := lib.NewPipeline(supportedSteps, steps, wrappers, db, monitor)
+	if err != nil {
+		return nil, err
+	}
+	return &novaPipeline{pipeline, db}, nil
 }

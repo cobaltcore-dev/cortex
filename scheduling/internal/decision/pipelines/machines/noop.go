@@ -19,11 +19,7 @@ type NoopFilter struct {
 // Should be something like: "my_cool_scheduler_step".
 func (NoopFilter) GetName() string { return "noop" }
 
-// Get the alias of this step.
-func (NoopFilter) GetAlias() string { return "" }
-
-func (f *NoopFilter) Init(alias string, db db.DB, opts conf.RawOpts) error {
-	f.Alias = alias
+func (f *NoopFilter) Init(db db.DB, opts conf.RawOpts) error {
 	return nil
 }
 

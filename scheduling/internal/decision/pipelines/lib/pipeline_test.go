@@ -10,27 +10,19 @@ import (
 
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	"k8s.io/client-go/rest"
 )
 
 type mockPipelineStep struct {
-	err   error
-	name  string
-	alias string
+	err  error
+	name string
 }
 
-func (m *mockPipelineStep) Init(alias string, db db.DB, opts libconf.RawOpts) error {
-	m.alias = alias
+func (m *mockPipelineStep) Init(db db.DB, opts libconf.RawOpts) error {
 	return nil
 }
 
 func (m *mockPipelineStep) GetName() string {
 	return m.name
-}
-
-func (m *mockPipelineStep) GetAlias() string {
-	return m.alias
 }
 
 func (m *mockPipelineStep) Run(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
@@ -47,8 +39,7 @@ func TestPipeline_Run(t *testing.T) {
 	pipeline := &pipeline[mockPipelineRequest]{
 		steps: map[string]Step[mockPipelineRequest]{
 			"mock_pipeline_step": &mockPipelineStep{
-				name:  "mock_pipeline_step",
-				alias: "mock_pipeline_step_alias",
+				name: "mock_pipeline_step",
 			},
 		},
 		order: []string{
@@ -197,12 +188,14 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 
 func TestPipeline_RunSteps(t *testing.T) {
 	mockStep := &mockPipelineStep{
-		name:  "mock_pipeline_step",
-		alias: "mock_pipeline_step_alias",
+		name: "mock_pipeline_step",
 	}
 	p := &pipeline[mockPipelineRequest]{
-		executionOrder: [][]Step[mockPipelineRequest]{
-			{mockStep},
+		order: []string{
+			"mock_pipeline_step",
+		},
+		steps: map[string]Step[mockPipelineRequest]{
+			"mock_pipeline_step": mockStep,
 		},
 	}
 
@@ -215,91 +208,10 @@ func TestPipeline_RunSteps(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 step result, got %d", len(result))
 	}
-	if _, ok := result["mock_pipeline_step (mock_pipeline_step_alias)"]; !ok {
-		t.Fatalf("expected result for step 'mock_pipeline_step (mock_pipeline_step_alias)'")
+	if _, ok := result["mock_pipeline_step"]; !ok {
+		t.Fatalf("expected result for step 'mock_pipeline_step'")
 	}
-	if result["mock_pipeline_step (mock_pipeline_step_alias)"]["host2"] != 1.0 {
-		t.Errorf("expected weight 1.0 for host2, got %f", result["mock_pipeline_step (mock_pipeline_step_alias)"]["host2"])
-	}
-}
-
-func TestNewPipeline(t *testing.T) {
-	database := db.DB{}          // Mock or initialize as needed
-	monitor := PipelineMonitor{} // Replace with an actual mock implementation if available
-
-	// Set up kubekonfig for GetConfigOrDie
-	restConfig := &rest.Config{}
-	_ = restConfig
-
-	supportedSteps := map[string]func() Step[mockPipelineRequest]{
-		"mock_pipeline_step": func() Step[mockPipelineRequest] {
-			return &mockPipelineStep{
-				name: "mock_pipeline_step",
-			}
-		},
-	}
-
-	type extraStepOpts struct{}
-	pipeline := NewPipeline(
-		supportedSteps,
-		[]conf.SchedulerStepConfig[extraStepOpts]{{Name: "mock_pipeline_step", Options: libconf.RawOpts{}}},
-		[]StepWrapper[mockPipelineRequest, extraStepOpts]{},
-		database, monitor,
-	).(*pipeline[mockPipelineRequest])
-
-	if len(pipeline.executionOrder) != 1 {
-		t.Fatalf("expected 1 execution order group, got %d", len(pipeline.executionOrder))
-	}
-	if len(pipeline.executionOrder[0]) != 1 {
-		t.Fatalf("expected 1 step in the execution order, got %d", len(pipeline.executionOrder[0]))
-	}
-	if pipeline.executionOrder[0][0].GetName() != "mock_pipeline_step" {
-		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][0].GetName())
-	}
-}
-
-func TestNewPipeline_SameStepMultipleAliases(t *testing.T) {
-	database := db.DB{}          // Mock or initialize as needed
-	monitor := PipelineMonitor{} // Replace with an actual mock implementation if available
-	supportedSteps := map[string]func() Step[mockPipelineRequest]{
-		"mock_pipeline_step": func() Step[mockPipelineRequest] {
-			return &mockPipelineStep{
-				name:  "mock_pipeline_step",
-				alias: "", // Set by Init
-			}
-		},
-	}
-
-	type extraStepOpts struct{}
-	pipeline := NewPipeline(
-		supportedSteps,
-		[]conf.SchedulerStepConfig[extraStepOpts]{
-			{Name: "mock_pipeline_step", Alias: "mock_step_1", Options: libconf.RawOpts{}},
-			{Name: "mock_pipeline_step", Alias: "mock_step_2", Options: libconf.RawOpts{}},
-		},
-		[]StepWrapper[mockPipelineRequest, extraStepOpts]{},
-		database, monitor,
-	).(*pipeline[mockPipelineRequest])
-
-	if len(pipeline.executionOrder[0]) != 2 {
-		t.Fatalf("expected 2 steps in the execution order, got %d: %v", len(pipeline.executionOrder[0]), pipeline.executionOrder[0])
-	}
-	if pipeline.executionOrder[0][0].GetName() != "mock_pipeline_step" {
-		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][0].GetName())
-	}
-	if pipeline.executionOrder[0][1].GetName() != "mock_pipeline_step" {
-		t.Errorf("expected step name 'mock_pipeline_step', got '%s'", pipeline.executionOrder[0][1].GetName())
-	}
-	if pipeline.executionOrder[0][0].GetAlias() != "mock_step_1" {
-		t.Errorf("expected step alias 'mock_step_1', got '%s'", pipeline.executionOrder[0][0].GetAlias())
-	}
-	if pipeline.executionOrder[0][1].GetAlias() != "mock_step_2" {
-		t.Errorf("expected step alias 'mock_step_2', got '%s'", pipeline.executionOrder[0][1].GetAlias())
-	}
-	if pipeline.applicationOrder[0] != "mock_pipeline_step (mock_step_1)" {
-		t.Errorf("expected application order 'mock_pipeline_step (mock_step_1)', got '%s'", pipeline.applicationOrder[0])
-	}
-	if pipeline.applicationOrder[1] != "mock_pipeline_step (mock_step_2)" {
-		t.Errorf("expected application order 'mock_pipeline_step (mock_step_2)', got '%s'", pipeline.applicationOrder[1])
+	if result["mock_pipeline_step"]["host2"] != 1.0 {
+		t.Errorf("expected weight 1.0 for host2, got %f", result["mock_pipeline_step"]["host2"])
 	}
 }

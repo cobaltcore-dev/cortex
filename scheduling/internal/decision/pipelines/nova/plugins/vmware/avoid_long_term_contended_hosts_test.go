@@ -49,7 +49,7 @@ func TestAvoidLongTermContendedHostsStep_Run(t *testing.T) {
         "maxCPUContentionActivationUpperBound": -1.0
     }`)
 	step := &AvoidLongTermContendedHostsStep{}
-	if err := step.Init("", testDB, opts); err != nil {
+	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

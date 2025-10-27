@@ -30,7 +30,7 @@ func (EmptyStepOpts) Validate() error { return nil }
 // Interface for a scheduler step.
 type Step[RequestType PipelineRequest] interface {
 	// Configure the step with a database and options.
-	Init(alias string, db db.DB, opts conf.RawOpts) error
+	Init(db db.DB, opts conf.RawOpts) error
 	// Run this step of the scheduling pipeline.
 	// Return a map of keys to activation values. Important: keys that are
 	// not in the map are considered as filtered out.
@@ -41,8 +41,6 @@ type Step[RequestType PipelineRequest] interface {
 	// The name is used to identify the step in metrics, config, logs, and more.
 	// Should be something like: "my_cool_scheduler_step".
 	GetName() string
-	// Get the alias of this step.
-	GetAlias() string
 }
 
 // Common base for all steps that provides some functionality
@@ -59,17 +57,13 @@ type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 }
 
 // Init the step with the database and options.
-func (s *BaseStep[RequestType, Opts]) Init(alias string, db db.DB, opts conf.RawOpts) error {
-	s.Alias = alias
+func (s *BaseStep[RequestType, Opts]) Init(db db.DB, opts conf.RawOpts) error {
 	if err := s.Load(opts); err != nil {
 		return err
 	}
 	s.DB = db
 	return s.Options.Validate()
 }
-
-// Get the alias of this step.
-func (s *BaseStep[RequestType, Opts]) GetAlias() string { return s.Alias }
 
 // Get a default result (no action) for the input weight keys given in the request.
 func (s *BaseStep[RequestType, Opts]) PrepareResult(request RequestType) *StepResult {

@@ -434,7 +434,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			t.Logf("Running test case: %s", tt.name)
 			step := &FilterHasEnoughCapacity{}
 			step.Client = testClient() // Override the real client with our fake client
-			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
+			if err := step.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 			// Override the real client with our fake client after Init()
@@ -574,7 +574,7 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 
 	step := &FilterHasEnoughCapacity{}
 	step.Client = fakeClient // Override the real client with our fake client
-	if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
+	if err := step.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -845,7 +845,7 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 
 			step := &FilterHasEnoughCapacity{}
 			step.Client = fakeClient // Override the real client with our fake client
-			if err := step.Init("", testDB, conf.NewRawOpts("{}")); err != nil {
+			if err := step.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 

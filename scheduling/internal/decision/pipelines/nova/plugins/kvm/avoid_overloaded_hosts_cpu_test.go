@@ -52,7 +52,7 @@ func TestAvoidOverloadedHostsCPUStep_Run(t *testing.T) {
         "maxCPUUsageActivationUpperBound": -0.5
     }`)
 	step := &AvoidOverloadedHostsCPUStep{}
-	if err := step.Init("", testDB, opts); err != nil {
+	if err := step.Init(testDB, opts); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
