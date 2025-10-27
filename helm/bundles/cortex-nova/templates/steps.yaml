@@ -305,9 +305,6 @@ metadata:
 spec:
   operator: cortex-nova
   type: descheduler
-  {{- if .Values.scheduling.descheduler.disableDryRun }}
-  disableDryRun: {{ .Values.scheduling.descheduler.disableDryRun }}
-  {{- end }}
   impl: avoid_high_steal_pct
   description: |
     Deschedule once vms reach this cpu steal pct over the observed time span.

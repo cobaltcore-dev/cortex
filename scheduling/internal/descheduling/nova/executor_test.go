@@ -109,11 +109,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 			},
 			config: conf.Config{
-				DeschedulerConfig: conf.DeschedulerConfig{
-					Nova: conf.NovaDeschedulerConfig{
-						DisableDryRun: true,
-					},
-				},
+				DisableDeschedulerDryRun: true,
 			},
 			expectedPhase: v1alpha1.DeschedulingStatusPhaseCompleted,
 		},
@@ -139,11 +135,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 			},
 			config: conf.Config{
-				DeschedulerConfig: conf.DeschedulerConfig{
-					Nova: conf.NovaDeschedulerConfig{
-						DisableDryRun: false,
-					},
-				},
+				DisableDeschedulerDryRun: false,
 			},
 			expectedPhase: v1alpha1.DeschedulingStatusPhaseQueued,
 		},
@@ -297,11 +289,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				migrateError: errors.New("migration failed"),
 			},
 			config: conf.Config{
-				DeschedulerConfig: conf.DeschedulerConfig{
-					Nova: conf.NovaDeschedulerConfig{
-						DisableDryRun: true,
-					},
-				},
+				DisableDeschedulerDryRun: true,
 			},
 			expectedPhase: v1alpha1.DeschedulingStatusPhaseFailed,
 			expectedError: "failed to live-migrate VM: migration failed",

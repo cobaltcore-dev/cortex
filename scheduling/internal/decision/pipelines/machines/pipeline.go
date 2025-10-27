@@ -6,7 +6,7 @@ package machines
 import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 )
 
@@ -20,18 +20,17 @@ var supportedSteps = map[string]func() MachineStep{
 
 // Create a new machine scheduler pipeline.
 func NewPipeline(
-	config conf.MachineSchedulerPipelineConfig,
+	steps []v1alpha1.Step,
 	db db.DB,
 	monitor lib.PipelineMonitor,
-) lib.Pipeline[ironcore.MachinePipelineRequest] {
+) (lib.Pipeline[ironcore.MachinePipelineRequest], error) {
 
 	// Wrappers to apply to each step in the pipeline.
-	wrappers := []lib.StepWrapper[ironcore.MachinePipelineRequest, struct{}]{
+	wrappers := []lib.StepWrapper[ironcore.MachinePipelineRequest]{
 		// Monitor the step execution.
-		func(s MachineStep, c conf.MachineSchedulerStepConfig) MachineStep {
-			// This monitor calculates detailed impact metrics for each step.
-			return lib.MonitorStep(s, monitor)
+		func(s MachineStep, config v1alpha1.Step) (MachineStep, error) {
+			return lib.MonitorStep(s, monitor), nil
 		},
 	}
-	return lib.NewPipeline(supportedSteps, config.Plugins, wrappers, db, monitor)
+	return lib.NewPipeline(supportedSteps, steps, wrappers, db, monitor)
 }

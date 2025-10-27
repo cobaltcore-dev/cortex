@@ -30,11 +30,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
-	cinderapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
-	machinesapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
-	manilaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
-	novaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/cleanup"
@@ -248,73 +244,59 @@ func main() {
 	// API endpoint.
 	mux := http.NewServeMux()
 
-	// TODO: Handle the configuration of pipelines and steps dynamically (e.g. via CRDs).
-	if len(config.SchedulerConfig.Nova.Pipelines) > 0 {
-		pipelines := map[string]lib.Pipeline[novaapi.ExternalSchedulerRequest]{}
-		for _, pipelineConf := range config.SchedulerConfig.Nova.Pipelines {
-			pipelines[pipelineConf.Name] = nova.NewPipeline(pipelineConf, database, pipelineMonitor)
-		}
+	switch config.Operator {
+	case "cortex-nova":
 		if err := (&nova.DecisionReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Pipelines: pipelines,
-			Conf:      config,
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			DB:      database,
+			Monitor: pipelineMonitor,
+			Conf:    config,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		novahttp.NewAPI(config).Init(mux)
 		go cleanup.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
-	}
-	if len(config.SchedulerConfig.Manila.Pipelines) > 0 {
-		pipelines := map[string]lib.Pipeline[manilaapi.ExternalSchedulerRequest]{}
-		for _, pipelineConf := range config.SchedulerConfig.Manila.Pipelines {
-			pipelines[pipelineConf.Name] = manila.NewPipeline(pipelineConf, database, pipelineMonitor)
-		}
+	case "cortex-manila":
 		if err := (&manila.DecisionReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Pipelines: pipelines,
-			Conf:      config,
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			// TODO DB:      database,
+			// TODO Monitor: pipelineMonitor,
+			Conf: config,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		manilahttp.NewAPI(config).Init(mux)
-		// TODO: Implement cleanup for manila decisions.
-	}
-	if len(config.SchedulerConfig.Cinder.Pipelines) > 0 {
-		pipelines := map[string]lib.Pipeline[cinderapi.ExternalSchedulerRequest]{}
-		for _, pipelineConf := range config.SchedulerConfig.Cinder.Pipelines {
-			pipelines[pipelineConf.Name] = cinder.NewPipeline(pipelineConf, database, pipelineMonitor)
-		}
+		// TODO go cleanup.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
+	case "cortex-cinder":
 		if err := (&cinder.DecisionReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Pipelines: pipelines,
-			Conf:      config,
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			// TODO DB:      database,
+			// TODO Monitor: pipelineMonitor,
+			Conf: config,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		cinderhttp.NewAPI(config).Init(mux)
-		// TODO: Implement cleanup for cinder decisions.
-	}
-	if len(config.SchedulerConfig.Machines.Pipelines) > 0 {
-		pipelines := map[string]lib.Pipeline[machinesapi.MachinePipelineRequest]{}
-		for _, pipelineConf := range config.SchedulerConfig.Machines.Pipelines {
-			pipelines[pipelineConf.Name] = machines.NewPipeline(pipelineConf, database, pipelineMonitor)
-		}
+		// TODO go cleanup.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
+	case "cortex-machines":
 		// TODO: Implement cleanup for machine decisions (on delete of the machine).
 		if err := (&machines.DecisionReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Pipelines: pipelines,
-			Conf:      config,
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Conf:   config,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+	default:
+		setupLog.Error(err, "unknown operator type", "operator", config.Operator)
+		os.Exit(1)
 	}
 
 	// +kubebuilder:scaffold:builder

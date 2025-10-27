@@ -6,12 +6,12 @@ package manila
 import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/manila/plugins/netapp"
 )
 
-type ManilaStep = scheduling.Step[api.ExternalSchedulerRequest]
+type ManilaStep = lib.Step[api.ExternalSchedulerRequest]
 
 // Configuration of steps supported by the scheduling.
 // The steps actually used by the scheduler are defined through the configuration file.
@@ -21,21 +21,27 @@ var supportedSteps = map[string]func() ManilaStep{
 
 // Create a new Manila scheduler pipeline.
 func NewPipeline(
-	config conf.ManilaSchedulerPipelineConfig,
+	steps []v1alpha1.Step,
 	db db.DB,
-	monitor scheduling.PipelineMonitor,
-) scheduling.Pipeline[api.ExternalSchedulerRequest] {
+	monitor lib.PipelineMonitor,
+) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
 	// Wrappers to apply to each step in the pipeline.
-	wrappers := []scheduling.StepWrapper[api.ExternalSchedulerRequest, struct{}]{
+	wrappers := []lib.StepWrapper[api.ExternalSchedulerRequest]{
 		// Validate that no hosts are removed.
-		func(s ManilaStep, c conf.ManilaSchedulerStepConfig) ManilaStep {
-			return scheduling.ValidateStep(s, c.DisabledValidations)
+		func(s ManilaStep, config v1alpha1.Step) (ManilaStep, error) {
+			if config.Spec.Type != v1alpha1.StepTypeWeigher {
+				return s, nil
+			}
+			if config.Spec.Weigher == nil {
+				return s, nil
+			}
+			return lib.ValidateStep(s, config.Spec.Weigher.DisabledValidations), nil
 		},
 		// Monitor the step execution.
-		func(s ManilaStep, c conf.ManilaSchedulerStepConfig) ManilaStep {
-			return scheduling.MonitorStep(s, monitor)
+		func(s ManilaStep, config v1alpha1.Step) (ManilaStep, error) {
+			return lib.MonitorStep(s, monitor), nil
 		},
 	}
-	return scheduling.NewPipeline(supportedSteps, config.Plugins, wrappers, db, monitor)
+	return lib.NewPipeline(supportedSteps, steps, wrappers, db, monitor)
 }

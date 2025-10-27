@@ -6,7 +6,7 @@ package cinder
 import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 )
@@ -19,21 +19,27 @@ var supportedSteps = map[string]func() CinderStep{}
 
 // Create a new Cinder scheduler pipeline.
 func NewPipeline(
-	config conf.CinderSchedulerPipelineConfig,
+	steps []v1alpha1.Step,
 	db db.DB,
 	monitor scheduling.PipelineMonitor,
-) lib.Pipeline[api.ExternalSchedulerRequest] {
+) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
 	// Wrappers to apply to each step in the pipeline.
-	wrappers := []scheduling.StepWrapper[api.ExternalSchedulerRequest, struct{}]{
+	wrappers := []lib.StepWrapper[api.ExternalSchedulerRequest]{
 		// Validate that no hosts are removed.
-		func(s CinderStep, c conf.CinderSchedulerStepConfig) CinderStep {
-			return lib.ValidateStep(s, c.DisabledValidations)
+		func(s CinderStep, config v1alpha1.Step) (CinderStep, error) {
+			if config.Spec.Type != v1alpha1.StepTypeWeigher {
+				return s, nil
+			}
+			if config.Spec.Weigher == nil {
+				return s, nil
+			}
+			return lib.ValidateStep(s, config.Spec.Weigher.DisabledValidations), nil
 		},
 		// Monitor the step execution.
-		func(s CinderStep, c conf.CinderSchedulerStepConfig) CinderStep {
-			return lib.MonitorStep(s, monitor)
+		func(s CinderStep, config v1alpha1.Step) (CinderStep, error) {
+			return lib.MonitorStep(s, monitor), nil
 		},
 	}
-	return lib.NewPipeline(supportedSteps, config.Plugins, wrappers, db, monitor)
+	return lib.NewPipeline(supportedSteps, steps, wrappers, db, monitor)
 }

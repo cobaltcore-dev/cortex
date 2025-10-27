@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
 )
 
@@ -55,9 +54,7 @@ func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.K
 
 func TestNewNovaAPI(t *testing.T) {
 	k := &testlibKeystone.MockKeystoneAPI{}
-	conf := conf.NovaDeschedulerConfig{}
-
-	api := NewNovaAPI(k, conf)
+	api := NewNovaAPI(k)
 	if api == nil {
 		t.Fatal("expected non-nil api")
 	}
@@ -77,8 +74,7 @@ func TestNovaAPI_GetServer(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	conf := conf.NovaDeschedulerConfig{Availability: "public"}
-	nova := NewNovaAPI(k, conf).(*novaAPI)
+	nova := NewNovaAPI(k).(*novaAPI)
 	ctx := t.Context()
 	nova.Init(ctx)
 
@@ -100,8 +96,7 @@ func TestNovaAPI_LiveMigrate(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	conf := conf.NovaDeschedulerConfig{Availability: "public"}
-	nova := NewNovaAPI(k, conf).(*novaAPI)
+	nova := NewNovaAPI(k).(*novaAPI)
 	ctx := t.Context()
 	nova.Init(ctx)
 
@@ -130,8 +125,7 @@ func TestNovaAPI_GetServerMigrations(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	conf := conf.NovaDeschedulerConfig{Availability: "public"}
-	nova := NewNovaAPI(k, conf).(*novaAPI)
+	nova := NewNovaAPI(k).(*novaAPI)
 	ctx := t.Context()
 	nova.Init(ctx)
 

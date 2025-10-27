@@ -11,7 +11,6 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 )
@@ -42,17 +41,12 @@ type NovaAPI interface {
 type novaAPI struct {
 	// Keystone api to authenticate against.
 	keystoneAPI keystone.KeystoneAPI
-	// Nova configuration.
-	conf conf.NovaDeschedulerConfig
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
 }
 
-func NewNovaAPI(keystoneAPI keystone.KeystoneAPI, conf conf.NovaDeschedulerConfig) NovaAPI {
-	return &novaAPI{
-		keystoneAPI: keystoneAPI,
-		conf:        conf,
-	}
+func NewNovaAPI(keystoneAPI keystone.KeystoneAPI) NovaAPI {
+	return &novaAPI{keystoneAPI: keystoneAPI}
 }
 
 func (api *novaAPI) Init(ctx context.Context) {
@@ -62,7 +56,7 @@ func (api *novaAPI) Init(ctx context.Context) {
 	// Automatically fetch the nova endpoint from the keystone service catalog.
 	provider := api.keystoneAPI.Client()
 	serviceType := "compute"
-	url, err := api.keystoneAPI.FindEndpoint(api.conf.Availability, serviceType)
+	url, err := api.keystoneAPI.FindEndpoint(api.keystoneAPI.Availability(), serviceType)
 	if err != nil {
 		panic(err)
 	}

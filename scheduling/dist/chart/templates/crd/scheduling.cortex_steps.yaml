@@ -64,14 +64,6 @@ spec:
           spec:
             description: spec defines the desired state of Step
             properties:
-              descheduler:
-                description: If the type is "descheduler", this contains additional
-                  configuration for it.
-                properties:
-                  disableDryRun:
-                    description: If dry-run is disabled (by default its enabled).
-                    type: boolean
-                type: object
               description:
                 description: |-
                   Additional description of the step which helps understand its purpose

@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins/kvm"
 	"github.com/prometheus/client_golang/prometheus"
@@ -33,8 +33,6 @@ type Pipeline struct {
 	client.Client
 	// Kubernetes scheme to use for the deschedulings.
 	Scheme *runtime.Scheme
-	// Configuration for the descheduler.
-	Config conf.DeschedulerConfig
 	// Nova API to use for the descheduler.
 	NovaAPI NovaAPI
 	// Cycle detector to avoid cycles in descheduling.
@@ -46,22 +44,23 @@ type Pipeline struct {
 	steps []Step
 }
 
-func (p *Pipeline) Init(supported []Step, ctx context.Context, db db.DB, config conf.DeschedulerConfig) {
+func (p *Pipeline) Init(supported []Step, confedSteps []v1alpha1.Step, ctx context.Context, db db.DB) {
 	supportedStepsByName := make(map[string]Step)
 	for _, step := range supported {
 		supportedStepsByName[step.GetName()] = step
 	}
 
 	// Load all steps from the configuration.
-	p.steps = make([]Step, 0, len(config.Nova.Plugins))
-	for _, stepConf := range config.Nova.Plugins {
+	p.steps = make([]Step, 0, len(confedSteps))
+	for _, stepConf := range confedSteps {
 		step, ok := supportedStepsByName[stepConf.Name]
 		if !ok {
 			slog.Error("descheduler: step not supported", "name", stepConf.Name)
 			continue
 		}
 		step = monitorStep(step, p.Monitor)
-		if err := step.Init(db, stepConf.Options); err != nil {
+		rawOpts := libconf.NewRawOptsBytes(stepConf.Spec.Opts.Raw)
+		if err := step.Init(db, rawOpts); err != nil {
 			slog.Error("descheduler: failed to initialize step", "name", stepConf.Name, "error", err)
 			continue
 		}
@@ -69,7 +68,7 @@ func (p *Pipeline) Init(supported []Step, ctx context.Context, db db.DB, config 
 		slog.Info(
 			"descheduler: added step",
 			"name", stepConf.Name,
-			"options", stepConf.Options,
+			"options", rawOpts,
 		)
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 )
 
@@ -175,8 +174,7 @@ func TestCycleDetector_Filter(t *testing.T) {
 				mockAPI.getError = errors.New("API error")
 			}
 
-			config := conf.DeschedulerConfig{}
-			detector := NewCycleDetector(mockAPI, config)
+			detector := NewCycleDetector(mockAPI)
 
 			ctx := context.Background()
 			result, err := detector.Filter(ctx, tt.decisions)
@@ -230,8 +228,7 @@ func TestCycleDetector_Filter_EmptyDecisions(t *testing.T) {
 		migrations: map[string][]migration{},
 	}
 
-	config := conf.DeschedulerConfig{}
-	detector := NewCycleDetector(mockAPI, config)
+	detector := NewCycleDetector(mockAPI)
 
 	ctx := context.Background()
 	result, err := detector.Filter(ctx, []plugins.Decision{})

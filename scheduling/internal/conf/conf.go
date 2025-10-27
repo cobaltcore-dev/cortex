@@ -11,6 +11,9 @@ type Config struct {
 	// The operator will only touch CRs with this operator name.
 	Operator string `json:"operator"`
 
+	// Whether to disable dry-run for descheduler steps.
+	DisableDeschedulerDryRun bool `json:"disableDeschedulerDryRun"`
+
 	// Lib modules configs.
 	libconf.DBConfig `json:"db"`
 

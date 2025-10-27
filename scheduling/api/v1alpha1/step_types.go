@@ -38,12 +38,6 @@ type WeigherSpec struct {
 	DisabledValidations DisabledValidationsSpec `json:"disabledValidations,omitempty"`
 }
 
-type DeschedulerSpec struct {
-	// If dry-run is disabled (by default its enabled).
-	// +kubebuilder:validation:Optional
-	DisableDryRun bool `json:"disableDryRun,omitempty"`
-}
-
 type StepSpec struct {
 	// The operator by which this step should be executed.
 	Operator string `json:"operator,omitempty"`
@@ -53,9 +47,6 @@ type StepSpec struct {
 	// If the type is "weigher", this contains additional configuration for it.
 	// +kubebuilder:validation:Optional
 	Weigher *WeigherSpec `json:"weigher,omitempty"`
-	// If the type is "descheduler", this contains additional configuration for it.
-	// +kubebuilder:validation:Optional
-	Descheduler *DeschedulerSpec `json:"descheduler,omitempty"`
 
 	// The name of the scheduler step in the cortex implementation.
 	Impl string `json:"impl"`
