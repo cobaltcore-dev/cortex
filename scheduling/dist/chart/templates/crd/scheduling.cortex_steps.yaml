@@ -33,7 +33,7 @@ spec:
     - jsonPath: .status.ready
       name: Ready
       type: boolean
-    - jsonPath: .status.knowledgesReady
+    - jsonPath: .status.knowledgesReadyFrac
       name: Knowledges Ready
       type: string
     - jsonPath: .status.error
@@ -127,6 +127,9 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              operator:
+                description: The operator by which this step should be executed.
+                type: string
               opts:
                 description: Additional configuration for the extractor that can be
                   used
@@ -168,7 +171,7 @@ spec:
               error:
                 description: An error explaining why the step is not ready, if applicable.
                 type: string
-              knowledgesReady:
+              knowledgesReadyFrac:
                 description: |-
                   "ReadyKnowledges / TotalKnowledges ready" as a human-readable string
                   or "ready" if there are no knowledges configured.

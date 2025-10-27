@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Machine is the Schema for the machines API
+        description: MachinePool is the Schema for the machinepools API
         properties:
           apiVersion:
             description: |-
@@ -185,7 +185,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MachinePool is the Schema for the machinepools API
+        description: Machine is the Schema for the machines API
         properties:
           apiVersion:
             description: |-

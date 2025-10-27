@@ -68,7 +68,7 @@ func NewPipeline[RequestType PipelineRequest](
 			}
 		}
 		opts := libconf.NewRawOptsBytes(stepConfig.Spec.Opts.Raw)
-		if err := step.Init(stepConfig.Name, database, opts); err != nil {
+		if err := step.Init(database, opts); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
 		steps = append(steps, step)

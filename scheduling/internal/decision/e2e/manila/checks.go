@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"math/rand"
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
@@ -27,13 +26,7 @@ func RunChecks(ctx context.Context, config conf.Config) {
 
 // Check that the Manila external scheduler returns a valid set of share hosts.
 func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
-	if len(config.Manila.Pipelines) == 0 {
-		slog.Info("manila scheduling not configured, skipping check")
-		return
-	}
 	//nolint:gosec // We don't care if the random source is cryptographically secure.
-	randSource := rand.New(rand.NewSource(int64(42)))
-	pipelineName := config.Manila.Pipelines[randSource.Intn(len(config.Manila.Pipelines))].Name
 	keystoneConf := config.KeystoneConfig
 	slog.Info("authenticating against openstack", "url", keystoneConf.URL)
 	authOptions := gophercloud.AuthOptions{
@@ -77,7 +70,7 @@ func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 		})
 	}
 	request := api.ExternalSchedulerRequest{
-		Pipeline: pipelineName,
+		Pipeline: "default",
 		Hosts:    hosts,
 		Weights:  weights,
 	}

@@ -27,7 +27,7 @@ spec:
     - jsonPath: .status.ready
       name: Ready
       type: boolean
-    - jsonPath: .status.stepsReady
+    - jsonPath: .status.StepsReadyFrac
       name: Steps Ready
       type: string
     - jsonPath: .status.error
@@ -137,7 +137,7 @@ spec:
               readySteps:
                 description: The number of steps that are ready.
                 type: integer
-              stepsReady:
+              stepsReadyFrac:
                 description: |-
                   An overview of the readiness of the steps in the pipeline.
                   Format: "ReadySteps / TotalSteps steps ready".

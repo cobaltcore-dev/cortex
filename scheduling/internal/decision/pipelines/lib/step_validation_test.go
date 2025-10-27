@@ -29,7 +29,7 @@ func TestStepValidator_GetName(t *testing.T) {
 
 func TestStepValidator_Init(t *testing.T) {
 	mockStep := &mockStep[mockPipelineRequest]{
-		InitFunc: func(alias string, db db.DB, opts libconf.RawOpts) error {
+		InitFunc: func(db db.DB, opts libconf.RawOpts) error {
 			return nil
 		},
 	}

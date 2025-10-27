@@ -45,6 +45,9 @@ type DeschedulerSpec struct {
 }
 
 type StepSpec struct {
+	// The operator by which this step should be executed.
+	Operator string `json:"operator,omitempty"`
+
 	// The type of the scheduler step.
 	Type StepType `json:"type"`
 	// If the type is "weigher", this contains additional configuration for it.
@@ -77,7 +80,7 @@ type StepStatus struct {
 	TotalKnowledges int `json:"totalKnowledges"`
 	// "ReadyKnowledges / TotalKnowledges ready" as a human-readable string
 	// or "ready" if there are no knowledges configured.
-	KnowledgesReady string `json:"knowledgesReady,omitempty"`
+	KnowledgesReadyFrac string `json:"knowledgesReadyFrac,omitempty"`
 	// An error explaining why the step is not ready, if applicable.
 	Error string `json:"error,omitempty"`
 }
@@ -89,7 +92,7 @@ type StepStatus struct {
 // +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
-// +kubebuilder:printcolumn:name="Knowledges Ready",type="string",JSONPath=".status.knowledgesReady"
+// +kubebuilder:printcolumn:name="Knowledges Ready",type="string",JSONPath=".status.knowledgesReadyFrac"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Step is the Schema for the deschedulings API

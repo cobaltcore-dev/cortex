@@ -45,7 +45,7 @@ type PipelineStatus struct {
 	ReadySteps int `json:"readySteps"`
 	// An overview of the readiness of the steps in the pipeline.
 	// Format: "ReadySteps / TotalSteps steps ready".
-	StepsReady string `json:"stepsReady,omitempty"`
+	StepsReadyFrac string `json:"stepsReadyFrac,omitempty"`
 	// An error explaining why the pipeline is not ready, if applicable.
 	Error string `json:"error,omitempty"`
 }
@@ -57,7 +57,7 @@ type PipelineStatus struct {
 // +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
-// +kubebuilder:printcolumn:name="Steps Ready",type="string",JSONPath=".status.stepsReady"
+// +kubebuilder:printcolumn:name="Steps Ready",type="string",JSONPath=".status.StepsReadyFrac"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Pipeline is the Schema for the decisions API

@@ -286,10 +286,8 @@ func randomRequest(dc datacenter, seed int, config conf.Config) api.ExternalSche
 		panic(err)
 	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
-	//nolint:gosec // We don't care if the random source is cryptographically secure.
-	pipelineName := config.SchedulerConfig.Nova.Pipelines[randSource.Intn(len(config.SchedulerConfig.Nova.Pipelines))].Name
 	request := api.ExternalSchedulerRequest{
-		Pipeline: pipelineName,
+		Pipeline: "default",
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
 			// Actual server that exists in nova but with mocked random properties.
 			InstanceUUID:     server.ID,
@@ -344,10 +342,6 @@ func checkNovaSchedulerReturnsValidHosts(
 
 // Run all checks.
 func RunChecks(ctx context.Context, config conf.Config) {
-	if len(config.SchedulerConfig.Nova.Pipelines) == 0 {
-		slog.Info("nova scheduling not configured, skipping check")
-		return
-	}
 	datacenter := prepare(ctx, config)
 	requestsWithHostsReturned := 0
 	requestsWithNoHostsReturned := 0
