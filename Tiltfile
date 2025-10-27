@@ -144,9 +144,7 @@ for (bundle_chart_path, _) in bundle_charts:
     print('--- Final sync of bundle chart: ' + bundle_chart_path)
     local('sh helm/sync.sh ' + bundle_chart_path)
 
-port_mappings = {}
 def new_port_mapping(component, local_port, remote_port):
-    port_mappings[component] = {'local': local_port, 'remote': remote_port}
     return port_forward(local_port, remote_port, name=component)
 
 k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=[
@@ -231,15 +229,7 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
 
 ########### Dev Dependencies
 
-# kubectl proxy for kubernetes API access
-local_resource(
-    'kubectl-proxy',
-    serve_cmd='kubectl proxy --port=8080',
-    labels=['Development'],
-    links=[
-        link('http://localhost:8080/apis/scheduling.cortex/v1alpha1/decisions', 'Cortex Decisions API'),
-    ],
-)
+
 
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
 k8s_yaml(helm('./helm/dev/cortex-prometheus-operator', name='cortex-prometheus-operator')) # Operator
@@ -259,13 +249,12 @@ k8s_resource(
     objects=['cortex-alertmanager:Alertmanager:default'],
     labels=['Monitoring'],
 )
-docker_build('cortex-visualizer', 'visualizer', build_args={'PORTMAPPINGSOBJ': encode_json(port_mappings)})
+docker_build('cortex-visualizer', 'visualizer')
 k8s_yaml('./visualizer/app.yaml')
 k8s_resource('cortex-visualizer', port_forwards=[
     port_forward(4000, 80),
 ], links=[
     link('localhost:4000/nova.html', 'nova visualizer'),
-    link('localhost:4000/manila.html', 'manila visualizer'),
 ], labels=['Monitoring'])
 docker_build('cortex-plutono', 'plutono')
 k8s_yaml('./plutono/app.yaml')
@@ -274,3 +263,12 @@ k8s_resource('cortex-plutono', port_forwards=[
 ], links=[
     link('http://localhost:5000/d/cortex/cortex?orgId=1', 'cortex dashboard'),
 ], labels=['Monitoring'])
+# kubectl proxy for kubernetes API access
+local_resource(
+    'kubectl-proxy',
+    serve_cmd='kubectl proxy --port=1337',
+    labels=['Development'],
+    links=[
+        link('http://localhost:1337/apis/scheduling.cortex/v1alpha1/decisions', 'Cortex Decisions API'),
+    ],
+)
