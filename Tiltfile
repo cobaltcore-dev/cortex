@@ -230,6 +230,17 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
     k8s_yaml('scheduling/samples/ironcore/machine.yaml')
 
 ########### Dev Dependencies
+
+# kubectl proxy for kubernetes API access
+local_resource(
+    'kubectl-proxy',
+    serve_cmd='kubectl proxy --port=8080',
+    labels=['Development'],
+    links=[
+        link('http://localhost:8080/apis/scheduling.cortex/v1alpha1/decisions', 'Cortex Decisions API'),
+    ],
+)
+
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
 k8s_yaml(helm('./helm/dev/cortex-prometheus-operator', name='cortex-prometheus-operator')) # Operator
 k8s_resource('cortex-prometheus-operator', labels=['Monitoring'])
