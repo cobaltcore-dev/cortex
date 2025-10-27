@@ -45,14 +45,14 @@ func (m *mockPipelineStep) Run(traceLog *slog.Logger, request mockPipelineReques
 func TestPipeline_Run(t *testing.T) {
 	// Create an instance of the pipeline with a mock step
 	pipeline := &pipeline[mockPipelineRequest]{
-		executionOrder: [][]Step[mockPipelineRequest]{
-			{&mockPipelineStep{
+		steps: map[string]Step[mockPipelineRequest]{
+			"mock_pipeline_step": &mockPipelineStep{
 				name:  "mock_pipeline_step",
 				alias: "mock_pipeline_step_alias",
-			}},
+			},
 		},
-		applicationOrder: []string{
-			"mock_pipeline_step (mock_pipeline_step_alias)",
+		order: []string{
+			"mock_pipeline_step",
 		},
 	}
 
@@ -126,7 +126,7 @@ func TestPipeline_NormalizeNovaWeights(t *testing.T) {
 
 func TestPipeline_ApplyStepWeights(t *testing.T) {
 	p := &pipeline[mockPipelineRequest]{
-		applicationOrder: []string{"step1", "step2"},
+		steps: map[string]Step[mockPipelineRequest]{},
 	}
 
 	tests := []struct {

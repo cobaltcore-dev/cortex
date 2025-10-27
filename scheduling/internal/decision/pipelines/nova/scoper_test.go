@@ -16,7 +16,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 )
 
@@ -82,8 +81,8 @@ func TestStepScoper_Run_HostSelector_Trait(t *testing.T) {
 
 	scoper := StepScoper{
 		Step: mockStep,
-		Scope: conf.NovaSchedulerStepScope{
-			HostSelectors: []conf.NovaSchedulerStepHostSelector{{
+		Scope: NovaSchedulerStepScope{
+			HostSelectors: []NovaSchedulerStepHostSelector{{
 				Subject:   "trait",
 				Type:      "infix",
 				Value:     "TRAIT_A",
@@ -134,8 +133,8 @@ func TestStepScoper_Run_HostSelector_HypervisorType_Difference(t *testing.T) {
 
 	scoper := StepScoper{
 		Step: mockStep,
-		Scope: conf.NovaSchedulerStepScope{
-			HostSelectors: []conf.NovaSchedulerStepHostSelector{{
+		Scope: NovaSchedulerStepScope{
+			HostSelectors: []NovaSchedulerStepHostSelector{{
 				Subject:   "hypervisortype",
 				Type:      "infix",
 				Value:     "xen",
@@ -185,8 +184,8 @@ func TestStepScoper_Run_SpecSelector_Skip(t *testing.T) {
 
 	scoper := StepScoper{
 		Step: mockStep,
-		Scope: conf.NovaSchedulerStepScope{
-			SpecSelectors: []conf.NovaSchedulerStepSpecSelector{{
+		Scope: NovaSchedulerStepScope{
+			SpecSelectors: []NovaSchedulerStepSpecSelector{{
 				Subject: "flavor",
 				Type:    "infix",
 				Value:   "special",
@@ -235,7 +234,7 @@ func TestStepScoper_Run_NoSelectors_AllInScope(t *testing.T) {
 
 	scoper := StepScoper{
 		Step:  mockStep,
-		Scope: conf.NovaSchedulerStepScope{}, // No selectors
+		Scope: NovaSchedulerStepScope{}, // No selectors
 		DB:    testDB,
 	}
 

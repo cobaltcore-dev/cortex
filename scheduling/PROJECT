@@ -35,4 +35,12 @@ resources:
   kind: Step
   path: github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: cortex
+  group: scheduling
+  kind: Pipeline
+  path: github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1
+  version: v1alpha1
 version: "3"

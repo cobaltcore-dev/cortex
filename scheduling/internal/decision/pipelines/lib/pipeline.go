@@ -12,9 +12,10 @@ import (
 	"sort"
 	"sync"
 
+	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type Pipeline[RequestType PipelineRequest] interface {
@@ -32,43 +33,27 @@ type pipeline[RequestType PipelineRequest] struct {
 	// The activation function to use when combining the
 	// results of the scheduler steps.
 	ActivationFunction
-	// The parallelizable order in which scheduler steps are executed.
-	executionOrder [][]Step[RequestType]
 	// The order in which scheduler steps are applied, by their step name.
-	applicationOrder []string
+	order []string
+	// The steps by their name.
+	steps map[string]Step[RequestType]
 	// Monitor to observe the pipeline.
 	monitor PipelineMonitor
 }
 
-type StepWrapper[RequestType PipelineRequest, StepExtraConfType any] func(
-	Step[RequestType],
-	conf.SchedulerStepConfig[StepExtraConfType],
-) Step[RequestType]
-
-// Get a unique key for the step, combining its name and alias.
-func getStepKey[RequestType PipelineRequest](step Step[RequestType]) string {
-	name := step.GetName()
-	alias := step.GetAlias()
-	key := ""
-	if alias == "" {
-		key = name
-	} else {
-		key = name + " (" + alias + ")"
-	}
-	return key
-}
+type StepWrapper[RequestType PipelineRequest] func(Step[RequestType]) Step[RequestType]
 
 // Create a new pipeline with steps contained in the configuration.
-func NewPipeline[RequestType PipelineRequest, StepExtraConfType any](
+func NewPipeline[RequestType PipelineRequest](
 	supportedSteps map[string]func() Step[RequestType],
-	confedSteps []conf.SchedulerStepConfig[StepExtraConfType],
-	stepWrappers []StepWrapper[RequestType, StepExtraConfType],
+	confedSteps []v1alpha1.Step,
+	stepWrappers []StepWrapper[RequestType],
 	database db.DB,
 	monitor PipelineMonitor,
 ) Pipeline[RequestType] {
 	// Load all steps from the configuration.
 	steps := []Step[RequestType]{}
-	applicationOrder := []string{}
+	order := []string{}
 	for _, stepConfig := range confedSteps {
 		makeStep, ok := supportedSteps[stepConfig.Name]
 		if !ok {
@@ -77,26 +62,31 @@ func NewPipeline[RequestType PipelineRequest, StepExtraConfType any](
 		step := makeStep()
 		// Apply the step wrappers to the step.
 		for _, wrapper := range stepWrappers {
-			step = wrapper(step, stepConfig)
+			step = wrapper(step)
 		}
-		if err := step.Init(stepConfig.Alias, database, stepConfig.Options); err != nil {
+		opts := libconf.NewRawOptsBytes(stepConfig.Spec.Opts.Raw)
+		if err := step.Init(stepConfig.Name, database, opts); err != nil {
 			panic("failed to initialize pipeline step: " + err.Error())
 		}
 		steps = append(steps, step)
-		applicationOrder = append(applicationOrder, getStepKey(step))
+		order = append(order, stepConfig.Name)
 		slog.Info(
 			"scheduler: added step",
 			"name", stepConfig.Name,
-			"alias", stepConfig.Alias,
-			"options", stepConfig.Options,
+			"impl", stepConfig.Spec.Impl,
+			"options", opts,
 		)
+	}
+	stepsByName := make(map[string]Step[RequestType], len(steps))
+	for _, step := range steps {
+		stepsByName[step.GetName()] = step
 	}
 
 	return &pipeline[RequestType]{
 		// All steps can be run in parallel.
-		executionOrder:   [][]Step[RequestType]{steps},
-		applicationOrder: applicationOrder,
-		monitor:          monitor,
+		order:   order,
+		steps:   stepsByName,
+		monitor: monitor,
 	}
 }
 
@@ -105,29 +95,28 @@ func NewPipeline[RequestType PipelineRequest, StepExtraConfType any](
 func (p *pipeline[RequestType]) runSteps(log *slog.Logger, request RequestType) map[string]map[string]float64 {
 	var lock sync.Mutex
 	activationsByStep := map[string]map[string]float64{}
-	for _, steps := range p.executionOrder {
-		var wg sync.WaitGroup
-		for _, step := range steps {
-			wg.Go(func() {
-				stepLog := log.With("stepName", step.GetName(), "stepAlias", step.GetAlias())
-				stepLog.Info("scheduler: running step")
-				result, err := step.Run(stepLog, request)
-				if errors.Is(err, ErrStepSkipped) {
-					stepLog.Info("scheduler: step skipped")
-					return
-				}
-				if err != nil {
-					stepLog.Error("scheduler: failed to run step", "error", err)
-					return
-				}
-				stepLog.Info("scheduler: finished step")
-				lock.Lock()
-				defer lock.Unlock()
-				activationsByStep[getStepKey(step)] = result.Activations
-			})
-		}
-		wg.Wait()
+	var wg sync.WaitGroup
+	for _, stepName := range p.order {
+		step := p.steps[stepName]
+		wg.Go(func() {
+			stepLog := log.With("stepName", stepName)
+			stepLog.Info("scheduler: running step")
+			result, err := step.Run(stepLog, request)
+			if errors.Is(err, ErrStepSkipped) {
+				stepLog.Info("scheduler: step skipped")
+				return
+			}
+			if err != nil {
+				stepLog.Error("scheduler: failed to run step", "error", err)
+				return
+			}
+			stepLog.Info("scheduler: finished step")
+			lock.Lock()
+			defer lock.Unlock()
+			activationsByStep[stepName] = result.Activations
+		})
 	}
+	wg.Wait()
 	return activationsByStep
 }
 
@@ -156,8 +145,8 @@ func (p *pipeline[RequestType]) applyStepWeights(
 	maps.Copy(outWeights, inWeights)
 
 	// Apply all activations in the strict order defined by the configuration.
-	for _, stepKey := range p.applicationOrder {
-		stepActivations, ok := stepWeights[stepKey]
+	for _, stepName := range p.order {
+		stepActivations, ok := stepWeights[stepName]
 		if !ok {
 			// This is ok, since steps can be skipped.
 			continue
@@ -213,10 +202,10 @@ func (p *pipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResul
 	if len(subjects) > 0 {
 		result.TargetHost = &subjects[0]
 	}
-	for _, stepKey := range p.applicationOrder {
-		if activations, ok := stepWeights[stepKey]; ok {
+	for _, stepName := range p.order {
+		if activations, ok := stepWeights[stepName]; ok {
 			result.StepResults = append(result.StepResults, v1alpha1.StepResult{
-				StepName:    stepKey,
+				StepRef:     corev1.ObjectReference{Name: stepName},
 				Activations: activations,
 			})
 		}

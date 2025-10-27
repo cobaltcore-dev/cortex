@@ -55,9 +55,9 @@ func NewPipeline(
 ) lib.Pipeline[api.ExternalSchedulerRequest] {
 
 	// Wrappers to apply to each step in the pipeline.
-	wrappers := []lib.StepWrapper[api.ExternalSchedulerRequest, conf.NovaSchedulerStepExtraConfig]{
+	wrappers := []lib.StepWrapper[api.ExternalSchedulerRequest, NovaSchedulerOpts]{
 		// Scope the step to Nova hosts/specs that match the step's scope.
-		func(s NovaStep, c conf.NovaSchedulerStepConfig) NovaStep {
+		func(s NovaStep, c conf.SchedulerStepConfig[NovaSchedulerOpts]) NovaStep {
 			if c.Extra == nil {
 				return s // No Nova configuration, run the step as is.
 			}

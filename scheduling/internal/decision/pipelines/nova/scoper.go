@@ -11,7 +11,6 @@ import (
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 )
 
@@ -19,7 +18,7 @@ type StepScoper struct {
 	// The wrapped step to scope.
 	Step scheduling.Step[api.ExternalSchedulerRequest]
 	// The scope for this step.
-	Scope conf.NovaSchedulerStepScope
+	Scope NovaSchedulerStepScope
 	// The database to use for querying host capabilities.
 	DB db.DB
 }
