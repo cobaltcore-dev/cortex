@@ -52,12 +52,13 @@ func NewPipeline[RequestType PipelineRequest](
 	monitor PipelineMonitor,
 ) (Pipeline[RequestType], error) {
 	// Load all steps from the configuration.
-	steps := []Step[RequestType]{}
+	stepsByName := make(map[string]Step[RequestType], len(confedSteps))
 	order := []string{}
 	for _, stepConfig := range confedSteps {
-		makeStep, ok := supportedSteps[stepConfig.Name]
+		slog.Info("scheduler: configuring step", "name", stepConfig.Name, "impl", stepConfig.Spec.Impl)
+		makeStep, ok := supportedSteps[stepConfig.Spec.Impl]
 		if !ok {
-			return nil, errors.New("unsupported scheduler step: " + stepConfig.Name)
+			return nil, errors.New("unsupported scheduler step impl: " + stepConfig.Spec.Impl)
 		}
 		step := makeStep()
 		// Apply the step wrappers to the step.
@@ -71,7 +72,7 @@ func NewPipeline[RequestType PipelineRequest](
 		if err := step.Init(database, opts); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
-		steps = append(steps, step)
+		stepsByName[stepConfig.Name] = step
 		order = append(order, stepConfig.Name)
 		slog.Info(
 			"scheduler: added step",
@@ -80,11 +81,6 @@ func NewPipeline[RequestType PipelineRequest](
 			"options", opts,
 		)
 	}
-	stepsByName := make(map[string]Step[RequestType], len(steps))
-	for _, step := range steps {
-		stepsByName[step.GetName()] = step
-	}
-
 	return &pipeline[RequestType]{
 		// All steps can be run in parallel.
 		order:   order,

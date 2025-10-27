@@ -5,6 +5,7 @@ metadata:
   name: default
 spec:
   operator: cortex-nova
+  type: filter-weigher
   steps:
     - ref: {name: vmware-hana-binpacking}
       mandatory: false
@@ -21,6 +22,7 @@ metadata:
   name: all-filters-enabled
 spec:
   operator: cortex-nova
+  type: filter-weigher
   steps:
     - ref: {name: vmware-hana-binpacking}
       mandatory: false
@@ -40,3 +42,14 @@ spec:
     - ref: {name: filter-packed-virtqueue}
     - ref: {name: filter-project-aggregates}
     - ref: {name: filter-compute-capabilities}
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Pipeline
+metadata:
+  name: descheduler
+spec:
+  operator: cortex-nova
+  type: descheduler
+  steps:
+    - ref: {name: avoid-high-steal-pct}
+      mandatory: false

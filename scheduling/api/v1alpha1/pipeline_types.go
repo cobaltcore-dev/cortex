@@ -10,7 +10,7 @@ import (
 
 type StepInPipeline struct {
 	// Reference to the step.
-	StepRef corev1.ObjectReference `json:"stepRef"`
+	Ref corev1.ObjectReference `json:"ref"`
 	// Whether this step is mandatory for the pipeline to be runnable.
 	// +kubebuilder:default=true
 	Mandatory bool `json:"mandatory"`
@@ -57,7 +57,7 @@ type PipelineStatus struct {
 // +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
-// +kubebuilder:printcolumn:name="Steps Ready",type="string",JSONPath=".status.StepsReadyFrac"
+// +kubebuilder:printcolumn:name="Steps",type="string",JSONPath=".status.stepsReadyFrac"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Pipeline is the Schema for the decisions API

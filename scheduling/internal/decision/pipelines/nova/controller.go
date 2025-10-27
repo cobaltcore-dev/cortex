@@ -91,36 +91,41 @@ func (s *DecisionReconciler) handlePipelineChange(
 	// Get all configured steps for the pipeline.
 	var steps []v1alpha1.Step
 	obj.Status.TotalSteps, obj.Status.ReadySteps = len(obj.Spec.Steps), 0
-	mandatoryStepNotReady := false
+	var err error
 	for _, step := range obj.Spec.Steps {
 		stepConf := &v1alpha1.Step{}
+		log.Info("checking step for pipeline", "pipelineName", obj.Name, "stepName", step.Ref.Name)
 		if err := s.Get(ctx, client.ObjectKey{
-			Name:      step.StepRef.Name,
-			Namespace: step.StepRef.Namespace,
+			Name:      step.Ref.Name,
+			Namespace: step.Ref.Namespace,
 		}, stepConf); err != nil {
+			err = fmt.Errorf("failed to get step %s: %w", step.Ref.Name, err)
 			continue
 		}
 		if !stepConf.Status.Ready {
 			if step.Mandatory {
-				mandatoryStepNotReady = true
+				err = fmt.Errorf("mandatory step %s not ready", step.Ref.Name)
 			}
+			log.Info("step not ready", "pipelineName", obj.Name, "stepName", step.Ref.Name)
 			continue
 		}
 		obj.Status.ReadySteps++
 		steps = append(steps, *stepConf)
 	}
 	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
-	if mandatoryStepNotReady {
-		log.Info("pipeline not ready, mandatory step not ready", "pipelineName", obj.Name)
+	if err != nil {
+		log.Error(err, "pipeline not ready due to step issues", "pipelineName", obj.Name)
 		obj.Status.Ready = false
-		obj.Status.Error = "mandatory step not ready"
+		obj.Status.Error = err.Error()
 		if err := s.Status().Update(ctx, obj); err != nil {
 			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
 		}
 		delete(s.pipelines, obj.Name)
 		return
 	}
-	var err error
+	if s.pipelines == nil {
+		s.pipelines = make(map[string]lib.Pipeline[api.ExternalSchedulerRequest])
+	}
 	s.pipelines[obj.Name], err = NewPipeline(steps, s.DB, s.Monitor)
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
@@ -213,8 +218,8 @@ func (s *DecisionReconciler) handleStepChange(
 	}
 	for _, pipeline := range pipelines.Items {
 		needsUpdate := false
-		for _, stepRef := range pipeline.Spec.Steps {
-			if stepRef.StepRef.Name == obj.Name && stepRef.StepRef.Namespace == obj.Namespace {
+		for _, step := range pipeline.Spec.Steps {
+			if step.Ref.Name == obj.Name && step.Ref.Namespace == obj.Namespace {
 				needsUpdate = true
 				break
 			}
@@ -258,8 +263,8 @@ func (s *DecisionReconciler) handleStepDeleted(
 	}
 	for _, pipeline := range pipelines.Items {
 		needsUpdate := false
-		for _, stepRef := range pipeline.Spec.Steps {
-			if stepRef.StepRef.Name == stepConf.Name && stepRef.StepRef.Namespace == stepConf.Namespace {
+		for _, step := range pipeline.Spec.Steps {
+			if step.Ref.Name == stepConf.Name && step.Ref.Namespace == stepConf.Namespace {
 				needsUpdate = true
 				break
 			}

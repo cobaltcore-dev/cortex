@@ -28,7 +28,7 @@ spec:
       name: Ready
       type: boolean
     - jsonPath: .status.knowledgesReadyFrac
-      name: Knowledges Ready
+      name: Knowledges
       type: string
     - jsonPath: .status.error
       name: Error

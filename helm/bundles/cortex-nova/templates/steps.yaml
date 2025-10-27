@@ -173,7 +173,7 @@ spec:
     # reserved space, to avoid reservations for the same project
     # and flavor to overlap.
     lockReserved: true
-
+---
 apiVersion: scheduling.cortex/v1alpha1
 kind: Step
 metadata:

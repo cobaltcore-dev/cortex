@@ -21,6 +21,9 @@ func NewRawOpts(rawJson string) RawOpts {
 }
 
 func NewRawOptsBytes(rawJson []byte) RawOpts {
+	if len(rawJson) == 0 {
+		return NewRawOptsBytes([]byte(`{}`))
+	}
 	return RawOpts{unmarshal: func(v any) error {
 		return json.Unmarshal(rawJson, v)
 	}}

@@ -27,8 +27,8 @@ spec:
     - jsonPath: .status.ready
       name: Ready
       type: boolean
-    - jsonPath: .status.StepsReadyFrac
-      name: Steps Ready
+    - jsonPath: .status.stepsReadyFrac
+      name: Steps
       type: string
     - jsonPath: .status.error
       name: Error
@@ -70,7 +70,7 @@ spec:
                       description: Whether this step is mandatory for the pipeline
                         to be runnable.
                       type: boolean
-                    stepRef:
+                    ref:
                       description: Reference to the step.
                       properties:
                         apiVersion:
@@ -115,7 +115,7 @@ spec:
                       x-kubernetes-map-type: atomic
                   required:
                   - mandatory
-                  - stepRef
+                  - ref
                   type: object
                 type: array
               type:

@@ -83,7 +83,7 @@ type StepStatus struct {
 // +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
-// +kubebuilder:printcolumn:name="Knowledges Ready",type="string",JSONPath=".status.knowledgesReadyFrac"
+// +kubebuilder:printcolumn:name="Knowledges",type="string",JSONPath=".status.knowledgesReadyFrac"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Step is the Schema for the deschedulings API
