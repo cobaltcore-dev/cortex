@@ -256,6 +256,7 @@ func main() {
 		}
 		// Inferred through the base controller.
 		decisionController.Client = mgr.GetClient()
+		decisionController.OperatorName = config.Operator
 		if err := (decisionController).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -275,6 +276,7 @@ func main() {
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = mgr.GetClient()
+		deschedulingsController.OperatorName = config.Operator
 		if err := (deschedulingsController).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsReconciler")
 			os.Exit(1)
@@ -297,6 +299,7 @@ func main() {
 		}
 		// Inferred through the base controller.
 		controller.Client = mgr.GetClient()
+		controller.OperatorName = config.Operator
 		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -312,6 +315,7 @@ func main() {
 		}
 		// Inferred through the base controller.
 		controller.Client = mgr.GetClient()
+		controller.OperatorName = config.Operator
 		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -327,6 +331,7 @@ func main() {
 		}
 		// Inferred through the base controller.
 		controller.Client = mgr.GetClient()
+		controller.OperatorName = config.Operator
 		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)

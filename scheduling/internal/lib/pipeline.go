@@ -56,6 +56,7 @@ func NewPipeline[RequestType PipelineRequest](
 	order := []string{}
 	for _, stepConfig := range confedSteps {
 		slog.Info("scheduler: configuring step", "name", stepConfig.Name, "impl", stepConfig.Spec.Impl)
+		slog.Info("supported:", "steps", maps.Keys(supportedSteps))
 		makeStep, ok := supportedSteps[stepConfig.Spec.Impl]
 		if !ok {
 			return nil, errors.New("unsupported scheduler step impl: " + stepConfig.Spec.Impl)

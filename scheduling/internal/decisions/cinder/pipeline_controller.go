@@ -154,7 +154,9 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
 	c.BasePipelineController.Delegate = c
 	c.pendingRequests = make(map[string]*pendingRequest)
-	mgr.Add(manager.RunnableFunc(c.InitAllPipelines))
+	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cortex-cinder-decisions").
 		For(

@@ -173,7 +173,9 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
 	c.BasePipelineController.Delegate = c
-	mgr.Add(manager.RunnableFunc(c.InitAllPipelines))
+	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cortex-machine-scheduler").
 		For(
