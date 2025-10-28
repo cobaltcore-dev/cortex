@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/lib/db"
@@ -23,6 +24,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+type pendingRequest struct {
+	responseChan chan *v1alpha1.Decision
+	cancelChan   chan struct{}
+}
+
 // The decision pipeline controller takes decision resources containing a
 // placement request spec and runs the scheduling pipeline to make a decision.
 // This decision is then written back to the decision resource status.
@@ -33,8 +39,10 @@ type DecisionPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[api.ExternalSchedulerRequest]
 
-	// Channel populated when a decision is updated.
-	sub chan *v1alpha1.Decision
+	// Map of pending API requests by decision key (namespace/name)
+	pendingRequests map[string]*pendingRequest
+	// Mutex to protect concurrent access to pendingRequests
+	mu sync.RWMutex
 
 	// Database to pass down to all steps.
 	DB db.DB
@@ -79,7 +87,25 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	c.sub <- decision
+
+	// Check if there's a pending request waiting for this decision
+	decisionKey := req.Namespace + "/" + req.Name
+	c.mu.RLock()
+	pending, exists := c.pendingRequests[decisionKey]
+	c.mu.RUnlock()
+
+	if exists {
+		// Send the decision to the waiting API request
+		select {
+		case pending.responseChan <- decision:
+			log.Info("sent decision response to pending API request", "decisionKey", decisionKey)
+		case <-pending.cancelChan:
+			log.Info("pending request was cancelled", "decisionKey", decisionKey)
+		default:
+			log.Info("no receiver for decision response", "decisionKey", decisionKey)
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -90,29 +116,44 @@ func (c *DecisionPipelineController) InitPipeline(steps []v1alpha1.Step) (lib.Pi
 
 // Process the decision from the API. Should create and return the updated decision.
 func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
-	// Create the decision object in kubernetes.
+	// Create the decision object in kubernetes first
 	if err := c.Create(ctx, decision); err != nil {
 		return nil, err
 	}
-	// Wait for the decision to be updated.
-	for {
-		select {
-		case updatedDecision := <-c.sub:
-			if updatedDecision.Name == decision.Name &&
-				updatedDecision.Namespace == decision.Namespace {
-				return updatedDecision, nil
-			}
-		case <-time.After(30 * time.Second):
-			return nil, context.DeadlineExceeded
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+
+	// Create a pending request entry
+	decisionKey := decision.Namespace + "/" + decision.Name
+	pending := &pendingRequest{
+		responseChan: make(chan *v1alpha1.Decision, 1),
+		cancelChan:   make(chan struct{}),
+	}
+	c.mu.Lock()
+	if c.pendingRequests == nil {
+		c.pendingRequests = make(map[string]*pendingRequest)
+	}
+	c.pendingRequests[decisionKey] = pending
+	c.mu.Unlock()
+
+	defer func() {
+		c.mu.Lock()
+		delete(c.pendingRequests, decisionKey)
+		c.mu.Unlock()
+		close(pending.cancelChan)
+	}()
+	select {
+	case updatedDecision := <-pending.responseChan:
+		return updatedDecision, nil
+	case <-time.After(30 * time.Second):
+		return nil, context.DeadlineExceeded
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
 	c.BasePipelineController.Delegate = c
-	c.sub = make(chan *v1alpha1.Decision)
+	// Initialize the pending requests map
+	c.pendingRequests = make(map[string]*pendingRequest)
 	mgr.Add(manager.RunnableFunc(c.InitAllPipelines))
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cortex-nova-decisions").
