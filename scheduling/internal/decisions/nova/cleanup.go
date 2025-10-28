@@ -5,11 +5,9 @@ package nova
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
@@ -64,19 +62,18 @@ func cleanupNova(ctx context.Context, client client.Client, conf conf.Config) er
 		return err
 	}
 	dataServers := &struct {
-		Servers []nova.Server `json:"servers"`
+		Servers []struct {
+			ID string `json:"id"`
+		} `json:"servers"`
 	}{}
 	if err := pages.(servers.ServerPage).ExtractInto(dataServers); err != nil {
 		return err
 	}
 	servers := dataServers.Servers
-	if len(servers) == 0 {
-		return errors.New("no servers found")
-	}
 	slog.Info("found servers", "count", len(servers))
-	serversByID := make(map[string]nova.Server)
+	serversByID := make(map[string]struct{})
 	for _, server := range servers {
-		serversByID[server.ID] = server
+		serversByID[server.ID] = struct{}{}
 	}
 
 	// List all reservations.
