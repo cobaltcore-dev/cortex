@@ -43,8 +43,6 @@ type DecisionPipelineController struct {
 	DB db.DB
 	// Monitor to pass down to all pipelines.
 	Monitor lib.PipelineMonitor
-	// Kubernetes client to manage/fetch resources.
-	client.Client
 }
 
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

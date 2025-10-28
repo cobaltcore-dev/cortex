@@ -139,8 +139,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				},
 				DB:      testDB,
 				Monitor: lib.PipelineMonitor{},
-				Client:  client,
 			}
+			controller.Client = client
 
 			req := ctrl.Request{
 				NamespacedName: types.NamespacedName{
