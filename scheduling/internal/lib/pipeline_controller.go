@@ -36,6 +36,8 @@ type BasePipelineController[PipelineType any] struct {
 	Delegate BasePipelineControllerDelegate[PipelineType]
 	// Kubernetes client to manage/fetch resources.
 	client.Client
+	// The name of the operator to scope resources to.
+	OperatorName string
 }
 
 // Handle the startup of the manager by initializing the pipeline map.
@@ -49,6 +51,9 @@ func (c *BasePipelineController[PipelineType]) InitAllPipelines(ctx context.Cont
 		return fmt.Errorf("failed to list existing pipelines: %w", err)
 	}
 	for _, pipelineConf := range pipelines.Items {
+		if pipelineConf.Spec.Operator != c.OperatorName {
+			continue
+		}
 		log.Info("initializing existing pipeline", "pipelineName", pipelineConf.Name)
 		c.handlePipelineChange(ctx, &pipelineConf, nil)
 	}
@@ -61,6 +66,10 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	obj *v1alpha1.Pipeline,
 	_ workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+	if obj.Spec.Operator != c.OperatorName {
+		delete(c.Pipelines, obj.Name) // Just to be sure.
+		return
+	}
 	log := ctrl.LoggerFrom(ctx)
 	// Get all configured steps for the pipeline.
 	var steps []v1alpha1.Step
@@ -162,6 +171,9 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 	obj *v1alpha1.Step,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+	if obj.Spec.Operator != c.OperatorName {
+		return
+	}
 	log := ctrl.LoggerFrom(ctx)
 	// Check the status of all knowledges depending on this step.
 	obj.Status.ReadyKnowledges = 0
@@ -249,6 +261,9 @@ func (c *BasePipelineController[PipelineType]) HandleStepDeleted(
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	stepConf := evt.Object.(*v1alpha1.Step)
+	if stepConf.Spec.Operator != c.OperatorName {
+		return
+	}
 	// When a step is deleted, we need to re-evaluate all pipelines depending on it.
 	var pipelines v1alpha1.PipelineList
 	log := ctrl.LoggerFrom(ctx)
@@ -276,6 +291,9 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 	obj *knowledgev1alpha1.Knowledge,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+	if obj.Spec.Operator != c.OperatorName {
+		return
+	}
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("knowledge changed, re-evaluating dependent steps", "knowledgeName", obj.Name)
 	// Find all steps depending on this knowledge and re-evaluate them.

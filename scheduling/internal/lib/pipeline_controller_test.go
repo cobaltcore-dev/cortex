@@ -180,8 +180,9 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 
 			delegate := &mockDelegate{shouldFail: tt.delegateFails}
 			controller := &BasePipelineController[mockPipeline]{
-				Delegate: delegate,
-				Client:   client,
+				Delegate:     delegate,
+				Client:       client,
+				OperatorName: "test",
 			}
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -299,9 +300,10 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 
 			delegate := &mockDelegate{shouldFail: tt.delegateFails}
 			controller := &BasePipelineController[mockPipeline]{
-				Pipelines: make(map[string]mockPipeline),
-				Delegate:  delegate,
-				Client:    client,
+				Pipelines:    make(map[string]mockPipeline),
+				Delegate:     delegate,
+				Client:       client,
+				OperatorName: "test",
 			}
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -352,8 +354,9 @@ func TestBasePipelineController_HandlePipelineDeleted(t *testing.T) {
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Delegate: delegate,
-		Client:   client,
+		Delegate:     delegate,
+		Client:       client,
+		OperatorName: "test",
 	}
 
 	ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -443,9 +446,10 @@ func TestBasePipelineController_HandleStepCreated(t *testing.T) {
 
 			delegate := &mockDelegate{}
 			controller := &BasePipelineController[mockPipeline]{
-				Pipelines: make(map[string]mockPipeline),
-				Delegate:  delegate,
-				Client:    client,
+				Pipelines:    make(map[string]mockPipeline),
+				Delegate:     delegate,
+				Client:       client,
+				OperatorName: "test",
 			}
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -527,9 +531,10 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 
 			delegate := &mockDelegate{}
 			controller := &BasePipelineController[mockPipeline]{
-				Pipelines: make(map[string]mockPipeline),
-				Delegate:  delegate,
-				Client:    client,
+				Pipelines:    make(map[string]mockPipeline),
+				Delegate:     delegate,
+				Client:       client,
+				OperatorName: "test",
 			}
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -645,8 +650,9 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Delegate: delegate,
-		Client:   client,
+		Delegate:     delegate,
+		Client:       client,
+		OperatorName: "test",
 	}
 
 	ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
