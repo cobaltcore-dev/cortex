@@ -144,8 +144,6 @@ for (bundle_chart_path, _) in bundle_charts:
     print('--- Final sync of bundle chart: ' + bundle_chart_path)
     local('sh helm/sync.sh ' + bundle_chart_path)
 
-def new_port_mapping(component, local_port, remote_port):
-    return port_forward(local_port, remote_port, name=component)
 
 k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=[
     # Locally enable IronCore CRDs and rolebindings (these are not deployed by default).
@@ -161,12 +159,12 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
         'cortex-reservations-operator.enabled=true',
     ]))
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
-        new_port_mapping('cortex-nova-postgresql', 8000, 5432),
+        port_forward(8000, 5432),
     ])
     k8s_resource('cortex-nova-kpis', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-knowledge-controller-manager', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-scheduling-controller-manager', labels=['Cortex-Nova'], port_forwards=[
-        new_port_mapping('cortex-nova-scheduling-controller-manager-api', 8001, 8080),
+        port_forward(8001, 8080),
     ])
     k8s_resource('cortex-nova-reservations-controller-manager', labels=['Cortex-Nova'])
     local_resource(
@@ -181,12 +179,12 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")
     k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=[tilt_values]))
     k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
-        new_port_mapping('cortex-manila-postgresql', 8002, 5432),
+        port_forward(8002, 5432),
     ])
     k8s_resource('cortex-manila-kpis', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-knowledge-controller-manager', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-scheduling-controller-manager', labels=['Cortex-Manila'], port_forwards=[
-        new_port_mapping('cortex-manila-scheduling-controller-manager-api', 8003, 8080),
+        port_forward(8003, 8080),
     ])
     local_resource(
         'Scheduler E2E Tests (Manila)',
@@ -199,12 +197,12 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
 if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=[tilt_values]))
     k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
-        new_port_mapping('cortex-cinder-postgresql', 8004, 5432),
+        port_forward(8004, 5432),
     ])
     k8s_resource('cortex-cinder-kpis', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-knowledge-controller-manager', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-scheduling-controller-manager', labels=['Cortex-Cinder'], port_forwards=[
-        new_port_mapping('cortex-cinder-scheduling-controller-manager-api', 8005, 8080),
+        port_forward(8005, 8080),
     ])
     local_resource(
         'Scheduler E2E Tests (Cinder)',
@@ -219,7 +217,7 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex IronCore bundle")
     k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=[tilt_values]))
     k8s_resource('cortex-ironcore-postgresql', labels=['Cortex-IronCore'], port_forwards=[
-        new_port_mapping('cortex-ironcore-postgresql', 8006, 5432),
+        port_forward(8006, 5432),
     ])
     k8s_resource('cortex-ironcore-scheduling-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
@@ -254,7 +252,7 @@ k8s_yaml('./visualizer/app.yaml')
 k8s_resource('cortex-visualizer', port_forwards=[
     port_forward(4000, 80),
 ], links=[
-    link('localhost:4000/nova.html', 'nova visualizer'),
+    link('localhost:4000', 'nova visualizer'),
 ], labels=['Monitoring'])
 docker_build('cortex-plutono', 'plutono')
 k8s_yaml('./plutono/app.yaml')
