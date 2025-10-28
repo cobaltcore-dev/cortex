@@ -33,19 +33,19 @@ import (
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/cleanup"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/cleanup"
-	cindere2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/cinder"
-	manilae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/manila"
-	novae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/nova"
-	cinderhttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/cinder"
-	manilahttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/manila"
-	novahttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/cinder"
-	lib "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	machines "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/machines"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/manila"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/cinder"
+	machines "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/machines"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/manila"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova"
+	cindere2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/cinder"
+	manilae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/manila"
+	novae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/nova"
+	lib "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
+	cindershims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/cinder"
+	manilashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/manila"
+	novashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/nova"
 	"github.com/sapcc/go-bits/httpext"
 	// +kubebuilder:scaffold:imports
 )
@@ -259,7 +259,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		novahttp.NewAPI(config, controller).Init(mux)
+		novashims.NewAPI(config, controller).Init(mux)
 		go cleanup.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-manila":
 		controller := &manila.DecisionPipelineController{
@@ -273,7 +273,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manilahttp.NewAPI(config, controller).Init(mux)
+		manilashims.NewAPI(config, controller).Init(mux)
 		// TODO go cleanup.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-cinder":
 		controller := &cinder.DecisionPipelineController{
@@ -287,7 +287,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cinderhttp.NewAPI(config, controller).Init(mux)
+		cindershims.NewAPI(config, controller).Init(mux)
 		// TODO go cleanup.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-ironcore":
 		// TODO: Implement cleanup for machine decisions (on delete of the machine).
