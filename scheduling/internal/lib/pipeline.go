@@ -150,7 +150,7 @@ func (p *pipeline[RequestType]) applyStepWeights(
 			// This is ok, since steps can be skipped.
 			continue
 		}
-		outWeights = p.Apply(outWeights, stepActivations)
+		outWeights = p.ActivationFunction.Apply(outWeights, stepActivations)
 	}
 	return outWeights
 }

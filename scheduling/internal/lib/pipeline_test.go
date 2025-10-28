@@ -118,6 +118,7 @@ func TestPipeline_NormalizeNovaWeights(t *testing.T) {
 func TestPipeline_ApplyStepWeights(t *testing.T) {
 	p := &pipeline[mockPipelineRequest]{
 		steps: map[string]Step[mockPipelineRequest]{},
+		order: []string{"step1", "step2"},
 	}
 
 	tests := []struct {
