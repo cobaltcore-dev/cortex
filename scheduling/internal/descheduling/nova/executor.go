@@ -126,7 +126,7 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 		"vmId", vmId, "host", server.ComputeHost,
 	)
 
-	if !e.Conf.DeschedulerConfig.Nova.DisableDryRun {
+	if !e.Conf.DisableDeschedulerDryRun {
 		log.Info("descheduler: dry-run enabled, skipping execution", "vmId", vmId)
 		return ctrl.Result{}, nil
 	}

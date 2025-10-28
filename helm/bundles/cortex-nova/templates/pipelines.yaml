@@ -1,0 +1,55 @@
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-external-scheduler
+spec:
+  operator: cortex-nova
+  type: filter-weigher
+  steps:
+    - ref: {name: vmware-hana-binpacking}
+      mandatory: false
+    - ref: {name: vmware-general-purpose-balancing}
+      mandatory: false
+    - ref: {name: vmware-avoid-long-term-contended-hosts}
+      mandatory: false
+    - ref: {name: vmware-avoid-short-term-contended-hosts}
+      mandatory: false
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-external-scheduler-reservations
+spec:
+  operator: cortex-nova
+  type: filter-weigher
+  steps:
+    - ref: {name: vmware-hana-binpacking}
+      mandatory: false
+    - ref: {name: vmware-general-purpose-balancing}
+      mandatory: false
+    - ref: {name: vmware-avoid-long-term-contended-hosts}
+      mandatory: false
+    - ref: {name: vmware-avoid-short-term-contended-hosts}
+      mandatory: false
+    - ref: {name: filter-host-instructions}
+    - ref: {name: filter-has-enough-capacity}
+    - ref: {name: filter-has-requested-traits}
+    - ref: {name: filter-has-accelerators}
+    - ref: {name: filter-correct-az}
+    - ref: {name: filter-disabled}
+    - ref: {name: filter-external-customer}
+    - ref: {name: filter-packed-virtqueue}
+    - ref: {name: filter-project-aggregates}
+    - ref: {name: filter-compute-capabilities}
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-descheduler
+spec:
+  operator: cortex-nova
+  type: descheduler
+  steps:
+    - ref: {name: avoid-high-steal-pct}
+      mandatory: false

@@ -1,0 +1,9 @@
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Pipeline
+metadata:
+  name: cinder-external-scheduler
+spec:
+  operator: cortex-cinder
+  type: filter-weigher
+  steps: []

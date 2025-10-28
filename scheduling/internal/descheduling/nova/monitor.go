@@ -6,7 +6,6 @@ package nova
 import (
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -22,7 +21,7 @@ type Monitor struct {
 	deschedulingRunTimer *prometheus.HistogramVec
 }
 
-func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
+func NewPipelineMonitor() Monitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_descheduler_pipeline_step_run_duration_seconds",
 		Help:    "Duration of descheduler pipeline step run",
@@ -42,18 +41,26 @@ func NewPipelineMonitor(registry *monitoring.Registry) Monitor {
 		Help:    "Duration of descheduling a VM in the descheduler pipeline",
 		Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
 	}, []string{"error", "skipped", "source_host", "target_host", "vm_id"})
-	registry.MustRegister(
-		stepRunTimer,
-		stepDeschedulingCounter,
-		pipelineRunTimer,
-		deschedulingRunTimer,
-	)
 	return Monitor{
 		stepRunTimer:            stepRunTimer,
 		stepDeschedulingCounter: stepDeschedulingCounter,
 		pipelineRunTimer:        pipelineRunTimer,
 		deschedulingRunTimer:    deschedulingRunTimer,
 	}
+}
+
+func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
+	m.stepRunTimer.Describe(ch)
+	m.stepDeschedulingCounter.Describe(ch)
+	m.pipelineRunTimer.Describe(ch)
+	m.deschedulingRunTimer.Describe(ch)
+}
+
+func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
+	m.stepRunTimer.Collect(ch)
+	m.stepDeschedulingCounter.Collect(ch)
+	m.pipelineRunTimer.Collect(ch)
+	m.deschedulingRunTimer.Collect(ch)
 }
 
 type StepMonitor struct {

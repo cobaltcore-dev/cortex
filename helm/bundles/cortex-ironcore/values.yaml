@@ -37,17 +37,3 @@ cortex-scheduling-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-ironcore
-    scheduler:
-      machines:
-        pipelines:
-          # Note: there needs to be at least one pipeline with the name "default".
-          - name: default
-            # Configuration of scheduler steps that modify the Nova scheduler weights.
-            #
-            # The `name` should correspond to a known scheduler plugin.
-            # Note that all scheduler steps will be executed in parallel. However,
-            # the order will be maintained when the weights are applied to the
-            # input Nova weights.
-            plugins:
-              - name: noop
-                alias: noop

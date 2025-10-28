@@ -1,0 +1,315 @@
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: vmware-hana-binpacking
+spec:
+  operator: cortex-nova
+  type: weigher
+  impl: shared_resource_balancing
+  description: |
+    Binpack hana vmware vms on hana hosts.
+  knowledges:
+    - name: host-utilization
+  opts:
+    scope:
+      hostSelectors:
+        # Note: due to the vmware spec selector, it is expected that
+        # this step is only executed for VMware hosts.
+        - subject: trait
+          type: infix
+          value: "HANA_EXCLUSIVE"
+          operation: intersection
+      specSelectors:
+        - subject: flavor
+          type: infix
+          value: "hana"
+          action: continue
+        - subject: vmware
+          type: bool
+          value: true
+          action: continue
+    # In this configuration, we only consider the memory usage
+    # after the flavor has been placed.
+    ramAfterEnabled: true
+    ramUtilizedAfterLowerBoundPct: 0
+    ramUtilizedAfterUpperBoundPct: 100
+    ramUtilizedAfterActivationLowerBound: 0.0
+    ramUtilizedAfterActivationUpperBound: 1.0
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: vmware-general-purpose-balancing
+spec:
+  operator: cortex-nova
+  type: weigher
+  impl: shared_resource_balancing
+  description: |
+    Balance non-hana vmware vms on non-hana hosts. This step only depends on
+    openstack data and is thus available for all vms, regardless of the
+    hypervisor. However, in this configuration we only execute it for VMware vms.
+  knowledges:
+    - name: host-utilization
+  opts:
+    scope:
+      hostSelectors:
+        # Note: due to the vmware spec selector, it is expected that
+        # this step is only executed for VMware hosts. However,
+        # we don't want to balance on HANA exclusive hosts.
+        - subject: trait
+          type: infix
+          value: "HANA_EXCLUSIVE"
+          operation: difference
+      specSelectors:
+        # Don't balance HANA vms.
+        - subject: flavor
+          type: infix
+          value: "hana"
+          action: skip
+        - subject: vmware
+          type: bool
+          value: true
+          action: continue
+    # In this configuration, we only consider the memory usage.
+    ramEnabled: true
+    ramUtilizedLowerBoundPct: 0
+    ramUtilizedUpperBoundPct: 100
+    ramUtilizedActivationLowerBound: 1.0
+    ramUtilizedActivationUpperBound: 0.0
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: vmware-avoid-long-term-contended-hosts
+spec:
+  operator: cortex-nova
+  type: weigher
+  impl: vmware_avoid_long_term_contended_hosts
+  description: |
+    Avoid placing vms on hosts with a high CPU contention over a longer
+    period of time. This step depends on vrops metrics and is thus only
+    executed for VMware vms.
+  knowledges:
+    - name: vmware-long-term-contended-hosts
+  opts:
+    scope:
+      specSelectors:
+        - subject: vmware
+          type: bool
+          value: true
+          action: continue
+    # In this configuration, we only consider the memory usage.
+    avgCPUContentionLowerBound: 0 # pct
+    avgCPUContentionUpperBound: 10 # pct
+    avgCPUContentionActivationLowerBound: 0.0
+    avgCPUContentionActivationUpperBound: -0.75
+    maxCPUContentionLowerBound: 0 # pct
+    maxCPUContentionUpperBound: 10 # pct
+    maxCPUContentionActivationLowerBound: 0.0
+    maxCPUContentionActivationUpperBound: -0.25
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: vmware-avoid-short-term-contended-hosts
+spec:
+  operator: cortex-nova
+  type: weigher
+  impl: vmware_avoid_short_term_contended_hosts
+  description: |
+    Avoid placing vms on hosts with a high CPU contention over a shorter
+    period of time. This step depends on vrops metrics and is thus only
+    executed for VMware vms.
+  knowledges:
+    - name: vmware-short-term-contended-hosts
+  opts:
+    scope:
+      specSelectors:
+        - subject: vmware
+          type: bool
+          value: true
+          action: continue
+    # In this configuration, we only consider the memory usage.
+    avgCPUContentionLowerBound: 0 # pct
+    avgCPUContentionUpperBound: 10 # pct
+    avgCPUContentionActivationLowerBound: 0.0
+    avgCPUContentionActivationUpperBound: -0.75
+    maxCPUContentionLowerBound: 0 # pct
+    maxCPUContentionUpperBound: 10 # pct
+    maxCPUContentionActivationLowerBound: 0.0
+    maxCPUContentionActivationUpperBound: -0.25
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-host-instructions
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_host_instructions
+  description: |
+    Filter hosts based on instructions given in the request spec.
+  knowledges: []
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-has-enough-capacity
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_has_enough_capacity
+  description: |
+    Only get hosts that have sufficient space for the requested flavor.
+  knowledges:
+    # TODO: Remove this dependency since this is a filter which should
+    # not depend on a potentially non-recent knowledge.
+    # This should be changed to use the hypervisor CRD.
+    - name: host-utilization
+  opts:
+    # If reserved space should be locked even for matching requests.
+    # For the reservations pipeline, we don't want to unlock
+    # reserved space, to avoid reservations for the same project
+    # and flavor to overlap.
+    lockReserved: true
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-has-requested-traits
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_has_requested_traits
+  description: |
+    Check if the traits required/forbidden in the flavor extra spec
+    match the host's assigned traits.
+  knowledges:
+    # TODO: Remove this dependency since this is a filter which should
+    # not depend on a potentially non-recent knowledge.
+    # This should be changed to use the hypervisor CRD.
+    - name: host-capabilities
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-has-accelerators
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_has_accelerators
+  description: |
+    If requested, only get hosts with accelerators.
+  # TODO: This step currently depends on traits directly from the datasources.
+  # This should be changed to use the hypervisor CRD.
+  knowledges: []
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-correct-az
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_correct_az
+  description: |
+    Only get hosts in the requested az.
+  knowledges:
+    # TODO: Remove this dependency since this is a filter which should
+    # not depend on a potentially non-recent knowledge.
+    # This should be changed to use the hypervisor CRD.
+    - name: host-az
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-disabled
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_disabled
+  description: |
+    Only get hosts that are not disabled.
+  # TODO: This step currently depends on traits directly from the datasources.
+  # This should be changed to use the hypervisor CRD.
+  knowledges: []
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-external-customer
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_external_customer
+  description: |
+    Prefix-match the domain name for external customer domains and
+    filter out hosts that are not intended for external customers.
+  # TODO: This step currently depends on traits directly from the datasources.
+  # This should be changed to use the hypervisor CRD.
+  knowledges: []
+  opts:
+    domainNamePrefixes: ["iaas-"]
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-packed-virtqueue
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_packed_virtqueue
+  description: |
+    If requested, only get hosts with packed virtqueues.
+  # TODO: This step currently depends on traits directly from the datasources.
+  # This should be changed to use the hypervisor CRD.
+  knowledges: []
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-project-aggregates
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_project_aggregates
+  description: |
+    Lock certain hosts for certain projects, based on the aggregate metadata.
+    Note that hosts without aggregate tenant filter are still accessible.
+  knowledges:
+    # TODO: Remove this dependency since this is a filter which should
+    # not depend on a potentially non-recent knowledge.
+    # This should be changed to use the hypervisor CRD.
+    - name: host-pinned-projects
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: filter-compute-capabilities
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_compute_capabilities
+  description: |
+    Check the capabilities of each host and if they match the extra spec
+    provided in the request spec flavor.
+  # TODO: This step currently depends on hypervisor capabilities directly from
+  # the datasources. This should be changed to use the hypervisor CRD.
+  knowledges: []
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: avoid-high-steal-pct
+spec:
+  operator: cortex-nova
+  type: descheduler
+  impl: avoid_high_steal_pct
+  description: |
+    Deschedule once vms reach this cpu steal pct over the observed time span.
+  # TODO: This step currently depends on hypervisor capabilities directly from
+  # the datasources. This should be changed to use the hypervisor CRD.
+  knowledges: []
+  opts:
+    maxStealPctOverObservedTimeSpan: 20.0

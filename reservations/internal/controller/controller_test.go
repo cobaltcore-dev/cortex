@@ -317,8 +317,8 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		}
 
 		// Verify request structure
-		if req.Pipeline != "all-filters-enabled" {
-			t.Errorf("Expected Pipeline to be 'all-filters-enabled', got %q", req.Pipeline)
+		if req.Pipeline != "nova-external-scheduler-reservations" {
+			t.Errorf("Expected Pipeline to be 'nova-external-scheduler-reservations', got %q", req.Pipeline)
 		}
 		if req.Spec.Data.NumInstances != 1 {
 			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)

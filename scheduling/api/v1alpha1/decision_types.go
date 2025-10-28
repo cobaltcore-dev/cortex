@@ -56,8 +56,8 @@ type DecisionSpec struct {
 }
 
 type StepResult struct {
-	// Name of the scheduler step.
-	StepName string `json:"stepName"`
+	// object reference to the scheduler step.
+	StepRef corev1.ObjectReference `json:"stepRef"`
 	// Activations of the step for each host.
 	Activations map[string]float64 `json:"activations"`
 }
@@ -118,6 +118,7 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
 // +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
+// +kubebuilder:selectablefield:JSONPath=".spec.resourceID"
 
 // Decision is the Schema for the decisions API
 type Decision struct {

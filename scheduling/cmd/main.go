@@ -26,29 +26,27 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
-	cinderapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
-	machinesapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
-	manilaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
-	novaapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/cleanup"
-	cindere2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/cinder"
-	manilae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/manila"
-	novae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/e2e/nova"
-	cinderhttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/cinder"
-	manilahttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/manila"
-	novahttp "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/http/nova"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/cinder"
-	lib "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
-	machines "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/machines"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/manila"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/nova"
+	decisionscinder "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/cinder"
+	decisionsmachines "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/machines"
+	decisionsmanila "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/manila"
+	decisionsnova "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova"
+	deschedulingnova "github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova"
+	cindere2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/cinder"
+	manilae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/manila"
+	novae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/nova"
+	lib "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
+	cindershims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/cinder"
+	manilashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/manila"
+	novashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/nova"
 	"github.com/sapcc/go-bits/httpext"
 	// +kubebuilder:scaffold:imports
 )
@@ -64,6 +62,7 @@ func init() {
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(reservationsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(knowledgev1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -214,7 +213,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "scheduling.cortex",
+		LeaderElectionID:       config.Operator + "-scheduling-controller-leader-election-id",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -248,73 +247,99 @@ func main() {
 	// API endpoint.
 	mux := http.NewServeMux()
 
-	// TODO: Handle the configuration of pipelines and steps dynamically (e.g. via CRDs).
-	if len(config.SchedulerConfig.Nova.Pipelines) > 0 {
-		pipelines := map[string]lib.Pipeline[novaapi.ExternalSchedulerRequest]{}
-		for _, pipelineConf := range config.SchedulerConfig.Nova.Pipelines {
-			pipelines[pipelineConf.Name] = nova.NewPipeline(pipelineConf, database, pipelineMonitor)
+	switch config.Operator {
+	case "cortex-nova":
+		decisionController := &decisionsnova.DecisionPipelineController{
+			DB:      database,
+			Monitor: pipelineMonitor,
+			Conf:    config,
 		}
-		if err := (&nova.DecisionReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Pipelines: pipelines,
-			Conf:      config,
-		}).SetupWithManager(mgr); err != nil {
+		// Inferred through the base controller.
+		decisionController.Client = mgr.GetClient()
+		decisionController.OperatorName = config.Operator
+		if err := (decisionController).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		novahttp.NewAPI(config).Init(mux)
-		go cleanup.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
-	}
-	if len(config.SchedulerConfig.Manila.Pipelines) > 0 {
-		pipelines := map[string]lib.Pipeline[manilaapi.ExternalSchedulerRequest]{}
-		for _, pipelineConf := range config.SchedulerConfig.Manila.Pipelines {
-			pipelines[pipelineConf.Name] = manila.NewPipeline(pipelineConf, database, pipelineMonitor)
+		novashims.NewAPI(config, decisionController).Init(mux)
+		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
+
+		// Deschedulings controller
+		deschedulingsKeystoneAPI := keystone.NewKeystoneAPI(config.KeystoneConfig)
+		deschedulingsNovaAPI := deschedulingnova.NewNovaAPI(deschedulingsKeystoneAPI)
+		deschedulingsNovaAPI.Init(ctx)
+		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
+			DB:            database,
+			Monitor:       deschedulingnova.NewPipelineMonitor(),
+			Conf:          config,
+			CycleDetector: deschedulingnova.NewCycleDetector(deschedulingsNovaAPI),
 		}
-		if err := (&manila.DecisionReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Pipelines: pipelines,
-			Conf:      config,
+		// Inferred through the base controller.
+		deschedulingsController.Client = mgr.GetClient()
+		deschedulingsController.OperatorName = config.Operator
+		if err := (deschedulingsController).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsReconciler")
+			os.Exit(1)
+		}
+		go deschedulingsController.CreateDeschedulingsPeriodically(ctx)
+		// Deschedulings cleanup on startup
+		if err := (&deschedulingnova.Cleanup{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
+			os.Exit(1)
+		}
+
+	case "cortex-manila":
+		controller := &decisionsmanila.DecisionPipelineController{
+			DB:      database,
+			Monitor: pipelineMonitor,
+			Conf:    config,
+		}
+		// Inferred through the base controller.
+		controller.Client = mgr.GetClient()
+		controller.OperatorName = config.Operator
+		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manilahttp.NewAPI(config).Init(mux)
-		// TODO: Implement cleanup for manila decisions.
-	}
-	if len(config.SchedulerConfig.Cinder.Pipelines) > 0 {
-		pipelines := map[string]lib.Pipeline[cinderapi.ExternalSchedulerRequest]{}
-		for _, pipelineConf := range config.SchedulerConfig.Cinder.Pipelines {
-			pipelines[pipelineConf.Name] = cinder.NewPipeline(pipelineConf, database, pipelineMonitor)
+		manilashims.NewAPI(config, controller).Init(mux)
+		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
+
+	case "cortex-cinder":
+		controller := &decisionscinder.DecisionPipelineController{
+			DB:      database,
+			Monitor: pipelineMonitor,
+			Conf:    config,
 		}
-		if err := (&cinder.DecisionReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Pipelines: pipelines,
-			Conf:      config,
-		}).SetupWithManager(mgr); err != nil {
+		// Inferred through the base controller.
+		controller.Client = mgr.GetClient()
+		controller.OperatorName = config.Operator
+		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cinderhttp.NewAPI(config).Init(mux)
-		// TODO: Implement cleanup for cinder decisions.
-	}
-	if len(config.SchedulerConfig.Machines.Pipelines) > 0 {
-		pipelines := map[string]lib.Pipeline[machinesapi.MachinePipelineRequest]{}
-		for _, pipelineConf := range config.SchedulerConfig.Machines.Pipelines {
-			pipelines[pipelineConf.Name] = machines.NewPipeline(pipelineConf, database, pipelineMonitor)
+		cindershims.NewAPI(config, controller).Init(mux)
+		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
+
+	case "cortex-ironcore":
+		controller := &decisionsmachines.DecisionPipelineController{
+			DB:      database,
+			Monitor: pipelineMonitor,
+			Conf:    config,
 		}
-		// TODO: Implement cleanup for machine decisions (on delete of the machine).
-		if err := (&machines.DecisionReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Pipelines: pipelines,
-			Conf:      config,
-		}).SetupWithManager(mgr); err != nil {
+		// Inferred through the base controller.
+		controller.Client = mgr.GetClient()
+		controller.OperatorName = config.Operator
+		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+
+	default:
+		setupLog.Error(err, "unknown operator type", "operator", config.Operator)
+		os.Exit(1)
 	}
 
 	// +kubebuilder:scaffold:builder

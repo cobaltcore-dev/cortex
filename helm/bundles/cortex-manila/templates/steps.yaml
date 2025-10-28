@@ -1,0 +1,23 @@
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: netapp-cpu-usage-balancing-manila
+spec:
+  operator: cortex-manila
+  type: weigher
+  impl: netapp_cpu_usage_balancing
+  description: |
+    Balance cpu utilization of Manila storage pools.
+  knowledges:
+    - name: netapp-storage-pool-cpu-usage-manila
+  opts:
+    # Min-max scaling for gap-fitting based on CPU usage (pct)
+    avgCPUUsageLowerBound: 0 # pct
+    avgCPUUsageUpperBound: 10 # pct
+    avgCPUUsageActivationLowerBound: 0.0
+    avgCPUUsageActivationUpperBound: -0.75
+    maxCPUUsageLowerBound: 0 # pct
+    maxCPUUsageUpperBound: 10 # pct
+    maxCPUUsageActivationLowerBound: 0.0
+    maxCPUUsageActivationUpperBound: -0.25

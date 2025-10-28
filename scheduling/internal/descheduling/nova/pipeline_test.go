@@ -4,14 +4,13 @@
 package nova
 
 import (
-	"context"
 	"errors"
 	"reflect"
 	"testing"
 
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 )
 
@@ -48,7 +47,7 @@ func TestPipeline_Init(t *testing.T) {
 	tests := []struct {
 		name           string
 		supportedSteps []Step
-		config         conf.DeschedulerConfig
+		confedSteps    []v1alpha1.Step
 		expectedSteps  int
 	}{
 		{
@@ -56,12 +55,11 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: []Step{
 				&mockPipelineStep{name: "test-step"},
 			},
-			config: conf.DeschedulerConfig{
-				Nova: conf.NovaDeschedulerConfig{
-					Plugins: []conf.DeschedulerStepConfig{
-						{Name: "test-step", Options: libconf.RawOpts{}},
-					},
-				},
+			confedSteps: []v1alpha1.Step{
+				{Spec: v1alpha1.StepSpec{
+					Impl: "test-step",
+					Type: v1alpha1.StepTypeDescheduler,
+				}},
 			},
 			expectedSteps: 1,
 		},
@@ -70,12 +68,11 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: []Step{
 				&mockPipelineStep{name: "test-step"},
 			},
-			config: conf.DeschedulerConfig{
-				Nova: conf.NovaDeschedulerConfig{
-					Plugins: []conf.DeschedulerStepConfig{
-						{Name: "unsupported-step", Options: libconf.RawOpts{}},
-					},
-				},
+			confedSteps: []v1alpha1.Step{
+				{Spec: v1alpha1.StepSpec{
+					Impl: "unsupported-step",
+					Type: v1alpha1.StepTypeDescheduler,
+				}},
 			},
 			expectedSteps: 0,
 		},
@@ -84,12 +81,11 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: []Step{
 				&mockPipelineStep{name: "failing-step", initError: errors.New("init failed")},
 			},
-			config: conf.DeschedulerConfig{
-				Nova: conf.NovaDeschedulerConfig{
-					Plugins: []conf.DeschedulerStepConfig{
-						{Name: "failing-step", Options: libconf.RawOpts{}},
-					},
-				},
+			confedSteps: []v1alpha1.Step{
+				{Spec: v1alpha1.StepSpec{
+					Impl: "failing-step",
+					Type: v1alpha1.StepTypeDescheduler,
+				}},
 			},
 			expectedSteps: 0,
 		},
@@ -99,13 +95,15 @@ func TestPipeline_Init(t *testing.T) {
 				&mockPipelineStep{name: "step1"},
 				&mockPipelineStep{name: "step2"},
 			},
-			config: conf.DeschedulerConfig{
-				Nova: conf.NovaDeschedulerConfig{
-					Plugins: []conf.DeschedulerStepConfig{
-						{Name: "step1", Options: libconf.RawOpts{}},
-						{Name: "step2", Options: libconf.RawOpts{}},
-					},
-				},
+			confedSteps: []v1alpha1.Step{
+				{Spec: v1alpha1.StepSpec{
+					Impl: "step1",
+					Type: v1alpha1.StepTypeDescheduler,
+				}},
+				{Spec: v1alpha1.StepSpec{
+					Impl: "step2",
+					Type: v1alpha1.StepTypeDescheduler,
+				}},
 			},
 			expectedSteps: 2,
 		},
@@ -113,13 +111,10 @@ func TestPipeline_Init(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline := &Pipeline{
-				Config: tt.config,
-			}
+			pipeline := &Pipeline{}
 
-			ctx := context.Background()
 			testDB := db.DB{}
-			pipeline.Init(tt.supportedSteps, ctx, testDB, tt.config)
+			pipeline.Init(tt.confedSteps, tt.supportedSteps, testDB)
 
 			if len(pipeline.steps) != tt.expectedSteps {
 				t.Errorf("expected %d steps, got %d", tt.expectedSteps, len(pipeline.steps))
@@ -324,12 +319,12 @@ func TestPipeline_combine(t *testing.T) {
 
 func TestSupportedSteps(t *testing.T) {
 	// Test that SupportedSteps is properly initialized
-	if len(SupportedSteps) == 0 {
+	if len(supportedSteps) == 0 {
 		t.Error("SupportedSteps should not be empty")
 	}
 
 	// Verify each supported step has a name
-	for i, step := range SupportedSteps {
+	for i, step := range supportedSteps {
 		if step.GetName() == "" {
 			t.Errorf("supported step at index %d has empty name", i)
 		}

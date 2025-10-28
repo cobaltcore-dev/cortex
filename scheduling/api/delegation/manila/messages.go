@@ -25,7 +25,6 @@ type ExternalSchedulerRequest struct {
 	// Weights map of share hosts to their weights calculated by the Manila weigher pipeline.
 	Weights map[string]float64 `json:"weights"`
 	// The name of the pipeline to execute.
-	// By default the required pipeline with the name "default" will be used.
 	Pipeline string `json:"pipeline"`
 }
 

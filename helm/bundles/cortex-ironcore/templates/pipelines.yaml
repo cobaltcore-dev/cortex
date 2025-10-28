@@ -1,0 +1,11 @@
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Pipeline
+metadata:
+  name: machines-scheduler
+spec:
+  operator: cortex-ironcore
+  type: filter-weigher
+  steps:
+    - ref: {name: machinepools-noop}
+      mandatory: false
