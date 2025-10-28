@@ -289,7 +289,7 @@ func main() {
 		}
 		cinderhttp.NewAPI(config).Init(mux)
 		// TODO go cleanup.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
-	case "cortex-machines":
+	case "cortex-ironcore":
 		// TODO: Implement cleanup for machine decisions (on delete of the machine).
 		controller := &machines.DecisionPipelineController{
 			DB:      database,
