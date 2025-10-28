@@ -5,7 +5,6 @@ package cinder
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -68,9 +67,6 @@ func cleanupCinder(ctx context.Context, client client.Client, conf conf.Config) 
 		return err
 	}
 	volumes := dataVolumes.Volumes
-	if len(volumes) == 0 {
-		return errors.New("no volumes found")
-	}
 	slog.Info("found volumes", "count", len(volumes))
 	volumesByID := make(map[string]struct{})
 	for _, volume := range volumes {
