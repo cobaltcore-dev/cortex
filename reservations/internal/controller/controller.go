@@ -161,7 +161,13 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	if len(externalSchedulerResponse.Hosts) == 0 {
 		log.Info("no hosts found for reservation", "reservation", req.Name)
-		return ctrl.Result{}, errors.New("no hosts found for reservation")
+		res.Status.Error = "no hosts found for reservation"
+		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
+		if err := r.Status().Update(ctx, &res); err != nil {
+			log.Error(err, "failed to update reservation status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil // No need to requeue, we didn't find a host.
 	}
 	// Update the reservation with the found host (idx 0)
 	host := externalSchedulerResponse.Hosts[0]
