@@ -5,6 +5,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,14 +20,14 @@ import (
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/dynamicinformer"
-	"k8s.io/client-go/tools/cache"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
+
+type HTTPAPIDelegate interface {
+	// Process the decision from the API. Should create and return the updated decision.
+	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error)
+}
 
 type HTTPAPI interface {
 	// Bind the server handlers.
@@ -34,15 +35,16 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	config  conf.Config
-	monitor scheduling.APIMonitor
-	client  *dynamic.DynamicClient
+	config   conf.Config
+	monitor  scheduling.APIMonitor
+	delegate HTTPAPIDelegate
 }
 
-func NewAPI(config conf.Config) HTTPAPI {
+func NewAPI(config conf.Config, delegate HTTPAPIDelegate) HTTPAPI {
 	return &httpAPI{
-		config:  config,
-		monitor: scheduling.NewSchedulerMonitor(),
+		config:   config,
+		monitor:  scheduling.NewSchedulerMonitor(),
+		delegate: delegate,
 	}
 }
 
@@ -50,8 +52,6 @@ func NewAPI(config conf.Config) HTTPAPI {
 func (httpAPI *httpAPI) Init(mux *http.ServeMux) {
 	metrics.Registry.MustRegister(&httpAPI.monitor)
 	mux.HandleFunc("/scheduler/nova/external", httpAPI.NovaExternalScheduler)
-	restConfig := ctrl.GetConfigOrDie()
-	httpAPI.client = dynamic.NewForConfigOrDie(restConfig)
 }
 
 // Check if the scheduler can run based on the request data.
@@ -120,8 +120,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Create the decision object in kubernetes.
-	unstructuredDecision, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&v1alpha1.Decision{
+	decision := &v1alpha1.Decision{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Decision",
 			APIVersion: "scheduling.cortex/v1alpha1",
@@ -138,74 +137,23 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			Type:       v1alpha1.DecisionTypeNovaServer,
 			NovaRaw:    &raw,
 		},
-	})
+	}
+	ctx := r.Context()
+	result, err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision)
 	if err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to convert decision to unstructured")
+		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling decision")
 		return
 	}
-	resource := v1alpha1.GroupVersion.WithResource("decisions")
-	obj, err := httpAPI.client.
-		Resource(resource).
-		Create(r.Context(), &unstructured.Unstructured{Object: unstructuredDecision}, metav1.CreateOptions{})
-	if err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to create decision resource")
+	if result.Status.Error != "" || result.Status.Result == nil {
+		c.Respond(http.StatusInternalServerError, errors.New(result.Status.Error), "decision failed")
 		return
 	}
-
-	// Make an informer for the decision resource.
-	resultChan := make(chan *v1alpha1.Decision, 1)
-	informer := dynamicinformer.
-		NewFilteredDynamicSharedInformerFactory(httpAPI.client, 0, metav1.NamespaceAll, nil).
-		ForResource(resource).
-		Informer()
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			unstructuredObj, ok := newObj.(*unstructured.Unstructured)
-			if !ok {
-				slog.Error("failed to convert to unstructured object")
-				return
-			}
-
-			updated := &v1alpha1.Decision{}
-			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj.Object, updated); err != nil {
-				slog.Error("failed to convert decision object", "error", err)
-				return
-			}
-			// Only process updates for our specific decision resource
-			if updated.Name != obj.GetName() || updated.Spec.Type != v1alpha1.DecisionTypeNovaServer {
-				return
-			}
-			if updated.Status.Error != "" || updated.Status.Result != nil {
-				resultChan <- updated
-				return
-			}
-		},
-	})
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-	go informer.Run(stopCh)
-	if !cache.WaitForCacheSync(stopCh, informer.HasSynced) {
-		c.Respond(http.StatusInternalServerError, fmt.Errorf("failed to sync cache"), "failed to sync cache")
+	hosts := result.Status.Result.OrderedHosts
+	response := delegationAPI.ExternalSchedulerResponse{Hosts: hosts}
+	w.Header().Set("Content-Type", "application/json")
+	if err = json.NewEncoder(w).Encode(response); err != nil {
+		c.Respond(http.StatusInternalServerError, err, "failed to encode response")
 		return
 	}
-
-	// Wait for the scheduling decision to be processed and return the result
-	select {
-	case result := <-resultChan:
-		if result.Status.Error != "" || result.Status.Result == nil {
-			c.Respond(http.StatusInternalServerError, errors.New(result.Status.Error), "decision failed")
-			return
-		}
-		hosts := (*result.Status.Result).OrderedHosts
-		response := delegationAPI.ExternalSchedulerResponse{Hosts: hosts}
-		w.Header().Set("Content-Type", "application/json")
-		if err = json.NewEncoder(w).Encode(response); err != nil {
-			c.Respond(http.StatusInternalServerError, err, "failed to encode response")
-			return
-		}
-		c.Respond(http.StatusOK, nil, "Success")
-	case <-r.Context().Done():
-		c.Respond(http.StatusRequestTimeout, r.Context().Err(), "request timeout")
-		return
-	}
+	c.Respond(http.StatusOK, nil, "Success")
 }

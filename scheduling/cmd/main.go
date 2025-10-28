@@ -259,7 +259,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		novahttp.NewAPI(config).Init(mux)
+		novahttp.NewAPI(config, controller).Init(mux)
 		go cleanup.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-manila":
 		controller := &manila.DecisionPipelineController{
@@ -273,7 +273,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manilahttp.NewAPI(config).Init(mux)
+		manilahttp.NewAPI(config, controller).Init(mux)
 		// TODO go cleanup.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-cinder":
 		controller := &cinder.DecisionPipelineController{
@@ -287,7 +287,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cinderhttp.NewAPI(config).Init(mux)
+		cinderhttp.NewAPI(config, controller).Init(mux)
 		// TODO go cleanup.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-ironcore":
 		// TODO: Implement cleanup for machine decisions (on delete of the machine).

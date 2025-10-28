@@ -33,6 +33,9 @@ type DecisionPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[api.ExternalSchedulerRequest]
 
+	// Channel populated when a decision is updated.
+	sub chan *v1alpha1.Decision
+
 	// Database to pass down to all steps.
 	DB db.DB
 	// Monitor to pass down to all pipelines.
@@ -76,6 +79,7 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
+	c.sub <- decision
 	return ctrl.Result{}, nil
 }
 
@@ -84,8 +88,31 @@ func (c *DecisionPipelineController) InitPipeline(steps []v1alpha1.Step) (lib.Pi
 	return NewPipeline(steps, c.DB, c.Monitor)
 }
 
+// Process the decision from the API. Should create and return the updated decision.
+func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
+	// Create the decision object in kubernetes.
+	if err := c.Create(ctx, decision); err != nil {
+		return nil, err
+	}
+	// Wait for the decision to be updated.
+	for {
+		select {
+		case updatedDecision := <-c.sub:
+			if updatedDecision.Name == decision.Name &&
+				updatedDecision.Namespace == decision.Namespace {
+				return updatedDecision, nil
+			}
+		case <-time.After(30 * time.Second):
+			return nil, context.DeadlineExceeded
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
 	c.BasePipelineController.Delegate = c
+	c.sub = make(chan *v1alpha1.Decision)
 	mgr.Add(manager.RunnableFunc(c.InitAllPipelines))
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cortex-cinder-decisions").
