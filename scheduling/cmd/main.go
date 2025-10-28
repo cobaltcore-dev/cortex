@@ -320,7 +320,6 @@ func main() {
 		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 	case "cortex-ironcore":
-		// TODO: Implement cleanup for machine decisions (on delete of the machine).
 		controller := &decisionsmachines.DecisionPipelineController{
 			DB:      database,
 			Monitor: pipelineMonitor,
