@@ -277,7 +277,7 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	log := ctrl.LoggerFrom(ctx)
-	log.Info("handling knowledge change", "knowledgeName", obj.Name)
+	log.Info("knowledge changed, re-evaluating dependent steps", "knowledgeName", obj.Name)
 	// Find all steps depending on this knowledge and re-evaluate them.
 	var steps v1alpha1.StepList
 	if err := c.List(ctx, &steps); err != nil {
@@ -318,8 +318,15 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
-	knowledgeConf := evt.ObjectNew.(*knowledgev1alpha1.Knowledge)
-	c.handleKnowledgeChange(ctx, knowledgeConf, queue)
+	before := evt.ObjectOld.(*knowledgev1alpha1.Knowledge)
+	after := evt.ObjectNew.(*knowledgev1alpha1.Knowledge)
+	errorChanged := before.Status.Error != after.Status.Error
+	dataBecameAvailable := before.Status.RawLength == 0 && after.Status.RawLength > 0
+	if !errorChanged && !dataBecameAvailable {
+		// No relevant change, skip re-evaluation.
+		return
+	}
+	c.handleKnowledgeChange(ctx, after, queue)
 }
 
 // Handler bound to a knowledge watch to handle deleted knowledges.
