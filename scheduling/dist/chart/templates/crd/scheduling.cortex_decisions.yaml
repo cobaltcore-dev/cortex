@@ -347,6 +347,8 @@ spec:
         required:
         - spec
         type: object
+    selectableFields:
+    - jsonPath: .spec.resourceID
     served: true
     storage: true
     subresources:

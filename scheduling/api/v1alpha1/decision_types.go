@@ -118,6 +118,7 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
 // +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
+// +kubebuilder:selectablefield:JSONPath=".spec.resourceID"
 
 // Decision is the Schema for the decisions API
 type Decision struct {
