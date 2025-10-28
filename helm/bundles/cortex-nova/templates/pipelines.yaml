@@ -2,7 +2,7 @@
 apiVersion: scheduling.cortex/v1alpha1
 kind: Pipeline
 metadata:
-  name: default
+  name: nova-external-scheduler
 spec:
   operator: cortex-nova
   type: filter-weigher
@@ -19,7 +19,7 @@ spec:
 apiVersion: scheduling.cortex/v1alpha1
 kind: Pipeline
 metadata:
-  name: all-filters-enabled
+  name: nova-external-scheduler-reservations
 spec:
   operator: cortex-nova
   type: filter-weigher
@@ -46,7 +46,7 @@ spec:
 apiVersion: scheduling.cortex/v1alpha1
 kind: Pipeline
 metadata:
-  name: descheduler
+  name: nova-descheduler
 spec:
   operator: cortex-nova
   type: descheduler

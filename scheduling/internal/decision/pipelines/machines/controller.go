@@ -126,7 +126,7 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 				Type:       v1alpha1.DecisionTypeIroncoreMachine,
 				ResourceID: new.ObjectMeta.Name,
 				PipelineRef: corev1.ObjectReference{
-					Name: "default",
+					Name: "machines-scheduler",
 				},
 				MachineRef: &corev1.ObjectReference{
 					Name:      new.ObjectMeta.Name,

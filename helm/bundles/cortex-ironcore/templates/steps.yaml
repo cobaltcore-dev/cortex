@@ -1,0 +1,12 @@
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: machinepools-noop
+spec:
+  operator: cortex-ironcore
+  type: weigher
+  impl: noop
+  description: |
+    Does nothing.
+  knowledges: []

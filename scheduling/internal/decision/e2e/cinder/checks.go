@@ -26,7 +26,7 @@ func checkCinderSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 	// TODO ADD THIS CHECK
 
 	//
-	pipelineName := "default"
+	pipelineName := "cinder-external-scheduler"
 	request := api.ExternalSchedulerRequest{
 		Pipeline: pipelineName,
 		Hosts:    []api.ExternalSchedulerHost{},

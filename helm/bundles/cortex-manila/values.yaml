@@ -110,28 +110,3 @@ cortex-scheduling-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-manila
-    scheduler:
-      manila:
-        pipelines:
-          # Note: there needs to be at least one pipeline with the name "default".
-          - name: default
-            # Configuration of scheduler steps that modify the Manila scheduler weights.
-            #
-            # The `name` should correspond to a known scheduler plugin.
-            # Note that all scheduler steps will be executed in parallel. However,
-            # the order will be maintained when the weights are applied to the
-            # input weights.
-            plugins:
-              # Balance cpu utilization of Manila storage pools.
-              - name: netapp_cpu_usage_balancing
-                options:
-                  # Min-max scaling for gap-fitting based on CPU usage (pct)
-                  avgCPUUsageLowerBound: 0 # pct
-                  avgCPUUsageUpperBound: 10 # pct
-                  avgCPUUsageActivationLowerBound: 0.0
-                  avgCPUUsageActivationUpperBound: -0.75
-                  maxCPUUsageLowerBound: 0 # pct
-                  maxCPUUsageUpperBound: 10 # pct
-                  maxCPUUsageActivationLowerBound: 0.0
-                  maxCPUUsageActivationUpperBound: -0.25
-

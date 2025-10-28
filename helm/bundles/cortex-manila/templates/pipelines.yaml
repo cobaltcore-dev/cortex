@@ -1,0 +1,11 @@
+---
+apiVersion: scheduling.cortex/v1alpha1
+kind: Pipeline
+metadata:
+  name: manila-external-scheduler
+spec:
+  operator: cortex-manila
+  type: filter-weigher
+  steps:
+    - ref: {name: netapp-cpu-usage-balancing-manila}
+      mandatory: false

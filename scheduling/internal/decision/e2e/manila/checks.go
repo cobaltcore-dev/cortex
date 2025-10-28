@@ -70,7 +70,7 @@ func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Conf
 		})
 	}
 	request := api.ExternalSchedulerRequest{
-		Pipeline: "default",
+		Pipeline: "manila-external-scheduler",
 		Hosts:    hosts,
 		Weights:  weights,
 	}

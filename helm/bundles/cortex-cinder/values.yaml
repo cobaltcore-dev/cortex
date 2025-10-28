@@ -119,12 +119,3 @@ cortex-scheduling-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-cinder
-    scheduler:
-      cinder:
-        pipelines:
-          # Note: there needs to be at least one pipeline with the name "default".
-          - name: default
-            # Configuration of scheduler steps that modify the Cinder scheduler weights.
-            #
-            # The `name` should correspond to a known scheduler plugin.
-            plugins: []

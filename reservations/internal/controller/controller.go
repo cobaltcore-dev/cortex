@@ -123,8 +123,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Call the external scheduler delegation API to get a host for the reservation.
 	externalSchedulerRequest := schedulerdelegationapi.ExternalSchedulerRequest{
-		// Pipeline with all filters enabled + preselects all hosts.
-		Pipeline: "all-filters-enabled",
+		Pipeline: "nova-external-scheduler-reservations",
 		Hosts:    eligibleHosts,
 		Weights:  weights,
 		Spec: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaSpec]{

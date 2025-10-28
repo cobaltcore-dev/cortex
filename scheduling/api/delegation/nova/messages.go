@@ -41,7 +41,6 @@ type ExternalSchedulerRequest struct {
 	Weights map[string]float64      `json:"weights"`
 
 	// The name of the pipeline to execute.
-	// By default the required pipeline with the name "default" will be used.
 	Pipeline string `json:"pipeline"`
 }
 
