@@ -35,7 +35,7 @@ import (
 // reconfigure the pipelines as needed.
 type DecisionPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[ironcore.MachinePipelineRequest]
+	lib.BasePipelineController[lib.Pipeline[ironcore.MachinePipelineRequest]]
 
 	// Config for the scheduling operator.
 	Conf conf.Config

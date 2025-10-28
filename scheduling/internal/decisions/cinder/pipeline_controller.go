@@ -38,7 +38,7 @@ type pendingRequest struct {
 // reconfigure the pipelines as needed.
 type DecisionPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[api.ExternalSchedulerRequest]
+	lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]
 
 	// Map of pending API requests by decision key (namespace/name)
 	pendingRequests map[string]*pendingRequest

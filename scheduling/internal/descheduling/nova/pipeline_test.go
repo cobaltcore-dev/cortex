@@ -4,7 +4,6 @@
 package nova
 
 import (
-	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -114,9 +113,8 @@ func TestPipeline_Init(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pipeline := &Pipeline{}
 
-			ctx := context.Background()
 			testDB := db.DB{}
-			pipeline.Init(tt.supportedSteps, tt.confedSteps, ctx, testDB)
+			pipeline.Init(tt.confedSteps, tt.supportedSteps, testDB)
 
 			if len(pipeline.steps) != tt.expectedSteps {
 				t.Errorf("expected %d steps, got %d", tt.expectedSteps, len(pipeline.steps))
@@ -321,12 +319,12 @@ func TestPipeline_combine(t *testing.T) {
 
 func TestSupportedSteps(t *testing.T) {
 	// Test that SupportedSteps is properly initialized
-	if len(SupportedSteps) == 0 {
+	if len(supportedSteps) == 0 {
 		t.Error("SupportedSteps should not be empty")
 	}
 
 	// Verify each supported step has a name
-	for i, step := range SupportedSteps {
+	for i, step := range supportedSteps {
 		if step.GetName() == "" {
 			t.Errorf("supported step at index %d has empty name", i)
 		}

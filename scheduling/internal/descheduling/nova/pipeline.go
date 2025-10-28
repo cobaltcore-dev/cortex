@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
-	"time"
 
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
@@ -17,24 +16,18 @@ import (
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins/kvm"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-bits/jobloop"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Configuration of steps supported by the descheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
-var SupportedSteps = []Step{
+var supportedSteps = []Step{
 	&kvm.AvoidHighStealPctStep{},
 }
 
 type Pipeline struct {
-	// Client for the kubernetes API.
+	// Kubernetes client to create descheduling resources.
 	client.Client
-	// Kubernetes scheme to use for the deschedulings.
-	Scheme *runtime.Scheme
-	// Nova API to use for the descheduler.
-	NovaAPI NovaAPI
 	// Cycle detector to avoid cycles in descheduling.
 	CycleDetector CycleDetector
 	// Monitor to use for tracking the pipeline.
@@ -44,9 +37,9 @@ type Pipeline struct {
 	steps []Step
 }
 
-func (p *Pipeline) Init(supported []Step, confedSteps []v1alpha1.Step, ctx context.Context, db db.DB) {
+func (p *Pipeline) Init(confedSteps []v1alpha1.Step, supportedSteps []Step, db db.DB) error {
 	supportedStepsByName := make(map[string]Step)
-	for _, step := range supported {
+	for _, step := range supportedSteps {
 		supportedStepsByName[step.GetName()] = step
 	}
 
@@ -55,14 +48,12 @@ func (p *Pipeline) Init(supported []Step, confedSteps []v1alpha1.Step, ctx conte
 	for _, stepConf := range confedSteps {
 		step, ok := supportedStepsByName[stepConf.Name]
 		if !ok {
-			slog.Error("descheduler: step not supported", "name", stepConf.Name)
-			continue
+			return errors.New("descheduler: unsupported step: " + stepConf.Spec.Impl)
 		}
 		step = monitorStep(step, p.Monitor)
 		rawOpts := libconf.NewRawOptsBytes(stepConf.Spec.Opts.Raw)
 		if err := step.Init(db, rawOpts); err != nil {
-			slog.Error("descheduler: failed to initialize step", "name", stepConf.Name, "error", err)
-			continue
+			return err
 		}
 		p.steps = append(p.steps, step)
 		slog.Info(
@@ -71,6 +62,7 @@ func (p *Pipeline) Init(supported []Step, confedSteps []v1alpha1.Step, ctx conte
 			"options", rawOpts,
 		)
 	}
+	return nil
 }
 
 // Execute the descheduler steps in parallel and collect the decisions made by
@@ -160,55 +152,44 @@ func (p *Pipeline) combine(decisionsByStep map[string][]plugins.Decision) []plug
 	return combinedDecisions
 }
 
-func (p *Pipeline) CreateDeschedulingsPeriodically(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("descheduler shutting down")
-			return
-		default:
-			decisionsByStep := p.run()
-			if len(decisionsByStep) == 0 {
-				slog.Info("descheduler: no decisions made in this run")
-				time.Sleep(jobloop.DefaultJitter(time.Minute))
-				continue
-			}
-			slog.Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
-			decisions := p.combine(decisionsByStep)
-			var err error
-			decisions, err = p.CycleDetector.Filter(ctx, decisions)
-			if err != nil {
-				slog.Error("descheduler: failed to filter decisions for cycles", "error", err)
-				time.Sleep(jobloop.DefaultJitter(time.Minute))
-				continue
-			}
-			for _, decision := range decisions {
-				// Precaution: If a descheduling for the VM already exists, skip it.
-				// The TTL controller will clean up old deschedulings so the vm
-				// can be descheduled again later if needed, or we can manually
-				// delete the descheduling if we want to deschedule the VM again.
-				var existing v1alpha1.Descheduling
-				err := p.Get(ctx, client.ObjectKey{Name: decision.VMID}, &existing)
-				if err == nil {
-					slog.Info("descheduler: descheduling already exists for VM, skipping", "vmId", decision.VMID)
-					continue
-				}
-
-				descheduling := &v1alpha1.Descheduling{}
-				descheduling.Name = decision.VMID
-				descheduling.Spec.Ref = decision.VMID
-				descheduling.Spec.RefType = v1alpha1.DeschedulingSpecVMReferenceNovaServerUUID
-				descheduling.Spec.PrevHostType = v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName
-				descheduling.Spec.PrevHost = decision.Host
-				descheduling.Spec.Reason = decision.Reason
-				descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseQueued
-				if err := p.Create(ctx, descheduling); err != nil {
-					slog.Error("descheduler: failed to create descheduling", "vmId", decision.VMID, "error", err)
-					continue
-				}
-				slog.Info("descheduler: created descheduling", "vmId", decision.VMID, "host", decision.Host, "reason", decision.Reason)
-			}
-			time.Sleep(jobloop.DefaultJitter(time.Minute))
-		}
+func (p *Pipeline) createDeschedulings(ctx context.Context) error {
+	decisionsByStep := p.run()
+	if len(decisionsByStep) == 0 {
+		slog.Info("descheduler: no decisions made in this run")
+		return nil
 	}
+	slog.Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
+	decisions := p.combine(decisionsByStep)
+	var err error
+	decisions, err = p.CycleDetector.Filter(ctx, decisions)
+	if err != nil {
+		slog.Error("descheduler: failed to filter decisions for cycles", "error", err)
+		return err
+	}
+	for _, decision := range decisions {
+		// Precaution: If a descheduling for the VM already exists, skip it.
+		// The TTL controller will clean up old deschedulings so the vm
+		// can be descheduled again later if needed, or we can manually
+		// delete the descheduling if we want to deschedule the VM again.
+		var existing v1alpha1.Descheduling
+		err := p.Get(ctx, client.ObjectKey{Name: decision.VMID}, &existing)
+		if err == nil {
+			slog.Info("descheduler: descheduling already exists for VM, skipping", "vmId", decision.VMID)
+			continue
+		}
+
+		descheduling := &v1alpha1.Descheduling{}
+		descheduling.Name = decision.VMID
+		descheduling.Spec.Ref = decision.VMID
+		descheduling.Spec.RefType = v1alpha1.DeschedulingSpecVMReferenceNovaServerUUID
+		descheduling.Spec.PrevHostType = v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName
+		descheduling.Spec.PrevHost = decision.Host
+		descheduling.Spec.Reason = decision.Reason
+		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseQueued
+		if err := p.Create(ctx, descheduling); err != nil {
+			return err
+		}
+		slog.Info("descheduler: created descheduling", "vmId", decision.VMID, "host", decision.Host, "reason", decision.Reason)
+	}
+	return nil
 }

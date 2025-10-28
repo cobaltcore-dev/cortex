@@ -19,30 +19,30 @@ import (
 // The base pipeline controller will delegate some methods to the parent
 // controller struct. The parent controller only needs to conform to this
 // interface and set the delegate field accordingly.
-type BasePipelineControllerDelegate[RequestType PipelineRequest] interface {
+type BasePipelineControllerDelegate[PipelineType any] interface {
 	// Initialize a new pipeline with the given steps.
 	//
 	// This method is delegated to the parent controller, when a pipeline needs
 	// to be newly initialized or re-initialized to update it in the pipeline
 	// map.
-	InitPipeline(steps []v1alpha1.Step) (Pipeline[RequestType], error)
+	InitPipeline(steps []v1alpha1.Step) (PipelineType, error)
 }
 
 // Base controller for decision pipelines.
-type BasePipelineController[RequestType PipelineRequest] struct {
+type BasePipelineController[PipelineType any] struct {
 	// Available pipelines by their name.
-	Pipelines map[string]Pipeline[RequestType]
+	Pipelines map[string]PipelineType
 	// Delegate to create pipelines.
-	Delegate BasePipelineControllerDelegate[RequestType]
+	Delegate BasePipelineControllerDelegate[PipelineType]
 	// Kubernetes client to manage/fetch resources.
 	client.Client
 }
 
 // Handle the startup of the manager by initializing the pipeline map.
-func (c *BasePipelineController[RequestType]) InitAllPipelines(ctx context.Context) error {
+func (c *BasePipelineController[PipelineType]) InitAllPipelines(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("initializing pipeline map")
-	c.Pipelines = make(map[string]Pipeline[RequestType])
+	c.Pipelines = make(map[string]PipelineType)
 	// List all existing pipelines and initialize them.
 	var pipelines v1alpha1.PipelineList
 	if err := c.List(ctx, &pipelines); err != nil {
@@ -56,7 +56,7 @@ func (c *BasePipelineController[RequestType]) InitAllPipelines(ctx context.Conte
 }
 
 // Handle a pipeline creation or update event from watching pipeline resources.
-func (c *BasePipelineController[RequestType]) handlePipelineChange(
+func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	ctx context.Context,
 	obj *v1alpha1.Pipeline,
 	_ workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -122,7 +122,7 @@ func (c *BasePipelineController[RequestType]) handlePipelineChange(
 //
 // This handler will initialize new pipelines as needed and put them into the
 // pipeline map.
-func (c *BasePipelineController[RequestType]) HandlePipelineCreated(
+func (c *BasePipelineController[PipelineType]) HandlePipelineCreated(
 	ctx context.Context,
 	evt event.CreateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -135,7 +135,7 @@ func (c *BasePipelineController[RequestType]) HandlePipelineCreated(
 //
 // This handler will initialize new pipelines as needed and put them into the
 // pipeline map.
-func (c *BasePipelineController[RequestType]) HandlePipelineUpdated(
+func (c *BasePipelineController[PipelineType]) HandlePipelineUpdated(
 	ctx context.Context,
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -147,7 +147,7 @@ func (c *BasePipelineController[RequestType]) HandlePipelineUpdated(
 // Handler bound to a pipeline watch to handle deleted pipelines.
 //
 // This handler will remove pipelines from the pipeline map.
-func (c *BasePipelineController[RequestType]) HandlePipelineDeleted(
+func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	ctx context.Context,
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -157,7 +157,7 @@ func (c *BasePipelineController[RequestType]) HandlePipelineDeleted(
 }
 
 // Handle a step creation or update event from watching step resources.
-func (c *BasePipelineController[RequestType]) handleStepChange(
+func (c *BasePipelineController[PipelineType]) handleStepChange(
 	ctx context.Context,
 	obj *v1alpha1.Step,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -218,7 +218,7 @@ func (c *BasePipelineController[RequestType]) handleStepChange(
 //
 // This handler will look at the underlying resources of the step and check
 // if they are ready. It will then re-evaluate all pipelines depending on the step.
-func (c *BasePipelineController[RequestType]) HandleStepCreated(
+func (c *BasePipelineController[PipelineType]) HandleStepCreated(
 	ctx context.Context,
 	evt event.CreateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -231,7 +231,7 @@ func (c *BasePipelineController[RequestType]) HandleStepCreated(
 //
 // This handler will look at the underlying resources of the step and check
 // if they are ready. It will then re-evaluate all pipelines depending on the step.
-func (c *BasePipelineController[RequestType]) HandleStepUpdated(
+func (c *BasePipelineController[PipelineType]) HandleStepUpdated(
 	ctx context.Context,
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -243,7 +243,7 @@ func (c *BasePipelineController[RequestType]) HandleStepUpdated(
 // Handler bound to a step watch to handle deleted steps.
 //
 // This handler will re-evaluate all pipelines depending on the step.
-func (c *BasePipelineController[RequestType]) HandleStepDeleted(
+func (c *BasePipelineController[PipelineType]) HandleStepDeleted(
 	ctx context.Context,
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -271,7 +271,7 @@ func (c *BasePipelineController[RequestType]) HandleStepDeleted(
 }
 
 // Handle a knowledge creation, update, or delete event from watching knowledge resources.
-func (c *BasePipelineController[RequestType]) handleKnowledgeChange(
+func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 	ctx context.Context,
 	obj *knowledgev1alpha1.Knowledge,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -301,7 +301,7 @@ func (c *BasePipelineController[RequestType]) handleKnowledgeChange(
 // Handler bound to a knowledge watch to handle created knowledges.
 //
 // This handler will re-evaluate all steps depending on the knowledge.
-func (c *BasePipelineController[RequestType]) HandleKnowledgeCreated(
+func (c *BasePipelineController[PipelineType]) HandleKnowledgeCreated(
 	ctx context.Context,
 	evt event.CreateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -313,7 +313,7 @@ func (c *BasePipelineController[RequestType]) HandleKnowledgeCreated(
 // Handler bound to a knowledge watch to handle updated knowledges.
 //
 // This handler will re-evaluate all steps depending on the knowledge.
-func (c *BasePipelineController[RequestType]) HandleKnowledgeUpdated(
+func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
 	ctx context.Context,
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
@@ -325,7 +325,7 @@ func (c *BasePipelineController[RequestType]) HandleKnowledgeUpdated(
 // Handler bound to a knowledge watch to handle deleted knowledges.
 //
 // This handler will re-evaluate all steps depending on the knowledge.
-func (c *BasePipelineController[RequestType]) HandleKnowledgeDeleted(
+func (c *BasePipelineController[PipelineType]) HandleKnowledgeDeleted(
 	ctx context.Context,
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],

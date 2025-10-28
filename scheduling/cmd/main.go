@@ -29,16 +29,18 @@ import (
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/cleanup"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/cinder"
-	machines "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/machines"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/manila"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova"
+	decisionscinder "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/cinder"
+	decisionsmachines "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/machines"
+	decisionsmanila "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/manila"
+	decisionsnova "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova"
+	deschedulingnova "github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova"
 	cindere2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/manila"
 	novae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/nova"
@@ -248,21 +250,41 @@ func main() {
 
 	switch config.Operator {
 	case "cortex-nova":
-		controller := &nova.DecisionPipelineController{
+		decisionController := &decisionsnova.DecisionPipelineController{
 			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
 		// Inferred through the base controller.
-		controller.Client = mgr.GetClient()
-		if err := (controller).SetupWithManager(mgr); err != nil {
+		decisionController.Client = mgr.GetClient()
+		if err := (decisionController).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		novashims.NewAPI(config, controller).Init(mux)
+		novashims.NewAPI(config, decisionController).Init(mux)
 		go cleanup.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
+
+		// Deschedulings controller
+		deschedulingsKeystoneAPI := keystone.NewKeystoneAPI(config.KeystoneConfig)
+		deschedulingsNovaAPI := deschedulingnova.NewNovaAPI(deschedulingsKeystoneAPI)
+		deschedulingsNovaAPI.Init(ctx)
+		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
+			DB:            database,
+			Monitor:       deschedulingnova.NewPipelineMonitor(),
+			Conf:          config,
+			CycleDetector: deschedulingnova.NewCycleDetector(deschedulingsNovaAPI),
+		}
+		// Inferred through the base controller.
+		deschedulingsController.Client = mgr.GetClient()
+		if err := (deschedulingsController).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsReconciler")
+			os.Exit(1)
+		}
+		go deschedulingsController.CreateDeschedulingsPeriodically(ctx)
+		// TODO go cleanup.CleanupNovaDeschedulingsRegularly(ctx, mgr.GetClient(), config)
+
 	case "cortex-manila":
-		controller := &manila.DecisionPipelineController{
+		controller := &decisionsmanila.DecisionPipelineController{
 			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -275,8 +297,9 @@ func main() {
 		}
 		manilashims.NewAPI(config, controller).Init(mux)
 		// TODO go cleanup.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
+
 	case "cortex-cinder":
-		controller := &cinder.DecisionPipelineController{
+		controller := &decisionscinder.DecisionPipelineController{
 			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -289,9 +312,10 @@ func main() {
 		}
 		cindershims.NewAPI(config, controller).Init(mux)
 		// TODO go cleanup.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
+
 	case "cortex-ironcore":
 		// TODO: Implement cleanup for machine decisions (on delete of the machine).
-		controller := &machines.DecisionPipelineController{
+		controller := &decisionsmachines.DecisionPipelineController{
 			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -302,6 +326,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+
 	default:
 		setupLog.Error(err, "unknown operator type", "operator", config.Operator)
 		os.Exit(1)
