@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,7 +21,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	"github.com/sapcc/go-bits/jobloop"
 )
 
 // ReservationReconciler reconciles a Reservation object
@@ -60,7 +58,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
-			return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
@@ -73,7 +71,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
-			return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil // No need to requeue, the reservation is now failed.
 	}
