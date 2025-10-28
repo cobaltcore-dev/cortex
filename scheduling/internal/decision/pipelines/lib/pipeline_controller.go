@@ -269,3 +269,67 @@ func (c *BasePipelineController[RequestType]) HandleStepDeleted(
 		}
 	}
 }
+
+// Handle a knowledge creation, update, or delete event from watching knowledge resources.
+func (c *BasePipelineController[RequestType]) handleKnowledgeChange(
+	ctx context.Context,
+	obj *knowledgev1alpha1.Knowledge,
+	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
+) {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("handling knowledge change", "knowledgeName", obj.Name)
+	// Find all steps depending on this knowledge and re-evaluate them.
+	var steps v1alpha1.StepList
+	if err := c.List(ctx, &steps); err != nil {
+		log.Error(err, "failed to list steps for knowledge", "knowledgeName", obj.Name)
+		return
+	}
+	for _, step := range steps.Items {
+		needsUpdate := false
+		for _, knowledgeRef := range step.Spec.Knowledges {
+			if knowledgeRef.Name == obj.Name && knowledgeRef.Namespace == obj.Namespace {
+				needsUpdate = true
+				break
+			}
+		}
+		if needsUpdate {
+			c.handleStepChange(ctx, &step, queue)
+		}
+	}
+}
+
+// Handler bound to a knowledge watch to handle created knowledges.
+//
+// This handler will re-evaluate all steps depending on the knowledge.
+func (c *BasePipelineController[RequestType]) HandleKnowledgeCreated(
+	ctx context.Context,
+	evt event.CreateEvent,
+	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
+) {
+	knowledgeConf := evt.Object.(*knowledgev1alpha1.Knowledge)
+	c.handleKnowledgeChange(ctx, knowledgeConf, queue)
+}
+
+// Handler bound to a knowledge watch to handle updated knowledges.
+//
+// This handler will re-evaluate all steps depending on the knowledge.
+func (c *BasePipelineController[RequestType]) HandleKnowledgeUpdated(
+	ctx context.Context,
+	evt event.UpdateEvent,
+	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
+) {
+	knowledgeConf := evt.ObjectNew.(*knowledgev1alpha1.Knowledge)
+	c.handleKnowledgeChange(ctx, knowledgeConf, queue)
+}
+
+// Handler bound to a knowledge watch to handle deleted knowledges.
+//
+// This handler will re-evaluate all steps depending on the knowledge.
+func (c *BasePipelineController[RequestType]) HandleKnowledgeDeleted(
+	ctx context.Context,
+	evt event.DeleteEvent,
+	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
+) {
+	knowledgeConf := evt.Object.(*knowledgev1alpha1.Knowledge)
+	c.handleKnowledgeChange(ctx, knowledgeConf, queue)
+}

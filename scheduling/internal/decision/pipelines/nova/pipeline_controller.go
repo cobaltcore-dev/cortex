@@ -1,7 +1,7 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package manila
+package nova
 
 import (
 	"context"
@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
+	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
+	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
@@ -65,13 +66,13 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
 		return ctrl.Result{}, nil
 	}
-	if decision.Spec.ManilaRaw == nil {
-		log.Info("skipping decision, no manilaRaw spec defined")
+	if decision.Spec.NovaRaw == nil {
+		log.Info("skipping decision, no novaRaw spec defined")
 		return ctrl.Result{}, nil
 	}
 	var request api.ExternalSchedulerRequest
-	if err := json.Unmarshal(decision.Spec.ManilaRaw.Raw, &request); err != nil {
-		log.Error(err, "failed to unmarshal manilaRaw spec")
+	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
+		log.Error(err, "failed to unmarshal novaRaw spec")
 		return ctrl.Result{}, err
 	}
 
@@ -116,7 +117,7 @@ func (c *DecisionPipelineController) InitPipeline(steps []v1alpha1.Step) (lib.Pi
 
 // Process the decision from the API. Should create and return the updated decision.
 func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
-	// Create the decision object in kubernetes.
+	// Create the decision object in kubernetes first
 	if err := c.Create(ctx, decision); err != nil {
 		return nil, err
 	}
@@ -152,10 +153,11 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
 	c.BasePipelineController.Delegate = c
+	// Initialize the pending requests map
 	c.pendingRequests = make(map[string]*pendingRequest)
 	mgr.Add(manager.RunnableFunc(c.InitAllPipelines))
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("cortex-manila-decisions").
+		Named("cortex-nova-decisions").
 		For(
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
@@ -167,8 +169,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 				if decision.Status.Error != "" || decision.Status.Result != nil {
 					return false
 				}
-				// Only handle manila decisions.
-				return decision.Spec.Type == v1alpha1.DecisionTypeManilaShare
+				// Only handle nova decisions.
+				return decision.Spec.Type == v1alpha1.DecisionTypeNovaServer
 			})),
 		).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
@@ -209,6 +211,20 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 					v1alpha1.StepTypeWeigher,
 				}
 				return slices.Contains(supportedTypes, step.Spec.Type)
+			})),
+		).
+		// Watch knowledge changes so that we can reconfigure pipelines as needed.
+		Watches(
+			&knowledgev1alpha1.Knowledge{},
+			handler.Funcs{
+				CreateFunc: c.HandleKnowledgeCreated,
+				UpdateFunc: c.HandleKnowledgeUpdated,
+				DeleteFunc: c.HandleKnowledgeDeleted,
+			},
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				knowledge := obj.(*knowledgev1alpha1.Knowledge)
+				// Only react to knowledge matching the operator.
+				return knowledge.Spec.Operator == c.Conf.Operator
 			})),
 		).
 		Complete(c)

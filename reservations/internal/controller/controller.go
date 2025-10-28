@@ -148,22 +148,22 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	reqBody, err := json.Marshal(externalSchedulerRequest)
 	if err != nil {
 		log.Error(err, "failed to marshal external scheduler request")
-		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
+		return ctrl.Result{}, err
 	}
 	response, err := httpClient.Post(url, "application/json", strings.NewReader(string(reqBody)))
 	if err != nil {
 		log.Error(err, "failed to send external scheduler request")
-		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
+		return ctrl.Result{}, err
 	}
 	defer response.Body.Close()
 	var externalSchedulerResponse schedulerdelegationapi.ExternalSchedulerResponse
 	if err := json.NewDecoder(response.Body).Decode(&externalSchedulerResponse); err != nil {
 		log.Error(err, "failed to decode external scheduler response")
-		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
+		return ctrl.Result{}, err
 	}
 	if len(externalSchedulerResponse.Hosts) == 0 {
 		log.Info("no hosts found for reservation", "reservation", req.Name)
-		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, errors.New("no hosts found for reservation")
+		return ctrl.Result{}, errors.New("no hosts found for reservation")
 	}
 	// Update the reservation with the found host (idx 0)
 	host := externalSchedulerResponse.Hosts[0]
@@ -173,7 +173,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	res.Status.Error = "" // Clear any previous error.
 	if err := r.Status().Update(ctx, &res); err != nil {
 		log.Error(err, "failed to update reservation status")
-		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(time.Minute)}, err
+		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil // No need to requeue, the reservation is now active.
 }
