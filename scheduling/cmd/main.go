@@ -248,39 +248,42 @@ func main() {
 
 	switch config.Operator {
 	case "cortex-nova":
-		if err := (&nova.DecisionReconciler{
-			Client:  mgr.GetClient(),
-			Scheme:  mgr.GetScheme(),
+		controller := &nova.DecisionPipelineController{
 			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
-		}).SetupWithManager(mgr); err != nil {
+		}
+		// Inferred through the base controller.
+		controller.Client = mgr.GetClient()
+		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		novahttp.NewAPI(config).Init(mux)
 		go cleanup.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-manila":
-		if err := (&manila.DecisionReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			// TODO DB:      database,
-			// TODO Monitor: pipelineMonitor,
-			Conf: config,
-		}).SetupWithManager(mgr); err != nil {
+		controller := &manila.DecisionPipelineController{
+			DB:      database,
+			Monitor: pipelineMonitor,
+			Conf:    config,
+		}
+		// Inferred through the base controller.
+		controller.Client = mgr.GetClient()
+		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		manilahttp.NewAPI(config).Init(mux)
 		// TODO go cleanup.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-cinder":
-		if err := (&cinder.DecisionReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			// TODO DB:      database,
-			// TODO Monitor: pipelineMonitor,
-			Conf: config,
-		}).SetupWithManager(mgr); err != nil {
+		controller := &cinder.DecisionPipelineController{
+			DB:      database,
+			Monitor: pipelineMonitor,
+			Conf:    config,
+		}
+		// Inferred through the base controller.
+		controller.Client = mgr.GetClient()
+		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
@@ -288,11 +291,14 @@ func main() {
 		// TODO go cleanup.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
 	case "cortex-machines":
 		// TODO: Implement cleanup for machine decisions (on delete of the machine).
-		if err := (&machines.DecisionReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Conf:   config,
-		}).SetupWithManager(mgr); err != nil {
+		controller := &machines.DecisionPipelineController{
+			DB:      database,
+			Monitor: pipelineMonitor,
+			Conf:    config,
+		}
+		// Inferred through the base controller.
+		controller.Client = mgr.GetClient()
+		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}

@@ -5,8 +5,10 @@ package machines
 
 import (
 	"context"
+	"slices"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
@@ -14,7 +16,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decision/pipelines/lib"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -26,28 +27,37 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type DecisionReconciler struct {
-	// Available pipelines by their name.
-	Pipelines map[string]lib.Pipeline[ironcore.MachinePipelineRequest]
+// The decision pipeline controller takes decision resources containing a
+// machine ref and runs the scheduling pipeline to make a decision.
+// This decision is then written back to the decision resource status.
+//
+// Additionally, the controller watches for pipeline and step changes to
+// reconfigure the pipelines as needed.
+type DecisionPipelineController struct {
+	// Toolbox shared between all pipeline controllers.
+	lib.BasePipelineController[ironcore.MachinePipelineRequest]
+
 	// Config for the scheduling operator.
 	Conf conf.Config
+	// Database to pass down to all steps.
+	DB db.DB
+	// Monitor to pass down to all pipelines.
+	Monitor lib.PipelineMonitor
 	// Kubernetes client to manage/fetch resources.
 	client.Client
-	// Scheme for the Kubernetes client.
-	Scheme *runtime.Scheme
 }
 
-func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	startedAt := time.Now() // So we can measure sync duration.
 	log := ctrl.LoggerFrom(ctx)
 
 	// Determine if this is a decision or machine reconciliation.
 	decision := &v1alpha1.Decision{}
-	if err := s.Get(ctx, req.NamespacedName, decision); err != nil {
+	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	pipeline, ok := s.Pipelines[decision.Spec.PipelineRef.Name]
+	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline not found", "pipelineName", decision.Spec.PipelineRef.Name)
 		return ctrl.Result{}, nil
@@ -55,7 +65,7 @@ func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Find all available machine pools.
 	pools := &ironcorev1alpha1.MachinePoolList{}
-	if err := s.List(ctx, pools); err != nil {
+	if err := c.List(ctx, pools); err != nil {
 		return ctrl.Result{}, err
 	}
 	if len(pools.Items) == 0 {
@@ -72,7 +82,7 @@ func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	decision.Status.Result = &result
 	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	if err := s.Status().Update(ctx, decision); err != nil {
+	if err := c.Status().Update(ctx, decision); err != nil {
 		log.Error(err, "failed to update decision status")
 		return ctrl.Result{}, err
 	}
@@ -80,7 +90,7 @@ func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Set the machine pool ref on the machine.
 	machine := &ironcorev1alpha1.Machine{}
-	if err := s.Get(ctx, client.ObjectKey{
+	if err := c.Get(ctx, client.ObjectKey{
 		Name:      decision.Spec.MachineRef.Name,
 		Namespace: decision.Spec.MachineRef.Namespace,
 	}, machine); err != nil {
@@ -89,7 +99,7 @@ func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	// Assign the first machine pool returned by the pipeline.
 	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: *result.TargetHost}
-	if err := s.Update(ctx, machine); err != nil {
+	if err := c.Update(ctx, machine); err != nil {
 		log.V(1).Error(err, "failed to assign machine pool to instance")
 		return ctrl.Result{}, err
 	}
@@ -98,7 +108,12 @@ func (s *DecisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func (s *DecisionReconciler) handleMachine() handler.EventHandler {
+// The base controller will delegate the pipeline creation down to this method.
+func (c *DecisionPipelineController) InitPipeline(steps []v1alpha1.Step) (lib.Pipeline[ironcore.MachinePipelineRequest], error) {
+	return NewPipeline(steps, c.DB, c.Monitor)
+}
+
+func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 	handle := func(ctx context.Context, new *ironcorev1alpha1.Machine) {
 		log := ctrl.LoggerFrom(ctx)
 		// Create a decision resource to schedule the machine.
@@ -107,7 +122,7 @@ func (s *DecisionReconciler) handleMachine() handler.EventHandler {
 				GenerateName: "machine-",
 			},
 			Spec: v1alpha1.DecisionSpec{
-				Operator:   s.Conf.Operator,
+				Operator:   c.Conf.Operator,
 				Type:       v1alpha1.DecisionTypeIroncoreMachine,
 				ResourceID: new.ObjectMeta.Name,
 				PipelineRef: corev1.ObjectReference{
@@ -119,7 +134,7 @@ func (s *DecisionReconciler) handleMachine() handler.EventHandler {
 				},
 			},
 		}
-		if err := s.Create(ctx, decision); err != nil {
+		if err := c.Create(ctx, decision); err != nil {
 			log.Error(err, "failed to create decision for machine scheduling")
 		}
 	}
@@ -139,14 +154,16 @@ func (s *DecisionReconciler) handleMachine() handler.EventHandler {
 	}
 }
 
-func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
+func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
+	c.BasePipelineController.Delegate = c
+	mgr.Add(manager.RunnableFunc(c.InitAllPipelines))
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("cortex-machine-scheduler").
 		For(
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.Operator != s.Conf.Operator {
+				if decision.Spec.Operator != c.Conf.Operator {
 					return false
 				}
 				// Ignore already decided schedulings.
@@ -159,7 +176,7 @@ func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
 		).
 		Watches(
 			&ironcorev1alpha1.Machine{},
-			s.handleMachine(),
+			c.handleMachine(),
 			// Only schedule machines that have the custom scheduler set.
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				machine := obj.(*ironcorev1alpha1.Machine)
@@ -174,5 +191,45 @@ func (s *DecisionReconciler) SetupWithManager(mgr manager.Manager) error {
 				return machine.Spec.Scheduler == ""
 			})),
 		).
-		Complete(s)
+		// Watch pipeline changes so that we can reconfigure pipelines as needed.
+		Watches(
+			&v1alpha1.Pipeline{},
+			handler.Funcs{
+				CreateFunc: c.HandlePipelineCreated,
+				UpdateFunc: c.HandlePipelineUpdated,
+				DeleteFunc: c.HandlePipelineDeleted,
+			},
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				pipeline := obj.(*v1alpha1.Pipeline)
+				// Only react to pipelines matching the operator.
+				if pipeline.Spec.Operator != c.Conf.Operator {
+					return false
+				}
+				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
+			})),
+		).
+		// Watch step changes so that we can turn on/off pipelines depending on
+		// unready steps.
+		Watches(
+			&v1alpha1.Step{},
+			handler.Funcs{
+				CreateFunc: c.HandleStepCreated,
+				UpdateFunc: c.HandleStepUpdated,
+				DeleteFunc: c.HandleStepDeleted,
+			},
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				step := obj.(*v1alpha1.Step)
+				// Only react to steps matching the operator.
+				if step.Spec.Operator != c.Conf.Operator {
+					return false
+				}
+				// Only react to filter and weigher steps.
+				supportedTypes := []v1alpha1.StepType{
+					v1alpha1.StepTypeFilter,
+					v1alpha1.StepTypeWeigher,
+				}
+				return slices.Contains(supportedTypes, step.Spec.Type)
+			})),
+		).
+		Complete(c)
 }
