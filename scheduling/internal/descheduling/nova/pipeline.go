@@ -46,7 +46,7 @@ func (p *Pipeline) Init(confedSteps []v1alpha1.Step, supportedSteps []Step, db d
 	// Load all steps from the configuration.
 	p.steps = make([]Step, 0, len(confedSteps))
 	for _, stepConf := range confedSteps {
-		step, ok := supportedStepsByName[stepConf.Name]
+		step, ok := supportedStepsByName[stepConf.Spec.Impl]
 		if !ok {
 			return errors.New("descheduler: unsupported step: " + stepConf.Spec.Impl)
 		}
