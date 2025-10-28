@@ -99,17 +99,6 @@ cortex-knowledge-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-cinder
-    extractor:
-      # Configuration of features that should be extracted from the synced data.
-      #
-      # The `name` should correspond to a known feature extractor plugin.
-      # Note that the order defined here will also be the order in which the
-      # extractors are executed. If possible, extractors whose dependencies have
-      # been executed will be executed in parallel to speed up the process.
-      plugins:
-        # NetApp-specific extractors.
-        - name: netapp_storage_pool_cpu_usage_extractor
-          recencySeconds: 60 # 1 minute
 
 cortex-scheduling-operator:
   # CRDs are deployed in the cortex-crds chart.
