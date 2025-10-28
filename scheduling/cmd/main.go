@@ -34,7 +34,6 @@ import (
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/cleanup"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	decisionscinder "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/cinder"
 	decisionsmachines "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/machines"
@@ -262,7 +261,7 @@ func main() {
 			os.Exit(1)
 		}
 		novashims.NewAPI(config, decisionController).Init(mux)
-		go cleanup.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
+		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 		// Deschedulings controller
 		deschedulingsKeystoneAPI := keystone.NewKeystoneAPI(config.KeystoneConfig)
@@ -281,7 +280,14 @@ func main() {
 			os.Exit(1)
 		}
 		go deschedulingsController.CreateDeschedulingsPeriodically(ctx)
-		// TODO go cleanup.CleanupNovaDeschedulingsRegularly(ctx, mgr.GetClient(), config)
+		// Deschedulings cleanup on startup
+		if err := (&deschedulingnova.Cleanup{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
+			os.Exit(1)
+		}
 
 	case "cortex-manila":
 		controller := &decisionsmanila.DecisionPipelineController{
@@ -296,7 +302,7 @@ func main() {
 			os.Exit(1)
 		}
 		manilashims.NewAPI(config, controller).Init(mux)
-		// TODO go cleanup.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
+		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 	case "cortex-cinder":
 		controller := &decisionscinder.DecisionPipelineController{
@@ -311,7 +317,7 @@ func main() {
 			os.Exit(1)
 		}
 		cindershims.NewAPI(config, controller).Init(mux)
-		// TODO go cleanup.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
+		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 	case "cortex-ironcore":
 		// TODO: Implement cleanup for machine decisions (on delete of the machine).

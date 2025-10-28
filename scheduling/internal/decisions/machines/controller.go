@@ -151,6 +151,23 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 			}
 			handle(ctx, new)
 		},
+		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			// Delete the associated decision(s).
+			log := ctrl.LoggerFrom(ctx)
+			machine := evt.Object.(*ironcorev1alpha1.Machine)
+			var decisions v1alpha1.DecisionList
+			if err := c.List(ctx, &decisions); err != nil {
+				log.Error(err, "failed to list decisions for deleted machine")
+				return
+			}
+			for _, decision := range decisions.Items {
+				if decision.Spec.MachineRef.Name == machine.Name && decision.Spec.MachineRef.Namespace == machine.Namespace {
+					if err := c.Delete(ctx, &decision); err != nil {
+						log.Error(err, "failed to delete decision for deleted machine")
+					}
+				}
+			}
+		},
 	}
 }
 

@@ -1,10 +1,11 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package cleanup
+package nova
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 )
 
 // Delete all decisions for nova servers that have been deleted.
-func cleanup(ctx context.Context, client client.Client, conf conf.Config) error {
+func cleanupNova(ctx context.Context, client client.Client, conf conf.Config) error {
 	keystoneConf := conf.KeystoneConfig
 	authOptions := gophercloud.AuthOptions{
 		IdentityEndpoint: keystoneConf.URL,
@@ -70,7 +71,7 @@ func cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 	}
 	servers := dataServers.Servers
 	if len(servers) == 0 {
-		panic("no servers found")
+		return errors.New("no servers found")
 	}
 	slog.Info("found servers", "count", len(servers))
 	serversByID := make(map[string]nova.Server)
@@ -120,7 +121,7 @@ func cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 
 func CleanupNovaDecisionsRegularly(ctx context.Context, client client.Client, conf conf.Config) {
 	for {
-		if err := cleanup(ctx, client, conf); err != nil {
+		if err := cleanupNova(ctx, client, conf); err != nil {
 			slog.Error("failed to cleanup nova decisions", "error", err)
 		}
 		// Wait for 1 hour before the next cleanup.
