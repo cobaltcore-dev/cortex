@@ -36,6 +36,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	decisionscinder "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/cinder"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/explanation"
 	decisionsmachines "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/machines"
 	decisionsmanila "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/manila"
 	decisionsnova "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova"
@@ -339,6 +340,17 @@ func main() {
 
 	default:
 		setupLog.Error(err, "unknown operator type", "operator", config.Operator)
+		os.Exit(1)
+	}
+
+	// Setup a controller which will reconcile the history and explanation for
+	// decision resources.
+	explanationController := &explanation.Controller{
+		Client:       mgr.GetClient(),
+		OperatorName: config.Operator,
+	}
+	if err := explanationController.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
 		os.Exit(1)
 	}
 
