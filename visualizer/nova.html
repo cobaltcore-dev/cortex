@@ -312,10 +312,7 @@
 
     // Draw individual decisions
     function drawDecision(app, spec, status, vmId) {
-
       const novaRequest = spec.novaRaw
-
-
       let type = "unknown"
       if (novaRequest.live) {
         type = "live migration"
@@ -348,8 +345,8 @@
           "value": `${flavor.name} (MB: ${flavor.memory_mb}, vCPUs: ${flavor.vcpus})`
         },
         {
-          "name": "Decision",
-          "value": `${status.description}`
+          "name": "Explanation",
+          "value": `${status.explanation || 'N/A'}`
         }
       ]
 
@@ -363,13 +360,12 @@
 
       app.appendChild(details)
 
-
       const decisionSteps = {}
       const decisionOrder = []
 
-      for (const step of status.stepResults ?? []) {
-        decisionSteps[step.stepName] = step.activations
-        decisionOrder.push(step.stepName)
+      for (const step of status.result.stepResults ?? []) {
+        decisionSteps[step.stepRef.name] = step.activations
+        decisionOrder.push(step.stepRef.name)
       }
 
       const steps = {
@@ -468,6 +464,10 @@
       listSchedulingDecisions()
         .then(data => {
           state.schedulingDecisions = data.items || []
+          console.log(data)
+          for (const item of state.schedulingDecisions) {
+            console.log(item.status.history)
+          }
           updateSidebar()
           redraw()
         })
