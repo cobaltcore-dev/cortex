@@ -312,10 +312,7 @@
 
     // Draw individual decisions
     function drawDecision(app, spec, status, vmId) {
-
       const novaRequest = spec.novaRaw
-
-
       let type = "unknown"
       if (novaRequest.live) {
         type = "live migration"
@@ -348,8 +345,8 @@
           "value": `${flavor.name} (MB: ${flavor.memory_mb}, vCPUs: ${flavor.vcpus})`
         },
         {
-          "name": "Decision",
-          "value": `${status.description}`
+          "name": "Explanation",
+          "value": `${status.explanation || 'N/A'}`
         }
       ]
 
@@ -363,13 +360,12 @@
 
       app.appendChild(details)
 
-
       const decisionSteps = {}
       const decisionOrder = []
 
-      for (const step of status.stepResults ?? []) {
-        decisionSteps[step.stepName] = step.activations
-        decisionOrder.push(step.stepName)
+      for (const step of status.result.stepResults ?? []) {
+        decisionSteps[step.stepRef.name] = step.activations
+        decisionOrder.push(step.stepRef.name)
       }
 
       const steps = {
@@ -381,7 +377,10 @@
       const order = ['raw nova weights', 'normalized nova weights', ...decisionOrder, 'aggregated output weights']
       const highlights = ['raw nova weights', 'normalized nova weights', 'aggregated output weights']
 
-      const hostnames = status.result.orderedHosts || []
+      const orderedHosts = status.result.orderedHosts || []
+      const rawWeightHosts = Object.keys(status.result.rawInWeights || {})
+      const remainingHosts = rawWeightHosts.filter(host => !orderedHosts.includes(host))
+      const hostnames = [...orderedHosts, ...remainingHosts]
 
       const tableContainer = document.createElement('div')
       tableContainer.classList.add('table-container')
@@ -445,7 +444,7 @@
 
 
     // Redraw main content based on selected decision
-    function redraw() {
+    async function redraw() {
       const app = document.querySelector('#app')
       app.innerHTML = ''
 
@@ -459,6 +458,12 @@
       }
       const id = state.selectedDecisions.metadata.name
       drawDecision(app, state.selectedDecisions.spec, state.selectedDecisions.status, id)
+
+      for (const item of state.selectedDecisions.status.history) {
+        const result = await listSchedulingDecisions(item.name)
+        drawDecision(app, result.spec, result.status, result.metadata.name)
+      }
+
     }
 
     // Initialize app
