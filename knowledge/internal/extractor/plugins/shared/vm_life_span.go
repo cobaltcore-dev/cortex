@@ -20,6 +20,8 @@ type VMLifeSpanRaw struct {
 	Duration int `db:"duration"`
 	// Flavor name of the virtual machine.
 	FlavorName string `db:"flavor_name"`
+	// Whether the statistic is from a VM that is deleted or still running.
+	Deleted bool `db:"deleted"`
 }
 
 // Extractor that extracts the time elapsed until the vm was deleted.
@@ -29,6 +31,47 @@ type VMLifeSpanHistogramExtractor struct {
 		struct{},                         // No options passed through yaml config
 		shared.VMLifeSpanHistogramBucket, // Feature model
 	]
+}
+
+// Extract histogram buckets from raw life span data based on whether the VMs are deleted or still running.
+func extractHistogramBuckets(lifeSpansRaw []VMLifeSpanRaw, deleted bool) []shared.VMLifeSpanHistogramBucket {
+	// Filter life spans based on the deleted flag.
+	var lifeSpans []VMLifeSpanRaw
+	for _, ls := range lifeSpansRaw {
+		if ls.Deleted == deleted {
+			lifeSpans = append(lifeSpans, ls)
+		}
+	}
+
+	// Calculate histogram buckets
+	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
+	keysFunc := func(lifeSpan VMLifeSpanRaw) []string {
+		return []string{lifeSpan.FlavorName, "all"}
+	}
+	valueFunc := func(lifeSpan VMLifeSpanRaw) float64 {
+		return float64(lifeSpan.Duration)
+	}
+	hists, counts, sums := tools.Histogram(lifeSpans, buckets, keysFunc, valueFunc)
+	var features []shared.VMLifeSpanHistogramBucket
+	for key, hist := range hists {
+		labels := strings.Split(key, ",")
+		if len(labels) != 1 {
+			slog.Warn("vm_life_span: unexpected comma in flavor name")
+			continue
+		}
+		for bucket, value := range hist {
+			// Create a feature for each bucket.
+			features = append(features, shared.VMLifeSpanHistogramBucket{
+				FlavorName: labels[0],
+				Bucket:     bucket,
+				Value:      value,
+				Count:      counts[key],
+				Sum:        sums[key],
+				Deleted:    deleted,
+			})
+		}
+	}
+	return features
 }
 
 //go:embed vm_life_span.sql
@@ -45,32 +88,10 @@ func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
 	if _, err := e.DB.Select(&lifeSpansRaw, vmLifeSpanQuery); err != nil {
 		return nil, err
 	}
-	// Calculate the histogram based on the extracted features.
-	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
-	keysFunc := func(lifeSpan VMLifeSpanRaw) []string {
-		return []string{lifeSpan.FlavorName, "all"}
-	}
-	valueFunc := func(lifeSpan VMLifeSpanRaw) float64 {
-		return float64(lifeSpan.Duration)
-	}
-	hists, counts, sums := tools.Histogram(lifeSpansRaw, buckets, keysFunc, valueFunc)
-	var features []shared.VMLifeSpanHistogramBucket
-	for key, hist := range hists {
-		labels := strings.Split(key, ",")
-		if len(labels) != 1 {
-			slog.Warn("vm_life_span: unexpected comma in flavor name")
-			continue
-		}
-		for bucket, value := range hist {
-			// Create a feature for each bucket.
-			features = append(features, shared.VMLifeSpanHistogramBucket{
-				FlavorName: labels[0],
-				Bucket:     bucket,
-				Value:      value,
-				Count:      counts[key],
-				Sum:        sums[key],
-			})
-		}
-	}
+
+	deletedVMLifeSpansBuckets := extractHistogramBuckets(lifeSpansRaw, true)
+	runningVMLifeSpansBuckets := extractHistogramBuckets(lifeSpansRaw, false)
+
+	features := append(deletedVMLifeSpansBuckets, runningVMLifeSpansBuckets...)
 	return e.Extracted(features)
 }
