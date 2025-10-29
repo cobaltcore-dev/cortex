@@ -33,15 +33,17 @@ func TestVMMigrationStatisticsKPI_Collect(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(shared.VMHostResidency{}),
+		testDB.AddTable(shared.VMHostResidencyHistogramBucket{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	vmHostResidency := []any{
-		&shared.VMHostResidency{Duration: 120, FlavorName: "small", InstanceUUID: "uuid1", MigrationUUID: "migration1", SourceHost: "host1", TargetHost: "host2", SourceNode: "node1", TargetNode: "node2", UserID: "user1", ProjectID: "project1", Type: "live-migration", Time: 1620000000},
-		&shared.VMHostResidency{Duration: 300, FlavorName: "medium", InstanceUUID: "uuid2", MigrationUUID: "migration2", SourceHost: "host3", TargetHost: "host4", SourceNode: "node3", TargetNode: "node4", UserID: "user2", ProjectID: "project2", Type: "resize", Time: 1620000300},
+		&shared.VMHostResidencyHistogramBucket{FlavorName: "small", Bucket: 60, Value: 100, Count: 10, Sum: 600},
+		&shared.VMHostResidencyHistogramBucket{FlavorName: "medium", Bucket: 120, Value: 200, Count: 20, Sum: 2400},
+		&shared.VMHostResidencyHistogramBucket{FlavorName: "large", Bucket: 180, Value: 300, Count: 30, Sum: 5400},
 	}
+
 	if err := testDB.Insert(vmHostResidency...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

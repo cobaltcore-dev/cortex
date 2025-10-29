@@ -26,7 +26,7 @@ func TestVMHostResidencyExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
-	if !testDB.TableExists(shared.VMHostResidency{}) {
+	if !testDB.TableExists(shared.VMHostResidencyHistogramBucket{}) {
 		t.Error("expected table to be created")
 	}
 }
@@ -86,21 +86,42 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error during extraction, got %v", err)
 	}
 
-	if len(features) != 2 {
-		t.Errorf("expected 2 features, got %d", len(features))
+	if len(features) != 30*3 { // 2 flavors + "all" * 30 buckets
+		t.Errorf("expected 90 features, got %d", len(features))
 	}
 
-	expected := map[string]shared.VMHostResidency{
-		"migration1": {Duration: 172800, FlavorName: "small", InstanceUUID: "server1", MigrationUUID: "migration1", SourceHost: "host1", TargetHost: "host2", Type: "live-migration", Time: 1735862400, ProjectID: "", UserID: ""},
-		"migration2": {Duration: 172800, FlavorName: "medium", InstanceUUID: "server2", MigrationUUID: "migration2", SourceHost: "host2", TargetHost: "host3", Type: "resize", Time: 1735948800, ProjectID: "", UserID: ""},
-	}
-
-	for _, feature := range features {
-		vmResidency := feature.(shared.VMHostResidency)
-		expectedFeature := expected[vmResidency.MigrationUUID]
-
-		if vmResidency != expectedFeature {
-			t.Errorf("unexpected feature for migration %s: got %+v, expected %+v", vmResidency.MigrationUUID, vmResidency, expectedFeature)
+	// Check the actual values of the features
+	foundSmall := false
+	foundMedium := false
+	for _, f := range features {
+		bucketFeature, ok := f.(shared.VMHostResidencyHistogramBucket)
+		if !ok {
+			t.Errorf("feature is not of type VMHostResidencyHistogramBucket: %T", f)
+			continue
 		}
+		if bucketFeature.FlavorName == "small" {
+			foundSmall = true
+			if bucketFeature.Count == 0 {
+				t.Errorf("expected count > 0 for flavor 'small', got %d", bucketFeature.Count)
+			}
+			if bucketFeature.Sum < 1 {
+				t.Errorf("expected sum > 0 for flavor 'small', got %f", bucketFeature.Sum)
+			}
+		}
+		if bucketFeature.FlavorName == "medium" {
+			foundMedium = true
+			if bucketFeature.Count == 0 {
+				t.Errorf("expected count > 0 for flavor 'medium', got %d", bucketFeature.Count)
+			}
+			if bucketFeature.Sum < 1 {
+				t.Errorf("expected sum > 0 for flavor 'medium', got %f", bucketFeature.Sum)
+			}
+		}
+	}
+	if !foundSmall {
+		t.Errorf("expected feature for flavor 'small' not found")
+	}
+	if !foundMedium {
+		t.Errorf("expected feature for flavor 'medium' not found")
 	}
 }
