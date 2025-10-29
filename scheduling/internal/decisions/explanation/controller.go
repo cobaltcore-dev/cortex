@@ -33,6 +33,8 @@ type Controller struct {
 	// This allows multiple operators to coexist in the same cluster without
 	// interfering with each other's decisions.
 	OperatorName string
+	// If the field indexing should be skipped (useful for testing).
+	SkipIndexFields bool
 }
 
 // Check if a decision should be processed by this controller.
@@ -75,11 +77,28 @@ func (c *Controller) reconcileHistory(ctx context.Context, decision *v1alpha1.De
 	log := ctrl.LoggerFrom(ctx)
 	// Get all previous decisions for the same ResourceID.
 	var previousDecisions v1alpha1.DecisionList
-	if err := c.List(ctx, &previousDecisions, client.MatchingFields{"spec.resourceID": decision.Spec.ResourceID}); err != nil {
-		log.Error(err, "failed to list previous decisions", "resourceID", decision.Spec.ResourceID)
-		return err
+	if c.SkipIndexFields {
+		// When field indexing is skipped, list all decisions and filter manually
+		if err := c.List(ctx, &previousDecisions); err != nil {
+			log.Error(err, "failed to list all decisions", "resourceID", decision.Spec.ResourceID)
+			return err
+		}
+		// Filter to only decisions with matching ResourceID
+		var filteredDecisions []v1alpha1.Decision
+		for _, prevDecision := range previousDecisions.Items {
+			if prevDecision.Spec.ResourceID == decision.Spec.ResourceID {
+				filteredDecisions = append(filteredDecisions, prevDecision)
+			}
+		}
+		previousDecisions.Items = filteredDecisions
+	} else {
+		// Use field indexing for efficient lookup
+		if err := c.List(ctx, &previousDecisions, client.MatchingFields{"spec.resourceID": decision.Spec.ResourceID}); err != nil {
+			log.Error(err, "failed to list previous decisions", "resourceID", decision.Spec.ResourceID)
+			return err
+		}
 	}
-	var history []corev1.ObjectReference
+	history := []corev1.ObjectReference{} // Not var-init so we see the empty slice.
 	// Make sure the resulting history will be in chronological order.
 	sort.Slice(previousDecisions.Items, func(i, j int) bool {
 		t1 := previousDecisions.Items[i].CreationTimestamp
@@ -113,7 +132,19 @@ func (c *Controller) reconcileHistory(ctx context.Context, decision *v1alpha1.De
 
 // Process the explanation for the given decision.
 func (c *Controller) reconcileExplanation(ctx context.Context, decision *v1alpha1.Decision) error {
-	_ = ctrl.LoggerFrom(ctx)
+	log := ctrl.LoggerFrom(ctx)
+	explainer := &Explainer{Client: c.Client}
+	explanationText, err := explainer.Explain(ctx, decision)
+	if err != nil {
+		log.Error(err, "failed to explain decision", "name", decision.Name)
+		return err
+	}
+	decision.Status.Explanation = explanationText
+	if err := c.Status().Update(ctx, decision); err != nil {
+		log.Error(err, "failed to update decision status with explanation", "name", decision.Name)
+		return err
+	}
+	log.Info("successfully reconciled decision explanation", "name", decision.Name)
 	return nil
 }
 
@@ -142,6 +173,20 @@ func (c *Controller) StartupCallback(ctx context.Context) error {
 
 // This function sets up the controller with the provided manager.
 func (c *Controller) SetupWithManager(mgr manager.Manager) error {
+	// Index the decisions by ResourceID for efficient lookup.
+	if !c.SkipIndexFields {
+		if err := mgr.GetFieldIndexer().IndexField(
+			context.Background(),
+			&v1alpha1.Decision{},
+			"spec.resourceID",
+			func(obj client.Object) []string {
+				decision := obj.(*v1alpha1.Decision)
+				return []string{decision.Spec.ResourceID}
+			},
+		); err != nil {
+			return err
+		}
+	}
 	if err := mgr.Add(manager.RunnableFunc(c.StartupCallback)); err != nil {
 		return err
 	}

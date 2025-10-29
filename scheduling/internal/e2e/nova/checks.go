@@ -132,7 +132,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 	slog.Info("found hypervisors", "count", len(hypervisors))
 
 	slog.Info("listing servers")
-	slo := servers.ListOpts{AllTenants: true, Limit: 100}
+	slo := servers.ListOpts{AllTenants: true, Limit: 10}
 	pages := must.Return(servers.List(novaSC, slo).AllPages(ctx))
 	dataServers := &struct {
 		Servers []nova.Server `json:"servers"`
