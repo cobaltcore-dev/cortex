@@ -26,7 +26,7 @@ func TestVMHostResidencyExtractor_Init(t *testing.T) {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 
-	if !testDB.TableExists(shared.VMHostResidency{}) {
+	if !testDB.TableExists(shared.VMHostResidencyHistogramBucket{}) {
 		t.Error("expected table to be created")
 	}
 }
