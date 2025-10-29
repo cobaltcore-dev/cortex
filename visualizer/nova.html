@@ -276,7 +276,6 @@
 
       listSchedulingDecisions(vmId)
         .then(decision => {
-          console.log(decision)
           if (!decision) {
             alert(`No scheduling decision found for vm_id ${vmId}`)
             return
@@ -286,7 +285,6 @@
           redraw()
         })
         .catch(error => {
-          console.log(error)
           alert('Error loading scheduling decision: ' + error)
           state.selectedDecisions = null
           updateSidebar()
@@ -316,7 +314,7 @@
     function drawDecision(app, spec, status, vmId) {
 
       const novaRequest = spec.novaRaw
-      console.log("?")
+
 
       let type = "unknown"
       if (novaRequest.live) {
@@ -373,8 +371,6 @@
         decisionSteps[step.stepName] = step.activations
         decisionOrder.push(step.stepName)
       }
-
-      console.log('Decision Steps:', decisionSteps)
 
       const steps = {
         ...decisionSteps,
