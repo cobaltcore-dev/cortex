@@ -4,15 +4,12 @@
 package shared
 
 import (
-	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/kpis/internal/plugins"
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -23,8 +20,6 @@ type VMMigrationStatisticsKPI struct {
 
 	// Time a VM has been on a host before migration.
 	timeUntilMigrationDesc *prometheus.Desc
-	// Number of migrations.
-	nMigrations *prometheus.GaugeVec
 }
 
 func (VMMigrationStatisticsKPI) GetName() string {
@@ -41,58 +36,45 @@ func (k *VMMigrationStatisticsKPI) Init(db db.DB, opts conf.RawOpts) error {
 		[]string{"type", "flavor_name"},
 		nil,
 	)
-	k.nMigrations = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_migrations_total",
-		Help: "Number of migrations",
-	}, []string{"type", "source_host", "target_host", "source_node", "target_node"})
 	return nil
 }
 
 func (k *VMMigrationStatisticsKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.timeUntilMigrationDesc
-	k.nMigrations.Describe(ch)
 }
 
 func (k *VMMigrationStatisticsKPI) Collect(ch chan<- prometheus.Metric) {
-	var hostResidencies []shared.VMHostResidency
-	tableName := shared.VMHostResidency{}.TableName()
-	if _, err := k.DB.Select(&hostResidencies, "SELECT * FROM "+tableName); err != nil {
+	// The buckets are already aggregated in the database, so we can just select them.
+	var buckets []shared.VMHostResidencyHistogramBucket
+	tableName := shared.VMHostResidencyHistogramBucket{}.TableName()
+	if _, err := k.DB.Select(&buckets, "SELECT * FROM "+tableName); err != nil {
 		slog.Error("failed to select vm host residencies", "err", err)
 		return
 	}
-	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
-	keysFunc := func(residency shared.VMHostResidency) []string {
-		return []string{
-			residency.Type + "," + residency.FlavorName,
-			"all,all",
-		}
-	}
-	valueFunc := func(residency shared.VMHostResidency) float64 {
-		return float64(residency.Duration)
-	}
-	hists, counts, sums := tools.Histogram(hostResidencies, buckets, keysFunc, valueFunc)
-	for key, hist := range hists {
-		labels := strings.Split(key, ",")
-		if len(labels) != 2 {
-			slog.Warn("vm_migration_statistics: unexpected comma in migration type, flavor name or id")
+	bucketsByFlavor := make(map[string][]shared.VMHostResidencyHistogramBucket)
+	for _, bucket := range buckets {
+		if bucket.FlavorName == "" {
+			slog.Warn("vm_host_residency: empty flavor name in bucket", "bucket", bucket)
 			continue
 		}
-		ch <- prometheus.MustNewConstHistogram(k.timeUntilMigrationDesc, counts[key], sums[key], hist, labels...)
+		bucketsByFlavor[bucket.FlavorName] = append(bucketsByFlavor[bucket.FlavorName], bucket)
 	}
-
-	nMigrations := make(map[string]int)
-	for _, r := range hostResidencies {
-		key := fmt.Sprintf(
-			"%s,%s,%s,%s,%s",
-			r.Type, r.SourceHost, r.TargetHost, r.SourceNode, r.TargetNode,
+	for flavor, buckets := range bucketsByFlavor {
+		if len(buckets) == 0 {
+			slog.Warn("vm_host_residency: no buckets for flavor", "flavor", flavor)
+			continue
+		}
+		var count uint64
+		var sum float64
+		hist := make(map[float64]uint64, len(buckets))
+		for _, bucket := range buckets {
+			hist[bucket.Bucket] = bucket.Value
+			count = bucket.Count // Same for all bucket objects.
+			sum = bucket.Sum     // Same for all bucket objects.
+		}
+		ch <- prometheus.MustNewConstHistogram(
+			k.timeUntilMigrationDesc,
+			count, sum, hist, "unknown", flavor,
 		)
-		nMigrations[key]++
 	}
-	for key, n := range nMigrations {
-		parts := strings.Split(key, ",")
-		k.nMigrations.WithLabelValues(
-			parts[0], parts[1], parts[2], parts[3], parts[4],
-		).Set(float64(n))
-	}
-	k.nMigrations.Collect(ch)
 }

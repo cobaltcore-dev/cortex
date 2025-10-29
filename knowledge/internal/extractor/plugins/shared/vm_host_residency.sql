@@ -28,6 +28,6 @@ SELECT
     -- Sometimes the server can be vanished already, set default
     -- values for that case.
     COALESCE(durations.duration, 0) AS duration,
-    COALESCE(durations.flavor_name, 'unknown') AS flavor_name,
+    COALESCE(durations.flavor_name, 'unknown') AS flavor_name
 FROM openstack_migrations AS migrations
 LEFT JOIN durations ON migrations.uuid = durations.migration_uuid;
