@@ -22,11 +22,13 @@ type VMLifeSpanHistogramBucket struct {
 	Count uint64 `db:"count"`
 	// The sum of all durations that fell into this bucket.
 	Sum float64 `db:"sum"`
+	// Whether the statistic is of VMs that are deleted or still running.
+	Deleted bool `db:"deleted"`
 }
 
 // Table under which the feature is stored.
 func (VMLifeSpanHistogramBucket) TableName() string {
-	return "feature_vm_life_span_histogram_bucket"
+	return "feature_vm_life_span_histogram_bucket_v2"
 }
 
 // Indexes for the feature.

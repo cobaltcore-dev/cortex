@@ -47,26 +47,28 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 
 	// Create dependency tables
 	if err := testDB.CreateTable(
+		testDB.AddTable(nova.Server{}),
 		testDB.AddTable(nova.DeletedServer{}),
 		testDB.AddTable(nova.Flavor{}),
 	); err != nil {
 		t.Fatalf("failed to create dependency tables: %v", err)
 	}
 
-	servers := []any{
+	data := []any{
+		// Deleted openstack servers
 		&nova.DeletedServer{ID: "server1", FlavorName: "small", Created: "2025-01-01T00:00:00Z", Status: "DELETED", Updated: "2025-01-03T00:00:00Z"},
 		&nova.DeletedServer{ID: "server2", FlavorName: "medium", Created: "2025-01-02T00:00:00Z", Status: "DELETED", Updated: "2025-01-04T00:00:00Z"},
-	}
-	if err := testDB.Insert(servers...); err != nil {
-		t.Fatalf("failed to insert servers: %v", err)
-	}
 
-	flavors := []any{
+		// Non deleted openstack servers
+		&nova.Server{ID: "server3", FlavorName: "small", Created: "2025-01-05T00:00:00Z", Status: "ACTIVE"},
+		&nova.Server{ID: "server4", FlavorName: "medium", Created: "2025-01-06T00:00:00Z", Status: "SHUTOFF"},
+
+		// Flavors
 		&nova.Flavor{ID: "flavor1", Name: "small"},
 		&nova.Flavor{ID: "flavor2", Name: "medium"},
 	}
-	if err := testDB.Insert(flavors...); err != nil {
-		t.Fatalf("failed to insert flavors: %v", err)
+	if err := testDB.Insert(data...); err != nil {
+		t.Fatalf("failed to insert servers: %v", err)
 	}
 
 	extractor := &VMLifeSpanHistogramExtractor{}
@@ -80,42 +82,59 @@ func TestVMLifeSpanExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error during extraction, got %v", err)
 	}
 
-	if len(features) != 30*3 { // 2 flavors + "all" * 30 buckets
-		t.Errorf("expected 90 features, got %d", len(features))
+	// We expect 30 buckets for each flavor + "all" category
+	// 2 flavors + "all" = 3 categories
+	// 'detected' and 'running' = 2 states
+	expectedLength := 30 * (2 + 1) * 2
+
+	if len(features) != expectedLength {
+		t.Errorf("expected %d features, got %d", expectedLength, len(features))
 	}
 
 	// Check the actual values of the features
-	foundSmall := false
-	foundMedium := false
+	foundSmallDeleted := false
+	foundMediumDeleted := false
+	foundSmallRunning := false
+	foundMediumRunning := false
+
 	for _, f := range features {
 		bucketFeature, ok := f.(shared.VMLifeSpanHistogramBucket)
 		if !ok {
 			t.Errorf("feature is not of type VMLifeSpanHistogramBucket: %T", f)
 			continue
 		}
-		if bucketFeature.FlavorName == "small" {
-			foundSmall = true
-			if bucketFeature.Count == 0 {
-				t.Errorf("expected count > 0 for flavor 'small', got %d", bucketFeature.Count)
-			}
-			if bucketFeature.Sum < 1 {
-				t.Errorf("expected sum > 0 for flavor 'small', got %f", bucketFeature.Sum)
-			}
+
+		if bucketFeature.FlavorName == "small" && bucketFeature.Deleted {
+			foundSmallDeleted = true
 		}
-		if bucketFeature.FlavorName == "medium" {
-			foundMedium = true
-			if bucketFeature.Count == 0 {
-				t.Errorf("expected count > 0 for flavor 'medium', got %d", bucketFeature.Count)
-			}
-			if bucketFeature.Sum < 1 {
-				t.Errorf("expected sum > 0 for flavor 'medium', got %f", bucketFeature.Sum)
-			}
+		if bucketFeature.FlavorName == "medium" && bucketFeature.Deleted {
+			foundMediumDeleted = true
+		}
+		if bucketFeature.FlavorName == "small" && !bucketFeature.Deleted {
+			foundSmallRunning = true
+		}
+		if bucketFeature.FlavorName == "medium" && !bucketFeature.Deleted {
+			foundMediumRunning = true
+		}
+
+		// Check that count and sum are greater than zero for non-empty buckets
+		if bucketFeature.Count == 0 {
+			t.Errorf("expected count > 0 for flavor 'medium', got %d", bucketFeature.Count)
+		}
+		if bucketFeature.Sum < 1 {
+			t.Errorf("expected sum > 0 for flavor 'medium', got %f", bucketFeature.Sum)
 		}
 	}
-	if !foundSmall {
+	if !foundSmallDeleted {
 		t.Errorf("expected feature for flavor 'small' not found")
 	}
-	if !foundMedium {
+	if !foundMediumDeleted {
+		t.Errorf("expected feature for flavor 'medium' not found")
+	}
+	if !foundSmallRunning {
+		t.Errorf("expected feature for flavor 'small' not found")
+	}
+	if !foundMediumRunning {
 		t.Errorf("expected feature for flavor 'medium' not found")
 	}
 }
