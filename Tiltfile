@@ -244,6 +244,8 @@ k8s_resource(
     objects=['cortex-alertmanager:Alertmanager:default'],
     labels=['Monitoring'],
 )
+
+k8s_yaml('./visualizer/role.yaml')
 docker_build('cortex-visualizer', 'visualizer')
 k8s_yaml('./visualizer/app.yaml')
 k8s_resource('cortex-visualizer', port_forwards=[
@@ -258,12 +260,3 @@ k8s_resource('cortex-plutono', port_forwards=[
 ], links=[
     link('http://localhost:5000/d/cortex/cortex?orgId=1', 'cortex dashboard'),
 ], labels=['Monitoring'])
-# kubectl proxy for kubernetes API access
-local_resource(
-    'kubectl-proxy',
-    serve_cmd='kubectl proxy --port=1337',
-    labels=['Development'],
-    links=[
-        link('http://localhost:1337/apis/scheduling.cortex/v1alpha1/decisions', 'Cortex Decisions API'),
-    ],
-)

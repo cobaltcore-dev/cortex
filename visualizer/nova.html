@@ -196,7 +196,7 @@
 
   <script>
 
-    const kubernetesAPIServer = 'http://localhost:4000/api'
+    const kubernetesAPIServer = 'http://localhost:4000/k8s'
 
     const state = {
       schedulingDecisions: [],
@@ -316,6 +316,7 @@
     function drawDecision(app, spec, status, vmId) {
 
       const novaRequest = spec.novaRaw
+      console.log("?")
 
       let type = "unknown"
       if (novaRequest.live) {
@@ -369,9 +370,11 @@
       const decisionOrder = []
 
       for (const step of status.stepResults ?? []) {
-        decisionSteps[step.step] = step.activations
-        decisionOrder.push(step.step)
+        decisionSteps[step.stepName] = step.activations
+        decisionOrder.push(step.stepName)
       }
+
+      console.log('Decision Steps:', decisionSteps)
 
       const steps = {
         ...decisionSteps,
