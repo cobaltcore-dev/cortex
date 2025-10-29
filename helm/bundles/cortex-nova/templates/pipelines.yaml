@@ -5,6 +5,11 @@ metadata:
   name: nova-external-scheduler
 spec:
   operator: cortex-nova
+  description: |
+    Nova provides virtual machine placement on compute hosts for OpenStack.
+    After applying its own filtering and weighing logic, it delegates to cortex
+    for additional filtering and weighing via this external scheduler pipeline.
+    Cortex returns a ranked list of hosts back to nova for final selection.
   type: filter-weigher
   steps:
     - ref: {name: vmware-hana-binpacking}
@@ -22,6 +27,11 @@ metadata:
   name: nova-external-scheduler-reservations
 spec:
   operator: cortex-nova
+  description: |
+    This pipeline can be used to place reservations the same way nova would place
+    its virtual machines. It uses the same filtering steps as implemented in the
+    nova service, ensuring a valid placement of the reservation. It then leverages
+    cortex's weighing steps to provide an optimized host selection for the reservation.
   type: filter-weigher
   steps:
     - ref: {name: vmware-hana-binpacking}
@@ -49,6 +59,9 @@ metadata:
   name: nova-descheduler
 spec:
   operator: cortex-nova
+  description:
+    This pipeline runs steps that select virtual machines to deschedule from
+    compute hosts in order to optimize resource usage and performance.
   type: descheduler
   steps:
     - ref: {name: avoid-high-steal-pct}

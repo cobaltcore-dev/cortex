@@ -58,6 +58,9 @@ spec:
           spec:
             description: spec defines the desired state of Pipeline
             properties:
+              description:
+                description: An optional description of the pipeline.
+                type: string
               operator:
                 description: The operator by which this pipeline should be handled.
                 type: string

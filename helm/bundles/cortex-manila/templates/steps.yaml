@@ -8,7 +8,10 @@ spec:
   type: weigher
   impl: netapp_cpu_usage_balancing
   description: |
-    Balance cpu utilization of Manila storage pools.
+    This step uses netapp storage pool cpu metrics condensed into a feature
+    to balance manila share placements across available storage pools.
+    Its main purpose is to avoid cpu overutilization on a storage pool which
+    may lead to performance degradation for shares placed on that pool.
   knowledges:
     - name: netapp-storage-pool-cpu-usage-manila
   opts:

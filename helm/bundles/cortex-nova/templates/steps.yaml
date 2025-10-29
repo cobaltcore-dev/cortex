@@ -8,7 +8,9 @@ spec:
   type: weigher
   impl: shared_resource_balancing
   description: |
-    Binpack hana vmware vms on hana hosts.
+    This step pulls HANA VMs onto the smallest possible gaps on HANA-exclusive
+    VMware hosts. In this way hosts with much free space are held free for
+    larger HANA VMs, improving overall packing efficiency for HANA workloads.
   knowledges:
     - name: host-utilization
   opts:
@@ -46,9 +48,9 @@ spec:
   type: weigher
   impl: shared_resource_balancing
   description: |
-    Balance non-hana vmware vms on non-hana hosts. This step only depends on
-    openstack data and is thus available for all vms, regardless of the
-    hypervisor. However, in this configuration we only execute it for VMware vms.
+    This step balances non-HANA VMs across non-HANA exclusive VMware hosts. It
+    pulls vms onto the freeest hosts possible to ensure an even distribution of
+    workloads across the available infrastructure.
   knowledges:
     - name: host-utilization
   opts:
@@ -87,9 +89,10 @@ spec:
   type: weigher
   impl: vmware_avoid_long_term_contended_hosts
   description: |
-    Avoid placing vms on hosts with a high CPU contention over a longer
-    period of time. This step depends on vrops metrics and is thus only
-    executed for VMware vms.
+    This step avoids placing vms on vmware hosts with a high CPU contention over
+    a longer period of time, based on vrops contention metrics. In particular,
+    this step looks at a longer time window of 4 weeks to identify hosts that
+    are consistently contended.
   knowledges:
     - name: vmware-long-term-contended-hosts
   opts:
@@ -99,7 +102,6 @@ spec:
           type: bool
           value: true
           action: continue
-    # In this configuration, we only consider the memory usage.
     avgCPUContentionLowerBound: 0 # pct
     avgCPUContentionUpperBound: 10 # pct
     avgCPUContentionActivationLowerBound: 0.0
@@ -118,9 +120,10 @@ spec:
   type: weigher
   impl: vmware_avoid_short_term_contended_hosts
   description: |
-    Avoid placing vms on hosts with a high CPU contention over a shorter
-    period of time. This step depends on vrops metrics and is thus only
-    executed for VMware vms.
+    This step avoids placing vms on vmware hosts with a high CPU contention over
+    a shorter period of time, based on vrops contention metrics. In particular,
+    this step looks at a shorter time window of 20 minutes to identify hosts that
+    are currently contended.
   knowledges:
     - name: vmware-short-term-contended-hosts
   opts:
@@ -130,7 +133,6 @@ spec:
           type: bool
           value: true
           action: continue
-    # In this configuration, we only consider the memory usage.
     avgCPUContentionLowerBound: 0 # pct
     avgCPUContentionUpperBound: 10 # pct
     avgCPUContentionActivationLowerBound: 0.0
@@ -149,7 +151,9 @@ spec:
   type: filter
   impl: filter_host_instructions
   description: |
-    Filter hosts based on instructions given in the request spec.
+    This step will consider the `ignore_hosts` and `force_hosts` instructions
+    from the nova scheduler request spec to filter out or exclusively allow
+    certain hosts.
   knowledges: []
 ---
 apiVersion: scheduling.cortex/v1alpha1
@@ -161,7 +165,9 @@ spec:
   type: filter
   impl: filter_has_enough_capacity
   description: |
-    Only get hosts that have sufficient space for the requested flavor.
+    This step will filter out hosts that do not have enough available capacity
+    to host the requested flavor. If enabled, this step will subtract the
+    current reservations residing on this host from the available capacity.
   knowledges:
     # TODO: Remove this dependency since this is a filter which should
     # not depend on a potentially non-recent knowledge.
@@ -183,8 +189,10 @@ spec:
   type: filter
   impl: filter_has_requested_traits
   description: |
-    Check if the traits required/forbidden in the flavor extra spec
-    match the host's assigned traits.
+    This step filters hosts that do not have the requested traits given by the
+    nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+    not have the specified trait. "trait:<trait>": "required" means the host
+    must have the specified trait.
   knowledges:
     # TODO: Remove this dependency since this is a filter which should
     # not depend on a potentially non-recent knowledge.
@@ -200,7 +208,8 @@ spec:
   type: filter
   impl: filter_has_accelerators
   description: |
-    If requested, only get hosts with accelerators.
+    This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+    the nova flavor extra specs request accelerators via "accel:device_profile".
   # TODO: This step currently depends on traits directly from the datasources.
   # This should be changed to use the hypervisor CRD.
   knowledges: []
@@ -214,7 +223,8 @@ spec:
   type: filter
   impl: filter_correct_az
   description: |
-    Only get hosts in the requested az.
+    This step will filter out hosts whose aggregate information indicates they
+    are not placed in the requested availability zone.
   knowledges:
     # TODO: Remove this dependency since this is a filter which should
     # not depend on a potentially non-recent knowledge.
@@ -230,7 +240,9 @@ spec:
   type: filter
   impl: filter_disabled
   description: |
-    Only get hosts that are not disabled.
+    This step will filter out hosts for which the hypervisor status is
+    `disabled`, the hypervisor state is `down`, or the trait
+    `COMPUTE_STATUS_DISABLED` is assigned.
   # TODO: This step currently depends on traits directly from the datasources.
   # This should be changed to use the hypervisor CRD.
   knowledges: []
@@ -244,8 +256,10 @@ spec:
   type: filter
   impl: filter_external_customer
   description: |
-    Prefix-match the domain name for external customer domains and
-    filter out hosts that are not intended for external customers.
+    This step prefix-matches the domain name for external customer domains and
+    filters out hosts that are not intended for external customers. It considers
+    the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+    `domain_name` scheduler hint from the nova request spec.
   # TODO: This step currently depends on traits directly from the datasources.
   # This should be changed to use the hypervisor CRD.
   knowledges: []
@@ -261,7 +275,9 @@ spec:
   type: filter
   impl: filter_packed_virtqueue
   description: |
-    If requested, only get hosts with packed virtqueues.
+    If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
+    image properties contain the `hw_virtio_packed_ring` key, this step will
+    filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
   # TODO: This step currently depends on traits directly from the datasources.
   # This should be changed to use the hypervisor CRD.
   knowledges: []
@@ -275,8 +291,9 @@ spec:
   type: filter
   impl: filter_project_aggregates
   description: |
-    Lock certain hosts for certain projects, based on the aggregate metadata.
-    Note that hosts without aggregate tenant filter are still accessible.
+    This step locks certain hosts for certain projects, based on the aggregate
+    metadata. Note that hosts without aggregate tenant filter are still
+    accessible and will not be filtered out.
   knowledges:
     # TODO: Remove this dependency since this is a filter which should
     # not depend on a potentially non-recent knowledge.
@@ -292,8 +309,13 @@ spec:
   type: filter
   impl: filter_compute_capabilities
   description: |
-    Check the capabilities of each host and if they match the extra spec
-    provided in the request spec flavor.
+    This step will filter out hosts that do not meet the compute capabilities
+    requested by the nova flavor extra specs, like `{"arch": "x86_64",
+    "maxphysaddr:bits": 46, ...}`.
+
+    Note: currently, advanced boolean/numeric operators for the capabilities
+    like `>`, `!`, ... are not supported because they are not used by any of our
+    flavors in production.
   # TODO: This step currently depends on hypervisor capabilities directly from
   # the datasources. This should be changed to use the hypervisor CRD.
   knowledges: []
@@ -307,7 +329,8 @@ spec:
   type: descheduler
   impl: avoid_high_steal_pct
   description: |
-    Deschedule once vms reach this cpu steal pct over the observed time span.
+    This step will deschedule VMs once they reach this CPU steal percentage over
+    the observed time span.
   # TODO: This step currently depends on hypervisor capabilities directly from
   # the datasources. This should be changed to use the hypervisor CRD.
   knowledges: []

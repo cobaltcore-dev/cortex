@@ -11,8 +11,8 @@ spec:
   extractor:
     name: vrops_hostsystem_resolver
   description: |
-    Resolves the hostsystem label provided to the vrops prometheus metrics to
-    the associated nova hypervisor compute host.
+    This knowledge resolves the hostsystem label provided to the vrops
+    prometheus metrics to the associated nova hypervisor compute host.
   recency: "1h"
   dependencies:
     datasources:
@@ -34,8 +34,8 @@ spec:
   extractor:
     name: vrops_project_noisiness_extractor
   description: |
-    Calculates how noisy projects are in terms of CPU contention on their VMs'
-    hostsystems.
+    This knowledge calculates how noisy projects are in terms of CPU contention
+    on their VMs' hostsystems.
   recency: "6h"
   dependencies:
     datasources:
@@ -55,7 +55,8 @@ spec:
   extractor:
     name: vrops_hostsystem_contention_long_term_extractor
   description: |
-    Identifies hostsystems that have been contended for long periods of time.
+    This knowledge identifies hostsystems that have been contended for
+    long periods of time.
   dependencies:
     knowledges:
       - name: vmware-resolved-hostsystems
@@ -74,7 +75,8 @@ spec:
   extractor:
     name: vrops_hostsystem_contention_short_term_extractor
   description: |
-    Identifies hostsystems that have been contended for short periods of time.
+    This knowledge identifies hostsystems that have been contended for short
+    periods of time.
   dependencies:
     knowledges:
       - name: vmware-resolved-hostsystems
@@ -93,7 +95,8 @@ spec:
   extractor:
     name: kvm_libvirt_domain_cpu_steal_pct_extractor
   description: |
-    Identifies KVM libvirt domains that are experiencing CPU steal.
+    This knowledge identifies KVM libvirt domains that are experiencing CPU
+    steal, i.e. cpu contention or cpu wait.
   dependencies:
     datasources:
       - name: kvm-libvirt-domain-steal-pct
@@ -111,7 +114,8 @@ spec:
   extractor:
     name: host_pinned_projects_extractor
   description: |
-    Extract host-to-project pinning relationships from Nova aggregates.
+    This knowledge extracts host-to-project pinning relationships from Nova
+    aggregates.
   recency: "5m"
   dependencies:
     datasources:
@@ -130,7 +134,8 @@ spec:
   extractor:
     name: host_utilization_extractor
   description: |
-    Extract how much space is available on each host.
+    This knowledge calculates how much space is available on each host.
+    Note that this doesn't consider reservations placed on the hosts.
   recency: "60s"
   dependencies:
     datasources:
@@ -149,7 +154,7 @@ spec:
   extractor:
     name: host_capabilities_extractor
   description: |
-    Extract capabilities of each host.
+    This knowledge extracts compute capabilities of each host.
   recency: "60s"
   dependencies:
     datasources:
@@ -170,7 +175,8 @@ spec:
   extractor:
     name: vm_host_residency_extractor
   description: |
-    Extract VM residency information.
+    This knowledge calculates how long VMs have been running on their host
+    until they were migrated away.
   recency: "60s"
   dependencies:
     datasources:
@@ -190,7 +196,8 @@ spec:
   extractor:
     name: vm_life_span_histogram_extractor
   description: |
-    Extract VM life span information.
+    This knowledge calculates how long VMs have been running until they were
+    deleted. The information is aggregated in histogram buckets.
   recency: "60s"
   dependencies:
     datasources:
@@ -209,7 +216,7 @@ spec:
   extractor:
     name: host_az_extractor
   description: |
-    Extract host availability zone information.
+    This knowledge extracts which availability zone each host belongs to.
   recency: "60s"
   dependencies:
     datasources:
@@ -228,7 +235,7 @@ spec:
   extractor:
     name: sap_host_details_extractor
   description: |
-    Extract SAP-specific host details information.
+    This knowledge extracts SAP-specific host details information.
   recency: "60s"
   dependencies:
     datasources:

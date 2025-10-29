@@ -8,5 +8,7 @@ spec:
   type: weigher
   impl: noop
   description: |
-    Does nothing.
+    This is only a passthrough step which assigns a zero-weight to all machinepool
+    candidates. It is used as a placeholder step in the ironcore machines scheduler
+    pipeline.
   knowledges: []

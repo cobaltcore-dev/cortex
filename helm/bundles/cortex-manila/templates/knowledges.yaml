@@ -11,7 +11,7 @@ spec:
   extractor:
     name: netapp_storage_pool_cpu_usage_extractor
   description: |
-    Extracts CPU usage information for NetApp storage pools.
+    This knowledge aggregates CPU usage information for NetApp storage pools.
   recency: "60s"
   dependencies:
     datasources:

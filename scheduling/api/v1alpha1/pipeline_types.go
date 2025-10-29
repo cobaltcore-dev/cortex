@@ -30,6 +30,9 @@ const (
 type PipelineSpec struct {
 	// The operator by which this pipeline should be handled.
 	Operator string `json:"operator,omitempty"`
+	// An optional description of the pipeline.
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
 	// The type of the pipeline.
 	Type PipelineType `json:"type"`
 	// The ordered list of steps that make up this pipeline.
