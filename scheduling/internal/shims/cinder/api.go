@@ -19,6 +19,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -141,8 +142,13 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling decision")
 		return
 	}
-	if result.Status.Error != "" || result.Status.Result == nil {
-		c.Respond(http.StatusInternalServerError, errors.New(result.Status.Error), "decision failed")
+	// Check if the decision contains status conditions indicating an error.
+	if meta.IsStatusConditionTrue(result.Status.Conditions, v1alpha1.DecisionConditionError) {
+		c.Respond(http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
+		return
+	}
+	if result.Status.Result == nil {
+		c.Respond(http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
 		return
 	}
 	hosts := result.Status.Result.OrderedHosts

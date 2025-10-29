@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -100,7 +101,12 @@ func createTestKnowledge(name, namespace string, hasError bool, rawLength int) *
 		},
 	}
 	if hasError {
-		knowledge.Status.Error = "test error"
+		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+			Type:    knowledgev1alpha1.KnowledgeConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "TestError",
+			Message: "This is a test error",
+		})
 	}
 	return knowledge
 }
@@ -332,9 +338,9 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 				t.Errorf("Expected Ready=%v, got %v", tt.expectReady, updatedPipeline.Status.Ready)
 			}
 
-			hasError := updatedPipeline.Status.Error != ""
+			hasError := meta.IsStatusConditionTrue(updatedPipeline.Status.Conditions, v1alpha1.PipelineConditionError)
 			if hasError != tt.expectError {
-				t.Errorf("Expected error=%v, got error=%v (%s)", tt.expectError, hasError, updatedPipeline.Status.Error)
+				t.Errorf("Expected Error condition=%v, got %v", tt.expectError, hasError)
 			}
 		})
 	}

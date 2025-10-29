@@ -49,12 +49,18 @@ const (
 	ReservationStatusPhaseFailed ReservationStatusPhase = "failed"
 )
 
+const (
+	// Something went wrong during the handling of the reservation.
+	ReservationConditionError = "Error"
+)
+
 // ReservationStatus defines the observed state of Reservation.
 type ReservationStatus struct {
 	// The current phase of the reservation.
 	Phase ReservationStatusPhase `json:"phase,omitempty"`
-	// An error explaining why the reservation is failed, if applicable.
-	Error string `json:"error,omitempty"`
+	// The current status conditions of the reservation.
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 	// The name of the compute host that was allocated.
 	Host string `json:"host"`
 }
@@ -64,7 +70,6 @@ type ReservationStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
-// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Reservation is the Schema for the reservations API
 type Reservation struct {

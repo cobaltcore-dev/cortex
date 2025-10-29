@@ -22,6 +22,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/lib/sso"
 	"github.com/sapcc/go-bits/jobloop"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,7 +76,12 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		FromSecretRef(ctx, datasource.Spec.DatabaseSecretRef)
 	if err != nil {
 		log.Error(err, "failed to authenticate with database", "secretRef", datasource.Spec.DatabaseSecretRef)
-		datasource.Status.Error = "failed to authenticate with database: " + err.Error()
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "DatabaseAuthenticationFailed",
+			Message: "failed to authenticate with database: " + err.Error(),
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -91,7 +97,12 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 			FromSecretRef(ctx, *datasource.Spec.SSOSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with SSO", "secretRef", datasource.Spec.SSOSecretRef)
-			datasource.Status.Error = "failed to authenticate with SSO: " + err.Error()
+			meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.DatasourceConditionError,
+				Status:  metav1.ConditionTrue,
+				Reason:  "SSOAuthenticationFailed",
+				Message: "failed to authenticate with SSO: " + err.Error(),
+			})
 			if err := r.Status().Update(ctx, datasource); err != nil {
 				log.Error(err, "failed to update datasource status", "name", datasource.Name)
 				return ctrl.Result{}, err
@@ -105,7 +116,12 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		FromSecretRef(ctx, datasource.Spec.OpenStack.SecretRef)
 	if err != nil {
 		log.Error(err, "failed to authenticate with keystone", "secretRef", datasource.Spec.OpenStack.SecretRef)
-		datasource.Status.Error = "failed to authenticate with keystone: " + err.Error()
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "KeystoneAuthenticationFailed",
+			Message: "failed to authenticate with keystone: " + err.Error(),
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -159,7 +175,12 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	default:
 		log.Info("skipping datasource, unsupported openstack datasource type", "type", datasource.Spec.OpenStack.Type)
-		datasource.Status.Error = "unsupported openstack datasource type: " + string(datasource.Spec.OpenStack.Type)
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "UnsupportedOpenStackDatasourceType",
+			Message: "unsupported openstack datasource type: " + string(datasource.Spec.OpenStack.Type),
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -170,7 +191,12 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	// Initialize the syncer before syncing.
 	if err := syncer.Init(ctx); err != nil {
 		log.Error(err, "failed to init openstack datasource", "name", datasource.Name)
-		datasource.Status.Error = "failed to init openstack datasource: " + err.Error()
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "OpenStackDatasourceInitFailed",
+			Message: "failed to init openstack datasource: " + err.Error(),
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -181,7 +207,12 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	nResults, err := syncer.Sync(ctx)
 	if errors.Is(err, v1alpha1.ErrWaitingForDependencyDatasource) {
 		log.Info("datasource sync waiting for dependency datasource", "name", datasource.Name)
-		datasource.Status.Error = "waiting for dependency datasource"
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionWaiting,
+			Status:  metav1.ConditionTrue,
+			Reason:  "WaitingForDependencyDatasource",
+			Message: "waiting for dependency datasource",
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -192,7 +223,12 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	// Other error
 	if err != nil {
 		log.Error(err, "failed to sync openstack datasource", "name", datasource.Name)
-		datasource.Status.Error = "failed to sync openstack datasource: " + err.Error()
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "OpenStackDatasourceSyncFailed",
+			Message: "failed to sync openstack datasource: " + err.Error(),
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -201,7 +237,8 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	// Update the datasource status to reflect successful sync.
-	datasource.Status.Error = ""
+	meta.RemoveStatusCondition(&datasource.Status.Conditions, v1alpha1.DatasourceConditionError)
+	meta.RemoveStatusCondition(&datasource.Status.Conditions, v1alpha1.DatasourceConditionWaiting)
 	datasource.Status.LastSynced = metav1.NewTime(time.Now())
 	nextTime := time.Now().Add(datasource.Spec.OpenStack.SyncInterval.Duration)
 	datasource.Status.NextSyncTime = metav1.NewTime(nextTime)

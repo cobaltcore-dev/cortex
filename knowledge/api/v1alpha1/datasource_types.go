@@ -222,6 +222,13 @@ type DatasourceSpec struct {
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef,omitempty"`
 }
 
+const (
+	// Something went wrong during the syncing of the datasource.
+	DatasourceConditionError = "Error"
+	// The datasource is waiting for a dependency datasource to become available.
+	DatasourceConditionWaiting = "Waiting"
+)
+
 type DatasourceStatus struct {
 	// When the datasource was last successfully synced.
 	LastSynced metav1.Time `json:"lastSynced,omitempty"`
@@ -232,8 +239,9 @@ type DatasourceStatus struct {
 	// Planned time for the next sync.
 	NextSyncTime metav1.Time `json:"nextSyncTime,omitempty"`
 
-	// If there was an error during the last sync, it is recorded here.
-	Error string `json:"error,omitempty"`
+	// The current status conditions of the datasource.
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true
@@ -246,7 +254,6 @@ type DatasourceStatus struct {
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Next",type="string",JSONPath=".status.nextSyncTime"
 // +kubebuilder:printcolumn:name="Objects",type="integer",JSONPath=".status.numberOfObjects"
-// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Datasource is the Schema for the datasources API
 type Datasource struct {

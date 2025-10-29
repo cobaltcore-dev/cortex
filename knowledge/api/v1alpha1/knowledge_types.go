@@ -104,6 +104,11 @@ func BoxFeatureList[T any](features []T) (runtime.RawExtension, error) {
 	return raw, err
 }
 
+const (
+	// Something went wrong during the extraction of the knowledge.
+	KnowledgeConditionError = "Error"
+)
+
 type KnowledgeStatus struct {
 	// When the knowledge was last successfully extracted.
 	// +kubebuilder:validation:Optional
@@ -119,9 +124,9 @@ type KnowledgeStatus struct {
 	// +kubebuilder:validation:Optional
 	RawLength int `json:"rawLength,omitempty"`
 
-	// If there was an error during the last extraction, it is recorded here.
+	// The current status conditions of the knowledge.
 	// +kubebuilder:validation:Optional
-	Error string `json:"error,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true
@@ -133,7 +138,6 @@ type KnowledgeStatus struct {
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Recency",type="string",JSONPath=".spec.recency"
 // +kubebuilder:printcolumn:name="Features",type="integer",JSONPath=".status.rawLength"
-// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Knowledge is the Schema for the knowledges API
 type Knowledge struct {

@@ -39,6 +39,11 @@ type PipelineSpec struct {
 	Steps []StepInPipeline `json:"steps,omitempty"`
 }
 
+const (
+	// Something went wrong during the pipeline reconciliation.
+	PipelineConditionError = "Error"
+)
+
 type PipelineStatus struct {
 	// Whether the pipeline is ready to be used.
 	Ready bool `json:"ready"`
@@ -49,8 +54,9 @@ type PipelineStatus struct {
 	// An overview of the readiness of the steps in the pipeline.
 	// Format: "ReadySteps / TotalSteps steps ready".
 	StepsReadyFrac string `json:"stepsReadyFrac,omitempty"`
-	// An error explaining why the pipeline is not ready, if applicable.
-	Error string `json:"error,omitempty"`
+	// The current status conditions of the pipeline.
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true
@@ -61,7 +67,6 @@ type PipelineStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
 // +kubebuilder:printcolumn:name="Steps",type="string",JSONPath=".status.stepsReadyFrac"
-// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Pipeline is the Schema for the decisions API
 type Pipeline struct {

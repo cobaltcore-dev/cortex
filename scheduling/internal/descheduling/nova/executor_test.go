@@ -11,6 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -368,8 +369,8 @@ func TestExecutor_Reconcile(t *testing.T) {
 				t.Errorf("expected phase %s, got %s", tt.expectedPhase, updated.Status.Phase)
 			}
 
-			if tt.expectedError != "" && updated.Status.Error != tt.expectedError {
-				t.Errorf("expected error %q, got %q", tt.expectedError, updated.Status.Error)
+			if tt.expectedError != "" && meta.IsStatusConditionFalse(updated.Status.Conditions, v1alpha1.DeschedulingConditionError) {
+				t.Error("expected error condition to be true")
 			}
 
 			if tt.expectedPhase == v1alpha1.DeschedulingStatusPhaseCompleted {

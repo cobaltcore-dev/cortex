@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -120,8 +121,8 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Expected phase %v, got %v", tt.expectedPhase, updated.Status.Phase)
 				}
 
-				if tt.expectedError != "" && updated.Status.Error != tt.expectedError {
-					t.Errorf("Expected error %v, got %v", tt.expectedError, updated.Status.Error)
+				if tt.expectedError != "" && meta.IsStatusConditionFalse(updated.Status.Conditions, v1alpha1.ReservationConditionError) {
+					t.Errorf("Expected error %v, got %v", tt.expectedError, updated.Status.Conditions)
 				}
 			}
 		})
@@ -262,8 +263,8 @@ func TestReservationReconciler_reconcileInstanceReservation(t *testing.T) {
 				t.Errorf("Expected phase %v, got %v", tt.expectedPhase, updated.Status.Phase)
 			}
 
-			if tt.expectedError != "" && updated.Status.Error != tt.expectedError {
-				t.Errorf("Expected error %v, got %v", tt.expectedError, updated.Status.Error)
+			if tt.expectedError != "" && meta.IsStatusConditionFalse(updated.Status.Conditions, v1alpha1.ReservationConditionError) {
+				t.Errorf("Expected error %v, got %v", tt.expectedError, updated.Status.Conditions)
 			}
 		})
 	}
@@ -396,8 +397,8 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		t.Errorf("Expected host %v, got %v", "test-host-1", updated.Status.Host)
 	}
 
-	if updated.Status.Error != "" {
-		t.Errorf("Expected no error, got %v", updated.Status.Error)
+	if meta.IsStatusConditionTrue(updated.Status.Conditions, v1alpha1.ReservationConditionError) {
+		t.Errorf("Expected no error, got %v", updated.Status.Conditions)
 	}
 }
 

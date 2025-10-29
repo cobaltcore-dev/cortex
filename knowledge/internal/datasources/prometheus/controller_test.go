@@ -161,33 +161,6 @@ func TestDatasourceSpec(t *testing.T) {
 	}
 }
 
-func TestDatasourceStatus(t *testing.T) {
-	// Test that datasource status struct works correctly
-	status := v1alpha1.DatasourceStatus{
-		NumberOfObjects: 100,
-		Took:            metav1.Duration{Duration: 30 * time.Second},
-		Error:           "",
-	}
-
-	if status.NumberOfObjects != 100 {
-		t.Errorf("Expected NumberOfObjects 100, got %d", status.NumberOfObjects)
-	}
-
-	if status.Took.Duration.Seconds() != 30 {
-		t.Errorf("Expected Took 30, got %f", status.Took.Duration.Seconds())
-	}
-
-	if status.Error != "" {
-		t.Errorf("Expected empty error, got %s", status.Error)
-	}
-
-	// Test with error
-	status.Error = "connection failed"
-	if status.Error != "connection failed" {
-		t.Errorf("Expected error 'connection failed', got %s", status.Error)
-	}
-}
-
 func TestMetricTypeMapping(t *testing.T) {
 	// Test that we know about the expected metric types
 	knownMetricTypes := []string{

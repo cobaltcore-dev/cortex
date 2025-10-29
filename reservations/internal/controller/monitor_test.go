@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -126,7 +127,14 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 			},
 			Status: v1alpha1.ReservationStatus{
 				Phase: v1alpha1.ReservationStatusPhaseFailed,
-				Error: "test error",
+				Conditions: []metav1.Condition{
+					{
+						Type:    v1alpha1.ReservationConditionError,
+						Status:  metav1.ConditionTrue,
+						Reason:  "SomeError",
+						Message: "Failed due to some error",
+					},
+				},
 			},
 		},
 		{
@@ -358,7 +366,14 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 		},
 		Status: v1alpha1.ReservationStatus{
 			Phase: v1alpha1.ReservationStatusPhaseFailed,
-			Error: "error with, commas, in it",
+			Conditions: []metav1.Condition{
+				{
+					Type:    v1alpha1.ReservationConditionError,
+					Status:  metav1.ConditionTrue,
+					Reason:  "SomeError",
+					Message: "error with, commas, in it",
+				},
+			},
 		},
 	}
 
