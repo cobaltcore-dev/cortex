@@ -149,6 +149,15 @@
       border-color: #007bff;
       box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
     }
+
+    .table-container {
+      overflow-x: auto;
+    }
+
+    .table-container table {
+      min-width: max-content;
+      margin: 0;
+    }
   </style>
 </head>
 
@@ -186,6 +195,9 @@
   </div>
 
   <script>
+
+    const kubernetesAPIServer = 'http://localhost:4000/k8s'
+
     const state = {
       schedulingDecisions: [],
       selectedDecisions: null,
@@ -253,7 +265,7 @@
 
     // Update the current displayed decision based on the vm_id URL parameter.
     function updateCurrentDecision() {
-      const urlParams = new URLSearchParams(window.location.search);
+      const urlParams = new URLSearchParams(window.location.search)
       const vmId = urlParams.get('vm_id')
 
       if (!vmId) {
@@ -282,14 +294,13 @@
     // List scheduling decisions, optionally filtered by vmId.
     async function listSchedulingDecisions(vmId) {
       // Get the port mapping from /portmappings.json
-      const portMappingsResponse = await fetch('portmappings.json')
-      const novaSchedulerAPIPort = JSON.parse(await portMappingsResponse.text())['cortex-nova-scheduler-api']?.local
-      let url = `http://localhost:${novaSchedulerAPIPort}/scheduler/nova/scheduling-decisions`
+      let url = `${kubernetesAPIServer}/apis/scheduling.cortex/v1alpha1/decisions`
 
       if (vmId) {
-        url += `?vm_id=${vmId}`
+        url += `/${vmId}`
       }
       const response = await fetch(url)
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -301,26 +312,40 @@
 
     // Draw individual decisions
     function drawDecision(app, spec, status, vmId) {
+
+      const novaRequest = spec.novaRaw
+
+
+      let type = "unknown"
+      if (novaRequest.live) {
+        type = "live migration"
+      } else if (novaRequest.resize) {
+        type = "resize"
+      } else if (novaRequest.rebuild) {
+        type = "rebuild"
+      } else {
+        type = "new instance"
+      }
+
+      const availabilityZone = novaRequest.spec["nova_object.data"].availability_zone
+      const instanceUUID = novaRequest.spec["nova_object.data"].instance_uuid
+      const flavor = novaRequest.spec["nova_object.data"].flavor["nova_object.data"]
       const detailsToDisplay = [
         {
           "name": "Event Type",
-          "value": spec.eventType
+          "value": type
         },
         {
           "name": "VM ID",
-          "value": vmId
-        },
-        {
-          "name": "Request ID",
-          "value": spec.id
+          "value": instanceUUID
         },
         {
           "name": "Availability Zone",
-          "value": spec.availabilityZone
+          "value": availabilityZone
         },
         {
           "name": "Flavor",
-          "value": `${spec.flavor.name} (MB: ${spec.flavor.requests.memory}, vCPUs: ${spec.flavor.requests.cpu})`
+          "value": `${flavor.name} (MB: ${flavor.memory_mb}, vCPUs: ${flavor.vcpus})`
         },
         {
           "name": "Decision",
@@ -342,34 +367,27 @@
       const decisionSteps = {}
       const decisionOrder = []
 
-      for (const step of spec.pipeline.outputs ?? []) {
-        decisionSteps[step.step] = step.activations
-        decisionOrder.push(step.step)
+      for (const step of status.stepResults ?? []) {
+        decisionSteps[step.stepName] = step.activations
+        decisionOrder.push(step.stepName)
       }
 
       const steps = {
         ...decisionSteps,
-        'scaled nova weights': spec.input,
-        'output weights': status.finalScores,
+        'raw nova weights': status.result.rawInWeights,
+        'normalized nova weights': status.result.normalizedInWeights,
+        'aggregated output weights': status.result.aggregatedOutWeights,
       }
-      const order = ['scaled nova weights', ...decisionOrder, 'output weights']
-      const highlights = ['scaled nova weights', 'output weights']
+      const order = ['raw nova weights', 'normalized nova weights', ...decisionOrder, 'aggregated output weights']
+      const highlights = ['raw nova weights', 'normalized nova weights', 'aggregated output weights']
 
-      const hostnames = Object.keys(status.finalScores || {}).sort((a, b) => {
-        const scoreA = status.finalScores[a]
-        const scoreB = status.finalScores[b]
+      const hostnames = status.result.orderedHosts || []
 
-        // Handle undefined values - put them at the end
-        if (scoreA === undefined && scoreB === undefined) return a.localeCompare(b)
-        if (scoreA === undefined) return 1
-        if (scoreB === undefined) return -1
-
-        // Sort by score (descending), then by name
-        return scoreB - scoreA || a.localeCompare(b)
-      })
+      const tableContainer = document.createElement('div')
+      tableContainer.classList.add('table-container')
 
       const table = document.createElement('table')
-      app.appendChild(table)
+      tableContainer.appendChild(table)
 
       let innerTable = ""
 
@@ -413,7 +431,7 @@
       // Add hosts to the table.
       innerTable += '<tr>'
       for (const host of hostnames) {
-        const hasWeight = status.finalScores[host] !== undefined
+        const hasWeight = status.result.aggregatedOutWeights[host] !== undefined
         innerTable += `
           <th class="hostname" style="${hasWeight ? '' : greyout}">
             <div>${host}</div>
@@ -422,7 +440,7 @@
       }
 
       table.innerHTML = innerTable
-      app.appendChild(table)
+      app.appendChild(tableContainer)
     }
 
 
@@ -439,13 +457,8 @@
       `
         return
       }
-
-      const vmId = state.selectedDecisions.metadata.name
-
-      for (const spec of state.selectedDecisions.spec.decisions) {
-        const status = state.selectedDecisions.status.results.find(d => d.id === spec.id) || {}
-        drawDecision(app, spec, status, vmId)
-      }
+      const id = state.selectedDecisions.metadata.name
+      drawDecision(app, state.selectedDecisions.spec, state.selectedDecisions.status, id)
     }
 
     // Initialize app
@@ -460,6 +473,7 @@
         })
         .then(updateCurrentDecision)
         .catch(error => {
+          console.error(error)
           alert('Error loading scheduling decisions: ' + error)
         })
     }
