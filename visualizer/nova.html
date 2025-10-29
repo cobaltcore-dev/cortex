@@ -377,7 +377,10 @@
       const order = ['raw nova weights', 'normalized nova weights', ...decisionOrder, 'aggregated output weights']
       const highlights = ['raw nova weights', 'normalized nova weights', 'aggregated output weights']
 
-      const hostnames = status.result.orderedHosts || []
+      const orderedHosts = status.result.orderedHosts || []
+      const rawWeightHosts = Object.keys(status.result.rawInWeights || {})
+      const remainingHosts = rawWeightHosts.filter(host => !orderedHosts.includes(host))
+      const hostnames = [...orderedHosts, ...remainingHosts]
 
       const tableContainer = document.createElement('div')
       tableContainer.classList.add('table-container')
@@ -441,7 +444,7 @@
 
 
     // Redraw main content based on selected decision
-    function redraw() {
+    async function redraw() {
       const app = document.querySelector('#app')
       app.innerHTML = ''
 
@@ -455,6 +458,12 @@
       }
       const id = state.selectedDecisions.metadata.name
       drawDecision(app, state.selectedDecisions.spec, state.selectedDecisions.status, id)
+
+      for (const item of state.selectedDecisions.status.history) {
+        const result = await listSchedulingDecisions(item.name)
+        drawDecision(app, result.spec, result.status, result.metadata.name)
+      }
+
     }
 
     // Initialize app
@@ -464,10 +473,6 @@
       listSchedulingDecisions()
         .then(data => {
           state.schedulingDecisions = data.items || []
-          console.log(data)
-          for (const item of state.schedulingDecisions) {
-            console.log(item.status.history)
-          }
           updateSidebar()
           redraw()
         })
