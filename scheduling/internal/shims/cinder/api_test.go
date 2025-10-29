@@ -16,6 +16,7 @@ import (
 	cinderapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type mockHTTPAPIDelegate struct {
@@ -230,7 +231,13 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 			}(),
 			decisionResult: &v1alpha1.Decision{
 				Status: v1alpha1.DecisionStatus{
-					Error: "decision processing failed",
+					Conditions: []metav1.Condition{
+						{
+							Type:   v1alpha1.DecisionConditionError,
+							Status: metav1.ConditionTrue,
+							Reason: "SchedulingError",
+						},
+					},
 				},
 			},
 			expectedStatus: http.StatusInternalServerError,

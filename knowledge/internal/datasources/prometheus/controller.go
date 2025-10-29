@@ -15,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/sso"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -73,7 +74,12 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	}[datasource.Spec.Prometheus.Type]
 	if !ok {
 		log.Info("skipping datasource, unsupported metric type", "metricType", datasource.Spec.Prometheus.Type)
-		datasource.Status.Error = "unsupported metric type: " + datasource.Spec.Prometheus.Type
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "UnsupportedPrometheusMetricType",
+			Message: "unsupported metric type: " + datasource.Spec.Prometheus.Type,
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -86,7 +92,12 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		FromSecretRef(ctx, datasource.Spec.DatabaseSecretRef)
 	if err != nil {
 		log.Error(err, "failed to authenticate with database", "secretRef", datasource.Spec.DatabaseSecretRef)
-		datasource.Status.Error = "failed to authenticate with database: " + err.Error()
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "DatabaseAuthenticationFailed",
+			Message: "failed to authenticate with database: " + err.Error(),
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -102,7 +113,12 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 			FromSecretRef(ctx, *datasource.Spec.SSOSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with SSO", "secretRef", datasource.Spec.SSOSecretRef)
-			datasource.Status.Error = "failed to authenticate with SSO: " + err.Error()
+			meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.DatasourceConditionError,
+				Status:  metav1.ConditionTrue,
+				Reason:  "SSOAuthenticationFailed",
+				Message: "failed to authenticate with SSO: " + err.Error(),
+			})
 			if err := r.Status().Update(ctx, datasource); err != nil {
 				log.Error(err, "failed to update datasource status", "name", datasource.Name)
 				return ctrl.Result{}, err
@@ -122,7 +138,12 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	prometheusURL, ok := secret.Data["url"]
 	if !ok {
 		log.Error(err, "missing 'url' in prometheus secret", "secretRef", datasource.Spec.Prometheus.SecretRef)
-		datasource.Status.Error = "missing 'url' in prometheus secret"
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "MissingPrometheusURL",
+			Message: "missing 'url' in prometheus secret",
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -140,7 +161,12 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	nResults, nextSync, err := syncer.Sync(ctx)
 	if err != nil {
 		log.Error(err, "failed to sync prometheus datasource", "name", datasource.Name)
-		datasource.Status.Error = "failed to sync prometheus datasource: " + err.Error()
+		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DatasourceConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "PrometheusDatasourceSyncFailed",
+			Message: "failed to sync prometheus datasource: " + err.Error(),
+		})
 		if err := r.Status().Update(ctx, datasource); err != nil {
 			log.Error(err, "failed to update datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
@@ -149,7 +175,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Update the datasource status to reflect successful sync.
-	datasource.Status.Error = ""
+	meta.RemoveStatusCondition(&datasource.Status.Conditions, v1alpha1.DatasourceConditionError)
 	datasource.Status.LastSynced = metav1.NewTime(time.Now())
 	datasource.Status.NextSyncTime = metav1.NewTime(nextSync)
 	datasource.Status.NumberOfObjects = nResults

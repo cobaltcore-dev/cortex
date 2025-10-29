@@ -17,6 +17,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -78,7 +79,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}[knowledge.Spec.Extractor.Name]
 	if !ok {
 		log.Info("skipping knowledge extraction, unsupported extractor", "name", knowledge.Spec.Extractor.Name)
-		knowledge.Status.Error = "unsupported extractor name: " + knowledge.Spec.Extractor.Name
+		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KnowledgeConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "UnsupportedExtractor",
+			Message: "unsupported extractor name: " + knowledge.Spec.Extractor.Name,
+		})
 		if err := r.Status().Update(ctx, knowledge); err != nil {
 			log.Error(err, "failed to update knowledge status")
 			return ctrl.Result{}, err
@@ -95,7 +101,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			Name:      dsRef.Name,
 		}, ds); err != nil {
 			log.Error(err, "failed to get datasource", "name", dsRef.Name)
-			knowledge.Status.Error = "failed to get datasource: " + err.Error()
+			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.KnowledgeConditionError,
+				Status:  metav1.ConditionTrue,
+				Reason:  "DatasourceFetchFailed",
+				Message: "failed to get datasource: " + err.Error(),
+			})
 			if err := r.Status().Update(ctx, knowledge); err != nil {
 				log.Error(err, "failed to update knowledge status")
 				return ctrl.Result{}, err
@@ -107,7 +118,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		} else if databaseSecretRef.Name != ds.Spec.DatabaseSecretRef.Name ||
 			databaseSecretRef.Namespace != ds.Spec.DatabaseSecretRef.Namespace {
 			log.Error(nil, "datasources have differing database secret refs")
-			knowledge.Status.Error = "datasources have differing database secret refs"
+			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.KnowledgeConditionError,
+				Status:  metav1.ConditionTrue,
+				Reason:  "InconsistentDatabaseSecretRefs",
+				Message: "datasources have differing database secret refs",
+			})
 			if err := r.Status().Update(ctx, knowledge); err != nil {
 				log.Error(err, "failed to update knowledge status")
 				return ctrl.Result{}, err
@@ -123,7 +139,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			FromSecretRef(ctx, *databaseSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with database", "secretRef", *databaseSecretRef)
-			knowledge.Status.Error = "failed to authenticate with database: " + err.Error()
+			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.KnowledgeConditionError,
+				Status:  metav1.ConditionTrue,
+				Reason:  "DatabaseAuthenticationFailed",
+				Message: "failed to authenticate with database: " + err.Error(),
+			})
 			if err := r.Status().Update(ctx, knowledge); err != nil {
 				log.Error(err, "failed to update knowledge status")
 				return ctrl.Result{}, err
@@ -141,7 +162,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			FromSecretRef(ctx, *knowledge.Spec.DatabaseSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with extractor database", "secretRef", *knowledge.Spec.DatabaseSecretRef)
-			knowledge.Status.Error = "failed to authenticate with extractor database: " + err.Error()
+			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.KnowledgeConditionError,
+				Status:  metav1.ConditionTrue,
+				Reason:  "ExtractorDatabaseAuthenticationFailed",
+				Message: "failed to authenticate with extractor database: " + err.Error(),
+			})
 			if err := r.Status().Update(ctx, knowledge); err != nil {
 				log.Error(err, "failed to update knowledge status")
 				return ctrl.Result{}, err
@@ -155,7 +181,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	wrapped := monitorFeatureExtractor(knowledge.Spec.Extractor.Name, extractor, r.Monitor)
 	if err := wrapped.Init(authenticatedDatasourceDB, authenticatedExtractorDB, knowledge.Spec); err != nil {
 		log.Error(err, "failed to initialize feature extractor", "name", knowledge.Spec)
-		knowledge.Status.Error = "failed to initialize feature extractor: " + err.Error()
+		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KnowledgeConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "FeatureExtractorInitializationFailed",
+			Message: "failed to initialize feature extractor: " + err.Error(),
+		})
 		if err := r.Status().Update(ctx, knowledge); err != nil {
 			log.Error(err, "failed to update knowledge status")
 			return ctrl.Result{}, err
@@ -166,7 +197,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	features, err := extractor.Extract()
 	if err != nil {
 		log.Error(err, "failed to extract features", "name", knowledge.Spec.Extractor.Name)
-		knowledge.Status.Error = "failed to extract features: " + err.Error()
+		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KnowledgeConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "FeatureExtractionFailed",
+			Message: "failed to extract features: " + err.Error(),
+		})
 		if err := r.Status().Update(ctx, knowledge); err != nil {
 			log.Error(err, "failed to update knowledge status")
 			return ctrl.Result{}, err
@@ -182,7 +218,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		raw, err := v1alpha1.BoxFeatureList(features)
 		if err != nil {
 			log.Error(err, "failed to marshal extracted features", "name", knowledge.Spec.Extractor.Name)
-			knowledge.Status.Error = "failed to marshal extracted features: " + err.Error()
+			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.KnowledgeConditionError,
+				Status:  metav1.ConditionTrue,
+				Reason:  "FeatureMarshalingFailed",
+				Message: "failed to marshal extracted features: " + err.Error(),
+			})
 			if err := r.Status().Update(ctx, knowledge); err != nil {
 				log.Error(err, "failed to update knowledge status")
 				return ctrl.Result{}, err
@@ -191,8 +232,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		knowledge.Status.Raw = raw
 	}
+	meta.RemoveStatusCondition(&knowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
 	knowledge.Status.LastExtracted = metav1.NewTime(time.Now())
-	knowledge.Status.Error = ""
 	knowledge.Status.RawLength = len(features)
 	knowledge.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	if err := r.Status().Update(ctx, knowledge); err != nil {

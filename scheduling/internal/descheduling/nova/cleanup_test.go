@@ -58,7 +58,14 @@ func TestCleanup_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{
 					Phase: v1alpha1.DeschedulingStatusPhaseFailed,
-					Error: "migration failed",
+					Conditions: []metav1.Condition{
+						{
+							Type:    v1alpha1.DeschedulingConditionError,
+							Status:  metav1.ConditionTrue,
+							Reason:  "MigrationFailed",
+							Message: "migration failed",
+						},
+					},
 				},
 			},
 			expectDelete:  true,

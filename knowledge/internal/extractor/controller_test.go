@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/conf"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -151,8 +152,9 @@ func TestKnowledgeReconciler_Reconcile_UnsupportedExtractor(t *testing.T) {
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "unsupported-extractor"}, &updatedKnowledge); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(updatedKnowledge.Status.Error, "unsupported extractor name") {
-		t.Errorf("Expected error to contain 'unsupported extractor name', got: %s", updatedKnowledge.Status.Error)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	if condition == nil || !strings.Contains(condition.Message, "unsupported extractor name") {
+		t.Errorf("Expected error to contain 'unsupported extractor name', got: %s", condition.Message)
 	}
 }
 
@@ -210,8 +212,9 @@ func TestKnowledgeReconciler_Reconcile_MissingDatasource(t *testing.T) {
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "missing-datasource"}, &updatedKnowledge); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(updatedKnowledge.Status.Error, "failed to get datasource") {
-		t.Errorf("Expected error to contain 'failed to get datasource', got: %s", updatedKnowledge.Status.Error)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	if condition == nil || !strings.Contains(condition.Message, "failed to get datasource") {
+		t.Errorf("Expected error to contain 'failed to get datasource', got: %s", condition.Message)
 	}
 }
 
@@ -286,8 +289,9 @@ func TestKnowledgeReconciler_Reconcile_DifferentDatabaseSecrets(t *testing.T) {
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "different-db-secrets"}, &updatedKnowledge); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(updatedKnowledge.Status.Error, "datasources have differing database secret refs") {
-		t.Errorf("Expected error to contain 'datasources have differing database secret refs', got: %s", updatedKnowledge.Status.Error)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	if condition == nil || !strings.Contains(condition.Message, "datasources have differing database secret refs") {
+		t.Errorf("Expected error to contain 'datasources have differing database secret refs', got: %s", condition.Message)
 	}
 }
 
@@ -365,12 +369,14 @@ func TestKnowledgeReconciler_Reconcile_SameDatabaseSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Should not have the "differing database secret refs" error
-	if strings.Contains(updatedKnowledge.Status.Error, "datasources have differing database secret refs") {
-		t.Errorf("Should not have 'differing database secret refs' error, got: %s", updatedKnowledge.Status.Error)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	if condition == nil || strings.Contains(condition.Message, "datasources have differing database secret refs") {
+		t.Errorf("Should not have 'differing database secret refs' error, got: %s", condition.Message)
 	}
 	// Should have an error about authentication failure or missing secret
-	if !strings.Contains(updatedKnowledge.Status.Error, "failed to authenticate with database") {
-		t.Errorf("Expected error to contain 'failed to authenticate with database', got: %s", updatedKnowledge.Status.Error)
+	if condition == nil || (!strings.Contains(condition.Message, "failed to authenticate with database") &&
+		!strings.Contains(condition.Message, "secret not found")) {
+		t.Errorf("Expected error to contain 'failed to authenticate with database' or 'secret not found', got: %s", condition.Message)
 	}
 }
 
@@ -422,9 +428,10 @@ func TestKnowledgeReconciler_Reconcile_NoDatasources(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Should have an error related to feature extraction, not datasource validation
-	if !strings.Contains(updatedKnowledge.Status.Error, "failed to initialize feature extractor") &&
-		!strings.Contains(updatedKnowledge.Status.Error, "database connection is not initialized") {
-		t.Errorf("Expected error to contain 'failed to initialize feature extractor' or 'database connection is not initialized', got: %s", updatedKnowledge.Status.Error)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	if condition == nil || !strings.Contains(condition.Message, "failed to initialize feature extractor") &&
+		!strings.Contains(condition.Message, "database connection is not initialized") {
+		t.Errorf("Expected error to contain 'failed to initialize feature extractor' or 'database connection is not initialized', got: %s", condition.Message)
 	}
 }
 
@@ -493,14 +500,14 @@ func TestKnowledgeReconciler_Reconcile_SupportedExtractors(t *testing.T) {
 			if err := fakeClient.Get(ctx, types.NamespacedName{Name: "test-" + extractorName}, &updatedKnowledge); err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(updatedKnowledge.Status.Error, "unsupported extractor name") {
-				t.Errorf("Should not have 'unsupported extractor name' error for %s, got: %s", extractorName, updatedKnowledge.Status.Error)
+			condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+			if condition == nil || strings.Contains(condition.Message, "unsupported extractor name") {
+				t.Errorf("Should not have 'unsupported extractor name' error, got: %s", condition.Message)
 			}
 			// Should have an error related to feature extraction or database connection
-			if !strings.Contains(updatedKnowledge.Status.Error, "failed to initialize feature extractor") &&
-				!strings.Contains(updatedKnowledge.Status.Error, "database connection is not initialized") &&
-				!strings.Contains(updatedKnowledge.Status.Error, "failed to extract features") {
-				t.Errorf("Expected error related to feature extraction for %s, got: %s", extractorName, updatedKnowledge.Status.Error)
+			if condition == nil || (!strings.Contains(condition.Message, "failed to initialize feature extractor") &&
+				!strings.Contains(condition.Message, "database connection is not initialized")) {
+				t.Errorf("Expected error to contain 'failed to initialize feature extractor' or 'database connection is not initialized', got: %s", condition.Message)
 			}
 		})
 	}

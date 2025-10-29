@@ -50,11 +50,17 @@ const (
 	DeschedulingStatusPhaseFailed DeschedulingStatusPhase = "failed"
 )
 
+const (
+	// Something went wrong during the descheduling process.
+	DeschedulingConditionError = "Error"
+)
+
 type DeschedulingStatus struct {
 	// The current phase of the descheduling.
 	Phase DeschedulingStatusPhase `json:"phase"`
-	// An error explaining why the descheduling failed, if applicable.
-	Error string `json:"error,omitempty"`
+	// The current status conditions of the descheduling.
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 	// The name of the compute host where the VM was rescheduled to.
 	NewHost string `json:"newHost,omitempty"`
 	// The type of host where the VM was rescheduled to.

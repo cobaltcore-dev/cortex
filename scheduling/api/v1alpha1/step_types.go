@@ -62,6 +62,11 @@ type StepSpec struct {
 	Description string `json:"description,omitempty"`
 }
 
+const (
+	// Something went wrong during the step reconciliation.
+	StepConditionError = "Error"
+)
+
 type StepStatus struct {
 	// If the step is ready to be executed.
 	Ready bool `json:"ready"`
@@ -72,8 +77,9 @@ type StepStatus struct {
 	// "ReadyKnowledges / TotalKnowledges ready" as a human-readable string
 	// or "ready" if there are no knowledges configured.
 	KnowledgesReadyFrac string `json:"knowledgesReadyFrac,omitempty"`
-	// An error explaining why the step is not ready, if applicable.
-	Error string `json:"error,omitempty"`
+	// The current status conditions of the step.
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true
@@ -84,7 +90,6 @@ type StepStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
 // +kubebuilder:printcolumn:name="Knowledges",type="string",JSONPath=".status.knowledgesReadyFrac"
-// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
 // Step is the Schema for the deschedulings API
 type Step struct {

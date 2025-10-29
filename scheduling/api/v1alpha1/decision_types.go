@@ -84,6 +84,11 @@ type DecisionResult struct {
 	TargetHost *string `json:"targetHost,omitempty"`
 }
 
+const (
+	// Something went wrong during the calculation of the decision.
+	DecisionConditionError = "Error"
+)
+
 type DecisionStatus struct {
 	// The time it took to schedule.
 	// +kubebuilder:validation:Optional
@@ -102,9 +107,9 @@ type DecisionStatus struct {
 	// +kubebuilder:validation:Optional
 	Explanation string `json:"explanation,omitempty"`
 
-	// If there was an error during the last decision, it is recorded here.
+	// The current status conditions of the decision.
 	// +kubebuilder:validation:Optional
-	Error string `json:"error,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true
@@ -117,7 +122,6 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
 // +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
-// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 // +kubebuilder:selectablefield:JSONPath=".spec.resourceID"
 
 // Decision is the Schema for the decisions API

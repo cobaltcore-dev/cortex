@@ -12,7 +12,9 @@ import (
 	"slices"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,7 +56,12 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Currently we can only reconcile cortex-nova reservations.
 	if res.Spec.Scheduler.CortexNova == nil {
 		log.Info("reservation is not a cortex-nova reservation, skipping", "reservation", req.Name)
-		res.Status.Error = "reservation is not a cortex-nova reservation"
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "UnsupportedScheduler",
+			Message: "reservation is not a cortex-nova reservation",
+		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
@@ -67,7 +74,12 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	hvType, ok := schedulerSpec.FlavorExtraSpecs["capabilities:hypervisor_type"]
 	if !ok || !slices.Contains(r.Conf.Hypervisors, hvType) {
 		log.Info("hypervisor type is not supported", "reservation", req.Name)
-		res.Status.Error = fmt.Sprintf("hypervisor type is not supported: %s", hvType)
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "UnsupportedHypervisorType",
+			Message: fmt.Sprintf("hypervisor type is not supported: %s", hvType),
+		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
@@ -161,7 +173,12 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	if len(externalSchedulerResponse.Hosts) == 0 {
 		log.Info("no hosts found for reservation", "reservation", req.Name)
-		res.Status.Error = "no hosts found for reservation"
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "NoHostsFound",
+			Message: "no hosts found for reservation",
+		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		if err := r.Status().Update(ctx, &res); err != nil {
 			log.Error(err, "failed to update reservation status")
@@ -172,9 +189,9 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Update the reservation with the found host (idx 0)
 	host := externalSchedulerResponse.Hosts[0]
 	log.Info("found host for reservation", "reservation", req.Name, "host", host)
+	meta.RemoveStatusCondition(&res.Status.Conditions, v1alpha1.ReservationConditionError)
 	res.Status.Phase = v1alpha1.ReservationStatusPhaseActive
 	res.Status.Host = host
-	res.Status.Error = "" // Clear any previous error.
 	if err := r.Status().Update(ctx, &res); err != nil {
 		log.Error(err, "failed to update reservation status")
 		return ctrl.Result{}, err

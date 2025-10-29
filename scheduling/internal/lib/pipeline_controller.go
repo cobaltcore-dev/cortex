@@ -9,6 +9,8 @@ import (
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -99,7 +101,12 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	if err != nil {
 		log.Error(err, "pipeline not ready due to step issues", "pipelineName", obj.Name)
 		obj.Status.Ready = false
-		obj.Status.Error = err.Error()
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.StepConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "StepNotReady",
+			Message: err.Error(),
+		})
 		if err := c.Status().Update(ctx, obj); err != nil {
 			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
 		}
@@ -111,7 +118,12 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
 		obj.Status.Ready = false
-		obj.Status.Error = err.Error()
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "PipelineInitFailed",
+			Message: err.Error(),
+		})
 		if err := c.Status().Update(ctx, obj); err != nil {
 			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
 		}
@@ -120,7 +132,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	}
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
 	obj.Status.Ready = true
-	obj.Status.Error = ""
+	meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.PipelineConditionError)
 	if err := c.Status().Update(ctx, obj); err != nil {
 		log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
 		return
@@ -187,7 +199,9 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 			log.Error(err, "failed to get knowledge depending on step", "knowledgeName", knowledgeRef.Name)
 			continue
 		}
-		if knowledge.Status.Error != "" {
+		// Check if the knowledge status conditions indicate an error.
+		if meta.IsStatusConditionTrue(knowledge.Status.Conditions, knowledgev1alpha1.KnowledgeConditionError) {
+			log.Info("knowledge not ready due to error condition", "knowledgeName", knowledgeRef.Name)
 			continue
 		}
 		obj.Status.ReadyKnowledges++
@@ -195,11 +209,16 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 	obj.Status.KnowledgesReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadyKnowledges, obj.Status.TotalKnowledges)
 	if obj.Status.ReadyKnowledges != obj.Status.TotalKnowledges {
 		obj.Status.Ready = false
-		obj.Status.Error = "not all knowledges are ready"
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.StepConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "KnowledgesNotReady",
+			Message: "not all knowledges are ready",
+		})
 		log.Info("step not ready, not all knowledges are ready", "stepName", obj.Name)
 	} else {
 		obj.Status.Ready = true
-		obj.Status.Error = ""
+		meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.StepConditionError)
 		log.Info("step is ready", "stepName", obj.Name)
 	}
 	if err := c.Status().Update(ctx, obj); err != nil {
@@ -338,7 +357,9 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
 ) {
 	before := evt.ObjectOld.(*knowledgev1alpha1.Knowledge)
 	after := evt.ObjectNew.(*knowledgev1alpha1.Knowledge)
-	errorChanged := before.Status.Error != after.Status.Error
+	errorBefore := meta.IsStatusConditionTrue(before.Status.Conditions, knowledgev1alpha1.KnowledgeConditionError)
+	errorAfter := meta.IsStatusConditionTrue(after.Status.Conditions, knowledgev1alpha1.KnowledgeConditionError)
+	errorChanged := errorBefore != errorAfter
 	dataBecameAvailable := before.Status.RawLength == 0 && after.Status.RawLength > 0
 	if !errorChanged && !dataBecameAvailable {
 		// No relevant change, skip re-evaluation.

@@ -167,7 +167,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 					return false
 				}
 				// Ignore already decided schedulings.
-				if decision.Status.Error != "" || decision.Status.Result != nil {
+				if decision.Status.Result != nil {
 					return false
 				}
 				// Only handle manila decisions.

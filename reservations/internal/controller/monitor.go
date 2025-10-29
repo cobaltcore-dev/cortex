@@ -9,6 +9,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -59,8 +61,13 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 
 	countByLabels := map[string]uint64{}
 	for _, reservation := range reservations.Items {
+		errorCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionError)
+		errorMsg := ""
+		if errorCondition != nil && errorCondition.Status == metav1.ConditionTrue {
+			errorMsg = errorCondition.Message
+		}
 		key := string(reservation.Status.Phase) +
-			"," + strings.ReplaceAll(reservation.Status.Error, ",", ";")
+			"," + strings.ReplaceAll(errorMsg, ",", ";")
 		countByLabels[key]++
 	}
 	for key, count := range countByLabels {
@@ -72,8 +79,13 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	resourcesByLabels := map[string]map[string]uint64{}
 	for _, reservation := range reservations.Items {
 		host := ""
+		errorCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionError)
+		errorMsg := ""
+		if errorCondition != nil && errorCondition.Status == metav1.ConditionTrue {
+			errorMsg = errorCondition.Message
+		}
 		key := string(reservation.Status.Phase) +
-			"," + strings.ReplaceAll(reservation.Status.Error, ",", ";") +
+			"," + strings.ReplaceAll(errorMsg, ",", ";") +
 			"," + host
 		if _, ok := resourcesByLabels[key]; !ok {
 			resourcesByLabels[key] = map[string]uint64{}
