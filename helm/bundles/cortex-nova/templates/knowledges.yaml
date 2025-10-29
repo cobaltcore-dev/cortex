@@ -203,6 +203,7 @@ spec:
     datasources:
       - name: nova-flavors
       - name: nova-deleted-servers
+      - name: nova-servers
 ---
 apiVersion: knowledge.cortex/v1alpha1
 kind: Knowledge
