@@ -8,7 +8,7 @@ package shared
 type VMHostResidencyHistogramBucket struct {
 	// Flavor name of the virtual machine.
 	FlavorName string `db:"flavor_name"`
-	// The bucket this life span falls into.
+	// The bucket this residency falls into.
 	Bucket float64 `db:"bucket"`
 	// The value of the bucket.
 	Value uint64 `db:"value"`
