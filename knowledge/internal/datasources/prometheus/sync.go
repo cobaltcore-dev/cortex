@@ -47,6 +47,7 @@ func newTypedSyncer[M prometheus.PrometheusMetric](
 		syncTimeRange:         ds.Spec.Prometheus.TimeRange.Duration,
 		syncInterval:          ds.Spec.Prometheus.Interval.Duration,
 		syncResolutionSeconds: int(ds.Spec.Prometheus.Resolution.Duration.Seconds()),
+		sleepBetweenRequests:  500 * time.Millisecond,
 	}
 }
 
@@ -73,6 +74,10 @@ type syncer[M prometheus.PrometheusMetric] struct {
 	db *db.DB
 	// Authenticated HTTP client to connect to Prometheus.
 	httpClient *http.Client
+
+	// How long to sleep between requests to avoid overloading the Prometheus server.
+	// A default jitter will be applied to this duration.
+	sleepBetweenRequests time.Duration
 }
 
 // Metrics fetched from Prometheus with the time window
@@ -281,7 +286,7 @@ func (s *syncer[M]) sync(start time.Time) {
 	)
 
 	// Don't overload the Prometheus server.
-	time.Sleep(jobloop.DefaultJitter(1 * time.Second))
+	time.Sleep(jobloop.DefaultJitter(s.sleepBetweenRequests))
 	// Continue syncing.
 	s.sync(end)
 }

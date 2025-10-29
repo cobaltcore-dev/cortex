@@ -4,8 +4,11 @@
 package prometheus
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,24 +16,24 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
 	"github.com/cobaltcore-dev/cortex/lib/db"
+	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Mock metric implementation for testing
 type mockMetric struct {
-	name      string
-	timestamp time.Time
-	value     float64
-	tableName string
+	Name      string    `db:"name"`
+	Timestamp time.Time `db:"timestamp"`
+	Value     float64   `db:"value"`
 }
 
-func (m mockMetric) GetName() string              { return m.name }
-func (m mockMetric) GetTimestamp() time.Time      { return m.timestamp }
-func (m mockMetric) GetValue() float64            { return m.value }
-func (m mockMetric) TableName() string            { return m.tableName }
+func (m mockMetric) GetName() string              { return m.Name }
+func (m mockMetric) GetTimestamp() time.Time      { return m.Timestamp }
+func (m mockMetric) GetValue() float64            { return m.Value }
+func (m mockMetric) TableName() string            { return "test_metrics" }
 func (m mockMetric) Indexes() map[string][]string { return nil }
 func (m mockMetric) With(name string, t time.Time, v float64) prometheus.PrometheusMetric {
-	return mockMetric{name: name, timestamp: t, value: v, tableName: m.tableName}
+	return mockMetric{Name: name, Timestamp: t, Value: v}
 }
 
 func TestNewTypedSyncer(t *testing.T) {
@@ -58,14 +61,437 @@ func TestNewTypedSyncer(t *testing.T) {
 	}
 }
 
+func TestSyncerFetch(t *testing.T) {
+	tests := []struct {
+		name           string
+		prometheusResp string
+		statusCode     int
+		wantErr        bool
+		expectedCount  int
+	}{
+		{
+			name: "successful fetch with metrics",
+			prometheusResp: `{
+				"status": "success",
+				"data": {
+					"resultType": "matrix",
+					"result": [
+						{
+							"metric": {},
+							"values": [
+								[1609459200, "0.5"],
+								[1609459260, "0.7"]
+							]
+						}
+					]
+				}
+			}`,
+			statusCode:    200,
+			expectedCount: 2,
+		},
+		{
+			name: "empty result",
+			prometheusResp: `{
+				"status": "success",
+				"data": {
+					"resultType": "matrix",
+					"result": []
+				}
+			}`,
+			statusCode:    200,
+			expectedCount: 0,
+		},
+		{
+			name: "prometheus error status",
+			prometheusResp: `{
+				"status": "error",
+				"errorType": "bad_data",
+				"error": "invalid query"
+			}`,
+			statusCode: 200,
+			wantErr:    true,
+		},
+		{
+			name:           "http error",
+			prometheusResp: "",
+			statusCode:     500,
+			wantErr:        true,
+		},
+		{
+			name:           "invalid json",
+			prometheusResp: "invalid json",
+			statusCode:     200,
+			wantErr:        true,
+		},
+		{
+			name: "invalid value format",
+			prometheusResp: `{
+				"status": "success",
+				"data": {
+					"resultType": "matrix",
+					"result": [
+						{
+							"metric": {},
+							"values": [
+								[1609459200, "invalid"]
+							]
+						}
+					]
+				}
+			}`,
+			statusCode: 200,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.statusCode != 200 {
+					w.WriteHeader(tt.statusCode)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(tt.prometheusResp))
+			}))
+			defer server.Close()
+
+			s := &syncer[mockMetric]{
+				host:                  server.URL,
+				query:                 "up",
+				alias:                 "test_metric",
+				syncResolutionSeconds: 60,
+				httpClient:            &http.Client{},
+				monitor:               datasources.Monitor{},
+				sleepBetweenRequests:  0,
+			}
+
+			start := time.Unix(1609459200, 0)
+			end := time.Unix(1609459800, 0)
+
+			data, err := s.fetch(start, end)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(data.Metrics) != tt.expectedCount {
+				t.Errorf("expected %d metrics, got %d", tt.expectedCount, len(data.Metrics))
+			}
+
+			if !data.Start.Equal(start) {
+				t.Errorf("expected start %v, got %v", start, data.Start)
+			}
+
+			if !data.End.Equal(end) {
+				t.Errorf("expected end %v, got %v", end, data.End)
+			}
+		})
+	}
+}
+
+func TestSyncerGetSyncWindowStart(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupDB        func(*db.DB)
+		expectedResult func(time.Time) bool
+		wantErr        bool
+	}{
+		{
+			name: "empty database - returns time range in past",
+			setupDB: func(testDB *db.DB) {
+				err := testDB.CreateTable(testDB.AddTable(mockMetric{}))
+				if err != nil {
+					t.Fatalf("failed to create table: %v", err)
+				}
+			},
+			expectedResult: func(result time.Time) bool {
+				expectedStart := time.Now().Add(-24 * time.Hour)
+				return result.Before(time.Now()) && result.After(expectedStart.Add(-time.Minute))
+			},
+		},
+		{
+			name: "existing metrics - returns latest timestamp",
+			setupDB: func(testDB *db.DB) {
+				err := testDB.CreateTable(testDB.AddTable(mockMetric{}))
+				if err != nil {
+					t.Fatalf("failed to create table: %v", err)
+				}
+
+				metric := mockMetric{
+					Name:      "test_metric",
+					Timestamp: time.Unix(1609459200, 0),
+					Value:     1.0,
+				}
+
+				if err := testDB.Insert(&metric); err != nil {
+					t.Fatalf("failed to insert metric: %v", err)
+				}
+			},
+			expectedResult: func(result time.Time) bool {
+				expected := time.Unix(1609459200, 0)
+				return result.Equal(expected)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dbEnv := testlibDB.SetupDBEnv(t)
+			testDB := db.DB{DbMap: dbEnv.DbMap}
+			defer testDB.Close()
+			defer dbEnv.Close()
+
+			tt.setupDB(&testDB)
+
+			s := &syncer[mockMetric]{
+				db:                   &testDB,
+				alias:                "test_metric",
+				syncTimeRange:        24 * time.Hour,
+				sleepBetweenRequests: 0,
+			}
+
+			result, err := s.getSyncWindowStart()
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if !tt.expectedResult(result) {
+				t.Errorf("result validation failed for time: %v", result)
+			}
+		})
+	}
+}
+
+func TestSyncerSync(t *testing.T) {
+	tests := []struct {
+		name           string
+		prometheusResp string
+		setupDB        func(*db.DB)
+		startTime      time.Time
+		expectedCalls  int
+	}{
+		{
+			name: "sync with metrics",
+			prometheusResp: `{
+				"status": "success",
+				"data": {
+					"resultType": "matrix",
+					"result": [
+						{
+							"metric": {},
+							"values": [
+								[1609459200, "0.5"]
+							]
+						}
+					]
+				}
+			}`,
+			setupDB: func(testDB *db.DB) {
+				err := testDB.CreateTable(testDB.AddTable(mockMetric{}))
+				if err != nil {
+					t.Fatalf("failed to create table: %v", err)
+				}
+			},
+			startTime:     time.Unix(1609459200, 0),
+			expectedCalls: 1,
+		},
+		{
+			name: "sync future time - no calls",
+			setupDB: func(testDB *db.DB) {
+				err := testDB.CreateTable(testDB.AddTable(mockMetric{}))
+				if err != nil {
+					t.Fatalf("failed to create table: %v", err)
+				}
+			},
+			startTime:     time.Now().Add(time.Hour),
+			expectedCalls: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dbEnv := testlibDB.SetupDBEnv(t)
+			testDB := db.DB{DbMap: dbEnv.DbMap}
+			defer testDB.Close()
+			defer dbEnv.Close()
+
+			tt.setupDB(&testDB)
+
+			callCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				callCount++
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(tt.prometheusResp))
+			}))
+			defer server.Close()
+
+			s := &syncer[mockMetric]{
+				db:                    &testDB,
+				host:                  server.URL,
+				query:                 "up",
+				alias:                 "test_metric",
+				syncTimeRange:         24 * time.Hour,
+				syncInterval:          time.Hour,
+				syncResolutionSeconds: 60,
+				httpClient:            &http.Client{},
+				monitor:               datasources.Monitor{},
+				sleepBetweenRequests:  0,
+			}
+
+			s.sync(tt.startTime)
+
+			if callCount < tt.expectedCalls {
+				t.Errorf("expected at least %d HTTP calls, got %d", tt.expectedCalls, callCount)
+			}
+		})
+	}
+}
+
+func TestSyncerSyncMethod(t *testing.T) {
+	tests := []struct {
+		name           string
+		prometheusResp string
+		setupDB        func(*db.DB)
+		expectedCount  int64
+		wantErr        bool
+	}{
+		{
+			name: "successful full sync",
+			prometheusResp: `{
+				"status": "success",
+				"data": {
+					"resultType": "matrix",
+					"result": [
+						{
+							"metric": {},
+							"values": [
+								[1609459200, "0.5"],
+								[1609459260, "0.7"]
+							]
+						}
+					]
+				}
+			}`,
+			setupDB: func(testDB *db.DB) {
+				err := testDB.CreateTable(testDB.AddTable(mockMetric{}))
+				if err != nil {
+					t.Fatalf("failed to create table: %v", err)
+				}
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "empty prometheus response",
+			prometheusResp: `{
+				"status": "success",
+				"data": {
+					"resultType": "matrix",
+					"result": []
+				}
+			}`,
+			setupDB: func(testDB *db.DB) {
+				err := testDB.CreateTable(testDB.AddTable(mockMetric{}))
+				if err != nil {
+					t.Fatalf("failed to create table: %v", err)
+				}
+			},
+			expectedCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dbEnv := testlibDB.SetupDBEnv(t)
+			testDB := db.DB{DbMap: dbEnv.DbMap}
+			defer testDB.Close()
+			defer dbEnv.Close()
+
+			tt.setupDB(&testDB)
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Verify URL parameters
+				if !strings.Contains(r.URL.RawQuery, "query=up") {
+					t.Error("expected query parameter in URL")
+				}
+				if !strings.Contains(r.URL.RawQuery, "start=") {
+					t.Error("expected start parameter in URL")
+				}
+				if !strings.Contains(r.URL.RawQuery, "end=") {
+					t.Error("expected end parameter in URL")
+				}
+				if !strings.Contains(r.URL.RawQuery, "step=60") {
+					t.Error("expected step parameter in URL")
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(tt.prometheusResp))
+			}))
+			defer server.Close()
+
+			s := &syncer[mockMetric]{
+				db:                    &testDB,
+				host:                  server.URL,
+				query:                 "up",
+				alias:                 "test_metric",
+				syncTimeRange:         24 * time.Hour,
+				syncInterval:          time.Hour,
+				syncResolutionSeconds: 60,
+				httpClient:            &http.Client{},
+				monitor:               datasources.Monitor{},
+				sleepBetweenRequests:  0,
+			}
+
+			nResults, nextSync, err := s.Sync(context.Background())
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if nResults != tt.expectedCount {
+				t.Errorf("expected %d results, got %d", tt.expectedCount, nResults)
+			}
+
+			if nextSync.Before(time.Now()) {
+				t.Error("next sync time should be in the future")
+			}
+		})
+	}
+}
+
 func TestPrometheusTimelineData(t *testing.T) {
 	start := time.Unix(1609459200, 0)
 	end := time.Unix(1609459800, 0)
 	duration := end.Sub(start)
 
 	metrics := []mockMetric{
-		{name: "test", timestamp: start, value: 1.0, tableName: "test_table"},
-		{name: "test", timestamp: end, value: 2.0, tableName: "test_table"},
+		{Name: "test", Timestamp: start, Value: 1.0},
+		{Name: "test", Timestamp: end, Value: 2.0},
 	}
 
 	data := prometheusTimelineData[mockMetric]{
@@ -131,10 +557,9 @@ func TestMockMetric(t *testing.T) {
 	now := time.Now()
 
 	m := mockMetric{
-		name:      "test_metric",
-		timestamp: now,
-		value:     42.0,
-		tableName: "test_table",
+		Name:      "test_metric",
+		Timestamp: now,
+		Value:     42.0,
 	}
 
 	if m.GetName() != "test_metric" {
@@ -149,8 +574,8 @@ func TestMockMetric(t *testing.T) {
 		t.Errorf("Expected value 42.0, got %f", m.GetValue())
 	}
 
-	if m.TableName() != "test_table" {
-		t.Errorf("Expected table name 'test_table', got %s", m.TableName())
+	if m.TableName() != "test_metrics" {
+		t.Errorf("Expected table name 'test_metrics', got %s", m.TableName())
 	}
 
 	if m.Indexes() != nil {
