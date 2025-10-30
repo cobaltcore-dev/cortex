@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
@@ -153,28 +154,34 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		}
 		msg := "scheduler: statistics for step " + stepName
 		msg += " -- " + statName + ""
-		before := ""
+		var beforeBuilder strings.Builder
 		for i, subject := range subjectsIn {
 			if subjectStat, ok := statData.Subjects[subject]; ok {
-				before += strconv.FormatFloat(subjectStat, 'f', 2, 64) + " " + statData.Unit
+				beforeBuilder.WriteString(strconv.FormatFloat(subjectStat, 'f', 2, 64))
+				beforeBuilder.WriteString(" ")
+				beforeBuilder.WriteString(statData.Unit)
 			} else {
-				before += "-"
+				beforeBuilder.WriteString("-")
 			}
 			if i < len(subjectsIn)-1 {
-				before += ", "
+				beforeBuilder.WriteString(", ")
 			}
 		}
-		after := ""
+		before := beforeBuilder.String()
+		var afterBuilder strings.Builder
 		for i, subject := range subjectsOut {
 			if subjectStat, ok := statData.Subjects[subject]; ok {
-				after += strconv.FormatFloat(subjectStat, 'f', 2, 64) + " " + statData.Unit
+				afterBuilder.WriteString(strconv.FormatFloat(subjectStat, 'f', 2, 64))
+				afterBuilder.WriteString(" ")
+				afterBuilder.WriteString(statData.Unit)
 			} else {
-				after += "-"
+				afterBuilder.WriteString("-")
 			}
 			if i < len(subjectsOut)-1 {
-				after += ", "
+				afterBuilder.WriteString(", ")
 			}
 		}
+		after := afterBuilder.String()
 		traceLog.Info(msg, "before", before, "after", after)
 	}
 

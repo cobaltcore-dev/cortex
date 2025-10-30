@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
@@ -133,17 +134,17 @@ func (p *Pipeline) combine(decisionsByStep map[string][]plugins.Decision) []plug
 			slog.Error("descheduler: skipping vm with conflicting origin hosts", "vmId", vmID, "decisions", decisions)
 			continue
 		}
-		// Combine the reasons of all decisions.
-		reason := "multiple reasons: "
+		var reasonBuilder strings.Builder
+		reasonBuilder.WriteString("multiple reasons: ")
 		for i, decision := range decisions {
 			if i > 0 {
-				reason += "; "
+				reasonBuilder.WriteString("; ")
 			}
-			reason += decision.Reason
+			reasonBuilder.WriteString(decision.Reason)
 		}
 		combinedDecisions = append(combinedDecisions, plugins.Decision{
 			VMID:   vmID,
-			Reason: reason,
+			Reason: reasonBuilder.String(),
 			Host:   host,
 		})
 	}
