@@ -103,6 +103,10 @@ type DecisionStatus struct {
 	// +kubebuilder:validation:Optional
 	History *[]corev1.ObjectReference `json:"history,omitempty"`
 
+	// The number of decisions that preceded this one for the same resource.
+	// +kubebuilder:validation:Optional
+	Precedence *int `json:"precedence,omitempty"`
+
 	// A human-readable explanation of the decision result.
 	// +kubebuilder:validation:Optional
 	Explanation string `json:"explanation,omitempty"`
@@ -118,6 +122,7 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Resource ID",type="string",JSONPath=".spec.resourceID"
+// +kubebuilder:printcolumn:name="#",type="string",JSONPath=".status.precedence"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"

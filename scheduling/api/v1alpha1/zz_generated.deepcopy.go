@@ -179,6 +179,11 @@ func (in *DecisionStatus) DeepCopyInto(out *DecisionStatus) {
 			copy(*out, *in)
 		}
 	}
+	if in.Precedence != nil {
+		in, out := &in.Precedence, &out.Precedence
+		*out = new(int)
+		**out = **in
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]metav1.Condition, len(*in))

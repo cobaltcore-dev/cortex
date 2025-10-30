@@ -122,6 +122,8 @@ func (c *Controller) reconcileHistory(ctx context.Context, decision *v1alpha1.De
 		})
 	}
 	decision.Status.History = &history
+	precedence := len(history)
+	decision.Status.Precedence = &precedence
 	if err := c.Status().Update(ctx, decision); err != nil {
 		log.Error(err, "failed to update decision status with history", "name", decision.Name)
 		return err
