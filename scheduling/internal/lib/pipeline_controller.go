@@ -204,6 +204,10 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 			log.Info("knowledge not ready due to error condition", "knowledgeName", knowledgeRef.Name)
 			continue
 		}
+		if knowledge.Status.RawLength == 0 {
+			log.Info("knowledge not ready, no data available", "knowledgeName", knowledgeRef.Name)
+			continue
+		}
 		obj.Status.ReadyKnowledges++
 	}
 	obj.Status.KnowledgesReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadyKnowledges, obj.Status.TotalKnowledges)
