@@ -248,7 +248,7 @@
       // Only display the first 100 decisions for performance
       state.schedulingDecisions.slice(0, 100).forEach(decision => {
         const li = document.createElement('li')
-        li.textContent = `${decision.metadata.name}`
+        li.textContent = `${decision.metadata.name} (${(decision.status.result.orderedHosts || []).length})`
         li.onclick = () => {
           document.getElementById('vmIdFilter').value = ""
           navigateToDecision(decision.metadata.name)
