@@ -11,7 +11,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
@@ -62,7 +61,7 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
 		{
 			name: "Avoid contended pools",
 			request: api.ExternalSchedulerRequest{
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ShareHost: "pool1"},
 					{ShareHost: "pool2"},
 					{ShareHost: "pool3"},
@@ -79,7 +78,7 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
 		{
 			name: "Missing data",
 			request: api.ExternalSchedulerRequest{
-				Hosts: []delegationAPI.ExternalSchedulerHost{
+				Hosts: []api.ExternalSchedulerHost{
 					{ShareHost: "pool4"},
 					{ShareHost: "pool5"}, // No data for pool5
 				},

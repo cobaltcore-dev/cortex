@@ -49,6 +49,7 @@ func TestPipeline_Init(t *testing.T) {
 		supportedSteps []Step
 		confedSteps    []v1alpha1.Step
 		expectedSteps  int
+		expectedError  bool
 	}{
 		{
 			name: "successful initialization with single step",
@@ -74,7 +75,7 @@ func TestPipeline_Init(t *testing.T) {
 					Type: v1alpha1.StepTypeDescheduler,
 				}},
 			},
-			expectedSteps: 0,
+			expectedError: true,
 		},
 		{
 			name: "initialization with step init error",
@@ -87,7 +88,7 @@ func TestPipeline_Init(t *testing.T) {
 					Type: v1alpha1.StepTypeDescheduler,
 				}},
 			},
-			expectedSteps: 0,
+			expectedError: true,
 		},
 		{
 			name: "initialization with multiple steps",
@@ -114,7 +115,16 @@ func TestPipeline_Init(t *testing.T) {
 			pipeline := &Pipeline{}
 
 			testDB := db.DB{}
-			pipeline.Init(tt.confedSteps, tt.supportedSteps, testDB)
+			err := pipeline.Init(tt.confedSteps, tt.supportedSteps, testDB)
+			if tt.expectedError {
+				if err == nil {
+					t.Fatalf("expected error during initialization, got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Failed to initialize pipeline: %v", err)
+			}
 
 			if len(pipeline.steps) != tt.expectedSteps {
 				t.Errorf("expected %d steps, got %d", tt.expectedSteps, len(pipeline.steps))
@@ -353,7 +363,7 @@ func BenchmarkPipeline_run(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		pipeline.run()
 	}
 }
@@ -373,7 +383,7 @@ func BenchmarkPipeline_combine(b *testing.B) {
 	pipeline := &Pipeline{}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		pipeline.combine(decisionsByStep)
 	}
 }

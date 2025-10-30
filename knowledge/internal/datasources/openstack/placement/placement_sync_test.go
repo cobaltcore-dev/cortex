@@ -117,7 +117,9 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderTraits}
 
 	rps := []placement.ResourceProvider{{UUID: "1", Name: "rp1"}}
-	testDB.CreateTable(testDB.AddTable(placement.ResourceProvider{}))
+	if err := testDB.CreateTable(testDB.AddTable(placement.ResourceProvider{})); err != nil {
+		t.Fatalf("failed to create resource provider table: %v", err)
+	}
 	err := db.ReplaceAll(testDB, rps...)
 	if err != nil {
 		t.Fatalf("failed to insert resource providers: %v", err)
@@ -153,7 +155,9 @@ func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderInventoryUsages}
 
 	rps := []placement.ResourceProvider{{UUID: "1", Name: "rp1"}}
-	testDB.CreateTable(testDB.AddTable(placement.ResourceProvider{}))
+	if err := testDB.CreateTable(testDB.AddTable(placement.ResourceProvider{})); err != nil {
+		t.Fatalf("failed to create resource provider table: %v", err)
+	}
 	err := db.ReplaceAll(testDB, rps...)
 	if err != nil {
 		t.Fatalf("failed to insert resource providers: %v", err)

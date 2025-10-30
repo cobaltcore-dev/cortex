@@ -215,7 +215,9 @@ func TestReservationReconciler_reconcileInstanceReservation(t *testing.T) {
 			// Create a mock server for the external scheduler
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if tt.mockResponse != nil {
-					json.NewEncoder(w).Encode(tt.mockResponse)
+					if err := json.NewEncoder(w).Encode(tt.mockResponse); err != nil {
+						t.Fatalf("failed to write response: %v", err)
+					}
 				} else {
 					w.WriteHeader(http.StatusInternalServerError)
 				}
@@ -325,7 +327,9 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)
 		}
 
-		json.NewEncoder(w).Encode(mockResponse)
+		if err := json.NewEncoder(w).Encode(mockResponse); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

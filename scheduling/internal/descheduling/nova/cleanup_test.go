@@ -18,7 +18,10 @@ import (
 
 func TestCleanup_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
-	v1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	now := metav1.Now()
 	oneHourAgo := metav1.Time{Time: now.Add(-time.Hour)}
@@ -183,7 +186,10 @@ func TestCleanup_Reconcile(t *testing.T) {
 
 func TestCleanup_Reconcile_NonexistentResource(t *testing.T) {
 	scheme := runtime.NewScheme()
-	v1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
@@ -213,7 +219,10 @@ func TestCleanup_Reconcile_NonexistentResource(t *testing.T) {
 
 func TestCleanupOnStartup_Start(t *testing.T) {
 	scheme := runtime.NewScheme()
-	v1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	now := metav1.Now()
 	oneHourAgo := metav1.Time{Time: now.Add(-time.Hour)}
@@ -265,7 +274,7 @@ func TestCleanupOnStartup_Start(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := cleanupOnStartup.Start(ctx)
+	err = cleanupOnStartup.Start(ctx)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -295,7 +304,10 @@ func TestCleanupOnStartup_Start(t *testing.T) {
 
 func TestCleanupOnStartup_Start_EmptyList(t *testing.T) {
 	scheme := runtime.NewScheme()
-	v1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
@@ -309,7 +321,7 @@ func TestCleanupOnStartup_Start_EmptyList(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := cleanupOnStartup.Start(ctx)
+	err = cleanupOnStartup.Start(ctx)
 
 	if err != nil {
 		t.Errorf("unexpected error for empty list: %v", err)

@@ -1,8 +1,31 @@
 # Declare test targets as phony targets (not file names)
-.PHONY: test test-fast test-full
+.PHONY: lint test-fast test-full
 
-# Default test command - runs without Docker (fast)
-test: test-fast
+default: test-fast lint
+
+# Run golangci-lint on all Go modules
+lint:
+	@echo "Running linters on all Go modules..."
+	@for dir in */; do \
+		if [ -f "$$dir/go.mod" ]; then \
+			echo "Linting $$dir..."; \
+			cd "$$dir" && golangci-lint run \
+				--config ../.golangci.yaml \
+			&& cd ..; \
+		fi; \
+	done
+
+lint-fix:
+	@echo "Running linters on all Go modules..."
+	@for dir in */; do \
+		if [ -f "$$dir/go.mod" ]; then \
+			echo "Linting $$dir..."; \
+			cd "$$dir" && golangci-lint run \
+				--fix \
+				--config ../.golangci.yaml \
+			&& cd ..; \
+		fi; \
+	done
 
 # Run tests without Docker/PostgreSQL container (faster, but some tests may be skipped)
 test-fast:

@@ -248,7 +248,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				t.Errorf("Expected no error but got: %v", err)
 			}
 
-			if result.Requeue {
+			if result.RequeueAfter > 0 {
 				t.Error("Expected no requeue")
 			}
 
@@ -524,5 +524,8 @@ func TestDecisionPipelineController_SetupWithManager(t *testing.T) {
 		}
 	}()
 
-	controller.SetupWithManager(nil)
+	err := controller.SetupWithManager(nil)
+	if err != nil {
+		t.Errorf("Unexpected error from SetupWithManager: %v", err)
+	}
 }

@@ -45,7 +45,9 @@ func TestIdentityAPI_GetAllDomains(t *testing.T) {
 	conf := v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeDomains}
 
 	api := NewIdentityAPI(mon, k, conf).(*identityAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	domains, err := api.GetAllDomains(ctx)
@@ -97,7 +99,9 @@ func TestIdentityAPI_GetAllProjects(t *testing.T) {
 	conf := v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeProjects}
 
 	api := NewIdentityAPI(mon, k, conf).(*identityAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	projects, err := api.GetAllProjects(ctx)

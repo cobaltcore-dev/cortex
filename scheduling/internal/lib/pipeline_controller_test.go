@@ -48,15 +48,21 @@ func (m *mockDelegate) InitPipeline(steps []v1alpha1.Step) (mockPipeline, error)
 
 func setupTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	_ = v1alpha1.AddToScheme(scheme)
-	_ = knowledgev1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		return nil
+	}
+	err = knowledgev1alpha1.AddToScheme(scheme)
+	if err != nil {
+		return nil
+	}
 	return scheme
 }
 
-func createTestPipeline(name string, steps []v1alpha1.StepInPipeline) *v1alpha1.Pipeline {
+func createTestPipeline(steps []v1alpha1.StepInPipeline) *v1alpha1.Pipeline {
 	return &v1alpha1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name: "test-pipeline",
 		},
 		Spec: v1alpha1.PipelineSpec{
 			Operator: "test",
@@ -66,11 +72,11 @@ func createTestPipeline(name string, steps []v1alpha1.StepInPipeline) *v1alpha1.
 	}
 }
 
-func createTestStep(name, namespace string, ready bool, knowledges []corev1.ObjectReference) *v1alpha1.Step {
+func createTestStep(ready bool, knowledges []corev1.ObjectReference) *v1alpha1.Step {
 	return &v1alpha1.Step{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:      "test-step",
+			Namespace: "default",
 		},
 		Spec: v1alpha1.StepSpec{
 			Operator:   "test",
@@ -87,11 +93,11 @@ func createTestStep(name, namespace string, ready bool, knowledges []corev1.Obje
 	}
 }
 
-func createTestKnowledge(name, namespace string, hasError bool, rawLength int) *knowledgev1alpha1.Knowledge {
+func createTestKnowledge(name string, hasError bool, rawLength int) *knowledgev1alpha1.Knowledge {
 	knowledge := &knowledgev1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: namespace,
+			Namespace: "default",
 		},
 		Spec: knowledgev1alpha1.KnowledgeSpec{
 			Operator: "test",
@@ -131,7 +137,7 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 		{
 			name: "single pipeline with ready step",
 			existingPipelines: []v1alpha1.Pipeline{
-				*createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+				*createTestPipeline([]v1alpha1.StepInPipeline{
 					{
 						Ref: corev1.ObjectReference{
 							Name:      "test-step",
@@ -142,7 +148,7 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 				}),
 			},
 			existingSteps: []v1alpha1.Step{
-				*createTestStep("test-step", "default", true, nil),
+				*createTestStep(true, nil),
 			},
 			expectedPipelines: 1,
 			expectError:       false,
@@ -150,7 +156,7 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 		{
 			name: "pipeline with non-ready mandatory step",
 			existingPipelines: []v1alpha1.Pipeline{
-				*createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+				*createTestPipeline([]v1alpha1.StepInPipeline{
 					{
 						Ref: corev1.ObjectReference{
 							Name:      "test-step",
@@ -161,7 +167,7 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 				}),
 			},
 			existingSteps: []v1alpha1.Step{
-				*createTestStep("test-step", "default", false, nil),
+				*createTestStep(false, nil),
 			},
 			expectedPipelines: 0,
 			expectError:       false,
@@ -221,7 +227,7 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 	}{
 		{
 			name: "pipeline with ready steps",
-			pipeline: createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
 				{
 					Ref: corev1.ObjectReference{
 						Name:      "test-step",
@@ -231,14 +237,14 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 				},
 			}),
 			existingSteps: []v1alpha1.Step{
-				*createTestStep("test-step", "default", true, nil),
+				*createTestStep(true, nil),
 			},
 			expectReady: true,
 			expectError: false,
 		},
 		{
 			name: "pipeline with non-ready mandatory step",
-			pipeline: createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
 				{
 					Ref: corev1.ObjectReference{
 						Name:      "test-step",
@@ -248,14 +254,14 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 				},
 			}),
 			existingSteps: []v1alpha1.Step{
-				*createTestStep("test-step", "default", false, nil),
+				*createTestStep(false, nil),
 			},
 			expectReady: false,
 			expectError: true,
 		},
 		{
 			name: "pipeline with non-ready optional step",
-			pipeline: createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
 				{
 					Ref: corev1.ObjectReference{
 						Name:      "test-step",
@@ -265,14 +271,14 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 				},
 			}),
 			existingSteps: []v1alpha1.Step{
-				*createTestStep("test-step", "default", false, nil),
+				*createTestStep(false, nil),
 			},
 			expectReady: true,
 			expectError: false,
 		},
 		{
 			name: "delegate fails to initialize pipeline",
-			pipeline: createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
 				{
 					Ref: corev1.ObjectReference{
 						Name:      "test-step",
@@ -282,7 +288,7 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 				},
 			}),
 			existingSteps: []v1alpha1.Step{
-				*createTestStep("test-step", "default", true, nil),
+				*createTestStep(true, nil),
 			},
 			delegateFails: true,
 			expectReady:   false,
@@ -349,7 +355,7 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 func TestBasePipelineController_HandlePipelineDeleted(t *testing.T) {
 	scheme := setupTestScheme()
 
-	pipeline := createTestPipeline("test-pipeline", nil)
+	pipeline := createTestPipeline(nil)
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(pipeline).
@@ -389,14 +395,14 @@ func TestBasePipelineController_HandleStepCreated(t *testing.T) {
 	}{
 		{
 			name: "step with ready knowledges",
-			step: createTestStep("test-step", "default", false, []corev1.ObjectReference{
+			step: createTestStep(false, []corev1.ObjectReference{
 				{Name: "knowledge1", Namespace: "default"},
 			}),
 			knowledges: []knowledgev1alpha1.Knowledge{
-				*createTestKnowledge("knowledge1", "default", false, 10),
+				*createTestKnowledge("knowledge1", false, 10),
 			},
 			pipelines: []v1alpha1.Pipeline{
-				*createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+				*createTestPipeline([]v1alpha1.StepInPipeline{
 					{
 						Ref: corev1.ObjectReference{
 							Name:      "test-step",
@@ -411,14 +417,14 @@ func TestBasePipelineController_HandleStepCreated(t *testing.T) {
 		},
 		{
 			name: "step with knowledge error",
-			step: createTestStep("test-step", "default", false, []corev1.ObjectReference{
+			step: createTestStep(false, []corev1.ObjectReference{
 				{Name: "knowledge1", Namespace: "default"},
 			}),
 			knowledges: []knowledgev1alpha1.Knowledge{
-				*createTestKnowledge("knowledge1", "default", true, 0),
+				*createTestKnowledge("knowledge1", true, 0),
 			},
 			pipelines: []v1alpha1.Pipeline{
-				*createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+				*createTestPipeline([]v1alpha1.StepInPipeline{
 					{
 						Ref: corev1.ObjectReference{
 							Name:      "test-step",
@@ -494,30 +500,30 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 	}{
 		{
 			name:          "error status changed",
-			oldKnowledge:  createTestKnowledge("test-knowledge", "default", false, 10),
-			newKnowledge:  createTestKnowledge("test-knowledge", "default", true, 10),
+			oldKnowledge:  createTestKnowledge("test-knowledge", false, 10),
+			newKnowledge:  createTestKnowledge("test-knowledge", true, 10),
 			shouldTrigger: true,
 		},
 		{
 			name:          "data became available",
-			oldKnowledge:  createTestKnowledge("test-knowledge", "default", false, 0),
-			newKnowledge:  createTestKnowledge("test-knowledge", "default", false, 10),
+			oldKnowledge:  createTestKnowledge("test-knowledge", false, 0),
+			newKnowledge:  createTestKnowledge("test-knowledge", false, 10),
 			shouldTrigger: true,
 		},
 		{
 			name:          "no relevant change",
-			oldKnowledge:  createTestKnowledge("test-knowledge", "default", false, 10),
-			newKnowledge:  createTestKnowledge("test-knowledge", "default", false, 15),
+			oldKnowledge:  createTestKnowledge("test-knowledge", false, 10),
+			newKnowledge:  createTestKnowledge("test-knowledge", false, 15),
 			shouldTrigger: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := createTestStep("test-step", "default", false, []corev1.ObjectReference{
+			step := createTestStep(false, []corev1.ObjectReference{
 				{Name: "test-knowledge", Namespace: "default"},
 			})
-			pipeline := createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+			pipeline := createTestPipeline([]v1alpha1.StepInPipeline{
 				{
 					Ref: corev1.ObjectReference{
 						Name:      "test-step",
@@ -568,8 +574,8 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 func TestBasePipelineController_HandleStepDeleted(t *testing.T) {
 	scheme := setupTestScheme()
 
-	step := createTestStep("test-step", "default", true, nil)
-	pipeline := createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+	step := createTestStep(true, nil)
+	pipeline := createTestPipeline([]v1alpha1.StepInPipeline{
 		{
 			Ref: corev1.ObjectReference{
 				Name:      "test-step",
@@ -629,11 +635,11 @@ func TestBasePipelineController_HandleStepDeleted(t *testing.T) {
 func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 	scheme := setupTestScheme()
 
-	knowledge := createTestKnowledge("test-knowledge", "default", false, 10)
-	step := createTestStep("test-step", "default", true, []corev1.ObjectReference{
+	knowledge := createTestKnowledge("test-knowledge", false, 10)
+	step := createTestStep(true, []corev1.ObjectReference{
 		{Name: "test-knowledge", Namespace: "default"},
 	})
-	pipeline := createTestPipeline("test-pipeline", []v1alpha1.StepInPipeline{
+	pipeline := createTestPipeline([]v1alpha1.StepInPipeline{
 		{
 			Ref: corev1.ObjectReference{
 				Name:      "test-step",

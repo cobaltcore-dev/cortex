@@ -90,6 +90,7 @@ func (mc *mockController) getJointDB(
 	datasources []corev1.ObjectReference,
 	knowledges []corev1.ObjectReference,
 ) (*db.DB, error) {
+
 	if mc.mockError != nil {
 		return nil, mc.mockError
 	}
@@ -180,7 +181,6 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 	log := ctrl.LoggerFrom(ctx)
 
 	// Get all the datasources this kpi depends on, if any.
-	var datasources []v1alpha1.Datasource
 	var datasourcesReady int
 	for _, dsRef := range obj.Spec.Dependencies.Datasources {
 		ds := &v1alpha1.Datasource{}
@@ -194,7 +194,6 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 			log.Error(err, "failed to get datasource dependency", "datasource", dsRef)
 			return err
 		}
-		datasources = append(datasources, *ds)
 		// Check if datasource is ready
 		if ds.Status.IsReady() {
 			datasourcesReady++
@@ -202,7 +201,6 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 	}
 
 	// Get all knowledges this kpi depends on, if any.
-	var knowledges []v1alpha1.Knowledge
 	var knowledgesReady int
 	for _, knRef := range obj.Spec.Dependencies.Knowledges {
 		kn := &v1alpha1.Knowledge{}
@@ -216,7 +214,6 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 			log.Error(err, "failed to get knowledge dependency", "knowledge", knRef)
 			return err
 		}
-		knowledges = append(knowledges, *kn)
 		// Check if knowledge is ready
 		if kn.Status.IsReady() {
 			knowledgesReady++
@@ -935,7 +932,6 @@ func TestController_InitAllKPIs(t *testing.T) {
 	// Use mock controller to avoid real database connections
 	controller := &mockController{
 		Controller: baseController,
-		mockDB:     &db.DB{}, // Mock database instance
 	}
 
 	err := controller.InitAllKPIs(context.Background())

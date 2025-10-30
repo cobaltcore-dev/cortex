@@ -124,6 +124,7 @@ func NewPostgresDB(
 	registry *monitoring.Registry,
 	monitor Monitor,
 ) DB {
+
 	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          strip(c.Host),

@@ -352,8 +352,7 @@ func TestNovaPipelineType(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	var step NovaStep
-	step = &mockNovaStep{}
+	var step NovaStep = &mockNovaStep{}
 
 	// Test initialization
 	opts := conf.NewRawOpts(`{}`)

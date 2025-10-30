@@ -64,14 +64,8 @@ func (c *hypervisorClient) Init(ctx context.Context) {
 	c.provider = auth.Client()
 	syncLog.Info("authenticated against openstack")
 
-	// Get the keystone endpoint.
-	url := must.Return(c.provider.EndpointLocator(gophercloud.EndpointOpts{
-		Type:         "identity",
-		Availability: "public",
-	}))
-
 	// Get the nova endpoint.
-	url = must.Return(c.provider.EndpointLocator(gophercloud.EndpointOpts{
+	url := must.Return(c.provider.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "compute",
 		Availability: "public",
 	}))

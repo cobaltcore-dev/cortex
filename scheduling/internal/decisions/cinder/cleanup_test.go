@@ -153,14 +153,20 @@ func TestCleanupCinder(t *testing.T) {
 						volumesResponse := map[string]any{
 							"volumes": []mockVolume{},
 						}
-						json.NewEncoder(w).Encode(volumesResponse)
+						err := json.NewEncoder(w).Encode(volumesResponse)
+						if err != nil {
+							t.Errorf("Failed to encode volumes response: %v", err)
+						}
 						return
 					}
 
 					volumesResponse := map[string]any{
 						"volumes": tt.mockVolumes,
 					}
-					json.NewEncoder(w).Encode(volumesResponse)
+					err := json.NewEncoder(w).Encode(volumesResponse)
+					if err != nil {
+						t.Errorf("Failed to encode volumes response: %v", err)
+					}
 					return
 				}
 
@@ -198,7 +204,10 @@ func TestCleanupCinder(t *testing.T) {
 							},
 						},
 					}
-					json.NewEncoder(w).Encode(versionResponse)
+					err := json.NewEncoder(w).Encode(versionResponse)
+					if err != nil {
+						t.Errorf("Failed to encode version response: %v", err)
+					}
 				case "/v3/auth/tokens":
 					// Set the correct status code that gophercloud expects
 					w.WriteHeader(http.StatusCreated)
@@ -249,7 +258,10 @@ func TestCleanupCinder(t *testing.T) {
 
 					// Set the token in the header for gophercloud
 					w.Header().Set("X-Subject-Token", "mock-token-id")
-					json.NewEncoder(w).Encode(tokenResponse)
+					err := json.NewEncoder(w).Encode(tokenResponse)
+					if err != nil {
+						t.Errorf("Failed to encode token response: %v", err)
+					}
 				default:
 					w.WriteHeader(http.StatusNotFound)
 				}

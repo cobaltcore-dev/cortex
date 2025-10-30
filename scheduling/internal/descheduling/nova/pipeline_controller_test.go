@@ -123,7 +123,10 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 
 func TestDeschedulingsPipelineController_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
-	v1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
@@ -147,7 +150,10 @@ func TestDeschedulingsPipelineController_Reconcile(t *testing.T) {
 
 func TestDeschedulingsPipelineController_SetupWithManager(t *testing.T) {
 	scheme := runtime.NewScheme()
-	v1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
@@ -168,5 +174,8 @@ func TestDeschedulingsPipelineController_SetupWithManager(t *testing.T) {
 		}
 	}()
 
-	_ = controller.SetupWithManager(nil)
+	err = controller.SetupWithManager(nil)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
 }

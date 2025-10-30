@@ -11,28 +11,6 @@ import (
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
-type mockStep struct {
-	Name      string
-	InitErr   error
-	RunErr    error
-	Decisions []string
-}
-
-func (m *mockStep) Init(_ db.DB, _ conf.RawOpts) error {
-	return m.InitErr
-}
-
-func (m *mockStep) GetName() string {
-	return m.Name
-}
-
-func (m *mockStep) Run() ([]string, error) {
-	if m.RunErr != nil {
-		return nil, m.RunErr
-	}
-	return m.Decisions, nil
-}
-
 type MockOptions struct {
 	Option1 string `json:"option1"`
 	Option2 int    `json:"option2"`

@@ -78,7 +78,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			Type:    v1alpha1.ReservationConditionError,
 			Status:  metav1.ConditionTrue,
 			Reason:  "UnsupportedHypervisorType",
-			Message: fmt.Sprintf("hypervisor type is not supported: %s", hvType),
+			Message: "hypervisor type is not supported: " + hvType,
 		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		if err := r.Client.Status().Update(ctx, &res); err != nil {
@@ -108,7 +108,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Get all supported hosts and assign zero-weights to them.
-	hypervisors, err := r.HypervisorClient.ListHypervisors(ctx)
+	hypervisors, err := r.ListHypervisors(ctx)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list hypervisors: %w", err)
 	}

@@ -75,16 +75,16 @@ func TestPrometheusDatasourceTypes(t *testing.T) {
 		t.Errorf("Expected type 'node_exporter_metric', got %s", ds.Type)
 	}
 
-	if ds.TimeRange.Duration.Seconds() != 3600 {
-		t.Errorf("Expected TimeRange 3600, got %f", ds.TimeRange.Duration.Seconds())
+	if ds.TimeRange.Seconds() != 3600 {
+		t.Errorf("Expected TimeRange 3600, got %f", ds.TimeRange.Seconds())
 	}
 
-	if ds.Interval.Duration.Seconds() != 60 {
-		t.Errorf("Expected Interval 60, got %f", ds.Interval.Duration.Seconds())
+	if ds.Interval.Seconds() != 60 {
+		t.Errorf("Expected Interval 60, got %f", ds.Interval.Seconds())
 	}
 
-	if ds.Resolution.Duration.Seconds() != 15 {
-		t.Errorf("Expected Resolution 15, got %f", ds.Resolution.Duration.Seconds())
+	if ds.Resolution.Seconds() != 15 {
+		t.Errorf("Expected Resolution 15, got %f", ds.Resolution.Seconds())
 	}
 
 	if ds.SecretRef.Name != "prometheus-secret" {
@@ -176,9 +176,7 @@ func TestMetricTypeMapping(t *testing.T) {
 	for _, metricType := range knownMetricTypes {
 		// Create a test datasource with this metric type
 		ds := v1alpha1.PrometheusDatasource{
-			Query: "test_query",
-			Alias: "test_alias",
-			Type:  metricType,
+			Type: metricType,
 			SecretRef: corev1.SecretReference{
 				Name:      "test-secret",
 				Namespace: "default",

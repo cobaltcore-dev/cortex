@@ -32,8 +32,7 @@ func (s *LimesSyncer) Init(ctx context.Context) error {
 	}
 	var tables = []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
-	switch s.Conf.Type {
-	case v1alpha1.LimesDatasourceTypeProjectCommitments:
+	if s.Conf.Type == v1alpha1.LimesDatasourceTypeProjectCommitments {
 		tables = append(tables, s.DB.AddTable(limes.Commitment{}))
 	}
 	return s.DB.CreateTable(tables...)
@@ -44,8 +43,7 @@ func (s *LimesSyncer) Sync(ctx context.Context) (int64, error) {
 	// Only sync the objects that are configured in the yaml conf.
 	var err error
 	var nResults int64
-	switch s.Conf.Type {
-	case v1alpha1.LimesDatasourceTypeProjectCommitments:
+	if s.Conf.Type == v1alpha1.LimesDatasourceTypeProjectCommitments {
 		nResults, err = s.SyncCommitments(ctx)
 	}
 	return nResults, err

@@ -37,6 +37,7 @@ func newTypedSyncer[M prometheus.PrometheusMetric](
 	prometheusURL string,
 	monitor datasources.Monitor,
 ) typedSyncer {
+
 	return &syncer[M]{
 		db:                    db,
 		httpClient:            httpClient,
@@ -46,7 +47,7 @@ func newTypedSyncer[M prometheus.PrometheusMetric](
 		alias:                 ds.Spec.Prometheus.Alias,
 		syncTimeRange:         ds.Spec.Prometheus.TimeRange.Duration,
 		syncInterval:          ds.Spec.Prometheus.Interval.Duration,
-		syncResolutionSeconds: int(ds.Spec.Prometheus.Resolution.Duration.Seconds()),
+		syncResolutionSeconds: int(ds.Spec.Prometheus.Resolution.Seconds()),
 		sleepBetweenRequests:  500 * time.Millisecond,
 	}
 }
@@ -97,7 +98,7 @@ type prometheusRangeMetric[M prometheus.PrometheusMetric] struct {
 
 // Fetch metrics from Prometheus. The query is executed in the time window
 // [start, end] with the specified resolution.
-func (s *syncer[M]) fetch(start time.Time, end time.Time) (*prometheusTimelineData[M], error) {
+func (s *syncer[M]) fetch(start, end time.Time) (*prometheusTimelineData[M], error) {
 	if s.monitor.RequestTimer != nil {
 		hist := s.monitor.RequestTimer.WithLabelValues(
 			"prometheus_" + s.alias,

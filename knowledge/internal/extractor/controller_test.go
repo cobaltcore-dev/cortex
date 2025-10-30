@@ -47,7 +47,7 @@ func TestKnowledgeReconciler_Reconcile_NonExistentResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		t.Error("Expected no requeue")
 	}
 }
@@ -143,7 +143,7 @@ func TestKnowledgeReconciler_Reconcile_UnsupportedExtractor(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		t.Error("Expected no requeue")
 	}
 
@@ -203,7 +203,7 @@ func TestKnowledgeReconciler_Reconcile_MissingDatasource(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for missing datasource, got nil")
 	}
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		t.Error("Expected no requeue")
 	}
 

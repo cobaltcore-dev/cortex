@@ -207,8 +207,7 @@ func TestCinderStepType(t *testing.T) {
 	defer testDB.Close()
 	defer dbEnv.Close()
 
-	var step CinderStep
-	step = &mockCinderStep{}
+	var step CinderStep = &mockCinderStep{}
 
 	// Test initialization
 	opts := conf.NewRawOpts(`{}`)

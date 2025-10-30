@@ -363,8 +363,8 @@ func TestReconcile_DatasourceChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile failed: %v", err)
 	}
-	if result.Requeue {
-		t.Error("Expected Requeue to be false")
+	if result.RequeueAfter > 0 {
+		t.Error("Expected RequeueAfter to be zero")
 	}
 
 	// Verify the dependent knowledge was updated with trigger annotation
@@ -433,8 +433,8 @@ func TestReconcile_KnowledgeChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile failed: %v", err)
 	}
-	if result.Requeue {
-		t.Error("Expected Requeue to be false")
+	if result.RequeueAfter > 0 {
+		t.Error("Expected RequeueAfter to be zero")
 	}
 
 	// Verify the dependent knowledge was updated with trigger annotation
@@ -465,8 +465,8 @@ func TestReconcile_NonExistentResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile failed: %v", err)
 	}
-	if result.Requeue {
-		t.Error("Expected Requeue to be false")
+	if result.RequeueAfter > 0 {
+		t.Error("Expected RequeueAfter to be zero")
 	}
 }
 

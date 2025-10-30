@@ -100,7 +100,9 @@ func TestLimesSyncer_Sync(t *testing.T) {
 	syncer.API = &mockLimesAPI{}
 
 	// Initialize the syncer to create the commitment table
-	syncer.Init(t.Context())
+	if err := syncer.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init limes syncer: %v", err)
+	}
 
 	ctx := t.Context()
 	_, err := syncer.Sync(ctx)

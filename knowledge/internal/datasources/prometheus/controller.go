@@ -52,7 +52,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Info("skipping datasource, not a prometheus datasource", "name", datasource.Name)
 		return ctrl.Result{}, nil
 	}
-	if datasource.Status.NextSyncTime.Time.After(time.Now()) {
+	if datasource.Status.NextSyncTime.After(time.Now()) {
 		log.Info("skipping datasource sync, not yet time", "name", datasource.Name)
 		return ctrl.Result{RequeueAfter: time.Until(datasource.Status.NextSyncTime.Time)}, nil
 	}

@@ -152,7 +152,7 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
-	c.BasePipelineController.Delegate = c
+	c.Delegate = c
 	c.pendingRequests = make(map[string]*pendingRequest)
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err

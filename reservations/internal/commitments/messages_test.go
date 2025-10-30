@@ -11,6 +11,7 @@ import (
 )
 
 func TestCommitment_JSONSerialization(t *testing.T) {
+	//nolint:gosec
 	now := uint64(time.Now().Unix())
 	confirmBy := now + 3600
 	confirmedAt := now + 7200

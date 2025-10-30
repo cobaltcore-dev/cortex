@@ -26,7 +26,6 @@ func RunChecks(ctx context.Context, config conf.Config) {
 
 // Check that the Manila external scheduler returns a valid set of share hosts.
 func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
-	//nolint:gosec // We don't care if the random source is cryptographically secure.
 	keystoneConf := config.KeystoneConfig
 	slog.Info("authenticating against openstack", "url", keystoneConf.URL)
 	authOptions := gophercloud.AuthOptions{

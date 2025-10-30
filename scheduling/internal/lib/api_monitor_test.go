@@ -5,6 +5,7 @@ package lib
 
 import (
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -66,7 +67,7 @@ func TestAPIMonitor_Collect(t *testing.T) {
 
 func TestAPIMonitor_Callback(t *testing.T) {
 	monitor := NewSchedulerMonitor()
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	w := httptest.NewRecorder()
 	pattern := "/test"
 
@@ -137,7 +138,7 @@ func TestMonitoredCallback_Respond_WithoutError(t *testing.T) {
 				ApiRequestsTimer: apiRequestsTimer,
 			}
 
-			req := httptest.NewRequest(tt.method, tt.pattern, nil)
+			req := httptest.NewRequest(tt.method, tt.pattern, http.NoBody)
 			w := httptest.NewRecorder()
 
 			callback := monitor.Callback(w, req, tt.pattern)
@@ -256,7 +257,7 @@ func TestMonitoredCallback_Respond_WithError(t *testing.T) {
 				ApiRequestsTimer: apiRequestsTimer,
 			}
 
-			req := httptest.NewRequest(tt.method, tt.pattern, nil)
+			req := httptest.NewRequest(tt.method, tt.pattern, http.NoBody)
 			w := httptest.NewRecorder()
 
 			callback := monitor.Callback(w, req, tt.pattern)
@@ -334,7 +335,7 @@ func TestMonitoredCallback_Respond_NilMonitor(t *testing.T) {
 	callback := MonitoredCallback{
 		apiMonitor: nil,
 		w:          httptest.NewRecorder(),
-		r:          httptest.NewRequest("GET", "/test", nil),
+		r:          httptest.NewRequest(http.MethodGet, "/test", http.NoBody),
 		pattern:    "/test",
 		t:          time.Now(),
 	}
@@ -365,7 +366,7 @@ func TestMonitoredCallback_TimeMeasurement(t *testing.T) {
 		ApiRequestsTimer: apiRequestsTimer,
 	}
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	w := httptest.NewRecorder()
 
 	callback := monitor.Callback(w, req, "/test")
@@ -420,7 +421,7 @@ func TestMonitoredCallback_HTTPMethods(t *testing.T) {
 				ApiRequestsTimer: apiRequestsTimer,
 			}
 
-			req := httptest.NewRequest(method, "/test", nil)
+			req := httptest.NewRequest(method, "/test", http.NoBody)
 			w := httptest.NewRecorder()
 
 			callback := monitor.Callback(w, req, "/test")

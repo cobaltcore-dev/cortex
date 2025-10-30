@@ -91,7 +91,9 @@ func TestNovaSyncer_Sync(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -113,7 +115,9 @@ func TestNovaSyncer_SyncServers(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	n, err := syncer.SyncAllServers(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -159,7 +163,9 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 			}
 
 			ctx := t.Context()
-			syncer.Init(ctx)
+			if err := syncer.Init(ctx); err != nil {
+				t.Fatalf("failed to init identity syncer: %v", err)
+			}
 			n, err := syncer.SyncDeletedServers(ctx)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
@@ -186,7 +192,9 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	n, err := syncer.SyncAllHypervisors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -211,7 +219,9 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	n, err := syncer.SyncAllFlavors(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -236,7 +246,9 @@ func TestNovaSyncer_SyncMigrations(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	n, err := syncer.SyncAllMigrations(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -261,7 +273,9 @@ func TestNovaSyncer_SyncAggregates(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	n, err := syncer.SyncAllAggregates(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

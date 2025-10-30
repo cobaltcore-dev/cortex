@@ -32,8 +32,7 @@ func (s *ManilaSyncer) Init(ctx context.Context) error {
 	}
 	tables := []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
-	switch s.Conf.Type {
-	case v1alpha1.ManilaDatasourceTypeStoragePools:
+	if s.Conf.Type == v1alpha1.ManilaDatasourceTypeStoragePools {
 		tables = append(tables, s.DB.AddTable(manila.StoragePool{}))
 	}
 	return s.DB.CreateTable(tables...)
@@ -44,8 +43,7 @@ func (s *ManilaSyncer) Sync(ctx context.Context) (int64, error) {
 	// Only sync the objects that are configured in the yaml conf.
 	var err error
 	var nResults int64
-	switch s.Conf.Type {
-	case v1alpha1.ManilaDatasourceTypeStoragePools:
+	if s.Conf.Type == v1alpha1.ManilaDatasourceTypeStoragePools {
 		nResults, err = s.SyncAllStoragePools(ctx)
 	}
 	return nResults, err

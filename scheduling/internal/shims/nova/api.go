@@ -14,7 +14,6 @@ import (
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	delegationAPI "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	scheduling "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
@@ -104,8 +103,8 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	raw := runtime.RawExtension{Raw: body}
 	var requestData api.ExternalSchedulerRequest
 	// Copy the raw body to a io.Reader for json deserialization.
-	copy := body
-	reader := bytes.NewReader(copy)
+	cp := body
+	reader := bytes.NewReader(cp)
 	if err := json.NewDecoder(reader).Decode(&requestData); err != nil {
 		c.Respond(http.StatusBadRequest, err, "failed to decode request body")
 		return
@@ -155,7 +154,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	hosts := result.Status.Result.OrderedHosts
-	response := delegationAPI.ExternalSchedulerResponse{Hosts: hosts}
+	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
 		c.Respond(http.StatusInternalServerError, err, "failed to encode response")

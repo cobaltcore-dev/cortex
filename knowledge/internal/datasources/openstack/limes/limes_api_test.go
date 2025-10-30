@@ -46,7 +46,9 @@ func TestLimesAPI_GetAllCommitments(t *testing.T) {
 	conf := v1alpha1.LimesDatasource{}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	projects := []identity.Project{{ID: "project1", DomainID: "domain1"}}
@@ -81,7 +83,9 @@ func TestLimesAPI_GetAllCommitments_Error(t *testing.T) {
 	conf := v1alpha1.LimesDatasource{}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	projects := []identity.Project{{ID: "project1", DomainID: "domain1"}}
@@ -106,7 +110,9 @@ func TestLimesAPI_GetAllCommitments_EmptyResponse(t *testing.T) {
 	conf := v1alpha1.LimesDatasource{}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	projects := []identity.Project{{ID: "project1", DomainID: "domain1"}}
@@ -148,7 +154,9 @@ func TestLimesAPI_GetAllCommitments_MultipleProjects(t *testing.T) {
 	k := &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	projects := []identity.Project{

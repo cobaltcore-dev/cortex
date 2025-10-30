@@ -208,7 +208,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				t.Errorf("Expected no error but got: %v", err)
 			}
 
-			if result.Requeue {
+			if result.RequeueAfter > 0 {
 				t.Error("Expected no requeue")
 			}
 

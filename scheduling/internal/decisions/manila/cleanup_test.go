@@ -181,14 +181,20 @@ func TestCleanupManila(t *testing.T) {
 						sharesResponse := map[string]any{
 							"shares": []mockShare{},
 						}
-						json.NewEncoder(w).Encode(sharesResponse)
+						err := json.NewEncoder(w).Encode(sharesResponse)
+						if err != nil {
+							t.Errorf("Failed to encode shares response: %v", err)
+						}
 						return
 					}
 
 					sharesResponse := map[string]any{
 						"shares": tt.mockShares,
 					}
-					json.NewEncoder(w).Encode(sharesResponse)
+					err := json.NewEncoder(w).Encode(sharesResponse)
+					if err != nil {
+						t.Errorf("Failed to encode shares response: %v", err)
+					}
 					return
 				}
 
@@ -209,7 +215,10 @@ func TestCleanupManila(t *testing.T) {
 							},
 						},
 					}
-					json.NewEncoder(w).Encode(versionResponse)
+					err := json.NewEncoder(w).Encode(versionResponse)
+					if err != nil {
+						t.Errorf("Failed to encode version response: %v", err)
+					}
 					return
 				}
 
@@ -247,7 +256,10 @@ func TestCleanupManila(t *testing.T) {
 							},
 						},
 					}
-					json.NewEncoder(w).Encode(versionResponse)
+					err := json.NewEncoder(w).Encode(versionResponse)
+					if err != nil {
+						t.Errorf("Failed to encode version response: %v", err)
+					}
 				case "/v3/auth/tokens":
 					w.WriteHeader(http.StatusCreated)
 
@@ -297,7 +309,10 @@ func TestCleanupManila(t *testing.T) {
 
 					// Set the token in the header
 					w.Header().Set("X-Subject-Token", "mock-token-id")
-					json.NewEncoder(w).Encode(tokenResponse)
+					err := json.NewEncoder(w).Encode(tokenResponse)
+					if err != nil {
+						t.Errorf("Failed to encode token response: %v", err)
+					}
 				default:
 					w.WriteHeader(http.StatusNotFound)
 				}

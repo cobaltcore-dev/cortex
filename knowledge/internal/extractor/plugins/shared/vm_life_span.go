@@ -92,6 +92,6 @@ func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
 	deletedVMLifeSpansBuckets := extractHistogramBuckets(lifeSpansRaw, true)
 	runningVMLifeSpansBuckets := extractHistogramBuckets(lifeSpansRaw, false)
 
-	features := append(deletedVMLifeSpansBuckets, runningVMLifeSpansBuckets...)
-	return e.Extracted(features)
+	deletedVMLifeSpansBuckets = append(deletedVMLifeSpansBuckets, runningVMLifeSpansBuckets...)
+	return e.Extracted(deletedVMLifeSpansBuckets)
 }

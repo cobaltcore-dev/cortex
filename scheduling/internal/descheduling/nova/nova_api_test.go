@@ -4,7 +4,6 @@
 package nova
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,40 +11,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
 )
-
-type mockNovaAPI struct {
-	InitFunc                func(ctx context.Context)
-	GetFunc                 func(ctx context.Context, id string) (server, error)
-	LiveMigrateFunc         func(ctx context.Context, id string) error
-	GetServerMigrationsFunc func(ctx context.Context, id string) ([]migration, error)
-}
-
-func (m *mockNovaAPI) Init(ctx context.Context) {
-	if m.InitFunc != nil {
-		m.InitFunc(ctx)
-	}
-}
-
-func (m *mockNovaAPI) Get(ctx context.Context, id string) (server, error) {
-	if m.GetFunc != nil {
-		return m.GetFunc(ctx, id)
-	}
-	return server{}, nil
-}
-
-func (m *mockNovaAPI) LiveMigrate(ctx context.Context, id string) error {
-	if m.LiveMigrateFunc != nil {
-		return m.LiveMigrateFunc(ctx, id)
-	}
-	return nil
-}
-
-func (m *mockNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
-	if m.GetServerMigrationsFunc != nil {
-		return m.GetServerMigrationsFunc(ctx, id)
-	}
-	return nil, nil
-}
 
 func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
 	server := httptest.NewServer(handler)

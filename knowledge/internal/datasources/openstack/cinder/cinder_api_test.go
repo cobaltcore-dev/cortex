@@ -82,7 +82,9 @@ func TestCinderAPI_GetAllStoragePools(t *testing.T) {
 	conf := v1alpha1.CinderDatasource{}
 
 	api := NewCinderAPI(mon, k, conf).(*cinderAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init api: %v", err)
+	}
 
 	ctx := t.Context()
 	pools, err := api.GetAllStoragePools(ctx)
@@ -108,7 +110,9 @@ func TestCinderAPI_GetAllStoragePools_Error(t *testing.T) {
 	conf := v1alpha1.CinderDatasource{}
 
 	api := NewCinderAPI(mon, k, conf).(*cinderAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	_, err := api.GetAllStoragePools(ctx)

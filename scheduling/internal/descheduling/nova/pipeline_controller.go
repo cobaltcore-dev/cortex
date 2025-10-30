@@ -81,7 +81,7 @@ func (c *DeschedulingsPipelineController) Reconcile(ctx context.Context, req ctr
 }
 
 func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager) error {
-	c.BasePipelineController.Delegate = c
+	c.Delegate = c
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

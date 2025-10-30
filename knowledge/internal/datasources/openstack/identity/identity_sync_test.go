@@ -60,7 +60,9 @@ func TestIdentitySyncer_Sync(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -82,7 +84,9 @@ func TestIdentitySyncer_SyncProjects(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	n, err := syncer.SyncProjects(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -107,7 +111,9 @@ func TestIdentitySyncer_SyncDomains(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	syncer.Init(ctx)
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init identity syncer: %v", err)
+	}
 	n, err := syncer.SyncDomains(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

@@ -221,14 +221,20 @@ func TestCleanupNova(t *testing.T) {
 						serversResponse := map[string]any{
 							"servers": []mockServer{},
 						}
-						json.NewEncoder(w).Encode(serversResponse)
+						err := json.NewEncoder(w).Encode(serversResponse)
+						if err != nil {
+							t.Errorf("Failed to encode servers response: %v", err)
+						}
 						return
 					}
 
 					serversResponse := map[string]any{
 						"servers": tt.mockServers,
 					}
-					json.NewEncoder(w).Encode(serversResponse)
+					err := json.NewEncoder(w).Encode(serversResponse)
+					if err != nil {
+						t.Errorf("Failed to encode servers response: %v", err)
+					}
 					return
 				}
 
@@ -262,7 +268,10 @@ func TestCleanupNova(t *testing.T) {
 							},
 						},
 					}
-					json.NewEncoder(w).Encode(versionResponse)
+					err := json.NewEncoder(w).Encode(versionResponse)
+					if err != nil {
+						t.Errorf("Failed to encode version response: %v", err)
+					}
 				case "/v3/auth/tokens":
 					w.WriteHeader(http.StatusCreated)
 
@@ -309,7 +318,10 @@ func TestCleanupNova(t *testing.T) {
 					}
 
 					w.Header().Set("X-Subject-Token", "mock-token-id")
-					json.NewEncoder(w).Encode(tokenResponse)
+					err := json.NewEncoder(w).Encode(tokenResponse)
+					if err != nil {
+						t.Errorf("Failed to encode token response: %v", err)
+					}
 				default:
 					w.WriteHeader(http.StatusNotFound)
 				}

@@ -112,7 +112,7 @@ func (c *DecisionPipelineController) InitPipeline(steps []v1alpha1.Step) (lib.Pi
 }
 
 func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
-	handle := func(ctx context.Context, new *ironcorev1alpha1.Machine) {
+	handle := func(ctx context.Context, newMachine *ironcorev1alpha1.Machine) {
 		log := ctrl.LoggerFrom(ctx)
 		// Create a decision resource to schedule the machine.
 		decision := &v1alpha1.Decision{
@@ -122,13 +122,13 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 			Spec: v1alpha1.DecisionSpec{
 				Operator:   c.Conf.Operator,
 				Type:       v1alpha1.DecisionTypeIroncoreMachine,
-				ResourceID: new.ObjectMeta.Name,
+				ResourceID: newMachine.Name,
 				PipelineRef: corev1.ObjectReference{
 					Name: "machines-scheduler",
 				},
 				MachineRef: &corev1.ObjectReference{
-					Name:      new.ObjectMeta.Name,
-					Namespace: new.ObjectMeta.Namespace,
+					Name:      newMachine.Name,
+					Namespace: newMachine.Namespace,
 				},
 			},
 		}
@@ -142,12 +142,12 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 			handle(ctx, machine)
 		},
 		UpdateFunc: func(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			new := evt.ObjectNew.(*ironcorev1alpha1.Machine)
-			if new.Spec.MachinePoolRef != nil {
+			newMachine := evt.ObjectNew.(*ironcorev1alpha1.Machine)
+			if newMachine.Spec.MachinePoolRef != nil {
 				// Machine is already scheduled, no need to create a decision.
 				return
 			}
-			handle(ctx, new)
+			handle(ctx, newMachine)
 		},
 		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			// Delete the associated decision(s).
@@ -170,7 +170,7 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
-	c.BasePipelineController.Delegate = c
+	c.Delegate = c
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

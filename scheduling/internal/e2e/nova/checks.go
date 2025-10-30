@@ -247,7 +247,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 }
 
 // Generate external scheduler requests with the given datacenter data.
-func randomRequest(dc datacenter, seed int, config conf.Config) api.ExternalSchedulerRequest {
+func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	// Create a new random source with the given seed.
 	//nolint:gosec // We don't care if the random source is cryptographically secure.
 	randSource := rand.New(rand.NewSource(int64(seed)))
@@ -316,7 +316,6 @@ func randomRequest(dc datacenter, seed int, config conf.Config) api.ExternalSche
 // Check that the nova external scheduler returns a valid set of hosts.
 func checkNovaSchedulerReturnsValidHosts(
 	ctx context.Context,
-	config conf.Config,
 	req api.ExternalSchedulerRequest,
 ) []string {
 
@@ -350,8 +349,8 @@ func RunChecks(ctx context.Context, config conf.Config) {
 	requestsWithHostsReturned := 0
 	requestsWithNoHostsReturned := 0
 	for i := range nRandomRequestsToSend {
-		request := randomRequest(datacenter, i, config)
-		hosts := checkNovaSchedulerReturnsValidHosts(ctx, config, request)
+		request := randomRequest(datacenter, i)
+		hosts := checkNovaSchedulerReturnsValidHosts(ctx, request)
 		if len(hosts) > 0 {
 			requestsWithHostsReturned++
 		} else {

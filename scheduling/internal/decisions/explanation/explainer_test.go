@@ -306,7 +306,7 @@ func stringPtr(s string) *string {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || findInString(s, substr))
+	return len(s) >= len(substr) && (s == substr || substr == "" || findInString(s, substr))
 }
 
 func findInString(s, substr string) bool {

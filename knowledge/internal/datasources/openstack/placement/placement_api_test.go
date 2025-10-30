@@ -46,7 +46,9 @@ func TestPlacementAPI_GetAllResourceProviders(t *testing.T) {
 	conf := v1alpha1.PlacementDatasource{}
 
 	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	rps, err := api.GetAllResourceProviders(ctx)
@@ -76,7 +78,9 @@ func TestPlacementAPI_GetAllTraits(t *testing.T) {
 	conf := v1alpha1.PlacementDatasource{}
 
 	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	providers := []placement.ResourceProvider{{UUID: "1", Name: "rp1"}}
@@ -107,7 +111,9 @@ func TestPlacementAPI_GetAllTraits_Error(t *testing.T) {
 	conf := v1alpha1.PlacementDatasource{}
 
 	api := NewPlacementAPI(mon, pc, conf).(*placementAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	providers := []placement.ResourceProvider{{UUID: "error", Name: "rp1"}}
@@ -155,7 +161,9 @@ func TestPlacementAPI_GetAllInventoryUsages(t *testing.T) {
 	k := &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
 
 	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	providers := []placement.ResourceProvider{{UUID: "1", Name: "rp1", ResourceProviderGeneration: 1}}

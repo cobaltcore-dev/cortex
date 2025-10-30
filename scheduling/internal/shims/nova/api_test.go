@@ -67,7 +67,7 @@ func TestHTTPAPI_Init(t *testing.T) {
 	api.Init(mux)
 
 	// Test that the handler is registered by making a request
-	req := httptest.NewRequest(http.MethodGet, "/scheduler/nova/external", nil)
+	req := httptest.NewRequest(http.MethodGet, "/scheduler/nova/external", http.NoBody)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -186,7 +186,10 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 					},
 					Pipeline: "test-pipeline",
 				}
-				data, _ := json.Marshal(req)
+				data, err := json.Marshal(req)
+				if err != nil {
+					t.Fatalf("Failed to marshal request data: %v", err)
+				}
 				return string(data)
 			}(),
 			decisionResult: &v1alpha1.Decision{
@@ -217,7 +220,10 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 					},
 					Pipeline: "test-pipeline",
 				}
-				data, _ := json.Marshal(req)
+				data, err := json.Marshal(req)
+				if err != nil {
+					t.Fatalf("Failed to marshal request data: %v", err)
+				}
 				return string(data)
 			}(),
 			processDecisionErr: errors.New("processing failed"),
@@ -241,7 +247,10 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 					},
 					Pipeline: "test-pipeline",
 				}
-				data, _ := json.Marshal(req)
+				data, err := json.Marshal(req)
+				if err != nil {
+					t.Fatalf("Failed to marshal request data: %v", err)
+				}
 				return string(data)
 			}(),
 			decisionResult: &v1alpha1.Decision{
@@ -346,7 +355,10 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 		Pipeline: "test-pipeline",
 	}
 
-	body, _ := json.Marshal(requestData)
+	body, err := json.Marshal(requestData)
+	if err != nil {
+		t.Fatalf("Failed to marshal request data: %v", err)
+	}
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/nova/external", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
@@ -377,8 +389,8 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 		t.Errorf("Expected type %s, got %s", v1alpha1.DecisionTypeNovaServer, capturedDecision.Spec.Type)
 	}
 
-	if capturedDecision.ObjectMeta.GenerateName != "nova-" {
-		t.Errorf("Expected generate name 'nova-', got %s", capturedDecision.ObjectMeta.GenerateName)
+	if capturedDecision.GenerateName != "nova-" {
+		t.Errorf("Expected generate name 'nova-', got %s", capturedDecision.GenerateName)
 	}
 
 	if capturedDecision.Spec.NovaRaw == nil {

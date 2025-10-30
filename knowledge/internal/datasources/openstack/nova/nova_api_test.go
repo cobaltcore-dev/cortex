@@ -70,7 +70,9 @@ func TestNovaAPI_GetDeletedServers(t *testing.T) {
 		conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers}
 
 		api := NewNovaAPI(mon, k, conf).(*novaAPI)
-		api.Init(t.Context())
+		if err := api.Init(t.Context()); err != nil {
+			t.Fatalf("failed to init cinder api: %v", err)
+		}
 
 		ctx := t.Context()
 		servers, err := api.GetDeletedServers(ctx, tt.Time)
@@ -107,7 +109,9 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 	conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	servers, err := api.GetAllServers(ctx)
@@ -144,7 +148,9 @@ func TestNovaAPI_GetAllHypervisors(t *testing.T) {
 	conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeHypervisors}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	hypervisors, err := api.GetAllHypervisors(ctx)
@@ -181,7 +187,9 @@ func TestNovaAPI_GetAllFlavors(t *testing.T) {
 	conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeFlavors}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	flavors, err := api.GetAllFlavors(ctx)
@@ -221,7 +229,9 @@ func TestNovaAPI_GetAllMigrations(t *testing.T) {
 	conf := v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeMigrations}
 
 	api := NewNovaAPI(mon, k, conf).(*novaAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	migrations, err := api.GetAllMigrations(ctx)

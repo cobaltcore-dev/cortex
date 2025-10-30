@@ -31,8 +31,7 @@ func (s *CinderSyncer) Init(ctx context.Context) error {
 	}
 	tables := []*gorp.TableMap{}
 	// Only add the tables that are configured in the yaml conf.
-	switch s.Conf.Type {
-	case v1alpha1.CinderDatasourceTypeStoragePools:
+	if s.Conf.Type == v1alpha1.CinderDatasourceTypeStoragePools {
 		tables = append(tables, s.DB.AddTable(cinder.StoragePool{}))
 	}
 	return s.DB.CreateTable(tables...)
@@ -43,8 +42,7 @@ func (s *CinderSyncer) Sync(ctx context.Context) (int64, error) {
 	// Only sync the objects that are configured in the yaml conf.
 	var err error
 	var nResults int64
-	switch s.Conf.Type {
-	case v1alpha1.CinderDatasourceTypeStoragePools:
+	if s.Conf.Type == v1alpha1.CinderDatasourceTypeStoragePools {
 		nResults, err = s.SyncAllStoragePools(ctx)
 	}
 	return nResults, err

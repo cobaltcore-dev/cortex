@@ -68,6 +68,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	obj *v1alpha1.Pipeline,
 	_ workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	if obj.Spec.Operator != c.OperatorName {
 		delete(c.Pipelines, obj.Name) // Just to be sure.
 		return
@@ -80,7 +81,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	for _, step := range obj.Spec.Steps {
 		stepConf := &v1alpha1.Step{}
 		log.Info("checking step for pipeline", "pipelineName", obj.Name, "stepName", step.Ref.Name)
-		if err := c.Get(ctx, client.ObjectKey{
+		if err = c.Get(ctx, client.ObjectKey{
 			Name:      step.Ref.Name,
 			Namespace: step.Ref.Namespace,
 		}, stepConf); err != nil {
@@ -148,6 +149,7 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineCreated(
 	evt event.CreateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	pipelineConf := evt.Object.(*v1alpha1.Pipeline)
 	c.handlePipelineChange(ctx, pipelineConf, queue)
 }
@@ -161,6 +163,7 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineUpdated(
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	pipelineConf := evt.ObjectNew.(*v1alpha1.Pipeline)
 	c.handlePipelineChange(ctx, pipelineConf, queue)
 }
@@ -173,6 +176,7 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	pipelineConf := evt.Object.(*v1alpha1.Pipeline)
 	delete(c.Pipelines, pipelineConf.Name)
 }
@@ -183,6 +187,7 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 	obj *v1alpha1.Step,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	if obj.Spec.Operator != c.OperatorName {
 		return
 	}
@@ -258,6 +263,7 @@ func (c *BasePipelineController[PipelineType]) HandleStepCreated(
 	evt event.CreateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	stepConf := evt.Object.(*v1alpha1.Step)
 	c.handleStepChange(ctx, stepConf, queue)
 }
@@ -271,6 +277,7 @@ func (c *BasePipelineController[PipelineType]) HandleStepUpdated(
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	stepConf := evt.ObjectNew.(*v1alpha1.Step)
 	c.handleStepChange(ctx, stepConf, queue)
 }
@@ -283,6 +290,7 @@ func (c *BasePipelineController[PipelineType]) HandleStepDeleted(
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	stepConf := evt.Object.(*v1alpha1.Step)
 	if stepConf.Spec.Operator != c.OperatorName {
 		return
@@ -314,6 +322,7 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 	obj *knowledgev1alpha1.Knowledge,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	if obj.Spec.Operator != c.OperatorName {
 		return
 	}
@@ -347,6 +356,7 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeCreated(
 	evt event.CreateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	knowledgeConf := evt.Object.(*knowledgev1alpha1.Knowledge)
 	c.handleKnowledgeChange(ctx, knowledgeConf, queue)
 }
@@ -359,6 +369,7 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	before := evt.ObjectOld.(*knowledgev1alpha1.Knowledge)
 	after := evt.ObjectNew.(*knowledgev1alpha1.Knowledge)
 	errorBefore := meta.IsStatusConditionTrue(before.Status.Conditions, knowledgev1alpha1.KnowledgeConditionError)
@@ -380,6 +391,7 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeDeleted(
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	knowledgeConf := evt.Object.(*knowledgev1alpha1.Knowledge)
 	c.handleKnowledgeChange(ctx, knowledgeConf, queue)
 }

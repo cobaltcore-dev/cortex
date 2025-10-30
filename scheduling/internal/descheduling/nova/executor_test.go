@@ -76,7 +76,10 @@ func newMockMonitor() Monitor {
 
 func TestExecutor_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
-	v1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	tests := []struct {
 		name           string
@@ -389,7 +392,10 @@ func TestExecutor_Reconcile(t *testing.T) {
 
 func TestExecutor_ReconcileNotFound(t *testing.T) {
 	scheme := runtime.NewScheme()
-	v1alpha1.AddToScheme(scheme)
+	err := v1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	executor := &Executor{
@@ -413,7 +419,7 @@ func TestExecutor_ReconcileNotFound(t *testing.T) {
 		t.Errorf("expected no error for not found resource, got: %v", err)
 	}
 
-	if result.Requeue || result.RequeueAfter > 0 {
+	if result.RequeueAfter > 0 {
 		t.Error("expected no requeue for not found resource")
 	}
 }

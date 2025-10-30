@@ -208,7 +208,6 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	log := ctrl.LoggerFrom(ctx)
 
 	// Get all the datasources this kpi depends on, if any.
-	var datasources []v1alpha1.Datasource
 	var datasourcesReady int
 	for _, dsRef := range obj.Spec.Dependencies.Datasources {
 		ds := &v1alpha1.Datasource{}
@@ -222,7 +221,6 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			log.Error(err, "failed to get datasource dependency", "datasource", dsRef)
 			return err
 		}
-		datasources = append(datasources, *ds)
 		// Check if datasource is ready
 		if ds.Status.IsReady() {
 			datasourcesReady++
@@ -230,7 +228,6 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	}
 
 	// Get all knowledges this kpi depends on, if any.
-	var knowledges []v1alpha1.Knowledge
 	var knowledgesReady int
 	for _, knRef := range obj.Spec.Dependencies.Knowledges {
 		kn := &v1alpha1.Knowledge{}
@@ -244,7 +241,6 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			log.Error(err, "failed to get knowledge dependency", "knowledge", knRef)
 			return err
 		}
-		knowledges = append(knowledges, *kn)
 		// Check if knowledge is ready
 		if kn.Status.IsReady() {
 			knowledgesReady++
@@ -350,6 +346,7 @@ func (c *Controller) handleDatasourceCreated(
 	evt event.CreateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	ds := evt.Object.(*v1alpha1.Datasource)
 	c.handleDatasourceChange(ctx, ds, queue)
 }
@@ -359,6 +356,7 @@ func (c *Controller) handleDatasourceUpdated(
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	dsBefore := evt.ObjectNew.(*v1alpha1.Datasource)
 	dsAfter := evt.ObjectOld.(*v1alpha1.Datasource)
 	// Only react to changes affecting the readiness.
@@ -374,6 +372,7 @@ func (c *Controller) handleDatasourceDeleted(
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	ds := evt.Object.(*v1alpha1.Datasource)
 	c.handleDatasourceChange(ctx, ds, queue)
 }
@@ -410,6 +409,7 @@ func (c *Controller) handleKnowledgeCreated(
 	evt event.CreateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	kn := evt.Object.(*v1alpha1.Knowledge)
 	c.handleKnowledgeChange(ctx, kn, queue)
 }
@@ -419,6 +419,7 @@ func (c *Controller) handleKnowledgeUpdated(
 	evt event.UpdateEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	knBefore := evt.ObjectNew.(*v1alpha1.Knowledge)
 	knAfter := evt.ObjectOld.(*v1alpha1.Knowledge)
 	// Only react to changes affecting the readiness.
@@ -434,6 +435,7 @@ func (c *Controller) handleKnowledgeDeleted(
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	kn := evt.Object.(*v1alpha1.Knowledge)
 	c.handleKnowledgeChange(ctx, kn, queue)
 }

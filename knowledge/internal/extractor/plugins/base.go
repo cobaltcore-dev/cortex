@@ -28,7 +28,7 @@ type BaseExtractor[Opts any, Feature db.Table] struct {
 }
 
 // Init the extractor with the database and options.
-func (e *BaseExtractor[Opts, Feature]) Init(datasourceDB *db.DB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (e *BaseExtractor[Opts, Feature]) Init(datasourceDB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
 	rawOpts := libconf.NewRawOpts(`{}`)
 	if len(spec.Extractor.Config.Raw) > 0 {
 		rawOpts = libconf.NewRawOptsBytes(spec.Extractor.Config.Raw)

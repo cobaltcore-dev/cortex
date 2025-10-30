@@ -21,7 +21,7 @@ type mockFeatureExtractor struct {
 	features     []plugins.Feature
 }
 
-func (m *mockFeatureExtractor) Init(datasourceDB *db.DB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (m *mockFeatureExtractor) Init(datasourceDB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
 	return m.initError
 }
 
@@ -77,8 +77,9 @@ func TestMonitor_DescribeAndCollect(t *testing.T) {
 		metrics = append(metrics, metric)
 	}
 
-	// Initially, there should be no metrics collected since no operations have occurred
-	// This is normal behavior for Prometheus metrics
+	if len(metrics) != 0 {
+		t.Error("Expected no metrics collected since no metrics have been recorded yet")
+	}
 }
 
 func TestMonitorFeatureExtractor_Init(t *testing.T) {
@@ -99,7 +100,7 @@ func TestMonitorFeatureExtractor_Init(t *testing.T) {
 	wrappedExtractor = monitorFeatureExtractor("test-extractor", mockExtractor, monitor)
 
 	err = wrappedExtractor.Init(nil, nil, v1alpha1.KnowledgeSpec{})
-	if err != expectedError {
+	if !errors.Is(err, expectedError) {
 		t.Errorf("Expected error %v, got %v", expectedError, err)
 	}
 }
@@ -153,7 +154,7 @@ func TestMonitorFeatureExtractor_Extract_Error(t *testing.T) {
 	wrappedExtractor := monitorFeatureExtractor("test-extractor", mockExtractor, monitor)
 
 	features, err := wrappedExtractor.Extract()
-	if err != expectedError {
+	if !errors.Is(err, expectedError) {
 		t.Errorf("Expected error %v, got %v", expectedError, err)
 	}
 	if features != nil {

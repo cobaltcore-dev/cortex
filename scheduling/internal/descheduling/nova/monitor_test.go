@@ -148,7 +148,7 @@ func TestStepMonitor_Init_WithError(t *testing.T) {
 
 	err := monitoredStep.Init(db.DB{}, conf.RawOpts{})
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 }
@@ -197,7 +197,7 @@ func TestStepMonitor_Run_WithError(t *testing.T) {
 
 	result, err := monitoredStep.Run()
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 

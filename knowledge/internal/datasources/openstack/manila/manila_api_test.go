@@ -86,7 +86,9 @@ func TestManilaAPI_GetAllStoragePools(t *testing.T) {
 	conf := v1alpha1.ManilaDatasource{}
 
 	api := NewManilaAPI(mon, k, conf).(*manilaAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	pools, err := api.GetAllStoragePools(ctx)
@@ -112,7 +114,9 @@ func TestManilaAPI_GetAllStoragePools_Error(t *testing.T) {
 	conf := v1alpha1.ManilaDatasource{}
 
 	api := NewManilaAPI(mon, k, conf).(*manilaAPI)
-	api.Init(t.Context())
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init cinder api: %v", err)
+	}
 
 	ctx := t.Context()
 	_, err := api.GetAllStoragePools(ctx)

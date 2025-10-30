@@ -4,7 +4,6 @@
 package openstack
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -163,8 +162,8 @@ func TestOpenStackDatasourceSpec(t *testing.T) {
 		t.Errorf("Expected Nova type %s, got %s", v1alpha1.NovaDatasourceTypeServers, spec.OpenStack.Nova.Type)
 	}
 
-	if spec.OpenStack.SyncInterval.Duration.Seconds() != 3600 {
-		t.Errorf("Expected SyncInterval 3600, got %f", spec.OpenStack.SyncInterval.Duration.Seconds())
+	if spec.OpenStack.SyncInterval.Seconds() != 3600 {
+		t.Errorf("Expected SyncInterval 3600, got %f", spec.OpenStack.SyncInterval.Seconds())
 	}
 
 	if spec.OpenStack.SecretRef.Name != "keystone-credentials" {
@@ -292,21 +291,6 @@ func TestCinderDatasourceSpec(t *testing.T) {
 	}
 }
 
-// Mock syncer for testing
-type mockSyncer struct {
-	initError error
-	syncError error
-	syncCount int64
-}
-
-func (m *mockSyncer) Init(ctx context.Context) error {
-	return m.initError
-}
-
-func (m *mockSyncer) Sync(ctx context.Context) (int64, error) {
-	return m.syncCount, m.syncError
-}
-
 func TestOpenStackDatasourceValidation(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -383,7 +367,7 @@ func TestOpenStackDatasourceValidation(t *testing.T) {
 				t.Errorf("Expected valid datasource to have secret reference")
 			}
 
-			if tt.valid && tt.datasource.Spec.OpenStack.SyncInterval.Duration.Seconds() <= 0 {
+			if tt.valid && tt.datasource.Spec.OpenStack.SyncInterval.Seconds() <= 0 {
 				t.Errorf("Expected valid datasource to have positive sync interval")
 			}
 		})

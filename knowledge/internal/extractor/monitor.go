@@ -68,7 +68,7 @@ type FeatureExtractorMonitor[F plugins.FeatureExtractor] struct {
 }
 
 // Initialize the wrapped feature extractor with the database and options.
-func (m FeatureExtractorMonitor[F]) Init(datasourceDB *db.DB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (m FeatureExtractorMonitor[F]) Init(datasourceDB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
 	// Configure the wrapped feature extractor.
 	return m.FeatureExtractor.Init(datasourceDB, extractorDB, spec)
 }

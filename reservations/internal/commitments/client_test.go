@@ -53,7 +53,7 @@ func TestCommitmentsClient_ListProjects(t *testing.T) {
 		if r.URL.Path == "/v3/projects" {
 			// Return raw JSON string as the gophercloud pages expect
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{
+			_, err := w.Write([]byte(`{
 				"projects": [
 					{
 						"id": "project1",
@@ -69,6 +69,9 @@ func TestCommitmentsClient_ListProjects(t *testing.T) {
 					}
 				]
 			}`))
+			if err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
 			return
 		}
 		http.NotFound(w, r)
@@ -148,7 +151,7 @@ func TestCommitmentsClient_ListFlavorsByName(t *testing.T) {
 		if strings.Contains(r.URL.Path, "/flavors/detail") {
 			// Return raw JSON string as the gophercloud pages expect
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{
+			_, err := w.Write([]byte(`{
 				"flavors": [
 					{
 						"id": "flavor1",
@@ -176,6 +179,9 @@ func TestCommitmentsClient_ListFlavorsByName(t *testing.T) {
 					}
 				]
 			}`))
+			if err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
 			return
 		}
 		http.NotFound(w, r)
@@ -287,15 +293,20 @@ func TestCommitmentsClient_ListCommitmentsByID(t *testing.T) {
 						Amount:           10,
 						Unit:             "instances",
 						Duration:         "1 year",
-						CreatedAt:        uint64(time.Now().Unix()),
-						ExpiresAt:        uint64(time.Now().Add(365 * 24 * time.Hour).Unix()),
-						Status:           "confirmed",
-						ProjectID:        projectID,
-						DomainID:         domainID,
+						//nolint:gosec
+						CreatedAt: uint64(time.Now().Unix()),
+						//nolint:gosec
+						ExpiresAt: uint64(time.Now().Add(365 * 24 * time.Hour).Unix()),
+						Status:    "confirmed",
+						ProjectID: projectID,
+						DomainID:  domainID,
 					},
 				},
 			}
-			json.NewEncoder(w).Encode(response)
+			err := json.NewEncoder(w).Encode(response)
+			if err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
 			return
 		}
 		http.NotFound(w, r)
@@ -390,7 +401,7 @@ func TestCommitmentsClient_ListServersByProjectID(t *testing.T) {
 			// Return raw JSON string as the gophercloud pages expect
 			w.Header().Set("Content-Type", "application/json")
 			if tenantID == "project1" {
-				w.Write([]byte(`{
+				if _, err := w.Write([]byte(`{
 					"servers": [
 						{
 							"id": "server1",
@@ -400,9 +411,13 @@ func TestCommitmentsClient_ListServersByProjectID(t *testing.T) {
 							"flavor": {"original_name": "m1.small"}
 						}
 					]
-				}`))
+				}`)); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
 			} else {
-				w.Write([]byte(`{"servers": []}`))
+				if _, err := w.Write([]byte(`{"servers": []}`)); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
 			}
 			return
 		}
@@ -518,7 +533,9 @@ func TestCommitmentsClient_listCommitments(t *testing.T) {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -598,7 +615,9 @@ func TestCommitmentsClient_listCommitments_JSONError(t *testing.T) {
 	// Mock server that returns invalid JSON
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("invalid json"))
+		if _, err := w.Write([]byte("invalid json")); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -643,7 +662,7 @@ func TestCommitmentsClient_listServersForProject(t *testing.T) {
 
 		// Return raw JSON string as the gophercloud pages expect
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{
+		if _, err := w.Write([]byte(`{
 			"servers": [
 				{
 					"id": "server1",
@@ -660,7 +679,9 @@ func TestCommitmentsClient_listServersForProject(t *testing.T) {
 					"flavor": {"original_name": "m1.medium"}
 				}
 			]
-		}`))
+		}`)); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -757,7 +778,9 @@ func TestCommitmentsClient_ContextCancellation(t *testing.T) {
 	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate a slow server
 		time.Sleep(100 * time.Millisecond)
-		json.NewEncoder(w).Encode(map[string]any{"projects": []Project{}})
+		if err := json.NewEncoder(w).Encode(map[string]any{"projects": []Project{}}); err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
 	}))
 	defer slowServer.Close()
 

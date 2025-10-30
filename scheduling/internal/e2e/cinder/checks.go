@@ -12,17 +12,16 @@ import (
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/sapcc/go-bits/must"
 )
 
 // Run all checks.
-func RunChecks(ctx context.Context, config conf.Config) {
-	checkCinderSchedulerReturnsValidHosts(ctx, config)
+func RunChecks(ctx context.Context) {
+	checkCinderSchedulerReturnsValidHosts(ctx)
 }
 
 // Check that the Cinder external scheduler returns a valid set of share hosts.
-func checkCinderSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
+func checkCinderSchedulerReturnsValidHosts(ctx context.Context) {
 	// TODO ADD THIS CHECK
 
 	//
