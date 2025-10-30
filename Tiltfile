@@ -33,15 +33,6 @@ def kubebuilder_binary_files(path):
     """
     return [path + '/cmd', path + '/api', path + '/internal', path + '/go.mod', path + '/go.sum']
 
-########### Cortex KPIs
-docker_build('ghcr.io/cobaltcore-dev/cortex-kpis', '.',
-    dockerfile='Dockerfile',
-    build_args={'GO_MOD_PATH': 'kpis'},
-    only=kubebuilder_binary_files('kpis') + ['lib/', 'testlib/', 'knowledge/'],
-)
-local('sh helm/sync.sh kpis/dist/chart')
-# Deployed as part of bundles below.
-
 ########### Knowledge Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex-knowledge-operator', '.',
     dockerfile='Dockerfile',
@@ -89,7 +80,6 @@ dep_charts = {
         ('helm/library/cortex-alerts', 'cortex-alerts'),
         ('helm/library/cortex-postgres', 'cortex-postgres'),
 
-        ('kpis/dist/chart', 'cortex-kpis'),
         ('reservations/dist/chart', 'cortex-reservations-operator'),
         ('scheduling/dist/chart', 'cortex-scheduling-operator'),
         ('knowledge/dist/chart', 'cortex-knowledge-operator'),
@@ -99,7 +89,6 @@ dep_charts = {
         ('helm/library/cortex-postgres', 'cortex-postgres'),
 
         ('scheduling/dist/chart', 'cortex-scheduling-operator'),
-        ('kpis/dist/chart', 'cortex-kpis'),
         ('knowledge/dist/chart', 'cortex-knowledge-operator'),
     ],
     'cortex-cinder': [
@@ -107,7 +96,6 @@ dep_charts = {
         ('helm/library/cortex-postgres', 'cortex-postgres'),
 
         ('scheduling/dist/chart', 'cortex-scheduling-operator'),
-        ('kpis/dist/chart', 'cortex-kpis'),
         ('knowledge/dist/chart', 'cortex-knowledge-operator'),
     ],
     'cortex-ironcore': [
@@ -161,7 +149,6 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8000, 5432),
     ])
-    k8s_resource('cortex-nova-kpis', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-knowledge-controller-manager', labels=['Cortex-Nova'])
     k8s_resource('cortex-nova-scheduling-controller-manager', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8001, 8080),
@@ -181,7 +168,6 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
         port_forward(8002, 5432),
     ])
-    k8s_resource('cortex-manila-kpis', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-knowledge-controller-manager', labels=['Cortex-Manila'])
     k8s_resource('cortex-manila-scheduling-controller-manager', labels=['Cortex-Manila'], port_forwards=[
         port_forward(8003, 8080),
@@ -199,7 +185,6 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8004, 5432),
     ])
-    k8s_resource('cortex-cinder-kpis', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-knowledge-controller-manager', labels=['Cortex-Cinder'])
     k8s_resource('cortex-cinder-scheduling-controller-manager', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8005, 8080),
@@ -212,7 +197,6 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
         auto_init=False,
     )
 
-# TODO fix this setup
 if 'ironcore' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex IronCore bundle")
     k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=[tilt_values]))
