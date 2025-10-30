@@ -75,22 +75,6 @@ cortex-alerts:
   alerts:
     componentPrefix: cortex-cinder
 
-cortex-kpis:
-  fullnameOverride: cortex-cinder-kpis
-  service:
-    extraLabels:
-      app: cortex-cinder-kpis # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-cinder-kpis
-  args: []
-  conf:
-    kpis:
-      # Configuration of KPIs that should be extracted from the synced data.
-      #
-      # The `name` should correspond to a known KPI extractor plugin.
-      plugins: []
-
 cortex-knowledge-operator:
   # CRDs are deployed in the cortex-crds chart.
   crd: {enable: false}

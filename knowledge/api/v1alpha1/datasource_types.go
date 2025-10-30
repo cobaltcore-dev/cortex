@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -242,6 +243,17 @@ type DatasourceStatus struct {
 	// The current status conditions of the datasource.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+}
+
+// Helper function to check if the datasource is ready.
+func (s *DatasourceStatus) IsReady() bool {
+	if meta.IsStatusConditionTrue(s.Conditions, DatasourceConditionError) {
+		return false
+	}
+	if meta.IsStatusConditionTrue(s.Conditions, DatasourceConditionWaiting) {
+		return false
+	}
+	return s.NumberOfObjects > 0
 }
 
 // +kubebuilder:object:root=true

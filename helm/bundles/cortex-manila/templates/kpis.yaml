@@ -1,0 +1,13 @@
+---
+apiVersion: knowledge.cortex/v1alpha1
+kind: KPI
+metadata:
+  name: netapp-storage-pool-cpu-usage-manila
+spec:
+  operator: cortex-manila
+  impl: netapp_storage_pool_cpu_usage_kpi
+  dependencies:
+    knowledges:
+      - name: netapp-storage-pool-cpu-usage-manila
+  description: |
+    This KPI tracks the CPU usage of Manila NetApp storage pools.

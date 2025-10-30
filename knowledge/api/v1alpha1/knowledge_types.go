@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -127,6 +128,14 @@ type KnowledgeStatus struct {
 	// The current status conditions of the knowledge.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+}
+
+// Helper function to check if the knowledge is ready.
+func (s *KnowledgeStatus) IsReady() bool {
+	if meta.IsStatusConditionTrue(s.Conditions, KnowledgeConditionError) {
+		return false
+	}
+	return s.RawLength > 0
 }
 
 // +kubebuilder:object:root=true
