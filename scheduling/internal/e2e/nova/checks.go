@@ -25,6 +25,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/sapcc/go-bits/must"
 )
 
@@ -133,11 +134,14 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 
 	slog.Info("listing servers")
 	slo := servers.ListOpts{AllTenants: true, Limit: 10}
-	pages := must.Return(servers.List(novaSC, slo).AllPages(ctx))
 	dataServers := &struct {
 		Servers []nova.Server `json:"servers"`
 	}{}
-	must.Succeed(pages.(servers.ServerPage).ExtractInto(dataServers))
+	must.Succeed(servers.List(novaSC, slo).
+		EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+			must.Succeed(page.(servers.ServerPage).ExtractInto(dataServers))
+			return false, nil // Only take the first page.
+		}))
 	servers := dataServers.Servers
 	if len(servers) == 0 {
 		panic("no servers found")
@@ -146,7 +150,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 
 	slog.Info("listing flavors")
 	flo := flavors.ListOpts{AccessType: flavors.AllAccess}
-	pages = must.Return(flavors.ListDetail(novaSC, flo).AllPages(ctx))
+	pages := must.Return(flavors.ListDetail(novaSC, flo).AllPages(ctx))
 	dataFlavors := &struct {
 		Flavors []nova.Flavor `json:"flavors"`
 	}{}
