@@ -459,7 +459,10 @@
       const id = state.selectedDecisions.metadata.name
       drawDecision(app, state.selectedDecisions.spec, state.selectedDecisions.status, id)
 
-      for (const item of state.selectedDecisions.status.history) {
+      const history = state.selectedDecisions.status.history || []
+      const reversedHistory = [...history].reverse()
+
+      for (const item of reversedHistory) {
         const result = await listSchedulingDecisions(item.name)
         drawDecision(app, result.spec, result.status, result.metadata.name)
       }

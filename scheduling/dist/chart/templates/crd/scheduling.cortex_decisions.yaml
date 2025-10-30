@@ -30,6 +30,9 @@ spec:
     - jsonPath: .spec.resourceID
       name: Resource ID
       type: string
+    - jsonPath: .status.precedence
+      name: '#'
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
@@ -302,6 +305,10 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              precedence:
+                description: The number of decisions that preceded this one for the
+                  same resource.
+                type: integer
               result:
                 description: The result of this decision.
                 properties:

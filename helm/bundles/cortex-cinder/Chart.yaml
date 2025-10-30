@@ -17,6 +17,10 @@ dependencies:
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.5.4
 
+  # from: file://../../../knowledge/dist/chart
+  - name: cortex-knowledge-operator
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.0.1
   # from: file://../../../scheduling/dist/chart
   - name: cortex-scheduling-operator
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
