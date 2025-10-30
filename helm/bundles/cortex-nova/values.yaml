@@ -5,9 +5,12 @@ owner-info:
   enabled: true
   helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-nova"
   maintainers:
-    - "p.matthes@sap.com"
-    - "markus.wieland@sap.com"
     - "arno.uhlig@sap.com"
+    - "julius.clausnitzer@sap.com"
+    - "malte.viering@sap.com"
+    - "marcel.bloecher@sap.com"
+    - "markus.wieland@sap.com"
+    - "p.matthes@sap.com"
   support-group: "workload-management"
   service: "cortex-nova"
 
