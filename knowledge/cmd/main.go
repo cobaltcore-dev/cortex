@@ -31,6 +31,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/openstack"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor"
+	"github.com/cobaltcore-dev/cortex/knowledge/internal/kpis"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	// +kubebuilder:scaffold:imports
 )
@@ -234,6 +235,15 @@ func main() {
 		Conf:   config,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TriggerReconciler")
+		os.Exit(1)
+	}
+
+	if err := (&kpis.Controller{
+		Client:              mgr.GetClient(),
+		SupportedKPIsByImpl: kpis.SupportedKPIsByImpl,
+		OperatorName:        config.Operator,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KPIController")
 		os.Exit(1)
 	}
 

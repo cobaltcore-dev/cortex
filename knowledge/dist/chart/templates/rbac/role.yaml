@@ -11,6 +11,8 @@ rules:
   - knowledge.cortex
   resources:
   - datasources
+  - knowledges
+  - kpis
   verbs:
   - create
   - delete
@@ -23,38 +25,16 @@ rules:
   - knowledge.cortex
   resources:
   - datasources/finalizers
+  - knowledges/finalizers
+  - kpis/finalizers
   verbs:
   - update
 - apiGroups:
   - knowledge.cortex
   resources:
   - datasources/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - knowledge.cortex
-  resources:
-  - knowledges
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - knowledge.cortex
-  resources:
-  - knowledges/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - knowledge.cortex
-  resources:
   - knowledges/status
+  - kpis/status
   verbs:
   - get
   - patch

@@ -83,33 +83,6 @@ cortex-alerts:
   alerts:
     componentPrefix: cortex-nova
 
-cortex-kpis:
-  fullnameOverride: cortex-nova-kpis
-  service:
-    extraLabels:
-      app: cortex-nova-kpis # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-nova-kpis
-  args: []
-  conf:
-    kpis:
-      # Configuration of KPIs that should be extracted from the synced data.
-      #
-      # The `name` should correspond to a known KPI extractor plugin.
-      plugins:
-        # VMware-specific KPIs.
-        - name: vmware_host_contention_kpi
-        - name: vmware_project_noisiness_kpi
-        # SAP specific KPIs.
-        - name: sap_host_total_allocatable_capacity_kpi
-        - name: sap_host_capacity_kpi
-        - name: sap_host_running_vms_kpi
-        # Shared KPIs.
-        - name: vm_migration_statistics_kpi
-        - name: vm_life_span_kpi
-        - name: vm_commitments_kpi
-
 cortex-knowledge-operator:
   # CRDs are deployed in the cortex-crds chart.
   crd: {enable: false}

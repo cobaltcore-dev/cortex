@@ -27,4 +27,12 @@ resources:
   kind: Datasource
   path: github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: cortex
+  group: knowledge
+  kind: KPI
+  path: github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1
+  version: v1alpha1
 version: "3"

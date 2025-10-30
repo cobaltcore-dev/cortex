@@ -70,14 +70,6 @@ jobs:
           go tool cover -func scheduling_profile.cov > scheduling_func_coverage.txt
           cd ..
 
-          echo "Running tests for the kpis module..."
-          cd kpis
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=kpis_profile.cov ./internal/...
-          go tool cover -func kpis_profile.cov > kpis_func_coverage.txt
-          cd ..
-
           echo "Running tests for the knowledge module..."
           cd knowledge
           go test -v \
@@ -171,19 +163,6 @@ jobs:
               schedulingCoverageReport = 'No coverage data available';
             }
 
-            // Read kpis module coverage report
-            let kpisCoverageReport = '';
-            let kpisCoveragePercentage = 'unknown';
-            try {
-              kpisCoverageReport = fs.readFileSync('kpis/kpis_func_coverage.txt', 'utf8');
-              const kpisLines = kpisCoverageReport.trim().split('\n');
-              const kpisLastLine = kpisLines[kpisLines.length - 1];
-              const kpisCoverageMatch = kpisLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              kpisCoveragePercentage = kpisCoverageMatch ? kpisCoverageMatch[1] : 'unknown';
-            } catch (error) {
-              kpisCoverageReport = 'No coverage data available';
-            }
-
             // Read knowledge module coverage report
             let knowledgeCoverageReport = '';
             let knowledgeCoveragePercentage = 'unknown';
@@ -227,16 +206,6 @@ jobs:
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
             commentBody += schedulingCoverageReport;
-            commentBody += '```\n';
-            commentBody += '</details>\n';
-
-            // KPIs module coverage
-            commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in KPIs module (kpis/internal/): ';
-            commentBody += kpisCoveragePercentage;
-            commentBody += '%</summary>\n\n';
-            commentBody += '```text\n';
-            commentBody += kpisCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n';
 
