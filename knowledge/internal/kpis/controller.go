@@ -32,7 +32,7 @@ import (
 )
 
 // Configuration of supported kpis.
-var SupportedKPIs = map[string]plugins.KPI{
+var SupportedKPIsByImpl = map[string]plugins.KPI{
 	// VMware kpis.
 	"vmware_host_contention_kpi":   &vmware.VMwareHostContentionKPI{},
 	"vmware_project_noisiness_kpi": &vmware.VMwareProjectNoisinessKPI{},
@@ -54,12 +54,12 @@ type Controller struct {
 	// Kubernetes client to manage/fetch resources.
 	client.Client
 	// The supported kpis to manage.
-	SupportedKPIs map[string]plugins.KPI
+	SupportedKPIsByImpl map[string]plugins.KPI
 	// The name of the operator to scope resources to.
 	OperatorName string
 
 	// Registered kpis by name.
-	registeredKPIs map[string]plugins.KPI
+	registeredKPIsByResourceName map[string]plugins.KPI
 }
 
 // This loop will be called by the controller-runtime for each kpi
@@ -68,23 +68,27 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	log := ctrl.LoggerFrom(ctx)
 	kpi := &v1alpha1.KPI{}
 
-	// If this kpi is not supported, ignore it.
-	if _, ok := c.SupportedKPIs[req.Name]; !ok {
-		log.Info("kpi: unsupported kpi, ignoring", "name", req.Name)
-		return ctrl.Result{}, nil
-	}
-
 	if err := c.Get(ctx, req.NamespacedName, kpi); err != nil {
 		// Remove the kpi if it was deleted.
 		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
 		}
-		if existingKPI, ok := c.registeredKPIs[req.Name]; ok {
+		var kpis v1alpha1.KPIList
+		if err := c.List(ctx, &kpis); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to list kpis: %w", err)
+		}
+		if existingKPI, ok := c.registeredKPIsByResourceName[req.Name]; ok {
 			metrics.Registry.Unregister(existingKPI)
-			delete(c.registeredKPIs, req.Name)
+			delete(c.registeredKPIsByResourceName, req.Name)
 			log.Info("kpi: unregistered deleted kpi", "name", req.Name)
 			return ctrl.Result{}, existingKPI.Deinit()
 		}
+		return ctrl.Result{}, nil
+	}
+
+	// If this kpi is not supported, ignore it.
+	if _, ok := c.SupportedKPIsByImpl[kpi.Spec.Impl]; !ok {
+		log.Info("kpi: unsupported kpi, ignoring", "name", req.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -110,7 +114,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (c *Controller) InitAllKPIs(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("initializing KPIs")
-	c.registeredKPIs = make(map[string]plugins.KPI)
+	c.registeredKPIsByResourceName = make(map[string]plugins.KPI)
 	// List all existing kpis and initialize them.
 	var kpis v1alpha1.KPIList
 	if err := c.List(ctx, &kpis); err != nil {
@@ -153,6 +157,9 @@ func (c *Controller) getJointDB(
 			Namespace: dsRef.Namespace,
 			Name:      dsRef.Name,
 		}, ds); err != nil {
+			if client.IgnoreNotFound(err) == nil {
+				continue
+			}
 			return nil, err
 		}
 		if databaseSecretRef == nil {
@@ -168,6 +175,9 @@ func (c *Controller) getJointDB(
 			Namespace: knRef.Namespace,
 			Name:      knRef.Name,
 		}, kn); err != nil {
+			if client.IgnoreNotFound(err) == nil {
+				continue
+			}
 			return nil, err
 		}
 		if kn.Spec.DatabaseSecretRef == nil {
@@ -206,6 +216,9 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			Namespace: dsRef.Namespace,
 			Name:      dsRef.Name,
 		}, ds); err != nil {
+			if client.IgnoreNotFound(err) == nil {
+				continue
+			}
 			log.Error(err, "failed to get datasource dependency", "datasource", dsRef)
 			return err
 		}
@@ -225,6 +238,9 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			Namespace: knRef.Namespace,
 			Name:      knRef.Name,
 		}, kn); err != nil {
+			if client.IgnoreNotFound(err) == nil {
+				continue
+			}
 			log.Error(err, "failed to get knowledge dependency", "knowledge", knRef)
 			return err
 		}
@@ -236,15 +252,16 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	}
 
 	dependenciesReadyTotal := datasourcesReady + knowledgesReady
-	dependenciesTotal := len(datasources) + len(knowledges)
-	registeredKPI, registered := c.registeredKPIs[obj.Name]
+	dependenciesTotal := len(obj.Spec.Dependencies.Datasources) +
+		len(obj.Spec.Dependencies.Knowledges)
+	registeredKPI, registered := c.registeredKPIsByResourceName[obj.Name]
 
 	// If all dependencies are ready but the kpi is not registered yet,
 	// initialize and register it now.
 	if dependenciesReadyTotal == dependenciesTotal && !registered {
 		log.Info("kpi: registering new kpi", "name", obj.Name)
 		var ok bool
-		registeredKPI, ok = c.SupportedKPIs[obj.Name]
+		registeredKPI, ok = c.SupportedKPIsByImpl[obj.Spec.Impl]
 		if !ok {
 			return fmt.Errorf("kpi %s not supported", obj.Name)
 		}
@@ -269,7 +286,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		if err := metrics.Registry.Register(registeredKPI); err != nil {
 			return fmt.Errorf("failed to register kpi %s metrics: %w", obj.Name, err)
 		}
-		c.registeredKPIs[obj.Name] = registeredKPI
+		c.registeredKPIsByResourceName[obj.Name] = registeredKPI
 	}
 
 	// If the dependencies are not all ready but the kpi is registered,
@@ -280,7 +297,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		if err := registeredKPI.Deinit(); err != nil {
 			return fmt.Errorf("failed to deinitialize kpi %s: %w", obj.Name, err)
 		}
-		delete(c.registeredKPIs, obj.Name)
+		delete(c.registeredKPIsByResourceName, obj.Name)
 	}
 
 	// Update the status to ready and populate the ready dependencies.

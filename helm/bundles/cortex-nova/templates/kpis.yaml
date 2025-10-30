@@ -16,7 +16,7 @@ spec:
 apiVersion: knowledge.cortex/v1alpha1
 kind: KPI
 metadata:
-  name: vmware-host-contention
+  name: vmware-project-noisiness
 spec:
   operator: cortex-nova
   impl: vmware_project_noisiness_kpi
@@ -36,7 +36,7 @@ spec:
   impl: sap_host_total_allocatable_capacity_kpi
   dependencies:
     knowledges:
-      - name: host-details
+      - name: sap-host-details
       - name: host-utilization
   description: |
     This KPI tracks the total allocatable capacity of SAP hosts.
@@ -50,7 +50,7 @@ spec:
   impl: sap_host_capacity_kpi
   dependencies:
     knowledges:
-      - name: host-details
+      - name: sap-host-details
       - name: host-utilization
   description: |
     This KPI tracks the total allocatable capacity of SAP hosts.
@@ -64,7 +64,7 @@ spec:
   impl: sap_host_running_vms_kpi
   dependencies:
     knowledges:
-      - name: host-details
+      - name: sap-host-details
       - name: host-utilization
   description: |
     This KPI tracks the total number of running VMs on SAP hosts.
