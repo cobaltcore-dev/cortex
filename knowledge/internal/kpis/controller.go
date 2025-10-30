@@ -273,14 +273,19 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		if err != nil {
 			return fmt.Errorf("failed to get joint database for kpi %s: %w", obj.Name, err)
 		}
-		if jointDB == nil {
+		if jointDB == nil && dependenciesTotal > 0 {
 			return fmt.Errorf("kpi %s requires at least one datasource or knowledge with a database", obj.Name)
 		}
 		rawOpts := libconf.NewRawOpts(`{}`)
 		if len(obj.Spec.Opts.Raw) > 0 {
 			rawOpts = libconf.NewRawOptsBytes(obj.Spec.Opts.Raw)
 		}
-		if err := registeredKPI.Init(*jointDB, rawOpts); err != nil {
+		// Initialize KPI with database if available, otherwise with empty DB
+		var dbToUse db.DB
+		if jointDB != nil {
+			dbToUse = *jointDB
+		}
+		if err := registeredKPI.Init(dbToUse, rawOpts); err != nil {
 			return fmt.Errorf("failed to initialize kpi %s: %w", obj.Name, err)
 		}
 		if err := metrics.Registry.Register(registeredKPI); err != nil {
