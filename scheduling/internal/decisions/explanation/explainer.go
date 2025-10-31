@@ -211,12 +211,12 @@ func (e *Explainer) buildInputComparison(decision *v1alpha1.Decision) string {
 
 	targetHost := *result.TargetHost
 
-	// Get input weights (prefer normalized, fall back to raw)
+	// Get input weights (prefer raw, fall back to normalized)
 	var inputWeights map[string]float64
-	if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
-		inputWeights = result.NormalizedInWeights
-	} else if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+	if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
 		inputWeights = result.RawInWeights
+	} else if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+		inputWeights = result.NormalizedInWeights
 	} else {
 		return ""
 	}
@@ -310,12 +310,12 @@ func (e *Explainer) buildDeletedHostsAnalysis(decision *v1alpha1.Decision) strin
 		return ""
 	}
 
-	// Get input weights (prefer normalized, fall back to raw)
+	// Get input weights (prefer raw, fall back to normalized)
 	var inputWeights map[string]float64
-	if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
-		inputWeights = result.NormalizedInWeights
-	} else if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+	if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
 		inputWeights = result.RawInWeights
+	} else if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+		inputWeights = result.NormalizedInWeights
 	} else {
 		return ""
 	}
@@ -658,12 +658,12 @@ func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost st
 		return []string{}
 	}
 
-	// Get input weights (prefer normalized, fall back to raw)
+	// Get input weights (prefer raw, fall back to normalized)
 	var inputWeights map[string]float64
-	if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
-		inputWeights = result.NormalizedInWeights
-	} else if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+	if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
 		inputWeights = result.RawInWeights
+	} else if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+		inputWeights = result.NormalizedInWeights
 	} else {
 		return []string{}
 	}
