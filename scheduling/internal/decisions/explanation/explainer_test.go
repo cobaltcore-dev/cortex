@@ -668,7 +668,6 @@ func TestExplainer_CompleteExplanation(t *testing.T) {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
-	// Test a complete explanation with all features
 	previousDecision := WithUID(WithTargetHost(NewTestDecision("test-decision-1"), "host-1"), "test-uid-1")
 
 	decision := WithSteps(
@@ -808,7 +807,6 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
-	// Create timestamps for testing durations
 	baseTime := metav1.Now()
 	time1 := metav1.Time{Time: baseTime.Add(-120 * time.Minute)} // 2 hours ago
 	time2 := metav1.Time{Time: baseTime.Add(-60 * time.Minute)}  // 1 hour ago
@@ -1062,9 +1060,6 @@ func intPtr(i int) *int {
 	return &i
 }
 
-// TestExplainer_RawWeightsPriorityBugFix tests that the explainer correctly prioritizes
-// raw weights over normalized weights to preserve small but important differences.
-// This test verifies the fix for the bug where normalized weights were incorrectly preferred.
 func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -1196,8 +1191,6 @@ func TestExplainer_RawVsNormalizedComparison(t *testing.T) {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
-	// This test demonstrates what would happen with the old (buggy) behavior
-	// vs the new (correct) behavior
 	decision := &v1alpha1.Decision{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-decision",
@@ -1241,14 +1234,116 @@ func TestExplainer_RawVsNormalizedComparison(t *testing.T) {
 		return
 	}
 
-	// With the fix, should correctly identify host-2 as input winner using raw weights
 	if !contains(explanation, "Input choice confirmed: host-2 (1000.10→1002.10)") {
 		t.Errorf("Expected explanation to show raw weight value (1000.10), but got: %s", explanation)
 	}
 
-	// Should NOT show any indication that input choice was overridden
 	if contains(explanation, "Input favored host-1") || contains(explanation, "Input favored host-3") {
 		t.Errorf("Expected explanation to NOT show input choice override, but got: %s", explanation)
 	}
 
+}
+
+func TestExplainer_StepImpactAnalysis(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	tests := []struct {
+		name             string
+		decision         *v1alpha1.Decision
+		expectedContains []string
+	}{
+		{
+			name: "step with positive impact",
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 2.0}),
+				Step("resource-weigher", map[string]float64{"host-1": 1.5, "host-2": 0.2})),
+			expectedContains: []string{
+				"Step impacts:",
+				"resource-weigher +1.50",
+			},
+		},
+		{
+			name: "step with promotion to first",
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 2.0}),
+				Step("resource-weigher", map[string]float64{"host-1": 2.0, "host-2": 0.5})),
+			expectedContains: []string{
+				"Step impacts:",
+				"resource-weigher +2.00→#1",
+			},
+		},
+		{
+			name: "step with competitor removal",
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 2.0, "host-2": 1.0, "host-3": 0.5}),
+				Step("availability-filter", map[string]float64{"host-1": 0.0})),
+			expectedContains: []string{
+				"Step impacts:",
+				"availability-filter +0.00 (removed 2)",
+			},
+		},
+		{
+			name: "multiple steps sorted by impact",
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 2.0}),
+				Step("resource-weigher", map[string]float64{"host-1": 1.5, "host-2": 0.2}),
+				Step("availability-filter", map[string]float64{"host-1": 0.1, "host-2": 0.0})),
+			expectedContains: []string{
+				"Step impacts:",
+				"resource-weigher +1.50",
+				"availability-filter +0.10",
+			},
+		},
+		{
+			name: "no step impacts for decision without steps",
+			decision: WithInputWeights(
+				WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+				map[string]float64{"host-1": 2.0, "host-2": 1.0}),
+			expectedContains: []string{}, // No step impacts should be present
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(tt.decision).
+				Build()
+
+			explainer := &Explainer{Client: client}
+
+			explanation, err := explainer.Explain(context.Background(), tt.decision)
+			if err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+				return
+			}
+
+			for _, expected := range tt.expectedContains {
+				if !contains(explanation, expected) {
+					t.Errorf("Expected explanation to contain '%s', but got: %s", expected, explanation)
+				}
+			}
+
+			// For the "no step impacts" case, ensure no step impacts analysis is present
+			if len(tt.expectedContains) == 0 {
+				stepImpactsKeywords := []string{"Step impacts:", "→#1", "removed"}
+				for _, keyword := range stepImpactsKeywords {
+					if contains(explanation, keyword) {
+						t.Errorf("Expected explanation to NOT contain '%s' for no step impacts case, but got: %s", keyword, explanation)
+					}
+				}
+			}
+		})
+	}
 }

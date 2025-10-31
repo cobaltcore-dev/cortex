@@ -43,6 +43,9 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 	// Build deleted hosts analysis part
 	deletedHostsAnalysis := e.buildDeletedHostsAnalysis(decision)
 
+	// Build step impact analysis part
+	stepImpactAnalysis := e.buildStepImpactAnalysis(decision)
+
 	// Build global chain analysis part
 	globalChainAnalysis, err := e.buildGlobalChainAnalysis(ctx, decision)
 	if err != nil {
@@ -71,6 +74,10 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 
 	if deletedHostsAnalysis != "" {
 		parts = append(parts, deletedHostsAnalysis)
+	}
+
+	if stepImpactAnalysis != "" {
+		parts = append(parts, stepImpactAnalysis)
 	}
 
 	if globalChainAnalysis != "" {
@@ -617,6 +624,16 @@ type ScoreCalculationResult struct {
 	DeletedHosts map[string][]string // host -> list of steps that deleted it
 }
 
+// StepImpact represents the impact of a single pipeline step on the winning host.
+type StepImpact struct {
+	Step               string
+	ScoreBefore        float64
+	ScoreAfter         float64
+	ScoreDelta         float64
+	CompetitorsRemoved int
+	PromotedToFirst    bool
+}
+
 // calculateScoresFromSteps processes step results sequentially to compute final scores and track deleted hosts.
 func (e *Explainer) calculateScoresFromSteps(inputWeights map[string]float64, stepResults []v1alpha1.StepResult) ScoreCalculationResult {
 	if len(inputWeights) == 0 {
@@ -718,4 +735,155 @@ func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost st
 	}
 
 	return criticalSteps
+}
+
+// buildStepImpactAnalysis creates the step impact analysis part of the explanation.
+func (e *Explainer) buildStepImpactAnalysis(decision *v1alpha1.Decision) string {
+	result := decision.Status.Result
+	if result == nil || result.TargetHost == nil || result.StepResults == nil || len(result.StepResults) == 0 {
+		return ""
+	}
+
+	targetHost := *result.TargetHost
+
+	// Get input weights (prefer raw, fall back to normalized)
+	var inputWeights map[string]float64
+	if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+		inputWeights = result.RawInWeights
+	} else if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+		inputWeights = result.NormalizedInWeights
+	} else {
+		return ""
+	}
+
+	// Calculate step impacts for the winning host
+	impacts := e.calculateStepImpacts(inputWeights, result.StepResults, targetHost)
+	if len(impacts) == 0 {
+		return ""
+	}
+
+	// Sort impacts by absolute delta (highest first), with promotions taking priority
+	sort.Slice(impacts, func(i, j int) bool {
+		absI := impacts[i].ScoreDelta
+		if absI < 0 {
+			absI = -absI
+		}
+		absJ := impacts[j].ScoreDelta
+		if absJ < 0 {
+			absJ = -absJ
+		}
+
+		if absI != absJ {
+			return absI > absJ
+		}
+		if impacts[i].PromotedToFirst != impacts[j].PromotedToFirst {
+			return impacts[i].PromotedToFirst
+		}
+		return impacts[i].Step < impacts[j].Step
+	})
+
+	// Format output
+	var parts []string
+	for _, impact := range impacts {
+		parts = append(parts, e.formatStepImpact(impact))
+	}
+
+	output := " Step impacts:\n• " + parts[0]
+	for i := 1; i < len(parts); i++ {
+		output += "\n• " + parts[i]
+	}
+	return output + "."
+}
+
+// calculateStepImpacts tracks how each pipeline step affects the target host.
+func (e *Explainer) calculateStepImpacts(inputWeights map[string]float64, stepResults []v1alpha1.StepResult, targetHost string) []StepImpact {
+	if len(inputWeights) == 0 || len(stepResults) == 0 {
+		return []StepImpact{}
+	}
+
+	impacts := make([]StepImpact, 0, len(stepResults))
+	currentScores := make(map[string]float64)
+
+	// Start with input values as initial scores
+	for hostName, inputValue := range inputWeights {
+		currentScores[hostName] = inputValue
+	}
+
+	// Track target host's score before first step
+	scoreBefore := currentScores[targetHost]
+
+	// Process each pipeline step and track the target host's evolution
+	for _, stepResult := range stepResults {
+		// Count how many competitors will be removed in this step
+		competitorsRemoved := 0
+		for hostName := range currentScores {
+			if hostName != targetHost {
+				if _, exists := stepResult.Activations[hostName]; !exists {
+					competitorsRemoved++
+				}
+			}
+		}
+
+		// Check if target host was #1 before this step
+		wasFirst := true
+		targetScoreBefore := currentScores[targetHost]
+		for host, score := range currentScores {
+			if host != targetHost && score > targetScoreBefore {
+				wasFirst = false
+				break
+			}
+		}
+
+		// Apply activations and remove hosts not in this step
+		newScores := make(map[string]float64)
+		for hostName, score := range currentScores {
+			if activation, exists := stepResult.Activations[hostName]; exists {
+				newScores[hostName] = score + activation
+			}
+			// Hosts not in activations are removed (don't copy to newScores)
+		}
+
+		// Get target host's score after this step
+		scoreAfter := newScores[targetHost]
+
+		// Check if target host became #1 after this step
+		isFirstAfter := true
+		for host, score := range newScores {
+			if host != targetHost && score > scoreAfter {
+				isFirstAfter = false
+				break
+			}
+		}
+
+		promotedToFirst := !wasFirst && isFirstAfter
+
+		impacts = append(impacts, StepImpact{
+			Step:               stepResult.StepRef.Name,
+			ScoreBefore:        scoreBefore,
+			ScoreAfter:         scoreAfter,
+			ScoreDelta:         scoreAfter - scoreBefore,
+			CompetitorsRemoved: competitorsRemoved,
+			PromotedToFirst:    promotedToFirst,
+		})
+
+		// Update for next iteration
+		currentScores = newScores
+		scoreBefore = scoreAfter
+	}
+
+	return impacts
+}
+
+// formatStepImpact formats a single step impact value.
+func (e *Explainer) formatStepImpact(impact StepImpact) string {
+	if impact.PromotedToFirst {
+		return fmt.Sprintf("%s %+.2f→#1", impact.Step, impact.ScoreDelta)
+	}
+	if impact.ScoreDelta != 0 {
+		return fmt.Sprintf("%s %+.2f", impact.Step, impact.ScoreDelta)
+	}
+	if impact.CompetitorsRemoved > 0 {
+		return fmt.Sprintf("%s +0.00 (removed %d)", impact.Step, impact.CompetitorsRemoved)
+	}
+	return fmt.Sprintf("%s +0.00", impact.Step)
 }
