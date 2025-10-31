@@ -39,6 +39,9 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 	// Build critical steps analysis part
 	criticalSteps := e.buildCriticalStepsAnalysis(decision)
 
+	// Build deleted hosts analysis part
+	deletedHostsAnalysis := e.buildDeletedHostsAnalysis(decision)
+
 	// Combine parts
 	var parts []string
 	parts = append(parts, contextPart)
@@ -57,6 +60,10 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 
 	if criticalSteps != "" {
 		parts = append(parts, criticalSteps)
+	}
+
+	if deletedHostsAnalysis != "" {
+		parts = append(parts, deletedHostsAnalysis)
 	}
 
 	result := parts[0]
@@ -286,6 +293,101 @@ func (e *Explainer) buildCriticalStepsAnalysis(decision *v1alpha1.Decision) stri
 	return fmt.Sprintf("Decision driven by %d/%d pipeline steps: %s.", len(criticalSteps), totalSteps, stepList)
 }
 
+// buildDeletedHostsAnalysis creates the deleted hosts analysis part of the explanation.
+func (e *Explainer) buildDeletedHostsAnalysis(decision *v1alpha1.Decision) string {
+	result := decision.Status.Result
+	if result == nil || result.StepResults == nil || len(result.StepResults) == 0 {
+		return ""
+	}
+
+	// Get input weights (prefer normalized, fall back to raw)
+	var inputWeights map[string]float64
+	if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+		inputWeights = result.NormalizedInWeights
+	} else if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+		inputWeights = result.RawInWeights
+	} else {
+		return ""
+	}
+
+	// Calculate scores and get deleted hosts information
+	scoreResult := e.calculateScoresFromSteps(inputWeights, result.StepResults)
+
+	if len(scoreResult.DeletedHosts) == 0 {
+		return ""
+	}
+
+	// Check if input winner was deleted
+	inputWinner := ""
+	inputWinnerScore := -999999.0
+	for host, score := range inputWeights {
+		if score > inputWinnerScore {
+			inputWinnerScore = score
+			inputWinner = host
+		}
+	}
+
+	// Build deleted hosts summary
+	totalDeleted := len(scoreResult.DeletedHosts)
+	if totalDeleted == 1 {
+		// Single host deleted
+		for hostName, steps := range scoreResult.DeletedHosts {
+			if len(steps) == 1 {
+				if hostName == inputWinner {
+					return fmt.Sprintf("Input winner %s was filtered by %s.", hostName, steps[0])
+				}
+				return fmt.Sprintf("Host %s was filtered by %s.", hostName, steps[0])
+			} else {
+				// Multiple steps deleted the same host (shouldn't happen in normal flow)
+				stepList := e.formatStepList(steps)
+				if hostName == inputWinner {
+					return fmt.Sprintf("Input winner %s was filtered by %s.", hostName, stepList)
+				}
+				return fmt.Sprintf("Host %s was filtered by %s.", hostName, stepList)
+			}
+		}
+	} else {
+		// Multiple hosts deleted
+		inputWinnerDeleted := false
+		if _, exists := scoreResult.DeletedHosts[inputWinner]; exists {
+			inputWinnerDeleted = true
+		}
+
+		if inputWinnerDeleted {
+			return fmt.Sprintf("%d hosts filtered (including input winner %s).", totalDeleted, inputWinner)
+		}
+		return fmt.Sprintf("%d hosts filtered.", totalDeleted)
+	}
+
+	return ""
+}
+
+// formatStepList formats a list of step names with proper grammar.
+func (e *Explainer) formatStepList(steps []string) string {
+	if len(steps) == 0 {
+		return ""
+	}
+	if len(steps) == 1 {
+		return steps[0]
+	}
+	if len(steps) == 2 {
+		return steps[0] + " and " + steps[1]
+	}
+
+	// For 3+ steps: "step1, step2, and step3"
+	lastStep := steps[len(steps)-1]
+	otherSteps := steps[:len(steps)-1]
+	result := ""
+	for i, step := range otherSteps {
+		if i > 0 {
+			result += ", "
+		}
+		result += step
+	}
+	result += " and " + lastStep
+	return result
+}
+
 // findWinner returns the host with the highest score and the score value.
 func (e *Explainer) findWinner(scores map[string]float64) (string, float64) {
 	if len(scores) == 0 {
@@ -303,10 +405,19 @@ func (e *Explainer) findWinner(scores map[string]float64) (string, float64) {
 	return winner, maxScore
 }
 
-// calculateScoresFromSteps processes step results sequentially to compute final scores.
-func (e *Explainer) calculateScoresFromSteps(inputWeights map[string]float64, stepResults []v1alpha1.StepResult) map[string]float64 {
+// ScoreCalculationResult holds both final scores and deleted host tracking information.
+type ScoreCalculationResult struct {
+	FinalScores  map[string]float64
+	DeletedHosts map[string][]string // host -> list of steps that deleted it
+}
+
+// calculateScoresFromSteps processes step results sequentially to compute final scores and track deleted hosts.
+func (e *Explainer) calculateScoresFromSteps(inputWeights map[string]float64, stepResults []v1alpha1.StepResult) ScoreCalculationResult {
 	if len(inputWeights) == 0 {
-		return map[string]float64{}
+		return ScoreCalculationResult{
+			FinalScores:  map[string]float64{},
+			DeletedHosts: map[string][]string{},
+		}
 	}
 
 	// Start with input values as initial scores
@@ -315,8 +426,18 @@ func (e *Explainer) calculateScoresFromSteps(inputWeights map[string]float64, st
 		currentScores[hostName] = inputValue
 	}
 
+	deletedHosts := make(map[string][]string)
+
 	// Process each step sequentially
 	for _, stepResult := range stepResults {
+		// Check which hosts will be deleted in this step
+		for hostName := range currentScores {
+			if _, exists := stepResult.Activations[hostName]; !exists {
+				// Host not in this step's activations - will be deleted
+				deletedHosts[hostName] = append(deletedHosts[hostName], stepResult.StepRef.Name)
+			}
+		}
+
 		// Apply activations and remove hosts not in this step
 		newScores := make(map[string]float64)
 		for hostName, score := range currentScores {
@@ -329,11 +450,14 @@ func (e *Explainer) calculateScoresFromSteps(inputWeights map[string]float64, st
 		currentScores = newScores
 	}
 
-	return currentScores
+	return ScoreCalculationResult{
+		FinalScores:  currentScores,
+		DeletedHosts: deletedHosts,
+	}
 }
 
 // calculateScoresWithoutStep processes step results while skipping one specific step.
-func (e *Explainer) calculateScoresWithoutStep(inputWeights map[string]float64, stepResults []v1alpha1.StepResult, skipIndex int) map[string]float64 {
+func (e *Explainer) calculateScoresWithoutStep(inputWeights map[string]float64, stepResults []v1alpha1.StepResult, skipIndex int) ScoreCalculationResult {
 	if len(inputWeights) == 0 || skipIndex < 0 || skipIndex >= len(stepResults) {
 		return e.calculateScoresFromSteps(inputWeights, stepResults)
 	}
@@ -364,8 +488,8 @@ func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost st
 	}
 
 	// Calculate baseline scores with all steps
-	baselineScores := e.calculateScoresFromSteps(inputWeights, result.StepResults)
-	baselineWinner, _ := e.findWinner(baselineScores)
+	baselineResult := e.calculateScoresFromSteps(inputWeights, result.StepResults)
+	baselineWinner, _ := e.findWinner(baselineResult.FinalScores)
 
 	if baselineWinner == "" {
 		return []string{}
@@ -376,10 +500,10 @@ func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost st
 	// Try removing each step one by one
 	for i, stepResult := range result.StepResults {
 		// Calculate scores without this step
-		reducedScores := e.calculateScoresWithoutStep(inputWeights, result.StepResults, i)
+		reducedResult := e.calculateScoresWithoutStep(inputWeights, result.StepResults, i)
 
 		// Find winner without this step
-		reducedWinner, _ := e.findWinner(reducedScores)
+		reducedWinner, _ := e.findWinner(reducedResult.FinalScores)
 
 		// If removing this step changes the winner, it's critical
 		if reducedWinner != baselineWinner {
