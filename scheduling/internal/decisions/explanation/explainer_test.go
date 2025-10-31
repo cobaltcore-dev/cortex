@@ -6,6 +6,7 @@ package explanation
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -1113,6 +1114,262 @@ func TestExplainer_DeletedHostsAnalysis(t *testing.T) {
 					if contains(explanation, keyword) {
 						t.Errorf("Expected explanation to NOT contain '%s' for no deleted hosts case, but got: %s", keyword, explanation)
 					}
+				}
+			}
+		})
+	}
+}
+
+func TestExplainer_GlobalChainAnalysis(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	// Create timestamps for testing durations
+	baseTime := metav1.Now()
+	time1 := metav1.Time{Time: baseTime.Add(-120 * time.Minute)} // 2 hours ago
+	time2 := metav1.Time{Time: baseTime.Add(-60 * time.Minute)}  // 1 hour ago
+	time3 := metav1.Time{Time: baseTime.Time}                    // now
+
+	tests := []struct {
+		name               string
+		currentDecision    *v1alpha1.Decision
+		historyDecisions   []v1alpha1.Decision
+		expectedContains   []string
+		expectedNotContain []string
+	}{
+		{
+			name: "simple chain with durations",
+			currentDecision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "decision-3",
+					Namespace:         "default",
+					CreationTimestamp: time3,
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					History: &[]corev1.ObjectReference{
+						{Kind: "Decision", Namespace: "default", Name: "decision-1", UID: "uid-1"},
+						{Kind: "Decision", Namespace: "default", Name: "decision-2", UID: "uid-2"},
+					},
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-3"),
+					},
+				},
+			},
+			historyDecisions: []v1alpha1.Decision{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "decision-1",
+						Namespace:         "default",
+						UID:               "uid-1",
+						CreationTimestamp: time1,
+					},
+					Status: v1alpha1.DecisionStatus{
+						Result: &v1alpha1.DecisionResult{
+							TargetHost: stringPtr("host-1"),
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "decision-2",
+						Namespace:         "default",
+						UID:               "uid-2",
+						CreationTimestamp: time2,
+					},
+					Status: v1alpha1.DecisionStatus{
+						Result: &v1alpha1.DecisionResult{
+							TargetHost: stringPtr("host-2"),
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Chain: host-1 (1h) -> host-2 (1h) -> host-3 (0m).",
+			},
+		},
+		{
+			name: "chain with loop detection",
+			currentDecision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "decision-3",
+					Namespace:         "default",
+					CreationTimestamp: time3,
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					History: &[]corev1.ObjectReference{
+						{Kind: "Decision", Namespace: "default", Name: "decision-1", UID: "uid-1"},
+						{Kind: "Decision", Namespace: "default", Name: "decision-2", UID: "uid-2"},
+					},
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"), // Back to host-1 - creates loop
+					},
+				},
+			},
+			historyDecisions: []v1alpha1.Decision{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "decision-1",
+						Namespace:         "default",
+						UID:               "uid-1",
+						CreationTimestamp: time1,
+					},
+					Status: v1alpha1.DecisionStatus{
+						Result: &v1alpha1.DecisionResult{
+							TargetHost: stringPtr("host-1"),
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "decision-2",
+						Namespace:         "default",
+						UID:               "uid-2",
+						CreationTimestamp: time2,
+					},
+					Status: v1alpha1.DecisionStatus{
+						Result: &v1alpha1.DecisionResult{
+							TargetHost: stringPtr("host-2"),
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Chain (loop detected): host-1 (1h) -> host-2 (1h) -> host-1 (0m).",
+			},
+		},
+		{
+			name: "chain with multiple decisions on same host",
+			currentDecision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "decision-4",
+					Namespace:         "default",
+					CreationTimestamp: time3,
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					History: &[]corev1.ObjectReference{
+						{Kind: "Decision", Namespace: "default", Name: "decision-1", UID: "uid-1"},
+						{Kind: "Decision", Namespace: "default", Name: "decision-2", UID: "uid-2"},
+						{Kind: "Decision", Namespace: "default", Name: "decision-3", UID: "uid-3"},
+					},
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-2"),
+					},
+				},
+			},
+			historyDecisions: []v1alpha1.Decision{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "decision-1",
+						Namespace:         "default",
+						UID:               "uid-1",
+						CreationTimestamp: time1,
+					},
+					Status: v1alpha1.DecisionStatus{
+						Result: &v1alpha1.DecisionResult{
+							TargetHost: stringPtr("host-1"),
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "decision-2",
+						Namespace:         "default",
+						UID:               "uid-2",
+						CreationTimestamp: time1, // Same time as decision-1
+					},
+					Status: v1alpha1.DecisionStatus{
+						Result: &v1alpha1.DecisionResult{
+							TargetHost: stringPtr("host-1"), // Same host as decision-1
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "decision-3",
+						Namespace:         "default",
+						UID:               "uid-3",
+						CreationTimestamp: time2,
+					},
+					Status: v1alpha1.DecisionStatus{
+						Result: &v1alpha1.DecisionResult{
+							TargetHost: stringPtr("host-1"), // Still same host
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Chain: host-1 (2h; 3 decisions) -> host-2 (0m).",
+			},
+		},
+		{
+			name: "no chain for initial decision",
+			currentDecision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "decision-1",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					History: nil, // No history
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"),
+					},
+				},
+			},
+			historyDecisions: []v1alpha1.Decision{},
+			expectedNotContain: []string{
+				"Chain:",
+				"chain:",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []runtime.Object{tt.currentDecision}
+			for i := range tt.historyDecisions {
+				objects = append(objects, &tt.historyDecisions[i])
+			}
+
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(objects...).
+				Build()
+
+			explainer := &Explainer{Client: client}
+
+			explanation, err := explainer.Explain(context.Background(), tt.currentDecision)
+			if err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+				return
+			}
+
+			for _, expected := range tt.expectedContains {
+				if !contains(explanation, expected) {
+					t.Errorf("Expected explanation to contain '%s', but got: %s", expected, explanation)
+				}
+			}
+
+			for _, notExpected := range tt.expectedNotContain {
+				if contains(explanation, notExpected) {
+					t.Errorf("Expected explanation to NOT contain '%s', but got: %s", notExpected, explanation)
 				}
 			}
 		})
