@@ -13,73 +13,50 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// The explainer gets a scheduling decision and produces a human-readable
-// explanation of why the decision was made the way it was.
 type Explainer struct {
-	// The kubernetes client to use for fetching related data.
 	client.Client
 }
 
-// Explain the given decision and return a human-readable explanation.
 func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (string, error) {
-	// Build context part
 	contextPart := e.buildContext(decision)
 
-	// Build history comparison if there's history
 	historyComparison, err := e.buildHistoryComparison(ctx, decision)
 	if err != nil {
 		return "", err
 	}
 
-	// Build winner analysis part
 	winnerAnalysis := e.buildWinnerAnalysis(decision)
-
-	// Build input comparison part
 	inputComparison := e.buildInputComparison(decision)
-
-	// Build critical steps analysis part
 	criticalSteps := e.buildCriticalStepsAnalysis(decision)
-
-	// Build deleted hosts analysis part
 	deletedHostsAnalysis := e.buildDeletedHostsAnalysis(decision)
-
-	// Build step impact analysis part
 	stepImpactAnalysis := e.buildStepImpactAnalysis(decision)
 
-	// Build global chain analysis part
 	globalChainAnalysis, err := e.buildGlobalChainAnalysis(ctx, decision)
 	if err != nil {
 		return "", err
 	}
 
-	// Combine parts
 	var parts []string
 	parts = append(parts, contextPart)
 
 	if historyComparison != "" {
 		parts = append(parts, historyComparison)
 	}
-
 	if winnerAnalysis != "" {
 		parts = append(parts, winnerAnalysis)
 	}
-
 	if inputComparison != "" {
 		parts = append(parts, inputComparison)
 	}
-
 	if criticalSteps != "" {
 		parts = append(parts, criticalSteps)
 	}
-
 	if deletedHostsAnalysis != "" {
 		parts = append(parts, deletedHostsAnalysis)
 	}
-
 	if stepImpactAnalysis != "" {
 		parts = append(parts, stepImpactAnalysis)
 	}
-
 	if globalChainAnalysis != "" {
 		parts = append(parts, globalChainAnalysis)
 	}
@@ -92,7 +69,6 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 	return result, nil
 }
 
-// buildContext creates the contextual part of the explanation.
 func (e *Explainer) buildContext(decision *v1alpha1.Decision) string {
 	resourceType := e.getResourceType(decision.Spec.Type)
 
@@ -109,7 +85,6 @@ func (e *Explainer) buildContext(decision *v1alpha1.Decision) string {
 	return fmt.Sprintf("Decision #%d for this %s.", precedence, resourceType)
 }
 
-// buildHistoryComparison creates the history comparison part of the explanation.
 func (e *Explainer) buildHistoryComparison(ctx context.Context, decision *v1alpha1.Decision) (string, error) {
 	history := decision.Status.History
 	if history == nil || len(*history) == 0 {
