@@ -27,45 +27,41 @@ func TestExplainer_Explain(t *testing.T) {
 	}{
 		{
 			name:             "initial nova server placement",
-			decision:         NewDecision("test-decision").WithResourceID("test-resource-1").WithType(v1alpha1.DecisionTypeNovaServer).Build(),
+			decision:         WithResourceID(NewTestDecision("test-decision"), "test-resource-1"),
 			expectedContains: []string{"Initial placement of the nova server"},
 		},
 		{
 			name:             "initial cinder volume placement",
-			decision:         NewDecision("test-decision").WithResourceID("test-resource-2").WithType(v1alpha1.DecisionTypeCinderVolume).Build(),
+			decision:         WithDecisionType(WithResourceID(NewTestDecision("test-decision"), "test-resource-2"), v1alpha1.DecisionTypeCinderVolume),
 			expectedContains: []string{"Initial placement of the cinder volume"},
 		},
 		{
 			name:             "initial manila share placement",
-			decision:         NewDecision("test-decision").WithResourceID("test-resource-3").WithType(v1alpha1.DecisionTypeManilaShare).Build(),
+			decision:         WithDecisionType(WithResourceID(NewTestDecision("test-decision"), "test-resource-3"), v1alpha1.DecisionTypeManilaShare),
 			expectedContains: []string{"Initial placement of the manila share"},
 		},
 		{
 			name:             "initial ironcore machine placement",
-			decision:         NewDecision("test-decision").WithResourceID("test-resource-4").WithType(v1alpha1.DecisionTypeIroncoreMachine).Build(),
+			decision:         WithDecisionType(WithResourceID(NewTestDecision("test-decision"), "test-resource-4"), v1alpha1.DecisionTypeIroncoreMachine),
 			expectedContains: []string{"Initial placement of the ironcore machine"},
 		},
 		{
 			name:             "unknown resource type falls back to generic",
-			decision:         NewDecision("test-decision").WithResourceID("test-resource-5").WithType("unknown-type").Build(),
+			decision:         WithDecisionType(WithResourceID(NewTestDecision("test-decision"), "test-resource-5"), "unknown-type"),
 			expectedContains: []string{"Initial placement of the resource"},
 		},
 		{
 			name:             "empty history array",
-			decision:         NewDecision("test-decision").WithResourceID("test-resource-6").WithHistory([]corev1.ObjectReference{}).Build(),
+			decision:         WithResourceID(NewTestDecision("test-decision"), "test-resource-6"),
 			expectedContains: []string{"Initial placement of the nova server"},
 		},
 		{
 			name: "subsequent decision with history",
-			decision: NewDecision("test-decision-2").
-				WithResourceID("test-resource-7").
-				WithTargetHost("host-2").
-				WithHistoryDecisions(
-					NewDecision("test-decision-1").WithUID("test-uid-1").WithTargetHost("host-1").Build(),
-				).
-				Build(),
+			decision: WithHistoryRef(
+				WithTargetHost(WithResourceID(NewTestDecision("test-decision-2"), "test-resource-7"), "host-2"),
+				WithUID(WithTargetHost(WithResourceID(NewTestDecision("test-decision-1"), "test-resource-7"), "host-1"), "test-uid-1")),
 			historyDecisions: []*v1alpha1.Decision{
-				NewDecision("test-decision-1").WithUID("test-uid-1").WithTargetHost("host-1").WithResourceID("test-resource-7").Build(),
+				WithUID(WithTargetHost(WithResourceID(NewTestDecision("test-decision-1"), "test-resource-7"), "host-1"), "test-uid-1"),
 			},
 			expectedContains: []string{
 				"Decision #2 for this nova server",
@@ -75,14 +71,11 @@ func TestExplainer_Explain(t *testing.T) {
 		},
 		{
 			name: "subsequent decision with nil target hosts",
-			decision: NewDecision("test-decision-4").
-				WithResourceID("test-resource-8").
-				WithHistoryDecisions(
-					NewDecision("test-decision-3").WithUID("test-uid-3").Build(),
-				).
-				Build(),
+			decision: WithHistoryRef(
+				WithResourceID(NewTestDecision("test-decision-4"), "test-resource-8"),
+				WithUID(WithResourceID(NewTestDecision("test-decision-3"), "test-resource-8"), "test-uid-3")),
 			historyDecisions: []*v1alpha1.Decision{
-				NewDecision("test-decision-3").WithUID("test-uid-3").WithResourceID("test-resource-8").Build(),
+				WithUID(WithResourceID(NewTestDecision("test-decision-3"), "test-resource-8"), "test-uid-3"),
 			},
 			expectedContains: []string{
 				"Decision #2 for this nova server",
@@ -139,6 +132,113 @@ func findInString(s, substr string) bool {
 	}
 	return false
 }
+
+// Generic Decision Helpers - Composable functions with smart defaults
+func NewTestDecision(name string) *v1alpha1.Decision {
+	return &v1alpha1.Decision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default", // Sensible default
+		},
+		Spec: v1alpha1.DecisionSpec{
+			Type:       v1alpha1.DecisionTypeNovaServer, // Most common
+			ResourceID: "test-resource",                 // Generic default
+		},
+		Status: v1alpha1.DecisionStatus{},
+	}
+}
+
+func WithTargetHost(decision *v1alpha1.Decision, host string) *v1alpha1.Decision {
+	if decision.Status.Result == nil {
+		decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	decision.Status.Result.TargetHost = &host
+	return decision
+}
+
+func WithInputWeights(decision *v1alpha1.Decision, weights map[string]float64) *v1alpha1.Decision {
+	if decision.Status.Result == nil {
+		decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	decision.Status.Result.RawInWeights = weights
+	return decision
+}
+
+func WithOutputWeights(decision *v1alpha1.Decision, weights map[string]float64) *v1alpha1.Decision {
+	if decision.Status.Result == nil {
+		decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	decision.Status.Result.AggregatedOutWeights = weights
+
+	// Auto-generate ordered hosts from weights
+	hosts := make([]string, 0, len(weights))
+	for host := range weights {
+		hosts = append(hosts, host)
+	}
+	sort.Slice(hosts, func(i, j int) bool {
+		return weights[hosts[i]] > weights[hosts[j]]
+	})
+	decision.Status.Result.OrderedHosts = hosts
+
+	return decision
+}
+
+func WithSteps(decision *v1alpha1.Decision, steps ...v1alpha1.StepResult) *v1alpha1.Decision {
+	if decision.Status.Result == nil {
+		decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	decision.Status.Result.StepResults = steps
+	return decision
+}
+
+func WithDecisionType(decision *v1alpha1.Decision, decisionType v1alpha1.DecisionType) *v1alpha1.Decision {
+	decision.Spec.Type = decisionType
+	return decision
+}
+
+func WithResourceID(decision *v1alpha1.Decision, resourceID string) *v1alpha1.Decision {
+	decision.Spec.ResourceID = resourceID
+	return decision
+}
+
+func WithUID(decision *v1alpha1.Decision, uid string) *v1alpha1.Decision {
+	decision.UID = types.UID(uid)
+	return decision
+}
+
+func WithHistory(decision *v1alpha1.Decision, refs []corev1.ObjectReference) *v1alpha1.Decision {
+	decision.Status.History = &refs
+	return decision
+}
+
+// Helper to create a decision with history reference to another decision
+func WithHistoryRef(decision *v1alpha1.Decision, historyDecision *v1alpha1.Decision) *v1alpha1.Decision {
+	refs := []corev1.ObjectReference{
+		{
+			Kind:      "Decision",
+			Namespace: historyDecision.Namespace,
+			Name:      historyDecision.Name,
+			UID:       historyDecision.UID,
+		},
+	}
+	decision.Status.History = &refs
+	return decision
+}
+
+// Generic step creator
+func Step(name string, activations map[string]float64) v1alpha1.StepResult {
+	return v1alpha1.StepResult{
+		StepRef:     corev1.ObjectReference{Name: name},
+		Activations: activations,
+	}
+}
+
+// Common step names as constants
+const (
+	AvailabilityFilter = "availability-filter"
+	ResourceWeigher    = "resource-weigher"
+	PlacementPolicy    = "placement-policy"
+)
 
 // Decision Builder Pattern - Fluent interface for creating test decisions
 type DecisionBuilder struct {
@@ -475,226 +575,63 @@ func TestExplainer_CriticalStepsAnalysis(t *testing.T) {
 	}{
 		{
 			name: "single critical step",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0,
-							"host-2": 2.0, // host-2 would win without pipeline
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "resource-weigher"},
-								Activations: map[string]float64{
-									"host-1": 1.5, // host-1: 2.5, host-2: 2.2 (host-1 becomes winner)
-									"host-2": 0.2,
-								},
-							},
-							{
-								StepRef: corev1.ObjectReference{Name: "availability-filter"},
-								Activations: map[string]float64{
-									"host-1": 0.0, // Small non-critical change
-									"host-2": 0.0,
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 2.0}),
+				Step("resource-weigher", map[string]float64{"host-1": 1.5, "host-2": 0.2}),
+				Step("availability-filter", map[string]float64{"host-1": 0.0, "host-2": 0.0})),
 			expectedContains: []string{
 				"Decision driven by 1/2 pipeline step: resource-weigher",
 			},
 		},
 		{
 			name: "multiple critical steps",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0,
-							"host-2": 3.0, // host-2 would win without pipeline
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "resource-weigher"},
-								Activations: map[string]float64{
-									"host-1": 1.0, // host-1: 2.0, host-2: 2.5 (ties host2 and host3)
-									"host-2": -0.5,
-								},
-							},
-							{
-								StepRef: corev1.ObjectReference{Name: "availability-filter"},
-								Activations: map[string]float64{
-									"host-1": 1.0, // host-1: 3.0, host-2: 2.5 (host-1 becomes winner)
-									"host-2": 0.0,
-								},
-							},
-							{
-								StepRef: corev1.ObjectReference{Name: "placement-policy"},
-								Activations: map[string]float64{
-									"host-1": 0.05, // Small non-critical change
-									"host-2": 0.05,
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 3.0}),
+				Step("resource-weigher", map[string]float64{"host-1": 1.0, "host-2": -0.5}),
+				Step("availability-filter", map[string]float64{"host-1": 1.0, "host-2": 0.0}),
+				Step("placement-policy", map[string]float64{"host-1": 0.05, "host-2": 0.05})),
 			expectedContains: []string{
 				"Decision driven by 2/3 pipeline steps: resource-weigher and availability-filter",
 			},
 		},
 		{
 			name: "all steps non-critical",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 3.0, // Clear winner from input
-							"host-2": 1.0,
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "step-1"},
-								Activations: map[string]float64{
-									"host-1": 0.05, // Small changes don't change winner
-									"host-2": 0.05,
-								},
-							},
-							{
-								StepRef: corev1.ObjectReference{Name: "step-2"},
-								Activations: map[string]float64{
-									"host-1": 0.02,
-									"host-2": 0.02,
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 3.0, "host-2": 1.0}),
+				Step("step-1", map[string]float64{"host-1": 0.05, "host-2": 0.05}),
+				Step("step-2", map[string]float64{"host-1": 0.02, "host-2": 0.02})),
 			expectedContains: []string{
 				"Decision driven by input only (all 2 steps are non-critical)",
 			},
 		},
 		{
 			name: "all steps critical",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0,
-							"host-2": 3.0, // host-2 would win without pipeline
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "step-1"},
-								Activations: map[string]float64{
-									"host-1": 1.0, // host-1: 2.0, host-2: 2.5 (ties)
-									"host-2": -0.5,
-								},
-							},
-							{
-								StepRef: corev1.ObjectReference{Name: "step-2"},
-								Activations: map[string]float64{
-									"host-1": 1.0, // host-1: 3.0, host-2: 2.5 (host-1 becomes winner)
-									"host-2": 0.0,
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 3.0}),
+				Step("step-1", map[string]float64{"host-1": 1.0, "host-2": -0.5}),
+				Step("step-2", map[string]float64{"host-1": 1.0, "host-2": 0.0})),
 			expectedContains: []string{
 				"Decision requires all 2 pipeline steps",
 			},
 		},
 		{
 			name: "three critical steps formatting",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0,
-							"host-2": 4.0, // host-2 would win without pipeline
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "step-a"},
-								Activations: map[string]float64{
-									"host-1": 1.0, // host-1: 2.0, host-2: 3.5
-									"host-2": -0.5,
-								},
-							},
-							{
-								StepRef: corev1.ObjectReference{Name: "step-b"},
-								Activations: map[string]float64{
-									"host-1": 1.0, // host-1: 3.0, host-2: 3.5
-									"host-2": 0.0,
-								},
-							},
-							{
-								StepRef: corev1.ObjectReference{Name: "step-c"},
-								Activations: map[string]float64{
-									"host-1": 1.0, // host-1: 4.0, host-2: 3.5 (host-1 becomes winner)
-									"host-2": 0.0,
-								},
-							},
-							{
-								StepRef: corev1.ObjectReference{Name: "step-d"},
-								Activations: map[string]float64{
-									"host-1": 0.05, // Small non-critical change
-									"host-2": 0.05,
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 4.0}),
+				Step("step-a", map[string]float64{"host-1": 1.0, "host-2": -0.5}),
+				Step("step-b", map[string]float64{"host-1": 1.0, "host-2": 0.0}),
+				Step("step-c", map[string]float64{"host-1": 1.0, "host-2": 0.0}),
+				Step("step-d", map[string]float64{"host-1": 0.05, "host-2": 0.05})),
 			expectedContains: []string{
 				"Decision driven by 3/4 pipeline steps: step-a, step-b and step-c",
 			},
@@ -732,76 +669,21 @@ func TestExplainer_CompleteExplanation(t *testing.T) {
 	}
 
 	// Test a complete explanation with all features
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-decision-2",
-			Namespace: "default",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			Type:       v1alpha1.DecisionTypeNovaServer,
-			ResourceID: "test-resource",
-		},
-		Status: v1alpha1.DecisionStatus{
-			History: &[]corev1.ObjectReference{
-				{
-					Kind:      "Decision",
-					Namespace: "default",
-					Name:      "test-decision-1",
-					UID:       "test-uid-1",
-				},
-			},
-			Precedence: intPtr(1),
-			Result: &v1alpha1.DecisionResult{
-				TargetHost: stringPtr("host-2"),
-				RawInWeights: map[string]float64{
-					"host-1": 1.50, // host-1 would win without pipeline
-					"host-2": 1.20,
-					"host-3": 0.95,
-				},
-				AggregatedOutWeights: map[string]float64{
-					"host-1": 1.85,
-					"host-2": 2.45,
-					"host-3": 2.10,
-				},
-				OrderedHosts: []string{"host-2", "host-3", "host-1"},
-				StepResults: []v1alpha1.StepResult{
-					{
-						StepRef: corev1.ObjectReference{Name: "resource-weigher"},
-						Activations: map[string]float64{
-							"host-1": 0.15, // host-1: 1.65, host-2: 2.05, host-3: 1.70 (host-2 leads but not enough)
-							"host-2": 0.85,
-							"host-3": 0.75,
-						},
-					},
-					{
-						StepRef: corev1.ObjectReference{Name: "availability-filter"},
-						Activations: map[string]float64{
-							"host-1": 0.20, // host-1: 1.85, host-2: 2.45, host-3: 2.10 (host-2 wins decisively)
-							"host-2": 0.40,
-							"host-3": 0.40,
-						},
-					},
-				},
-			},
-		},
-	}
+	previousDecision := WithUID(WithTargetHost(NewTestDecision("test-decision-1"), "host-1"), "test-uid-1")
 
-	previousDecision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-decision-1",
-			Namespace: "default",
-			UID:       "test-uid-1",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			Type:       v1alpha1.DecisionTypeNovaServer,
-			ResourceID: "test-resource",
-		},
-		Status: v1alpha1.DecisionStatus{
-			Result: &v1alpha1.DecisionResult{
-				TargetHost: stringPtr("host-1"),
-			},
-		},
-	}
+	decision := WithSteps(
+		WithOutputWeights(
+			WithInputWeights(
+				WithHistoryRef(
+					WithTargetHost(NewTestDecision("test-decision-2"), "host-2"),
+					previousDecision),
+				map[string]float64{"host-1": 1.50, "host-2": 1.20, "host-3": 0.95}),
+			map[string]float64{"host-1": 1.85, "host-2": 2.45, "host-3": 2.10}),
+		Step("resource-weigher", map[string]float64{"host-1": 0.15, "host-2": 0.85, "host-3": 0.75}),
+		Step("availability-filter", map[string]float64{"host-1": 0.20, "host-2": 0.40, "host-3": 0.40}))
+
+	// Set precedence manually since it's not commonly used
+	decision.Status.Precedence = intPtr(1)
 
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -844,135 +726,44 @@ func TestExplainer_DeletedHostsAnalysis(t *testing.T) {
 	}{
 		{
 			name: "single host filtered by single step",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0,
-							"host-2": 2.0, // host-2 is input winner but gets filtered
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "availability-filter"},
-								Activations: map[string]float64{
-									"host-1": 0.5, // Only host-1 survives
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 2.0}),
+				Step("availability-filter", map[string]float64{"host-1": 0.5})),
 			expectedContains: []string{
 				"Input winner host-2 was filtered by availability-filter",
 			},
 		},
 		{
 			name: "multiple hosts filtered",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 3.0, // host-1 is input winner and survives
-							"host-2": 2.0,
-							"host-3": 1.0,
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "availability-filter"},
-								Activations: map[string]float64{
-									"host-1": 0.5, // Only host-1 survives
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 3.0, "host-2": 2.0, "host-3": 1.0}),
+				Step("availability-filter", map[string]float64{"host-1": 0.5})),
 			expectedContains: []string{
 				"2 hosts filtered",
 			},
 		},
 		{
 			name: "multiple hosts filtered including input winner",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0,
-							"host-2": 3.0, // host-2 is input winner but gets filtered
-							"host-3": 2.0,
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "availability-filter"},
-								Activations: map[string]float64{
-									"host-1": 0.5, // Only host-1 survives
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 3.0, "host-3": 2.0}),
+				Step("availability-filter", map[string]float64{"host-1": 0.5})),
 			expectedContains: []string{
 				"2 hosts filtered (including input winner host-2)",
 			},
 		},
 		{
 			name: "no hosts filtered",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0,
-							"host-2": 2.0,
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "resource-weigher"},
-								Activations: map[string]float64{
-									"host-1": 0.5, // Both hosts survive
-									"host-2": 0.3,
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: WithSteps(
+				WithInputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 1.0, "host-2": 2.0}),
+				Step("resource-weigher", map[string]float64{"host-1": 0.5, "host-2": 0.3})),
 			expectedContains: []string{}, // No deleted hosts analysis should be present
 		},
 	}
@@ -1288,36 +1079,16 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 	}{
 		{
 			name: "raw_weights_preserve_small_differences",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-2"),
-						RawInWeights: map[string]float64{
-							"host-1": 1000.05, // Small but important difference
-							"host-2": 1000.10, // Clear winner in raw weights
-							"host-3": 1000.00,
-						},
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0, // Normalized weights mask the difference
-							"host-2": 1.0, // All appear equal after normalization
-							"host-3": 1.0,
-						},
-						AggregatedOutWeights: map[string]float64{
-							"host-1": 1001.05,
-							"host-2": 1002.10, // host-2 wins after pipeline
-							"host-3": 1001.00,
-						},
-					},
-				},
-			},
+			decision: func() *v1alpha1.Decision {
+				decision := WithOutputWeights(
+					WithInputWeights(
+						WithTargetHost(NewTestDecision("test-decision"), "host-2"),
+						map[string]float64{"host-1": 1000.05, "host-2": 1000.10, "host-3": 1000.00}),
+					map[string]float64{"host-1": 1001.05, "host-2": 1002.10, "host-3": 1001.00})
+				// Add normalized weights to show they would mask the difference
+				decision.Status.Result.NormalizedInWeights = map[string]float64{"host-1": 1.0, "host-2": 1.0, "host-3": 1.0}
+				return decision
+			}(),
 			expectedContains: []string{
 				"Input choice confirmed: host-2 (1000.10→1002.10)", // Should use raw weights (1000.10)
 			},
@@ -1325,36 +1096,16 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 		},
 		{
 			name: "raw_weights_detect_correct_input_winner",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-3"),
-						RawInWeights: map[string]float64{
-							"host-1": 2000.15, // Clear winner in raw weights
-							"host-2": 2000.10,
-							"host-3": 2000.05, // Lowest in raw weights but wins final
-						},
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0, // All equal after normalization
-							"host-2": 1.0,
-							"host-3": 1.0,
-						},
-						AggregatedOutWeights: map[string]float64{
-							"host-1": 2001.15,
-							"host-2": 2001.10,
-							"host-3": 2002.05, // host-3 wins after pipeline
-						},
-					},
-				},
-			},
+			decision: func() *v1alpha1.Decision {
+				decision := WithOutputWeights(
+					WithInputWeights(
+						WithTargetHost(NewTestDecision("test-decision"), "host-3"),
+						map[string]float64{"host-1": 2000.15, "host-2": 2000.10, "host-3": 2000.05}),
+					map[string]float64{"host-1": 2001.15, "host-2": 2001.10, "host-3": 2002.05})
+				// Add normalized weights to show they would mask the difference
+				decision.Status.Result.NormalizedInWeights = map[string]float64{"host-1": 1.0, "host-2": 1.0, "host-3": 1.0}
+				return decision
+			}(),
 			expectedContains: []string{
 				"Input favored host-1 (2000.15), final winner: host-3 (2000.05→2002.05)", // Should detect host-1 as input winner using raw weights
 			},
@@ -1362,38 +1113,16 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 		},
 		{
 			name: "critical_steps_analysis_uses_raw_weights",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						RawInWeights: map[string]float64{
-							"host-1": 1000.05, // Slight advantage in raw weights
-							"host-2": 1000.00,
-						},
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0, // Equal after normalization
-							"host-2": 1.0,
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "resource-weigher"},
-								Activations: map[string]float64{
-									"host-1": 0.5, // Small boost makes host-1 clear winner
-									"host-2": 0.0,
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: func() *v1alpha1.Decision {
+				decision := WithSteps(
+					WithInputWeights(
+						WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+						map[string]float64{"host-1": 1000.05, "host-2": 1000.00}),
+					Step("resource-weigher", map[string]float64{"host-1": 0.5, "host-2": 0.0}))
+				// Add normalized weights to show they would mask the difference
+				decision.Status.Result.NormalizedInWeights = map[string]float64{"host-1": 1.0, "host-2": 1.0}
+				return decision
+			}(),
 			expectedContains: []string{
 				"Decision driven by input only (all 1 steps are non-critical)", // With small raw weight advantage, step is non-critical
 				"Input choice confirmed: host-1 (1000.05→0.00)",                // Shows raw weights are being used
@@ -1402,39 +1131,16 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 		},
 		{
 			name: "deleted_hosts_analysis_uses_raw_weights",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						RawInWeights: map[string]float64{
-							"host-1": 1000.00,
-							"host-2": 1000.05, // Slight winner in raw weights
-							"host-3": 999.95,
-						},
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0, // All equal after normalization
-							"host-2": 1.0,
-							"host-3": 1.0,
-						},
-						StepResults: []v1alpha1.StepResult{
-							{
-								StepRef: corev1.ObjectReference{Name: "availability-filter"},
-								Activations: map[string]float64{
-									"host-1": 0.0, // Only host-1 survives
-								},
-							},
-						},
-					},
-				},
-			},
+			decision: func() *v1alpha1.Decision {
+				decision := WithSteps(
+					WithInputWeights(
+						WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+						map[string]float64{"host-1": 1000.00, "host-2": 1000.05, "host-3": 999.95}),
+					Step("availability-filter", map[string]float64{"host-1": 0.0}))
+				// Add normalized weights to show they would mask the difference
+				decision.Status.Result.NormalizedInWeights = map[string]float64{"host-1": 1.0, "host-2": 1.0, "host-3": 1.0}
+				return decision
+			}(),
 			expectedContains: []string{
 				"2 hosts filtered (including input winner host-2)",                    // Shows raw weights are used to identify input winner
 				"Input favored host-2 (1000.05), final winner: host-1 (1000.00→0.00)", // Shows raw weights in input comparison
@@ -1443,32 +1149,15 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 		},
 		{
 			name: "fallback_to_normalized_when_no_raw_weights",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost:   stringPtr("host-1"),
-						RawInWeights: nil, // No raw weights available
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.5, // Should fall back to normalized
-							"host-2": 1.0,
-							"host-3": 0.8,
-						},
-						AggregatedOutWeights: map[string]float64{
-							"host-1": 2.5,
-							"host-2": 2.0,
-							"host-3": 1.8,
-						},
-					},
-				},
-			},
+			decision: func() *v1alpha1.Decision {
+				decision := WithOutputWeights(
+					WithTargetHost(NewTestDecision("test-decision"), "host-1"),
+					map[string]float64{"host-1": 2.5, "host-2": 2.0, "host-3": 1.8})
+				// Set normalized weights and clear raw weights to test fallback
+				decision.Status.Result.NormalizedInWeights = map[string]float64{"host-1": 1.5, "host-2": 1.0, "host-3": 0.8}
+				decision.Status.Result.RawInWeights = nil
+				return decision
+			}(),
 			expectedContains: []string{
 				"Input choice confirmed: host-1 (1.50→2.50)", // Should use normalized weights as fallback
 			},
@@ -1478,8 +1167,6 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Logf("Test description: %s", tt.description)
-
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithRuntimeObjects(tt.decision).
@@ -1498,8 +1185,6 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 					t.Errorf("Expected explanation to contain '%s', but got: %s", expected, explanation)
 				}
 			}
-
-			t.Logf("✅ Test passed: %s", explanation)
 		})
 	}
 }
@@ -1566,7 +1251,4 @@ func TestExplainer_RawVsNormalizedComparison(t *testing.T) {
 		t.Errorf("Expected explanation to NOT show input choice override, but got: %s", explanation)
 	}
 
-	t.Logf("✅ Correctly identified host-2 as input winner using raw weights (1000.10)")
-	t.Logf("✅ Small but important difference preserved (0.05 difference between host-1 and host-2)")
-	t.Logf("Explanation: %s", explanation)
 }
