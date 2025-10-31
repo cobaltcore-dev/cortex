@@ -33,6 +33,12 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 	// Build winner analysis part
 	winnerAnalysis := e.buildWinnerAnalysis(decision)
 
+	// Build input comparison part
+	inputComparison := e.buildInputComparison(decision)
+
+	// Build critical steps analysis part
+	criticalSteps := e.buildCriticalStepsAnalysis(decision)
+
 	// Combine parts
 	var parts []string
 	parts = append(parts, contextPart)
@@ -43,6 +49,14 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 
 	if winnerAnalysis != "" {
 		parts = append(parts, winnerAnalysis)
+	}
+
+	if inputComparison != "" {
+		parts = append(parts, inputComparison)
+	}
+
+	if criticalSteps != "" {
+		parts = append(parts, criticalSteps)
 	}
 
 	result := parts[0]
@@ -169,4 +183,166 @@ func (e *Explainer) calculateScoreGap(weights map[string]float64) float64 {
 	})
 
 	return scores[0] - scores[1]
+}
+
+// buildInputComparison creates the input vs output comparison part of the explanation.
+func (e *Explainer) buildInputComparison(decision *v1alpha1.Decision) string {
+	result := decision.Status.Result
+	if result == nil || result.TargetHost == nil {
+		return ""
+	}
+
+	targetHost := *result.TargetHost
+
+	// Get input weights (prefer normalized, fall back to raw)
+	var inputWeights map[string]float64
+	if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+		inputWeights = result.NormalizedInWeights
+	} else if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+		inputWeights = result.RawInWeights
+	} else {
+		return ""
+	}
+
+	// Find input winner
+	inputWinner := ""
+	inputWinnerScore := -999999.0
+	for host, score := range inputWeights {
+		if score > inputWinnerScore {
+			inputWinnerScore = score
+			inputWinner = host
+		}
+	}
+
+	if inputWinner == "" {
+		return ""
+	}
+
+	// Get target host's input and final scores
+	targetInputScore := 0.0
+	if score, exists := inputWeights[targetHost]; exists {
+		targetInputScore = score
+	}
+
+	targetFinalScore := 0.0
+	if result.AggregatedOutWeights != nil {
+		if score, exists := result.AggregatedOutWeights[targetHost]; exists {
+			targetFinalScore = score
+		}
+	}
+
+	if inputWinner == targetHost {
+		return fmt.Sprintf("Input choice confirmed: %s (%.2f→%.2f).",
+			targetHost, targetInputScore, targetFinalScore)
+	}
+
+	// Input winner different from final winner
+	return fmt.Sprintf("Input favored %s (%.2f), final winner: %s (%.2f→%.2f).",
+		inputWinner, inputWinnerScore, targetHost, targetInputScore, targetFinalScore)
+}
+
+// buildCriticalStepsAnalysis creates the critical steps analysis part of the explanation.
+func (e *Explainer) buildCriticalStepsAnalysis(decision *v1alpha1.Decision) string {
+	result := decision.Status.Result
+	if result == nil || result.TargetHost == nil || result.StepResults == nil || len(result.StepResults) == 0 {
+		return ""
+	}
+
+	targetHost := *result.TargetHost
+	criticalSteps := e.findCriticalSteps(decision, targetHost)
+
+	if len(criticalSteps) == 0 {
+		totalSteps := len(result.StepResults)
+		return fmt.Sprintf("Decision driven by input only (all %d steps are non-critical).", totalSteps)
+	}
+
+	totalSteps := len(result.StepResults)
+	if len(criticalSteps) == totalSteps {
+		return fmt.Sprintf("Decision requires all %d pipeline steps.", totalSteps)
+	}
+
+	if len(criticalSteps) == 1 {
+		return fmt.Sprintf("Decision driven by 1/%d pipeline step: %s.", totalSteps, criticalSteps[0])
+	}
+
+	// Multiple critical steps
+	var stepList string
+	if len(criticalSteps) == 2 {
+		stepList = criticalSteps[0] + " and " + criticalSteps[1]
+	} else {
+		// For 3+ steps: "step1, step2, and step3"
+		lastStep := criticalSteps[len(criticalSteps)-1]
+		otherSteps := criticalSteps[:len(criticalSteps)-1]
+		stepList = ""
+		for i, step := range otherSteps {
+			if i > 0 {
+				stepList += ", "
+			}
+			stepList += step
+		}
+		stepList += " and " + lastStep
+	}
+
+	return fmt.Sprintf("Decision driven by %d/%d pipeline steps: %s.", len(criticalSteps), totalSteps, stepList)
+}
+
+// findCriticalSteps identifies which steps had significant impact on the target host.
+// Uses a simplified heuristic based on activation magnitudes rather than complex elimination testing.
+func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost string) []string {
+	result := decision.Status.Result
+	if result == nil || result.StepResults == nil {
+		return []string{}
+	}
+
+	// Collect step activations for the target host
+	type stepActivation struct {
+		stepName   string
+		activation float64
+	}
+
+	var activations []stepActivation
+	for _, stepResult := range result.StepResults {
+		if activation, exists := stepResult.Activations[targetHost]; exists {
+			activations = append(activations, stepActivation{
+				stepName:   stepResult.StepRef.Name,
+				activation: activation,
+			})
+		}
+	}
+
+	if len(activations) == 0 {
+		return []string{}
+	}
+
+	// Sort by absolute activation value (highest impact first)
+	sort.Slice(activations, func(i, j int) bool {
+		absI := activations[i].activation
+		if absI < 0 {
+			absI = -absI
+		}
+		absJ := activations[j].activation
+		if absJ < 0 {
+			absJ = -absJ
+		}
+		return absI > absJ
+	})
+
+	// Consider steps with significant activation as critical
+	// Use a simple threshold: steps with activation >= 0.1 or top 50% of steps
+	var criticalSteps []string
+	threshold := 0.1
+	maxSteps := (len(activations) + 1) / 2 // At least half the steps
+
+	for i, activation := range activations {
+		absActivation := activation.activation
+		if absActivation < 0 {
+			absActivation = -absActivation
+		}
+
+		if absActivation >= threshold || i < maxSteps {
+			criticalSteps = append(criticalSteps, activation.stepName)
+		}
+	}
+
+	return criticalSteps
 }
