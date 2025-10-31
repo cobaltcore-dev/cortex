@@ -939,6 +939,186 @@ func TestExplainer_CompleteExplanation(t *testing.T) {
 	}
 }
 
+func TestExplainer_DeletedHostsAnalysis(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	tests := []struct {
+		name             string
+		decision         *v1alpha1.Decision
+		expectedContains []string
+	}{
+		{
+			name: "single host filtered by single step",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"),
+						NormalizedInWeights: map[string]float64{
+							"host-1": 1.0,
+							"host-2": 2.0, // host-2 is input winner but gets filtered
+						},
+						StepResults: []v1alpha1.StepResult{
+							{
+								StepRef: corev1.ObjectReference{Name: "availability-filter"},
+								Activations: map[string]float64{
+									"host-1": 0.5, // Only host-1 survives
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Input winner host-2 was filtered by availability-filter",
+			},
+		},
+		{
+			name: "multiple hosts filtered",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"),
+						NormalizedInWeights: map[string]float64{
+							"host-1": 3.0, // host-1 is input winner and survives
+							"host-2": 2.0,
+							"host-3": 1.0,
+						},
+						StepResults: []v1alpha1.StepResult{
+							{
+								StepRef: corev1.ObjectReference{Name: "availability-filter"},
+								Activations: map[string]float64{
+									"host-1": 0.5, // Only host-1 survives
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"2 hosts filtered",
+			},
+		},
+		{
+			name: "multiple hosts filtered including input winner",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"),
+						NormalizedInWeights: map[string]float64{
+							"host-1": 1.0,
+							"host-2": 3.0, // host-2 is input winner but gets filtered
+							"host-3": 2.0,
+						},
+						StepResults: []v1alpha1.StepResult{
+							{
+								StepRef: corev1.ObjectReference{Name: "availability-filter"},
+								Activations: map[string]float64{
+									"host-1": 0.5, // Only host-1 survives
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"2 hosts filtered (including input winner host-2)",
+			},
+		},
+		{
+			name: "no hosts filtered",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"),
+						NormalizedInWeights: map[string]float64{
+							"host-1": 1.0,
+							"host-2": 2.0,
+						},
+						StepResults: []v1alpha1.StepResult{
+							{
+								StepRef: corev1.ObjectReference{Name: "resource-weigher"},
+								Activations: map[string]float64{
+									"host-1": 0.5, // Both hosts survive
+									"host-2": 0.3,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedContains: []string{}, // No deleted hosts analysis should be present
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(tt.decision).
+				Build()
+
+			explainer := &Explainer{Client: client}
+
+			explanation, err := explainer.Explain(context.Background(), tt.decision)
+			if err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+				return
+			}
+
+			for _, expected := range tt.expectedContains {
+				if !contains(explanation, expected) {
+					t.Errorf("Expected explanation to contain '%s', but got: %s", expected, explanation)
+				}
+			}
+
+			// For the "no hosts filtered" case, ensure no deleted hosts analysis is present
+			if len(tt.expectedContains) == 0 {
+				deletedHostsKeywords := []string{"filtered", "Input winner", "hosts filtered"}
+				for _, keyword := range deletedHostsKeywords {
+					if contains(explanation, keyword) {
+						t.Errorf("Expected explanation to NOT contain '%s' for no deleted hosts case, but got: %s", keyword, explanation)
+					}
+				}
+			}
+		})
+	}
+}
+
 func intPtr(i int) *int {
 	return &i
 }
