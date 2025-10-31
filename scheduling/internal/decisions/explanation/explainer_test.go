@@ -513,7 +513,7 @@ func TestExplainer_InputComparison(t *testing.T) {
 			},
 		},
 		{
-			name: "normalized weights preferred over raw",
+			name: "raw weights preferred over normalized",
 			decision: &v1alpha1.Decision{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-decision",
@@ -542,7 +542,7 @@ func TestExplainer_InputComparison(t *testing.T) {
 				},
 			},
 			expectedContains: []string{
-				"Input choice confirmed: host-1 (1.00→2.45)",
+				"Input choice confirmed: host-1 (100.00→2.45)", // Should now use raw weights (100.00)
 			},
 		},
 	}
@@ -1378,4 +1378,304 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 
 func intPtr(i int) *int {
 	return &i
+}
+
+// TestExplainer_RawWeightsPriorityBugFix tests that the explainer correctly prioritizes
+// raw weights over normalized weights to preserve small but important differences.
+// This test verifies the fix for the bug where normalized weights were incorrectly preferred.
+func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	tests := []struct {
+		name             string
+		decision         *v1alpha1.Decision
+		expectedContains []string
+		description      string
+	}{
+		{
+			name: "raw_weights_preserve_small_differences",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-2"),
+						RawInWeights: map[string]float64{
+							"host-1": 1000.05, // Small but important difference
+							"host-2": 1000.10, // Clear winner in raw weights
+							"host-3": 1000.00,
+						},
+						NormalizedInWeights: map[string]float64{
+							"host-1": 1.0, // Normalized weights mask the difference
+							"host-2": 1.0, // All appear equal after normalization
+							"host-3": 1.0,
+						},
+						AggregatedOutWeights: map[string]float64{
+							"host-1": 1001.05,
+							"host-2": 1002.10, // host-2 wins after pipeline
+							"host-3": 1001.00,
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Input choice confirmed: host-2 (1000.10→1002.10)", // Should use raw weights (1000.10)
+			},
+			description: "Raw weights preserve small differences that normalized weights would mask",
+		},
+		{
+			name: "raw_weights_detect_correct_input_winner",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-3"),
+						RawInWeights: map[string]float64{
+							"host-1": 2000.15, // Clear winner in raw weights
+							"host-2": 2000.10,
+							"host-3": 2000.05, // Lowest in raw weights but wins final
+						},
+						NormalizedInWeights: map[string]float64{
+							"host-1": 1.0, // All equal after normalization
+							"host-2": 1.0,
+							"host-3": 1.0,
+						},
+						AggregatedOutWeights: map[string]float64{
+							"host-1": 2001.15,
+							"host-2": 2001.10,
+							"host-3": 2002.05, // host-3 wins after pipeline
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Input favored host-1 (2000.15), final winner: host-3 (2000.05→2002.05)", // Should detect host-1 as input winner using raw weights
+			},
+			description: "Raw weights correctly identify input winner that normalized weights would miss",
+		},
+		{
+			name: "critical_steps_analysis_uses_raw_weights",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"),
+						RawInWeights: map[string]float64{
+							"host-1": 1000.05, // Slight advantage in raw weights
+							"host-2": 1000.00,
+						},
+						NormalizedInWeights: map[string]float64{
+							"host-1": 1.0, // Equal after normalization
+							"host-2": 1.0,
+						},
+						StepResults: []v1alpha1.StepResult{
+							{
+								StepRef: corev1.ObjectReference{Name: "resource-weigher"},
+								Activations: map[string]float64{
+									"host-1": 0.5, // Small boost makes host-1 clear winner
+									"host-2": 0.0,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Decision driven by input only (all 1 steps are non-critical)", // With small raw weight advantage, step is non-critical
+				"Input choice confirmed: host-1 (1000.05→0.00)",                // Shows raw weights are being used
+			},
+			description: "Critical steps analysis uses raw weights - with small raw advantage, step becomes non-critical",
+		},
+		{
+			name: "deleted_hosts_analysis_uses_raw_weights",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"),
+						RawInWeights: map[string]float64{
+							"host-1": 1000.00,
+							"host-2": 1000.05, // Slight winner in raw weights
+							"host-3": 999.95,
+						},
+						NormalizedInWeights: map[string]float64{
+							"host-1": 1.0, // All equal after normalization
+							"host-2": 1.0,
+							"host-3": 1.0,
+						},
+						StepResults: []v1alpha1.StepResult{
+							{
+								StepRef: corev1.ObjectReference{Name: "availability-filter"},
+								Activations: map[string]float64{
+									"host-1": 0.0, // Only host-1 survives
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"2 hosts filtered (including input winner host-2)",                    // Shows raw weights are used to identify input winner
+				"Input favored host-2 (1000.05), final winner: host-1 (1000.00→0.00)", // Shows raw weights in input comparison
+			},
+			description: "Deleted hosts analysis uses raw weights to correctly identify input winner",
+		},
+		{
+			name: "fallback_to_normalized_when_no_raw_weights",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					Result: &v1alpha1.DecisionResult{
+						TargetHost:   stringPtr("host-1"),
+						RawInWeights: nil, // No raw weights available
+						NormalizedInWeights: map[string]float64{
+							"host-1": 1.5, // Should fall back to normalized
+							"host-2": 1.0,
+							"host-3": 0.8,
+						},
+						AggregatedOutWeights: map[string]float64{
+							"host-1": 2.5,
+							"host-2": 2.0,
+							"host-3": 1.8,
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Input choice confirmed: host-1 (1.50→2.50)", // Should use normalized weights as fallback
+			},
+			description: "Should fall back to normalized weights when raw weights are not available",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("Test description: %s", tt.description)
+
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(tt.decision).
+				Build()
+
+			explainer := &Explainer{Client: client}
+
+			explanation, err := explainer.Explain(context.Background(), tt.decision)
+			if err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+				return
+			}
+
+			for _, expected := range tt.expectedContains {
+				if !contains(explanation, expected) {
+					t.Errorf("Expected explanation to contain '%s', but got: %s", expected, explanation)
+				}
+			}
+
+			t.Logf("✅ Test passed: %s", explanation)
+		})
+	}
+}
+
+// TestExplainer_RawVsNormalizedComparison demonstrates the impact of the bug fix
+func TestExplainer_RawVsNormalizedComparison(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	// This test demonstrates what would happen with the old (buggy) behavior
+	// vs the new (correct) behavior
+	decision := &v1alpha1.Decision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-decision",
+			Namespace: "default",
+		},
+		Spec: v1alpha1.DecisionSpec{
+			Type:       v1alpha1.DecisionTypeNovaServer,
+			ResourceID: "test-resource",
+		},
+		Status: v1alpha1.DecisionStatus{
+			Result: &v1alpha1.DecisionResult{
+				TargetHost: stringPtr("host-2"),
+				RawInWeights: map[string]float64{
+					"host-1": 1000.05, // Very small difference
+					"host-2": 1000.10, // Slightly higher - should be detected as input winner
+					"host-3": 1000.00,
+				},
+				NormalizedInWeights: map[string]float64{
+					"host-1": 1.0, // All normalized to same value - would mask the difference
+					"host-2": 1.0,
+					"host-3": 1.0,
+				},
+				AggregatedOutWeights: map[string]float64{
+					"host-1": 1001.05,
+					"host-2": 1002.10, // host-2 wins
+					"host-3": 1001.00,
+				},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRuntimeObjects(decision).
+		Build()
+
+	explainer := &Explainer{Client: client}
+	explanation, err := explainer.Explain(context.Background(), decision)
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+		return
+	}
+
+	// With the fix, should correctly identify host-2 as input winner using raw weights
+	if !contains(explanation, "Input choice confirmed: host-2 (1000.10→1002.10)") {
+		t.Errorf("Expected explanation to show raw weight value (1000.10), but got: %s", explanation)
+	}
+
+	// Should NOT show any indication that input choice was overridden
+	if contains(explanation, "Input favored host-1") || contains(explanation, "Input favored host-3") {
+		t.Errorf("Expected explanation to NOT show input choice override, but got: %s", explanation)
+	}
+
+	t.Logf("✅ Correctly identified host-2 as input winner using raw weights (1000.10)")
+	t.Logf("✅ Small but important difference preserved (0.05 difference between host-1 and host-2)")
+	t.Logf("Explanation: %s", explanation)
 }
