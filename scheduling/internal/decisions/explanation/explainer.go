@@ -42,6 +42,12 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 	// Build deleted hosts analysis part
 	deletedHostsAnalysis := e.buildDeletedHostsAnalysis(decision)
 
+	// Build global chain analysis part
+	globalChainAnalysis, err := e.buildGlobalChainAnalysis(ctx, decision)
+	if err != nil {
+		return "", err
+	}
+
 	// Combine parts
 	var parts []string
 	parts = append(parts, contextPart)
@@ -64,6 +70,10 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 
 	if deletedHostsAnalysis != "" {
 		parts = append(parts, deletedHostsAnalysis)
+	}
+
+	if globalChainAnalysis != "" {
+		parts = append(parts, globalChainAnalysis)
 	}
 
 	result := parts[0]
@@ -385,6 +395,177 @@ func (e *Explainer) formatStepList(steps []string) string {
 		result += step
 	}
 	result += " and " + lastStep
+	return result
+}
+
+// buildGlobalChainAnalysis creates the global chain analysis part of the explanation.
+func (e *Explainer) buildGlobalChainAnalysis(ctx context.Context, decision *v1alpha1.Decision) (string, error) {
+	history := decision.Status.History
+	if history == nil || len(*history) == 0 {
+		return "", nil // No chain for initial decisions
+	}
+
+	// Fetch all decisions in the chain
+	chainDecisions, err := e.fetchDecisionChain(ctx, decision)
+	if err != nil {
+		return "", err
+	}
+
+	if len(chainDecisions) < 2 {
+		return "", nil // Need at least 2 decisions for a chain
+	}
+
+	// Generate chain description
+	return e.generateChainDescription(chainDecisions), nil
+}
+
+// fetchDecisionChain retrieves all decisions in the history chain.
+func (e *Explainer) fetchDecisionChain(ctx context.Context, decision *v1alpha1.Decision) ([]*v1alpha1.Decision, error) {
+	var chainDecisions []*v1alpha1.Decision
+
+	// Add all historical decisions
+	if decision.Status.History != nil {
+		for _, ref := range *decision.Status.History {
+			histDecision := &v1alpha1.Decision{}
+			if err := e.Get(ctx, client.ObjectKey{
+				Namespace: ref.Namespace,
+				Name:      ref.Name,
+			}, histDecision); err != nil {
+				return nil, err
+			}
+			chainDecisions = append(chainDecisions, histDecision)
+		}
+	}
+
+	// Add current decision
+	chainDecisions = append(chainDecisions, decision)
+
+	return chainDecisions, nil
+}
+
+// generateChainDescription creates a chain description from a sequence of decisions.
+func (e *Explainer) generateChainDescription(decisions []*v1alpha1.Decision) string {
+	if len(decisions) < 2 {
+		return ""
+	}
+
+	// Extract host chain and build segments
+	segments := e.buildHostSegments(decisions)
+	if len(segments) == 0 {
+		return ""
+	}
+
+	// Build chain string with durations
+	chainParts := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		part := segment.host + " (" + e.formatDuration(segment.duration)
+		if segment.decisions > 1 {
+			part += fmt.Sprintf("; %d decisions", segment.decisions)
+		}
+		part += ")"
+		chainParts = append(chainParts, part)
+	}
+
+	// Check for loops
+	hasLoop := e.detectLoop(segments)
+	chainStr := e.joinChainParts(chainParts)
+
+	if hasLoop {
+		return fmt.Sprintf("Chain (loop detected): %s.", chainStr)
+	}
+	return fmt.Sprintf("Chain: %s.", chainStr)
+}
+
+// HostSegment represents a segment in the host chain with duration and decision count.
+type HostSegment struct {
+	host      string
+	duration  int64 // duration in minutes
+	decisions int
+}
+
+// buildHostSegments creates host segments from decisions with durations.
+func (e *Explainer) buildHostSegments(decisions []*v1alpha1.Decision) []HostSegment {
+	if len(decisions) < 2 {
+		return []HostSegment{}
+	}
+
+	// Extract host chain
+	hostChain := make([]string, 0, len(decisions))
+	for _, decision := range decisions {
+		host := "(n/a)"
+		if decision.Status.Result != nil && decision.Status.Result.TargetHost != nil {
+			host = *decision.Status.Result.TargetHost
+		}
+		hostChain = append(hostChain, host)
+	}
+
+	// Build segments with durations
+	segments := make([]HostSegment, 0)
+	if len(hostChain) > 0 {
+		currentHost := hostChain[0]
+		segmentStart := 0
+
+		for i := 1; i <= len(hostChain); i++ {
+			// Check if we've reached the end or found a different host
+			if i == len(hostChain) || hostChain[i] != currentHost {
+				// Calculate duration for this segment
+				startTime := decisions[segmentStart].CreationTimestamp.Time
+				var endTime = startTime // Default to 0 duration for last segment
+				if i < len(hostChain) {
+					endTime = decisions[i].CreationTimestamp.Time
+				}
+
+				durationMinutes := int64(endTime.Sub(startTime).Minutes())
+
+				segments = append(segments, HostSegment{
+					host:      currentHost,
+					duration:  durationMinutes,
+					decisions: i - segmentStart,
+				})
+
+				if i < len(hostChain) {
+					currentHost = hostChain[i]
+					segmentStart = i
+				}
+			}
+		}
+	}
+
+	return segments
+}
+
+// formatDuration formats a duration in minutes to a human-readable format.
+func (e *Explainer) formatDuration(durationMinutes int64) string {
+	if durationMinutes >= 24*60 {
+		return fmt.Sprintf("%dd", durationMinutes/(24*60))
+	}
+	if durationMinutes >= 60 {
+		return fmt.Sprintf("%dh", durationMinutes/60)
+	}
+	return fmt.Sprintf("%dm", durationMinutes)
+}
+
+// detectLoop checks if there are repeated hosts in the segments.
+func (e *Explainer) detectLoop(segments []HostSegment) bool {
+	seenHosts := make(map[string]bool)
+	for _, segment := range segments {
+		if seenHosts[segment.host] {
+			return true
+		}
+		seenHosts[segment.host] = true
+	}
+	return false
+}
+
+// joinChainParts joins chain parts with arrows.
+func (e *Explainer) joinChainParts(parts []string) string {
+	result := ""
+	for i, part := range parts {
+		if i > 0 {
+			result += " -> "
+		}
+		result += part
+	}
 	return result
 }
 
