@@ -5,6 +5,7 @@ package explanation
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -12,167 +13,59 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestExplainer_Explain(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
 	tests := []struct {
-		name              string
-		decision          *v1alpha1.Decision
-		existingDecisions []v1alpha1.Decision
-		expectedContains  []string
-		expectError       bool
+		name             string
+		decision         *v1alpha1.Decision
+		historyDecisions []*v1alpha1.Decision
+		expectedContains []string
+		expectError      bool
 	}{
 		{
-			name: "initial nova server placement",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource-1",
-				},
-				Status: v1alpha1.DecisionStatus{
-					History: nil,
-				},
-			},
+			name:             "initial nova server placement",
+			decision:         NewDecision("test-decision").WithResourceID("test-resource-1").WithType(v1alpha1.DecisionTypeNovaServer).Build(),
 			expectedContains: []string{"Initial placement of the nova server"},
 		},
 		{
-			name: "initial cinder volume placement",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeCinderVolume,
-					ResourceID: "test-resource-2",
-				},
-				Status: v1alpha1.DecisionStatus{
-					History: nil,
-				},
-			},
+			name:             "initial cinder volume placement",
+			decision:         NewDecision("test-decision").WithResourceID("test-resource-2").WithType(v1alpha1.DecisionTypeCinderVolume).Build(),
 			expectedContains: []string{"Initial placement of the cinder volume"},
 		},
 		{
-			name: "initial manila share placement",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeManilaShare,
-					ResourceID: "test-resource-3",
-				},
-				Status: v1alpha1.DecisionStatus{
-					History: nil,
-				},
-			},
+			name:             "initial manila share placement",
+			decision:         NewDecision("test-decision").WithResourceID("test-resource-3").WithType(v1alpha1.DecisionTypeManilaShare).Build(),
 			expectedContains: []string{"Initial placement of the manila share"},
 		},
 		{
-			name: "initial ironcore machine placement",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeIroncoreMachine,
-					ResourceID: "test-resource-4",
-				},
-				Status: v1alpha1.DecisionStatus{
-					History: nil,
-				},
-			},
+			name:             "initial ironcore machine placement",
+			decision:         NewDecision("test-decision").WithResourceID("test-resource-4").WithType(v1alpha1.DecisionTypeIroncoreMachine).Build(),
 			expectedContains: []string{"Initial placement of the ironcore machine"},
 		},
 		{
-			name: "unknown resource type falls back to generic",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       "unknown-type",
-					ResourceID: "test-resource-5",
-				},
-				Status: v1alpha1.DecisionStatus{
-					History: nil,
-				},
-			},
+			name:             "unknown resource type falls back to generic",
+			decision:         NewDecision("test-decision").WithResourceID("test-resource-5").WithType("unknown-type").Build(),
 			expectedContains: []string{"Initial placement of the resource"},
 		},
 		{
-			name: "empty history array",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource-6",
-				},
-				Status: v1alpha1.DecisionStatus{
-					History: &[]corev1.ObjectReference{},
-				},
-			},
+			name:             "empty history array",
+			decision:         NewDecision("test-decision").WithResourceID("test-resource-6").WithHistory([]corev1.ObjectReference{}).Build(),
 			expectedContains: []string{"Initial placement of the nova server"},
 		},
 		{
 			name: "subsequent decision with history",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-decision-2",
-					Namespace:         "default",
-					CreationTimestamp: metav1.Time{Time: metav1.Now().Add(1000)},
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource-7",
-				},
-				Status: v1alpha1.DecisionStatus{
-					History: &[]corev1.ObjectReference{
-						{
-							Kind:      "Decision",
-							Namespace: "default",
-							Name:      "test-decision-1",
-							UID:       "test-uid-1",
-						},
-					},
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-2"),
-					},
-				},
-			},
-			existingDecisions: []v1alpha1.Decision{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-decision-1",
-						Namespace: "default",
-						UID:       "test-uid-1",
-					},
-					Spec: v1alpha1.DecisionSpec{
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "test-resource-7",
-					},
-					Status: v1alpha1.DecisionStatus{
-						Result: &v1alpha1.DecisionResult{
-							TargetHost: stringPtr("host-1"),
-						},
-					},
-				},
+			decision: NewDecision("test-decision-2").
+				WithResourceID("test-resource-7").
+				WithTargetHost("host-2").
+				WithHistoryDecisions(
+					NewDecision("test-decision-1").WithUID("test-uid-1").WithTargetHost("host-1").Build(),
+				).
+				Build(),
+			historyDecisions: []*v1alpha1.Decision{
+				NewDecision("test-decision-1").WithUID("test-uid-1").WithTargetHost("host-1").WithResourceID("test-resource-7").Build(),
 			},
 			expectedContains: []string{
 				"Decision #2 for this nova server",
@@ -182,42 +75,14 @@ func TestExplainer_Explain(t *testing.T) {
 		},
 		{
 			name: "subsequent decision with nil target hosts",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-4",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource-8",
-				},
-				Status: v1alpha1.DecisionStatus{
-					History: &[]corev1.ObjectReference{
-						{
-							Kind:      "Decision",
-							Namespace: "default",
-							Name:      "test-decision-3",
-							UID:       "test-uid-3",
-						},
-					},
-					Result: nil,
-				},
-			},
-			existingDecisions: []v1alpha1.Decision{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-decision-3",
-						Namespace: "default",
-						UID:       "test-uid-3",
-					},
-					Spec: v1alpha1.DecisionSpec{
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "test-resource-8",
-					},
-					Status: v1alpha1.DecisionStatus{
-						Result: nil,
-					},
-				},
+			decision: NewDecision("test-decision-4").
+				WithResourceID("test-resource-8").
+				WithHistoryDecisions(
+					NewDecision("test-decision-3").WithUID("test-uid-3").Build(),
+				).
+				Build(),
+			historyDecisions: []*v1alpha1.Decision{
+				NewDecision("test-decision-3").WithUID("test-uid-3").WithResourceID("test-resource-8").Build(),
 			},
 			expectedContains: []string{
 				"Decision #2 for this nova server",
@@ -229,72 +94,28 @@ func TestExplainer_Explain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := []runtime.Object{tt.decision}
-			for i := range tt.existingDecisions {
-				objects = append(objects, &tt.existingDecisions[i])
-			}
-
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(objects...).
-				Build()
-
-			explainer := &Explainer{Client: client}
-
-			explanation, err := explainer.Explain(context.Background(), tt.decision)
-
-			if tt.expectError && err == nil {
-				t.Errorf("Expected error but got none")
-				return
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-				return
-			}
-
-			for _, expected := range tt.expectedContains {
-				if !contains(explanation, expected) {
-					t.Errorf("Expected explanation to contain '%s', but got: %s", expected, explanation)
-				}
+			if len(tt.historyDecisions) > 0 {
+				RunExplanationTestWithHistory(t, tt.decision, tt.historyDecisions, tt.expectedContains)
+			} else {
+				RunExplanationTest(t, tt.decision, tt.expectedContains)
 			}
 		})
 	}
 }
 
 func TestExplainer_Explain_HistoryDecisionNotFound(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-decision",
-			Namespace: "default",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			Type:       v1alpha1.DecisionTypeNovaServer,
-			ResourceID: "test-resource",
-		},
-		Status: v1alpha1.DecisionStatus{
-			History: &[]corev1.ObjectReference{
-				{
-					Kind:      "Decision",
-					Namespace: "default",
-					Name:      "non-existent-decision",
-					UID:       "non-existent-uid",
-				},
+	decision := NewDecision("test-decision").
+		WithHistory([]corev1.ObjectReference{
+			{
+				Kind:      "Decision",
+				Namespace: "default",
+				Name:      "non-existent-decision",
+				UID:       "non-existent-uid",
 			},
-		},
-	}
-
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithRuntimeObjects(decision).
+		}).
 		Build()
 
-	explainer := &Explainer{Client: client}
-
+	explainer := SetupExplainerTest(t, decision)
 	_, err := explainer.Explain(context.Background(), decision)
 	if err == nil {
 		t.Error("Expected error when previous decision not found, but got none")
@@ -319,74 +140,246 @@ func findInString(s, substr string) bool {
 	return false
 }
 
-// Test data creation helpers
-func createBasicDecision(name, resourceID string, decisionType v1alpha1.DecisionType) *v1alpha1.Decision {
-	return &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			Type:       decisionType,
-			ResourceID: resourceID,
-		},
-		Status: v1alpha1.DecisionStatus{
-			History: nil,
+// Decision Builder Pattern - Fluent interface for creating test decisions
+type DecisionBuilder struct {
+	decision *v1alpha1.Decision
+}
+
+func NewDecision(name string) *DecisionBuilder {
+	return &DecisionBuilder{
+		decision: &v1alpha1.Decision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "default",
+			},
+			Spec: v1alpha1.DecisionSpec{
+				Type:       v1alpha1.DecisionTypeNovaServer,
+				ResourceID: "test-resource",
+			},
+			Status: v1alpha1.DecisionStatus{},
 		},
 	}
 }
 
-func createDecisionWithResult(name, resourceID string, targetHost string, weights map[string]float64, orderedHosts []string) *v1alpha1.Decision {
-	decision := createBasicDecision(name, resourceID, v1alpha1.DecisionTypeNovaServer)
-	decision.Status.Result = &v1alpha1.DecisionResult{
-		TargetHost:           stringPtr(targetHost),
-		AggregatedOutWeights: weights,
-		OrderedHosts:         orderedHosts,
+func (b *DecisionBuilder) WithResourceID(resourceID string) *DecisionBuilder {
+	b.decision.Spec.ResourceID = resourceID
+	return b
+}
+
+func (b *DecisionBuilder) WithType(decisionType v1alpha1.DecisionType) *DecisionBuilder {
+	b.decision.Spec.Type = decisionType
+	return b
+}
+
+func (b *DecisionBuilder) WithTargetHost(host string) *DecisionBuilder {
+	if b.decision.Status.Result == nil {
+		b.decision.Status.Result = &v1alpha1.DecisionResult{}
 	}
-	return decision
+	b.decision.Status.Result.TargetHost = stringPtr(host)
+	return b
 }
 
-func createDecisionWithInputComparison(name, resourceID, targetHost string, rawWeights, finalWeights map[string]float64) *v1alpha1.Decision {
-	decision := createDecisionWithResult(name, resourceID, targetHost, finalWeights, nil)
-	decision.Status.Result.RawInWeights = rawWeights
-	return decision
+func (b *DecisionBuilder) WithRawInputWeights(weights map[string]float64) *DecisionBuilder {
+	if b.decision.Status.Result == nil {
+		b.decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	b.decision.Status.Result.RawInWeights = weights
+	return b
 }
 
-func createDecisionWithNormalizedWeights(name, resourceID, targetHost string, rawWeights, normalizedWeights, finalWeights map[string]float64) *v1alpha1.Decision {
-	decision := createDecisionWithInputComparison(name, resourceID, targetHost, rawWeights, finalWeights)
-	decision.Status.Result.NormalizedInWeights = normalizedWeights
-	return decision
+func (b *DecisionBuilder) WithNormalizedInputWeights(weights map[string]float64) *DecisionBuilder {
+	if b.decision.Status.Result == nil {
+		b.decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	b.decision.Status.Result.NormalizedInWeights = weights
+	return b
 }
 
-func createStepResult(stepName string, activations map[string]float64) v1alpha1.StepResult {
+func (b *DecisionBuilder) WithAggregatedOutputWeights(weights map[string]float64) *DecisionBuilder {
+	if b.decision.Status.Result == nil {
+		b.decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	b.decision.Status.Result.AggregatedOutWeights = weights
+	return b
+}
+
+func (b *DecisionBuilder) WithOrderedHosts(hosts []string) *DecisionBuilder {
+	if b.decision.Status.Result == nil {
+		b.decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	b.decision.Status.Result.OrderedHosts = hosts
+	return b
+}
+
+func (b *DecisionBuilder) WithSteps(steps ...v1alpha1.StepResult) *DecisionBuilder {
+	if b.decision.Status.Result == nil {
+		b.decision.Status.Result = &v1alpha1.DecisionResult{}
+	}
+	b.decision.Status.Result.StepResults = steps
+	return b
+}
+
+func (b *DecisionBuilder) WithHistory(refs []corev1.ObjectReference) *DecisionBuilder {
+	b.decision.Status.History = &refs
+	return b
+}
+
+func (b *DecisionBuilder) WithHistoryDecisions(decisions ...*v1alpha1.Decision) *DecisionBuilder {
+	refs := make([]corev1.ObjectReference, len(decisions))
+	for i, decision := range decisions {
+		refs[i] = corev1.ObjectReference{
+			Kind:      "Decision",
+			Namespace: decision.Namespace,
+			Name:      decision.Name,
+			UID:       decision.UID,
+		}
+	}
+	b.decision.Status.History = &refs
+	return b
+}
+
+func (b *DecisionBuilder) WithPrecedence(precedence int) *DecisionBuilder {
+	b.decision.Status.Precedence = intPtr(precedence)
+	return b
+}
+
+func (b *DecisionBuilder) WithUID(uid string) *DecisionBuilder {
+	b.decision.UID = types.UID(uid)
+	return b
+}
+
+func (b *DecisionBuilder) WithCreationTimestamp(timestamp time.Time) *DecisionBuilder {
+	b.decision.CreationTimestamp = metav1.Time{Time: timestamp}
+	return b
+}
+
+func (b *DecisionBuilder) Build() *v1alpha1.Decision {
+	return b.decision
+}
+
+// Pre-built scenario helpers for common test patterns
+func DecisionWithScoring(name, winner string, scores map[string]float64) *DecisionBuilder {
+	orderedHosts := make([]string, 0, len(scores))
+	for host := range scores {
+		orderedHosts = append(orderedHosts, host)
+	}
+	// Sort by score descending
+	sort.Slice(orderedHosts, func(i, j int) bool {
+		return scores[orderedHosts[i]] > scores[orderedHosts[j]]
+	})
+
+	return NewDecision(name).
+		WithTargetHost(winner).
+		WithAggregatedOutputWeights(scores).
+		WithOrderedHosts(orderedHosts)
+}
+
+func DecisionWithInputComparison(name, winner string, inputWeights, finalWeights map[string]float64) *DecisionBuilder {
+	return NewDecision(name).
+		WithTargetHost(winner).
+		WithRawInputWeights(inputWeights).
+		WithAggregatedOutputWeights(finalWeights)
+}
+
+func DecisionWithCriticalSteps(name, winner string, inputWeights map[string]float64, steps ...v1alpha1.StepResult) *DecisionBuilder {
+	return NewDecision(name).
+		WithTargetHost(winner).
+		WithRawInputWeights(inputWeights).
+		WithSteps(steps...)
+}
+
+func DecisionWithHistory(name, winner string) *DecisionBuilder {
+	return NewDecision(name).
+		WithTargetHost(winner)
+}
+
+// Step result builders for common pipeline steps
+func ResourceWeigherStep(activations map[string]float64) v1alpha1.StepResult {
 	return v1alpha1.StepResult{
-		StepRef:     corev1.ObjectReference{Name: stepName},
+		StepRef:     corev1.ObjectReference{Name: "resource-weigher"},
 		Activations: activations,
 	}
 }
 
-func createDecisionWithSteps(name, resourceID, targetHost string, stepResults []v1alpha1.StepResult) *v1alpha1.Decision {
-	decision := createBasicDecision(name, resourceID, v1alpha1.DecisionTypeNovaServer)
-	decision.Status.Result = &v1alpha1.DecisionResult{
-		TargetHost:  stringPtr(targetHost),
-		StepResults: stepResults,
+func AvailabilityFilterStep(activations map[string]float64) v1alpha1.StepResult {
+	return v1alpha1.StepResult{
+		StepRef:     corev1.ObjectReference{Name: "availability-filter"},
+		Activations: activations,
 	}
-	return decision
 }
 
-func createDecisionWithHistory(name, resourceID string, historyRefs []corev1.ObjectReference, result *v1alpha1.DecisionResult) *v1alpha1.Decision {
-	decision := createBasicDecision(name, resourceID, v1alpha1.DecisionTypeNovaServer)
-	decision.Status.History = &historyRefs
-	decision.Status.Result = result
-	return decision
+func PlacementPolicyStep(activations map[string]float64) v1alpha1.StepResult {
+	return v1alpha1.StepResult{
+		StepRef:     corev1.ObjectReference{Name: "placement-policy"},
+		Activations: activations,
+	}
 }
 
-func TestExplainer_WinnerAnalysis(t *testing.T) {
+func WeigherStep(name string, activations map[string]float64) v1alpha1.StepResult {
+	return v1alpha1.StepResult{
+		StepRef:     corev1.ObjectReference{Name: name},
+		Activations: activations,
+	}
+}
+
+// Test execution helpers
+func SetupExplainerTest(t *testing.T, decisions ...*v1alpha1.Decision) *Explainer {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
+	objects := make([]runtime.Object, len(decisions))
+	for i, decision := range decisions {
+		objects[i] = decision
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRuntimeObjects(objects...).
+		Build()
+
+	return &Explainer{Client: client}
+}
+
+func RunExplanationTest(t *testing.T, decision *v1alpha1.Decision, expectedContains []string) {
+	explainer := SetupExplainerTest(t, decision)
+	explanation, err := explainer.Explain(context.Background(), decision)
+	AssertNoError(t, err)
+	AssertExplanationContains(t, explanation, expectedContains...)
+}
+
+func RunExplanationTestWithHistory(t *testing.T, decision *v1alpha1.Decision, historyDecisions []*v1alpha1.Decision, expectedContains []string) {
+	allDecisions := append(historyDecisions, decision)
+	explainer := SetupExplainerTest(t, allDecisions...)
+	explanation, err := explainer.Explain(context.Background(), decision)
+	AssertNoError(t, err)
+	AssertExplanationContains(t, explanation, expectedContains...)
+}
+
+func AssertNoError(t *testing.T, err error) {
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+}
+
+func AssertExplanationContains(t *testing.T, explanation string, expected ...string) {
+	for _, exp := range expected {
+		if !contains(explanation, exp) {
+			t.Errorf("Expected explanation to contain '%s', but got: %s", exp, explanation)
+		}
+	}
+}
+
+func AssertExplanationNotContains(t *testing.T, explanation string, notExpected ...string) {
+	for _, notExp := range notExpected {
+		if contains(explanation, notExp) {
+			t.Errorf("Expected explanation to NOT contain '%s', but got: %s", notExp, explanation)
+		}
+	}
+}
+
+func TestExplainer_WinnerAnalysis(t *testing.T) {
 	tests := []struct {
 		name             string
 		decision         *v1alpha1.Decision
@@ -394,9 +387,9 @@ func TestExplainer_WinnerAnalysis(t *testing.T) {
 	}{
 		{
 			name: "winner analysis with score gap",
-			decision: createDecisionWithResult("test-decision", "test-resource", "host-1",
-				map[string]float64{"host-1": 2.45, "host-2": 2.10, "host-3": 1.85},
-				[]string{"host-1", "host-2", "host-3"}),
+			decision: DecisionWithScoring("test-decision", "host-1",
+				map[string]float64{"host-1": 2.45, "host-2": 2.10, "host-3": 1.85}).
+				Build(),
 			expectedContains: []string{
 				"Selected: host-1 (score: 2.45)",
 				"gap to 2nd: 0.35",
@@ -405,9 +398,9 @@ func TestExplainer_WinnerAnalysis(t *testing.T) {
 		},
 		{
 			name: "winner analysis with single host",
-			decision: createDecisionWithResult("test-decision", "test-resource", "host-1",
-				map[string]float64{"host-1": 2.45},
-				[]string{"host-1"}),
+			decision: DecisionWithScoring("test-decision", "host-1",
+				map[string]float64{"host-1": 2.45}).
+				Build(),
 			expectedContains: []string{
 				"Selected: host-1 (score: 2.45)",
 				"1 hosts evaluated",
@@ -417,34 +410,12 @@ func TestExplainer_WinnerAnalysis(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(tt.decision).
-				Build()
-
-			explainer := &Explainer{Client: client}
-
-			explanation, err := explainer.Explain(context.Background(), tt.decision)
-			if err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-				return
-			}
-
-			for _, expected := range tt.expectedContains {
-				if !contains(explanation, expected) {
-					t.Errorf("Expected explanation to contain '%s', but got: %s", expected, explanation)
-				}
-			}
+			RunExplanationTest(t, tt.decision, tt.expectedContains)
 		})
 	}
 }
 
 func TestExplainer_InputComparison(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
 	tests := []struct {
 		name             string
 		decision         *v1alpha1.Decision
@@ -452,95 +423,32 @@ func TestExplainer_InputComparison(t *testing.T) {
 	}{
 		{
 			name: "input choice confirmed",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						RawInWeights: map[string]float64{
-							"host-1": 1.20,
-							"host-2": 1.10,
-							"host-3": 0.95,
-						},
-						AggregatedOutWeights: map[string]float64{
-							"host-1": 2.45,
-							"host-2": 2.10,
-							"host-3": 1.85,
-						},
-					},
-				},
-			},
+			decision: DecisionWithInputComparison("test-decision", "host-1",
+				map[string]float64{"host-1": 1.20, "host-2": 1.10, "host-3": 0.95},
+				map[string]float64{"host-1": 2.45, "host-2": 2.10, "host-3": 1.85}).
+				Build(),
 			expectedContains: []string{
 				"Input choice confirmed: host-1 (1.20→2.45)",
 			},
 		},
 		{
 			name: "input choice overridden",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-2"),
-						RawInWeights: map[string]float64{
-							"host-1": 1.50,
-							"host-2": 1.20,
-							"host-3": 0.95,
-						},
-						AggregatedOutWeights: map[string]float64{
-							"host-1": 1.85,
-							"host-2": 2.45,
-							"host-3": 2.10,
-						},
-					},
-				},
-			},
+			decision: DecisionWithInputComparison("test-decision", "host-2",
+				map[string]float64{"host-1": 1.50, "host-2": 1.20, "host-3": 0.95},
+				map[string]float64{"host-1": 1.85, "host-2": 2.45, "host-3": 2.10}).
+				Build(),
 			expectedContains: []string{
 				"Input favored host-1 (1.50), final winner: host-2 (1.20→2.45)",
 			},
 		},
 		{
 			name: "raw weights preferred over normalized",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
-				},
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						TargetHost: stringPtr("host-1"),
-						RawInWeights: map[string]float64{
-							"host-1": 100.0,
-							"host-2": 90.0,
-						},
-						NormalizedInWeights: map[string]float64{
-							"host-1": 1.0,
-							"host-2": 0.9,
-						},
-						AggregatedOutWeights: map[string]float64{
-							"host-1": 2.45,
-							"host-2": 2.10,
-						},
-					},
-				},
-			},
+			decision: NewDecision("test-decision").
+				WithTargetHost("host-1").
+				WithRawInputWeights(map[string]float64{"host-1": 100.0, "host-2": 90.0}).
+				WithNormalizedInputWeights(map[string]float64{"host-1": 1.0, "host-2": 0.9}).
+				WithAggregatedOutputWeights(map[string]float64{"host-1": 2.45, "host-2": 2.10}).
+				Build(),
 			expectedContains: []string{
 				"Input choice confirmed: host-1 (100.00→2.45)", // Should now use raw weights (100.00)
 			},
@@ -549,24 +457,7 @@ func TestExplainer_InputComparison(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(tt.decision).
-				Build()
-
-			explainer := &Explainer{Client: client}
-
-			explanation, err := explainer.Explain(context.Background(), tt.decision)
-			if err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-				return
-			}
-
-			for _, expected := range tt.expectedContains {
-				if !contains(explanation, expected) {
-					t.Errorf("Expected explanation to contain '%s', but got: %s", expected, explanation)
-				}
-			}
+			RunExplanationTest(t, tt.decision, tt.expectedContains)
 		})
 	}
 }
@@ -1190,7 +1081,7 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 				},
 			},
 			expectedContains: []string{
-				"Chain: host-1 (1h) -> host-2 (1h) -> host-3 (0m).",
+				"Chain: host-1 (1h) -> host-2 (1h) -> host-3 (0s).",
 			},
 		},
 		{
@@ -1244,7 +1135,7 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 				},
 			},
 			expectedContains: []string{
-				"Chain (loop detected): host-1 (1h) -> host-2 (1h) -> host-1 (0m).",
+				"Chain (loop detected): host-1 (1h) -> host-2 (1h) -> host-1 (0s).",
 			},
 		},
 		{
@@ -1312,7 +1203,7 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 				},
 			},
 			expectedContains: []string{
-				"Chain: host-1 (2h; 3 decisions) -> host-2 (0m).",
+				"Chain: host-1 (2h; 3 decisions) -> host-2 (0s).",
 			},
 		},
 		{

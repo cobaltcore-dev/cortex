@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -479,7 +480,7 @@ func (e *Explainer) generateChainDescription(decisions []*v1alpha1.Decision) str
 // HostSegment represents a segment in the host chain with duration and decision count.
 type HostSegment struct {
 	host      string
-	duration  int64 // duration in minutes
+	duration  time.Duration // Full precision duration
 	decisions int
 }
 
@@ -515,11 +516,11 @@ func (e *Explainer) buildHostSegments(decisions []*v1alpha1.Decision) []HostSegm
 					endTime = decisions[i].CreationTimestamp.Time
 				}
 
-				durationMinutes := int64(endTime.Sub(startTime).Minutes())
+				duration := endTime.Sub(startTime)
 
 				segments = append(segments, HostSegment{
 					host:      currentHost,
-					duration:  durationMinutes,
+					duration:  duration,
 					decisions: i - segmentStart,
 				})
 
@@ -534,15 +535,39 @@ func (e *Explainer) buildHostSegments(decisions []*v1alpha1.Decision) []HostSegm
 	return segments
 }
 
-// formatDuration formats a duration in minutes to a human-readable format.
-func (e *Explainer) formatDuration(durationMinutes int64) string {
-	if durationMinutes >= 24*60 {
-		return fmt.Sprintf("%dd", durationMinutes/(24*60))
+// formatDuration formats a duration to a human-readable format with full precision.
+func (e *Explainer) formatDuration(duration time.Duration) string {
+	totalSeconds := int64(duration.Seconds())
+
+	if totalSeconds == 0 {
+		return "0s"
 	}
-	if durationMinutes >= 60 {
-		return fmt.Sprintf("%dh", durationMinutes/60)
+
+	days := totalSeconds / 86400
+	hours := (totalSeconds % 86400) / 3600
+	minutes := (totalSeconds % 3600) / 60
+	seconds := totalSeconds % 60
+
+	var parts []string
+
+	if days > 0 {
+		parts = append(parts, fmt.Sprintf("%dd", days))
 	}
-	return fmt.Sprintf("%dm", durationMinutes)
+	if hours > 0 {
+		parts = append(parts, fmt.Sprintf("%dh", hours))
+	}
+	if minutes > 0 {
+		parts = append(parts, fmt.Sprintf("%dm", minutes))
+	}
+	if seconds > 0 {
+		parts = append(parts, fmt.Sprintf("%ds", seconds))
+	}
+
+	result := ""
+	for _, part := range parts {
+		result += part
+	}
+	return result
 }
 
 // detectLoop checks if there are repeated hosts in the segments.
