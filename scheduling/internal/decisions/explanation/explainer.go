@@ -286,61 +286,104 @@ func (e *Explainer) buildCriticalStepsAnalysis(decision *v1alpha1.Decision) stri
 	return fmt.Sprintf("Decision driven by %d/%d pipeline steps: %s.", len(criticalSteps), totalSteps, stepList)
 }
 
-// findCriticalSteps identifies which steps had significant impact on the target host.
-// Uses a simplified heuristic based on activation magnitudes rather than complex elimination testing.
+// findWinner returns the host with the highest score and the score value.
+func (e *Explainer) findWinner(scores map[string]float64) (string, float64) {
+	if len(scores) == 0 {
+		return "", -999999.0
+	}
+
+	winner := ""
+	maxScore := -999999.0
+	for host, score := range scores {
+		if score > maxScore {
+			maxScore = score
+			winner = host
+		}
+	}
+	return winner, maxScore
+}
+
+// calculateScoresFromSteps processes step results sequentially to compute final scores.
+func (e *Explainer) calculateScoresFromSteps(inputWeights map[string]float64, stepResults []v1alpha1.StepResult) map[string]float64 {
+	if len(inputWeights) == 0 {
+		return map[string]float64{}
+	}
+
+	// Start with input values as initial scores
+	currentScores := make(map[string]float64)
+	for hostName, inputValue := range inputWeights {
+		currentScores[hostName] = inputValue
+	}
+
+	// Process each step sequentially
+	for _, stepResult := range stepResults {
+		// Apply activations and remove hosts not in this step
+		newScores := make(map[string]float64)
+		for hostName, score := range currentScores {
+			if activation, exists := stepResult.Activations[hostName]; exists {
+				// Add activation to current score
+				newScores[hostName] = score + activation
+			}
+			// Hosts not in activations are removed (don't copy to newScores)
+		}
+		currentScores = newScores
+	}
+
+	return currentScores
+}
+
+// calculateScoresWithoutStep processes step results while skipping one specific step.
+func (e *Explainer) calculateScoresWithoutStep(inputWeights map[string]float64, stepResults []v1alpha1.StepResult, skipIndex int) map[string]float64 {
+	if len(inputWeights) == 0 || skipIndex < 0 || skipIndex >= len(stepResults) {
+		return e.calculateScoresFromSteps(inputWeights, stepResults)
+	}
+
+	// Create reduced step results without the skipped step
+	reducedSteps := make([]v1alpha1.StepResult, 0, len(stepResults)-1)
+	reducedSteps = append(reducedSteps, stepResults[:skipIndex]...)
+	reducedSteps = append(reducedSteps, stepResults[skipIndex+1:]...)
+
+	return e.calculateScoresFromSteps(inputWeights, reducedSteps)
+}
+
+// findCriticalSteps determines which steps change the winning host using backward elimination.
 func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost string) []string {
 	result := decision.Status.Result
-	if result == nil || result.StepResults == nil {
+	if result == nil || result.StepResults == nil || len(result.StepResults) == 0 {
 		return []string{}
 	}
 
-	// Collect step activations for the target host
-	type stepActivation struct {
-		stepName   string
-		activation float64
-	}
-
-	var activations []stepActivation
-	for _, stepResult := range result.StepResults {
-		if activation, exists := stepResult.Activations[targetHost]; exists {
-			activations = append(activations, stepActivation{
-				stepName:   stepResult.StepRef.Name,
-				activation: activation,
-			})
-		}
-	}
-
-	if len(activations) == 0 {
+	// Get input weights (prefer normalized, fall back to raw)
+	var inputWeights map[string]float64
+	if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+		inputWeights = result.NormalizedInWeights
+	} else if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+		inputWeights = result.RawInWeights
+	} else {
 		return []string{}
 	}
 
-	// Sort by absolute activation value (highest impact first)
-	sort.Slice(activations, func(i, j int) bool {
-		absI := activations[i].activation
-		if absI < 0 {
-			absI = -absI
-		}
-		absJ := activations[j].activation
-		if absJ < 0 {
-			absJ = -absJ
-		}
-		return absI > absJ
-	})
+	// Calculate baseline scores with all steps
+	baselineScores := e.calculateScoresFromSteps(inputWeights, result.StepResults)
+	baselineWinner, _ := e.findWinner(baselineScores)
 
-	// Consider steps with significant activation as critical
-	// Use a simple threshold: steps with activation >= 0.1 or top 50% of steps
-	var criticalSteps []string
-	threshold := 0.1
-	maxSteps := (len(activations) + 1) / 2 // At least half the steps
+	if baselineWinner == "" {
+		return []string{}
+	}
 
-	for i, activation := range activations {
-		absActivation := activation.activation
-		if absActivation < 0 {
-			absActivation = -absActivation
-		}
+	criticalSteps := make([]string, 0)
 
-		if absActivation >= threshold || i < maxSteps {
-			criticalSteps = append(criticalSteps, activation.stepName)
+	// Try removing each step one by one
+	for i, stepResult := range result.StepResults {
+		// Calculate scores without this step
+		reducedScores := e.calculateScoresWithoutStep(inputWeights, result.StepResults, i)
+
+		// Find winner without this step
+		reducedWinner, _ := e.findWinner(reducedScores)
+
+		// If removing this step changes the winner, it's critical
+		if reducedWinner != baselineWinner {
+			criticalSteps = append(criticalSteps, stepResult.StepRef.Name)
 		}
 	}
 
