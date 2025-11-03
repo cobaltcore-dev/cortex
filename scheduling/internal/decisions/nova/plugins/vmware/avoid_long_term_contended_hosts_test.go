@@ -46,7 +46,7 @@ func TestAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 	step.Options.MaxCPUContentionUpperBound = 100
 	step.Options.MaxCPUContentionActivationLowerBound = 0.0
 	step.Options.MaxCPUContentionActivationUpperBound = -1.0
-	step.DB = testDB
+	step.DB = &testDB
 
 	tests := []struct {
 		name     string

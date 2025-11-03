@@ -30,7 +30,7 @@ import (
 // reconfigure the pipelines as needed.
 type DeschedulingsPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[Pipeline]
+	lib.BasePipelineController[*Pipeline]
 
 	// Monitor to pass down to all pipelines.
 	Monitor Monitor
@@ -41,12 +41,12 @@ type DeschedulingsPipelineController struct {
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DeschedulingsPipelineController) InitPipeline(steps []v1alpha1.Step) (Pipeline, error) {
-	pipeline := Pipeline{
+func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, steps []v1alpha1.Step) (*Pipeline, error) {
+	pipeline := &Pipeline{
 		CycleDetector: c.CycleDetector,
 		Monitor:       c.Monitor,
 	}
-	err := pipeline.Init(steps, supportedSteps)
+	err := pipeline.Init(ctx, steps, supportedSteps)
 	return pipeline, err
 }
 
@@ -78,7 +78,7 @@ func (c *DeschedulingsPipelineController) Reconcile(ctx context.Context, req ctr
 }
 
 func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager) error {
-	c.Delegate = c
+	c.Initializer = c
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

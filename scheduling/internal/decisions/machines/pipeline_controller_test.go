@@ -252,7 +252,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(tt.steps)
+			pipeline, err := controller.InitPipeline(t.Context(), tt.steps)
 
 			if tt.expectError && err == nil {
 				t.Error("expected error but got none")
@@ -288,4 +288,8 @@ func (m *mockMachinePipeline) Run(request ironcore.MachinePipelineRequest) (sche
 	return schedulingv1alpha1.DecisionResult{
 		TargetHost: &targetHost,
 	}, nil
+}
+
+func (m *mockMachinePipeline) Deinit(ctx context.Context) error {
+	return nil
 }

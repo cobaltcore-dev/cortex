@@ -32,8 +32,10 @@ type Pipeline struct {
 	// Monitor to use for tracking the pipeline.
 	Monitor Monitor
 
-	// Steps to execute in the descheduler.
-	steps []Step
+	// The order in which scheduler steps are applied, by their step name.
+	order []string
+	// The steps by their name.
+	steps map[string]Step
 }
 
 func (p *Pipeline) Init(
@@ -42,21 +44,32 @@ func (p *Pipeline) Init(
 	supportedSteps map[string]Step,
 ) error {
 
+	p.order = []string{}
 	// Load all steps from the configuration.
-	p.steps = make([]Step, 0, len(confedSteps))
+	p.steps = make(map[string]Step, len(confedSteps))
 	for _, stepConf := range confedSteps {
 		step, ok := supportedSteps[stepConf.Spec.Impl]
 		if !ok {
 			return errors.New("descheduler: unsupported step: " + stepConf.Spec.Impl)
 		}
-		step = monitorStep(step, p.Monitor)
+		step = monitorStep(step, stepConf, p.Monitor)
 		if err := step.Init(ctx, p.Client, stepConf); err != nil {
 			return err
 		}
-		p.steps = append(p.steps, step)
-		slog.Info(
-			"descheduler: added step",
-			"name", stepConf.Name)
+		namespacedName := stepConf.Namespace + "/" + stepConf.Name
+		p.steps[namespacedName] = step
+		p.order = append(p.order, namespacedName)
+		slog.Info("descheduler: added step", "name", namespacedName)
+	}
+	return nil
+}
+
+// Deinitialize all steps in the pipeline.
+func (p *Pipeline) Deinit(ctx context.Context) error {
+	for _, step := range p.steps {
+		if err := step.Deinit(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -71,7 +84,7 @@ func (p *Pipeline) run() map[string][]plugins.Decision {
 	var lock sync.Mutex
 	decisionsByStep := map[string][]plugins.Decision{}
 	var wg sync.WaitGroup
-	for _, step := range p.steps {
+	for namespacedName, step := range p.steps {
 		wg.Go(func() {
 			slog.Info("descheduler: running step")
 			decisions, err := step.Run()
@@ -86,7 +99,7 @@ func (p *Pipeline) run() map[string][]plugins.Decision {
 			slog.Info("descheduler: finished step")
 			lock.Lock()
 			defer lock.Unlock()
-			decisionsByStep[step.GetName()] = decisions
+			decisionsByStep[namespacedName] = decisions
 		})
 	}
 	wg.Wait()

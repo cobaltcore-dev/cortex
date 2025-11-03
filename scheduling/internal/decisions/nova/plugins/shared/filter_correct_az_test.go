@@ -153,7 +153,7 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterCorrectAZStep{}
-			step.DB = testDB
+			step.DB = &testDB
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)

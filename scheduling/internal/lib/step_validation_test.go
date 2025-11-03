@@ -128,7 +128,7 @@ func TestValidateStep(t *testing.T) {
 		SameSubjectNumberInOut: true,
 	}
 
-	validator := ValidateStep(mockStep, disabledValidations)
+	validator := validateStep(mockStep, disabledValidations)
 	if !reflect.DeepEqual(validator.DisabledValidations, disabledValidations) {
 		t.Errorf("validateStep() DisabledValidations = %v, want %v", validator.DisabledValidations, disabledValidations)
 	}

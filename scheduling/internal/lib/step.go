@@ -55,7 +55,7 @@ type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 	// The kubernetes client to use.
 	Client client.Client
 	// Initialized database connection, if configured through the step spec.
-	DB db.DB
+	DB *db.DB
 }
 
 // Init the step with the database and options.
@@ -74,7 +74,7 @@ func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Cl
 		if err != nil {
 			return err
 		}
-		s.DB = *authenticatedDB
+		s.DB = authenticatedDB
 	}
 
 	s.Client = client

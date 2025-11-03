@@ -26,8 +26,8 @@ type StepMonitor[RequestType PipelineRequest] struct {
 
 	// The pipeline name to which this step belongs.
 	pipelineName string
-	// The namespaced name of this step.
-	namespacedName string
+	// The name of this step.
+	stepName string
 
 	// The wrapped scheduler step to monitor.
 	Step Step[RequestType]
@@ -53,7 +53,7 @@ func (s *StepMonitor[RequestType]) Deinit(ctx context.Context) error {
 }
 
 // Schedule using the wrapped step and measure the time it takes.
-func MonitorStep[RequestType PipelineRequest](
+func monitorStep[RequestType PipelineRequest](
 	ctx context.Context,
 	client client.Client,
 	step v1alpha1.Step,
@@ -61,20 +61,20 @@ func MonitorStep[RequestType PipelineRequest](
 	m PipelineMonitor,
 ) *StepMonitor[RequestType] {
 
-	namespacedName := step.Namespace + "/" + step.Name
+	stepName := step.Namespace + "/" + step.Name
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
 		runTimer = m.stepRunTimer.
-			WithLabelValues(m.PipelineName, namespacedName)
+			WithLabelValues(m.PipelineName, stepName)
 	}
 	var removedSubjectsObserver prometheus.Observer
 	if m.stepRemovedSubjectsObserver != nil {
 		removedSubjectsObserver = m.stepRemovedSubjectsObserver.
-			WithLabelValues(m.PipelineName, namespacedName)
+			WithLabelValues(m.PipelineName, stepName)
 	}
 	return &StepMonitor[RequestType]{
 		Step:                    impl,
-		namespacedName:          namespacedName,
+		stepName:                stepName,
 		pipelineName:            m.PipelineName,
 		runTimer:                runTimer,
 		stepSubjectWeight:       m.stepSubjectWeight,
@@ -97,7 +97,7 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		return nil, err
 	}
 	traceLog.Info(
-		"scheduler: finished step", "name", s.namespacedName,
+		"scheduler: finished step", "name", s.stepName,
 		"inWeights", inWeights, "outWeights", stepResult.Activations,
 	)
 
@@ -105,12 +105,12 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 	if s.stepSubjectWeight != nil {
 		for subject, weight := range stepResult.Activations {
 			s.stepSubjectWeight.
-				WithLabelValues(s.pipelineName, subject, s.namespacedName).
+				WithLabelValues(s.pipelineName, subject, s.stepName).
 				Add(weight)
 			if weight != 0.0 {
 				traceLog.Info(
 					"scheduler: modified subject weight",
-					"name", s.namespacedName, "weight", weight,
+					"name", s.stepName, "weight", weight,
 				)
 			}
 		}
@@ -123,7 +123,7 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 	if nSubjectsRemoved < 0 {
 		traceLog.Info(
 			"scheduler: removed subjects",
-			"name", s.namespacedName, "count", nSubjectsRemoved,
+			"name", s.stepName, "count", nSubjectsRemoved,
 		)
 	}
 	if s.removedSubjectsObserver != nil {
@@ -149,12 +149,12 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		originalIdx := slices.Index(subjectsIn, subjectsOut[idx])
 		if s.stepReorderingsObserver != nil {
 			o := s.stepReorderingsObserver.
-				WithLabelValues(s.pipelineName, s.namespacedName, strconv.Itoa(idx))
+				WithLabelValues(s.pipelineName, s.stepName, strconv.Itoa(idx))
 			o.Observe(float64(originalIdx))
 		}
 		traceLog.Info(
 			"scheduler: reordered subject",
-			"name", s.namespacedName, "subject", subjectsOut[idx],
+			"name", s.stepName, "subject", subjectsOut[idx],
 			"originalIdx", originalIdx, "newIdx", idx,
 		)
 	}
@@ -165,7 +165,7 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		if statData.Subjects == nil {
 			continue
 		}
-		msg := "scheduler: statistics for step " + s.namespacedName
+		msg := "scheduler: statistics for step " + s.stepName
 		msg += " -- " + statName + ""
 		var beforeBuilder strings.Builder
 		for i, subject := range subjectsIn {
@@ -207,18 +207,18 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		if err != nil {
 			traceLog.Error(
 				"scheduler: error calculating impact",
-				"name", s.namespacedName, "stat", statName, "error", err,
+				"name", s.stepName, "stat", statName, "error", err,
 			)
 			continue
 		}
 		if s.stepImpactObserver != nil {
 			stepImpactObserver := s.stepImpactObserver.
-				WithLabelValues(s.pipelineName, s.namespacedName, statName, statData.Unit)
+				WithLabelValues(s.pipelineName, s.stepName, statName, statData.Unit)
 			stepImpactObserver.Observe(impact)
 		}
 		traceLog.Info(
 			"scheduler: impact for step",
-			"name", s.namespacedName, "stat", statName,
+			"name", s.stepName, "stat", statName,
 			"unit", statData.Unit, "impact", impact,
 		)
 	}

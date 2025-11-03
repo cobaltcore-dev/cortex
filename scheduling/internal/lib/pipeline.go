@@ -51,9 +51,9 @@ func NewPipeline[RequestType PipelineRequest](
 	client client.Client,
 	supportedSteps map[string]func() Step[RequestType],
 	confedSteps []v1alpha1.Step,
-	stepWrappers []StepWrapper[RequestType],
 	monitor PipelineMonitor,
 ) (Pipeline[RequestType], error) {
+
 	// Load all steps from the configuration.
 	stepsByName := make(map[string]Step[RequestType], len(confedSteps))
 	order := []string{}
@@ -65,13 +65,10 @@ func NewPipeline[RequestType PipelineRequest](
 			return nil, errors.New("unsupported scheduler step impl: " + stepConfig.Spec.Impl)
 		}
 		step := makeStep()
-		// Apply the step wrappers to the step.
-		for _, wrapper := range stepWrappers {
-			var err error
-			if step, err = wrapper(ctx, client, stepConfig, step); err != nil {
-				return nil, errors.New("failed to wrap scheduler step: " + err.Error())
-			}
+		if stepConfig.Spec.Type == v1alpha1.StepTypeWeigher && stepConfig.Spec.Weigher != nil {
+			step = validateStep(step, stepConfig.Spec.Weigher.DisabledValidations)
 		}
+		step = monitorStep(ctx, client, stepConfig, step, monitor)
 		if err := step.Init(ctx, client, stepConfig); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}

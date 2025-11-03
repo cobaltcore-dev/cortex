@@ -433,7 +433,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			t.Logf("Running test case: %s", tt.name)
 			step := &FilterHasEnoughCapacity{}
 			step.Client = testClient() // Override the real client with our fake client
-			step.DB = testDB
+			step.DB = &testDB
 			// Override the real client with our fake client after Init()
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
@@ -571,7 +571,7 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 
 	step := &FilterHasEnoughCapacity{}
 	step.Client = fakeClient // Override the real client with our fake client
-	step.DB = testDB
+	step.DB = &testDB
 
 	// Test case: Request that would fit on host1 without reservations, but not with reservations
 	request := api.ExternalSchedulerRequest{
@@ -840,7 +840,7 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 
 			step := &FilterHasEnoughCapacity{}
 			step.Client = fakeClient // Override the real client with our fake client
-			step.DB = testDB
+			step.DB = &testDB
 
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {

@@ -19,7 +19,7 @@ func (f *NoopFilter) Init(ctx context.Context, client client.Client, step v1alph
 	return nil
 }
 
-func (m *NoopFilter) Deinit() error {
+func (m *NoopFilter) Deinit(ctx context.Context) error {
 	return nil
 }
 

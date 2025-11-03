@@ -131,7 +131,7 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &ResourceBalancingStep{}
 			step.Options = tt.opts
-			step.DB = testDB
+			step.DB = &testDB
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)

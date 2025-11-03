@@ -37,6 +37,9 @@ func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step 
 	m.initialized = true
 	return nil
 }
+func (m *mockPipelineStep) Deinit(ctx context.Context) error {
+	return nil
+}
 
 func TestPipeline_Init(t *testing.T) {
 	tests := []struct {
@@ -109,7 +112,7 @@ func TestPipeline_Init(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pipeline := &Pipeline{}
 
-			err := pipeline.Init(tt.confedSteps, tt.supportedSteps)
+			err := pipeline.Init(t.Context(), tt.confedSteps, tt.supportedSteps)
 			if tt.expectedError {
 				if err == nil {
 					t.Fatalf("expected error during initialization, got none")
@@ -142,6 +145,7 @@ func TestPipeline_run(t *testing.T) {
 	tests := []struct {
 		name            string
 		steps           map[string]Step
+		order           []string
 		expectedResults map[string][]plugins.Decision
 	}{
 		{
@@ -153,6 +157,7 @@ func TestPipeline_run(t *testing.T) {
 					},
 				},
 			},
+			order: []string{"test-step"},
 			expectedResults: map[string][]plugins.Decision{
 				"test-step": {
 					{VMID: "vm1", Reason: "test reason", Host: "host1"},
@@ -166,6 +171,7 @@ func TestPipeline_run(t *testing.T) {
 					runError: errors.New("step failed"),
 				},
 			},
+			order:           []string{"failing-step"},
 			expectedResults: map[string][]plugins.Decision{},
 		},
 		{
@@ -175,6 +181,7 @@ func TestPipeline_run(t *testing.T) {
 					runError: ErrStepSkipped,
 				},
 			},
+			order:           []string{"skipped-step"},
 			expectedResults: map[string][]plugins.Decision{},
 		},
 		{
@@ -191,6 +198,7 @@ func TestPipeline_run(t *testing.T) {
 					},
 				},
 			},
+			order: []string{"step1", "step2"},
 			expectedResults: map[string][]plugins.Decision{
 				"step1": {
 					{VMID: "vm1", Reason: "reason1", Host: "host1"},
@@ -204,12 +212,9 @@ func TestPipeline_run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stepSlice := []Step{}
-			for _, step := range tt.steps {
-				stepSlice = append(stepSlice, step)
-			}
 			pipeline := &Pipeline{
-				steps: stepSlice,
+				steps: tt.steps,
+				order: tt.order,
 			}
 
 			results := pipeline.run()
@@ -329,13 +334,13 @@ func TestSupportedSteps(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkPipeline_run(b *testing.B) {
-	steps := []Step{
-		&mockPipelineStep{
+	steps := map[string]Step{
+		"step1": &mockPipelineStep{
 			decisions: []plugins.Decision{
 				{VMID: "vm1", Reason: "bench reason", Host: "host1"},
 			},
 		},
-		&mockPipelineStep{
+		"step2": &mockPipelineStep{
 			decisions: []plugins.Decision{
 				{VMID: "vm2", Reason: "bench reason", Host: "host2"},
 			},
@@ -344,6 +349,7 @@ func BenchmarkPipeline_run(b *testing.B) {
 
 	pipeline := &Pipeline{
 		steps: steps,
+		order: []string{"step1", "step2"},
 	}
 
 	b.ResetTimer()

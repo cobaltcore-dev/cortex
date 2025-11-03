@@ -104,8 +104,12 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DecisionPipelineController) InitPipeline(steps []v1alpha1.Step) (lib.Pipeline[ironcore.MachinePipelineRequest], error) {
-	return NewPipeline(steps, c.Monitor)
+func (c *DecisionPipelineController) InitPipeline(
+	ctx context.Context,
+	steps []v1alpha1.Step,
+) (lib.Pipeline[ironcore.MachinePipelineRequest], error) {
+
+	return lib.NewPipeline(ctx, c.Client, supportedSteps, steps, c.Monitor)
 }
 
 func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
@@ -167,7 +171,7 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
-	c.Delegate = c
+	c.Initializer = c
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

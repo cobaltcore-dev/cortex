@@ -35,7 +35,7 @@ func (s *StepValidator[RequestType]) Deinit(ctx context.Context) error {
 }
 
 // Validate the wrapped step with the database and options.
-func ValidateStep[RequestType PipelineRequest](step Step[RequestType], disabledValidations v1alpha1.DisabledValidationsSpec) *StepValidator[RequestType] {
+func validateStep[RequestType PipelineRequest](step Step[RequestType], disabledValidations v1alpha1.DisabledValidationsSpec) *StepValidator[RequestType] {
 	return &StepValidator[RequestType]{
 		Step:                step,
 		DisabledValidations: disabledValidations,

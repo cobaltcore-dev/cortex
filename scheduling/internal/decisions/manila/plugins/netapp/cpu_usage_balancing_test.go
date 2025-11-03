@@ -46,7 +46,7 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
 	step.Options.MaxCPUUsageUpperBound = 100.0
 	step.Options.MaxCPUUsageActivationLowerBound = 0.0
 	step.Options.MaxCPUUsageActivationUpperBound = -1.0
-	step.DB = testDB
+	step.DB = &testDB
 
 	tests := []struct {
 		name     string

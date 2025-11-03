@@ -4,11 +4,9 @@
 package kvm
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/kvm"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
@@ -131,16 +129,9 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 				}
 			}
 
-			// Initialize the step
-			opts := conf.NewRawOpts(`{
-				"maxStealPctOverObservedTimeSpan": ` + formatFloat(tt.threshold) + `
-			}`)
-
 			step := &AvoidHighStealPctStep{}
-			err = step.Init(testDB, opts)
-			if err != nil {
-				t.Fatalf("failed to initialize step: %v", err)
-			}
+			step.Options.MaxStealPctOverObservedTimeSpan = tt.threshold
+			step.DB = &testDB
 
 			// Run the step
 			decisions, err := step.Run()
@@ -213,65 +204,6 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestAvoidHighStealPctStep_Validate(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	tests := []struct {
-		name      string
-		options   string
-		expectErr bool
-	}{
-		{
-			name:      "valid options",
-			options:   `{"maxStealPctOverObservedTimeSpan": 75.0}`,
-			expectErr: false,
-		},
-		{
-			name:      "valid zero threshold (should skip)",
-			options:   `{"maxStealPctOverObservedTimeSpan": 0.0}`,
-			expectErr: false,
-		},
-		{
-			name:      "valid negative threshold (should skip)",
-			options:   `{"maxStealPctOverObservedTimeSpan": -1.0}`,
-			expectErr: false,
-		},
-		{
-			name:      "missing threshold",
-			options:   `{}`,
-			expectErr: false, // Missing threshold defaults to 0, which skips execution
-		},
-		{
-			name:      "invalid JSON",
-			options:   `{"maxStealPctOverObservedTimeSpan": invalid}`,
-			expectErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			opts := conf.NewRawOpts(tt.options)
-			step := &AvoidHighStealPctStep{}
-			err := step.Init(testDB, opts)
-
-			if tt.expectErr && err == nil {
-				t.Error("expected error but got none")
-			}
-			if !tt.expectErr && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-		})
-	}
-}
-
-// Helper functions
-func formatFloat(f float64) string {
-	return fmt.Sprintf("%.3f", f)
 }
 
 func equalSlices(a, b []string) bool {

@@ -40,7 +40,7 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	step.Options.AvgCPUUsageUpperBound = 100.0
 	step.Options.AvgCPUUsageActivationLowerBound = 0.0
 	step.Options.AvgCPUUsageActivationUpperBound = -0.5
-	step.DB = testDB
+	step.DB = &testDB
 
 	tests := []struct {
 		name           string

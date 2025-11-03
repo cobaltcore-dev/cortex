@@ -68,6 +68,8 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 type StepMonitor struct {
 	// The step being monitored.
 	step Step
+	// The name of this step.
+	stepName string
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
 	// A counter to measure how many vms are descheduled by this step.
@@ -75,30 +77,32 @@ type StepMonitor struct {
 }
 
 // Monitor a step by wrapping it with a StepMonitor.
-func monitorStep(step Step, monitor Monitor) StepMonitor {
+func monitorStep(step Step, conf v1alpha1.Step, monitor Monitor) StepMonitor {
+	name := conf.Namespace + "/" + conf.Name
 	var runTimer prometheus.Observer
 	if monitor.stepRunTimer != nil {
-		runTimer = monitor.stepRunTimer.WithLabelValues(step.GetName())
+		runTimer = monitor.stepRunTimer.WithLabelValues(name)
 	}
 	var descheduledCounter prometheus.Counter
 	if monitor.stepDeschedulingCounter != nil {
-		descheduledCounter = monitor.stepDeschedulingCounter.WithLabelValues(step.GetName())
+		descheduledCounter = monitor.stepDeschedulingCounter.WithLabelValues(name)
 	}
 	return StepMonitor{
 		step:               step,
+		stepName:           name,
 		runTimer:           runTimer,
 		descheduledCounter: descheduledCounter,
 	}
 }
 
-// Get the name of the step being monitored.
-func (m StepMonitor) GetName() string {
-	return m.step.GetName()
-}
-
 // Initialize the step with the database and options.
 func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
-	return m.step.Init(opts)
+	return m.step.Init(ctx, client, step)
+}
+
+// Deinitialize the step, cleaning up any resources if needed.
+func (m StepMonitor) Deinit(ctx context.Context) error {
+	return m.step.Deinit(ctx)
 }
 
 // Run the step and measure its execution time.
