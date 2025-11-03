@@ -15,16 +15,16 @@ import (
 
 // Options for the scheduling step, given through the step config in the service yaml file.
 type GeneralPurposeBalancingStepOpts struct {
-	RAMUtilizedAfterLowerBoundPct        float64 `json:"ramUtilizedAfterLowerBoundPct"` // -> mapped to ActivationLowerBound
-	RAMUtilizedAfterUpperBoundPct        float64 `json:"ramUtilizedAfterUpperBoundPct"` // -> mapped to ActivationUpperBound
-	RAMUtilizedAfterActivationLowerBound float64 `json:"ramUtilizedAfterActivationLowerBound"`
-	RAMUtilizedAfterActivationUpperBound float64 `json:"ramUtilizedAfterActivationUpperBound"`
+	RAMUtilizedLowerBoundPct        float64 `json:"ramUtilizedLowerBoundPct"` // -> mapped to ActivationLowerBound
+	RAMUtilizedUpperBoundPct        float64 `json:"ramUtilizedUpperBoundPct"` // -> mapped to ActivationUpperBound
+	RAMUtilizedActivationLowerBound float64 `json:"ramUtilizedActivationLowerBound"`
+	RAMUtilizedActivationUpperBound float64 `json:"ramUtilizedActivationUpperBound"`
 }
 
 func (o GeneralPurposeBalancingStepOpts) Validate() error {
 	// Avoid zero-division during min-max scaling.
-	if o.RAMUtilizedAfterLowerBoundPct == o.RAMUtilizedAfterUpperBoundPct {
-		return errors.New("ramUtilizedAfterLowerBound and ramUtilizedAfterUpperBound must not be equal")
+	if o.RAMUtilizedLowerBoundPct == o.RAMUtilizedUpperBoundPct {
+		return errors.New("ramUtilizedLowerBound and ramUtilizedUpperBound must not be equal")
 	}
 	return nil
 }
@@ -48,7 +48,7 @@ func (s *GeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.Ext
 		return result, nil
 	}
 
-	result.Statistics["ram utilized after"] = s.PrepareStats(request, "%")
+	result.Statistics["ram utilized"] = s.PrepareStats(request, "%")
 
 	var hostUtilizations []shared.HostUtilization
 	group := "scheduler-nova"
@@ -62,18 +62,15 @@ func (s *GeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.Ext
 		if _, ok := result.Activations[hostUtilization.ComputeHost]; !ok {
 			continue
 		}
-		after := hostUtilization.RAMUtilizedPct -
-			(float64(request.Spec.Data.Flavor.Data.MemoryMB) /
-				hostUtilization.TotalRAMAllocatableMB * 100)
 		result.
-			Statistics["ram utilized after"].
-			Subjects[hostUtilization.ComputeHost] = after
+			Statistics["ram utilized"].
+			Subjects[hostUtilization.ComputeHost] = hostUtilization.RAMUtilizedPct
 		result.Activations[hostUtilization.ComputeHost] = scheduling.MinMaxScale(
-			after,
-			s.Options.RAMUtilizedAfterLowerBoundPct,
-			s.Options.RAMUtilizedAfterUpperBoundPct,
-			s.Options.RAMUtilizedAfterActivationLowerBound,
-			s.Options.RAMUtilizedAfterActivationUpperBound,
+			hostUtilization.RAMUtilizedPct,
+			s.Options.RAMUtilizedLowerBoundPct,
+			s.Options.RAMUtilizedUpperBoundPct,
+			s.Options.RAMUtilizedActivationLowerBound,
+			s.Options.RAMUtilizedActivationUpperBound,
 		)
 	}
 

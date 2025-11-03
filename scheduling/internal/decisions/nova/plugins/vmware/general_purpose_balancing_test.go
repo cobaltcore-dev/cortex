@@ -22,16 +22,16 @@ func TestGeneralPurposeBalancingStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid options",
 			opts: GeneralPurposeBalancingStepOpts{
-				RAMUtilizedAfterLowerBoundPct: 20.0,
-				RAMUtilizedAfterUpperBoundPct: 80.0,
+				RAMUtilizedLowerBoundPct: 20.0,
+				RAMUtilizedUpperBoundPct: 80.0,
 			},
 			wantErr: false,
 		},
 		{
 			name: "equal bounds - should error",
 			opts: GeneralPurposeBalancingStepOpts{
-				RAMUtilizedAfterLowerBoundPct: 50.0,
-				RAMUtilizedAfterUpperBoundPct: 50.0,
+				RAMUtilizedLowerBoundPct: 50.0,
+				RAMUtilizedUpperBoundPct: 50.0,
 			},
 			wantErr: true,
 		},
@@ -63,21 +63,19 @@ func TestGeneralPurposeBalancingStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	// Insert test data
 	hostUtilizations := []any{
 		&shared.HostUtilization{
-			ComputeHost:           "host1",
-			RAMUtilizedPct:        60.0,
-			TotalRAMAllocatableMB: 32768.0,
+			ComputeHost:    "host1",
+			RAMUtilizedPct: 30.0,
 		},
 		&shared.HostUtilization{
-			ComputeHost:           "host2",
-			RAMUtilizedPct:        40.0,
-			TotalRAMAllocatableMB: 16384.0,
+			ComputeHost:    "host2",
+			RAMUtilizedPct: 60.0,
 		},
 		&shared.HostUtilization{
-			ComputeHost:           "host3",
-			RAMUtilizedPct:        80.0,
-			TotalRAMAllocatableMB: 65536.0,
+			ComputeHost:    "host3",
+			RAMUtilizedPct: 90.0,
 		},
 	}
 	if err := testDB.Insert(hostUtilizations...); err != nil {
@@ -97,6 +95,10 @@ func TestGeneralPurposeBalancingStep_Run(t *testing.T) {
 			ComputeHost: "host3",
 			Traits:      "HANA_EXCLUSIVE,OTHER_TRAIT",
 		},
+		&shared.HostCapabilities{
+			ComputeHost: "host4",
+			Traits:      "GENERAL_PURPOSE",
+		},
 	}
 	if err := testDB.Insert(hostCapabilities...); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -104,17 +106,18 @@ func TestGeneralPurposeBalancingStep_Run(t *testing.T) {
 
 	step := &GeneralPurposeBalancingStep{}
 	step.Options = GeneralPurposeBalancingStepOpts{
-		RAMUtilizedAfterLowerBoundPct:        20.0,
-		RAMUtilizedAfterUpperBoundPct:        70.0,
-		RAMUtilizedAfterActivationLowerBound: 0.0,
-		RAMUtilizedAfterActivationUpperBound: 1.0,
+		RAMUtilizedLowerBoundPct:        20.0,
+		RAMUtilizedUpperBoundPct:        80.0,
+		RAMUtilizedActivationLowerBound: 0.0,
+		RAMUtilizedActivationUpperBound: 1.0,
 	}
 	step.DB = &testDB
 
 	tests := []struct {
-		name          string
-		request       api.ExternalSchedulerRequest
-		expectedHosts map[string]bool // true if host should have modified activation
+		name                string
+		request             api.ExternalSchedulerRequest
+		expectedActivations map[string]float64 // expected activation values
+		expectStatistics    bool               // whether statistics should be present
 	}{
 		{
 			name: "General purpose VM on VMware",
@@ -136,11 +139,12 @@ func TestGeneralPurposeBalancingStep_Run(t *testing.T) {
 					{ComputeHost: "host3"},
 				},
 			},
-			expectedHosts: map[string]bool{
-				"host1": true,  // should get activation (60% - 12.5% = 47.5%, in range 20-70%)
-				"host2": false, // should be no-effect (40% - 25% = 15%, below 20% range)
-				"host3": false, // HANA_EXCLUSIVE host should be no-effect
+			expectedActivations: map[string]float64{
+				"host1": 0.16666666666666666, // (30-20)/(80-20) = 10/60 = 0.167
+				"host2": 0.6666666666666666,  // (60-20)/(80-20) = 40/60 = 0.667
+				"host3": 0.0,                 // HANA_EXCLUSIVE host should be no-effect
 			},
+			expectStatistics: true,
 		},
 		{
 			name: "HANA flavor should be skipped",
@@ -161,10 +165,11 @@ func TestGeneralPurposeBalancingStep_Run(t *testing.T) {
 					{ComputeHost: "host2"},
 				},
 			},
-			expectedHosts: map[string]bool{
-				"host1": false, // should be no-effect
-				"host2": false, // should be no-effect
+			expectedActivations: map[string]float64{
+				"host1": 0.0, // should be no-effect
+				"host2": 0.0, // should be no-effect
 			},
+			expectStatistics: false,
 		},
 		{
 			name: "Non-VMware VM should be skipped",
@@ -185,10 +190,36 @@ func TestGeneralPurposeBalancingStep_Run(t *testing.T) {
 					{ComputeHost: "host2"},
 				},
 			},
-			expectedHosts: map[string]bool{
-				"host1": false, // should be no-effect
-				"host2": false, // should be no-effect
+			expectedActivations: map[string]float64{
+				"host1": 0.0, // should be no-effect
+				"host2": 0.0, // should be no-effect
 			},
+			expectStatistics: false,
+		},
+		{
+			name: "Host without capabilities gets no-effect",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								MemoryMB: 2048,
+							},
+						},
+					},
+				},
+				VMware: true,
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host_unknown"}, // no capabilities for this host
+				},
+			},
+			expectedActivations: map[string]float64{
+				"host1":        0.16666666666666666, // normal scaling
+				"host_unknown": 0.0,                 // no-effect due to missing capabilities
+			},
+			expectStatistics: true,
 		},
 	}
 
@@ -203,32 +234,39 @@ func TestGeneralPurposeBalancingStep_Run(t *testing.T) {
 				t.Fatal("expected result, got nil")
 			}
 
-			for host, shouldHaveActivation := range tt.expectedHosts {
+			// Check activations
+			for host, expectedActivation := range tt.expectedActivations {
 				activation, ok := result.Activations[host]
 				if !ok {
 					t.Errorf("expected activation for host %s", host)
 					continue
 				}
 
-				if shouldHaveActivation {
-					// For general purpose balancing, we expect some calculated activation based on RAM utilization
-					if activation == 0 {
-						t.Errorf("expected non-zero activation for host %s, got %f", host, activation)
-					}
-				} else {
-					// Should be no-effect (0)
-					if activation != 0 {
-						t.Errorf("expected no-effect (0) activation for host %s, got %f", host, activation)
-					}
+				// Use a small epsilon for floating point comparison
+				epsilon := 1e-10
+				if abs(activation-expectedActivation) > epsilon {
+					t.Errorf("expected activation %.10f for host %s, got %.10f", expectedActivation, host, activation)
 				}
 			}
 
 			// Check statistics
-			if tt.name == "General purpose VM on VMware" {
-				if _, ok := result.Statistics["ram utilized after"]; !ok {
-					t.Error("expected 'ram utilized after' statistic")
+			if tt.expectStatistics {
+				if _, ok := result.Statistics["ram utilized"]; !ok {
+					t.Error("expected 'ram utilized' statistic")
+				}
+			} else {
+				if _, ok := result.Statistics["ram utilized"]; ok {
+					t.Error("did not expect 'ram utilized' statistic")
 				}
 			}
 		})
 	}
+}
+
+// Helper function for floating point comparison
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }

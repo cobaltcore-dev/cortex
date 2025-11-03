@@ -339,22 +339,22 @@ spec:
   # the datasources. This should be changed to use the hypervisor CRD.
   knowledges: []
 ---
-# apiVersion: scheduling.cortex/v1alpha1
-# kind: Step
-# metadata:
-#   name: avoid-high-steal-pct
-# spec:
-#   operator: cortex-nova
-#   # TODO: Remove this database reference once the scheduler
-#   # step doesn't need it anymore.
-#   databaseSecretRef:
-#     name: cortex-nova-postgres
-#     namespace: {{ .Release.Namespace }}
-#   type: descheduler
-#   impl: avoid_high_steal_pct
-#   description: |
-#     This step will deschedule VMs once they reach this CPU steal percentage over
-#     the observed time span.
-#   knowledges: []
-#   opts:
-#     maxStealPctOverObservedTimeSpan: 20.0
+apiVersion: scheduling.cortex/v1alpha1
+kind: Step
+metadata:
+  name: avoid-high-steal-pct
+spec:
+  operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  type: descheduler
+  impl: avoid_high_steal_pct
+  description: |
+    This step will deschedule VMs once they reach this CPU steal percentage over
+    the observed time span.
+  knowledges: []
+  opts:
+    maxStealPctOverObservedTimeSpan: 20.0

@@ -121,6 +121,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	}
 	// Delegate to the parent controller which knows how to create the pipeline.
 	if existingPipeline, exists := c.Pipelines[obj.Name]; exists {
+		log.Info("deinitializing existing pipeline before reinit", "pipelineName", obj.Name)
 		if err := existingPipeline.Deinit(ctx); err != nil {
 			log.Error(err, "failed to deinitialize existing pipeline", "pipelineName", obj.Name)
 		}
