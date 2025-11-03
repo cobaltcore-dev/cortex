@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type Explainer struct {
@@ -98,6 +100,15 @@ func (e *Explainer) buildHistoryComparison(ctx context.Context, decision *v1alph
 		Namespace: lastDecisionRef.Namespace,
 		Name:      lastDecisionRef.Name,
 	}, lastDecision); err != nil {
+		logger := log.FromContext(ctx)
+		if apierrors.IsNotFound(err) {
+			logger.Info("History decision not found, skipping history comparison",
+				"decision", lastDecisionRef.Name,
+				"namespace", lastDecisionRef.Namespace,
+				"uid", lastDecisionRef.UID)
+			return "", nil // Skip history comparison instead of failing
+		}
+		// For other errors, still fail
 		return "", err
 	}
 
@@ -405,6 +416,7 @@ func (e *Explainer) buildGlobalChainAnalysis(ctx context.Context, decision *v1al
 // fetchDecisionChain retrieves all decisions in the history chain.
 func (e *Explainer) fetchDecisionChain(ctx context.Context, decision *v1alpha1.Decision) ([]*v1alpha1.Decision, error) {
 	var chainDecisions []*v1alpha1.Decision
+	logger := log.FromContext(ctx)
 
 	// Add all historical decisions
 	if decision.Status.History != nil {
@@ -414,6 +426,14 @@ func (e *Explainer) fetchDecisionChain(ctx context.Context, decision *v1alpha1.D
 				Namespace: ref.Namespace,
 				Name:      ref.Name,
 			}, histDecision); err != nil {
+				if apierrors.IsNotFound(err) {
+					logger.Info("History decision not found, skipping from chain analysis",
+						"decision", ref.Name,
+						"namespace", ref.Namespace,
+						"uid", ref.UID)
+					continue // Skip missing decisions instead of failing
+				}
+				// For other errors, still fail
 				return nil, err
 			}
 			chainDecisions = append(chainDecisions, histDecision)

@@ -96,8 +96,10 @@ func TestExplainer_Explain(t *testing.T) {
 	}
 }
 
-func TestExplainer_Explain_HistoryDecisionNotFound(t *testing.T) {
+func TestExplainer_Explain_HistoryDecisionNotFound_GracefulHandling(t *testing.T) {
 	decision := NewDecision("test-decision").
+		WithResourceID("test-resource").
+		WithTargetHost("host-1").
 		WithHistory([]corev1.ObjectReference{
 			{
 				Kind:      "Decision",
@@ -109,9 +111,57 @@ func TestExplainer_Explain_HistoryDecisionNotFound(t *testing.T) {
 		Build()
 
 	explainer := SetupExplainerTest(t, decision)
-	_, err := explainer.Explain(context.Background(), decision)
-	if err == nil {
-		t.Error("Expected error when previous decision not found, but got none")
+	explanation, err := explainer.Explain(context.Background(), decision)
+
+	// Should NOT error anymore - graceful handling
+	if err != nil {
+		t.Errorf("Expected no error with graceful handling, but got: %v", err)
+	}
+
+	// Should contain context but not history comparison
+	if !contains(explanation, "Decision #2 for this nova server") {
+		t.Errorf("Expected explanation to contain context, but got: %s", explanation)
+	}
+
+	if contains(explanation, "Previous target host") {
+		t.Errorf("Expected explanation to NOT contain history comparison when decision is missing, but got: %s", explanation)
+	}
+}
+
+func TestExplainer_MissingHistoryDecisions_ChainAnalysis(t *testing.T) {
+	// Test that chain analysis works when some history decisions are missing
+	decision := NewDecision("current-decision").
+		WithResourceID("test-resource").
+		WithTargetHost("host-3").
+		WithHistory([]corev1.ObjectReference{
+			{Kind: "Decision", Namespace: "default", Name: "decision-1", UID: "uid-1"},
+			{Kind: "Decision", Namespace: "default", Name: "missing-decision", UID: "missing-uid"},
+			{Kind: "Decision", Namespace: "default", Name: "decision-3", UID: "uid-3"},
+		}).
+		Build()
+
+	// Only provide decision-1 and decision-3, missing decision-2
+	availableDecision := NewDecision("decision-1").
+		WithUID("uid-1").
+		WithTargetHost("host-1").
+		WithCreationTimestamp(time.Now().Add(-2 * time.Hour)).
+		Build()
+
+	explainer := SetupExplainerTest(t, decision, availableDecision)
+	explanation, err := explainer.Explain(context.Background(), decision)
+
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+
+	// Should contain context with full history count
+	if !contains(explanation, "Decision #4 for this nova server") {
+		t.Errorf("Expected explanation to contain context, but got: %s", explanation)
+	}
+
+	// Chain analysis should work with available decisions
+	if !contains(explanation, "Chain:") {
+		t.Errorf("Expected explanation to contain chain analysis, but got: %s", explanation)
 	}
 }
 
