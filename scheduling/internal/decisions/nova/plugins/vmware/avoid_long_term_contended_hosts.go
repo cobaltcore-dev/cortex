@@ -48,6 +48,12 @@ type AvoidLongTermContendedHostsStep struct {
 // Downvote hosts that are highly contended.
 func (s *AvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
+
+	if !request.VMware {
+		slog.Debug("Skipping general purpose balancing step for non-VMware VM")
+		return result, nil
+	}
+
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 

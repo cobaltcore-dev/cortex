@@ -19,6 +19,8 @@ var supportedSteps = map[string]func() NovaStep{
 	"vmware_anti_affinity_noisy_projects":     func() NovaStep { return &vmware.AntiAffinityNoisyProjectsStep{} },
 	"vmware_avoid_long_term_contended_hosts":  func() NovaStep { return &vmware.AvoidLongTermContendedHostsStep{} },
 	"vmware_avoid_short_term_contended_hosts": func() NovaStep { return &vmware.AvoidShortTermContendedHostsStep{} },
+	"vmware_hana_binpacking":                  func() NovaStep { return &vmware.HanaBinpackingStep{} },
+	"vmware_general_purpose_balancing":        func() NovaStep { return &vmware.GeneralPurposeBalancingStep{} },
 	// Shared steps
 	"shared_resource_balancing":   func() NovaStep { return &shared.ResourceBalancingStep{} },
 	"filter_has_accelerators":     func() NovaStep { return &shared.FilterHasAcceleratorsStep{} },
