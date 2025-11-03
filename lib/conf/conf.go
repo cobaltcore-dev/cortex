@@ -18,23 +18,13 @@ type SSOConfig struct {
 	SelfSigned bool `json:"selfSigned,omitempty"`
 }
 
-type DBReconnectConfig struct {
-	// The interval between liveness pings to the database.
-	LivenessPingIntervalSeconds int `json:"livenessPingIntervalSeconds"`
-	// The interval between reconnection attempts on connection loss.
-	RetryIntervalSeconds int `json:"retryIntervalSeconds"`
-	// The maximum number of reconnection attempts on connection loss before panic.
-	MaxRetries int `json:"maxRetries"`
-}
-
 // Database configuration.
 type DBConfig struct {
-	Host      string            `json:"host"`
-	Port      int               `json:"port"`
-	Database  string            `json:"database"`
-	User      string            `json:"user"`
-	Password  string            `json:"password"`
-	Reconnect DBReconnectConfig `json:"reconnect"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Database string `json:"database"`
+	User     string `json:"user"`
+	Password string `json:"password"`
 }
 
 // Configuration for the monitoring module.
