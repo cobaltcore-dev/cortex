@@ -45,7 +45,9 @@ func (s *BaseStep[Opts]) Init(ctx context.Context, client client.Client, step v1
 
 // Deinitialize the step, freeing any held resources.
 func (s *BaseStep[Opts]) Deinit(ctx context.Context) error {
-	s.DB.Close()
+	if s.DB != nil {
+		s.DB.Close()
+	}
 	return nil
 }
 
