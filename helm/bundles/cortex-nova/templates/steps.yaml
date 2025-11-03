@@ -331,8 +331,6 @@ spec:
   description: |
     This step will deschedule VMs once they reach this CPU steal percentage over
     the observed time span.
-  # TODO: This step currently depends on hypervisor capabilities directly from
-  # the datasources. This should be changed to use the hypervisor CRD.
   knowledges: []
   opts:
     maxStealPctOverObservedTimeSpan: 20.0
