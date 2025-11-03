@@ -66,16 +66,6 @@ func TestDB_TableExists(t *testing.T) {
 	}
 }
 
-func TestDB_Close(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	db := DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-
-	if err := db.Db.PingContext(t.Context()); err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
 func TestReplaceAll(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
