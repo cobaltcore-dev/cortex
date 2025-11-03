@@ -17,9 +17,6 @@ type FilterPackedVirtqueueStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *FilterPackedVirtqueueStep) GetName() string { return "filter_packed_virtqueue" }
-
 // If requested, only get hosts with packed virtqueues.
 func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)

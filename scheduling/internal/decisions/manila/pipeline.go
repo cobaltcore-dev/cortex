@@ -4,7 +4,6 @@
 package manila
 
 import (
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/manila/plugins/netapp"
@@ -16,13 +15,12 @@ type ManilaStep = lib.Step[api.ExternalSchedulerRequest]
 // Configuration of steps supported by the scheduling.
 // The steps actually used by the scheduler are defined through the configuration file.
 var supportedSteps = map[string]func() ManilaStep{
-	(&netapp.CPUUsageBalancingStep{}).GetName(): func() ManilaStep { return &netapp.CPUUsageBalancingStep{} },
+	"netapp_cpu_usage_balancing": func() ManilaStep { return &netapp.CPUUsageBalancingStep{} },
 }
 
 // Create a new Manila scheduler pipeline.
 func NewPipeline(
 	steps []v1alpha1.Step,
-	db db.DB,
 	monitor lib.PipelineMonitor,
 ) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
@@ -43,5 +41,5 @@ func NewPipeline(
 			return lib.MonitorStep(s, monitor), nil
 		},
 	}
-	return lib.NewPipeline(supportedSteps, steps, wrappers, db, monitor)
+	return lib.NewPipeline(supportedSteps, steps, wrappers, monitor)
 }

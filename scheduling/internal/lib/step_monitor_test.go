@@ -15,8 +15,8 @@ func TestStepMonitorRun(t *testing.T) {
 	runTimer := &testlibMonitoring.MockObserver{}
 	removedSubjectsObserver := &testlibMonitoring.MockObserver{}
 	monitor := &StepMonitor[mockPipelineRequest]{
+		namespacedName: "mock_step",
 		Step: &mockStep[mockPipelineRequest]{
-			Name: "mock_step",
 			RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
 				return &StepResult{
 					Activations: map[string]float64{"subject1": 0.1, "subject2": 1.0, "subject3": 0.0},

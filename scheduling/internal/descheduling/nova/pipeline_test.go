@@ -4,28 +4,23 @@
 package nova
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
 
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Mock implementations for testing pipeline functionality
 
 type mockPipelineStep struct {
-	name        string
 	decisions   []plugins.Decision
 	runError    error
 	initError   error
 	initialized bool
-}
-
-func (m *mockPipelineStep) GetName() string {
-	return m.name
 }
 
 func (m *mockPipelineStep) Run() ([]plugins.Decision, error) {
@@ -35,7 +30,7 @@ func (m *mockPipelineStep) Run() ([]plugins.Decision, error) {
 	return m.decisions, nil
 }
 
-func (m *mockPipelineStep) Init(db db.DB, opts libconf.RawOpts) error {
+func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
 	if m.initError != nil {
 		return m.initError
 	}
@@ -46,15 +41,15 @@ func (m *mockPipelineStep) Init(db db.DB, opts libconf.RawOpts) error {
 func TestPipeline_Init(t *testing.T) {
 	tests := []struct {
 		name           string
-		supportedSteps []Step
+		supportedSteps map[string]Step
 		confedSteps    []v1alpha1.Step
 		expectedSteps  int
 		expectedError  bool
 	}{
 		{
 			name: "successful initialization with single step",
-			supportedSteps: []Step{
-				&mockPipelineStep{name: "test-step"},
+			supportedSteps: map[string]Step{
+				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.Step{
 				{Spec: v1alpha1.StepSpec{
@@ -66,8 +61,8 @@ func TestPipeline_Init(t *testing.T) {
 		},
 		{
 			name: "initialization with unsupported step",
-			supportedSteps: []Step{
-				&mockPipelineStep{name: "test-step"},
+			supportedSteps: map[string]Step{
+				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.Step{
 				{Spec: v1alpha1.StepSpec{
@@ -79,8 +74,8 @@ func TestPipeline_Init(t *testing.T) {
 		},
 		{
 			name: "initialization with step init error",
-			supportedSteps: []Step{
-				&mockPipelineStep{name: "failing-step", initError: errors.New("init failed")},
+			supportedSteps: map[string]Step{
+				"failing-step": &mockPipelineStep{initError: errors.New("init failed")},
 			},
 			confedSteps: []v1alpha1.Step{
 				{Spec: v1alpha1.StepSpec{
@@ -92,9 +87,9 @@ func TestPipeline_Init(t *testing.T) {
 		},
 		{
 			name: "initialization with multiple steps",
-			supportedSteps: []Step{
-				&mockPipelineStep{name: "step1"},
-				&mockPipelineStep{name: "step2"},
+			supportedSteps: map[string]Step{
+				"step1": &mockPipelineStep{},
+				"step2": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.Step{
 				{Spec: v1alpha1.StepSpec{
@@ -114,8 +109,7 @@ func TestPipeline_Init(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pipeline := &Pipeline{}
 
-			testDB := db.DB{}
-			err := pipeline.Init(tt.confedSteps, tt.supportedSteps, testDB)
+			err := pipeline.Init(tt.confedSteps, tt.supportedSteps)
 			if tt.expectedError {
 				if err == nil {
 					t.Fatalf("expected error during initialization, got none")
@@ -135,7 +129,7 @@ func TestPipeline_Init(t *testing.T) {
 				if stepMonitor, ok := step.(StepMonitor); ok {
 					if mockStep, ok := stepMonitor.step.(*mockPipelineStep); ok {
 						if !mockStep.initialized {
-							t.Errorf("step %s was not properly initialized", mockStep.name)
+							t.Error("step was not properly initialized")
 						}
 					}
 				}
@@ -147,14 +141,13 @@ func TestPipeline_Init(t *testing.T) {
 func TestPipeline_run(t *testing.T) {
 	tests := []struct {
 		name            string
-		steps           []Step
+		steps           map[string]Step
 		expectedResults map[string][]plugins.Decision
 	}{
 		{
 			name: "successful run with single step",
-			steps: []Step{
-				&mockPipelineStep{
-					name: "test-step",
+			steps: map[string]Step{
+				"test-step": &mockPipelineStep{
 					decisions: []plugins.Decision{
 						{VMID: "vm1", Reason: "test reason", Host: "host1"},
 					},
@@ -168,9 +161,8 @@ func TestPipeline_run(t *testing.T) {
 		},
 		{
 			name: "run with step error",
-			steps: []Step{
-				&mockPipelineStep{
-					name:     "failing-step",
+			steps: map[string]Step{
+				"failing-step": &mockPipelineStep{
 					runError: errors.New("step failed"),
 				},
 			},
@@ -178,9 +170,8 @@ func TestPipeline_run(t *testing.T) {
 		},
 		{
 			name: "run with step skipped",
-			steps: []Step{
-				&mockPipelineStep{
-					name:     "skipped-step",
+			steps: map[string]Step{
+				"skipped-step": &mockPipelineStep{
 					runError: ErrStepSkipped,
 				},
 			},
@@ -188,15 +179,13 @@ func TestPipeline_run(t *testing.T) {
 		},
 		{
 			name: "run with multiple steps",
-			steps: []Step{
-				&mockPipelineStep{
-					name: "step1",
+			steps: map[string]Step{
+				"step1": &mockPipelineStep{
 					decisions: []plugins.Decision{
 						{VMID: "vm1", Reason: "reason1", Host: "host1"},
 					},
 				},
-				&mockPipelineStep{
-					name: "step2",
+				"step2": &mockPipelineStep{
 					decisions: []plugins.Decision{
 						{VMID: "vm2", Reason: "reason2", Host: "host2"},
 					},
@@ -215,8 +204,12 @@ func TestPipeline_run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			stepSlice := []Step{}
+			for _, step := range tt.steps {
+				stepSlice = append(stepSlice, step)
+			}
 			pipeline := &Pipeline{
-				steps: tt.steps,
+				steps: stepSlice,
 			}
 
 			results := pipeline.run()
@@ -332,26 +325,17 @@ func TestSupportedSteps(t *testing.T) {
 	if len(supportedSteps) == 0 {
 		t.Error("SupportedSteps should not be empty")
 	}
-
-	// Verify each supported step has a name
-	for i, step := range supportedSteps {
-		if step.GetName() == "" {
-			t.Errorf("supported step at index %d has empty name", i)
-		}
-	}
 }
 
 // Benchmark tests
 func BenchmarkPipeline_run(b *testing.B) {
 	steps := []Step{
 		&mockPipelineStep{
-			name: "bench-step1",
 			decisions: []plugins.Decision{
 				{VMID: "vm1", Reason: "bench reason", Host: "host1"},
 			},
 		},
 		&mockPipelineStep{
-			name: "bench-step2",
 			decisions: []plugins.Decision{
 				{VMID: "vm2", Reason: "bench reason", Host: "host2"},
 			},

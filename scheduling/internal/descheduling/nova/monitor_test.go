@@ -4,14 +4,16 @@
 package nova
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestNewPipelineMonitor(t *testing.T) {
@@ -79,11 +81,7 @@ type mockMonitorStep struct {
 	runCalled  bool
 }
 
-func (m *mockMonitorStep) GetName() string {
-	return m.name
-}
-
-func (m *mockMonitorStep) Init(db db.DB, opts conf.RawOpts) error {
+func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
 	m.initCalled = true
 	return m.initError
 }
@@ -104,10 +102,6 @@ func TestMonitorStep(t *testing.T) {
 
 	monitoredStep := monitorStep(step, monitor)
 
-	if monitoredStep.GetName() != "test-step" {
-		t.Errorf("expected name 'test-step', got %s", monitoredStep.GetName())
-	}
-
 	if monitoredStep.step != step {
 		t.Error("expected wrapped step to be preserved")
 	}
@@ -126,7 +120,7 @@ func TestStepMonitor_Init(t *testing.T) {
 	step := &mockMonitorStep{name: "test-step"}
 	monitoredStep := monitorStep(step, monitor)
 
-	err := monitoredStep.Init(db.DB{}, conf.RawOpts{})
+	err := monitoredStep.Init(conf.RawOpts{})
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -146,7 +140,7 @@ func TestStepMonitor_Init_WithError(t *testing.T) {
 	}
 	monitoredStep := monitorStep(step, monitor)
 
-	err := monitoredStep.Init(db.DB{}, conf.RawOpts{})
+	err := monitoredStep.Init(conf.RawOpts{})
 
 	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)

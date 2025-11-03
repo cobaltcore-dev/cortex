@@ -10,7 +10,6 @@ import (
 	"time"
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
@@ -33,8 +32,6 @@ type DeschedulingsPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[Pipeline]
 
-	// Database to pass down to all steps.
-	DB db.DB
 	// Monitor to pass down to all pipelines.
 	Monitor Monitor
 	// Config for the scheduling operator.
@@ -49,7 +46,7 @@ func (c *DeschedulingsPipelineController) InitPipeline(steps []v1alpha1.Step) (P
 		CycleDetector: c.CycleDetector,
 		Monitor:       c.Monitor,
 	}
-	err := pipeline.Init(steps, supportedSteps, c.DB)
+	err := pipeline.Init(steps, supportedSteps)
 	return pipeline, err
 }
 

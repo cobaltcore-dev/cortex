@@ -4,16 +4,14 @@
 package nova
 
 import (
-	"encoding/json"
-	"errors"
+	"context"
 
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type NovaStep = lib.Step[api.ExternalSchedulerRequest]
@@ -22,71 +20,65 @@ type NovaStep = lib.Step[api.ExternalSchedulerRequest]
 // The steps actually used by the scheduler are defined through the configuration file.
 var supportedSteps = map[string]func() NovaStep{
 	// VMware-specific steps
-	(&vmware.AntiAffinityNoisyProjectsStep{}).GetName():    func() NovaStep { return &vmware.AntiAffinityNoisyProjectsStep{} },
-	(&vmware.AvoidLongTermContendedHostsStep{}).GetName():  func() NovaStep { return &vmware.AvoidLongTermContendedHostsStep{} },
-	(&vmware.AvoidShortTermContendedHostsStep{}).GetName(): func() NovaStep { return &vmware.AvoidShortTermContendedHostsStep{} },
-	// KVM-specific steps
-	(&kvm.AvoidOverloadedHostsCPUStep{}).GetName():    func() NovaStep { return &kvm.AvoidOverloadedHostsCPUStep{} },
-	(&kvm.AvoidOverloadedHostsMemoryStep{}).GetName(): func() NovaStep { return &kvm.AvoidOverloadedHostsMemoryStep{} },
+	"vmware_anti_affinity_noisy_projects":     func() NovaStep { return &vmware.AntiAffinityNoisyProjectsStep{} },
+	"vmware_avoid_long_term_contended_hosts":  func() NovaStep { return &vmware.AvoidLongTermContendedHostsStep{} },
+	"vmware_avoid_short_term_contended_hosts": func() NovaStep { return &vmware.AvoidShortTermContendedHostsStep{} },
 	// Shared steps
-	(&shared.ResourceBalancingStep{}).GetName():         func() NovaStep { return &shared.ResourceBalancingStep{} },
-	(&shared.FilterHasAcceleratorsStep{}).GetName():     func() NovaStep { return &shared.FilterHasAcceleratorsStep{} },
-	(&shared.FilterCorrectAZStep{}).GetName():           func() NovaStep { return &shared.FilterCorrectAZStep{} },
-	(&shared.FilterDisabledStep{}).GetName():            func() NovaStep { return &shared.FilterDisabledStep{} },
-	(&shared.FilterPackedVirtqueueStep{}).GetName():     func() NovaStep { return &shared.FilterPackedVirtqueueStep{} },
-	(&shared.FilterExternalCustomerStep{}).GetName():    func() NovaStep { return &shared.FilterExternalCustomerStep{} },
-	(&shared.FilterProjectAggregatesStep{}).GetName():   func() NovaStep { return &shared.FilterProjectAggregatesStep{} },
-	(&shared.FilterComputeCapabilitiesStep{}).GetName(): func() NovaStep { return &shared.FilterComputeCapabilitiesStep{} },
-	(&shared.FilterHasRequestedTraits{}).GetName():      func() NovaStep { return &shared.FilterHasRequestedTraits{} },
-	(&shared.FilterHasEnoughCapacity{}).GetName():       func() NovaStep { return &shared.FilterHasEnoughCapacity{} },
-	(&shared.FilterHostInstructionsStep{}).GetName():    func() NovaStep { return &shared.FilterHostInstructionsStep{} },
+	"shared_resource_balancing":   func() NovaStep { return &shared.ResourceBalancingStep{} },
+	"filter_has_accelerators":     func() NovaStep { return &shared.FilterHasAcceleratorsStep{} },
+	"filter_correct_az":           func() NovaStep { return &shared.FilterCorrectAZStep{} },
+	"filter_disabled":             func() NovaStep { return &shared.FilterDisabledStep{} },
+	"filter_packed_virtqueue":     func() NovaStep { return &shared.FilterPackedVirtqueueStep{} },
+	"filter_external_customer":    func() NovaStep { return &shared.FilterExternalCustomerStep{} },
+	"filter_project_aggregates":   func() NovaStep { return &shared.FilterProjectAggregatesStep{} },
+	"filter_compute_capabilities": func() NovaStep { return &shared.FilterComputeCapabilitiesStep{} },
+	"filter_has_requested_traits": func() NovaStep { return &shared.FilterHasRequestedTraits{} },
+	"filter_has_enough_capacity":  func() NovaStep { return &shared.FilterHasEnoughCapacity{} },
+	"filter_host_instructions":    func() NovaStep { return &shared.FilterHostInstructionsStep{} },
 }
 
 // Specific pipeline for nova.
 type novaPipeline struct {
 	// The underlying shared pipeline logic.
 	lib.Pipeline[api.ExternalSchedulerRequest]
-	// Database to use for the nova pipeline.
-	database db.DB
 }
 
 // Create a new Nova scheduler pipeline.
 func NewPipeline(
+	ctx context.Context,
+	cl client.Client,
 	steps []v1alpha1.Step,
-	db db.DB,
 	monitor lib.PipelineMonitor,
 ) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
 	// Wrappers to apply to each step in the pipeline.
 	wrappers := []lib.StepWrapper[api.ExternalSchedulerRequest]{
-		// Scope the step to Nova hosts/specs that match the step's scope.
-		func(s NovaStep, config v1alpha1.Step) (NovaStep, error) {
-			if len(config.Spec.Opts.Raw) == 0 {
-				return s, nil
+		func(
+			ctx context.Context,
+			client client.Client,
+			step v1alpha1.Step,
+			impl lib.Step[api.ExternalSchedulerRequest],
+		) (NovaStep, error) {
+			if step.Spec.Type != v1alpha1.StepTypeWeigher {
+				return impl, nil
 			}
-			var c NovaSchedulerOpts
-			if err := json.Unmarshal(config.Spec.Opts.Raw, &c); err != nil {
-				return nil, errors.New("failed to unmarshal nova scheduler step opts: " + err.Error())
+			if step.Spec.Weigher == nil {
+				return impl, nil
 			}
-			return &StepScoper{Step: s, Scope: c.Scope}, nil
+			return lib.ValidateStep(impl, step.Spec.Weigher.DisabledValidations), nil
 		},
-		func(s NovaStep, config v1alpha1.Step) (NovaStep, error) {
-			if config.Spec.Type != v1alpha1.StepTypeWeigher {
-				return s, nil
-			}
-			if config.Spec.Weigher == nil {
-				return s, nil
-			}
-			return lib.ValidateStep(s, config.Spec.Weigher.DisabledValidations), nil
-		},
-		// Monitor the step execution.
-		func(s NovaStep, config v1alpha1.Step) (NovaStep, error) {
-			return lib.MonitorStep(s, monitor), nil
+		func(
+			ctx context.Context,
+			client client.Client,
+			step v1alpha1.Step,
+			impl lib.Step[api.ExternalSchedulerRequest],
+		) (NovaStep, error) {
+			return lib.MonitorStep(ctx, client, step, impl, monitor), nil
 		},
 	}
-	pipeline, err := lib.NewPipeline(supportedSteps, steps, wrappers, db, monitor)
+	pipeline, err := lib.NewPipeline(ctx, cl, supportedSteps, steps, wrappers, monitor)
 	if err != nil {
 		return nil, err
 	}
-	return &novaPipeline{pipeline, db}, nil
+	return &novaPipeline{pipeline}, nil
 }

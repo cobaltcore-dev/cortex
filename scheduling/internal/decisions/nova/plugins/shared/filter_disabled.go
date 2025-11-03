@@ -18,9 +18,6 @@ type FilterDisabledStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *FilterDisabledStep) GetName() string { return "filter_disabled" }
-
 // Only get hosts that are not disabled or down.
 func (s *FilterDisabledStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)

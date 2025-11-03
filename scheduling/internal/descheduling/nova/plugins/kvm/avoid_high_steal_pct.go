@@ -21,11 +21,6 @@ type AvoidHighStealPctStep struct {
 	plugins.BaseStep[AvoidHighStealPctStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *AvoidHighStealPctStep) GetName() string {
-	return "avoid_high_steal_pct"
-}
-
 func (s *AvoidHighStealPctStep) Run() ([]plugins.Decision, error) {
 	if s.Options.MaxStealPctOverObservedTimeSpan <= 0 {
 		slog.Info("skipping step because maxStealPctOverObservedTimeSpan is not set or <= 0")

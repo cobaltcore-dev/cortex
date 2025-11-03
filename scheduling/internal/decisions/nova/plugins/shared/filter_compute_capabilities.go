@@ -18,9 +18,6 @@ type FilterComputeCapabilitiesStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *FilterComputeCapabilitiesStep) GetName() string { return "filter_compute_capabilities" }
-
 // Convert a nested dictionary into a list of capabilities.
 //
 // The input is something like this:

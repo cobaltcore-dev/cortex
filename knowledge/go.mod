@@ -105,7 +105,6 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
-	github.com/dlmiddlecote/sqlstats v1.0.2 // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect

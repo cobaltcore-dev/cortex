@@ -16,9 +16,6 @@ type FilterCorrectAZStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *FilterCorrectAZStep) GetName() string { return "filter_correct_az" }
-
 // Only get hosts in the requested az.
 func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)

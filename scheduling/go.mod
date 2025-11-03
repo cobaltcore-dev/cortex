@@ -107,7 +107,6 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
-	github.com/dlmiddlecote/sqlstats v1.0.2 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/go-gorp/gorp v2.2.0+incompatible // indirect

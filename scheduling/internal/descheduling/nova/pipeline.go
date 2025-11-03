@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins/kvm"
@@ -22,8 +20,8 @@ import (
 
 // Configuration of steps supported by the descheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = []Step{
-	&kvm.AvoidHighStealPctStep{},
+var supportedSteps = map[string]Step{
+	"avoid_high_steal_pct": &kvm.AvoidHighStealPctStep{},
 }
 
 type Pipeline struct {
@@ -38,30 +36,27 @@ type Pipeline struct {
 	steps []Step
 }
 
-func (p *Pipeline) Init(confedSteps []v1alpha1.Step, supportedSteps []Step, db db.DB) error {
-	supportedStepsByName := make(map[string]Step)
-	for _, step := range supportedSteps {
-		supportedStepsByName[step.GetName()] = step
-	}
+func (p *Pipeline) Init(
+	ctx context.Context,
+	confedSteps []v1alpha1.Step,
+	supportedSteps map[string]Step,
+) error {
 
 	// Load all steps from the configuration.
 	p.steps = make([]Step, 0, len(confedSteps))
 	for _, stepConf := range confedSteps {
-		step, ok := supportedStepsByName[stepConf.Spec.Impl]
+		step, ok := supportedSteps[stepConf.Spec.Impl]
 		if !ok {
 			return errors.New("descheduler: unsupported step: " + stepConf.Spec.Impl)
 		}
 		step = monitorStep(step, p.Monitor)
-		rawOpts := libconf.NewRawOptsBytes(stepConf.Spec.Opts.Raw)
-		if err := step.Init(db, rawOpts); err != nil {
+		if err := step.Init(ctx, p.Client, stepConf); err != nil {
 			return err
 		}
 		p.steps = append(p.steps, step)
 		slog.Info(
 			"descheduler: added step",
-			"name", stepConf.Name,
-			"options", rawOpts,
-		)
+			"name", stepConf.Name)
 	}
 	return nil
 }
@@ -78,17 +73,17 @@ func (p *Pipeline) run() map[string][]plugins.Decision {
 	var wg sync.WaitGroup
 	for _, step := range p.steps {
 		wg.Go(func() {
-			slog.Info("descheduler: running step", "name", step.GetName())
+			slog.Info("descheduler: running step")
 			decisions, err := step.Run()
 			if errors.Is(err, ErrStepSkipped) {
-				slog.Info("descheduler: step skipped", "name", step.GetName())
+				slog.Info("descheduler: step skipped")
 				return
 			}
 			if err != nil {
-				slog.Error("descheduler: failed to run step", "name", step.GetName(), "error", err)
+				slog.Error("descheduler: failed to run step", "error", err)
 				return
 			}
-			slog.Info("descheduler: finished step", "name", step.GetName())
+			slog.Info("descheduler: finished step")
 			lock.Lock()
 			defer lock.Unlock()
 			decisionsByStep[step.GetName()] = decisions

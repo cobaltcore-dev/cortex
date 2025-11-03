@@ -92,11 +92,6 @@ type ResourceBalancingStep struct {
 	scheduling.BaseStep[api.ExternalSchedulerRequest, ResourceBalancingStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *ResourceBalancingStep) GetName() string {
-	return "shared_resource_balancing"
-}
-
 // Pack VMs on hosts based on their flavor.
 func (s *ResourceBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)

@@ -4,24 +4,19 @@
 package cinder
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestNewPipeline(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	tests := []struct {
 		name        string
 		steps       []v1alpha1.Step
@@ -72,7 +67,7 @@ func TestNewPipeline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			monitor := lib.PipelineMonitor{}
-			pipeline, err := NewPipeline(tt.steps, testDB, monitor)
+			pipeline, err := NewPipeline(tt.steps, monitor)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -88,13 +83,8 @@ func TestNewPipeline(t *testing.T) {
 }
 
 func TestPipelineRun(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	monitor := lib.PipelineMonitor{}
-	pipeline, err := NewPipeline([]v1alpha1.Step{}, testDB, monitor)
+	pipeline, err := NewPipeline([]v1alpha1.Step{}, monitor)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -202,16 +192,11 @@ func TestPipelineRun(t *testing.T) {
 }
 
 func TestCinderStepType(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	var step CinderStep = &mockCinderStep{}
 
 	// Test initialization
 	opts := conf.NewRawOpts(`{}`)
-	err := step.Init(testDB, opts)
+	err := step.Init(opts)
 	if err != nil {
 		t.Errorf("Expected no error but got: %v", err)
 	}
@@ -220,7 +205,11 @@ func TestCinderStepType(t *testing.T) {
 // Mock implementation for testing
 type mockCinderStep struct{}
 
-func (s *mockCinderStep) Init(db db.DB, opts conf.RawOpts) error {
+func (s *mockCinderStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+	return nil
+}
+
+func (m *mockCinderStep) Deinit() error {
 	return nil
 }
 
@@ -228,8 +217,4 @@ func (s *mockCinderStep) Run(logger *slog.Logger, request api.ExternalSchedulerR
 	return &lib.StepResult{
 		Activations: make(map[string]float64),
 	}, nil
-}
-
-func (s *mockCinderStep) GetName() string {
-	return "mock-cinder-step"
 }

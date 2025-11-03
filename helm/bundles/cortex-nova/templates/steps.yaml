@@ -14,6 +14,7 @@ spec:
   knowledges:
     - name: host-utilization
   opts:
+    # TODO: Remove this scope
     scope:
       hostSelectors:
         # Note: due to the vmware spec selector, it is expected that
@@ -54,6 +55,7 @@ spec:
   knowledges:
     - name: host-utilization
   opts:
+    # TODO: Remove this scope
     scope:
       hostSelectors:
         # Note: due to the vmware spec selector, it is expected that
@@ -96,6 +98,7 @@ spec:
   knowledges:
     - name: vmware-long-term-contended-hosts
   opts:
+    # TODO: Remove this scope
     scope:
       specSelectors:
         - subject: vmware
@@ -127,6 +130,7 @@ spec:
   knowledges:
     - name: vmware-short-term-contended-hosts
   opts:
+    # TODO: Remove this scope
     scope:
       specSelectors:
         - subject: vmware

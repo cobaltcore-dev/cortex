@@ -7,37 +7,10 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func TestNoopFilter_GetName(t *testing.T) {
-	filter := &NoopFilter{}
-	name := filter.GetName()
-
-	if name != "noop" {
-		t.Errorf("expected GetName() to return 'noop', got %q", name)
-	}
-}
-
-func TestNoopFilter_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	filter := &NoopFilter{}
-	opts := conf.NewRawOpts(`{}`)
-
-	err := filter.Init(testDB, opts)
-	if err != nil {
-		t.Errorf("expected Init() to succeed, got error: %v", err)
-	}
-}
 
 func TestNoopFilter_Run(t *testing.T) {
 	tests := []struct {

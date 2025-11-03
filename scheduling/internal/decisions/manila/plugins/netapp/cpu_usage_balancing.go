@@ -45,11 +45,6 @@ type CPUUsageBalancingStep struct {
 	scheduling.BaseStep[api.ExternalSchedulerRequest, CPUUsageBalancingStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *CPUUsageBalancingStep) GetName() string {
-	return "netapp_cpu_usage_balancing"
-}
-
 // Downvote hosts that are highly contended.
 func (s *CPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)

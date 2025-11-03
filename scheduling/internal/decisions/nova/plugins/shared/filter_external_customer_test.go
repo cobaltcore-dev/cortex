@@ -9,7 +9,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/placement"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
@@ -206,9 +205,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterExternalCustomerStep{}
-			if err := step.Init(testDB, conf.NewRawOpts(tt.opts)); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			step.DB = testDB
 			result, err := step.Run(slog.Default(), tt.request)
 
 			// For the "No domain hint" test case, we expect an error

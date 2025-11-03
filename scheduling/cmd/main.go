@@ -28,7 +28,6 @@ import (
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
@@ -236,10 +235,6 @@ func main() {
 	// This is useful to distinguish metrics from different deployments.
 	registry := monitoring.NewRegistry(libconf.MonitoringConfig{})
 
-	// Currently the scheduler pipeline will always need a database.
-	// TODO: Scheduler steps should not use the database, instead only CRs.
-	database := db.NewPostgresDB(ctx, config.DBConfig, registry, db.NewDBMonitor(registry))
-
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
 	// pipeline.
@@ -251,7 +246,6 @@ func main() {
 	switch config.Operator {
 	case "cortex-nova":
 		decisionController := &decisionsnova.DecisionPipelineController{
-			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -270,7 +264,6 @@ func main() {
 		deschedulingsNovaAPI := deschedulingnova.NewNovaAPI(deschedulingsKeystoneAPI)
 		deschedulingsNovaAPI.Init(ctx)
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
-			DB:            database,
 			Monitor:       deschedulingnova.NewPipelineMonitor(),
 			Conf:          config,
 			CycleDetector: deschedulingnova.NewCycleDetector(deschedulingsNovaAPI),
@@ -294,7 +287,6 @@ func main() {
 
 	case "cortex-manila":
 		controller := &decisionsmanila.DecisionPipelineController{
-			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -310,7 +302,6 @@ func main() {
 
 	case "cortex-cinder":
 		controller := &decisionscinder.DecisionPipelineController{
-			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -326,7 +317,6 @@ func main() {
 
 	case "cortex-ironcore":
 		controller := &decisionsmachines.DecisionPipelineController{
-			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}

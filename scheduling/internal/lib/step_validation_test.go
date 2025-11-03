@@ -8,43 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 )
-
-func TestStepValidator_GetName(t *testing.T) {
-	mockStep := &mockStep[mockPipelineRequest]{
-		Name: "mock-step",
-	}
-
-	validator := StepValidator[mockPipelineRequest]{
-		Step: mockStep,
-	}
-
-	if got := validator.GetName(); got != "mock-step" {
-		t.Errorf("GetName() = %v, want %v", got, "mock-step")
-	}
-}
-
-func TestStepValidator_Init(t *testing.T) {
-	mockStep := &mockStep[mockPipelineRequest]{
-		InitFunc: func(db db.DB, opts libconf.RawOpts) error {
-			return nil
-		},
-	}
-
-	testDB := db.DB{}
-	mockOpts := libconf.RawOpts{}
-
-	validator := StepValidator[mockPipelineRequest]{
-		Step: mockStep,
-	}
-
-	if err := validator.Init(testDB, mockOpts); err != nil {
-		t.Errorf("Init() error = %v, want nil", err)
-	}
-}
 
 func TestStepValidator_Run_ValidHosts(t *testing.T) {
 	mockStep := &mockStep[mockPipelineRequest]{

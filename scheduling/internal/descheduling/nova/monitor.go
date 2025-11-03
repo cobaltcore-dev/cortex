@@ -4,10 +4,12 @@
 package nova
 
 import (
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"context"
+
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Monitor struct {
@@ -95,8 +97,8 @@ func (m StepMonitor) GetName() string {
 }
 
 // Initialize the step with the database and options.
-func (m StepMonitor) Init(db db.DB, opts conf.RawOpts) error {
-	return m.step.Init(db, opts)
+func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+	return m.step.Init(opts)
 }
 
 // Run the step and measure its execution time.

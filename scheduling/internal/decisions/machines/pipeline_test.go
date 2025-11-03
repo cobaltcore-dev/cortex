@@ -6,19 +6,11 @@ package machines
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
 func TestNewPipeline(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	// Create a mock pipeline monitor
 	monitor := lib.PipelineMonitor{}
 
@@ -60,7 +52,7 @@ func TestNewPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := NewPipeline(tt.steps, testDB, monitor)
+			pipeline, err := NewPipeline(tt.steps, monitor)
 
 			if tt.expectError {
 				if err == nil {
@@ -109,35 +101,7 @@ func TestSupportedSteps(t *testing.T) {
 	}
 }
 
-func TestMachineStepType(t *testing.T) {
-	// Verify that MachineStep type alias is correctly defined
-	var step MachineStep = &NoopFilter{}
-
-	// Test that it implements the Step interface methods
-	name := step.GetName()
-	if name == "" {
-		t.Error("expected GetName() to return non-empty string")
-	}
-
-	// Test Init method exists and is callable
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	opts := conf.NewRawOpts(`{}`)
-	err := step.Init(testDB, opts)
-	if err != nil {
-		t.Errorf("expected Init() to succeed, got error: %v", err)
-	}
-}
-
 func TestPipelineWrappers(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	monitor := lib.PipelineMonitor{}
 
 	steps := []v1alpha1.Step{
@@ -149,7 +113,7 @@ func TestPipelineWrappers(t *testing.T) {
 		},
 	}
 
-	pipeline, err := NewPipeline(steps, testDB, monitor)
+	pipeline, err := NewPipeline(steps, monitor)
 	if err != nil {
 		t.Fatalf("expected no error creating pipeline, got: %v", err)
 	}

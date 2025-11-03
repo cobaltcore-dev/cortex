@@ -4,18 +4,18 @@
 package nova
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
 func TestSupportedSteps(t *testing.T) {
@@ -51,18 +51,10 @@ func TestSupportedSteps(t *testing.T) {
 		if step == nil {
 			t.Errorf("Step factory for %s returned nil", stepName)
 		}
-		if step.GetName() != stepName {
-			t.Errorf("Expected step name %s but got %s", stepName, step.GetName())
-		}
 	}
 }
 
 func TestNewPipeline(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	tests := []struct {
 		name        string
 		steps       []v1alpha1.Step
@@ -164,7 +156,8 @@ func TestNewPipeline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			monitor := lib.PipelineMonitor{}
-			pipeline, err := NewPipeline(tt.steps, testDB, monitor)
+			cl := fake.NewClientBuilder().Build()
+			pipeline, err := NewPipeline(t.Context(), cl, tt.steps, monitor)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -180,13 +173,9 @@ func TestNewPipeline(t *testing.T) {
 }
 
 func TestPipelineRun(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	monitor := lib.PipelineMonitor{}
-	pipeline, err := NewPipeline([]v1alpha1.Step{}, testDB, monitor)
+	cl := fake.NewClientBuilder().Build()
+	pipeline, err := NewPipeline(t.Context(), cl, []v1alpha1.Step{}, monitor)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -346,26 +335,14 @@ func TestPipelineRun(t *testing.T) {
 	}
 }
 
-func TestNovaPipelineType(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	var step NovaStep = &mockNovaStep{}
-
-	// Test initialization
-	opts := conf.NewRawOpts(`{}`)
-	err := step.Init(testDB, opts)
-	if err != nil {
-		t.Errorf("Expected no error but got: %v", err)
-	}
-}
-
 // Mock implementation for testing
 type mockNovaStep struct{}
 
-func (s *mockNovaStep) Init(db db.DB, opts conf.RawOpts) error {
+func (s *mockNovaStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+	return nil
+}
+
+func (s *mockNovaStep) Deinit() error {
 	return nil
 }
 
@@ -373,8 +350,4 @@ func (s *mockNovaStep) Run(logger *slog.Logger, request api.ExternalSchedulerReq
 	return &lib.StepResult{
 		Activations: make(map[string]float64),
 	}, nil
-}
-
-func (s *mockNovaStep) GetName() string {
-	return "mock-nova-step"
 }

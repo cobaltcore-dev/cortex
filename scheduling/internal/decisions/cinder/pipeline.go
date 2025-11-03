@@ -4,7 +4,6 @@
 package cinder
 
 import (
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/cinder"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
@@ -19,7 +18,6 @@ var supportedSteps = map[string]func() CinderStep{}
 // Create a new Cinder scheduler pipeline.
 func NewPipeline(
 	steps []v1alpha1.Step,
-	db db.DB,
 	monitor lib.PipelineMonitor,
 ) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
@@ -40,5 +38,5 @@ func NewPipeline(
 			return lib.MonitorStep(s, monitor), nil
 		},
 	}
-	return lib.NewPipeline(supportedSteps, steps, wrappers, db, monitor)
+	return lib.NewPipeline(supportedSteps, steps, wrappers, monitor)
 }

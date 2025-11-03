@@ -60,6 +60,18 @@ type StepSpec struct {
 	// and decisions made by it.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
+
+	// If needed, database credentials for fetching data from the database.
+	// The secret should contain the following keys:
+	// - "username": The database username.
+	// - "password": The database password.
+	// - "host": The database host.
+	// - "port": The database port.
+	// - "database": The database name.
+	// Note: this field will be removed in the future when db access in scheduler
+	// steps is no longer needed.
+	// +kubebuilder:validation:Optional
+	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef"`
 }
 
 const (

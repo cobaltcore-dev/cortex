@@ -17,12 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,11 +32,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 	if err := knowledgev1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add knowledgev1alpha1 scheme: %v", err)
 	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
 
 	manilaRequest := api.ExternalSchedulerRequest{
 		Spec: map[string]any{
@@ -177,7 +170,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Client:    client,
 					Pipelines: make(map[string]lib.Pipeline[api.ExternalSchedulerRequest]),
 				},
-				DB:      testDB,
 				Monitor: lib.PipelineMonitor{},
 				Conf: conf.Config{
 					Operator: "test-operator",
@@ -241,11 +233,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithStatusSubresource(&v1alpha1.Decision{}).
@@ -255,7 +242,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 		BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
 			Client: client,
 		},
-		DB:              testDB,
 		Monitor:         lib.PipelineMonitor{},
 		pendingRequests: make(map[string]*pendingRequest),
 	}
@@ -335,13 +321,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 }
 
 func TestDecisionPipelineController_InitPipeline(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	controller := &DecisionPipelineController{
-		DB:      testDB,
 		Monitor: lib.PipelineMonitor{},
 	}
 

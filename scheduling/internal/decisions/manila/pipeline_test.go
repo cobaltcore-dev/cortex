@@ -6,21 +6,14 @@ package manila
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestNewPipeline(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	monitor := lib.PipelineMonitor{}
 
 	tests := []struct {
@@ -100,7 +93,7 @@ func TestNewPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := NewPipeline(tt.steps, testDB, monitor)
+			pipeline, err := NewPipeline(tt.steps, monitor)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -116,15 +109,10 @@ func TestNewPipeline(t *testing.T) {
 }
 
 func TestPipelineRun(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	monitor := lib.PipelineMonitor{}
 
 	// Create a pipeline with no steps for basic testing
-	pipeline, err := NewPipeline([]v1alpha1.Step{}, testDB, monitor)
+	pipeline, err := NewPipeline([]v1alpha1.Step{}, monitor)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -219,22 +207,6 @@ func TestPipelineRun(t *testing.T) {
 			}
 			if !targetFound {
 				t.Errorf("Target host %s not found in ordered hosts", *result.TargetHost)
-			}
-		})
-	}
-}
-
-func TestSupportedSteps(t *testing.T) {
-	// Test that all supported steps can be instantiated
-	for stepName, stepFactory := range supportedSteps {
-		t.Run(stepName, func(t *testing.T) {
-			step := stepFactory()
-			if step == nil {
-				t.Errorf("Step factory for %s returned nil", stepName)
-			}
-
-			if step.GetName() != stepName {
-				t.Errorf("Expected step name %s but got %s", stepName, step.GetName())
 			}
 		})
 	}

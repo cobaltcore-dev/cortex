@@ -18,9 +18,6 @@ type FilterHasAcceleratorsStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *FilterHasAcceleratorsStep) GetName() string { return "filter_has_accelerators" }
-
 // If requested, only get hosts with accelerators.
 func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)

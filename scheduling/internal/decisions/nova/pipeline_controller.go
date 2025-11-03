@@ -11,7 +11,6 @@ import (
 	"time"
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
@@ -45,8 +44,6 @@ type DecisionPipelineController struct {
 	// Mutex to protect concurrent access to pendingRequests
 	mu sync.RWMutex
 
-	// Database to pass down to all steps.
-	DB db.DB
 	// Monitor to pass down to all pipelines.
 	Monitor lib.PipelineMonitor
 	// Config for the scheduling operator.
@@ -111,8 +108,8 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DecisionPipelineController) InitPipeline(steps []v1alpha1.Step) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
-	return NewPipeline(steps, c.DB, c.Monitor)
+func (c *DecisionPipelineController) InitPipeline(ctx context.Context, steps []v1alpha1.Step) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
+	return NewPipeline(ctx, c.Client, steps, c.Monitor)
 }
 
 // Process the decision from the API. Should create and return the updated decision.
@@ -152,7 +149,7 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
-	c.Delegate = c
+	c.Initializer = c
 	// Initialize the pending requests map
 	c.pendingRequests = make(map[string]*pendingRequest)
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {

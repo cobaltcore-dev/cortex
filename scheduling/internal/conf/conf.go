@@ -14,8 +14,7 @@ type Config struct {
 	// Whether to disable dry-run for descheduler steps.
 	DisableDeschedulerDryRun bool `json:"disableDeschedulerDryRun"`
 
-	// Lib modules configs.
-	libconf.DBConfig `json:"db"`
+	//
 
 	libconf.KeystoneConfig `json:"keystone"`
 }

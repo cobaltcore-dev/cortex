@@ -20,15 +20,6 @@ type Decision struct {
 	Host   string
 }
 
-func TestAvoidHighStealPctStep_GetName(t *testing.T) {
-	step := &AvoidHighStealPctStep{}
-	expectedName := "avoid_high_steal_pct"
-
-	if step.GetName() != expectedName {
-		t.Errorf("expected step name %s, got %s", expectedName, step.GetName())
-	}
-}
-
 func TestAvoidHighStealPctStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
