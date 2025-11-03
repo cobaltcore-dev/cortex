@@ -59,15 +59,6 @@ datasources:
       enabled: false
       <<: *sharedSSOCert
 
-# Values shared between all subcharts.
-global:
-  # Values passed to the service through a configmap.
-  conf:
-    # Connection parameters for the database where data is stored.
-    db:
-      # Must match postgresql settings from the cortex-postgres chart.
-      host: cortex-nova-postgresql
-
 # Features in early development that are not ready for production yet.
 cortex-reservations-operator:
   enabled: false

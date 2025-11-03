@@ -18,19 +18,6 @@ alerts:
   enabled: true
   prometheus: openstack
 
-# Values shared between all subcharts.
-global:
-  # Values passed to the service through a configmap.
-  conf:
-    # Connection parameters for the database where data is stored.
-    db:
-      # Must match postgresql settings from the cortex-postgres chart.
-      host: cortex-ironcore-postgresql
-
-# Custom configuration for the cortex postgres chart.
-cortex-postgres:
-  fullnameOverride: cortex-ironcore-postgresql
-
 cortex-scheduling-operator:
   enabled: false
   # CRDs are deployed in the cortex-crds chart.
