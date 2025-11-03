@@ -289,7 +289,3 @@ func (m *mockMachinePipeline) Run(request ironcore.MachinePipelineRequest) (sche
 		TargetHost: &targetHost,
 	}, nil
 }
-
-func (m *mockMachinePipeline) Deinit(ctx context.Context) error {
-	return nil
-}

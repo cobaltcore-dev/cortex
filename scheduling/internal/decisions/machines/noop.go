@@ -19,10 +19,6 @@ func (f *NoopFilter) Init(ctx context.Context, client client.Client, step v1alph
 	return nil
 }
 
-func (m *NoopFilter) Deinit(ctx context.Context) error {
-	return nil
-}
-
 // Run this step of the scheduling pipeline.
 // Return a map of keys to activation values. Important: keys that are
 // not in the map are considered as filtered out.

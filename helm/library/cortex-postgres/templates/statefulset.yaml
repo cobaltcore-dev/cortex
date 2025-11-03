@@ -43,6 +43,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: max-conns
+              mountPath: /docker-entrypoint-initdb.d/max_conns.sql
+              subPath: max_conns.sql
         - name: {{ include "cortex-postgres.fullname" . }}-exporter
           image: "{{ .Values.exporter.image.repository }}:{{ .Values.exporter.image.tag }}"
           imagePullPolicy: {{ .Values.exporter.image.pullPolicy }}
@@ -76,6 +79,10 @@ spec:
               port: http-metrics
             initialDelaySeconds: 5
             periodSeconds: 5
+      volumes:
+        - name: max-conns
+          configMap:
+            name: {{ include "cortex-postgres.fullname" . }}-max-conns
   volumeClaimTemplates:
     - metadata:
         name: data

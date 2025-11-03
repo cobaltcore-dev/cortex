@@ -30,10 +30,6 @@ func (s *StepValidator[RequestType]) Init(ctx context.Context, client client.Cli
 	return s.Step.Init(ctx, client, step)
 }
 
-func (s *StepValidator[RequestType]) Deinit(ctx context.Context) error {
-	return s.Step.Deinit(ctx)
-}
-
 // Validate the wrapped step with the database and options.
 func validateStep[RequestType PipelineRequest](step Step[RequestType], disabledValidations v1alpha1.DisabledValidationsSpec) *StepValidator[RequestType] {
 	return &StepValidator[RequestType]{

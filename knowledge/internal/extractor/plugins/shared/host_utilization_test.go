@@ -18,9 +18,7 @@ import (
 func TestHostUtilizationExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	extractor := &HostUtilizationExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
 	if err := extractor.Init(&testDB, &testDB, config); err != nil {
@@ -199,7 +197,6 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dbEnv := testlibDB.SetupDBEnv(t)
 			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer testDB.Close()
 			defer dbEnv.Close()
 
 			if err := testDB.CreateTable(

@@ -35,9 +35,7 @@ func (MockFeature) Indexes() map[string][]string {
 func TestBaseExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	opts := []byte(`{
         "option1": "value1",
         "option2": 2
@@ -76,9 +74,7 @@ func TestBaseExtractor_Init(t *testing.T) {
 func TestBaseExtractor_InitWithRecency(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	recencySeconds := 3600 // One hour
 	config := v1alpha1.KnowledgeSpec{
 		Extractor: v1alpha1.KnowledgeExtractorSpec{
@@ -99,9 +95,7 @@ func TestBaseExtractor_InitWithRecency(t *testing.T) {
 func TestBaseExtractor_Extracted(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create the table for MockFeature
 	err := testDB.CreateTable(testDB.AddTable(MockFeature{}))
 	if err != nil {
@@ -158,9 +152,7 @@ func TestBaseExtractor_Extracted(t *testing.T) {
 func TestBaseExtractor_ExtractSQL(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create the table for MockFeature
 	err := testDB.CreateTable(testDB.AddTable(MockFeature{}))
 	if err != nil {

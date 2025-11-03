@@ -100,11 +100,6 @@ func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alph
 	return m.step.Init(ctx, client, step)
 }
 
-// Deinitialize the step, cleaning up any resources if needed.
-func (m StepMonitor) Deinit(ctx context.Context) error {
-	return m.step.Deinit(ctx)
-}
-
 // Run the step and measure its execution time.
 func (m StepMonitor) Run() ([]plugins.Decision, error) {
 	if m.runTimer != nil {

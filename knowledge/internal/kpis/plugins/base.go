@@ -25,9 +25,3 @@ func (k *BaseKPI[Opts]) Init(db db.DB, opts conf.RawOpts) error {
 	k.DB = db
 	return nil
 }
-
-// Deinit this kpi, cleaning up resources.
-func (k *BaseKPI[Opts]) Deinit() error {
-	k.DB.Close()
-	return nil
-}

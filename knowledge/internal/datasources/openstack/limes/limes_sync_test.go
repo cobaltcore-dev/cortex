@@ -48,9 +48,7 @@ func (m *mockLimesAPI) GetAllCommitments(ctx context.Context, projects []identit
 func TestLimesSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneAPI{}
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
@@ -70,9 +68,7 @@ func TestLimesSyncer_Init(t *testing.T) {
 func TestLimesSyncer_Sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Insert a test project for the sync to use
 	project := identity.Project{
 		ID:       "test-project-id",
@@ -114,9 +110,7 @@ func TestLimesSyncer_Sync(t *testing.T) {
 func TestLimesSyncer_SyncCommitments(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Insert a test project for the sync to use
 	project := identity.Project{
 		ID:       "test-project-id",
@@ -156,9 +150,7 @@ func TestLimesSyncer_SyncCommitments(t *testing.T) {
 func TestLimesSyncer_SyncCommitments_NoProjects(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create project table but don't insert any projects
 	testDB.AddTable(identity.Project{})
 	if err := testDB.CreateTable(testDB.AddTable(identity.Project{})); err != nil {

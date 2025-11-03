@@ -25,9 +25,7 @@ func (m *mockCinderAPI) GetAllStoragePools(ctx context.Context) ([]cinder.Storag
 func TestCinderSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 
@@ -46,9 +44,7 @@ func TestCinderSyncer_Init(t *testing.T) {
 func TestCinderSyncer_Sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 
@@ -69,9 +65,7 @@ func TestCinderSyncer_Sync(t *testing.T) {
 func TestCinderSyncer_SyncAllStoragePools(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 

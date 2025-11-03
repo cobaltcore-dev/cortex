@@ -16,9 +16,7 @@ import (
 func TestCPUUsageBalancingStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency table
 	err := testDB.CreateTable(testDB.AddTable(netapp.StoragePoolCPUUsage{}))
 	if err != nil {

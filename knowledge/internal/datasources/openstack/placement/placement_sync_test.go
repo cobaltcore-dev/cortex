@@ -34,9 +34,7 @@ func (m *mockPlacementAPI) GetAllInventoryUsages(ctx context.Context, providers 
 func TestPlacementSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
@@ -56,9 +54,7 @@ func TestPlacementSyncer_Init(t *testing.T) {
 func TestPlacementSyncer_Sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
@@ -81,9 +77,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
@@ -109,9 +103,7 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 func TestPlacementSyncer_SyncTraits(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderTraits}
@@ -147,9 +139,7 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneAPI{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderInventoryUsages}

@@ -38,9 +38,6 @@ func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step 
 	m.initialized = true
 	return nil
 }
-func (m *mockPipelineStep) Deinit(ctx context.Context) error {
-	return nil
-}
 
 func TestPipeline_Init(t *testing.T) {
 	tests := []struct {

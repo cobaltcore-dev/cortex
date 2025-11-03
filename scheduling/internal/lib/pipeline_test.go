@@ -22,10 +22,6 @@ func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step 
 	return nil
 }
 
-func (m *mockPipelineStep) Deinit(ctx context.Context) error {
-	return nil
-}
-
 func (m *mockPipelineStep) Run(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
 	if m.err != nil {
 		return nil, m.err

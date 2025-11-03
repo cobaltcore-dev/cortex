@@ -16,9 +16,7 @@ import (
 func TestVROpsHostsystemContentionShortTermExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	extractor := &VROpsHostsystemContentionShortTermExtractor{}
 
 	config := v1alpha1.KnowledgeSpec{}
@@ -34,9 +32,7 @@ func TestVROpsHostsystemContentionShortTermExtractor_Init(t *testing.T) {
 func TestVROpsHostsystemContentionShortTermExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(vmware.ResolvedVROpsHostsystem{}),

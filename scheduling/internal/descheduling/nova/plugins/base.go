@@ -43,14 +43,6 @@ func (s *BaseStep[Opts]) Init(ctx context.Context, client client.Client, step v1
 	return nil
 }
 
-// Deinitialize the step, freeing any held resources.
-func (s *BaseStep[Opts]) Deinit(ctx context.Context) error {
-	if s.DB != nil {
-		s.DB.Close()
-	}
-	return nil
-}
-
 type Decision struct {
 	// Get the VM ID for which this decision applies.
 	VMID string

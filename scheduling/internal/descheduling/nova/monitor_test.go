@@ -86,10 +86,6 @@ func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v
 	return m.initError
 }
 
-func (m *mockMonitorStep) Deinit(ctx context.Context) error {
-	return nil
-}
-
 func (m *mockMonitorStep) Run() ([]plugins.Decision, error) {
 	m.runCalled = true
 	return m.decisions, m.runError

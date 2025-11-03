@@ -29,9 +29,7 @@ func (m *mockIdentityAPI) GetAllProjects(ctx context.Context) ([]identity.Projec
 func TestIdentitySyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
 		DB:   testDB,
@@ -48,9 +46,7 @@ func TestIdentitySyncer_Init(t *testing.T) {
 func TestIdentitySyncer_Sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
 		DB:   testDB,
@@ -72,9 +68,7 @@ func TestIdentitySyncer_Sync(t *testing.T) {
 func TestIdentitySyncer_SyncProjects(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
 		DB:   testDB,
@@ -99,9 +93,7 @@ func TestIdentitySyncer_SyncProjects(t *testing.T) {
 func TestIdentitySyncer_SyncDomains(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
 		DB:   testDB,

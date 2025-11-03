@@ -17,9 +17,7 @@ import (
 func TestStoragePoolCPUUsageExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	extractor := &StoragePoolCPUUsageExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
 	if err := extractor.Init(&testDB, &testDB, config); err != nil {
@@ -34,9 +32,7 @@ func TestStoragePoolCPUUsageExtractor_Init(t *testing.T) {
 func TestStoragePoolCPUUsageExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(manila.StoragePool{}),

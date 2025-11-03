@@ -21,9 +21,7 @@ import (
 func TestHostAvailableCapacityKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	kpi := &HostAvailableCapacityKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -43,9 +41,7 @@ func getMetricName(desc string) string {
 func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	if err := testDB.CreateTable(
 		testDB.AddTable(sap.HostDetails{}),
 		testDB.AddTable(shared.HostUtilization{}),
@@ -318,9 +314,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	if err := testDB.CreateTable(
 		testDB.AddTable(sap.HostDetails{}),
 		testDB.AddTable(shared.HostUtilization{}),

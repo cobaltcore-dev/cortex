@@ -18,9 +18,7 @@ import (
 func TestFilterPackedVirtqueueStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(nova.Hypervisor{}),

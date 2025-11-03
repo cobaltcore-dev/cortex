@@ -32,9 +32,6 @@ func (m *mockControllerStep) Run() ([]plugins.Decision, error) {
 func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
 	return nil
 }
-func (m *mockControllerStep) Deinit(ctx context.Context) error {
-	return nil
-}
 
 func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	tests := []struct {

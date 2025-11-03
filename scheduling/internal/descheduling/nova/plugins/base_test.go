@@ -6,9 +6,7 @@ package plugins
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -23,11 +21,6 @@ func (o MockOptions) Validate() error {
 }
 
 func TestBaseStep_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	step := BaseStep[MockOptions]{}
 	cl := fake.NewClientBuilder().Build()
 	err := step.Init(t.Context(), cl, v1alpha1.Step{

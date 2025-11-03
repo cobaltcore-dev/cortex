@@ -17,9 +17,7 @@ import (
 func TestFilterHasRequestedTraits_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostCapabilities{}),
@@ -492,9 +490,7 @@ func TestFilterHasRequestedTraits_TraitParsing(t *testing.T) {
 	// Test the trait parsing logic with edge cases
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostCapabilities{}),

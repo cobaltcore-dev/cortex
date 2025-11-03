@@ -21,7 +21,6 @@ type Decision struct {
 func TestAvoidHighStealPctStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
 
 	// Create the feature table

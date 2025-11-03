@@ -249,7 +249,6 @@ func TestSyncerGetSyncWindowStart(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dbEnv := testlibDB.SetupDBEnv(t)
 			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer testDB.Close()
 			defer dbEnv.Close()
 
 			tt.setupDB(&testDB)
@@ -332,7 +331,6 @@ func TestSyncerSync(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dbEnv := testlibDB.SetupDBEnv(t)
 			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer testDB.Close()
 			defer dbEnv.Close()
 
 			tt.setupDB(&testDB)
@@ -425,7 +423,6 @@ func TestSyncerSyncMethod(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dbEnv := testlibDB.SetupDBEnv(t)
 			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer testDB.Close()
 			defer dbEnv.Close()
 
 			tt.setupDB(&testDB)

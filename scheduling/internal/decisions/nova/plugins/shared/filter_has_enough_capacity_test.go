@@ -41,9 +41,7 @@ func testClient() client.Client {
 func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostUtilization{}),
@@ -465,9 +463,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostUtilization{}),
@@ -650,9 +646,7 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostUtilization{}),

@@ -30,10 +30,6 @@ type mockPipeline struct {
 	steps []v1alpha1.Step
 }
 
-func (m mockPipeline) Deinit(ctx context.Context) error {
-	return nil
-}
-
 // Mock initializer implementation
 type mockInitializer struct {
 	shouldFail   bool

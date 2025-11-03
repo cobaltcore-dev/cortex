@@ -19,9 +19,6 @@ type mockStep[RequestType PipelineRequest] struct {
 func (m *mockStep[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
 	return m.InitFunc(ctx, client, step)
 }
-func (m *mockStep[RequestType]) Deinit(ctx context.Context) error {
-	return nil
-}
 func (m *mockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
 	return m.RunFunc(traceLog, request)
 }

@@ -16,9 +16,7 @@ import (
 func TestVMLifeSpanKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	kpi := &VMLifeSpanKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -28,9 +26,7 @@ func TestVMLifeSpanKPI_Init(t *testing.T) {
 func TestVMLifeSpanKPI_Collect(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(shared.VMLifeSpanHistogramBucket{}),

@@ -50,9 +50,7 @@ func TestGeneralPurposeBalancingStepOpts_Validate(t *testing.T) {
 func TestGeneralPurposeBalancingStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(testDB.AddTable(shared.HostUtilization{}))
 	if err != nil {

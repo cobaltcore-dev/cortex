@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-gorp/gorp"
@@ -33,6 +34,12 @@ type Table interface {
 	// Map of index name to column names.
 	Indexes() map[string][]string
 }
+
+// Available initialized connections by the db url.
+//
+// The access to this map is thread-safe meaning FromSecretRef can be called
+// concurrently.
+var connections = sync.Map{} // map[string]*DB
 
 // Kubernetes connector which initializes the database connection from a secret.
 type Connector struct{ client.Client }
@@ -78,10 +85,17 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	if err != nil {
 		return nil, err
 	}
+	dbUrlStr := dbURL.String()
 	// Strip the password from the URL for logging.
-	urlForLog := strings.ReplaceAll(dbURL.String(), strip(string(password)), "****")
+	urlForLog := strings.ReplaceAll(dbUrlStr, strip(string(password)), "****")
 	slog.Info("connecting to database", "url", urlForLog)
-	db, err := sql.Open("postgres", dbURL.String())
+
+	// Check if we already have a connection for this url.
+	if conn, ok := connections.Load(dbUrlStr); ok {
+		slog.Info("reusing existing database connection", "url", urlForLog)
+		return conn.(*DB), nil
+	}
+	db, err := sql.Open("postgres", dbUrlStr)
 	if err != nil {
 		panic(err)
 	}
@@ -103,7 +117,9 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	db.SetMaxOpenConns(16)
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	slog.Info("database is ready")
-	return &DB{DbMap: dbMap}, nil
+	wrapped := &DB{DbMap: dbMap}
+	connections.Store(dbUrlStr, wrapped)
+	return wrapped, nil
 }
 
 // Executes a select query while monitoring its execution time.
@@ -173,13 +189,6 @@ func (d *DB) TableExists(t Table) bool {
 		return false
 	}
 	return exists
-}
-
-// Convenience function to close the database connection.
-func (d *DB) Close() {
-	if err := d.Db.Close(); err != nil {
-		slog.Error("failed to close database connection", "error", err)
-	}
 }
 
 // Replace all old objects of a table with new objects.

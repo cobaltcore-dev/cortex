@@ -22,6 +22,4 @@ type Step interface {
 	Run() ([]plugins.Decision, error)
 	// Configure the step with a database and options.
 	Init(ctx context.Context, client client.Client, step v1alpha1.Step) error
-	// Deinitialize the step, cleaning up any resources if needed.
-	Deinit(ctx context.Context) error
 }

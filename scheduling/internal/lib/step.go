@@ -34,8 +34,6 @@ func (EmptyStepOpts) Validate() error { return nil }
 type Step[RequestType PipelineRequest] interface {
 	// Configure the step and initialize things like a database connection.
 	Init(ctx context.Context, client client.Client, step v1alpha1.Step) error
-	// Deinitialize the step, freeing any held resources.
-	Deinit(ctx context.Context) error
 	// Run this step of the scheduling pipeline.
 	// Return a map of keys to activation values. Important: keys that are
 	// not in the map are considered as filtered out.
@@ -77,14 +75,6 @@ func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Cl
 	}
 
 	s.Client = client
-	return nil
-}
-
-// Deinitialize the step, freeing any held resources.
-func (s *BaseStep[RequestType, Opts]) Deinit(ctx context.Context) error {
-	if s.DB != nil {
-		s.DB.Close()
-	}
 	return nil
 }
 

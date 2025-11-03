@@ -25,9 +25,7 @@ func (m *mockManilaAPI) GetAllStoragePools(ctx context.Context) ([]manila.Storag
 func TestManilaSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	conf := v1alpha1.ManilaDatasource{Type: v1alpha1.ManilaDatasourceTypeStoragePools}
 
@@ -46,9 +44,7 @@ func TestManilaSyncer_Init(t *testing.T) {
 func TestManilaSyncer_Sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	conf := v1alpha1.ManilaDatasource{Type: v1alpha1.ManilaDatasourceTypeStoragePools}
 
@@ -69,9 +65,7 @@ func TestManilaSyncer_Sync(t *testing.T) {
 func TestManilaSyncer_SyncAllStoragePools(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	conf := v1alpha1.ManilaDatasource{Type: v1alpha1.ManilaDatasourceTypeStoragePools}
 

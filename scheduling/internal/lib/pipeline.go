@@ -21,8 +21,6 @@ import (
 type Pipeline[RequestType PipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
 	Run(request RequestType) (v1alpha1.DecisionResult, error)
-	// Deinitialize the pipeline, freeing any held resources.
-	Deinit(ctx context.Context) error
 }
 
 // Pipeline of scheduler steps.
@@ -86,16 +84,6 @@ func NewPipeline[RequestType PipelineRequest](
 		steps:   stepsByName,
 		monitor: monitor,
 	}, nil
-}
-
-// De-initialize all steps in the pipeline.
-func (p *pipeline[RequestType]) Deinit(ctx context.Context) error {
-	for _, step := range p.steps {
-		if err := step.Deinit(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // Execute the scheduler steps in groups of the execution order.

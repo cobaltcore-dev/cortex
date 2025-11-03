@@ -30,13 +30,8 @@ type PipelineInitializer[PipelineType any] interface {
 	InitPipeline(ctx context.Context, steps []v1alpha1.Step) (PipelineType, error)
 }
 
-type Deinitializable interface {
-	// Deinitialize the pipeline, freeing any held resources.
-	Deinit(ctx context.Context) error
-}
-
 // Base controller for decision pipelines.
-type BasePipelineController[PipelineType Deinitializable] struct {
+type BasePipelineController[PipelineType any] struct {
 	// Available pipelines by their name.
 	Pipelines map[string]PipelineType
 	// Delegate to create pipelines.
@@ -119,13 +114,6 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		delete(c.Pipelines, obj.Name)
 		return
 	}
-	// Delegate to the parent controller which knows how to create the pipeline.
-	if existingPipeline, exists := c.Pipelines[obj.Name]; exists {
-		log.Info("deinitializing existing pipeline before reinit", "pipelineName", obj.Name)
-		if err := existingPipeline.Deinit(ctx); err != nil {
-			log.Error(err, "failed to deinitialize existing pipeline", "pipelineName", obj.Name)
-		}
-	}
 	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, steps)
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
@@ -188,13 +176,7 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 
-	log := ctrl.LoggerFrom(ctx)
 	pipelineConf := evt.Object.(*v1alpha1.Pipeline)
-	if existingPipeline, exists := c.Pipelines[pipelineConf.Name]; exists {
-		if err := existingPipeline.Deinit(ctx); err != nil {
-			log.Error(err, "failed to deinitialize deleted pipeline", "pipelineName", pipelineConf.Name)
-		}
-	}
 	delete(c.Pipelines, pipelineConf.Name)
 }
 

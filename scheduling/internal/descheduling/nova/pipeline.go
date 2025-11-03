@@ -64,16 +64,6 @@ func (p *Pipeline) Init(
 	return nil
 }
 
-// Deinitialize all steps in the pipeline.
-func (p *Pipeline) Deinit(ctx context.Context) error {
-	for _, step := range p.steps {
-		if err := step.Deinit(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Execute the descheduler steps in parallel and collect the decisions made by
 // each step.
 func (p *Pipeline) run() map[string][]plugins.Decision {

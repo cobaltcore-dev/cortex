@@ -26,7 +26,6 @@ func (m MockTable) Indexes() map[string][]string {
 func TestDB_CreateTable(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
@@ -43,7 +42,6 @@ func TestDB_CreateTable(t *testing.T) {
 func TestDB_AddTable(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
@@ -55,7 +53,6 @@ func TestDB_AddTable(t *testing.T) {
 func TestDB_TableExists(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
@@ -72,7 +69,6 @@ func TestDB_TableExists(t *testing.T) {
 func TestDB_Close(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	db.Close()
 	defer dbEnv.Close()
 
 	if err := db.Db.PingContext(t.Context()); err == nil {
@@ -83,7 +79,6 @@ func TestDB_Close(t *testing.T) {
 func TestReplaceAll(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
@@ -157,7 +152,6 @@ func TestBulkInsert(t *testing.T) {
 	// Set up the test database environment
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	// Add and create the table

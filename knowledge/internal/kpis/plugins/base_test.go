@@ -29,9 +29,7 @@ func (MockKPI) TableName() string {
 func TestBaseKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	opts := conf.NewRawOpts(`{
         "option1": "value1",
         "option2": 2
