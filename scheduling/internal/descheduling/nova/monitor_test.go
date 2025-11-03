@@ -182,7 +182,7 @@ func TestStepMonitor_Run(t *testing.T) {
 	}
 
 	// Verify that the counter was incremented
-	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("test-step"))
+	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("/test-step"))
 	if counterValue != 2.0 {
 		t.Errorf("expected counter value 2.0, got %f", counterValue)
 	}
@@ -208,7 +208,7 @@ func TestStepMonitor_Run_WithError(t *testing.T) {
 	}
 
 	// Counter should not be incremented on error
-	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("test-step"))
+	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("/test-step"))
 	if counterValue != 0.0 {
 		t.Errorf("expected counter value 0.0, got %f", counterValue)
 	}
@@ -233,7 +233,7 @@ func TestStepMonitor_Run_EmptyResult(t *testing.T) {
 	}
 
 	// Counter should be 0 for empty results
-	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("test-step"))
+	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("/test-step"))
 	if counterValue != 0.0 {
 		t.Errorf("expected counter value 0.0, got %f", counterValue)
 	}

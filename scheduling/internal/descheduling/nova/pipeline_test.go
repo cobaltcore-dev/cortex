@@ -11,6 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -55,7 +56,7 @@ func TestPipeline_Init(t *testing.T) {
 				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.Step{
-				{Spec: v1alpha1.StepSpec{
+				{ObjectMeta: v1.ObjectMeta{Name: "step1"}, Spec: v1alpha1.StepSpec{
 					Impl: "test-step",
 					Type: v1alpha1.StepTypeDescheduler,
 				}},
@@ -68,7 +69,7 @@ func TestPipeline_Init(t *testing.T) {
 				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.Step{
-				{Spec: v1alpha1.StepSpec{
+				{ObjectMeta: v1.ObjectMeta{Name: "step2"}, Spec: v1alpha1.StepSpec{
 					Impl: "unsupported-step",
 					Type: v1alpha1.StepTypeDescheduler,
 				}},
@@ -81,7 +82,7 @@ func TestPipeline_Init(t *testing.T) {
 				"failing-step": &mockPipelineStep{initError: errors.New("init failed")},
 			},
 			confedSteps: []v1alpha1.Step{
-				{Spec: v1alpha1.StepSpec{
+				{ObjectMeta: v1.ObjectMeta{Name: "step3"}, Spec: v1alpha1.StepSpec{
 					Impl: "failing-step",
 					Type: v1alpha1.StepTypeDescheduler,
 				}},
@@ -95,11 +96,11 @@ func TestPipeline_Init(t *testing.T) {
 				"step2": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.Step{
-				{Spec: v1alpha1.StepSpec{
+				{ObjectMeta: v1.ObjectMeta{Name: "step1"}, Spec: v1alpha1.StepSpec{
 					Impl: "step1",
 					Type: v1alpha1.StepTypeDescheduler,
 				}},
-				{Spec: v1alpha1.StepSpec{
+				{ObjectMeta: v1.ObjectMeta{Name: "step2"}, Spec: v1alpha1.StepSpec{
 					Impl: "step2",
 					Type: v1alpha1.StepTypeDescheduler,
 				}},

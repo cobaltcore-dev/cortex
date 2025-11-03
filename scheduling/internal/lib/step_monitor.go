@@ -54,8 +54,8 @@ func (s *StepMonitor[RequestType]) Deinit(ctx context.Context) error {
 
 // Schedule using the wrapped step and measure the time it takes.
 func monitorStep[RequestType PipelineRequest](
-	ctx context.Context,
-	client client.Client,
+	_ context.Context,
+	_ client.Client,
 	step v1alpha1.Step,
 	impl Step[RequestType],
 	m PipelineMonitor,

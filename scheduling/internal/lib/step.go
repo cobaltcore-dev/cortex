@@ -8,7 +8,6 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
@@ -49,7 +48,7 @@ type Step[RequestType PipelineRequest] interface {
 // that would otherwise be duplicated across all steps.
 type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 	// Options to pass via yaml to this step.
-	conf.JsonOpts[Opts]
+	libconf.JsonOpts[Opts]
 	// The activation function to use.
 	ActivationFunction
 	// The kubernetes client to use.

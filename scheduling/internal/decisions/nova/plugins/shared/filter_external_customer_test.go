@@ -56,7 +56,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
 		request       api.ExternalSchedulerRequest
-		opts          string
+		opts          FilterExternalCustomerStepOpts
 		expectedHosts []string
 		filteredHosts []string
 	}{
@@ -77,10 +77,10 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host4"},
 				},
 			},
-			opts: `{
-				"domainNamePrefixes": ["external-customer-"],
-				"ignoredDomainNames": []
-			}`,
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"external-customer-"},
+				CustomerIgnoredDomainNames: []string{},
+			},
 			expectedHosts: []string{"host2", "host4"}, // Hosts without external customer support
 			filteredHosts: []string{"host1", "host3"}, // Hosts with external customer support are filtered out
 		},
@@ -101,10 +101,10 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host4"},
 				},
 			},
-			opts: `{
-				"domainNamePrefixes": ["external-customer-"],
-				"ignoredDomainNames": []
-			}`,
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"external-customer-"},
+				CustomerIgnoredDomainNames: []string{},
+			},
 			expectedHosts: []string{"host1", "host2", "host3", "host4"},
 			filteredHosts: []string{},
 		},
@@ -125,10 +125,10 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host4"},
 				},
 			},
-			opts: `{
-				"domainNamePrefixes": ["external-customer-"],
-				"ignoredDomainNames": ["external-customer-ignored.com"]
-			}`,
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"external-customer-"},
+				CustomerIgnoredDomainNames: []string{"external-customer-ignored.com"},
+			},
 			expectedHosts: []string{"host1", "host2", "host3", "host4"},
 			filteredHosts: []string{},
 		},
@@ -149,10 +149,10 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host4"},
 				},
 			},
-			opts: `{
-				"domainNamePrefixes": ["external-customer-", "partner-"],
-				"ignoredDomainNames": []
-			}`,
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"external-customer-", "partner-"},
+				CustomerIgnoredDomainNames: []string{},
+			},
 			expectedHosts: []string{"host2", "host4"},
 			filteredHosts: []string{"host1", "host3"},
 		},
@@ -173,10 +173,10 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host4"},
 				},
 			},
-			opts: `{
-				"domainNamePrefixes": ["external-customer-"],
-				"ignoredDomainNames": []
-			}`,
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"external-customer-"},
+				CustomerIgnoredDomainNames: []string{},
+			},
 			expectedHosts: []string{"host2", "host4"},
 			filteredHosts: []string{"host1", "host3"},
 		},
@@ -193,10 +193,10 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host2"},
 				},
 			},
-			opts: `{
-				"domainNamePrefixes": ["external-customer-"],
-				"ignoredDomainNames": []
-			}`,
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"external-customer-"},
+				CustomerIgnoredDomainNames: []string{},
+			},
 			expectedHosts: []string{}, // Should return error, but we expect empty result
 			filteredHosts: []string{"host1", "host2"},
 		},
@@ -206,6 +206,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterExternalCustomerStep{}
 			step.DB = &testDB
+			step.Options = tt.opts
 			result, err := step.Run(slog.Default(), tt.request)
 
 			// For the "No domain hint" test case, we expect an error
