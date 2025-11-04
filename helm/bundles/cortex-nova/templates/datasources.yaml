@@ -8,7 +8,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.prometheus.sso.enabled }}
+  {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-prometheus-sso
     namespace: {{ .Release.Namespace }}
@@ -31,7 +31,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.prometheus.sso.enabled }}
+  {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-prometheus-sso
     namespace: {{ .Release.Namespace }}
@@ -54,7 +54,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.prometheus.sso.enabled }}
+  {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-prometheus-sso
     namespace: {{ .Release.Namespace }}
@@ -80,7 +80,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.prometheus.sso.enabled }}
+  {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-prometheus-sso
     namespace: {{ .Release.Namespace }}
@@ -109,7 +109,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -132,7 +132,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -155,7 +155,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -178,7 +178,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -201,7 +201,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -224,7 +224,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -247,7 +247,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -270,7 +270,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -293,7 +293,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -316,7 +316,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -339,7 +339,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}
@@ -362,7 +362,7 @@ spec:
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
     namespace: {{ .Release.Namespace }}

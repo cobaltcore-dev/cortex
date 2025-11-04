@@ -16,8 +16,6 @@ type FilterHasRequestedTraits struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
-func (s *FilterHasRequestedTraits) GetName() string { return "filter_has_requested_traits" }
-
 // Filter hosts that do not have the requested traits given by the extra spec:
 // - "trait:<trait>": "forbidden" means the host must not have the specified trait.
 // - "trait:<trait>": "required" means the host must have the specified trait.

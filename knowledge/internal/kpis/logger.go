@@ -33,11 +33,6 @@ func (l kpilogger) Init(db db.DB, opts conf.RawOpts) error {
 	return l.kpi.Init(db, opts)
 }
 
-func (l kpilogger) Deinit() error {
-	slog.Info("kpi: deinitializing", "name", l.kpi.GetName())
-	return l.kpi.Deinit()
-}
-
 func (l kpilogger) GetName() string {
 	return l.kpi.GetName()
 }

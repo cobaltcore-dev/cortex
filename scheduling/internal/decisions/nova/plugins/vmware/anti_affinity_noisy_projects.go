@@ -36,14 +36,15 @@ type AntiAffinityNoisyProjectsStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, AntiAffinityNoisyProjectsStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *AntiAffinityNoisyProjectsStep) GetName() string {
-	return "vmware_anti_affinity_noisy_projects"
-}
-
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
+
+	if !request.VMware {
+		slog.Debug("Skipping general purpose balancing step for non-VMware VM")
+		return result, nil
+	}
+
 	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")
 
 	// Check how noisy the project is on the compute hosts.

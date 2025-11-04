@@ -4,7 +4,7 @@
 package conf
 
 import (
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type Config struct {
@@ -14,8 +14,9 @@ type Config struct {
 	// Whether to disable dry-run for descheduler steps.
 	DisableDeschedulerDryRun bool `json:"disableDeschedulerDryRun"`
 
-	// Lib modules configs.
-	libconf.DBConfig `json:"db"`
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 
-	libconf.KeystoneConfig `json:"keystone"`
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 }

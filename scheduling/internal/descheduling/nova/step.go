@@ -4,11 +4,12 @@
 package nova
 
 import (
+	"context"
 	"errors"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -19,8 +20,6 @@ var (
 type Step interface {
 	// Get the VMs on their current hosts that should be considered for descheduling.
 	Run() ([]plugins.Decision, error)
-	// Get the name of this step, used for identification in config, logs, metrics, etc.
-	GetName() string
 	// Configure the step with a database and options.
-	Init(db db.DB, opts conf.RawOpts) error
+	Init(ctx context.Context, client client.Client, step v1alpha1.Step) error
 }

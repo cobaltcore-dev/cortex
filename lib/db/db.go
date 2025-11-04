@@ -10,18 +10,14 @@ import (
 	"log/slog"
 	"net/url"
 	"reflect"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
-	"github.com/dlmiddlecote/sqlstats"
 	"github.com/go-gorp/gorp"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/easypg"
-	"github.com/sapcc/go-bits/jobloop"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -29,7 +25,6 @@ import (
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
 	*gorp.DbMap
-	retryConf conf.DBReconnectConfig
 	// Monitor for database related metrics like connection attempts.
 	monitor Monitor
 }
@@ -39,6 +34,12 @@ type Table interface {
 	// Map of index name to column names.
 	Indexes() map[string][]string
 }
+
+// Available initialized connections by the db url.
+//
+// The access to this map is thread-safe meaning FromSecretRef can be called
+// concurrently.
+var connections = sync.Map{} // map[string]*DB
 
 // Kubernetes connector which initializes the database connection from a secret.
 type Connector struct{ client.Client }
@@ -84,10 +85,17 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	if err != nil {
 		return nil, err
 	}
+	dbUrlStr := dbURL.String()
 	// Strip the password from the URL for logging.
-	urlForLog := strings.ReplaceAll(dbURL.String(), strip(string(password)), "****")
+	urlForLog := strings.ReplaceAll(dbUrlStr, strip(string(password)), "****")
 	slog.Info("connecting to database", "url", urlForLog)
-	db, err := sql.Open("postgres", dbURL.String())
+
+	// Check if we already have a connection for this url.
+	if conn, ok := connections.Load(dbUrlStr); ok {
+		slog.Info("reusing existing database connection", "url", urlForLog)
+		return conn.(*DB), nil
+	}
+	db, err := sql.Open("postgres", dbUrlStr)
 	if err != nil {
 		panic(err)
 	}
@@ -109,89 +117,9 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	db.SetMaxOpenConns(16)
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	slog.Info("database is ready")
-	reconnectConfig := conf.DBReconnectConfig{
-		MaxRetries:                  5,
-		RetryIntervalSeconds:        2,
-		LivenessPingIntervalSeconds: 30,
-	}
-	return &DB{DbMap: dbMap, retryConf: reconnectConfig}, nil
-}
-
-// Create a new postgres database and wait until it is connected.
-func NewPostgresDB(
-	ctx context.Context,
-	c conf.DBConfig,
-	registry *monitoring.Registry,
-	monitor Monitor,
-) DB {
-
-	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
-	dbURL, err := easypg.URLFrom(easypg.URLParts{
-		HostName:          strip(c.Host),
-		Port:              strconv.Itoa(c.Port),
-		UserName:          strip(c.User),
-		Password:          strip(c.Password),
-		ConnectionOptions: "sslmode=disable",
-		DatabaseName:      strip(c.Database),
-	})
-	if err != nil {
-		panic(err)
-	}
-	// Strip the password from the URL for logging.
-	slog.Info("connecting to database", "url", strings.ReplaceAll(dbURL.String(), strip(c.Password), "****"))
-	db, err := sql.Open("postgres", dbURL.String())
-	if err != nil {
-		panic(err)
-	}
-
-	// If the wait time exceeds 10 seconds, we will panic.
-	maxRetries := 10
-	for i := range maxRetries {
-		err := db.PingContext(ctx)
-		if err == nil {
-			break
-		}
-		if i == maxRetries-1 {
-			panic("giving up connecting to database")
-		}
-		slog.Error("failed to connect to database, retrying...", "error", err)
-		time.Sleep(1 * time.Second)
-	}
-
-	db.SetMaxOpenConns(16)
-	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
-	slog.Info("database is ready")
-	if registry != nil {
-		// Expose metrics for the database connection pool.
-		registry.MustRegister(sqlstats.NewStatsCollector("cortex", db))
-	}
-	return DB{DbMap: dbMap, monitor: monitor, retryConf: c.Reconnect}
-}
-
-// Check periodically if the database is alive. If not, panic.
-func (d *DB) CheckLivenessPeriodically(ctx context.Context) {
-	var failures int
-	for {
-		if err := d.Db.PingContext(ctx); err != nil {
-			if failures >= d.retryConf.MaxRetries {
-				slog.Error("database is unreachable, giving up", "error", err)
-				panic(err)
-			}
-			failures++
-			if d.monitor.connectionAttempts != nil {
-				d.monitor.connectionAttempts.Inc()
-			}
-
-			slog.Error("failed to ping database", "error", err, "attempt", failures)
-			interval := time.Duration(d.retryConf.RetryIntervalSeconds) * time.Second
-			time.Sleep(jobloop.DefaultJitter(interval))
-			continue
-		}
-		failures = 0
-		slog.Debug("check ok: database is reachable")
-		sleepTime := time.Duration(d.retryConf.LivenessPingIntervalSeconds) * time.Second
-		time.Sleep(jobloop.DefaultJitter(sleepTime))
-	}
+	wrapped := &DB{DbMap: dbMap}
+	connections.Store(dbUrlStr, wrapped)
+	return wrapped, nil
 }
 
 // Executes a select query while monitoring its execution time.
@@ -261,13 +189,6 @@ func (d *DB) TableExists(t Table) bool {
 		return false
 	}
 	return exists
-}
-
-// Convenience function to close the database connection.
-func (d *DB) Close() {
-	if err := d.Db.Close(); err != nil {
-		slog.Error("failed to close database connection", "error", err)
-	}
 }
 
 // Replace all old objects of a table with new objects.

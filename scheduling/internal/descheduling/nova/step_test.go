@@ -37,7 +37,6 @@ func (s *BaseStep) Init(db db.DB, opts conf.RawOpts) error {
 func TestBaseStep_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
 
 	opts := conf.NewRawOpts(`{

@@ -7,13 +7,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	schedulingv1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,11 +21,6 @@ import (
 )
 
 func TestDecisionPipelineController_Reconcile(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	scheme := runtime.NewScheme()
 	if err := schedulingv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheduling scheme: %v", err)
@@ -137,7 +130,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Conf: conf.Config{
 					Operator: "test-operator",
 				},
-				DB:      testDB,
 				Monitor: lib.PipelineMonitor{},
 			}
 			controller.Client = client
@@ -218,13 +210,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 }
 
 func TestDecisionPipelineController_InitPipeline(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
 	controller := &DecisionPipelineController{
-		DB:      testDB,
 		Monitor: lib.PipelineMonitor{},
 	}
 
@@ -266,7 +252,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(tt.steps)
+			pipeline, err := controller.InitPipeline(t.Context(), tt.steps)
 
 			if tt.expectError && err == nil {
 				t.Error("expected error but got none")

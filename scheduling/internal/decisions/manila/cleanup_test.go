@@ -17,15 +17,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func TestCleanupManila(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add corev1 scheme: %v", err)
 	}
 
 	tests := []struct {
@@ -160,11 +163,6 @@ func TestCleanupManila(t *testing.T) {
 			for i := range tt.decisions {
 				objects[i] = &tt.decisions[i]
 			}
-
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				Build()
 
 			// Create mock Manila server
 			manilaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -319,19 +317,33 @@ func TestCleanupManila(t *testing.T) {
 			}))
 			defer keystoneServer.Close()
 
+			// Add the keystone secret object
+			objects = append(objects, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "keystone-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"url":               []byte(keystoneServer.URL),
+					"availability":      []byte("public"),
+					"username":          []byte("test-user"),
+					"password":          []byte("test-password"),
+					"projectName":       []byte("test-project"),
+					"userDomainName":    []byte("default"),
+					"projectDomainName": []byte("default"),
+				},
+			})
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				Build()
 			config := conf.Config{
 				Operator: "test-operator",
-				KeystoneConfig: libconf.KeystoneConfig{
-					URL:                 keystoneServer.URL,
-					Availability:        "public",
-					OSUsername:          "test-user",
-					OSPassword:          "test-password",
-					OSProjectName:       "test-project",
-					OSUserDomainName:    "default",
-					OSProjectDomainName: "default",
+				KeystoneSecretRef: corev1.SecretReference{
+					Name:      "keystone-secret",
+					Namespace: "default",
 				},
 			}
-
 			err := cleanupManila(context.Background(), client, config)
 
 			if tt.expectError && err == nil {
@@ -381,21 +393,38 @@ func TestCleanupManilaDecisionsRegularly(t *testing.T) {
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add corev1 scheme: %v", err)
+	}
+
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "keystone-secret",
+				Namespace: "default",
+			},
+			Data: map[string][]byte{
+				"url":               []byte("http://invalid-keystone-url"),
+				"availability":      []byte("public"),
+				"username":          []byte("test-user"),
+				"password":          []byte("test-password"),
+				"projectName":       []byte("test-project"),
+				"userDomainName":    []byte("default"),
+				"projectDomainName": []byte("default"),
+			},
+		},
+	}
 
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
+		WithObjects(objects...).
 		Build()
 
 	config := conf.Config{
 		Operator: "test-operator",
-		KeystoneConfig: libconf.KeystoneConfig{
-			URL:                 "http://invalid-keystone-url",
-			Availability:        "public",
-			OSUsername:          "test-user",
-			OSPassword:          "test-password",
-			OSProjectName:       "test-project",
-			OSUserDomainName:    "default",
-			OSProjectDomainName: "default",
+		KeystoneSecretRef: corev1.SecretReference{
+			Name:      "keystone-secret",
+			Namespace: "default",
 		},
 	}
 

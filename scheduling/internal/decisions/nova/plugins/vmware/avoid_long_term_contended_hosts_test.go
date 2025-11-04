@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/vmware"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 
@@ -18,9 +17,7 @@ import (
 func TestAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsHostsystemContentionLongTerm{}))
 	if err != nil {
@@ -38,20 +35,16 @@ func TestAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := conf.NewRawOpts(`{
-        "avgCPUContentionLowerBound": 0,
-        "avgCPUContentionUpperBound": 100,
-        "avgCPUContentionActivationLowerBound": 0.0,
-        "avgCPUContentionActivationUpperBound": -1.0,
-        "maxCPUContentionLowerBound": 0,
-        "maxCPUContentionUpperBound": 100,
-        "maxCPUContentionActivationLowerBound": 0.0,
-        "maxCPUContentionActivationUpperBound": -1.0
-    }`)
 	step := &AvoidLongTermContendedHostsStep{}
-	if err := step.Init(testDB, opts); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	step.Options.AvgCPUContentionLowerBound = 0
+	step.Options.AvgCPUContentionUpperBound = 100
+	step.Options.AvgCPUContentionActivationLowerBound = 0.0
+	step.Options.AvgCPUContentionActivationUpperBound = -1.0
+	step.Options.MaxCPUContentionLowerBound = 0
+	step.Options.MaxCPUContentionUpperBound = 100
+	step.Options.MaxCPUContentionActivationLowerBound = 0.0
+	step.Options.MaxCPUContentionActivationUpperBound = -1.0
+	step.DB = &testDB
 
 	tests := []struct {
 		name     string

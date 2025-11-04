@@ -9,13 +9,9 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type FilterHasEnoughCapacityOpts struct {
@@ -27,35 +23,7 @@ func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
 
 type FilterHasEnoughCapacity struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, FilterHasEnoughCapacityOpts]
-
-	// Kubernetes client.
-	Client client.Client
 }
-
-func (s *FilterHasEnoughCapacity) Init(db db.DB, opts conf.RawOpts) error {
-	if err := s.BaseStep.Init(db, opts); err != nil {
-		return err
-	}
-	if s.Client != nil {
-		return nil // Already initialized.
-	}
-	scheme, err := v1alpha1.SchemeBuilder.Build()
-	if err != nil {
-		return err
-	}
-	clientConfig, err := ctrl.GetConfig()
-	if err != nil {
-		return err
-	}
-	cl, err := client.New(clientConfig, client.Options{Scheme: scheme})
-	if err != nil {
-		return err
-	}
-	s.Client = cl
-	return nil
-}
-
-func (s *FilterHasEnoughCapacity) GetName() string { return "filter_has_enough_capacity" }
 
 // Filter hosts that don't have enough capacity to run the requested flavor.
 //

@@ -6,10 +6,14 @@ package nova
 import (
 	"context"
 
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type CycleDetector interface {
+	// Initialize the cycle detector with needed clients.
+	Init(ctx context.Context, client client.Client, conf conf.Config) error
 	// Filter descheduling decisions to avoid cycles.
 	Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error)
 }
@@ -19,8 +23,13 @@ type cycleDetector struct {
 	novaAPI NovaAPI
 }
 
-func NewCycleDetector(novaAPI NovaAPI) CycleDetector {
-	return &cycleDetector{novaAPI: novaAPI}
+func NewCycleDetector() CycleDetector {
+	return &cycleDetector{novaAPI: NewNovaAPI()}
+}
+
+// Initialize the cycle detector.
+func (c *cycleDetector) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	return c.novaAPI.Init(ctx, client, conf)
 }
 
 func (c *cycleDetector) Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error) {

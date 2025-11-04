@@ -6,9 +6,9 @@ package plugins
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type MockOptions struct {
@@ -21,18 +21,16 @@ func (o MockOptions) Validate() error {
 }
 
 func TestBaseStep_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
-	defer dbEnv.Close()
-
-	opts := conf.NewRawOpts(`{
-        "option1": "value1",
-        "option2": 2
-    }`)
-
 	step := BaseStep[MockOptions]{}
-	err := step.Init(testDB, opts)
+	cl := fake.NewClientBuilder().Build()
+	err := step.Init(t.Context(), cl, v1alpha1.Step{
+		Spec: v1alpha1.StepSpec{
+			Opts: runtime.RawExtension{Raw: []byte(`{
+				"option1": "value1",
+				"option2": 2
+			}`)},
+		},
+	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

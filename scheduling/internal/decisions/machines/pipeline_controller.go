@@ -8,7 +8,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
@@ -39,8 +38,6 @@ type DecisionPipelineController struct {
 
 	// Config for the scheduling operator.
 	Conf conf.Config
-	// Database to pass down to all steps.
-	DB db.DB
 	// Monitor to pass down to all pipelines.
 	Monitor lib.PipelineMonitor
 }
@@ -107,8 +104,12 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DecisionPipelineController) InitPipeline(steps []v1alpha1.Step) (lib.Pipeline[ironcore.MachinePipelineRequest], error) {
-	return NewPipeline(steps, c.DB, c.Monitor)
+func (c *DecisionPipelineController) InitPipeline(
+	ctx context.Context,
+	steps []v1alpha1.Step,
+) (lib.Pipeline[ironcore.MachinePipelineRequest], error) {
+
+	return lib.NewPipeline(ctx, c.Client, supportedSteps, steps, c.Monitor)
 }
 
 func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
@@ -170,7 +171,7 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
-	c.Delegate = c
+	c.Initializer = c
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

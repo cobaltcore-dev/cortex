@@ -13,37 +13,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/gophercloud/gophercloud/v2"
 )
 
 func TestNewCommitmentsClient(t *testing.T) {
-	config := conf.KeystoneConfig{
-		URL:                 "http://keystone.example.com",
-		OSUsername:          "testuser",
-		OSPassword:          "testpass",
-		OSProjectName:       "testproject",
-		OSUserDomainName:    "default",
-		OSProjectDomainName: "default",
-	}
-
-	client := NewCommitmentsClient(config)
+	client := NewCommitmentsClient()
 	if client == nil {
 		t.Fatal("expected client to be created, got nil")
 	}
 
 	// Check that the returned client is of the correct type
-	concreteClient, ok := client.(*commitmentsClient)
+	_, ok := client.(*commitmentsClient)
 	if !ok {
 		t.Fatal("expected client to be of type *commitmentsClient")
-	}
-
-	// Verify config is set correctly
-	if concreteClient.conf.URL != config.URL {
-		t.Errorf("expected URL %s, got %s", config.URL, concreteClient.conf.URL)
-	}
-	if concreteClient.conf.OSUsername != config.OSUsername {
-		t.Errorf("expected username %s, got %s", config.OSUsername, concreteClient.conf.OSUsername)
 	}
 }
 

@@ -21,13 +21,13 @@ import (
 // The base pipeline controller will delegate some methods to the parent
 // controller struct. The parent controller only needs to conform to this
 // interface and set the delegate field accordingly.
-type BasePipelineControllerDelegate[PipelineType any] interface {
+type PipelineInitializer[PipelineType any] interface {
 	// Initialize a new pipeline with the given steps.
 	//
 	// This method is delegated to the parent controller, when a pipeline needs
 	// to be newly initialized or re-initialized to update it in the pipeline
 	// map.
-	InitPipeline(steps []v1alpha1.Step) (PipelineType, error)
+	InitPipeline(ctx context.Context, steps []v1alpha1.Step) (PipelineType, error)
 }
 
 // Base controller for decision pipelines.
@@ -35,7 +35,7 @@ type BasePipelineController[PipelineType any] struct {
 	// Available pipelines by their name.
 	Pipelines map[string]PipelineType
 	// Delegate to create pipelines.
-	Delegate BasePipelineControllerDelegate[PipelineType]
+	Initializer PipelineInitializer[PipelineType]
 	// Kubernetes client to manage/fetch resources.
 	client.Client
 	// The name of the operator to scope resources to.
@@ -114,8 +114,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		delete(c.Pipelines, obj.Name)
 		return
 	}
-	// Delegate to the parent controller which knows how to create the pipeline.
-	c.Pipelines[obj.Name], err = c.Delegate.InitPipeline(steps)
+	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, steps)
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
 		obj.Status.Ready = false

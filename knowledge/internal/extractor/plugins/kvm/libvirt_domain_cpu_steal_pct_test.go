@@ -18,9 +18,7 @@ import (
 func TestLibvirtDomainCPUStealPctExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	extractor := &LibvirtDomainCPUStealPctExtractor{}
 
 	config := v1alpha1.KnowledgeSpec{
@@ -41,9 +39,7 @@ func TestLibvirtDomainCPUStealPctExtractor_Init(t *testing.T) {
 func TestLibvirtDomainCPUStealPctExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(prometheus.KVMDomainMetric{}),

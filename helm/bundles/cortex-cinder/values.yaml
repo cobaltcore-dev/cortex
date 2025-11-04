@@ -41,32 +41,23 @@ postgres:
   database: postgres
   port: "5432"
 
-datasources:
-  prometheus:
-    url: "https://path-to-your-prometheus"
-    sso:
-      enabled: false
-      <<: *sharedSSOCert
-  openstack:
-    url: "https://path-to-keystone/v3"
-    availability: public
-    username: openstack-user-with-all-project-read-access
-    password: openstack-user-password
-    projectName: openstack-project-of-user
-    userDomainName: openstack-domain-of-user
-    projectDomainName: openstack-domain-of-project-scoped-to
-    sso:
-      enabled: false
-      <<: *sharedSSOCert
+prometheus:
+  url: "https://path-to-your-prometheus"
+  sso:
+    enabled: false
+    <<: *sharedSSOCert
 
-# Values accessible to all subcharts.
-global:
-  # Values passed to the service through a configmap.
-  conf:
-    # Connection parameters for the database where data is stored.
-    db:
-      # Must match postgresql settings from the cortex-postgres chart.
-      host: cortex-cinder-postgresql
+openstack:
+  url: "https://path-to-keystone/v3"
+  availability: public
+  username: openstack-user-with-all-project-read-access
+  password: openstack-user-password
+  projectName: openstack-project-of-user
+  userDomainName: openstack-domain-of-user
+  projectDomainName: openstack-domain-of-project-scoped-to
+  sso:
+    enabled: false
+    <<: *sharedSSOCert
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
@@ -95,3 +86,9 @@ cortex-scheduling-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-cinder
+    keystoneSecretRef:
+      name: cortex-cinder-openstack-keystone
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-cinder-openstack-sso
+    #   namespace: default

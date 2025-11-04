@@ -15,9 +15,6 @@ type FilterHostInstructionsStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *FilterHostInstructionsStep) GetName() string { return "filter_host_instructions" }
-
 // Filter hosts based on instructions given in the request spec. Supported are:
 // - spec.ignore_hosts: Filter out all hosts in this list.
 // - spec.force_hosts: Include only hosts in this list.

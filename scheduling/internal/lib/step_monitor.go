@@ -4,6 +4,7 @@
 package lib
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -13,9 +14,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Wraps a scheduler step to monitor its execution.
@@ -25,6 +26,8 @@ type StepMonitor[RequestType PipelineRequest] struct {
 
 	// The pipeline name to which this step belongs.
 	pipelineName string
+	// The name of this step.
+	stepName string
 
 	// The wrapped scheduler step to monitor.
 	Step Step[RequestType]
@@ -40,29 +43,34 @@ type StepMonitor[RequestType PipelineRequest] struct {
 	stepImpactObserver *prometheus.HistogramVec
 }
 
-// Get the name of the wrapped step.
-func (s *StepMonitor[RequestType]) GetName() string {
-	return s.Step.GetName()
-}
-
 // Initialize the wrapped step with the database and options.
-func (s *StepMonitor[RequestType]) Init(db db.DB, opts conf.RawOpts) error {
-	return s.Step.Init(db, opts)
+func (s *StepMonitor[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+	return s.Step.Init(ctx, client, step)
 }
 
 // Schedule using the wrapped step and measure the time it takes.
-func MonitorStep[RequestType PipelineRequest](step Step[RequestType], m PipelineMonitor) *StepMonitor[RequestType] {
-	stepName := step.GetName()
+func monitorStep[RequestType PipelineRequest](
+	_ context.Context,
+	_ client.Client,
+	step v1alpha1.Step,
+	impl Step[RequestType],
+	m PipelineMonitor,
+) *StepMonitor[RequestType] {
+
+	stepName := step.Namespace + "/" + step.Name
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
-		runTimer = m.stepRunTimer.WithLabelValues(m.PipelineName, stepName)
+		runTimer = m.stepRunTimer.
+			WithLabelValues(m.PipelineName, stepName)
 	}
 	var removedSubjectsObserver prometheus.Observer
 	if m.stepRemovedSubjectsObserver != nil {
-		removedSubjectsObserver = m.stepRemovedSubjectsObserver.WithLabelValues(m.PipelineName, stepName)
+		removedSubjectsObserver = m.stepRemovedSubjectsObserver.
+			WithLabelValues(m.PipelineName, stepName)
 	}
 	return &StepMonitor[RequestType]{
-		Step:                    step,
+		Step:                    impl,
+		stepName:                stepName,
 		pipelineName:            m.PipelineName,
 		runTimer:                runTimer,
 		stepSubjectWeight:       m.stepSubjectWeight,
@@ -74,8 +82,6 @@ func MonitorStep[RequestType PipelineRequest](step Step[RequestType], m Pipeline
 
 // Run the step and observe its execution.
 func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
-	stepName := s.GetName()
-
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)
 		defer timer.ObserveDuration()
@@ -87,18 +93,20 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		return nil, err
 	}
 	traceLog.Info(
-		"scheduler: finished step", "name", stepName,
+		"scheduler: finished step", "name", s.stepName,
 		"inWeights", inWeights, "outWeights", stepResult.Activations,
 	)
 
 	// Observe how much the step modifies the weights of the subjects.
 	if s.stepSubjectWeight != nil {
 		for subject, weight := range stepResult.Activations {
-			s.stepSubjectWeight.WithLabelValues(s.pipelineName, subject, stepName).Add(weight)
+			s.stepSubjectWeight.
+				WithLabelValues(s.pipelineName, subject, s.stepName).
+				Add(weight)
 			if weight != 0.0 {
 				traceLog.Info(
 					"scheduler: modified subject weight",
-					"name", stepName, "weight", weight,
+					"name", s.stepName, "weight", weight,
 				)
 			}
 		}
@@ -111,7 +119,7 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 	if nSubjectsRemoved < 0 {
 		traceLog.Info(
 			"scheduler: removed subjects",
-			"name", stepName, "count", nSubjectsRemoved,
+			"name", s.stepName, "count", nSubjectsRemoved,
 		)
 	}
 	if s.removedSubjectsObserver != nil {
@@ -136,12 +144,13 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		// Observe how far it was moved.
 		originalIdx := slices.Index(subjectsIn, subjectsOut[idx])
 		if s.stepReorderingsObserver != nil {
-			o := s.stepReorderingsObserver.WithLabelValues(s.pipelineName, stepName, strconv.Itoa(idx))
+			o := s.stepReorderingsObserver.
+				WithLabelValues(s.pipelineName, s.stepName, strconv.Itoa(idx))
 			o.Observe(float64(originalIdx))
 		}
 		traceLog.Info(
 			"scheduler: reordered subject",
-			"name", stepName, "subject", subjectsOut[idx],
+			"name", s.stepName, "subject", subjectsOut[idx],
 			"originalIdx", originalIdx, "newIdx", idx,
 		)
 	}
@@ -152,7 +161,7 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		if statData.Subjects == nil {
 			continue
 		}
-		msg := "scheduler: statistics for step " + stepName
+		msg := "scheduler: statistics for step " + s.stepName
 		msg += " -- " + statName + ""
 		var beforeBuilder strings.Builder
 		for i, subject := range subjectsIn {
@@ -194,18 +203,18 @@ func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestTyp
 		if err != nil {
 			traceLog.Error(
 				"scheduler: error calculating impact",
-				"name", stepName, "stat", statName, "error", err,
+				"name", s.stepName, "stat", statName, "error", err,
 			)
 			continue
 		}
 		if s.stepImpactObserver != nil {
 			stepImpactObserver := s.stepImpactObserver.
-				WithLabelValues(s.pipelineName, stepName, statName, statData.Unit)
+				WithLabelValues(s.pipelineName, s.stepName, statName, statData.Unit)
 			stepImpactObserver.Observe(impact)
 		}
 		traceLog.Info(
 			"scheduler: impact for step",
-			"name", stepName, "stat", statName,
+			"name", s.stepName, "stat", statName,
 			"unit", statData.Unit, "impact", impact,
 		)
 	}

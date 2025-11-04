@@ -32,9 +32,6 @@ type FilterExternalCustomerStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, FilterExternalCustomerStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *FilterExternalCustomerStep) GetName() string { return "filter_external_customer" }
-
 // Prefix-match the domain name for external customer domains and filter out hosts
 // that are not intended for external customers.
 func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {

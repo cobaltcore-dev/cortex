@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 
@@ -19,9 +18,7 @@ import (
 func TestFilterCorrectAZStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostAZ{}),
@@ -154,9 +151,7 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterCorrectAZStep{}
-			if err := step.Init(testDB, conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			step.DB = &testDB
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)

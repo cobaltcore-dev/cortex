@@ -4,10 +4,12 @@
 package nova
 
 import (
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"context"
+
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Monitor struct {
@@ -66,6 +68,8 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 type StepMonitor struct {
 	// The step being monitored.
 	step Step
+	// The name of this step.
+	stepName string
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
 	// A counter to measure how many vms are descheduled by this step.
@@ -73,30 +77,27 @@ type StepMonitor struct {
 }
 
 // Monitor a step by wrapping it with a StepMonitor.
-func monitorStep(step Step, monitor Monitor) StepMonitor {
+func monitorStep(step Step, conf v1alpha1.Step, monitor Monitor) StepMonitor {
+	name := conf.Namespace + "/" + conf.Name
 	var runTimer prometheus.Observer
 	if monitor.stepRunTimer != nil {
-		runTimer = monitor.stepRunTimer.WithLabelValues(step.GetName())
+		runTimer = monitor.stepRunTimer.WithLabelValues(name)
 	}
 	var descheduledCounter prometheus.Counter
 	if monitor.stepDeschedulingCounter != nil {
-		descheduledCounter = monitor.stepDeschedulingCounter.WithLabelValues(step.GetName())
+		descheduledCounter = monitor.stepDeschedulingCounter.WithLabelValues(name)
 	}
 	return StepMonitor{
 		step:               step,
+		stepName:           name,
 		runTimer:           runTimer,
 		descheduledCounter: descheduledCounter,
 	}
 }
 
-// Get the name of the step being monitored.
-func (m StepMonitor) GetName() string {
-	return m.step.GetName()
-}
-
 // Initialize the step with the database and options.
-func (m StepMonitor) Init(db db.DB, opts conf.RawOpts) error {
-	return m.step.Init(db, opts)
+func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+	return m.step.Init(ctx, client, step)
 }
 
 // Run the step and measure its execution time.

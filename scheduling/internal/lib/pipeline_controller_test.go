@@ -30,15 +30,15 @@ type mockPipeline struct {
 	steps []v1alpha1.Step
 }
 
-// Mock delegate implementation
-type mockDelegate struct {
+// Mock initializer implementation
+type mockInitializer struct {
 	shouldFail   bool
 	initPipeline func(steps []v1alpha1.Step) (mockPipeline, error)
 }
 
-func (m *mockDelegate) InitPipeline(steps []v1alpha1.Step) (mockPipeline, error) {
+func (m *mockInitializer) InitPipeline(ctx context.Context, steps []v1alpha1.Step) (mockPipeline, error) {
 	if m.shouldFail {
-		return mockPipeline{}, errors.New("mock delegate error")
+		return mockPipeline{}, errors.New("mock initializer error")
 	}
 	if m.initPipeline != nil {
 		return m.initPipeline(steps)
@@ -124,7 +124,7 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 		name              string
 		existingPipelines []v1alpha1.Pipeline
 		existingSteps     []v1alpha1.Step
-		delegateFails     bool
+		initializerFails  bool
 		expectedPipelines int
 		expectError       bool
 	}{
@@ -190,9 +190,9 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}).
 				Build()
 
-			delegate := &mockDelegate{shouldFail: tt.delegateFails}
+			initializer := &mockInitializer{shouldFail: tt.initializerFails}
 			controller := &BasePipelineController[mockPipeline]{
-				Delegate:     delegate,
+				Initializer:  initializer,
 				Client:       client,
 				OperatorName: "test",
 			}
@@ -218,12 +218,12 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 	scheme := setupTestScheme()
 
 	tests := []struct {
-		name          string
-		pipeline      *v1alpha1.Pipeline
-		existingSteps []v1alpha1.Step
-		delegateFails bool
-		expectReady   bool
-		expectError   bool
+		name             string
+		pipeline         *v1alpha1.Pipeline
+		existingSteps    []v1alpha1.Step
+		initializerFails bool
+		expectReady      bool
+		expectError      bool
 	}{
 		{
 			name: "pipeline with ready steps",
@@ -277,7 +277,7 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "delegate fails to initialize pipeline",
+			name: "initializer fails to initialize pipeline",
 			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
 				{
 					Ref: corev1.ObjectReference{
@@ -290,9 +290,9 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 			existingSteps: []v1alpha1.Step{
 				*createTestStep(true, nil),
 			},
-			delegateFails: true,
-			expectReady:   false,
-			expectError:   true,
+			initializerFails: true,
+			expectReady:      false,
+			expectError:      true,
 		},
 	}
 
@@ -310,10 +310,10 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}).
 				Build()
 
-			delegate := &mockDelegate{shouldFail: tt.delegateFails}
+			initializer := &mockInitializer{shouldFail: tt.initializerFails}
 			controller := &BasePipelineController[mockPipeline]{
 				Pipelines:    make(map[string]mockPipeline),
-				Delegate:     delegate,
+				Initializer:  initializer,
 				Client:       client,
 				OperatorName: "test",
 			}
@@ -361,12 +361,12 @@ func TestBasePipelineController_HandlePipelineDeleted(t *testing.T) {
 		WithObjects(pipeline).
 		Build()
 
-	delegate := &mockDelegate{}
+	initializer := &mockInitializer{}
 	controller := &BasePipelineController[mockPipeline]{
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Delegate:     delegate,
+		Initializer:  initializer,
 		Client:       client,
 		OperatorName: "test",
 	}
@@ -456,10 +456,10 @@ func TestBasePipelineController_HandleStepCreated(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}, &knowledgev1alpha1.Knowledge{}).
 				Build()
 
-			delegate := &mockDelegate{}
+			initializer := &mockInitializer{}
 			controller := &BasePipelineController[mockPipeline]{
 				Pipelines:    make(map[string]mockPipeline),
-				Delegate:     delegate,
+				Initializer:  initializer,
 				Client:       client,
 				OperatorName: "test",
 			}
@@ -541,10 +541,10 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}, &knowledgev1alpha1.Knowledge{}).
 				Build()
 
-			delegate := &mockDelegate{}
+			initializer := &mockInitializer{}
 			controller := &BasePipelineController[mockPipeline]{
 				Pipelines:    make(map[string]mockPipeline),
-				Delegate:     delegate,
+				Initializer:  initializer,
 				Client:       client,
 				OperatorName: "test",
 			}
@@ -594,13 +594,13 @@ func TestBasePipelineController_HandleStepDeleted(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.Pipeline{}).
 		Build()
 
-	delegate := &mockDelegate{}
+	initializer := &mockInitializer{}
 	controller := &BasePipelineController[mockPipeline]{
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Delegate: delegate,
-		Client:   client,
+		Initializer: initializer,
+		Client:      client,
 	}
 
 	ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -657,12 +657,12 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}).
 		Build()
 
-	delegate := &mockDelegate{}
+	initializer := &mockInitializer{}
 	controller := &BasePipelineController[mockPipeline]{
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Delegate:     delegate,
+		Initializer:  initializer,
 		Client:       client,
 		OperatorName: "test",
 	}

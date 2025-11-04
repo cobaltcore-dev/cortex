@@ -10,7 +10,6 @@ import (
 	"time"
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
@@ -31,10 +30,8 @@ import (
 // reconfigure the pipelines as needed.
 type DeschedulingsPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[Pipeline]
+	lib.BasePipelineController[*Pipeline]
 
-	// Database to pass down to all steps.
-	DB db.DB
 	// Monitor to pass down to all pipelines.
 	Monitor Monitor
 	// Config for the scheduling operator.
@@ -44,12 +41,13 @@ type DeschedulingsPipelineController struct {
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DeschedulingsPipelineController) InitPipeline(steps []v1alpha1.Step) (Pipeline, error) {
-	pipeline := Pipeline{
+func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, steps []v1alpha1.Step) (*Pipeline, error) {
+	pipeline := &Pipeline{
+		Client:        c.Client,
 		CycleDetector: c.CycleDetector,
 		Monitor:       c.Monitor,
 	}
-	err := pipeline.Init(steps, supportedSteps, c.DB)
+	err := pipeline.Init(ctx, steps, supportedSteps)
 	return pipeline, err
 }
 
@@ -81,7 +79,13 @@ func (c *DeschedulingsPipelineController) Reconcile(ctx context.Context, req ctr
 }
 
 func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager) error {
-	c.Delegate = c
+	c.Initializer = c
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		// Initialize the cycle detector.
+		return c.CycleDetector.Init(ctx, mgr.GetClient(), c.Conf)
+	})); err != nil {
+		return err
+	}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

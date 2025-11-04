@@ -5,35 +5,21 @@ metadata:
   name: vmware-hana-binpacking
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: weigher
-  impl: shared_resource_balancing
+  impl: vmware_hana_binpacking
   description: |
     This step pulls HANA VMs onto the smallest possible gaps on HANA-exclusive
     VMware hosts. In this way hosts with much free space are held free for
     larger HANA VMs, improving overall packing efficiency for HANA workloads.
   knowledges:
     - name: host-utilization
+    - name: host-capabilities
   opts:
-    scope:
-      hostSelectors:
-        # Note: due to the vmware spec selector, it is expected that
-        # this step is only executed for VMware hosts.
-        - subject: trait
-          type: infix
-          value: "HANA_EXCLUSIVE"
-          operation: intersection
-      specSelectors:
-        - subject: flavor
-          type: infix
-          value: "hana"
-          action: continue
-        - subject: vmware
-          type: bool
-          value: true
-          action: continue
-    # In this configuration, we only consider the memory usage
-    # after the flavor has been placed.
-    ramAfterEnabled: true
     ramUtilizedAfterLowerBoundPct: 0
     ramUtilizedAfterUpperBoundPct: 100
     ramUtilizedAfterActivationLowerBound: 0.0
@@ -45,36 +31,21 @@ metadata:
   name: vmware-general-purpose-balancing
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: weigher
-  impl: shared_resource_balancing
+  impl: vmware_general_purpose_balancing
   description: |
     This step balances non-HANA VMs across non-HANA exclusive VMware hosts. It
     pulls vms onto the freeest hosts possible to ensure an even distribution of
     workloads across the available infrastructure.
   knowledges:
     - name: host-utilization
+    - name: host-capabilities
   opts:
-    scope:
-      hostSelectors:
-        # Note: due to the vmware spec selector, it is expected that
-        # this step is only executed for VMware hosts. However,
-        # we don't want to balance on HANA exclusive hosts.
-        - subject: trait
-          type: infix
-          value: "HANA_EXCLUSIVE"
-          operation: difference
-      specSelectors:
-        # Don't balance HANA vms.
-        - subject: flavor
-          type: infix
-          value: "hana"
-          action: skip
-        - subject: vmware
-          type: bool
-          value: true
-          action: continue
-    # In this configuration, we only consider the memory usage.
-    ramEnabled: true
     ramUtilizedLowerBoundPct: 0
     ramUtilizedUpperBoundPct: 100
     ramUtilizedActivationLowerBound: 1.0
@@ -86,6 +57,11 @@ metadata:
   name: vmware-avoid-long-term-contended-hosts
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: weigher
   impl: vmware_avoid_long_term_contended_hosts
   description: |
@@ -96,12 +72,6 @@ spec:
   knowledges:
     - name: vmware-long-term-contended-hosts
   opts:
-    scope:
-      specSelectors:
-        - subject: vmware
-          type: bool
-          value: true
-          action: continue
     avgCPUContentionLowerBound: 0 # pct
     avgCPUContentionUpperBound: 10 # pct
     avgCPUContentionActivationLowerBound: 0.0
@@ -117,6 +87,11 @@ metadata:
   name: vmware-avoid-short-term-contended-hosts
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: weigher
   impl: vmware_avoid_short_term_contended_hosts
   description: |
@@ -127,12 +102,6 @@ spec:
   knowledges:
     - name: vmware-short-term-contended-hosts
   opts:
-    scope:
-      specSelectors:
-        - subject: vmware
-          type: bool
-          value: true
-          action: continue
     avgCPUContentionLowerBound: 0 # pct
     avgCPUContentionUpperBound: 10 # pct
     avgCPUContentionActivationLowerBound: 0.0
@@ -148,6 +117,11 @@ metadata:
   name: filter-host-instructions
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_host_instructions
   description: |
@@ -162,6 +136,11 @@ metadata:
   name: filter-has-enough-capacity
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_has_enough_capacity
   description: |
@@ -186,6 +165,11 @@ metadata:
   name: filter-has-requested-traits
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_has_requested_traits
   description: |
@@ -205,6 +189,11 @@ metadata:
   name: filter-has-accelerators
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_has_accelerators
   description: |
@@ -220,6 +209,11 @@ metadata:
   name: filter-correct-az
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_correct_az
   description: |
@@ -237,6 +231,11 @@ metadata:
   name: filter-disabled
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_disabled
   description: |
@@ -253,6 +252,11 @@ metadata:
   name: filter-external-customer
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_external_customer
   description: |
@@ -272,6 +276,11 @@ metadata:
   name: filter-packed-virtqueue
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_packed_virtqueue
   description: |
@@ -288,6 +297,11 @@ metadata:
   name: filter-project-aggregates
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_project_aggregates
   description: |
@@ -306,6 +320,11 @@ metadata:
   name: filter-compute-capabilities
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_compute_capabilities
   description: |
@@ -326,6 +345,11 @@ metadata:
   name: avoid-high-steal-pct
 spec:
   operator: cortex-nova
+  # TODO: Remove this database reference once the scheduler
+  # step doesn't need it anymore.
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
   type: descheduler
   impl: avoid_high_steal_pct
   description: |

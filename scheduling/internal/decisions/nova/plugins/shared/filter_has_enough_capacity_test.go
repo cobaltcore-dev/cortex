@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
@@ -42,9 +41,7 @@ func testClient() client.Client {
 func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostUtilization{}),
@@ -434,9 +431,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			t.Logf("Running test case: %s", tt.name)
 			step := &FilterHasEnoughCapacity{}
 			step.Client = testClient() // Override the real client with our fake client
-			if err := step.Init(testDB, conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			step.DB = &testDB
 			// Override the real client with our fake client after Init()
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
@@ -468,9 +463,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostUtilization{}),
@@ -574,9 +567,7 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 
 	step := &FilterHasEnoughCapacity{}
 	step.Client = fakeClient // Override the real client with our fake client
-	if err := step.Init(testDB, conf.NewRawOpts("{}")); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	step.DB = &testDB
 
 	// Test case: Request that would fit on host1 without reservations, but not with reservations
 	request := api.ExternalSchedulerRequest{
@@ -655,9 +646,7 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostUtilization{}),
@@ -845,9 +834,7 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 
 			step := &FilterHasEnoughCapacity{}
 			step.Client = fakeClient // Override the real client with our fake client
-			if err := step.Init(testDB, conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			step.DB = &testDB
 
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {

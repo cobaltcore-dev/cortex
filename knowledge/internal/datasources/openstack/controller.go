@@ -88,7 +88,6 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		return ctrl.Result{}, err
 	}
-	defer authenticatedDB.Close()
 
 	// Authenticate with the datasource host if SSO is configured.
 	var authenticatedHTTP = http.DefaultClient

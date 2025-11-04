@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -27,7 +28,9 @@ type mockExecutorNovaAPI struct {
 	migrationDelay time.Duration
 }
 
-func (m *mockExecutorNovaAPI) Init(ctx context.Context) {}
+func (m *mockExecutorNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	return nil
+}
 
 func (m *mockExecutorNovaAPI) Get(ctx context.Context, id string) (server, error) {
 	if m.getError != nil {

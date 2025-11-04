@@ -4,14 +4,17 @@
 package nova
 
 import (
+	"context"
 	"errors"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestNewPipelineMonitor(t *testing.T) {
@@ -71,7 +74,6 @@ func TestMonitor_Collect(t *testing.T) {
 }
 
 type mockMonitorStep struct {
-	name       string
 	decisions  []plugins.Decision
 	initError  error
 	runError   error
@@ -79,11 +81,7 @@ type mockMonitorStep struct {
 	runCalled  bool
 }
 
-func (m *mockMonitorStep) GetName() string {
-	return m.name
-}
-
-func (m *mockMonitorStep) Init(db db.DB, opts conf.RawOpts) error {
+func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
 	m.initCalled = true
 	return m.initError
 }
@@ -96,17 +94,13 @@ func (m *mockMonitorStep) Run() ([]plugins.Decision, error) {
 func TestMonitorStep(t *testing.T) {
 	monitor := NewPipelineMonitor()
 	step := &mockMonitorStep{
-		name: "test-step",
 		decisions: []plugins.Decision{
 			{VMID: "vm1", Reason: "test"},
 		},
 	}
+	conf := v1alpha1.Step{ObjectMeta: v1.ObjectMeta{Name: "test-step"}}
 
-	monitoredStep := monitorStep(step, monitor)
-
-	if monitoredStep.GetName() != "test-step" {
-		t.Errorf("expected name 'test-step', got %s", monitoredStep.GetName())
-	}
+	monitoredStep := monitorStep(step, conf, monitor)
 
 	if monitoredStep.step != step {
 		t.Error("expected wrapped step to be preserved")
@@ -123,10 +117,13 @@ func TestMonitorStep(t *testing.T) {
 
 func TestStepMonitor_Init(t *testing.T) {
 	monitor := NewPipelineMonitor()
-	step := &mockMonitorStep{name: "test-step"}
-	monitoredStep := monitorStep(step, monitor)
+	step := &mockMonitorStep{}
+	conf := v1alpha1.Step{ObjectMeta: v1.ObjectMeta{Name: "test-step"}}
 
-	err := monitoredStep.Init(db.DB{}, conf.RawOpts{})
+	monitoredStep := monitorStep(step, conf, monitor)
+
+	client := fake.NewClientBuilder().Build()
+	err := monitoredStep.Init(t.Context(), client, conf)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -141,12 +138,13 @@ func TestStepMonitor_Init_WithError(t *testing.T) {
 	monitor := NewPipelineMonitor()
 	expectedErr := errors.New("init failed")
 	step := &mockMonitorStep{
-		name:      "test-step",
 		initError: expectedErr,
 	}
-	monitoredStep := monitorStep(step, monitor)
+	conf := v1alpha1.Step{ObjectMeta: v1.ObjectMeta{Name: "test-step"}}
+	monitoredStep := monitorStep(step, conf, monitor)
 
-	err := monitoredStep.Init(db.DB{}, conf.RawOpts{})
+	client := fake.NewClientBuilder().Build()
+	err := monitoredStep.Init(t.Context(), client, conf)
 
 	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
@@ -160,10 +158,10 @@ func TestStepMonitor_Run(t *testing.T) {
 		{VMID: "vm2", Reason: "test2"},
 	}
 	step := &mockMonitorStep{
-		name:      "test-step",
 		decisions: decisions,
 	}
-	monitoredStep := monitorStep(step, monitor)
+	conf := v1alpha1.Step{ObjectMeta: v1.ObjectMeta{Name: "test-step"}}
+	monitoredStep := monitorStep(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
 
@@ -180,7 +178,7 @@ func TestStepMonitor_Run(t *testing.T) {
 	}
 
 	// Verify that the counter was incremented
-	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("test-step"))
+	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("/test-step"))
 	if counterValue != 2.0 {
 		t.Errorf("expected counter value 2.0, got %f", counterValue)
 	}
@@ -190,10 +188,10 @@ func TestStepMonitor_Run_WithError(t *testing.T) {
 	monitor := NewPipelineMonitor()
 	expectedErr := errors.New("run failed")
 	step := &mockMonitorStep{
-		name:     "test-step",
 		runError: expectedErr,
 	}
-	monitoredStep := monitorStep(step, monitor)
+	conf := v1alpha1.Step{ObjectMeta: v1.ObjectMeta{Name: "test-step"}}
+	monitoredStep := monitorStep(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
 
@@ -206,7 +204,7 @@ func TestStepMonitor_Run_WithError(t *testing.T) {
 	}
 
 	// Counter should not be incremented on error
-	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("test-step"))
+	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("/test-step"))
 	if counterValue != 0.0 {
 		t.Errorf("expected counter value 0.0, got %f", counterValue)
 	}
@@ -215,10 +213,10 @@ func TestStepMonitor_Run_WithError(t *testing.T) {
 func TestStepMonitor_Run_EmptyResult(t *testing.T) {
 	monitor := NewPipelineMonitor()
 	step := &mockMonitorStep{
-		name:      "test-step",
 		decisions: []plugins.Decision{}, // Empty slice
 	}
-	monitoredStep := monitorStep(step, monitor)
+	conf := v1alpha1.Step{ObjectMeta: v1.ObjectMeta{Name: "test-step"}}
+	monitoredStep := monitorStep(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
 
@@ -231,7 +229,7 @@ func TestStepMonitor_Run_EmptyResult(t *testing.T) {
 	}
 
 	// Counter should be 0 for empty results
-	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("test-step"))
+	counterValue := testutil.ToFloat64(monitor.stepDeschedulingCounter.WithLabelValues("/test-step"))
 	if counterValue != 0.0 {
 		t.Errorf("expected counter value 0.0, got %f", counterValue)
 	}
@@ -241,13 +239,12 @@ func TestMonitorStep_WithNilMonitor(t *testing.T) {
 	// Test with empty monitor (nil fields)
 	monitor := Monitor{}
 	step := &mockMonitorStep{
-		name: "test-step",
 		decisions: []plugins.Decision{
 			{VMID: "vm1", Reason: "test"},
 		},
 	}
-
-	monitoredStep := monitorStep(step, monitor)
+	conf := v1alpha1.Step{ObjectMeta: v1.ObjectMeta{Name: "test-step"}}
+	monitoredStep := monitorStep(step, conf, monitor)
 
 	// Should not panic with nil timers/counters
 	result, err := monitoredStep.Run()

@@ -4,12 +4,12 @@
 package lib
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Wrapper for scheduler steps that validates them before/after execution.
@@ -21,22 +21,17 @@ type StepValidator[RequestType PipelineRequest] struct {
 	DisabledValidations v1alpha1.DisabledValidationsSpec
 }
 
-// Get the name of the wrapped step.
-func (s *StepValidator[RequestType]) GetName() string {
-	return s.Step.GetName()
-}
-
 // Initialize the wrapped step with the database and options.
-func (s *StepValidator[RequestType]) Init(db db.DB, opts libconf.RawOpts) error {
+func (s *StepValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
 	slog.Info(
-		"scheduler: init validation for step", "name", s.GetName(),
+		"scheduler: init validation for step", "name", step.Name,
 		"disabled", s.DisabledValidations,
 	)
-	return s.Step.Init(db, opts)
+	return s.Step.Init(ctx, client, step)
 }
 
 // Validate the wrapped step with the database and options.
-func ValidateStep[RequestType PipelineRequest](step Step[RequestType], disabledValidations v1alpha1.DisabledValidationsSpec) *StepValidator[RequestType] {
+func validateStep[RequestType PipelineRequest](step Step[RequestType], disabledValidations v1alpha1.DisabledValidationsSpec) *StepValidator[RequestType] {
 	return &StepValidator[RequestType]{
 		Step:                step,
 		DisabledValidations: disabledValidations,

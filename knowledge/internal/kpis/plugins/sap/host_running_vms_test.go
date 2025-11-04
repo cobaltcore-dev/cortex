@@ -20,9 +20,7 @@ import (
 func TestHostRunningVMsKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	kpi := &HostRunningVMsKPI{}
 	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -32,9 +30,7 @@ func TestHostRunningVMsKPI_Init(t *testing.T) {
 func TestHostRunningVMsKPI_Collect(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	if err := testDB.CreateTable(
 		testDB.AddTable(sap.HostDetails{}),
 		testDB.AddTable(shared.HostUtilization{}),

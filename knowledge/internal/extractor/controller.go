@@ -151,7 +151,6 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 			return ctrl.Result{}, err
 		}
-		defer authenticatedDatasourceDB.Close()
 	}
 
 	// Connect to the extractor database if specified.
@@ -174,7 +173,6 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 			return ctrl.Result{}, err
 		}
-		defer authenticatedExtractorDB.Close()
 	}
 
 	// Initialize and run the extractor.

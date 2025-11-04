@@ -4,17 +4,10 @@
 package db
 
 import (
-	"os"
-	"strconv"
 	"testing"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
-	"github.com/cobaltcore-dev/cortex/testlib/db/containers"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 type MockTable struct {
@@ -30,34 +23,9 @@ func (m MockTable) Indexes() map[string][]string {
 	return nil
 }
 
-func TestNewDB(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-	container := containers.PostgresContainer{}
-	container.Init(t)
-	defer container.Close()
-
-	port, err := strconv.Atoi(container.GetPort())
-	if err != nil {
-		t.Fatalf("failed to convert port: %v", err)
-	}
-	config := conf.DBConfig{
-		Host:     "localhost",
-		Port:     port,
-		User:     "postgres",
-		Password: "secret",
-		Database: "postgres",
-	}
-
-	db := NewPostgresDB(t.Context(), config, nil, Monitor{})
-	db.Close()
-}
-
 func TestDB_CreateTable(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
@@ -74,7 +42,6 @@ func TestDB_CreateTable(t *testing.T) {
 func TestDB_AddTable(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
@@ -86,7 +53,6 @@ func TestDB_AddTable(t *testing.T) {
 func TestDB_TableExists(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
@@ -100,21 +66,9 @@ func TestDB_TableExists(t *testing.T) {
 	}
 }
 
-func TestDB_Close(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	db := DB{DbMap: dbEnv.DbMap}
-	db.Close()
-	defer dbEnv.Close()
-
-	if err := db.Db.PingContext(t.Context()); err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
 func TestReplaceAll(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	table := db.AddTable(MockTable{})
@@ -188,7 +142,6 @@ func TestBulkInsert(t *testing.T) {
 	// Set up the test database environment
 	dbEnv := testlibDB.SetupDBEnv(t)
 	db := DB{DbMap: dbEnv.DbMap}
-	defer db.Close()
 	defer dbEnv.Close()
 
 	// Add and create the table
@@ -275,59 +228,4 @@ func TestBulkInsert(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestUnexpectedConnectionLoss(t *testing.T) {
-	// The test is only relevant for postgres and not sqlite.
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-	container := containers.PostgresContainer{}
-	container.Init(t)
-	// no need to defer the container close here, as it will be closed in the test below
-
-	port, err := strconv.Atoi(container.GetPort())
-	if err != nil {
-		t.Fatalf("failed to convert port: %v", err)
-	}
-	config := conf.DBConfig{
-		Host:     "localhost",
-		Port:     port,
-		User:     "postgres",
-		Password: "secret",
-		Database: "postgres",
-		Reconnect: conf.DBReconnectConfig{
-			MaxRetries:                  10,
-			RetryIntervalSeconds:        0,
-			LivenessPingIntervalSeconds: 0,
-		},
-	}
-
-	registry := &monitoring.Registry{Registry: prometheus.NewRegistry()}
-	monitor := NewDBMonitor(registry)
-
-	ctx := t.Context()
-	db := NewPostgresDB(ctx, config, nil, monitor)
-	defer db.Close()
-
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic, but code did not panic")
-		}
-
-		if err := db.Db.PingContext(ctx); err == nil {
-			t.Errorf("expected error, got nil")
-		}
-
-		// Check if the connection attempts metric was incremented
-		if monitor.connectionAttempts == nil {
-			t.Fatalf("expected connection attempts metric to be registered")
-		}
-		attempts := testutil.ToFloat64(monitor.connectionAttempts)
-		if attempts != float64(config.Reconnect.MaxRetries) {
-			t.Errorf("expected %v connection attempts, got %v", config.Reconnect.MaxRetries, attempts)
-		}
-	}()
-	container.Close()
-	db.CheckLivenessPeriodically(ctx)
 }

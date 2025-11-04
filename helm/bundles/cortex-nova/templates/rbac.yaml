@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 # Cluster level access is required as the controller manager has no default namespace set.
 kind: ClusterRole
 metadata:
-  name: cortex-nova-knowledge-secret-reader
+  name: cortex-nova-secret-reader
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -18,5 +18,31 @@ subjects:
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: cortex-nova-knowledge-secret-reader
+  name: cortex-nova-secret-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cortex-nova-scheduling-secret-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: cortex-nova-scheduling-controller-manager
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: cortex-nova-secret-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cortex-nova-reservations-secret-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: cortex-nova-reservations-controller-manager
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: cortex-nova-secret-reader
   apiGroup: rbac.authorization.k8s.io

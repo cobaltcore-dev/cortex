@@ -45,14 +45,15 @@ type AvoidShortTermContendedHostsStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, AvoidShortTermContendedHostsStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *AvoidShortTermContendedHostsStep) GetName() string {
-	return "vmware_avoid_short_term_contended_hosts"
-}
-
 // Downvote hosts that are highly contended.
 func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
+
+	if !request.VMware {
+		slog.Debug("Skipping general purpose balancing step for non-VMware VM")
+		return result, nil
+	}
+
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 

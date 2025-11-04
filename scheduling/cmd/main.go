@@ -20,6 +20,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -28,8 +29,6 @@ import (
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
@@ -49,6 +48,8 @@ import (
 	manilashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/manila"
 	novashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/nova"
 	"github.com/sapcc/go-bits/httpext"
+	"github.com/sapcc/go-bits/must"
+	corev1 "k8s.io/api/core/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -64,6 +65,7 @@ func init() {
 	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(reservationsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(knowledgev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(corev1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -73,15 +75,18 @@ func main() {
 	config := libconf.GetConfigOrDie[conf.Config]()
 	// Custom entrypoint for e2e tests.
 	if len(os.Args) == 2 {
+		restConfig := ctrl.GetConfigOrDie()
+		copts := client.Options{Scheme: scheme}
+		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
 		case "e2e-nova":
-			novae2e.RunChecks(ctx, config)
+			novae2e.RunChecks(ctx, client, config)
 			return
 		case "e2e-cinder":
-			cindere2e.RunChecks(ctx)
+			cindere2e.RunChecks(ctx, client, config)
 			return
 		case "e2e-manila":
-			manilae2e.RunChecks(ctx, config)
+			manilae2e.RunChecks(ctx, client, config)
 			return
 		}
 	}
@@ -236,10 +241,6 @@ func main() {
 	// This is useful to distinguish metrics from different deployments.
 	registry := monitoring.NewRegistry(libconf.MonitoringConfig{})
 
-	// Currently the scheduler pipeline will always need a database.
-	// TODO: Scheduler steps should not use the database, instead only CRs.
-	database := db.NewPostgresDB(ctx, config.DBConfig, registry, db.NewDBMonitor(registry))
-
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
 	// pipeline.
@@ -251,7 +252,6 @@ func main() {
 	switch config.Operator {
 	case "cortex-nova":
 		decisionController := &decisionsnova.DecisionPipelineController{
-			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -266,14 +266,10 @@ func main() {
 		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 		// Deschedulings controller
-		deschedulingsKeystoneAPI := keystone.NewKeystoneAPI(config.KeystoneConfig)
-		deschedulingsNovaAPI := deschedulingnova.NewNovaAPI(deschedulingsKeystoneAPI)
-		deschedulingsNovaAPI.Init(ctx)
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
-			DB:            database,
 			Monitor:       deschedulingnova.NewPipelineMonitor(),
 			Conf:          config,
-			CycleDetector: deschedulingnova.NewCycleDetector(deschedulingsNovaAPI),
+			CycleDetector: deschedulingnova.NewCycleDetector(),
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = mgr.GetClient()
@@ -294,7 +290,6 @@ func main() {
 
 	case "cortex-manila":
 		controller := &decisionsmanila.DecisionPipelineController{
-			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -310,7 +305,6 @@ func main() {
 
 	case "cortex-cinder":
 		controller := &decisionscinder.DecisionPipelineController{
-			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -326,7 +320,6 @@ func main() {
 
 	case "cortex-ironcore":
 		controller := &decisionsmachines.DecisionPipelineController{
-			DB:      database,
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}

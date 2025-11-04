@@ -8,7 +8,7 @@ spec:
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.prometheus.sso.enabled }}
+  {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-cinder-prometheus-sso
     namespace: {{ .Release.Namespace }}
@@ -31,7 +31,7 @@ spec:
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.prometheus.sso.enabled }}
+  {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-cinder-prometheus-sso
     namespace: {{ .Release.Namespace }}
@@ -54,7 +54,7 @@ spec:
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.prometheus.sso.enabled }}
+  {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-cinder-prometheus-sso
     namespace: {{ .Release.Namespace }}
@@ -77,7 +77,7 @@ spec:
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}
-  {{- if .Values.datasources.openstack.sso.enabled }}
+  {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-cinder-openstack-sso
     namespace: {{ .Release.Namespace }}

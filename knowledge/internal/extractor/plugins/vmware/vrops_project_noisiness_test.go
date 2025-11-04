@@ -18,9 +18,7 @@ import (
 func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	extractor := &VROpsProjectNoisinessExtractor{}
 
 	config := v1alpha1.KnowledgeSpec{
@@ -44,9 +42,7 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(prometheus.VROpsVMMetric{}),

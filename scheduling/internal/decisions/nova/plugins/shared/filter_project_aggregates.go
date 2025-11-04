@@ -16,9 +16,6 @@ type FilterProjectAggregatesStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
-// Get the name of this step, used for identification in config, logs, metrics, etc.
-func (s *FilterProjectAggregatesStep) GetName() string { return "filter_project_aggregates" }
-
 // Lock certain hosts for certain projects, based on the aggregate metadata.
 // Note that hosts without aggregate tenant filter are still accessible.
 func (s *FilterProjectAggregatesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {

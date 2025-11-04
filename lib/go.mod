@@ -6,7 +6,6 @@ replace github.com/cobaltcore-dev/cortex/testlib => ../testlib
 
 require (
 	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
-	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/lib/pq v1.10.9
@@ -55,7 +54,6 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

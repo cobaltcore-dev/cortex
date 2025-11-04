@@ -28,11 +28,9 @@ import (
 
 // Mock KPI implementation for testing
 type mockKPI struct {
-	name         string
-	initError    error
-	deinitError  error
-	initCalled   bool
-	deinitCalled bool
+	name       string
+	initError  error
+	initCalled bool
 }
 
 func (m *mockKPI) Init(db db.DB, opts libconf.RawOpts) error {
@@ -43,11 +41,6 @@ func (m *mockKPI) Init(db db.DB, opts libconf.RawOpts) error {
 func (m *mockKPI) Collect(ch chan<- prometheus.Metric) {}
 
 func (m *mockKPI) Describe(ch chan<- *prometheus.Desc) {}
-
-func (m *mockKPI) Deinit() error {
-	m.deinitCalled = true
-	return m.deinitError
-}
 
 func (m *mockKPI) GetName() string {
 	return m.name
@@ -68,10 +61,6 @@ func (l *mockKPILogger) Collect(ch chan<- prometheus.Metric) {
 
 func (l *mockKPILogger) Describe(ch chan<- *prometheus.Desc) {
 	l.kpi.Describe(ch)
-}
-
-func (l *mockKPILogger) Deinit() error {
-	return l.kpi.Deinit()
 }
 
 func (l *mockKPILogger) GetName() string {
@@ -147,7 +136,7 @@ func (mc *mockController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			metrics.Registry.Unregister(existingKPI)
 			delete(mc.registeredKPIsByResourceName, req.Name)
 			log.Info("kpi: unregistered deleted kpi", "name", req.Name)
-			return ctrl.Result{}, existingKPI.Deinit()
+			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, nil
 	}
@@ -264,14 +253,10 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 		mc.registeredKPIsByResourceName[obj.Name] = registeredKPI
 	}
 
-	// If the dependencies are not all ready but the kpi is registered,
-	// unregister and deinitialize it.
+	// If the dependencies are not all ready but the kpi is registered, unregister it.
 	if dependenciesReadyTotal < dependenciesTotal && registered {
 		log.Info("kpi: unregistering kpi due to unready dependencies", "name", obj.Name)
 		metrics.Registry.Unregister(registeredKPI)
-		if err := registeredKPI.Deinit(); err != nil {
-			return fmt.Errorf("failed to deinitialize kpi %s: %w", obj.Name, err)
-		}
 		delete(mc.registeredKPIsByResourceName, obj.Name)
 	}
 
@@ -556,10 +541,6 @@ func TestController_Reconcile_KPIDeleted(t *testing.T) {
 	// Verify KPI was unregistered
 	if _, registered := controller.registeredKPIsByResourceName["deleted-kpi"]; registered {
 		t.Error("Expected KPI to be unregistered but it's still registered")
-	}
-
-	if !mockKPIInstance.deinitCalled {
-		t.Error("Expected KPI to be deinitialized but Deinit was not called")
 	}
 }
 

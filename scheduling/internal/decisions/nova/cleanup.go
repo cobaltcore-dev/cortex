@@ -6,43 +6,40 @@ package nova
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Delete all decisions for nova servers that have been deleted.
 func cleanupNova(ctx context.Context, client client.Client, conf conf.Config) error {
-	keystoneConf := conf.KeystoneConfig
-	authOptions := gophercloud.AuthOptions{
-		IdentityEndpoint: keystoneConf.URL,
-		Username:         keystoneConf.OSUsername,
-		DomainName:       keystoneConf.OSUserDomainName,
-		Password:         keystoneConf.OSPassword,
-		AllowReauth:      true,
-		Scope: &gophercloud.AuthScope{
-			ProjectName: keystoneConf.OSProjectName,
-			DomainName:  keystoneConf.OSProjectDomainName,
-		},
+	var authenticatedHTTP = http.DefaultClient
+	if conf.SSOSecretRef != nil {
+		var err error
+		authenticatedHTTP, err = sso.Connector{Client: client}.
+			FromSecretRef(ctx, *conf.SSOSecretRef)
+		if err != nil {
+			return err
+		}
 	}
-	pc, err := openstack.NewClient(authOptions.IdentityEndpoint)
+	authenticatedKeystone, err := keystone.
+		Connector{Client: client, HTTPClient: authenticatedHTTP}.
+		FromSecretRef(ctx, conf.KeystoneSecretRef)
 	if err != nil {
 		return err
 	}
-	err = openstack.Authenticate(ctx, pc, authOptions)
-	if err != nil {
-		return err
-	}
-
+	pc := authenticatedKeystone.Client()
 	novaURL, err := pc.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "compute",
-		Availability: gophercloud.Availability(keystoneConf.Availability),
+		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
 	})
 	if err != nil {
 		return err

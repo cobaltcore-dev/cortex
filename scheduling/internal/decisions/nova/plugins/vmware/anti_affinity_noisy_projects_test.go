@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/vmware"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 
@@ -18,9 +17,7 @@ import (
 func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(testDB.AddTable(vmware.VROpsProjectNoisiness{}))
 	if err != nil {
@@ -36,16 +33,12 @@ func TestAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	opts := conf.NewRawOpts(`{
-        "avgCPUUsageLowerBound": 20,
-        "avgCPUUsageUpperBound": 100,
-        "avgCPUUsageActivationLowerBound": 0.0,
-        "avgCPUUsageActivationUpperBound": -0.5
-    }`)
 	step := &AntiAffinityNoisyProjectsStep{}
-	if err := step.Init(testDB, opts); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	step.Options.AvgCPUUsageLowerBound = 20.0
+	step.Options.AvgCPUUsageUpperBound = 100.0
+	step.Options.AvgCPUUsageActivationLowerBound = 0.0
+	step.Options.AvgCPUUsageActivationUpperBound = -0.5
+	step.DB = &testDB
 
 	tests := []struct {
 		name           string

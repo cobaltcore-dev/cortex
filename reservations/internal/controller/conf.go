@@ -3,7 +3,9 @@
 
 package controller
 
-import "github.com/cobaltcore-dev/cortex/lib/conf"
+import (
+	corev1 "k8s.io/api/core/v1"
+)
 
 // Endpoints for the reservations operator.
 type EndpointsConfig struct {
@@ -17,6 +19,8 @@ type Config struct {
 	Endpoints EndpointsConfig `json:"endpoints"`
 	// Hypervisor types that should be managed.
 	Hypervisors []string `json:"hypervisors"`
-	// Keystone config.
-	Keystone conf.KeystoneConfig `json:"keystone"`
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 }

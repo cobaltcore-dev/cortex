@@ -7,8 +7,6 @@ import (
 	"context"
 	"testing"
 
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
@@ -16,10 +14,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type mockCycleDetector struct{}
+
+func (m *mockCycleDetector) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	return nil
+}
 
 func (m *mockCycleDetector) Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error) {
 	return decisions, nil
@@ -27,11 +30,12 @@ func (m *mockCycleDetector) Filter(ctx context.Context, decisions []plugins.Deci
 
 type mockControllerStep struct{}
 
-func (m *mockControllerStep) GetName() string { return "mock-step" }
 func (m *mockControllerStep) Run() ([]plugins.Decision, error) {
 	return nil, nil
 }
-func (m *mockControllerStep) Init(db db.DB, opts libconf.RawOpts) error { return nil }
+func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+	return nil
+}
 
 func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	tests := []struct {
@@ -81,19 +85,17 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			controller := &DeschedulingsPipelineController{
-				DB:            db.DB{},
 				Monitor:       NewPipelineMonitor(),
 				CycleDetector: &mockCycleDetector{},
 			}
-
-			// Override supportedSteps for testing
-			testSupportedSteps := []Step{&mockControllerStep{}}
 
 			pipeline := Pipeline{
 				CycleDetector: controller.CycleDetector,
 				Monitor:       controller.Monitor,
 			}
-			err := pipeline.Init(tt.steps, testSupportedSteps, controller.DB)
+			err := pipeline.Init(t.Context(), tt.steps, map[string]Step{
+				"mock-step": &mockControllerStep{},
+			})
 
 			if tt.expectError {
 				if err == nil {
@@ -131,7 +133,7 @@ func TestDeschedulingsPipelineController_Reconcile(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	controller := &DeschedulingsPipelineController{
-		BasePipelineController: lib.BasePipelineController[Pipeline]{
+		BasePipelineController: lib.BasePipelineController[*Pipeline]{
 			Client: client,
 		},
 	}
@@ -158,7 +160,7 @@ func TestDeschedulingsPipelineController_SetupWithManager(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	controller := &DeschedulingsPipelineController{
-		BasePipelineController: lib.BasePipelineController[Pipeline]{
+		BasePipelineController: lib.BasePipelineController[*Pipeline]{
 			Client: client,
 		},
 		Conf: conf.Config{

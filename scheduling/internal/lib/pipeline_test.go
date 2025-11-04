@@ -4,12 +4,13 @@
 package lib
 
 import (
+	"context"
 	"log/slog"
 	"math"
 	"testing"
 
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type mockPipelineStep struct {
@@ -17,12 +18,8 @@ type mockPipelineStep struct {
 	name string
 }
 
-func (m *mockPipelineStep) Init(db db.DB, opts libconf.RawOpts) error {
+func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
 	return nil
-}
-
-func (m *mockPipelineStep) GetName() string {
-	return m.name
 }
 
 func (m *mockPipelineStep) Run(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {

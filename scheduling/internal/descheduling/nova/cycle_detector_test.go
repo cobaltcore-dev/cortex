@@ -8,7 +8,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova/plugins"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type mockCycleDetectorNovaAPI struct {
@@ -16,7 +18,9 @@ type mockCycleDetectorNovaAPI struct {
 	getError   error
 }
 
-func (m *mockCycleDetectorNovaAPI) Init(ctx context.Context) {}
+func (m *mockCycleDetectorNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	return nil
+}
 
 func (m *mockCycleDetectorNovaAPI) Get(ctx context.Context, id string) (server, error) {
 	return server{}, errors.New("not implemented")
@@ -174,7 +178,7 @@ func TestCycleDetector_Filter(t *testing.T) {
 				mockAPI.getError = errors.New("API error")
 			}
 
-			detector := NewCycleDetector(mockAPI)
+			detector := cycleDetector{novaAPI: mockAPI}
 
 			ctx := context.Background()
 			result, err := detector.Filter(ctx, tt.decisions)
@@ -228,7 +232,7 @@ func TestCycleDetector_Filter_EmptyDecisions(t *testing.T) {
 		migrations: map[string][]migration{},
 	}
 
-	detector := NewCycleDetector(mockAPI)
+	detector := cycleDetector{novaAPI: mockAPI}
 
 	ctx := context.Background()
 	result, err := detector.Filter(ctx, []plugins.Decision{})

@@ -4,6 +4,7 @@
 package lib
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"maps"
@@ -12,20 +13,14 @@ import (
 	"sort"
 	"sync"
 
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Pipeline[RequestType PipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
 	Run(request RequestType) (v1alpha1.DecisionResult, error)
-}
-
-type Premodifier[RequestType PipelineRequest] interface {
-	// Modify the request before it is sent to the pipeline.
-	ModifyRequest(request *RequestType) error
 }
 
 // Pipeline of scheduler steps.
@@ -41,16 +36,22 @@ type pipeline[RequestType PipelineRequest] struct {
 	monitor PipelineMonitor
 }
 
-type StepWrapper[RequestType PipelineRequest] func(Step[RequestType], v1alpha1.Step) (Step[RequestType], error)
+type StepWrapper[RequestType PipelineRequest] func(
+	ctx context.Context,
+	client client.Client,
+	step v1alpha1.Step,
+	impl Step[RequestType],
+) (Step[RequestType], error)
 
 // Create a new pipeline with steps contained in the configuration.
 func NewPipeline[RequestType PipelineRequest](
+	ctx context.Context,
+	client client.Client,
 	supportedSteps map[string]func() Step[RequestType],
 	confedSteps []v1alpha1.Step,
-	stepWrappers []StepWrapper[RequestType],
-	database db.DB,
 	monitor PipelineMonitor,
 ) (Pipeline[RequestType], error) {
+
 	// Load all steps from the configuration.
 	stepsByName := make(map[string]Step[RequestType], len(confedSteps))
 	order := []string{}
@@ -62,15 +63,11 @@ func NewPipeline[RequestType PipelineRequest](
 			return nil, errors.New("unsupported scheduler step impl: " + stepConfig.Spec.Impl)
 		}
 		step := makeStep()
-		// Apply the step wrappers to the step.
-		for _, wrapper := range stepWrappers {
-			var err error
-			if step, err = wrapper(step, stepConfig); err != nil {
-				return nil, errors.New("failed to wrap scheduler step: " + err.Error())
-			}
+		if stepConfig.Spec.Type == v1alpha1.StepTypeWeigher && stepConfig.Spec.Weigher != nil {
+			step = validateStep(step, stepConfig.Spec.Weigher.DisabledValidations)
 		}
-		opts := libconf.NewRawOptsBytes(stepConfig.Spec.Opts.Raw)
-		if err := step.Init(database, opts); err != nil {
+		step = monitorStep(ctx, client, stepConfig, step, monitor)
+		if err := step.Init(ctx, client, stepConfig); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
 		stepsByName[stepConfig.Name] = step
@@ -79,7 +76,6 @@ func NewPipeline[RequestType PipelineRequest](
 			"scheduler: added step",
 			"name", stepConfig.Name,
 			"impl", stepConfig.Spec.Impl,
-			"options", opts,
 		)
 	}
 	return &pipeline[RequestType]{

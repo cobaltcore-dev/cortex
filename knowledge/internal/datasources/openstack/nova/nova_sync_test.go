@@ -60,9 +60,7 @@ func (m *mockNovaAPI) GetAllAggregates(ctx context.Context) ([]nova.Aggregate, e
 func TestNovaSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
 		DB:   testDB,
@@ -79,9 +77,7 @@ func TestNovaSyncer_Init(t *testing.T) {
 func TestNovaSyncer_Sync(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
 		DB:   testDB,
@@ -103,9 +99,7 @@ func TestNovaSyncer_Sync(t *testing.T) {
 func TestNovaSyncer_SyncServers(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
 		DB:   testDB,
@@ -148,7 +142,6 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 		t.Run(tt.Name, func(t *testing.T) {
 			dbEnv := testlibDB.SetupDBEnv(t)
 			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer testDB.Close()
 			defer dbEnv.Close()
 
 			mon := datasources.Monitor{}
@@ -180,9 +173,7 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
 		DB:   testDB,
@@ -207,9 +198,7 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 func TestNovaSyncer_SyncFlavors(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
 		DB:   testDB,
@@ -234,9 +223,7 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 func TestNovaSyncer_SyncMigrations(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
 		DB:   testDB,
@@ -261,9 +248,7 @@ func TestNovaSyncer_SyncMigrations(t *testing.T) {
 func TestNovaSyncer_SyncAggregates(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
 		DB:   testDB,

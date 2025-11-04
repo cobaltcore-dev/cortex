@@ -18,8 +18,6 @@ type KPI interface {
 	Collect(ch chan<- prometheus.Metric)
 	// Describe this metric.
 	Describe(ch chan<- *prometheus.Desc)
-	// Deinit this kpi, cleaning up resources.
-	Deinit() error
 	// Get the name of this kpi.
 	// This name is used to identify the kpi in metrics, config, logs, etc.
 	// Should be something like: "my_cool_kpi".

@@ -81,7 +81,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			metrics.Registry.Unregister(existingKPI)
 			delete(c.registeredKPIsByResourceName, req.Name)
 			log.Info("kpi: unregistered deleted kpi", "name", req.Name)
-			return ctrl.Result{}, existingKPI.Deinit()
+			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, nil
 	}
@@ -291,13 +291,10 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	}
 
 	// If the dependencies are not all ready but the kpi is registered,
-	// unregister and deinitialize it.
+	// unregister it.
 	if dependenciesReadyTotal < dependenciesTotal && registered {
 		log.Info("kpi: unregistering kpi due to unready dependencies", "name", obj.Name)
 		metrics.Registry.Unregister(registeredKPI)
-		if err := registeredKPI.Deinit(); err != nil {
-			return fmt.Errorf("failed to deinitialize kpi %s: %w", obj.Name, err)
-		}
 		delete(c.registeredKPIsByResourceName, obj.Name)
 	}
 

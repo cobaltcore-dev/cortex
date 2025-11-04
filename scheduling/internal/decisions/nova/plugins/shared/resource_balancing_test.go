@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 
@@ -18,9 +17,7 @@ import (
 func TestResourceBalancingStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency tables
 	err := testDB.CreateTable(
 		testDB.AddTable(shared.HostUtilization{}),
@@ -42,7 +39,7 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 		name            string
 		request         api.ExternalSchedulerRequest
 		expectedWeights map[string]float64
-		opts            string
+		opts            ResourceBalancingStepOpts
 	}{
 		{
 			name: "Single VM",
@@ -62,23 +59,23 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 				"host1": 3.0,
 				"host2": 0.0,
 			},
-			opts: `{
-		"cpuEnabled": true,
-		"cpuUtilizedLowerBoundPct": 0.0,
-		"cpuUtilizedUpperBoundPct": 100.0,
-		"cpuUtilizedActivationLowerBound": 1.0,
-		"cpuUtilizedActivationUpperBound": 0.0,
-		"ramEnabled": true,
-		"ramUtilizedLowerBoundPct": 0.0,
-		"ramUtilizedUpperBoundPct": 100.0,
-		"ramUtilizedActivationLowerBound": 1.0,
-		"ramUtilizedActivationUpperBound": 0.0,
-		"diskEnabled": true,
-		"diskUtilizedLowerBoundPct": 0.0,
-		"diskUtilizedUpperBoundPct": 100.0,
-		"diskUtilizedActivationLowerBound": 1.0,
-		"diskUtilizedActivationUpperBound": 0.0
-	}`,
+			opts: ResourceBalancingStepOpts{
+				CPUEnabled:                       true,
+				CPUUtilizedLowerBoundPct:         0.0,
+				CPUUtilizedUpperBoundPct:         100.0,
+				CPUUtilizedActivationLowerBound:  1.0,
+				CPUUtilizedActivationUpperBound:  0.0,
+				RAMEnabled:                       true,
+				RAMUtilizedLowerBoundPct:         0.0,
+				RAMUtilizedUpperBoundPct:         100.0,
+				RAMUtilizedActivationLowerBound:  1.0,
+				RAMUtilizedActivationUpperBound:  0.0,
+				DiskEnabled:                      true,
+				DiskUtilizedLowerBoundPct:        0.0,
+				DiskUtilizedUpperBoundPct:        100.0,
+				DiskUtilizedActivationLowerBound: 1.0,
+				DiskUtilizedActivationUpperBound: 0.0,
+			},
 		},
 		{
 			name: "CPU/RAM/Disk After Enabled",
@@ -108,32 +105,31 @@ func TestResourceBalancingStep_Run(t *testing.T) {
 				"host1": 3.0,
 				"host2": 0.3, // 3 * 0.1 = 0.3
 			},
-			opts: `{
-		"cpuAfterEnabled": true,
-		"cpuUtilizedAfterLowerBoundPct": 0.0,
-		"cpuUtilizedAfterUpperBoundPct": 100.0,
-		"cpuUtilizedAfterActivationLowerBound": 1.0,
-		"cpuUtilizedAfterActivationUpperBound": 0.0,
-		"ramAfterEnabled": true,
-		"ramUtilizedAfterLowerBoundPct": 0.0,
-		"ramUtilizedAfterUpperBoundPct": 100.0,
-		"ramUtilizedAfterActivationLowerBound": 1.0,
-		"ramUtilizedAfterActivationUpperBound": 0.0,
-		"diskAfterEnabled": true,
-		"diskUtilizedAfterLowerBoundPct": 0.0,
-		"diskUtilizedAfterUpperBoundPct": 100.0,
-		"diskUtilizedAfterActivationLowerBound": 1.0,
-		"diskUtilizedAfterActivationUpperBound": 0.0
-	}`,
+			opts: ResourceBalancingStepOpts{
+				CPUAfterEnabled:                       true,
+				CPUUtilizedAfterLowerBoundPct:         0.0,
+				CPUUtilizedAfterUpperBoundPct:         100.0,
+				CPUUtilizedAfterActivationLowerBound:  1.0,
+				CPUUtilizedAfterActivationUpperBound:  0.0,
+				RAMAfterEnabled:                       true,
+				RAMUtilizedAfterLowerBoundPct:         0.0,
+				RAMUtilizedAfterUpperBoundPct:         100.0,
+				RAMUtilizedAfterActivationLowerBound:  1.0,
+				RAMUtilizedAfterActivationUpperBound:  0.0,
+				DiskAfterEnabled:                      true,
+				DiskUtilizedAfterLowerBoundPct:        0.0,
+				DiskUtilizedAfterUpperBoundPct:        100.0,
+				DiskUtilizedAfterActivationLowerBound: 1.0,
+				DiskUtilizedAfterActivationUpperBound: 0.0,
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &ResourceBalancingStep{}
-			if err := step.Init(testDB, conf.NewRawOpts(tt.opts)); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			step.Options = tt.opts
+			step.DB = &testDB
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)

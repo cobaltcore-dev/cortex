@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/netapp"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
@@ -17,9 +16,7 @@ import (
 func TestCPUUsageBalancingStep_Run(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer testDB.Close()
 	defer dbEnv.Close()
-
 	// Create dependency table
 	err := testDB.CreateTable(testDB.AddTable(netapp.StoragePoolCPUUsage{}))
 	if err != nil {
@@ -38,20 +35,16 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
 	}
 
 	// Create an instance of the step
-	opts := conf.NewRawOpts(`{
-        "avgCPUUsageLowerBound": 0,
-        "avgCPUUsageUpperBound": 100,
-        "avgCPUUsageActivationLowerBound": 0.0,
-        "avgCPUUsageActivationUpperBound": -1.0,
-        "maxCPUUsageLowerBound": 0,
-        "maxCPUUsageUpperBound": 100,
-        "maxCPUUsageActivationLowerBound": 0.0,
-        "maxCPUUsageActivationUpperBound": -1.0
-    }`)
 	step := &CPUUsageBalancingStep{}
-	if err := step.Init(testDB, opts); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	step.Options.AvgCPUUsageLowerBound = 0.0
+	step.Options.AvgCPUUsageUpperBound = 100.0
+	step.Options.AvgCPUUsageActivationLowerBound = 0.0
+	step.Options.AvgCPUUsageActivationUpperBound = -1.0
+	step.Options.MaxCPUUsageLowerBound = 0.0
+	step.Options.MaxCPUUsageUpperBound = 100.0
+	step.Options.MaxCPUUsageActivationLowerBound = 0.0
+	step.Options.MaxCPUUsageActivationUpperBound = -1.0
+	step.DB = &testDB
 
 	tests := []struct {
 		name     string
