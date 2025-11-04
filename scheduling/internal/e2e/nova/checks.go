@@ -13,7 +13,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
@@ -285,9 +284,8 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 		panic(err)
 	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
-	time.Sleep(1 * time.Second) // Slow down the log output for better readability.
 	request := api.ExternalSchedulerRequest{
-		Pipeline: "nova-external-scheduler-reservations",
+		Pipeline: "nova-external-scheduler",
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
 			// Actual server that exists in nova but with mocked random properties.
 			InstanceUUID:     server.ID,
