@@ -1,37 +1,42 @@
 # Custom Resource Definitions (CRDs) 
 
 ## All Cortex owned CRDs
-### Datasource CRD
+### [Datasource CRD](../knowledge/config/crd/knowledge.cortex_datasources.yaml)
  - **Purpose**: Defines external data sources and sync schedules, continuously sync infrastructure state from multiple services (OpenStack, Prometheus, etc.)
  - **Event Trigger**: Scheduled sync intervals or external webhooks
  - **Owner**: Knowledge Operator (service-specific reconcilers)
  
-### Knowledge CRD
+### [Knowledge CRD](../knowledge/config/crd/knowledge.cortex_knowledges.yaml)
  - **Purpose**: Stores extracted features, Transforms raw data into actionable scheduling knowledge
  - **Event Trigger**: Datasource updates or dependency changes
  - **Owner**: Knowledge Operator (KnowledgeReconciler, TriggerReconciler)
 
-### Decision CRD
+### [KPI CRD](../knowledge/config/crd/knowledge.cortex_kpis.yaml)
+ - **Purpose**: Defines KPIs that depend on datasources and knowledge, tracks performance metrics and dependencies for scheduling decisions
+ - **Event Trigger**: Datasource or knowledge updates, dependency changes
+ - **Owner**: Knowledge Operator (KPI-specific reconcilers)
+
+### [Decision CRD](../scheduling/config/crd/scheduling.cortex_decisions.yaml)
  - **Purpose**: Records scheduling requests, decisions, and explanations
  - **Event Trigger**: External scheduler calls from various services
  - **Owner**: Scheduling Operator (service-specific controllers)
 
-### Pipeline CRD
+### [Pipeline CRD](../scheduling/config/crd/scheduling.cortex_pipelines.yaml)
  - **Purpose**: Defines scheduling workflows, configures multi-step scheduling logic per bundle
  - **Event Trigger**: Configuration changes
  - **Owner**: Scheduling Operator (DeschedulingsPipelineController, DecisionPipelineController variants)
 
-### Step CRD
+### [Step CRD](../scheduling/config/crd/scheduling.cortex_steps.yaml)
  - **Purpose**: Track individual steps within pipelines (filters, weighers, etc.)
  - **Event Trigger**: Pipeline configuration changes
  - **Owner**: Scheduling Operator
 
-### Descheduling CRD
+### [Descheduling CRD](../scheduling/config/crd/scheduling.cortex_deschedulings.yaml)
  - **Purpose**: Recommendations for moving workloads
  - **Event Trigger**: Capacity events
  - **Owner**: Scheduling Operator (Cleanup controllers)
 
-### Reservation CRD
+### [Reservation CRD](../reservations/config/crd/reservations.cortex_reservations.yaml)
  - **Purpose**: Manages capacity reservations, reserve resources
  - **Event Trigger**: Capacity requests
  - **Owner**: Reservations Operator (ReservationReconciler)
@@ -194,4 +199,3 @@ graph TB
 - **Rectangles (Gray)**: External Systems
 - **Solid arrows**: Direct actions (creates, updates, triggers)
 - **Dotted arrows**: Management/reference relationships
-
