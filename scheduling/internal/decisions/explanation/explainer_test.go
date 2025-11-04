@@ -262,7 +262,7 @@ func WithHistory(decision *v1alpha1.Decision, refs []corev1.ObjectReference) *v1
 }
 
 // Helper to create a decision with history reference to another decision
-func WithHistoryRef(decision *v1alpha1.Decision, historyDecision *v1alpha1.Decision) *v1alpha1.Decision {
+func WithHistoryRef(decision, historyDecision *v1alpha1.Decision) *v1alpha1.Decision {
 	refs := []corev1.ObjectReference{
 		{
 			Kind:      "Decision",
@@ -500,7 +500,9 @@ func RunExplanationTest(t *testing.T, decision *v1alpha1.Decision, expectedConta
 }
 
 func RunExplanationTestWithHistory(t *testing.T, decision *v1alpha1.Decision, historyDecisions []*v1alpha1.Decision, expectedContains []string) {
-	allDecisions := append(historyDecisions, decision)
+	allDecisions := make([]*v1alpha1.Decision, len(historyDecisions)+1)
+	copy(allDecisions, historyDecisions)
+	allDecisions[len(historyDecisions)] = decision
 	explainer := SetupExplainerTest(t, allDecisions...)
 	explanation, err := explainer.Explain(context.Background(), decision)
 	AssertNoError(t, err)
@@ -920,7 +922,7 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 				},
 			},
 			expectedContains: []string{
-				"Chain: host-1 (1h) -> host-2 (1h) -> host-3 (0s).",
+				"Chain: host-1 (1h0m0s) -> host-2 (1h0m0s) -> host-3 (0s).",
 			},
 		},
 		{
@@ -974,7 +976,7 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 				},
 			},
 			expectedContains: []string{
-				"Chain (loop detected): host-1 (1h) -> host-2 (1h) -> host-1 (0s).",
+				"Chain (loop detected): host-1 (1h0m0s) -> host-2 (1h0m0s) -> host-1 (0s).",
 			},
 		},
 		{
@@ -1042,7 +1044,47 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 				},
 			},
 			expectedContains: []string{
-				"Chain: host-1 (2h; 3 decisions) -> host-2 (0s).",
+				"Chain: host-1 (2h0m0s; 3 decisions) -> host-2 (0s).",
+			},
+		},
+		{
+			name: "chain with multi-day duration",
+			currentDecision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "decision-2",
+					Namespace:         "default",
+					CreationTimestamp: metav1.Time{Time: baseTime.Time},
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:       v1alpha1.DecisionTypeNovaServer,
+					ResourceID: "test-resource",
+				},
+				Status: v1alpha1.DecisionStatus{
+					History: &[]corev1.ObjectReference{
+						{Kind: "Decision", Namespace: "default", Name: "decision-1", UID: "uid-1"},
+					},
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-2"),
+					},
+				},
+			},
+			historyDecisions: []v1alpha1.Decision{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "decision-1",
+						Namespace:         "default",
+						UID:               "uid-1",
+						CreationTimestamp: metav1.Time{Time: baseTime.Add(-72 * time.Hour)}, // 3 days ago
+					},
+					Status: v1alpha1.DecisionStatus{
+						Result: &v1alpha1.DecisionResult{
+							TargetHost: stringPtr("host-1"),
+						},
+					},
+				},
+			},
+			expectedContains: []string{
+				"Chain: host-1 (72h0m0s) -> host-2 (0s).",
 			},
 		},
 		{
@@ -1291,7 +1333,6 @@ func TestExplainer_RawVsNormalizedComparison(t *testing.T) {
 	if contains(explanation, "Input favored host-1") || contains(explanation, "Input favored host-3") {
 		t.Errorf("Expected explanation to NOT show input choice override, but got: %s", explanation)
 	}
-
 }
 
 func TestExplainer_StepImpactAnalysis(t *testing.T) {

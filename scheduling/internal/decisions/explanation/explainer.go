@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -101,7 +101,7 @@ func (e *Explainer) buildHistoryComparison(ctx context.Context, decision *v1alph
 		Name:      lastDecisionRef.Name,
 	}, lastDecision); err != nil {
 		logger := log.FromContext(ctx)
-		if apierrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			logger.Info("History decision not found, skipping history comparison",
 				"decision", lastDecisionRef.Name,
 				"namespace", lastDecisionRef.Namespace,
@@ -179,7 +179,7 @@ func (e *Explainer) buildWinnerAnalysis(decision *v1alpha1.Decision) string {
 
 // calculateScoreGap calculates the gap between first and second place.
 func (e *Explainer) calculateScoreGap(weights map[string]float64) float64 {
-	if weights == nil || len(weights) < 2 {
+	if len(weights) < 2 {
 		return 0.0
 	}
 
@@ -207,11 +207,12 @@ func (e *Explainer) buildInputComparison(decision *v1alpha1.Decision) string {
 
 	// Get input weights (prefer raw, fall back to normalized)
 	var inputWeights map[string]float64
-	if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+	switch {
+	case len(result.RawInWeights) > 0:
 		inputWeights = result.RawInWeights
-	} else if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+	case len(result.NormalizedInWeights) > 0:
 		inputWeights = result.NormalizedInWeights
-	} else {
+	default:
 		return ""
 	}
 
@@ -255,12 +256,11 @@ func (e *Explainer) buildInputComparison(decision *v1alpha1.Decision) string {
 // buildCriticalStepsAnalysis creates the critical steps analysis part of the explanation.
 func (e *Explainer) buildCriticalStepsAnalysis(decision *v1alpha1.Decision) string {
 	result := decision.Status.Result
-	if result == nil || result.TargetHost == nil || result.StepResults == nil || len(result.StepResults) == 0 {
+	if result == nil || result.TargetHost == nil || len(result.StepResults) == 0 {
 		return ""
 	}
 
-	targetHost := *result.TargetHost
-	criticalSteps := e.findCriticalSteps(decision, targetHost)
+	criticalSteps := e.findCriticalSteps(decision)
 
 	if len(criticalSteps) == 0 {
 		totalSteps := len(result.StepResults)
@@ -306,11 +306,12 @@ func (e *Explainer) buildDeletedHostsAnalysis(decision *v1alpha1.Decision) strin
 
 	// Get input weights (prefer raw, fall back to normalized)
 	var inputWeights map[string]float64
-	if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+	switch {
+	case len(result.RawInWeights) > 0:
 		inputWeights = result.RawInWeights
-	} else if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+	case len(result.NormalizedInWeights) > 0:
 		inputWeights = result.NormalizedInWeights
-	} else {
+	default:
 		return ""
 	}
 
@@ -426,7 +427,7 @@ func (e *Explainer) fetchDecisionChain(ctx context.Context, decision *v1alpha1.D
 				Namespace: ref.Namespace,
 				Name:      ref.Name,
 			}, histDecision); err != nil {
-				if apierrors.IsNotFound(err) {
+				if errors.IsNotFound(err) {
 					logger.Info("History decision not found, skipping from chain analysis",
 						"decision", ref.Name,
 						"namespace", ref.Namespace,
@@ -461,7 +462,7 @@ func (e *Explainer) generateChainDescription(decisions []*v1alpha1.Decision) str
 	// Build chain string with durations
 	chainParts := make([]string, 0, len(segments))
 	for _, segment := range segments {
-		part := segment.host + " (" + e.formatDuration(segment.duration)
+		part := segment.host + " (" + (time.Duration(int(segment.duration.Seconds())) * time.Second).String()
 		if segment.decisions > 1 {
 			part += fmt.Sprintf("; %d decisions", segment.decisions)
 		}
@@ -537,41 +538,6 @@ func (e *Explainer) buildHostSegments(decisions []*v1alpha1.Decision) []HostSegm
 	return segments
 }
 
-// formatDuration formats a duration to a human-readable format with full precision.
-func (e *Explainer) formatDuration(duration time.Duration) string {
-	totalSeconds := int64(duration.Seconds())
-
-	if totalSeconds == 0 {
-		return "0s"
-	}
-
-	days := totalSeconds / 86400
-	hours := (totalSeconds % 86400) / 3600
-	minutes := (totalSeconds % 3600) / 60
-	seconds := totalSeconds % 60
-
-	var parts []string
-
-	if days > 0 {
-		parts = append(parts, fmt.Sprintf("%dd", days))
-	}
-	if hours > 0 {
-		parts = append(parts, fmt.Sprintf("%dh", hours))
-	}
-	if minutes > 0 {
-		parts = append(parts, fmt.Sprintf("%dm", minutes))
-	}
-	if seconds > 0 {
-		parts = append(parts, fmt.Sprintf("%ds", seconds))
-	}
-
-	result := ""
-	for _, part := range parts {
-		result += part
-	}
-	return result
-}
-
 // detectLoop checks if there are repeated hosts in the segments.
 func (e *Explainer) detectLoop(segments []HostSegment) bool {
 	seenHosts := make(map[string]bool)
@@ -596,12 +562,8 @@ func (e *Explainer) joinChainParts(parts []string) string {
 	return result
 }
 
-// findWinner returns the host with the highest score and the score value.
-func (e *Explainer) findWinner(scores map[string]float64) (string, float64) {
-	if len(scores) == 0 {
-		return "", -999999.0
-	}
-
+// findWinner returns the host with the highest score.
+func (e *Explainer) findWinner(scores map[string]float64) string {
 	winner := ""
 	maxScore := -999999.0
 	for host, score := range scores {
@@ -610,7 +572,7 @@ func (e *Explainer) findWinner(scores map[string]float64) (string, float64) {
 			winner = host
 		}
 	}
-	return winner, maxScore
+	return winner
 }
 
 // ScoreCalculationResult holds both final scores and deleted host tracking information.
@@ -689,25 +651,26 @@ func (e *Explainer) calculateScoresWithoutStep(inputWeights map[string]float64, 
 }
 
 // findCriticalSteps determines which steps change the winning host using backward elimination.
-func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost string) []string {
+func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision) []string {
 	result := decision.Status.Result
-	if result == nil || result.StepResults == nil || len(result.StepResults) == 0 {
+	if result == nil || len(result.StepResults) == 0 {
 		return []string{}
 	}
 
 	// Get input weights (prefer raw, fall back to normalized)
 	var inputWeights map[string]float64
-	if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+	switch {
+	case len(result.RawInWeights) > 0:
 		inputWeights = result.RawInWeights
-	} else if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+	case len(result.NormalizedInWeights) > 0:
 		inputWeights = result.NormalizedInWeights
-	} else {
+	default:
 		return []string{}
 	}
 
 	// Calculate baseline scores with all steps
 	baselineResult := e.calculateScoresFromSteps(inputWeights, result.StepResults)
-	baselineWinner, _ := e.findWinner(baselineResult.FinalScores)
+	baselineWinner := e.findWinner(baselineResult.FinalScores)
 
 	if baselineWinner == "" {
 		return []string{}
@@ -721,7 +684,7 @@ func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost st
 		reducedResult := e.calculateScoresWithoutStep(inputWeights, result.StepResults, i)
 
 		// Find winner without this step
-		reducedWinner, _ := e.findWinner(reducedResult.FinalScores)
+		reducedWinner := e.findWinner(reducedResult.FinalScores)
 
 		// If removing this step changes the winner, it's critical
 		if reducedWinner != baselineWinner {
@@ -735,7 +698,7 @@ func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision, targetHost st
 // buildStepImpactAnalysis creates the step impact analysis part of the explanation.
 func (e *Explainer) buildStepImpactAnalysis(decision *v1alpha1.Decision) string {
 	result := decision.Status.Result
-	if result == nil || result.TargetHost == nil || result.StepResults == nil || len(result.StepResults) == 0 {
+	if result == nil || result.TargetHost == nil || len(result.StepResults) == 0 {
 		return ""
 	}
 
@@ -743,11 +706,12 @@ func (e *Explainer) buildStepImpactAnalysis(decision *v1alpha1.Decision) string 
 
 	// Get input weights (prefer raw, fall back to normalized)
 	var inputWeights map[string]float64
-	if result.RawInWeights != nil && len(result.RawInWeights) > 0 {
+	switch {
+	case len(result.RawInWeights) > 0:
 		inputWeights = result.RawInWeights
-	} else if result.NormalizedInWeights != nil && len(result.NormalizedInWeights) > 0 {
+	case len(result.NormalizedInWeights) > 0:
 		inputWeights = result.NormalizedInWeights
-	} else {
+	default:
 		return ""
 	}
 
@@ -880,5 +844,5 @@ func (e *Explainer) formatStepImpact(impact StepImpact) string {
 	if impact.CompetitorsRemoved > 0 {
 		return fmt.Sprintf("%s +0.00 (removed %d)", impact.Step, impact.CompetitorsRemoved)
 	}
-	return fmt.Sprintf("%s +0.00", impact.Step)
+	return impact.Step + " +0.00"
 }
