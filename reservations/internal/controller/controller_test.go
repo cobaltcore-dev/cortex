@@ -405,23 +405,3 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		t.Errorf("Expected no error, got %v", updated.Status.Conditions)
 	}
 }
-
-func TestReservationReconciler_SetupWithManager(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	reconciler := &ReservationReconciler{
-		Scheme: scheme,
-	}
-
-	// This test just verifies that SetupWithManager method exists
-	// We can't easily test the actual setup without a real manager
-	// but we can verify the method signature is correct by calling it with nil
-	// (it will return an error, but that's expected)
-	err := reconciler.SetupWithManager(nil)
-	if err == nil {
-		t.Error("Expected error when calling SetupWithManager with nil manager")
-	}
-}

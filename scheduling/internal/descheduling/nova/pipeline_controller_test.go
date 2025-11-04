@@ -20,6 +20,10 @@ import (
 
 type mockCycleDetector struct{}
 
+func (m *mockCycleDetector) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	return nil
+}
+
 func (m *mockCycleDetector) Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error) {
 	return decisions, nil
 }

@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
@@ -201,6 +202,11 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return r.Init(ctx, mgr.GetClient(), r.Conf)
+	})); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Reservation{}).
 		Named("reservation").

@@ -178,7 +178,7 @@ func TestCycleDetector_Filter(t *testing.T) {
 				mockAPI.getError = errors.New("API error")
 			}
 
-			detector := NewCycleDetector(mockAPI)
+			detector := cycleDetector{novaAPI: mockAPI}
 
 			ctx := context.Background()
 			result, err := detector.Filter(ctx, tt.decisions)
@@ -232,7 +232,7 @@ func TestCycleDetector_Filter_EmptyDecisions(t *testing.T) {
 		migrations: map[string][]migration{},
 	}
 
-	detector := NewCycleDetector(mockAPI)
+	detector := cycleDetector{novaAPI: mockAPI}
 
 	ctx := context.Background()
 	result, err := detector.Filter(ctx, []plugins.Decision{})

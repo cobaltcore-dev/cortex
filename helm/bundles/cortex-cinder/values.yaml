@@ -86,3 +86,9 @@ cortex-scheduling-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-cinder
+    keystoneSecretRef:
+      name: cortex-cinder-openstack-keystone
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-cinder-openstack-sso
+    #   namespace: default

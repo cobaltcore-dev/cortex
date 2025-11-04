@@ -19,6 +19,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -195,17 +196,11 @@ func main() {
 
 	ctx := context.Background()
 
-	controllerConfig := conf.GetConfigOrDie[controller.Config]()
-	hvClient := controller.NewHypervisorClient()
-	if err := hvClient.Init(ctx, mgr.GetClient(), controllerConfig); err != nil {
-		setupLog.Error(err, "unable to initialize hypervisor client")
-		os.Exit(1)
-	}
 	if err := (&controller.ReservationReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
-		Conf:             controllerConfig,
-		HypervisorClient: hvClient,
+		Conf:             conf.GetConfigOrDie[controller.Config](),
+		HypervisorClient: controller.NewHypervisorClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Reservation")
 		os.Exit(1)
@@ -243,7 +238,14 @@ func main() {
 	metrics.Registry.MustRegister(&monitor)
 
 	setupLog.Info("starting commitments syncer")
-	syncer := commitments.NewSyncer(mgr.GetClient())
+	restConfig := ctrl.GetConfigOrDie()
+	copts := client.Options{Scheme: scheme}
+	commitmentsKubernetesClient, err := client.New(restConfig, copts)
+	if err != nil {
+		setupLog.Error(err, "unable to create commitments kubernetes client")
+		os.Exit(1)
+	}
+	syncer := commitments.NewSyncer(commitmentsKubernetesClient)
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 	if err := syncer.Init(ctx, commitmentsConfig); err != nil {
 		setupLog.Error(err, "unable to initialize commitments syncer")

@@ -266,15 +266,10 @@ func main() {
 		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 		// Deschedulings controller
-		deschedulingsNovaAPI := deschedulingnova.NewNovaAPI()
-		if err := deschedulingsNovaAPI.Init(ctx, mgr.GetClient(), config); err != nil {
-			setupLog.Error(err, "unable to create API", "API", "DeschedulingsNovaAPI")
-			os.Exit(1)
-		}
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
 			Monitor:       deschedulingnova.NewPipelineMonitor(),
 			Conf:          config,
-			CycleDetector: deschedulingnova.NewCycleDetector(deschedulingsNovaAPI),
+			CycleDetector: deschedulingnova.NewCycleDetector(),
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = mgr.GetClient()

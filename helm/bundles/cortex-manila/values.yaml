@@ -88,5 +88,7 @@ cortex-scheduling-operator:
     operator: cortex-manila
     keystoneSecretRef:
       name: cortex-manila-openstack-keystone
-    ssoSecretRef:
-      name: cortex-manila-openstack-sso
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-manila-openstack-sso
+    #   namespace: default

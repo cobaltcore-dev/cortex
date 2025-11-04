@@ -69,8 +69,10 @@ cortex-reservations-operator:
   conf:
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
-    ssoSecretRef:
-      name: cortex-nova-openstack-sso
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-nova-openstack-sso
+    #   namespace: default
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
@@ -101,5 +103,7 @@ cortex-scheduling-operator:
     operator: cortex-nova
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
-    ssoSecretRef:
-      name: cortex-nova-openstack-sso
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-nova-openstack-sso
+    #   namespace: default

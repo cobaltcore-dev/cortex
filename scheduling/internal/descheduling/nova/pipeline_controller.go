@@ -80,6 +80,12 @@ func (c *DeschedulingsPipelineController) Reconcile(ctx context.Context, req ctr
 
 func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager) error {
 	c.Initializer = c
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		// Initialize the cycle detector.
+		return c.CycleDetector.Init(ctx, mgr.GetClient(), c.Conf)
+	})); err != nil {
+		return err
+	}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
