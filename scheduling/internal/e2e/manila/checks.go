@@ -11,42 +11,44 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/schedulerstats"
 	"github.com/sapcc/go-bits/must"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Run all checks.
-func RunChecks(ctx context.Context, config conf.Config) {
-	checkManilaSchedulerReturnsValidHosts(ctx, config)
+func RunChecks(ctx context.Context, client client.Client, config conf.Config) {
+	checkManilaSchedulerReturnsValidHosts(ctx, client, config)
 }
 
 // Check that the Manila external scheduler returns a valid set of share hosts.
-func checkManilaSchedulerReturnsValidHosts(ctx context.Context, config conf.Config) {
-	keystoneConf := config.KeystoneConfig
-	slog.Info("authenticating against openstack", "url", keystoneConf.URL)
-	authOptions := gophercloud.AuthOptions{
-		IdentityEndpoint: keystoneConf.URL,
-		Username:         keystoneConf.OSUsername,
-		DomainName:       keystoneConf.OSUserDomainName,
-		Password:         keystoneConf.OSPassword,
-		AllowReauth:      true,
-		Scope: &gophercloud.AuthScope{
-			ProjectName: keystoneConf.OSProjectName,
-			DomainName:  keystoneConf.OSProjectDomainName,
-		},
+func checkManilaSchedulerReturnsValidHosts(
+	ctx context.Context,
+	client client.Client,
+	config conf.Config,
+) {
+
+	var authenticatedHTTP = http.DefaultClient
+	if config.SSOSecretRef != nil {
+		authenticatedHTTP = must.Return(sso.Connector{Client: client}.
+			FromSecretRef(ctx, *config.SSOSecretRef))
 	}
-	pc := must.Return(openstack.NewClient(authOptions.IdentityEndpoint))
-	must.Succeed(openstack.Authenticate(ctx, pc, authOptions))
+	authenticatedKeystone := must.Return(keystone.
+		Connector{Client: client, HTTPClient: authenticatedHTTP}.
+		FromSecretRef(ctx, config.KeystoneSecretRef))
+	pc := authenticatedKeystone.Client()
 	// Workaround to find the v2 service of manila.
 	// See: https://github.com/gophercloud/gophercloud/issues/3347
 	gophercloud.ServiceTypeAliases["shared-file-system"] = []string{"sharev2"}
 	sc := must.Return(openstack.NewSharedFileSystemV2(pc, gophercloud.EndpointOpts{
 		Type:         "sharev2",
-		Availability: gophercloud.Availability(keystoneConf.Availability),
+		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
 	}))
 	sc.Microversion = "2.65"
 	slog.Info("authenticated against openstack", "url", sc.Endpoint)

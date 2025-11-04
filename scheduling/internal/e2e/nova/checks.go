@@ -16,10 +16,11 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
@@ -27,6 +28,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/sapcc/go-bits/must"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -92,28 +94,20 @@ func getHypervisors(ctx context.Context, sc *gophercloud.ServiceClient) ([]nova.
 }
 
 // Prepare the test by fetching the necessary data from OpenStack.
-func prepare(ctx context.Context, config conf.Config) datacenter {
-	keystoneConf := config.KeystoneConfig
-	slog.Info("authenticating against openstack", "url", keystoneConf.URL)
-	authOptions := gophercloud.AuthOptions{
-		IdentityEndpoint: keystoneConf.URL,
-		Username:         keystoneConf.OSUsername,
-		DomainName:       keystoneConf.OSUserDomainName,
-		Password:         keystoneConf.OSPassword,
-		AllowReauth:      true,
-		Scope: &gophercloud.AuthScope{
-			ProjectName: keystoneConf.OSProjectName,
-			DomainName:  keystoneConf.OSProjectDomainName,
-		},
+func prepare(ctx context.Context, client client.Client, config conf.Config) datacenter {
+	var authenticatedHTTP = http.DefaultClient
+	if config.SSOSecretRef != nil {
+		authenticatedHTTP = must.Return(sso.Connector{Client: client}.
+			FromSecretRef(ctx, *config.SSOSecretRef))
 	}
-	pc := must.Return(openstack.NewClient(authOptions.IdentityEndpoint))
-	must.Succeed(openstack.Authenticate(ctx, pc, authOptions))
-	slog.Info("authenticated against openstack", "keystone", keystoneConf.URL)
-
+	authenticatedKeystone := must.Return(keystone.
+		Connector{Client: client, HTTPClient: authenticatedHTTP}.
+		FromSecretRef(ctx, config.KeystoneSecretRef))
+	pc := authenticatedKeystone.Client()
 	slog.Info("locating nova endpoint")
 	novaURL := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "compute",
-		Availability: gophercloud.Availability(keystoneConf.Availability),
+		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
 	}))
 	novaSC := &gophercloud.ServiceClient{
 		ProviderClient: pc,
@@ -186,7 +180,7 @@ func prepare(ctx context.Context, config conf.Config) datacenter {
 	slog.Info("locating keystone endpoint")
 	keystoneURL := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "identity",
-		Availability: gophercloud.Availability(keystoneConf.Availability),
+		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
 	}))
 	keystoneSC := &gophercloud.ServiceClient{
 		ProviderClient: pc,
@@ -344,8 +338,8 @@ func checkNovaSchedulerReturnsValidHosts(
 }
 
 // Run all checks.
-func RunChecks(ctx context.Context, config conf.Config) {
-	datacenter := prepare(ctx, config)
+func RunChecks(ctx context.Context, client client.Client, config conf.Config) {
+	datacenter := prepare(ctx, client, config)
 	requestsWithHostsReturned := 0
 	requestsWithNoHostsReturned := 0
 	for i := range nRandomRequestsToSend {

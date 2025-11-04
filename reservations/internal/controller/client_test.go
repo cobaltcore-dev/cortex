@@ -3,14 +3,20 @@
 
 package controller
 
-import "context"
+import (
+	"context"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
 
 type mockHypervisorClient struct {
 	hypervisorsToReturn []Hypervisor
 	errToReturn         error
 }
 
-func (m *mockHypervisorClient) Init(ctx context.Context) {}
+func (m *mockHypervisorClient) Init(ctx context.Context, client client.Client, conf Config) error {
+	return nil
+}
 
 func (m *mockHypervisorClient) ListHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	return m.hypervisorsToReturn, m.errToReturn

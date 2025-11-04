@@ -41,23 +41,23 @@ postgres:
   database: postgres
   port: "5432"
 
-datasources:
-  prometheus:
-    url: "https://path-to-your-prometheus"
-    sso:
-      enabled: false
-      <<: *sharedSSOCert
-  openstack:
-    url: "https://path-to-keystone/v3"
-    availability: public
-    username: openstack-user-with-all-project-read-access
-    password: openstack-user-password
-    projectName: openstack-project-of-user
-    userDomainName: openstack-domain-of-user
-    projectDomainName: openstack-domain-of-project-scoped-to
-    sso:
-      enabled: false
-      <<: *sharedSSOCert
+prometheus:
+  url: "https://path-to-your-prometheus"
+  sso:
+    enabled: false
+    <<: *sharedSSOCert
+
+openstack:
+  url: "https://path-to-keystone/v3"
+  availability: public
+  username: openstack-user-with-all-project-read-access
+  password: openstack-user-password
+  projectName: openstack-project-of-user
+  userDomainName: openstack-domain-of-user
+  projectDomainName: openstack-domain-of-project-scoped-to
+  sso:
+    enabled: false
+    <<: *sharedSSOCert
 
 # Features in early development that are not ready for production yet.
 cortex-reservations-operator:
@@ -66,6 +66,11 @@ cortex-reservations-operator:
   crd: {enable: false}
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-nova
+  conf:
+    keystoneSecretRef:
+      name: cortex-nova-openstack-keystone
+    ssoSecretRef:
+      name: cortex-nova-openstack-sso
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
@@ -94,3 +99,7 @@ cortex-scheduling-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-nova
+    keystoneSecretRef:
+      name: cortex-nova-openstack-keystone
+    ssoSecretRef:
+      name: cortex-nova-openstack-sso

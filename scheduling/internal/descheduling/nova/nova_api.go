@@ -11,8 +11,11 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
+	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type server struct {
@@ -29,7 +32,7 @@ type migration struct {
 
 type NovaAPI interface {
 	// Initialize the Nova API with the Keystone authentication.
-	Init(ctx context.Context)
+	Init(ctx context.Context, client client.Client, conf conf.Config) error
 	// Get a server by ID.
 	Get(ctx context.Context, id string) (server, error)
 	// Live migrate a server to a new host (doesnt wait for it to complete).
@@ -39,26 +42,38 @@ type NovaAPI interface {
 }
 
 type novaAPI struct {
-	// Keystone api to authenticate against.
-	keystoneAPI keystone.KeystoneAPI
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
 }
 
-func NewNovaAPI(keystoneAPI keystone.KeystoneAPI) NovaAPI {
-	return &novaAPI{keystoneAPI: keystoneAPI}
+func NewNovaAPI() NovaAPI {
+	return &novaAPI{}
 }
 
-func (api *novaAPI) Init(ctx context.Context) {
-	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		panic(err)
+func (api *novaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	var authenticatedHTTP = http.DefaultClient
+	if conf.SSOSecretRef != nil {
+		var err error
+		authenticatedHTTP, err = sso.Connector{Client: client}.
+			FromSecretRef(ctx, *conf.SSOSecretRef)
+		if err != nil {
+			return err
+		}
+	}
+	authenticatedKeystone, err := keystone.
+		Connector{Client: client, HTTPClient: authenticatedHTTP}.
+		FromSecretRef(ctx, conf.KeystoneSecretRef)
+	if err != nil {
+		return err
 	}
 	// Automatically fetch the nova endpoint from the keystone service catalog.
-	provider := api.keystoneAPI.Client()
+	provider := authenticatedKeystone.Client()
 	serviceType := "compute"
-	url, err := api.keystoneAPI.FindEndpoint(api.keystoneAPI.Availability(), serviceType)
+	url, err := authenticatedKeystone.FindEndpoint(
+		authenticatedKeystone.Availability(), serviceType,
+	)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	slog.Info("using nova endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
@@ -69,6 +84,7 @@ func (api *novaAPI) Init(ctx context.Context) {
 		// We need that to find placement resource providers for hypervisors.
 		Microversion: "2.53",
 	}
+	return nil
 }
 
 // Get a server by ID.

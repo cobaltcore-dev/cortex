@@ -20,6 +20,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -28,7 +29,6 @@ import (
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
@@ -48,6 +48,8 @@ import (
 	manilashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/manila"
 	novashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/nova"
 	"github.com/sapcc/go-bits/httpext"
+	"github.com/sapcc/go-bits/must"
+	corev1 "k8s.io/api/core/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -63,6 +65,7 @@ func init() {
 	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(reservationsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(knowledgev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(corev1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -72,15 +75,18 @@ func main() {
 	config := libconf.GetConfigOrDie[conf.Config]()
 	// Custom entrypoint for e2e tests.
 	if len(os.Args) == 2 {
+		restConfig := ctrl.GetConfigOrDie()
+		copts := client.Options{Scheme: scheme}
+		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
 		case "e2e-nova":
-			novae2e.RunChecks(ctx, config)
+			novae2e.RunChecks(ctx, client, config)
 			return
 		case "e2e-cinder":
-			cindere2e.RunChecks(ctx)
+			cindere2e.RunChecks(ctx, client, config)
 			return
 		case "e2e-manila":
-			manilae2e.RunChecks(ctx, config)
+			manilae2e.RunChecks(ctx, client, config)
 			return
 		}
 	}
@@ -260,9 +266,11 @@ func main() {
 		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 		// Deschedulings controller
-		deschedulingsKeystoneAPI := keystone.NewKeystoneAPI(config.KeystoneConfig)
-		deschedulingsNovaAPI := deschedulingnova.NewNovaAPI(deschedulingsKeystoneAPI)
-		deschedulingsNovaAPI.Init(ctx)
+		deschedulingsNovaAPI := deschedulingnova.NewNovaAPI()
+		if err := deschedulingsNovaAPI.Init(ctx, mgr.GetClient(), config); err != nil {
+			setupLog.Error(err, "unable to create API", "API", "DeschedulingsNovaAPI")
+			os.Exit(1)
+		}
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
 			Monitor:       deschedulingnova.NewPipelineMonitor(),
 			Conf:          config,

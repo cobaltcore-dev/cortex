@@ -9,11 +9,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-bits/must"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -34,16 +35,13 @@ type Hypervisor struct {
 // Client to fetch hypervisor data.
 type HypervisorClient interface {
 	// Init the client.
-	Init(ctx context.Context)
+	Init(ctx context.Context, client client.Client, conf Config) error
 	// List all hypervisors.
 	ListHypervisors(ctx context.Context) ([]Hypervisor, error)
 }
 
 // Hypervisor client fetching commitments from openstack services.
 type hypervisorClient struct {
-	// Basic config to authenticate against openstack.
-	conf conf.KeystoneConfig
-
 	// Providerclient authenticated against openstack.
 	provider *gophercloud.ProviderClient
 	// Nova service client for OpenStack.
@@ -52,17 +50,29 @@ type hypervisorClient struct {
 
 // Create a new hypervisor client.
 // By default, this client will fetch hypervisors from the nova API.
-func NewHypervisorClient(conf conf.KeystoneConfig) HypervisorClient {
-	return &hypervisorClient{conf: conf}
+func NewHypervisorClient() HypervisorClient {
+	return &hypervisorClient{}
 }
 
 // Init the client.
-func (c *hypervisorClient) Init(ctx context.Context) {
-	syncLog.Info("authenticating against openstack", "url", c.conf.URL)
-	auth := keystone.NewKeystoneAPI(c.conf)
-	must.Succeed(auth.Authenticate(ctx))
-	c.provider = auth.Client()
-	syncLog.Info("authenticated against openstack")
+func (c *hypervisorClient) Init(ctx context.Context, client client.Client, conf Config) error {
+	var authenticatedHTTP = http.DefaultClient
+	if conf.SSOSecretRef != nil {
+		var err error
+		authenticatedHTTP, err = sso.Connector{Client: client}.
+			FromSecretRef(ctx, *conf.SSOSecretRef)
+		if err != nil {
+			return err
+		}
+	}
+	authenticatedKeystone, err := keystone.
+		Connector{Client: client, HTTPClient: authenticatedHTTP}.
+		FromSecretRef(ctx, conf.KeystoneSecretRef)
+	if err != nil {
+		return err
+	}
+	// Automatically fetch the nova endpoint from the keystone service catalog.
+	c.provider = authenticatedKeystone.Client()
 
 	// Get the nova endpoint.
 	url := must.Return(c.provider.EndpointLocator(gophercloud.EndpointOpts{
@@ -76,6 +86,7 @@ func (c *hypervisorClient) Init(ctx context.Context) {
 		Type:           "compute",
 		Microversion:   "2.61",
 	}
+	return nil
 }
 
 func (c *hypervisorClient) ListHypervisors(ctx context.Context) ([]Hypervisor, error) {

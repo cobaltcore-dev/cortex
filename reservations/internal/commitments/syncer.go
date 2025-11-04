@@ -13,7 +13,6 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	"github.com/sapcc/go-bits/jobloop"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,17 +36,19 @@ type Syncer struct {
 
 // Create a new compute reservation syncer.
 func NewSyncer(k8sClient client.Client) *Syncer {
-	config := conf.GetConfigOrDie[Config]()
 	return &Syncer{
-		CommitmentsClient: NewCommitmentsClient(config.Keystone),
+		CommitmentsClient: NewCommitmentsClient(),
 		Client:            k8sClient,
 	}
 }
 
 // Initialize the syncer.
-func (s *Syncer) Init(ctx context.Context) {
+func (s *Syncer) Init(ctx context.Context, config Config) error {
 	// Initialize the syncer.
-	s.CommitmentsClient.Init(ctx)
+	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Helper struct to unify the commitment with metadata needed for reservation creation.

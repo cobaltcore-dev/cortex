@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
+	"github.com/gophercloud/gophercloud/v2"
 )
 
 func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
@@ -18,8 +19,7 @@ func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.K
 }
 
 func TestNewNovaAPI(t *testing.T) {
-	k := &testlibKeystone.MockKeystoneAPI{}
-	api := NewNovaAPI(k)
+	api := NewNovaAPI()
 	if api == nil {
 		t.Fatal("expected non-nil api")
 	}
@@ -39,9 +39,14 @@ func TestNovaAPI_GetServer(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	nova := NewNovaAPI(k).(*novaAPI)
+	nova := novaAPI{}
+	nova.sc = &gophercloud.ServiceClient{
+		ProviderClient: k.Client(),
+		Endpoint:       server.URL + "/",
+		Type:           "compute",
+		Microversion:   "2.53",
+	}
 	ctx := t.Context()
-	nova.Init(ctx)
 
 	s, err := nova.Get(ctx, "server-123")
 	if err != nil {
@@ -61,9 +66,14 @@ func TestNovaAPI_LiveMigrate(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	nova := NewNovaAPI(k).(*novaAPI)
+	nova := novaAPI{}
+	nova.sc = &gophercloud.ServiceClient{
+		ProviderClient: k.Client(),
+		Endpoint:       server.URL + "/",
+		Type:           "compute",
+		Microversion:   "2.53",
+	}
 	ctx := t.Context()
-	nova.Init(ctx)
 
 	err := nova.LiveMigrate(ctx, "server-123")
 	if err != nil {
@@ -90,9 +100,14 @@ func TestNovaAPI_GetServerMigrations(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	nova := NewNovaAPI(k).(*novaAPI)
+	nova := novaAPI{}
+	nova.sc = &gophercloud.ServiceClient{
+		ProviderClient: k.Client(),
+		Endpoint:       server.URL + "/",
+		Type:           "compute",
+		Microversion:   "2.53",
+	}
 	ctx := t.Context()
-	nova.Init(ctx)
 
 	migrations, err := nova.GetServerMigrations(ctx, "server-123")
 	if err != nil {

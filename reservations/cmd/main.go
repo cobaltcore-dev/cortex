@@ -195,13 +195,16 @@ func main() {
 
 	ctx := context.Background()
 
-	config := conf.GetConfigOrDie[controller.Config]()
-	hvClient := controller.NewHypervisorClient(config.Keystone)
-	hvClient.Init(ctx)
+	controllerConfig := conf.GetConfigOrDie[controller.Config]()
+	hvClient := controller.NewHypervisorClient()
+	if err := hvClient.Init(ctx, mgr.GetClient(), controllerConfig); err != nil {
+		setupLog.Error(err, "unable to initialize hypervisor client")
+		os.Exit(1)
+	}
 	if err := (&controller.ReservationReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
-		Conf:             config,
+		Conf:             controllerConfig,
 		HypervisorClient: hvClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Reservation")
@@ -241,7 +244,11 @@ func main() {
 
 	setupLog.Info("starting commitments syncer")
 	syncer := commitments.NewSyncer(mgr.GetClient())
-	syncer.Init(ctx)
+	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+	if err := syncer.Init(ctx, commitmentsConfig); err != nil {
+		setupLog.Error(err, "unable to initialize commitments syncer")
+		os.Exit(1)
+	}
 	go syncer.Run(ctx)
 
 	setupLog.Info("starting manager")

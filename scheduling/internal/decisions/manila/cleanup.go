@@ -7,8 +7,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"
@@ -19,33 +22,27 @@ import (
 
 // Delete all decisions for manila shares that have been deleted.
 func cleanupManila(ctx context.Context, client client.Client, conf conf.Config) error {
-	keystoneConf := conf.KeystoneConfig
-	authOptions := gophercloud.AuthOptions{
-		IdentityEndpoint: keystoneConf.URL,
-		Username:         keystoneConf.OSUsername,
-		DomainName:       keystoneConf.OSUserDomainName,
-		Password:         keystoneConf.OSPassword,
-		AllowReauth:      true,
-		Scope: &gophercloud.AuthScope{
-			ProjectName: keystoneConf.OSProjectName,
-			DomainName:  keystoneConf.OSProjectDomainName,
-		},
+	var authenticatedHTTP = http.DefaultClient
+	if conf.SSOSecretRef != nil {
+		var err error
+		authenticatedHTTP, err = sso.Connector{Client: client}.
+			FromSecretRef(ctx, *conf.SSOSecretRef)
+		if err != nil {
+			return err
+		}
 	}
-	pc, err := openstack.NewClient(authOptions.IdentityEndpoint)
+	authenticatedKeystone, err := keystone.Connector{Client: client, HTTPClient: authenticatedHTTP}.
+		FromSecretRef(ctx, conf.KeystoneSecretRef)
 	if err != nil {
 		return err
 	}
-	err = openstack.Authenticate(ctx, pc, authOptions)
-	if err != nil {
-		return err
-	}
-
+	pc := authenticatedKeystone.Client()
 	// Workaround to find the v2 service of manila.
 	// See: https://github.com/gophercloud/gophercloud/issues/3347
 	gophercloud.ServiceTypeAliases["shared-file-system"] = []string{"sharev2"}
 	manilaSC, err := openstack.NewSharedFileSystemV2(pc, gophercloud.EndpointOpts{
 		Type:         "sharev2",
-		Availability: gophercloud.Availability(keystoneConf.Availability),
+		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
 	})
 	if err != nil {
 		return err

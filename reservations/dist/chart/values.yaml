@@ -109,14 +109,3 @@ conf:
   endpoints:
     # The URL of the Nova external scheduler service.
     novaExternalScheduler: "http://cortex-nova-scheduler:8080/scheduler/nova/external"
-# Config provided here will override the config provided above.
-secrets:
-  # Override the endpoints and credentials to your OpenStack.
-  keystone:
-    url: https://path-to-keystone/v3
-    sso: *sharedSSOCert
-    username: openstack-user-with-all-project-read-access
-    password: openstack-user-password
-    projectName: openstack-project-of-user
-    userDomainName: openstack-domain-of-user
-    projectDomainName: openstack-domain-of-project-scoped-to

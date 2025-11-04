@@ -83,13 +83,3 @@ networkPolicy:
 
 # Default configuration provided through configmap to the operator.
 conf: {}
-
-# Values passed to the service through a kubernetes secret.
-# The keys of these values should correspond to the keys used above in the conf.
-#
-# Note: Please only add values here that MUST be overridden using the "secrets:" key.
-secrets:
-  # Database connection credentials.
-  db:
-    user: postgres
-    password: secret

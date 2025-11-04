@@ -6,32 +6,26 @@ package commitments
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func TestConfig_Structure(t *testing.T) {
 	// Test that Config struct can be instantiated
 	config := Config{
-		Keystone: conf.KeystoneConfig{
-			URL:                 "http://keystone:5000/v3",
-			OSUsername:          "test-user",
-			OSPassword:          "test-password",
-			OSProjectName:       "test-project",
-			OSUserDomainName:    "default",
-			OSProjectDomainName: "default",
+		KeystoneSecretRef: corev1.SecretReference{
+			Name:      "keystone-secret",
+			Namespace: "default",
+		},
+		SSOSecretRef: &corev1.SecretReference{
+			Name:      "sso-secret",
+			Namespace: "default",
 		},
 	}
 
-	if config.Keystone.URL != "http://keystone:5000/v3" {
-		t.Errorf("Expected Keystone URL to be 'http://keystone:5000/v3', got %v", config.Keystone.URL)
+	if config.KeystoneSecretRef.Name != "keystone-secret" {
+		t.Errorf("Expected keystone-secret, got %v", config.KeystoneSecretRef.Name)
 	}
-}
-
-func TestConfig_EmptyValues(t *testing.T) {
-	// Test that Config struct works with empty values
-	config := Config{}
-
-	if config.Keystone.URL != "" {
-		t.Errorf("Expected empty Keystone URL, got %v", config.Keystone.URL)
+	if config.SSOSecretRef.Name != "sso-secret" {
+		t.Errorf("Expected sso-secret, got %v", config.SSOSecretRef.Name)
 	}
 }

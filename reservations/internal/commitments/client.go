@@ -11,20 +11,21 @@ import (
 	gosync "sync"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
 	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/lib/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Client to fetch commitments.
 type CommitmentsClient interface {
 	// Init the client.
-	Init(ctx context.Context)
+	Init(ctx context.Context, client client.Client, conf Config) error
 	// List all projects to resolve commitments.
 	ListProjects(ctx context.Context) ([]Project, error)
 	// List all flavors by their name to resolve instance commitments.
@@ -38,9 +39,6 @@ type CommitmentsClient interface {
 
 // Commitments client fetching commitments from openstack services.
 type commitmentsClient struct {
-	// Basic config to authenticate against openstack.
-	conf conf.KeystoneConfig
-
 	// Providerclient authenticated against openstack.
 	provider *gophercloud.ProviderClient
 	// Keystone service client for OpenStack.
@@ -53,17 +51,28 @@ type commitmentsClient struct {
 
 // Create a new commitments client.
 // By default, this client will fetch commitments from the limes API.
-func NewCommitmentsClient(conf conf.KeystoneConfig) CommitmentsClient {
-	return &commitmentsClient{conf: conf}
+func NewCommitmentsClient() CommitmentsClient {
+	return &commitmentsClient{}
 }
 
 // Init the client.
-func (c *commitmentsClient) Init(ctx context.Context) {
-	syncLog.Info("authenticating against openstack", "url", c.conf.URL)
-	auth := keystone.NewKeystoneAPI(c.conf)
-	must.Succeed(auth.Authenticate(ctx))
-	c.provider = auth.Client()
-	syncLog.Info("authenticated against openstack")
+func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf Config) error {
+	var authenticatedHTTP = http.DefaultClient
+	if conf.SSOSecretRef != nil {
+		var err error
+		authenticatedHTTP, err = sso.Connector{Client: client}.
+			FromSecretRef(ctx, *conf.SSOSecretRef)
+		if err != nil {
+			return err
+		}
+	}
+	authenticatedKeystone, err := keystone.
+		Connector{Client: client, HTTPClient: authenticatedHTTP}.
+		FromSecretRef(ctx, conf.KeystoneSecretRef)
+	if err != nil {
+		return err
+	}
+	c.provider = authenticatedKeystone.Client()
 
 	// Get the keystone endpoint.
 	url := must.Return(c.provider.EndpointLocator(gophercloud.EndpointOpts{
@@ -101,6 +110,7 @@ func (c *commitmentsClient) Init(ctx context.Context) {
 		Endpoint:       url,
 		Type:           "resources",
 	}
+	return nil
 }
 
 // Get all Nova flavors by their name to resolve instance commitments.
