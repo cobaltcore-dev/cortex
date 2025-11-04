@@ -200,9 +200,6 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
 if 'ironcore' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex IronCore bundle")
     k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=[tilt_values]))
-    k8s_resource('cortex-ironcore-postgresql', labels=['Cortex-IronCore'], port_forwards=[
-        port_forward(8006, 5432),
-    ])
     k8s_resource('cortex-ironcore-scheduling-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
     k8s_yaml('scheduling/samples/ironcore/machinepool.yaml')
