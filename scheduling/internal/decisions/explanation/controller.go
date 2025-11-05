@@ -135,7 +135,11 @@ func (c *Controller) reconcileHistory(ctx context.Context, decision *v1alpha1.De
 // Process the explanation for the given decision.
 func (c *Controller) reconcileExplanation(ctx context.Context, decision *v1alpha1.Decision) error {
 	log := ctrl.LoggerFrom(ctx)
-	explainer := &Explainer{Client: c.Client}
+	explainer, err := NewExplainer(c.Client)
+	if err != nil {
+		log.Error(err, "failed to create explainer", "name", decision.Name)
+		return err
+	}
 	explanationText, err := explainer.Explain(ctx, decision)
 	if err != nil {
 		log.Error(err, "failed to explain decision", "name", decision.Name)
