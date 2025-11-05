@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -249,8 +250,7 @@ func main() {
 	// API endpoint.
 	mux := http.NewServeMux()
 
-	switch config.Operator {
-	case "cortex-nova":
+	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
 		decisionController := &decisionsnova.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -264,7 +264,8 @@ func main() {
 		}
 		novashims.NewAPI(config, decisionController).Init(mux)
 		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
-
+	}
+	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
 			Monitor:       deschedulingnova.NewPipelineMonitor(),
@@ -287,8 +288,8 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
 			os.Exit(1)
 		}
-
-	case "cortex-manila":
+	}
+	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
 		controller := &decisionsmanila.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -302,8 +303,8 @@ func main() {
 		}
 		manilashims.NewAPI(config, controller).Init(mux)
 		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
-
-	case "cortex-cinder":
+	}
+	if slices.Contains(config.EnabledControllers, "cortex-cinder-decisions-pipeline-controller") {
 		controller := &decisionscinder.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -317,8 +318,8 @@ func main() {
 		}
 		cindershims.NewAPI(config, controller).Init(mux)
 		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
-
-	case "cortex-ironcore":
+	}
+	if slices.Contains(config.EnabledControllers, "cortex-ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -330,21 +331,18 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-
-	default:
-		setupLog.Error(err, "unknown operator type", "operator", config.Operator)
-		os.Exit(1)
 	}
-
-	// Setup a controller which will reconcile the history and explanation for
-	// decision resources.
-	explanationController := &explanation.Controller{
-		Client:       mgr.GetClient(),
-		OperatorName: config.Operator,
-	}
-	if err := explanationController.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
-		os.Exit(1)
+	if slices.Contains(config.EnabledControllers, "explanation-controller") {
+		// Setup a controller which will reconcile the history and explanation for
+		// decision resources.
+		explanationController := &explanation.Controller{
+			Client:       mgr.GetClient(),
+			OperatorName: config.Operator,
+		}
+		if err := explanationController.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
+			os.Exit(1)
+		}
 	}
 
 	// +kubebuilder:scaffold:builder

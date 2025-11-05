@@ -92,3 +92,6 @@ cortex-scheduling-operator:
     # ssoSecretRef:
     #   name: cortex-manila-openstack-sso
     #   namespace: default
+    enabledControllers:
+      - manila-decisions-pipeline-controller
+      - explanation-controller
