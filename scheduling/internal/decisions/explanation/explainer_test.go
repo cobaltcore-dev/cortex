@@ -489,7 +489,11 @@ func SetupExplainerTest(t *testing.T, decisions ...*v1alpha1.Decision) *Explaine
 		WithRuntimeObjects(objects...).
 		Build()
 
-	return &Explainer{Client: client}
+	explainer, err := NewExplainer(client)
+	if err != nil {
+		t.Fatalf("Failed to create explainer: %v", err)
+	}
+	return explainer
 }
 
 func RunExplanationTest(t *testing.T, decision *v1alpha1.Decision, expectedContains []string) {
@@ -555,7 +559,7 @@ func TestExplainer_WinnerAnalysis(t *testing.T) {
 				Build(),
 			expectedContains: []string{
 				"Selected: host-1 (score: 2.45)",
-				"1 hosts evaluated",
+				"1 host evaluated",
 			},
 		},
 	}
@@ -647,7 +651,7 @@ func TestExplainer_CriticalStepsAnalysis(t *testing.T) {
 				Step("availability-filter", map[string]float64{"host-1": 1.0, "host-2": 0.0}),
 				Step("placement-policy", map[string]float64{"host-1": 0.05, "host-2": 0.05})),
 			expectedContains: []string{
-				"Decision driven by 2/3 pipeline steps: resource-weigher and availability-filter",
+				"Decision driven by 2/3 pipeline steps: resource-weigher, availability-filter",
 			},
 		},
 		{
@@ -685,7 +689,7 @@ func TestExplainer_CriticalStepsAnalysis(t *testing.T) {
 				Step("step-c", map[string]float64{"host-1": 1.0, "host-2": 0.0}),
 				Step("step-d", map[string]float64{"host-1": 0.05, "host-2": 0.05})),
 			expectedContains: []string{
-				"Decision driven by 3/4 pipeline steps: step-a, step-b and step-c",
+				"Decision driven by 3/4 pipeline steps: step-a, step-b, step-c",
 			},
 		},
 	}
@@ -697,7 +701,11 @@ func TestExplainer_CriticalStepsAnalysis(t *testing.T) {
 				WithRuntimeObjects(tt.decision).
 				Build()
 
-			explainer := &Explainer{Client: client}
+			explainer, err := NewExplainer(client)
+			if err != nil {
+				t.Errorf("Failed to create explainer: %v", err)
+				return
+			}
 
 			explanation, err := explainer.Explain(context.Background(), tt.decision)
 			if err != nil {
@@ -741,7 +749,11 @@ func TestExplainer_CompleteExplanation(t *testing.T) {
 		WithRuntimeObjects(decision, previousDecision).
 		Build()
 
-	explainer := &Explainer{Client: client}
+	explainer, err := NewExplainer(client)
+	if err != nil {
+		t.Errorf("Failed to create explainer: %v", err)
+		return
+	}
 
 	explanation, err := explainer.Explain(context.Background(), decision)
 	if err != nil {
@@ -783,7 +795,8 @@ func TestExplainer_DeletedHostsAnalysis(t *testing.T) {
 					map[string]float64{"host-1": 1.0, "host-2": 2.0}),
 				Step("availability-filter", map[string]float64{"host-1": 0.5})),
 			expectedContains: []string{
-				"Input winner host-2 was filtered by availability-filter",
+				"1 host filtered:",
+				"- host-2 (input choice) by availability-filter",
 			},
 		},
 		{
@@ -805,7 +818,9 @@ func TestExplainer_DeletedHostsAnalysis(t *testing.T) {
 					map[string]float64{"host-1": 1.0, "host-2": 3.0, "host-3": 2.0}),
 				Step("availability-filter", map[string]float64{"host-1": 0.5})),
 			expectedContains: []string{
-				"2 hosts filtered (including input winner host-2)",
+				"2 hosts filtered:",
+				"- host-2 (input choice) by availability-filter",
+				"- host-3 by availability-filter",
 			},
 		},
 		{
@@ -826,7 +841,11 @@ func TestExplainer_DeletedHostsAnalysis(t *testing.T) {
 				WithRuntimeObjects(tt.decision).
 				Build()
 
-			explainer := &Explainer{Client: client}
+			explainer, err := NewExplainer(client)
+			if err != nil {
+				t.Errorf("Failed to create explainer: %v", err)
+				return
+			}
 
 			explanation, err := explainer.Explain(context.Background(), tt.decision)
 			if err != nil {
@@ -1084,7 +1103,7 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 				},
 			},
 			expectedContains: []string{
-				"Chain: host-1 (72h0m0s) -> host-2 (0s).",
+				"Chain: host-1 (3d0h0m0s) -> host-2 (0s).",
 			},
 		},
 		{
@@ -1125,7 +1144,11 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 				WithRuntimeObjects(objects...).
 				Build()
 
-			explainer := &Explainer{Client: client}
+			explainer, err := NewExplainer(client)
+			if err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+				return
+			}
 
 			explanation, err := explainer.Explain(context.Background(), tt.currentDecision)
 			if err != nil {
@@ -1211,8 +1234,8 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 				return decision
 			}(),
 			expectedContains: []string{
-				"Decision driven by input only (all 1 steps are non-critical)", // With small raw weight advantage, step is non-critical
-				"Input choice confirmed: host-1 (1000.05→0.00)",                // Shows raw weights are being used
+				"Decision driven by input only (all 1 step is non-critical)", // With small raw weight advantage, step is non-critical
+				"Input choice confirmed: host-1 (1000.05→0.00)",              // Shows raw weights are being used
 			},
 			description: "Critical steps analysis uses raw weights - with small raw advantage, step becomes non-critical",
 		},
@@ -1229,8 +1252,9 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 				return decision
 			}(),
 			expectedContains: []string{
-				"2 hosts filtered (including input winner host-2)",                    // Shows raw weights are used to identify input winner
-				"Input favored host-2 (1000.05), final winner: host-1 (1000.00→0.00)", // Shows raw weights in input comparison
+				"2 hosts filtered:",
+				"- host-2 (input choice) by availability-filter",
+				"Input favored host-2 (1000.05), final winner: host-1 (1000.00→0.00)",
 			},
 			description: "Deleted hosts analysis uses raw weights to correctly identify input winner",
 		},
@@ -1259,7 +1283,10 @@ func TestExplainer_RawWeightsPriorityBugFix(t *testing.T) {
 				WithRuntimeObjects(tt.decision).
 				Build()
 
-			explainer := &Explainer{Client: client}
+			explainer, err := NewExplainer(client)
+			if err != nil {
+				t.Fatalf("Failed to create explainer: %v", err)
+			}
 
 			explanation, err := explainer.Explain(context.Background(), tt.decision)
 			if err != nil {
@@ -1319,7 +1346,12 @@ func TestExplainer_RawVsNormalizedComparison(t *testing.T) {
 		WithRuntimeObjects(decision).
 		Build()
 
-	explainer := &Explainer{Client: client}
+	explainer, err := NewExplainer(client)
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+		return
+	}
+
 	explanation, err := explainer.Explain(context.Background(), decision)
 	if err != nil {
 		t.Errorf("Expected no error but got: %v", err)
@@ -1412,7 +1444,11 @@ func TestExplainer_StepImpactAnalysis(t *testing.T) {
 				WithRuntimeObjects(tt.decision).
 				Build()
 
-			explainer := &Explainer{Client: client}
+			explainer, err := NewExplainer(client)
+			if err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+				return
+			}
 
 			explanation, err := explainer.Explain(context.Background(), tt.decision)
 			if err != nil {
