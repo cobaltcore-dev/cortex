@@ -4,7 +4,6 @@
 package lib
 
 import (
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -34,7 +33,7 @@ type PipelineMonitor struct {
 }
 
 // Create a new scheduler monitor and register the necessary Prometheus metrics.
-func NewPipelineMonitor(registry *monitoring.Registry) PipelineMonitor {
+func NewPipelineMonitor() PipelineMonitor {
 	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
 		Help:    "Duration of scheduler pipeline step run",
@@ -82,17 +81,6 @@ func NewPipelineMonitor(registry *monitoring.Registry) PipelineMonitor {
 		Name: "cortex_scheduler_pipeline_requests_total",
 		Help: "Total number of requests processed by the scheduler.",
 	}, []string{"pipeline"})
-	registry.MustRegister(
-		stepRunTimer,
-		stepSubjectWeight,
-		stepRemovedSubjectsObserver,
-		stepReorderingsObserver,
-		stepImpactObserver,
-		pipelineRunTimer,
-		subjectNumberInObserver,
-		subjectNumberOutObserver,
-		requestCounter,
-	)
 	return PipelineMonitor{
 		stepRunTimer:                stepRunTimer,
 		stepSubjectWeight:           stepSubjectWeight,
@@ -133,4 +121,28 @@ func (m *PipelineMonitor) observePipelineResult(request PipelineRequest, result 
 			WithLabelValues(m.PipelineName).
 			Inc()
 	}
+}
+
+func (m *PipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
+	m.stepRunTimer.Describe(ch)
+	m.stepSubjectWeight.Describe(ch)
+	m.stepRemovedSubjectsObserver.Describe(ch)
+	m.stepReorderingsObserver.Describe(ch)
+	m.stepImpactObserver.Describe(ch)
+	m.pipelineRunTimer.Describe(ch)
+	m.subjectNumberInObserver.Describe(ch)
+	m.subjectNumberOutObserver.Describe(ch)
+	m.requestCounter.Describe(ch)
+}
+
+func (m *PipelineMonitor) Collect(ch chan<- prometheus.Metric) {
+	m.stepRunTimer.Collect(ch)
+	m.stepSubjectWeight.Collect(ch)
+	m.stepRemovedSubjectsObserver.Collect(ch)
+	m.stepReorderingsObserver.Collect(ch)
+	m.stepImpactObserver.Collect(ch)
+	m.pipelineRunTimer.Collect(ch)
+	m.subjectNumberInObserver.Collect(ch)
+	m.subjectNumberOutObserver.Collect(ch)
+	m.requestCounter.Collect(ch)
 }

@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -73,6 +74,7 @@ func init() {
 func main() {
 	ctx := context.Background()
 	config := libconf.GetConfigOrDie[conf.Config]()
+
 	// Custom entrypoint for e2e tests.
 	if len(os.Args) == 2 {
 		restConfig := ctrl.GetConfigOrDie()
@@ -239,12 +241,14 @@ func main() {
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
-	registry := monitoring.NewRegistry(libconf.MonitoringConfig{})
+	sharedConfig := libconf.GetConfigOrDie[libconf.SharedConfig]()
+	registry := monitoring.NewRegistry(sharedConfig.MonitoringConfig)
+	metrics.Registry = registry
 
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
 	// pipeline.
-	pipelineMonitor := lib.NewPipelineMonitor(registry)
+	pipelineMonitor := lib.NewPipelineMonitor()
 
 	// API endpoint.
 	mux := http.NewServeMux()

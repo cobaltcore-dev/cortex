@@ -19,8 +19,7 @@ import (
 )
 
 func TestMonitor_Init(t *testing.T) {
-	monitor := &Monitor{}
-	monitor.Init()
+	monitor := NewControllerMonitor(nil)
 
 	if monitor.numberOfReservations == nil {
 		t.Error("numberOfReservations metric should be initialized")
@@ -32,8 +31,7 @@ func TestMonitor_Init(t *testing.T) {
 }
 
 func TestMonitor_Describe(t *testing.T) {
-	monitor := &Monitor{}
-	monitor.Init()
+	monitor := NewControllerMonitor(nil)
 
 	ch := make(chan *prometheus.Desc, 10)
 	go func() {
@@ -63,10 +61,7 @@ func TestMonitor_Collect_EmptyList(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	monitor := &Monitor{
-		Client: k8sClient,
-	}
-	monitor.Init()
+	monitor := NewControllerMonitor(k8sClient)
 
 	ch := make(chan prometheus.Metric, 10)
 	go func() {
@@ -167,10 +162,7 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	monitor := &Monitor{
-		Client: k8sClient,
-	}
-	monitor.Init()
+	monitor := NewControllerMonitor(k8sClient)
 
 	ch := make(chan prometheus.Metric, 100)
 	go func() {
@@ -252,10 +244,7 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 		WithObjects(reservation).
 		Build()
 
-	monitor := &Monitor{
-		Client: k8sClient,
-	}
-	monitor.Init()
+	monitor := NewControllerMonitor(k8sClient)
 
 	ch := make(chan prometheus.Metric, 100)
 	go func() {
@@ -321,10 +310,7 @@ func TestMonitor_Collect_ErrorHandling(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	monitor := &Monitor{
-		Client: k8sClient,
-	}
-	monitor.Init()
+	monitor := NewControllerMonitor(k8sClient)
 
 	ch := make(chan prometheus.Metric, 10)
 	go func() {
@@ -382,10 +368,7 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 		WithObjects(reservation).
 		Build()
 
-	monitor := &Monitor{
-		Client: client,
-	}
-	monitor.Init()
+	monitor := NewControllerMonitor(client)
 
 	ch := make(chan prometheus.Metric, 100)
 	go func() {

@@ -23,23 +23,20 @@ type Monitor struct {
 }
 
 func NewMonitor() Monitor {
-	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_feature_pipeline_step_run_duration_seconds",
-		Help:    "Duration of feature pipeline step run",
-		Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
-	}, []string{"step"})
-	stepFeatureCounter := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_feature_pipeline_step_features",
-		Help: "Number of features extracted by a feature pipeline step",
-	}, []string{"step"})
-	stepSkipCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cortex_feature_pipeline_step_skipped",
-		Help: "Number of times a feature pipeline step was skipped",
-	}, []string{"step"})
 	return Monitor{
-		stepRunTimer:       stepRunTimer,
-		stepFeatureCounter: stepFeatureCounter,
-		stepSkipCounter:    stepSkipCounter,
+		stepRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_feature_pipeline_step_run_duration_seconds",
+			Help:    "Duration of feature pipeline step run",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
+		}, []string{"step"}),
+		stepFeatureCounter: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_feature_pipeline_step_features",
+			Help: "Number of features extracted by a feature pipeline step",
+		}, []string{"step"}),
+		stepSkipCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_feature_pipeline_step_skipped",
+			Help: "Number of times a feature pipeline step was skipped",
+		}, []string{"step"}),
 	}
 }
 
