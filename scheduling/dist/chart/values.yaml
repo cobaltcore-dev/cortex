@@ -87,5 +87,14 @@ certmanager:
 networkPolicy:
   enable: false
 
-# Default configuration provided through configmap to the operator.
-conf: {}
+global:
+  conf: {}
+
+# Use this to unambiguate multiple cortex deployments in the same cluster.
+namePrefix: cortex
+conf:
+  # The operator will only touch CRs with this operator name.
+  operator: cortex
+  enabledControllers:
+    # The explanation controller is available for all decision resources.
+    - explanation-controller

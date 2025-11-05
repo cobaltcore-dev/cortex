@@ -92,3 +92,6 @@ cortex-scheduling-operator:
     # ssoSecretRef:
     #   name: cortex-cinder-openstack-sso
     #   namespace: default
+    enabledControllers:
+      - cinder-decisions-pipeline-controller
+      - explanation-controller
