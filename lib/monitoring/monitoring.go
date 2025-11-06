@@ -28,8 +28,6 @@ func WrapRegistry(registry RegistererGatherer, config conf.MonitoringConfig) *Re
 		RegistererGatherer: registry,
 		config:             config,
 	}
-	wrapped.MustRegister(collectors.NewGoCollector())
-	wrapped.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	return wrapped
 }
 
