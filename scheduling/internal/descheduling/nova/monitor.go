@@ -27,30 +27,26 @@ type Monitor struct {
 }
 
 func NewPipelineMonitor() Monitor {
-	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_descheduler_pipeline_step_run_duration_seconds",
-		Help:    "Duration of descheduler pipeline step run",
-		Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
-	}, []string{"step"})
-	stepDeschedulingCounter := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_descheduler_pipeline_step_vms_descheduled",
-		Help: "Number of vms descheduled by a descheduler pipeline step",
-	}, []string{"step"})
-	pipelineRunTimer := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cortex_descheduler_pipeline_run_duration_seconds",
-		Help:    "Duration of descheduler pipeline run",
-		Buckets: prometheus.DefBuckets,
-	})
-	deschedulingRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_descheduler_pipeline_vm_descheduling_duration_seconds",
-		Help:    "Duration of descheduling a VM in the descheduler pipeline",
-		Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
-	}, []string{"error", "skipped", "source_host", "target_host", "vm_id"})
 	return Monitor{
-		stepRunTimer:            stepRunTimer,
-		stepDeschedulingCounter: stepDeschedulingCounter,
-		pipelineRunTimer:        pipelineRunTimer,
-		deschedulingRunTimer:    deschedulingRunTimer,
+		stepRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_descheduler_pipeline_step_run_duration_seconds",
+			Help:    "Duration of descheduler pipeline step run",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
+		}, []string{"step"}),
+		stepDeschedulingCounter: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_descheduler_pipeline_step_vms_descheduled",
+			Help: "Number of vms descheduled by a descheduler pipeline step",
+		}, []string{"step"}),
+		pipelineRunTimer: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "cortex_descheduler_pipeline_run_duration_seconds",
+			Help:    "Duration of descheduler pipeline run",
+			Buckets: prometheus.DefBuckets,
+		}),
+		deschedulingRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_descheduler_pipeline_vm_descheduling_duration_seconds",
+			Help:    "Duration of descheduling a VM in the descheduler pipeline",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
+		}, []string{"error", "skipped", "source_host", "target_host", "vm_id"}),
 	}
 }
 
