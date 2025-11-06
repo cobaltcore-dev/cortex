@@ -47,6 +47,7 @@ type StepWrapper[RequestType PipelineRequest] func(
 func NewPipeline[RequestType PipelineRequest](
 	ctx context.Context,
 	client client.Client,
+	name string,
 	supportedSteps map[string]func() Step[RequestType],
 	confedSteps []v1alpha1.Step,
 	monitor PipelineMonitor,
@@ -55,6 +56,9 @@ func NewPipeline[RequestType PipelineRequest](
 	// Load all steps from the configuration.
 	stepsByName := make(map[string]Step[RequestType], len(confedSteps))
 	order := []string{}
+
+	pipelineMonitor := monitor.SubPipeline(name)
+
 	for _, stepConfig := range confedSteps {
 		slog.Info("scheduler: configuring step", "name", stepConfig.Name, "impl", stepConfig.Spec.Impl)
 		slog.Info("supported:", "steps", maps.Keys(supportedSteps))
@@ -66,7 +70,7 @@ func NewPipeline[RequestType PipelineRequest](
 		if stepConfig.Spec.Type == v1alpha1.StepTypeWeigher && stepConfig.Spec.Weigher != nil {
 			step = validateStep(step, stepConfig.Spec.Weigher.DisabledValidations)
 		}
-		step = monitorStep(ctx, client, stepConfig, step, monitor)
+		step = monitorStep(ctx, client, stepConfig, step, pipelineMonitor)
 		if err := step.Init(ctx, client, stepConfig); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
@@ -82,7 +86,7 @@ func NewPipeline[RequestType PipelineRequest](
 		// All steps can be run in parallel.
 		order:   order,
 		steps:   stepsByName,
-		monitor: monitor,
+		monitor: pipelineMonitor,
 	}, nil
 }
 

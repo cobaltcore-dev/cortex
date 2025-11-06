@@ -21,6 +21,9 @@ type Monitor struct {
 	pipelineRunTimer prometheus.Histogram
 	// A histogram to measure how long it takes to deschedule a VM.
 	deschedulingRunTimer *prometheus.HistogramVec
+
+	// The name of the pipeline being monitored.
+	PipelineName string
 }
 
 func NewPipelineMonitor() Monitor {
@@ -49,6 +52,13 @@ func NewPipelineMonitor() Monitor {
 		pipelineRunTimer:        pipelineRunTimer,
 		deschedulingRunTimer:    deschedulingRunTimer,
 	}
+}
+
+// Get a copied pipeline monitor with the name set, after binding the metrics.
+func (m Monitor) SubPipeline(name string) Monitor {
+	cp := m
+	cp.PipelineName = name
+	return cp
 }
 
 func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {

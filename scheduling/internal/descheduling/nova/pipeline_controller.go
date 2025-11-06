@@ -41,11 +41,11 @@ type DeschedulingsPipelineController struct {
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, steps []v1alpha1.Step) (*Pipeline, error) {
+func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (*Pipeline, error) {
 	pipeline := &Pipeline{
 		Client:        c.Client,
 		CycleDetector: c.CycleDetector,
-		Monitor:       c.Monitor,
+		Monitor:       c.Monitor.SubPipeline(name),
 	}
 	err := pipeline.Init(ctx, steps, supportedSteps)
 	return pipeline, err

@@ -27,7 +27,7 @@ type PipelineInitializer[PipelineType any] interface {
 	// This method is delegated to the parent controller, when a pipeline needs
 	// to be newly initialized or re-initialized to update it in the pipeline
 	// map.
-	InitPipeline(ctx context.Context, steps []v1alpha1.Step) (PipelineType, error)
+	InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (PipelineType, error)
 }
 
 // Base controller for decision pipelines.
@@ -114,7 +114,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		delete(c.Pipelines, obj.Name)
 		return
 	}
-	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, steps)
+	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, obj.Name, steps)
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
 		obj.Status.Ready = false

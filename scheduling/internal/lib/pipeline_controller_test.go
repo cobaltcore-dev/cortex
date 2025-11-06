@@ -36,14 +36,14 @@ type mockInitializer struct {
 	initPipeline func(steps []v1alpha1.Step) (mockPipeline, error)
 }
 
-func (m *mockInitializer) InitPipeline(ctx context.Context, steps []v1alpha1.Step) (mockPipeline, error) {
+func (m *mockInitializer) InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (mockPipeline, error) {
 	if m.shouldFail {
 		return mockPipeline{}, errors.New("mock initializer error")
 	}
 	if m.initPipeline != nil {
 		return m.initPipeline(steps)
 	}
-	return mockPipeline{name: "test-pipeline", steps: steps}, nil
+	return mockPipeline{name: name, steps: steps}, nil
 }
 
 func setupTestScheme() *runtime.Scheme {
