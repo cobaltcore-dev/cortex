@@ -12,8 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-func TestNewSyncMonitor(t *testing.T) {
-	monitor := NewSyncMonitor()
+func TestNewMonitor(t *testing.T) {
+	monitor := NewMonitor()
 
 	if monitor.ObjectsGauge == nil {
 		t.Error("ObjectsGauge should not be nil")
@@ -27,7 +27,7 @@ func TestNewSyncMonitor(t *testing.T) {
 }
 
 func TestMonitorDescribe(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 	ch := make(chan *prometheus.Desc, 10)
 
 	go func() {
@@ -69,7 +69,7 @@ func TestMonitorDescribe(t *testing.T) {
 }
 
 func TestMonitorCollect(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Add some data to the metrics so they will be collected
 	monitor.ObjectsGauge.WithLabelValues("test").Set(10)
@@ -95,7 +95,7 @@ func TestMonitorCollect(t *testing.T) {
 }
 
 func TestObjectsGaugeMetric(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Test that the gauge has the correct name and help
 	expected := `
@@ -122,7 +122,7 @@ func TestObjectsGaugeMetric(t *testing.T) {
 }
 
 func TestRequestTimerMetric(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Test that the histogram has the correct name and help
 	expected := `
@@ -163,7 +163,7 @@ func TestRequestTimerMetric(t *testing.T) {
 }
 
 func TestRequestProcessedCounterMetric(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Test that the counter has the correct name and help
 	expected := `
@@ -190,7 +190,7 @@ func TestRequestProcessedCounterMetric(t *testing.T) {
 }
 
 func TestMultipleDatasourceLabels(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Test with multiple datasource labels
 	monitor.ObjectsGauge.WithLabelValues("prometheus").Set(10)
@@ -222,7 +222,7 @@ func TestMultipleDatasourceLabels(t *testing.T) {
 }
 
 func TestMonitorMetricNames(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Add some data to the metrics so they will show up in the registry
 	monitor.ObjectsGauge.WithLabelValues("test").Set(10)
@@ -259,7 +259,7 @@ func TestMonitorMetricNames(t *testing.T) {
 }
 
 func TestMonitorMetricTypes(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Test that metrics have the correct types
 	registry := prometheus.NewRegistry()
@@ -288,7 +288,7 @@ func TestMonitorMetricTypes(t *testing.T) {
 }
 
 func TestMonitorBucketConfiguration(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Test that RequestTimer uses default buckets
 	monitor.RequestTimer.WithLabelValues("test").Observe(0.001) // Should be in first bucket
@@ -331,7 +331,7 @@ func TestMonitorBucketConfiguration(t *testing.T) {
 }
 
 func TestMonitorRegistration(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 	registry := prometheus.NewRegistry()
 
 	// Test that the monitor can be registered without errors
@@ -348,7 +348,7 @@ func TestMonitorRegistration(t *testing.T) {
 }
 
 func TestMonitorLabels(t *testing.T) {
-	monitor := NewSyncMonitor()
+	monitor := NewMonitor()
 
 	// Test that all metrics accept the datasource label
 	datasources := []string{"prometheus", "openstack-nova", "openstack-cinder", "custom-ds"}

@@ -198,8 +198,7 @@ func main() {
 	ctx := context.Background()
 
 	sharedConfig := conf.GetConfigOrDie[conf.SharedConfig]()
-	registry := monitoring.NewRegistry(sharedConfig.MonitoringConfig)
-	metrics.Registry = registry
+	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, sharedConfig.MonitoringConfig)
 
 	if err := (&controller.ReservationReconciler{
 		Client:           mgr.GetClient(),

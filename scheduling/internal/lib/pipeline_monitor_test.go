@@ -13,7 +13,7 @@ import (
 )
 
 func TestSchedulerMonitor(t *testing.T) {
-	registry := &monitoring.Registry{Registry: prometheus.NewRegistry()}
+	registry := &monitoring.Registry{RegistererGatherer: prometheus.NewRegistry()}
 	monitor := NewPipelineMonitor().SubPipeline("test")
 	registry.MustRegister(&monitor)
 

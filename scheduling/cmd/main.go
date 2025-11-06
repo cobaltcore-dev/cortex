@@ -30,6 +30,7 @@ import (
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
@@ -242,19 +243,21 @@ func main() {
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
 	sharedConfig := libconf.GetConfigOrDie[libconf.SharedConfig]()
-	registry := monitoring.NewRegistry(sharedConfig.MonitoringConfig)
-	metrics.Registry = registry
+	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, sharedConfig.MonitoringConfig)
 
-	// The pipeline monitor is a bucket for all metrics produced during the
-	// execution of individual steps (see step monitor below) and the overall
-	// pipeline.
-	pipelineMonitor := lib.NewPipelineMonitor()
+	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
+	metrics.Registry.MustRegister(&db.Monitor)
 
 	// API endpoint.
 	mux := http.NewServeMux()
 
 	switch config.Operator {
 	case "cortex-nova":
+		// The pipeline monitor is a bucket for all metrics produced during the
+		// execution of individual steps (see step monitor below) and the overall
+		// pipeline.
+		pipelineMonitor := lib.NewPipelineMonitor()
+		metrics.Registry.MustRegister(&pipelineMonitor)
 		decisionController := &decisionsnova.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -270,8 +273,10 @@ func main() {
 		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 		// Deschedulings controller
+		monitor := deschedulingnova.NewPipelineMonitor()
+		metrics.Registry.MustRegister(&monitor)
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
-			Monitor:       deschedulingnova.NewPipelineMonitor(),
+			Monitor:       monitor,
 			Conf:          config,
 			CycleDetector: deschedulingnova.NewCycleDetector(),
 		}
@@ -293,6 +298,11 @@ func main() {
 		}
 
 	case "cortex-manila":
+		// The pipeline monitor is a bucket for all metrics produced during the
+		// execution of individual steps (see step monitor below) and the overall
+		// pipeline.
+		pipelineMonitor := lib.NewPipelineMonitor()
+		metrics.Registry.MustRegister(&pipelineMonitor)
 		controller := &decisionsmanila.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -308,6 +318,11 @@ func main() {
 		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 	case "cortex-cinder":
+		// The pipeline monitor is a bucket for all metrics produced during the
+		// execution of individual steps (see step monitor below) and the overall
+		// pipeline.
+		pipelineMonitor := lib.NewPipelineMonitor()
+		metrics.Registry.MustRegister(&pipelineMonitor)
 		controller := &decisionscinder.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -323,6 +338,11 @@ func main() {
 		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
 
 	case "cortex-ironcore":
+		// The pipeline monitor is a bucket for all metrics produced during the
+		// execution of individual steps (see step monitor below) and the overall
+		// pipeline.
+		pipelineMonitor := lib.NewPipelineMonitor()
+		metrics.Registry.MustRegister(&pipelineMonitor)
 		controller := &decisionsmachines.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,

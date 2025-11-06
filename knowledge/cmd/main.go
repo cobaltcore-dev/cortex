@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -201,10 +202,10 @@ func main() {
 
 	// Override the default metrics registry with our own registry to add custom static labels for all metrics.
 	sharedConfig := libconf.GetConfigOrDie[libconf.SharedConfig]()
-	registry := monitoring.NewRegistry(sharedConfig.MonitoringConfig)
-	metrics.Registry = registry
+	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, sharedConfig.MonitoringConfig)
+	metrics.Registry.MustRegister(&db.Monitor)
 
-	datasourceMonitor := datasources.NewSyncMonitor()
+	datasourceMonitor := datasources.NewMonitor()
 	metrics.Registry.MustRegister(&datasourceMonitor)
 	if err := (&openstack.OpenStackDatasourceReconciler{
 		Client:  mgr.GetClient(),

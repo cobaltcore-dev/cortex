@@ -25,8 +25,6 @@ import (
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
 	*gorp.DbMap
-	// Monitor for database related metrics like connection attempts.
-	monitor Monitor
 }
 
 type Table interface {
@@ -43,6 +41,8 @@ var connections = sync.Map{} // map[string]*DB
 
 // Kubernetes connector which initializes the database connection from a secret.
 type Connector struct{ client.Client }
+
+var Monitor = newMonitor()
 
 // Create a new database client with authentication from the provided secret reference.
 func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference) (*DB, error) {
@@ -95,6 +95,9 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 		slog.Info("reusing existing database connection", "url", urlForLog)
 		return conn.(*DB), nil
 	}
+
+	Monitor.connectionAttempts.WithLabelValues(string(host), string(database)).Inc()
+
 	db, err := sql.Open("postgres", dbUrlStr)
 	if err != nil {
 		panic(err)
@@ -124,13 +127,10 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 
 // Executes a select query while monitoring its execution time.
 func (d *DB) SelectTimed(group string, i any, query string, args ...any) ([]any, error) {
-	if d.monitor.selectTimer != nil {
-		// URL-ify the query for the metrics.
-		queryURL := url.QueryEscape(query)
-		observer := d.monitor.selectTimer.WithLabelValues(group, queryURL)
-		timer := prometheus.NewTimer(observer)
-		defer timer.ObserveDuration()
-	}
+	queryURL := url.QueryEscape(query)
+	observer := Monitor.selectTimer.WithLabelValues(group, queryURL)
+	timer := prometheus.NewTimer(observer)
+	defer timer.ObserveDuration()
 	return d.Select(i, query, args...)
 }
 

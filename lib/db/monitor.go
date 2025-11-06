@@ -5,13 +5,21 @@ package db
 
 import "github.com/prometheus/client_golang/prometheus"
 
-type Monitor struct {
+type monitor struct {
+	connectionAttempts *prometheus.CounterVec
+	connectionFailures prometheus.Counter
+	connectionsActive  prometheus.Gauge
+
 	// An observer that checks how long SELECT queries take to run.
 	selectTimer *prometheus.HistogramVec
 }
 
-func NewDBMonitor() Monitor {
-	return Monitor{
+func newMonitor() monitor {
+	return monitor{
+		connectionAttempts: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_db_connection_attempts_total",
+			Help: "Total number of database connection attempts",
+		}, []string{"host", "database"}),
 		selectTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "cortex_db_select_duration_seconds",
 			Help:    "Duration of SELECT queries in seconds",
@@ -20,10 +28,10 @@ func NewDBMonitor() Monitor {
 	}
 }
 
-func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
+func (m *monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.selectTimer.Describe(ch)
 }
 
-func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
+func (m *monitor) Collect(ch chan<- prometheus.Metric) {
 	m.selectTimer.Collect(ch)
 }

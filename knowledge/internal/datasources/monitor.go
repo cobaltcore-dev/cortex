@@ -18,7 +18,7 @@ type Monitor struct {
 }
 
 // NewSyncMonitor creates a new sync monitor and registers the necessary Prometheus metrics.
-func NewSyncMonitor() Monitor {
+func NewMonitor() Monitor {
 	return Monitor{
 		ObjectsGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_sync_objects",
