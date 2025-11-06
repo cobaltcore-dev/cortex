@@ -341,7 +341,6 @@ func main() {
 
 	}
 	if slices.Contains(config.EnabledControllers, "cortex-ironcore-decisions-pipeline-controller") {
-	case "cortex-ironcore":
 		// The pipeline monitor is a bucket for all metrics produced during the
 		// execution of individual steps (see step monitor below) and the overall
 		// pipeline.
