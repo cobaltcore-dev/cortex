@@ -117,3 +117,7 @@ cortex-scheduling-operator:
     # ssoSecretRef:
     #   name: cortex-nova-openstack-sso
     #   namespace: default
+    enabledControllers:
+      - nova-decisions-pipeline-controller
+      - nova-deschedulings-pipeline-controller
+      - explanation-controller

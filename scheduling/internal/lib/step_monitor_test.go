@@ -7,13 +7,20 @@ import (
 	"log/slog"
 	"os"
 	"testing"
-
-	testlibMonitoring "github.com/cobaltcore-dev/cortex/testlib/monitoring"
 )
 
+type mockObserver struct {
+	// Observations recorded by the mock observer.
+	Observations []float64
+}
+
+func (m *mockObserver) Observe(value float64) {
+	m.Observations = append(m.Observations, value)
+}
+
 func TestStepMonitorRun(t *testing.T) {
-	runTimer := &testlibMonitoring.MockObserver{}
-	removedSubjectsObserver := &testlibMonitoring.MockObserver{}
+	runTimer := &mockObserver{}
+	removedSubjectsObserver := &mockObserver{}
 	monitor := &StepMonitor[mockPipelineRequest]{
 		stepName: "mock_step",
 		Step: &mockStep[mockPipelineRequest]{

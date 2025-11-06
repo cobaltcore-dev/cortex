@@ -27,3 +27,6 @@ cortex-scheduling-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-ironcore
+    enabledControllers:
+      - ironcore-decisions-pipeline-controller
+      - explanation-controller

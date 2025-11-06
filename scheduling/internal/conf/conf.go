@@ -19,4 +19,7 @@ type Config struct {
 
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+
+	// List of enabled controllers.
+	EnabledControllers []string `json:"enabledControllers"`
 }
