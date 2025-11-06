@@ -72,7 +72,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova-default\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova-external-scheduler\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -224,7 +224,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova-default\"}[2m])) by (le, step, alias))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova-external-scheduler\"}[2m])) by (le, step, alias))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -389,7 +389,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"nova-default\"}[2m])) by (le, step, alias, stat, unit))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"nova-external-scheduler\"}[2m])) by (le, step, alias, stat, unit))",
           "format": "time_series",
           "instant": false,
           "interval": "",
