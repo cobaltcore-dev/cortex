@@ -252,12 +252,13 @@ func main() {
 	// API endpoint.
 	mux := http.NewServeMux()
 
+	// The pipeline monitor is a bucket for all metrics produced during the
+	// execution of individual steps (see step monitor below) and the overall
+	// pipeline.
+	pipelineMonitor := lib.NewPipelineMonitor()
+	metrics.Registry.MustRegister(&pipelineMonitor)
+
 	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
-		// The pipeline monitor is a bucket for all metrics produced during the
-		// execution of individual steps (see step monitor below) and the overall
-		// pipeline.
-		pipelineMonitor := lib.NewPipelineMonitor()
-		metrics.Registry.MustRegister(&pipelineMonitor)
 		decisionController := &decisionsnova.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -300,11 +301,6 @@ func main() {
 
 	}
 	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
-		// The pipeline monitor is a bucket for all metrics produced during the
-		// execution of individual steps (see step monitor below) and the overall
-		// pipeline.
-		pipelineMonitor := lib.NewPipelineMonitor()
-		metrics.Registry.MustRegister(&pipelineMonitor)
 		controller := &decisionsmanila.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -320,11 +316,6 @@ func main() {
 		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	}
 	if slices.Contains(config.EnabledControllers, "cortex-cinder-decisions-pipeline-controller") {
-		// The pipeline monitor is a bucket for all metrics produced during the
-		// execution of individual steps (see step monitor below) and the overall
-		// pipeline.
-		pipelineMonitor := lib.NewPipelineMonitor()
-		metrics.Registry.MustRegister(&pipelineMonitor)
 		controller := &decisionscinder.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -341,11 +332,6 @@ func main() {
 
 	}
 	if slices.Contains(config.EnabledControllers, "cortex-ironcore-decisions-pipeline-controller") {
-		// The pipeline monitor is a bucket for all metrics produced during the
-		// execution of individual steps (see step monitor below) and the overall
-		// pipeline.
-		pipelineMonitor := lib.NewPipelineMonitor()
-		metrics.Registry.MustRegister(&pipelineMonitor)
 		controller := &decisionsmachines.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
