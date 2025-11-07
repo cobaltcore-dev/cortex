@@ -19,7 +19,7 @@ require (
 	github.com/sapcc/go-bits v0.0.0-20251023170348-b4bcd3ab3925
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
-	sigs.k8s.io/controller-runtime v0.22.3
+	sigs.k8s.io/controller-runtime v0.22.4
 )
 
 require (
