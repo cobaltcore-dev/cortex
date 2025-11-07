@@ -16,7 +16,7 @@ type monitor struct {
 }
 
 func newMonitor() monitor {
-	namespace := "cortex_db"
+	namespace := "cortex"
 	subsystem := "db"
 	return monitor{
 		connectionAttempts: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -61,7 +61,6 @@ func (m *monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.connectionAttempts.Describe(ch)
 	m.selectTimer.Describe(ch)
 
-	// Send the Desc objects directly
 	ch <- m.maxOpenDesc
 	ch <- m.openDesc
 	ch <- m.inUseDesc
@@ -76,36 +75,31 @@ func (m *monitor) Collect(ch chan<- prometheus.Metric) {
 		db := value.(*DB)
 		host := db.host
 		database := db.databaseName
-
-		if sqlDB := db.DbMap.Db; sqlDB != nil {
-			stats := sqlDB.Stats()
-
-			ch <- prometheus.MustNewConstMetric(
-				m.maxOpenDesc,
-				prometheus.GaugeValue,
-				float64(stats.MaxOpenConnections),
-				host, database,
-			)
-			ch <- prometheus.MustNewConstMetric(
-				m.openDesc,
-				prometheus.GaugeValue,
-				float64(stats.OpenConnections),
-				host, database,
-			)
-			ch <- prometheus.MustNewConstMetric(
-				m.inUseDesc,
-				prometheus.GaugeValue,
-				float64(stats.InUse),
-				host, database,
-			)
-			ch <- prometheus.MustNewConstMetric(
-				m.idleDesc,
-				prometheus.GaugeValue,
-				float64(stats.Idle),
-				host, database,
-			)
-		}
-
+		stats := db.Db.Stats()
+		ch <- prometheus.MustNewConstMetric(
+			m.maxOpenDesc,
+			prometheus.GaugeValue,
+			float64(stats.MaxOpenConnections),
+			host, database,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			m.openDesc,
+			prometheus.GaugeValue,
+			float64(stats.OpenConnections),
+			host, database,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			m.inUseDesc,
+			prometheus.GaugeValue,
+			float64(stats.InUse),
+			host, database,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			m.idleDesc,
+			prometheus.GaugeValue,
+			float64(stats.Idle),
+			host, database,
+		)
 		return true
 	})
 }
