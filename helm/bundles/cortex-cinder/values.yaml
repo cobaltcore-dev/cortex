@@ -59,6 +59,11 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
+monitoring: &globalMonitoring
+  labels:
+    github_org: cobaltcore-dev
+    github_repo: cortex
+
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-cinder-postgresql
@@ -77,6 +82,7 @@ cortex-knowledge-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-cinder
+    monitoring: *globalMonitoring
 
 cortex-scheduling-operator:
   # CRDs are deployed in the cortex-crds chart.
@@ -89,6 +95,7 @@ cortex-scheduling-operator:
     keystoneSecretRef:
       name: cortex-cinder-openstack-keystone
       namespace: default
+    monitoring: *globalMonitoring
     # ssoSecretRef:
     #   name: cortex-cinder-openstack-sso
     #   namespace: default
