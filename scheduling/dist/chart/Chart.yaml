@@ -3,6 +3,6 @@ name: cortex-scheduling-operator
 description: A Helm chart to distribute the cortex scheduling operator.
 type: application
 version: 0.0.1
-appVersion: "sha-2476107"
+appVersion: "sha-6e934d6"
 icon: "https://example.com/icon.png"
 dependencies: []
