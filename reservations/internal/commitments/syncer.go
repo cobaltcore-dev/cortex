@@ -122,6 +122,8 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 	mappedServers := map[string]struct{}{} // Servers subtracted from a commitment
 	var unusedCommitments []resolvedCommitment
 	for _, commitment := range resolvedCommitments {
+		matchingServerCount := uint64(0)
+
 		activeServers, ok := servers[commitment.ProjectID]
 		if !ok || len(activeServers) == 0 {
 			// No active servers in this project, keep the commitment.
@@ -142,13 +144,14 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 				continue
 			}
 			mappedServers[server.ID] = struct{}{}
-			commitment.Amount--
+			matchingServerCount++
 			syncLog.Info("subtracting server from commitment", "commitmentID", commitment.UUID, "serverID", server.ID, "remainingAmount", commitment.Amount)
 		}
-		if commitment.Amount <= 0 {
+		if matchingServerCount >= commitment.Amount {
 			syncLog.Info("skipping commitment that is fully used by active servers", "id", commitment.UUID, "project", commitment.ProjectID)
 			continue
 		}
+		commitment.Amount -= matchingServerCount
 		unusedCommitments = append(unusedCommitments, commitment)
 	}
 
