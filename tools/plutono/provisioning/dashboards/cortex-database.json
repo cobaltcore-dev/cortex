@@ -167,7 +167,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_size_bytes{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_table_size_bytes{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
