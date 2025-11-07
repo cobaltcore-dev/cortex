@@ -25,6 +25,8 @@ import (
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
 	*gorp.DbMap
+	host         string
+	databaseName string
 }
 
 type Table interface {
@@ -120,7 +122,7 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	db.SetMaxOpenConns(16)
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	slog.Info("database is ready")
-	wrapped := &DB{DbMap: dbMap}
+	wrapped := &DB{DbMap: dbMap, host: string(host), databaseName: string(database)}
 	connections.Store(dbUrlStr, wrapped)
 	return wrapped, nil
 }
