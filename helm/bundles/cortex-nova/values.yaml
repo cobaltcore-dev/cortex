@@ -29,7 +29,7 @@ sharedSSOCert: &sharedSSOCert
   key: |
     -----BEGIN PRIVATE KEY-----
     Your private key here
-    -----END PRIVATE KEY
+    -----END PRIVATE KEY-----
   # Whether the certificate is self-signed.
   # If true, the certificate is not verified.
   selfSigned: "false"
