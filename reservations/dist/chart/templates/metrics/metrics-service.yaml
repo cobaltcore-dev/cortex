@@ -15,4 +15,5 @@ spec:
       name: https
   selector:
     control-plane: controller-manager
+    app.kubernetes.io/name: cortex-reservations-operator
 {{- end }}
