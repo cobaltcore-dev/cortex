@@ -106,10 +106,11 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 // The base controller will delegate the pipeline creation down to this method.
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
+	name string,
 	steps []v1alpha1.Step,
 ) (lib.Pipeline[ironcore.MachinePipelineRequest], error) {
 
-	return lib.NewPipeline(ctx, c.Client, supportedSteps, steps, c.Monitor)
+	return lib.NewPipeline(ctx, c.Client, name, supportedSteps, steps, c.Monitor)
 }
 
 func (c *DecisionPipelineController) handleMachine() handler.EventHandler {

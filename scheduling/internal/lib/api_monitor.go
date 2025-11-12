@@ -20,13 +20,12 @@ type APIMonitor struct {
 
 // Create a new scheduler monitor and register the necessary Prometheus metrics.
 func NewSchedulerMonitor() APIMonitor {
-	apiRequestsTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_api_request_duration_seconds",
-		Help:    "Duration of API requests",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"method", "path", "status", "error"})
 	return APIMonitor{
-		ApiRequestsTimer: apiRequestsTimer,
+		ApiRequestsTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_scheduler_api_request_duration_seconds",
+			Help:    "Duration of API requests",
+			Buckets: prometheus.DefBuckets,
+		}, []string{"method", "path", "status", "error"}),
 	}
 }
 

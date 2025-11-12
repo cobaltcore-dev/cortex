@@ -59,6 +59,11 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
+monitoring: &globalMonitoring
+  labels:
+    github_org: cobaltcore-dev
+    github_repo: cortex
+
 # Features in early development that are not ready for production yet.
 cortex-reservations-operator:
   enabled: false
@@ -70,6 +75,8 @@ cortex-reservations-operator:
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
       namespace: default
+    monitoring: *globalMonitoring
+
     # ssoSecretRef:
     #   name: cortex-nova-openstack-sso
     #   namespace: default
@@ -92,6 +99,7 @@ cortex-knowledge-operator:
   conf:
     # The operator will only touch CRs with this operator name.
     operator: cortex-nova
+    monitoring: *globalMonitoring
 
 cortex-scheduling-operator:
   # CRDs are deployed in the cortex-crds chart.
@@ -104,6 +112,8 @@ cortex-scheduling-operator:
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
       namespace: default
+    monitoring: *globalMonitoring
+
     # ssoSecretRef:
     #   name: cortex-nova-openstack-sso
     #   namespace: default

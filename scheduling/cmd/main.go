@@ -24,12 +24,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/db"
 	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
@@ -74,6 +76,7 @@ func init() {
 func main() {
 	ctx := context.Background()
 	config := libconf.GetConfigOrDie[conf.Config]()
+
 	// Custom entrypoint for e2e tests.
 	if len(os.Args) == 2 {
 		restConfig := ctrl.GetConfigOrDie()
@@ -240,15 +243,20 @@ func main() {
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
-	registry := monitoring.NewRegistry(libconf.MonitoringConfig{})
+	sharedConfig := libconf.GetConfigOrDie[libconf.SharedConfig]()
+	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, sharedConfig.MonitoringConfig)
+
+	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
+	metrics.Registry.MustRegister(&db.Monitor)
+
+	// API endpoint.
+	mux := http.NewServeMux()
 
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
 	// pipeline.
-	pipelineMonitor := lib.NewPipelineMonitor(registry)
-
-	// API endpoint.
-	mux := http.NewServeMux()
+	pipelineMonitor := lib.NewPipelineMonitor()
+	metrics.Registry.MustRegister(&pipelineMonitor)
 
 	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
 		decisionController := &decisionsnova.DecisionPipelineController{
@@ -267,8 +275,10 @@ func main() {
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
+		monitor := deschedulingnova.NewPipelineMonitor()
+		metrics.Registry.MustRegister(&monitor)
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
-			Monitor:       deschedulingnova.NewPipelineMonitor(),
+			Monitor:       monitor,
 			Conf:          config,
 			CycleDetector: deschedulingnova.NewCycleDetector(),
 		}
@@ -288,6 +298,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
 			os.Exit(1)
 		}
+
 	}
 	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
 		controller := &decisionsmanila.DecisionPipelineController{
@@ -318,6 +329,7 @@ func main() {
 		}
 		cindershims.NewAPI(config, controller).Init(mux)
 		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
+
 	}
 	if slices.Contains(config.EnabledControllers, "cortex-ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{

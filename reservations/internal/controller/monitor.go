@@ -29,16 +29,18 @@ type Monitor struct {
 	reservedResources    *prometheus.GaugeVec
 }
 
-// Initialize the metrics and bind them to the registry.
-func (m *Monitor) Init() {
-	m.numberOfReservations = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_reservations_number",
-		Help: "Number of reservations.",
-	}, []string{"status_phase", "status_error"})
-	m.reservedResources = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_reservations_resources",
-		Help: "Resources reserved by reservations.",
-	}, []string{"status_phase", "status_error", "host", "resource"})
+func NewControllerMonitor(k8sClient client.Client) Monitor {
+	return Monitor{
+		Client: k8sClient,
+		numberOfReservations: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_reservations_number",
+			Help: "Number of reservations.",
+		}, []string{"status_phase", "status_error"}),
+		reservedResources: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_reservations_resources",
+			Help: "Resources reserved by reservations.",
+		}, []string{"status_phase", "status_error", "host", "resource"}),
+	}
 }
 
 // Describe the metrics for Prometheus.

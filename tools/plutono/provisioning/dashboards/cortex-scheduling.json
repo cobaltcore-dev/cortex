@@ -33,6 +33,64 @@
       "type": "row"
     },
     {
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 1,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "id": 109,
+      "options": {
+        "content": "",
+        "mode": "markdown"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Pipeline: nova-external-scheduler",
+      "type": "text"
+    },
+    {
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 1,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 110,
+      "options": {
+        "content": "",
+        "mode": "markdown"
+      },
+      "pluginVersion": "7.5.37",
+      "targets": [
+        {
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Pipeline: manila-external-scheduler",
+      "type": "text"
+    },
+    {
       "cards": {
         "cardPadding": 0,
         "cardRound": 0
@@ -57,7 +115,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 2
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -72,7 +130,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova-default\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova-external-scheduler\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -133,7 +191,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 2
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -148,7 +206,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila-default\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila-external-scheduler\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -209,7 +267,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 14
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -224,7 +282,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova-default\"}[2m])) by (le, step, alias))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"nova-external-scheduler\"}[2m])) by (le, step, alias))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -285,7 +343,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 14
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -300,7 +358,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila-default\"}[2m])) by (le, step, alias))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila-external-scheduler\"}[2m])) by (le, step, alias))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -355,7 +413,7 @@
         "h": 14,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 27
       },
       "hiddenSeries": false,
       "id": 91,
@@ -389,7 +447,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"nova-default\"}[2m])) by (le, step, alias, stat, unit))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"nova-external-scheduler\"}[2m])) by (le, step, alias, stat, unit))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -460,7 +518,7 @@
         "h": 14,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 27
       },
       "hiddenSeries": false,
       "id": 106,
@@ -494,7 +552,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"manila-default\"}[2m])) by (le, step, stat, unit))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_impact_bucket{pipeline=\"manila-external-scheduler\"}[2m])) by (le, step, stat, unit))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -562,7 +620,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 41
       },
       "hiddenSeries": false,
       "id": 89,
@@ -659,7 +717,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 53
       },
       "hiddenSeries": false,
       "id": 26,
@@ -767,7 +825,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 65
       },
       "hiddenSeries": false,
       "id": 107,
@@ -875,7 +933,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 76
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 37,
@@ -972,7 +1030,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 76
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 40,
@@ -1084,7 +1142,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 76
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 33,
@@ -1196,7 +1254,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 76
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 42,
@@ -1308,7 +1366,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 87
+        "y": 88
       },
       "hiddenSeries": false,
       "id": 45,

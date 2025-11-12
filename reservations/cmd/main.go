@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/reservations/internal/commitments"
 	"github.com/cobaltcore-dev/cortex/reservations/internal/controller"
@@ -196,6 +197,9 @@ func main() {
 
 	ctx := context.Background()
 
+	sharedConfig := conf.GetConfigOrDie[conf.SharedConfig]()
+	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, sharedConfig.MonitoringConfig)
+
 	if err := (&controller.ReservationReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
@@ -233,8 +237,7 @@ func main() {
 	}
 
 	setupLog.Info("starting monitor")
-	monitor := controller.Monitor{Client: mgr.GetClient()}
-	monitor.Init()
+	monitor := controller.NewControllerMonitor(mgr.GetClient())
 	metrics.Registry.MustRegister(&monitor)
 
 	setupLog.Info("starting commitments syncer")

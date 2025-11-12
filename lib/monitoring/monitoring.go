@@ -13,17 +13,30 @@ import (
 // Custom prometheus registry that adds functionality to the default registry.
 type Registry struct {
 	// Inherited prometheus registry.
-	*prometheus.Registry
+	RegistererGatherer
 	// Custom configuration for the monitoring.
 	config conf.MonitoringConfig
+}
+
+type RegistererGatherer interface {
+	prometheus.Registerer
+	prometheus.Gatherer
+}
+
+func WrapRegistry(registry RegistererGatherer, config conf.MonitoringConfig) *Registry {
+	wrapped := &Registry{
+		RegistererGatherer: registry,
+		config:             config,
+	}
+	return wrapped
 }
 
 // Create a new registry with the given configuration.
 // This registry will include the default go collector and process collector.
 func NewRegistry(config conf.MonitoringConfig) *Registry {
 	registry := &Registry{
-		Registry: prometheus.NewRegistry(),
-		config:   config,
+		RegistererGatherer: prometheus.NewRegistry(),
+		config:             config,
 	}
 	// Add go execution stats and process metrics to the registry.
 	registry.MustRegister(collectors.NewGoCollector())
@@ -33,7 +46,7 @@ func NewRegistry(config conf.MonitoringConfig) *Registry {
 
 // Custom gather method that adds custom labels to all metrics.
 func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
-	families, err := r.Registry.Gather()
+	families, err := r.RegistererGatherer.Gather()
 	if err != nil {
 		return nil, err
 	}

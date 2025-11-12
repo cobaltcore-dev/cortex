@@ -18,24 +18,21 @@ type Monitor struct {
 }
 
 // NewSyncMonitor creates a new sync monitor and registers the necessary Prometheus metrics.
-func NewSyncMonitor() Monitor {
-	objectsGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_sync_objects",
-		Help: "Number of objects synced",
-	}, []string{"datasource"})
-	requestTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_sync_request_duration_seconds",
-		Help:    "Duration of sync request",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"datasource"})
-	requestProcessedCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cortex_sync_request_processed_total",
-		Help: "Number of processed sync requests",
-	}, []string{"datasource"})
+func NewMonitor() Monitor {
 	return Monitor{
-		ObjectsGauge:            objectsGauge,
-		RequestTimer:            requestTimer,
-		RequestProcessedCounter: requestProcessedCounter,
+		ObjectsGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_sync_objects",
+			Help: "Number of objects synced",
+		}, []string{"datasource"}),
+		RequestTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_sync_request_duration_seconds",
+			Help:    "Duration of sync request",
+			Buckets: prometheus.DefBuckets,
+		}, []string{"datasource"}),
+		RequestProcessedCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_sync_request_processed_total",
+			Help: "Number of processed sync requests",
+		}, []string{"datasource"}),
 	}
 }
 

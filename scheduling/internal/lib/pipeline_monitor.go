@@ -4,7 +4,6 @@
 package lib
 
 import (
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -34,26 +33,7 @@ type PipelineMonitor struct {
 }
 
 // Create a new scheduler monitor and register the necessary Prometheus metrics.
-func NewPipelineMonitor(registry *monitoring.Registry) PipelineMonitor {
-	stepRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
-		Help:    "Duration of scheduler pipeline step run",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"pipeline", "step"})
-	stepSubjectWeight := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_scheduler_pipeline_step_weight_modification",
-		Help: "Modification of subject weight by scheduler pipeline step",
-	}, []string{"pipeline", "subject", "step"})
-	stepRemovedSubjectsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_removed_subjects",
-		Help:    "Number of subjects removed by scheduler pipeline step",
-		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
-	}, []string{"pipeline", "step"})
-	stepImpactObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_impact",
-		Help:    "Impact of the step on the subjects",
-		Buckets: prometheus.ExponentialBucketsRange(0.01, 1000, 20),
-	}, []string{"pipeline", "step", "stat", "unit"})
+func NewPipelineMonitor() PipelineMonitor {
 	buckets := []float64{}
 	buckets = append(buckets, prometheus.LinearBuckets(0, 1, 10)...)
 	buckets = append(buckets, prometheus.LinearBuckets(10, 10, 4)...)
@@ -63,46 +43,46 @@ func NewPipelineMonitor(registry *monitoring.Registry) PipelineMonitor {
 		Help:    "From which index of the subject list the subject came from originally.",
 		Buckets: buckets,
 	}, []string{"pipeline", "step", "outidx"})
-	pipelineRunTimer := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_run_duration_seconds",
-		Help:    "Duration of scheduler pipeline run",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"pipeline"})
-	subjectNumberInObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_subject_number_in",
-		Help:    "Number of subjects going into the scheduler pipeline",
-		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
-	}, []string{"pipeline"})
-	subjectNumberOutObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_subject_number_out",
-		Help:    "Number of subjects coming out of the scheduler pipeline",
-		Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
-	}, []string{"pipeline"})
-	requestCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cortex_scheduler_pipeline_requests_total",
-		Help: "Total number of requests processed by the scheduler.",
-	}, []string{"pipeline"})
-	registry.MustRegister(
-		stepRunTimer,
-		stepSubjectWeight,
-		stepRemovedSubjectsObserver,
-		stepReorderingsObserver,
-		stepImpactObserver,
-		pipelineRunTimer,
-		subjectNumberInObserver,
-		subjectNumberOutObserver,
-		requestCounter,
-	)
 	return PipelineMonitor{
-		stepRunTimer:                stepRunTimer,
-		stepSubjectWeight:           stepSubjectWeight,
-		stepRemovedSubjectsObserver: stepRemovedSubjectsObserver,
-		stepReorderingsObserver:     stepReorderingsObserver,
-		stepImpactObserver:          stepImpactObserver,
-		pipelineRunTimer:            pipelineRunTimer,
-		subjectNumberInObserver:     subjectNumberInObserver,
-		subjectNumberOutObserver:    subjectNumberOutObserver,
-		requestCounter:              requestCounter,
+		stepRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
+			Help:    "Duration of scheduler pipeline step run",
+			Buckets: prometheus.DefBuckets,
+		}, []string{"pipeline", "step"}),
+		stepSubjectWeight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_scheduler_pipeline_step_weight_modification",
+			Help: "Modification of subject weight by scheduler pipeline step",
+		}, []string{"pipeline", "subject", "step"}),
+		stepRemovedSubjectsObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_scheduler_pipeline_step_removed_subjects",
+			Help:    "Number of subjects removed by scheduler pipeline step",
+			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
+		}, []string{"pipeline", "step"}),
+		stepReorderingsObserver: stepReorderingsObserver,
+		stepImpactObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_scheduler_pipeline_step_impact",
+			Help:    "Impact of the step on the subjects",
+			Buckets: prometheus.ExponentialBucketsRange(0.01, 1000, 20),
+		}, []string{"pipeline", "step", "stat", "unit"}),
+		pipelineRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_scheduler_pipeline_run_duration_seconds",
+			Help:    "Duration of scheduler pipeline run",
+			Buckets: prometheus.DefBuckets,
+		}, []string{"pipeline"}),
+		subjectNumberInObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_scheduler_pipeline_subject_number_in",
+			Help:    "Number of subjects going into the scheduler pipeline",
+			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
+		}, []string{"pipeline"}),
+		subjectNumberOutObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_scheduler_pipeline_subject_number_out",
+			Help:    "Number of subjects coming out of the scheduler pipeline",
+			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
+		}, []string{"pipeline"}),
+		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_scheduler_pipeline_requests_total",
+			Help: "Total number of requests processed by the scheduler.",
+		}, []string{"pipeline"}),
 	}
 }
 
@@ -133,4 +113,28 @@ func (m *PipelineMonitor) observePipelineResult(request PipelineRequest, result 
 			WithLabelValues(m.PipelineName).
 			Inc()
 	}
+}
+
+func (m *PipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
+	m.stepRunTimer.Describe(ch)
+	m.stepSubjectWeight.Describe(ch)
+	m.stepRemovedSubjectsObserver.Describe(ch)
+	m.stepReorderingsObserver.Describe(ch)
+	m.stepImpactObserver.Describe(ch)
+	m.pipelineRunTimer.Describe(ch)
+	m.subjectNumberInObserver.Describe(ch)
+	m.subjectNumberOutObserver.Describe(ch)
+	m.requestCounter.Describe(ch)
+}
+
+func (m *PipelineMonitor) Collect(ch chan<- prometheus.Metric) {
+	m.stepRunTimer.Collect(ch)
+	m.stepSubjectWeight.Collect(ch)
+	m.stepRemovedSubjectsObserver.Collect(ch)
+	m.stepReorderingsObserver.Collect(ch)
+	m.stepImpactObserver.Collect(ch)
+	m.pipelineRunTimer.Collect(ch)
+	m.subjectNumberInObserver.Collect(ch)
+	m.subjectNumberOutObserver.Collect(ch)
+	m.requestCounter.Collect(ch)
 }

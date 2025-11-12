@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 7,
+  "id": 9,
   "links": [],
   "panels": [
     {
@@ -167,7 +167,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "increase(pg_stat_user_tables_size_bytes{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
+          "expr": "increase(pg_stat_user_tables_table_size_bytes{pod=~\"cortex-.*-postgresql-0\",datname=\"postgres\"}[2m])",
           "interval": "",
           "legendFormat": "{{relname}}",
           "queryType": "randomWalk",
@@ -1157,7 +1157,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (service) (go_sql_stats_connections_open{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "expr": "sum by (service) (cortex_db_connections_open{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
           "interval": "",
           "legendFormat": "{{ container }}",
           "queryType": "randomWalk",
@@ -1259,7 +1259,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (service) (go_sql_stats_connections_in_use{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "expr": "sum by (service) (cortex_db_connections_in_use{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
           "interval": "",
           "legendFormat": "{{ container }}",
           "queryType": "randomWalk",
@@ -1361,7 +1361,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (service) (go_sql_stats_connections_idle{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
+          "expr": "sum by (service) (cortex_db_connections_idle{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"})",
           "interval": "",
           "legendFormat": "{{ container }}",
           "queryType": "randomWalk",
