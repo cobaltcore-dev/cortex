@@ -1,0 +1,199 @@
+apiVersion: scheduling.cortex/v1alpha1
+kind: Decision
+metadata:
+  name: nova-qwjgh
+spec:
+  novaRaw:
+    # This information is omitted in the sample because it may contains internal data.
+    context: {}
+    hosts:
+    - host: nova-compute-bb83
+      hypervisor_hostname: hv83
+    - host: nova-compute-bb84
+      hypervisor_hostname: hv84
+    - host: nova-compute-bb97
+      hypervisor_hostname: hv97
+    pipeline: nova-external-scheduler
+    live: false
+    rebuild: false
+    resize: false
+    spec:
+      nova_object.changes: []
+      nova_object.data:
+        availability_zone: qa-de-1a
+        flavor:
+          nova_object.changes: []
+          nova_object.data:
+            created_at: "1970-01-01T00:00:00Z"
+            description: null
+            disabled: false
+            ephemeral_gb: 0
+            extra_specs:
+              capabilities:hypervisor_type: VMware vCenter Server
+              hw_video:ram_max_mb: "16"
+              vmware:hv_enabled: "True"
+              vmware:hw_version: vmx-18
+            flavorid: "1"
+            id: 1
+            is_public: true
+            memory_mb: 2032
+            name: hana
+            root_gb: 64
+            rxtx_factor: 1
+            swap: 0
+            updated_at: null
+            vcpu_weight: 0
+            vcpus: 2
+          nova_object.name: Flavor
+          nova_object.namespace: nova
+          nova_object.version: "1.2"
+        force_hosts: null
+        force_nodes: null
+        ignore_hosts: null
+        image:
+          nova_object.changes: []
+          nova_object.data:
+            checksum: abcdef1234567890abcdef1234567890
+            container_format: bare
+            created_at: "2025-11-05T06:30:49Z"
+            disk_format: vmdk
+            id: abc12345-6789-0123-4567-89abcdef0123
+            min_disk: 16
+            min_ram: 2032
+            name: SAP-compliant-ubuntu-22-04
+            owner: abcdef1234567890abcdef1234567890
+            properties:
+              nova_object.changes: []
+              nova_object.data:
+                hw_architecture: x86_64
+                hw_disk_bus: scsi
+                hw_disk_type: streamOptimized
+                hw_firmware_type: uefi
+                hw_scsi_model: vmpvscsi
+                hw_video_ram: 16
+                hw_vif_model: vmxnet3
+                img_hv_type: vmware
+                os_distro: ubuntu64Guest
+              nova_object.name: ImageMetaProps
+              nova_object.namespace: nova
+              nova_object.version: "1.36"
+            size: 1519575552
+            status: active
+            updated_at: "1970-01-01T00:00:00Z"
+          nova_object.name: ImageMeta
+          nova_object.namespace: nova
+          nova_object.version: "1.8"
+        instance_group: null
+        instance_uuid: abc12345-6789-0123-4567-89abcdef0123
+        is_bfv: false
+        limits:
+          nova_object.changes: []
+          nova_object.data:
+            disk_gb: null
+            memory_mb: null
+            numa_topology: null
+            vcpu: null
+          nova_object.name: SchedulerLimits
+          nova_object.namespace: nova
+          nova_object.version: "1.0"
+        network_metadata:
+          nova_object.changes: []
+          nova_object.data:
+            physnets:
+            - example-physnet
+            tunneled: false
+          nova_object.name: NetworkMetadata
+          nova_object.namespace: nova
+          nova_object.version: "1.0"
+        num_instances: 1
+        numa_topology: null
+        project_id: abcdef1234567890abcdef1234567890
+        request_level_params:
+          nova_object.changes: []
+          nova_object.data:
+            root_forbidden:
+            - COMPUTE_STATUS_DISABLED
+            root_required: []
+            same_subtree: []
+          nova_object.name: RequestLevelParams
+          nova_object.namespace: nova
+          nova_object.version: "1.1"
+        requested_destination:
+          nova_object.changes: []
+          nova_object.data:
+            aggregates:
+            - abcdef12-3456-7890-abcd-ef1234567890, def45678-90ab-cdef-1234-567890abcdef
+            forbidden_aggregates: null
+            host: ""
+            node: ""
+          nova_object.name: Destination
+          nova_object.namespace: nova
+          nova_object.version: "1.4"
+        requested_networks:
+          objects: null
+        scheduler_hints:
+          domain_name:
+          - example-domain
+        security_groups:
+          objects: null
+        user_id: abcdef1234567890abcdef1234567890abcdef
+      nova_object.name: RequestSpec
+      nova_object.namespace: nova
+      nova_object.version: "1.14"
+    vmware: true
+    weights:
+      nova-compute-bb83: 100.61753491786814
+      nova-compute-bb84: 0.562147416492215
+      nova-compute-bb97: -147
+  operator: cortex-nova
+  pipelineRef:
+    name: nova-external-scheduler
+  resourceID: abc12345-6789-0123-4567-89abcdef0123
+  type: nova-server
+status:
+  history: []
+  precedence: 0
+  result:
+    aggregatedOutWeights:
+      nova-compute-bb83: -0.2586204243205822
+      nova-compute-bb84: -0.7778352975969413
+      nova-compute-bb97: -1.2029604074864189
+    normalizedInWeights:
+      nova-compute-bb83: 1
+      nova-compute-bb84: 0.5095689891574562
+      nova-compute-bb97: -1
+    orderedHosts:
+    - nova-compute-bb83
+    - nova-compute-bb84
+    - nova-compute-bb97
+    rawInWeights:
+      nova-compute-bb83: 100.61753491786814
+      nova-compute-bb84: 0.562147416492215
+      nova-compute-bb97: -147
+    stepResults:
+    - activations:
+        nova-compute-bb83: 0
+        nova-compute-bb84: 0
+        nova-compute-bb97: 0
+      stepRef:
+        name: vmware-hana-binpacking
+    - activations:
+        nova-compute-bb83: 0
+        nova-compute-bb84: 0
+        nova-compute-bb97: 0
+      stepRef:
+        name: vmware-general-purpose-balancing
+    - activations:
+        nova-compute-bb83: -0.7281666968953378
+        nova-compute-bb84: -0.8118791666666665
+        nova-compute-bb97: -0.20302380079223104
+      stepRef:
+        name: vmware-avoid-long-term-contended-hosts
+    - activations:
+        nova-compute-bb83: -0.7525671006671896
+        nova-compute-bb84: -0.7197891666666667
+        nova-compute-bb97: -0.0026808333333333337
+      stepRef:
+        name: vmware-avoid-short-term-contended-hosts
+    targetHost: nova-compute-bb83
+  took: 3.511125ms
