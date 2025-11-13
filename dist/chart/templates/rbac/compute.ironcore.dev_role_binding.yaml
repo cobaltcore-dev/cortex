@@ -4,11 +4,11 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: {{ .Values.namePrefix }}-scheduling-manager-rolebinding-ironcore
+  name: {{ .Values.namePrefix }}-manager-rolebinding-ironcore
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ .Values.namePrefix }}-scheduling-manager-role-ironcore
+  name: {{ .Values.namePrefix }}-manager-role-ironcore
 subjects:
 - kind: ServiceAccount
   name: {{ .Values.namePrefix }}-{{ .Values.controllerManager.serviceAccountName }}

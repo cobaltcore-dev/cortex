@@ -5,7 +5,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.namePrefix }}-scheduling-controller-manager
+  name: {{ .Values.namePrefix }}-controller-manager
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
@@ -79,10 +79,10 @@ spec:
         # Custom values to configure the controller-manager.
         - name: scheduling-controller-manager-config-volume
           configMap:
-            name: {{ .Values.namePrefix }}-scheduling-controller-manager-config
+            name: {{ .Values.namePrefix }}-controller-manager-config
         - name: scheduling-controller-manager-secrets-volume
           secret:
-            secretName: {{ .Values.namePrefix }}-scheduling-controller-manager-secrets
+            secretName: {{ .Values.namePrefix }}-controller-manager-secrets
         {{- if and .Values.metrics.enable .Values.certmanager.enable }}
         - name: metrics-certs
           secret:
@@ -92,7 +92,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.namePrefix }}-scheduling-controller-manager-config
+  name: {{ .Values.namePrefix }}-controller-manager-config
 data:
   conf.json: |-
     {{- $mergedConf := dict }}
@@ -107,7 +107,7 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .Values.namePrefix }}-scheduling-controller-manager-secrets
+  name: {{ .Values.namePrefix }}-controller-manager-secrets
 type: Opaque
 data:
   secrets.json: |-

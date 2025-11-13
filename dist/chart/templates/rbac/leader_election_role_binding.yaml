@@ -5,11 +5,11 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   namespace: {{ .Release.Namespace }}
-  name: {{ .Values.namePrefix }}-scheduling-leader-election-rolebinding
+  name: {{ .Values.namePrefix }}-leader-election-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ .Values.namePrefix }}-scheduling-leader-election-role
+  name: {{ .Values.namePrefix }}-leader-election-role
 subjects:
 - kind: ServiceAccount
   name: {{ .Values.namePrefix }}-{{ .Values.controllerManager.serviceAccountName }}

@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
     control-plane: controller-manager
-  name: {{ .Values.namePrefix }}-scheduling-controller-manager-metrics-monitor
+  name: {{ .Values.namePrefix }}-controller-manager-metrics-monitor
   namespace: {{ .Release.Namespace }}
 spec:
   endpoints:
@@ -16,7 +16,7 @@ spec:
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
         {{- if .Values.certmanager.enable }}
-        serverName: {{ .Values.namePrefix }}-scheduling-controller-manager-metrics-service.{{ .Release.Namespace }}.svc
+        serverName: {{ .Values.namePrefix }}-controller-manager-metrics-service.{{ .Release.Namespace }}.svc
         # Apply secure TLS configuration with cert-manager
         insecureSkipVerify: false
         ca:
@@ -37,5 +37,5 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
-      app.kubernetes.io/name: cortex-scheduling-operator
+      app.kubernetes.io/name: cortex
 {{- end }}

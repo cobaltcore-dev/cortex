@@ -5,15 +5,19 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: {{ .Values.namePrefix }}-scheduling-manager-role
+  name: {{ .Values.namePrefix }}-manager-role
 rules:
 - apiGroups:
-  - scheduling.cortex
+  - cortex
   resources:
+  - knowledges
+  - datasources
+  - reservations
   - decisions
   - deschedulings
   - steps
   - pipelines
+  - kpis
   verbs:
   - create
   - delete
@@ -23,73 +27,29 @@ rules:
   - update
   - watch
 - apiGroups:
-  - scheduling.cortex
+  - cortex
   resources:
+  - knowledges/finalizers
+  - datasources/finalizers
+  - reservations/finalizers
   - decisions/finalizers
   - deschedulings/finalizers
   - steps/finalizers
   - pipelines/finalizers
+  - kpis/finalizers
   verbs:
   - update
 - apiGroups:
-  - scheduling.cortex
+  - cortex
   resources:
+  - knowledges/status
+  - datasources/status
+  - reservations/status
   - decisions/status
   - deschedulings/status
   - steps/status
   - pipelines/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - reservations.cortex
-  resources:
-  - reservations
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - reservations.cortex
-  resources:
-  - reservations/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - reservations.cortex
-  resources:
-  - reservations/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - knowledge.cortex
-  resources:
-  - knowledges
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - knowledge.cortex
-  resources:
-  - knowledges/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - knowledge.cortex
-  resources:
-  - knowledges/status
+  - kpis/status
   verbs:
   - get
   - patch
