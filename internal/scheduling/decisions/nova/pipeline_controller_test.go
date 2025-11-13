@@ -19,8 +19,9 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/conf"
+
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 func TestDecisionPipelineController_Reconcile(t *testing.T) {

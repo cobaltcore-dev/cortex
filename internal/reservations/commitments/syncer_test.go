@@ -14,11 +14,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 // Mock CommitmentsClient for testing
 type mockCommitmentsClient struct {
-	initFunc                      func(ctx context.Context, client client.Client, conf Config) error
+	initFunc                      func(ctx context.Context, client client.Client, conf conf.Config) error
 	initFuncCalled                bool
 	listProjectsFunc              func(ctx context.Context) ([]Project, error)
 	listProjectsFuncCalled        bool
@@ -30,7 +31,7 @@ type mockCommitmentsClient struct {
 	listServersFuncCalled         bool
 }
 
-func (m *mockCommitmentsClient) Init(ctx context.Context, client client.Client, conf Config) error {
+func (m *mockCommitmentsClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	m.initFuncCalled = true
 	if m.initFunc != nil {
 		return m.initFunc(ctx, client, conf)
@@ -108,7 +109,7 @@ func TestSyncer_Init(t *testing.T) {
 		Client:            k8sClient,
 	}
 
-	if err := syncer.Init(context.Background(), Config{}); err != nil {
+	if err := syncer.Init(context.Background(), conf.Config{}); err != nil {
 		t.Errorf("Syncer.Init() error = %v", err)
 	}
 
@@ -174,7 +175,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 		listServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
 			return map[string][]Server{}, nil // No active servers
 		},
-		initFunc: func(ctx context.Context, client client.Client, conf Config) error {
+		initFunc: func(ctx context.Context, client client.Client, conf conf.Config) error {
 			// No-op for init
 			return nil
 		},
@@ -304,7 +305,7 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 		listServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
 			return map[string][]Server{}, nil // No active servers
 		},
-		initFunc: func(ctx context.Context, client client.Client, conf Config) error {
+		initFunc: func(ctx context.Context, client client.Client, conf conf.Config) error {
 			// No-op for init
 			return nil
 		},
@@ -396,7 +397,7 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 		listServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
 			return map[string][]Server{}, nil // No active servers
 		},
-		initFunc: func(ctx context.Context, client client.Client, conf Config) error {
+		initFunc: func(ctx context.Context, client client.Client, conf conf.Config) error {
 			// No-op for init
 			return nil
 		},

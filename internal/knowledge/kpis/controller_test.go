@@ -11,7 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
-	libconf "github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
@@ -33,7 +33,7 @@ type mockKPI struct {
 	initCalled bool
 }
 
-func (m *mockKPI) Init(db db.DB, opts libconf.RawOpts) error {
+func (m *mockKPI) Init(db db.DB, opts conf.RawOpts) error {
 	m.initCalled = true
 	return m.initError
 }
@@ -51,7 +51,7 @@ type mockKPILogger struct {
 	kpi plugins.KPI
 }
 
-func (l *mockKPILogger) Init(db db.DB, opts libconf.RawOpts) error {
+func (l *mockKPILogger) Init(db db.DB, opts conf.RawOpts) error {
 	return l.kpi.Init(db, opts)
 }
 
@@ -235,9 +235,9 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 		if jointDB == nil && dependenciesTotal > 0 {
 			return fmt.Errorf("kpi %s requires at least one datasource or knowledge with a database", obj.Name)
 		}
-		rawOpts := libconf.NewRawOpts(`{}`)
+		rawOpts := conf.NewRawOpts(`{}`)
 		if len(obj.Spec.Opts.Raw) > 0 {
-			rawOpts = libconf.NewRawOptsBytes(obj.Spec.Opts.Raw)
+			rawOpts = conf.NewRawOptsBytes(obj.Spec.Opts.Raw)
 		}
 		// Initialize KPI with database if available, otherwise with empty DB
 		var dbToUse db.DB

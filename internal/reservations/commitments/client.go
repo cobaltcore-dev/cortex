@@ -11,6 +11,7 @@ import (
 	gosync "sync"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
@@ -25,7 +26,7 @@ import (
 // Client to fetch commitments.
 type CommitmentsClient interface {
 	// Init the client.
-	Init(ctx context.Context, client client.Client, conf Config) error
+	Init(ctx context.Context, client client.Client, conf conf.Config) error
 	// List all projects to resolve commitments.
 	ListProjects(ctx context.Context) ([]Project, error)
 	// List all flavors by their name to resolve instance commitments.
@@ -56,7 +57,7 @@ func NewCommitmentsClient() CommitmentsClient {
 }
 
 // Init the client.
-func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf Config) error {
+func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error

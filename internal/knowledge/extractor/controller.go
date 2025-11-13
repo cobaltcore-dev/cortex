@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/conf"
+
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/netapp"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"

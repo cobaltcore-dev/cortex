@@ -15,7 +15,8 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
+
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"

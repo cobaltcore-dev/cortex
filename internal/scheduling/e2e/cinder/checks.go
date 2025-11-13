@@ -12,7 +12,8 @@ import (
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/cinder"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
+
 	"github.com/sapcc/go-bits/must"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

@@ -8,8 +8,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/conf"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

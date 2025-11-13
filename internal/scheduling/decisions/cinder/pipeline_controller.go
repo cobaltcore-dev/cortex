@@ -12,8 +12,9 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/cinder"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/conf"
+
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"

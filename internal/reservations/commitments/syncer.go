@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/sapcc/go-bits/jobloop"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -43,7 +44,7 @@ func NewSyncer(k8sClient client.Client) *Syncer {
 }
 
 // Initialize the syncer.
-func (s *Syncer) Init(ctx context.Context, config Config) error {
+func (s *Syncer) Init(ctx context.Context, config conf.Config) error {
 	// Initialize the syncer.
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err

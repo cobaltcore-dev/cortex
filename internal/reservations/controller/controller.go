@@ -24,6 +24,7 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 // ReservationReconciler reconciles a Reservation object
@@ -35,7 +36,7 @@ type ReservationReconciler struct {
 	// Kubernetes scheme to use for the reservations.
 	Scheme *runtime.Scheme
 	// Configuration for the controller.
-	Conf Config
+	Conf conf.Config
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

@@ -9,7 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	libconf "github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -46,7 +46,7 @@ type Step[RequestType PipelineRequest] interface {
 // that would otherwise be duplicated across all steps.
 type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 	// Options to pass via yaml to this step.
-	libconf.JsonOpts[Opts]
+	conf.JsonOpts[Opts]
 	// The activation function to use.
 	ActivationFunction
 	// The kubernetes client to use.
@@ -57,7 +57,7 @@ type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 
 // Init the step with the database and options.
 func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
-	opts := libconf.NewRawOptsBytes(step.Spec.Opts.Raw)
+	opts := conf.NewRawOptsBytes(step.Spec.Opts.Raw)
 	if err := s.Load(opts); err != nil {
 		return err
 	}

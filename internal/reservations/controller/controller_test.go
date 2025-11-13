@@ -19,6 +19,7 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 func TestReservationReconciler_Reconcile(t *testing.T) {
@@ -82,7 +83,7 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 			reconciler := &ReservationReconciler{
 				Client: client,
 				Scheme: scheme,
-				Conf: Config{
+				Conf: conf.Config{
 					Hypervisors: []string{"kvm", "vmware"},
 				},
 			}
@@ -138,7 +139,7 @@ func TestReservationReconciler_reconcileInstanceReservation(t *testing.T) {
 	tests := []struct {
 		name          string
 		reservation   *v1alpha1.Reservation
-		config        Config
+		config        conf.Config
 		mockResponse  *schedulerdelegationapi.ExternalSchedulerResponse
 		expectedPhase v1alpha1.ReservationStatusPhase
 		expectedError string
@@ -166,7 +167,7 @@ func TestReservationReconciler_reconcileInstanceReservation(t *testing.T) {
 					},
 				},
 			},
-			config: Config{
+			config: conf.Config{
 				Hypervisors: []string{"kvm", "vmware"},
 			},
 			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
@@ -195,7 +196,7 @@ func TestReservationReconciler_reconcileInstanceReservation(t *testing.T) {
 					},
 				},
 			},
-			config: Config{
+			config: conf.Config{
 				Hypervisors: []string{"kvm", "vmware"},
 			},
 			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
@@ -333,9 +334,9 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 	}))
 	defer server.Close()
 
-	config := Config{
+	config := conf.Config{
 		Hypervisors: []string{"kvm", "vmware"},
-		Endpoints: EndpointsConfig{
+		Endpoints: conf.EndpointsConfig{
 			NovaExternalScheduler: server.URL,
 		},
 	}

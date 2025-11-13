@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 func TestCleanupCinder(t *testing.T) {

@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -14,7 +15,7 @@ type mockHypervisorClient struct {
 	errToReturn         error
 }
 
-func (m *mockHypervisorClient) Init(ctx context.Context, client client.Client, conf Config) error {
+func (m *mockHypervisorClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return nil
 }
 

@@ -29,27 +29,31 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	libconf "github.com/cobaltcore-dev/cortex/pkg/conf"
+	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/ironcore/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
+	"github.com/cobaltcore-dev/cortex/internal/reservations/commitments"
+	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/reservations/controller"
+	decisionscinder "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/cinder"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/explanation"
+	decisionsmachines "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/machines"
+	decisionsmanila "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/manila"
+	decisionsnova "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/nova"
+	deschedulingnova "github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova"
+	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
+	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
+	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
+	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	cindershims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/cinder"
+	manilashims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/manila"
+	novashims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
-	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
-	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
-	decisionscinder "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/cinder"
-	"github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/explanation"
-	decisionsmachines "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/machines"
-	decisionsmanila "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/manila"
-	decisionsnova "github.com/cobaltcore-dev/cortex/scheduling/internal/decisions/nova"
-	deschedulingnova "github.com/cobaltcore-dev/cortex/scheduling/internal/descheduling/nova"
-	cindere2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/cinder"
-	manilae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/manila"
-	novae2e "github.com/cobaltcore-dev/cortex/scheduling/internal/e2e/nova"
-	lib "github.com/cobaltcore-dev/cortex/scheduling/internal/lib"
-	cindershims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/cinder"
-	manilashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/manila"
-	novashims "github.com/cobaltcore-dev/cortex/scheduling/internal/shims/nova"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/must"
 	corev1 "k8s.io/api/core/v1"
@@ -66,8 +70,6 @@ func init() {
 
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
-	utilruntime.Must(reservationsv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(knowledgev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
@@ -75,11 +77,11 @@ func init() {
 //nolint:gocyclo
 func main() {
 	ctx := context.Background()
-	config := libconf.GetConfigOrDie[conf.Config]()
+	config := conf.GetConfigOrDie[conf.Config]()
+	restConfig := ctrl.GetConfigOrDie()
 
-	// Custom entrypoint for e2e tests.
+	// Custom entrypoint for scheduler e2e tests.
 	if len(os.Args) == 2 {
-		restConfig := ctrl.GetConfigOrDie()
 		copts := client.Options{Scheme: scheme}
 		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
@@ -217,13 +219,13 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       config.Operator + "-scheduling-controller-leader-election-id",
+		LeaderElectionID:       config.Operator + "-controller-leader-election-id",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -243,8 +245,7 @@ func main() {
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
-	sharedConfig := libconf.GetConfigOrDie[libconf.SharedConfig]()
-	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, sharedConfig.MonitoringConfig)
+	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, config.Monitoring)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
@@ -255,7 +256,7 @@ func main() {
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
 	// pipeline.
-	pipelineMonitor := lib.NewPipelineMonitor()
+	pipelineMonitor := schedulinglib.NewPipelineMonitor()
 	metrics.Registry.MustRegister(&pipelineMonitor)
 
 	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
@@ -354,6 +355,72 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if slices.Contains(config.EnabledControllers, "reservations-controller") {
+		monitor := reservationscontroller.NewControllerMonitor(mgr.GetClient())
+		metrics.Registry.MustRegister(&monitor)
+		if err := (&reservationscontroller.ReservationReconciler{
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			Conf:             config,
+			HypervisorClient: reservationscontroller.NewHypervisorClient(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Reservation")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(config.EnabledControllers, "datasource-controllers") {
+		monitor := datasources.NewMonitor()
+		metrics.Registry.MustRegister(&monitor)
+		if err := (&openstack.OpenStackDatasourceReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Monitor: monitor,
+			Conf:    config,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "OpenStackDatasourceReconciler")
+			os.Exit(1)
+		}
+		if err := (&prometheus.PrometheusDatasourceReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Monitor: monitor,
+			Conf:    config,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(config.EnabledControllers, "knowledge-controllers") {
+		monitor := extractor.NewMonitor()
+		metrics.Registry.MustRegister(&monitor)
+		if err := (&extractor.KnowledgeReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Monitor: monitor,
+			Conf:    config,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "KnowledgeReconciler")
+			os.Exit(1)
+		}
+		if err := (&extractor.TriggerReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Conf:   config,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "TriggerReconciler")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(config.EnabledControllers, "kpis-controller") {
+		if err := (&kpis.Controller{
+			Client:              mgr.GetClient(),
+			SupportedKPIsByImpl: kpis.SupportedKPIsByImpl,
+			OperatorName:        config.Operator,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "KPIController")
+			os.Exit(1)
+		}
+	}
 
 	// +kubebuilder:scaffold:builder
 
@@ -380,6 +447,22 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
+	}
+
+	if slices.Contains(config.EnabledTasks, "commitments-sync-task") {
+		setupLog.Info("starting commitments syncer")
+		copts := client.Options{Scheme: scheme}
+		commitmentsKubernetesClient, err := client.New(restConfig, copts)
+		if err != nil {
+			setupLog.Error(err, "unable to create commitments kubernetes client")
+			os.Exit(1)
+		}
+		syncer := commitments.NewSyncer(commitmentsKubernetesClient)
+		if err := syncer.Init(ctx, config); err != nil {
+			setupLog.Error(err, "unable to initialize commitments syncer")
+			os.Exit(1)
+		}
+		go syncer.Run(ctx)
 	}
 
 	errchan := make(chan error)

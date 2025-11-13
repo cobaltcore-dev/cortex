@@ -10,8 +10,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/delegation/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/conf"
+
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

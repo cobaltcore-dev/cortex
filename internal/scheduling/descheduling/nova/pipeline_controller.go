@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/conf"
+
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/sapcc/go-bits/jobloop"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"

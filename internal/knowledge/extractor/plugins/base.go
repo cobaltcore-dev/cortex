@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	libconf "github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 )
 
@@ -17,7 +17,7 @@ import (
 // that would otherwise be duplicated across all extractors.
 type BaseExtractor[Opts any, Feature db.Table] struct {
 	// Options to pass via yaml to this step.
-	libconf.JsonOpts[Opts]
+	conf.JsonOpts[Opts]
 	// Database connection where the datasources are stored.
 	DB *db.DB
 	// Database connection where the features will be stored.
@@ -29,9 +29,9 @@ type BaseExtractor[Opts any, Feature db.Table] struct {
 
 // Init the extractor with the database and options.
 func (e *BaseExtractor[Opts, Feature]) Init(datasourceDB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
-	rawOpts := libconf.NewRawOpts(`{}`)
+	rawOpts := conf.NewRawOpts(`{}`)
 	if len(spec.Extractor.Config.Raw) > 0 {
-		rawOpts = libconf.NewRawOptsBytes(spec.Extractor.Config.Raw)
+		rawOpts = conf.NewRawOptsBytes(spec.Extractor.Config.Raw)
 	}
 	if err := e.Load(rawOpts); err != nil {
 		return err

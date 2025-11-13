@@ -14,7 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/vmware"
-	libconf "github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -272,9 +272,9 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		if jointDB == nil && dependenciesTotal > 0 {
 			return fmt.Errorf("kpi %s requires at least one datasource or knowledge with a database", obj.Name)
 		}
-		rawOpts := libconf.NewRawOpts(`{}`)
+		rawOpts := conf.NewRawOpts(`{}`)
 		if len(obj.Spec.Opts.Raw) > 0 {
-			rawOpts = libconf.NewRawOptsBytes(obj.Spec.Opts.Raw)
+			rawOpts = conf.NewRawOptsBytes(obj.Spec.Opts.Raw)
 		}
 		// Initialize KPI with database if available, otherwise with empty DB
 		var dbToUse db.DB
