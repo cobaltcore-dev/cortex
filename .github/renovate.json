@@ -6,7 +6,9 @@
     "mergeConfidence:all-badges",
     "docker:disable"
   ],
-  "assignees": [],
+  "assignees": [
+    "SoWieMarkus"
+  ],
   "commitMessageAction": "Renovate: Update",
   "constraints": {
     "go": "1.25"
