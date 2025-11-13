@@ -16,8 +16,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cobaltcore-dev/cortex/spawner/cli"
-	"github.com/cobaltcore-dev/cortex/spawner/defaults"
+	"github.com/cobaltcore-dev/cortex/tools/spawner/cli"
+	"github.com/cobaltcore-dev/cortex/tools/spawner/defaults"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
