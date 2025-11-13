@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
+	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )

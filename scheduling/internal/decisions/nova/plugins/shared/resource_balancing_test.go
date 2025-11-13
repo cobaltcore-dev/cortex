@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 )
 
 func TestResourceBalancingStep_Run(t *testing.T) {

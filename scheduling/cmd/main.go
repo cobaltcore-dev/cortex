@@ -30,9 +30,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	knowledgev1alpha1 "github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
+	libconf "github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
@@ -298,7 +298,6 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
 			os.Exit(1)
 		}
-
 	}
 	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
 		controller := &decisionsmanila.DecisionPipelineController{
@@ -329,7 +328,6 @@ func main() {
 		}
 		cindershims.NewAPI(config, controller).Init(mux)
 		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
-
 	}
 	if slices.Contains(config.EnabledControllers, "cortex-ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{

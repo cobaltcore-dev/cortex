@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	libconf "github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
 )
 
 // Common base for all extractors that provides some functionality

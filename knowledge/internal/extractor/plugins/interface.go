@@ -5,7 +5,7 @@ package plugins
 
 import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
 )
 
 // Each feature extractor must conform to this interface.

@@ -10,8 +10,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
+	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 )
 
 type mockIdentityAPI struct{}

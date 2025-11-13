@@ -3,14 +3,13 @@ module github.com/cobaltcore-dev/cortex/reservations
 go 1.25.0
 
 replace (
-	github.com/cobaltcore-dev/cortex/lib => ../lib
+	github.com/cobaltcore-dev/cortex/pkg => ../pkg
 	github.com/cobaltcore-dev/cortex/reservations/api => ./api
 	github.com/cobaltcore-dev/cortex/scheduling/api => ../scheduling/api
-	github.com/cobaltcore-dev/cortex/testlib => ../testlib
 )
 
 require (
-	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/pkg v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/scheduling/api v0.0.0-00010101000000-000000000000
 	github.com/gophercloud/gophercloud/v2 v2.8.0

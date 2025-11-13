@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/lib/monitoring"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -35,7 +35,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/kpis"
-	libconf "github.com/cobaltcore-dev/cortex/lib/conf"
+	libconf "github.com/cobaltcore-dev/cortex/pkg/conf"
 	// +kubebuilder:scaffold:imports
 )
 

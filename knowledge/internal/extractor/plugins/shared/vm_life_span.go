@@ -11,7 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
-	"github.com/cobaltcore-dev/cortex/lib/tools"
+	"github.com/cobaltcore-dev/cortex/pkg/tools"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

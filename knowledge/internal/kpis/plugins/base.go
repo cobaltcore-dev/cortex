@@ -4,8 +4,8 @@
 package plugins
 
 import (
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
 )
 
 // Common base for all KPIs that provides some functionality

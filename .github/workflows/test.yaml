@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'lib/go.mod'
+          go-version-file: 'pkg/go.mod'
       - name: Test quickly without Docker
         run: make test-fast
 
@@ -39,19 +39,19 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'lib/go.mod'
+          go-version-file: 'pkg/go.mod'
       - name: Run tests with Docker and calculate coverage
         run: |
           export GITHUB_ACTIONS=1
           export POSTGRES_CONTAINER=1
           export RABBITMQ_CONTAINER=1
 
-          echo "Running tests for lib module..."
-          cd lib
+          echo "Running tests for pkg module..."
+          cd pkg
           go test -v \
             -coverpkg=./... \
-            -coverprofile=lib_profile.cov ./...
-          go tool cover -func lib_profile.cov > lib_func_coverage.txt
+            -coverprofile=pkg_profile.cov ./...
+          go tool cover -func pkg_profile.cov > pkg_func_coverage.txt
           cd ..
 
           echo "Running tests for reservations module..."
@@ -83,7 +83,7 @@ jobs:
         with:
           name: pr-func-coverage
           path: |
-            lib/lib_func_coverage.txt
+            pkg/pkg_func_coverage.txt
             reservations/reservations_func_coverage.txt
             scheduling/scheduling_func_coverage.txt
             kpis/kpis_func_coverage.txt
@@ -123,18 +123,18 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            // Read lib module coverage report
-            let libCoverageReport = '';
-            let libCoveragePercentage = 'unknown';
+            // Read pkg module coverage report
+            let pkgCoverageReport = '';
+            let pkgCoveragePercentage = 'unknown';
             try {
-              libCoverageReport = fs.readFileSync('lib/lib_func_coverage.txt', 'utf8');
-              const libLines = libCoverageReport.trim().split('\n');
-              const libLastLine = libLines[libLines.length - 1];
-              const libCoverageMatch = libLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              libCoveragePercentage = libCoverageMatch ? libCoverageMatch[1] : 'unknown';
-              libCoveragePercentage = libCoverageMatch ? libCoverageMatch[1] : 'unknown';
+              pkgCoverageReport = fs.readFileSync('pkg/pkg_func_coverage.txt', 'utf8');
+              const pkgLines = pkgCoverageReport.trim().split('\n');
+              const pkgLastLine = pkgLines[pkgLines.length - 1];
+              const pkgCoverageMatch = pkgLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              pkgCoveragePercentage = pkgCoverageMatch ? pkgCoverageMatch[1] : 'unknown';
+              pkgCoveragePercentage = pkgCoverageMatch ? pkgCoverageMatch[1] : 'unknown';
             } catch (error) {
-              libCoverageReport = 'No coverage data available';
+              pkgCoverageReport = 'No coverage data available';
             }
 
             // Read reservations module coverage report
@@ -179,13 +179,13 @@ jobs:
             let commentBody = '<!-- coverage-comment -->\n';
             commentBody += '## Test Coverage Report\n\n';
 
-            // Lib module coverage
+            // Pkg module coverage
             commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in lib module (lib/): ';
-            commentBody += libCoveragePercentage;
+            commentBody += '<summary>Coverage in pkg module (pkg/): ';
+            commentBody += pkgCoveragePercentage;
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
-            commentBody += libCoverageReport;
+            commentBody += pkgCoverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n\n';
 

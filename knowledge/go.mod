@@ -4,14 +4,12 @@ go 1.25.0
 
 replace (
 	github.com/cobaltcore-dev/cortex/knowledge/api => ../knowledge/api
-	github.com/cobaltcore-dev/cortex/lib => ../lib
-	github.com/cobaltcore-dev/cortex/testlib => ../testlib
+	github.com/cobaltcore-dev/cortex/pkg => ../pkg
 )
 
 require (
 	github.com/cobaltcore-dev/cortex/knowledge/api v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/pkg v0.0.0-00010101000000-000000000000
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/prometheus/client_golang v1.23.2

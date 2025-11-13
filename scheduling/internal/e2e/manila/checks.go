@@ -11,8 +11,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
-	"github.com/cobaltcore-dev/cortex/lib/sso"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"

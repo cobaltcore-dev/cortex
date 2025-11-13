@@ -12,7 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/lib/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

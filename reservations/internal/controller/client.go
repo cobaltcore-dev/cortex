@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
-	"github.com/cobaltcore-dev/cortex/lib/sso"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-bits/must"
 	ctrl "sigs.k8s.io/controller-runtime"

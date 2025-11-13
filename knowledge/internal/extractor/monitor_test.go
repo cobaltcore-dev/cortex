@@ -9,7 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )

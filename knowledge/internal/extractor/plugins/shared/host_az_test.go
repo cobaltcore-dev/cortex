@@ -11,9 +11,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/testlib"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
+	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 func TestHostDetailsExtractor_Init(t *testing.T) {

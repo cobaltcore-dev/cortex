@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
+	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
 )
 
 func TestGeneralPurposeBalancingStepOpts_Validate(t *testing.T) {

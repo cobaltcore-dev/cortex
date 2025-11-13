@@ -14,7 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"

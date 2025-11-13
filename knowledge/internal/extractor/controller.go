@@ -15,7 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/extractor/plugins/vmware"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

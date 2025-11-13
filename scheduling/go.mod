@@ -4,18 +4,16 @@ go 1.25.0
 
 replace (
 	github.com/cobaltcore-dev/cortex/knowledge/api => ../knowledge/api
-	github.com/cobaltcore-dev/cortex/lib => ../lib
+	github.com/cobaltcore-dev/cortex/pkg => ../pkg
 	github.com/cobaltcore-dev/cortex/reservations/api => ../reservations/api
 	github.com/cobaltcore-dev/cortex/scheduling/api => ../scheduling/api
-	github.com/cobaltcore-dev/cortex/testlib => ../testlib
 )
 
 require (
 	github.com/cobaltcore-dev/cortex/knowledge/api v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/lib v0.0.0-00010101000000-000000000000
+	github.com/cobaltcore-dev/cortex/pkg v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/reservations/api v0.0.0-00010101000000-000000000000
 	github.com/cobaltcore-dev/cortex/scheduling/api v0.0.0-00010101000000-000000000000
-	github.com/cobaltcore-dev/cortex/testlib v0.0.0-00010101000000-000000000000
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/sapcc/go-bits v0.0.0-20251106135743-875cf285580d

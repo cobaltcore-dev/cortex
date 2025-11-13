@@ -12,9 +12,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 
-	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
+	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"
 )
 
 func setupIdentityMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {

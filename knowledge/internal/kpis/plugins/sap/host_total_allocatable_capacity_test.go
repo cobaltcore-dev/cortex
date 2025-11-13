@@ -9,10 +9,10 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/sap"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	"github.com/cobaltcore-dev/cortex/testlib"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
+	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 )

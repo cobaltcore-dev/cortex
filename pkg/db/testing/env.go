@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/testlib/db/containers"
+	"github.com/cobaltcore-dev/cortex/pkg/db/testing/containers"
 	"github.com/go-gorp/gorp"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sapcc/go-bits/easypg"

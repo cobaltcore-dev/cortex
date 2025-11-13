@@ -11,8 +11,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/datasources"
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
-	testlibKeystone "github.com/cobaltcore-dev/cortex/testlib/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
+	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"
 	"github.com/gophercloud/gophercloud/v2"
 )
 

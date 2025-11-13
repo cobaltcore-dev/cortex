@@ -11,8 +11,8 @@ import (
 	gosync "sync"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
-	"github.com/cobaltcore-dev/cortex/lib/sso"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"

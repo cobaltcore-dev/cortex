@@ -9,11 +9,11 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/sap"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/shared"
-	"github.com/cobaltcore-dev/cortex/lib/tools"
+	"github.com/cobaltcore-dev/cortex/pkg/tools"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/internal/kpis/plugins"
-	"github.com/cobaltcore-dev/cortex/lib/conf"
-	"github.com/cobaltcore-dev/cortex/lib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

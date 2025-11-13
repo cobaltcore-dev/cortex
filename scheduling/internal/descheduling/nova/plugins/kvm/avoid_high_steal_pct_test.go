@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/features/kvm"
-	"github.com/cobaltcore-dev/cortex/lib/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/testlib/db"
+	"github.com/cobaltcore-dev/cortex/pkg/db"
+	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 )
 
 // Decision represents a descheduling decision for testing

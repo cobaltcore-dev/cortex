@@ -16,8 +16,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/knowledge/api/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
-	"github.com/cobaltcore-dev/cortex/lib/sso"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	api "github.com/cobaltcore-dev/cortex/scheduling/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
 	"github.com/gophercloud/gophercloud/v2"

@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/lib/keystone"
-	"github.com/cobaltcore-dev/cortex/lib/sso"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	reservationsv1alpha1 "github.com/cobaltcore-dev/cortex/reservations/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/scheduling/internal/conf"
