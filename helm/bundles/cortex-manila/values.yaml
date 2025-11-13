@@ -59,10 +59,28 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
-monitoring: &globalMonitoring
-  labels:
-    github_org: cobaltcore-dev
-    github_repo: cortex
+cortex:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-manila
+  conf:
+    keystoneSecretRef:
+      name: cortex-manila-openstack-keystone
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-manila-openstack-sso
+    #   namespace: default
+    monitoring:
+      labels:
+        github_org: cobaltcore-dev
+        github_repo: cortex
+    enabledControllers:
+      - manila-decisions-pipeline-controller
+      - explanation-controller
+      - datasource-controllers
+      - knowledge-controllers
+      - kpis-controller
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
@@ -73,32 +91,3 @@ cortex-alerts:
   fullnameOverride: cortex-manila
   alerts:
     componentPrefix: cortex-manila
-
-cortex-knowledge-operator:
-  # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-manila
-  conf:
-    # The operator will only touch CRs with this operator name.
-    operator: cortex-manila
-    monitoring: *globalMonitoring
-
-cortex-scheduling-operator:
-  # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-manila
-  conf:
-    # The operator will only touch CRs with this operator name.
-    operator: cortex-manila
-    keystoneSecretRef:
-      name: cortex-manila-openstack-keystone
-      namespace: default
-    monitoring: *globalMonitoring
-    # ssoSecretRef:
-    #   name: cortex-manila-openstack-sso
-    #   namespace: default
-    enabledControllers:
-      - manila-decisions-pipeline-controller
-      - explanation-controller

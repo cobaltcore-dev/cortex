@@ -18,12 +18,7 @@ alerts:
   enabled: true
   prometheus: openstack
 
-monitoring: &globalMonitoring
-  labels:
-    github_org: cobaltcore-dev
-    github_repo: cortex
-
-cortex-scheduling-operator:
+cortex:
   enabled: false
   # CRDs are deployed in the cortex-crds chart.
   crd: {enable: false}
@@ -35,4 +30,7 @@ cortex-scheduling-operator:
     enabledControllers:
       - ironcore-decisions-pipeline-controller
       - explanation-controller
-    monitoring: *globalMonitoring
+    monitoring:
+      labels:
+        github_org: cobaltcore-dev
+        github_repo: cortex

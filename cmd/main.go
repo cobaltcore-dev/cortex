@@ -315,7 +315,7 @@ func main() {
 		manilashims.NewAPI(config, controller).Init(mux)
 		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
 	}
-	if slices.Contains(config.EnabledControllers, "cortex-cinder-decisions-pipeline-controller") {
+	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &decisionscinder.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
@@ -330,7 +330,7 @@ func main() {
 		cindershims.NewAPI(config, controller).Init(mux)
 		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
 	}
-	if slices.Contains(config.EnabledControllers, "cortex-ironcore-decisions-pipeline-controller") {
+	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,

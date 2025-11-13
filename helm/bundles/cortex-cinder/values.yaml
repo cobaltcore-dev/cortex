@@ -59,10 +59,28 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
-monitoring: &globalMonitoring
-  labels:
-    github_org: cobaltcore-dev
-    github_repo: cortex
+cortex:
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-cinder
+  conf:
+    keystoneSecretRef:
+      name: cortex-cinder-openstack-keystone
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-cinder-openstack-sso
+    #   namespace: default
+    monitoring:
+      labels:
+        github_org: cobaltcore-dev
+        github_repo: cortex
+    enabledControllers:
+      - cinder-decisions-pipeline-controller
+      - explanation-controller
+      - datasource-controllers
+      - knowledge-controllers
+      - kpis-controller
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
@@ -73,32 +91,3 @@ cortex-alerts:
   fullnameOverride: cortex-cinder
   alerts:
     componentPrefix: cortex-cinder
-
-cortex-knowledge-operator:
-  # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-cinder
-  conf:
-    # The operator will only touch CRs with this operator name.
-    operator: cortex-cinder
-    monitoring: *globalMonitoring
-
-cortex-scheduling-operator:
-  # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-cinder
-  conf:
-    # The operator will only touch CRs with this operator name.
-    operator: cortex-cinder
-    keystoneSecretRef:
-      name: cortex-cinder-openstack-keystone
-      namespace: default
-    monitoring: *globalMonitoring
-    # ssoSecretRef:
-    #   name: cortex-cinder-openstack-sso
-    #   namespace: default
-    enabledControllers:
-      - cinder-decisions-pipeline-controller
-      - explanation-controller
