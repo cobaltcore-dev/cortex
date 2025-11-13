@@ -25,9 +25,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   dnsNames:
-    - scheduling.{{ .Release.Namespace }}.svc
-    - scheduling.{{ .Release.Namespace }}.svc.cluster.local
-    - scheduling-metrics-service.{{ .Release.Namespace }}.svc
+    - cortex.{{ .Release.Namespace }}.svc
+    - cortex.{{ .Release.Namespace }}.svc.cluster.local
+    - cortex-metrics-service.{{ .Release.Namespace }}.svc
   issuerRef:
     kind: Issuer
     name: selfsigned-issuer

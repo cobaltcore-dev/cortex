@@ -10,9 +10,9 @@ metadata:
     "helm.sh/resource-policy": keep
     {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: steps.scheduling.cortex
+  name: steps.cortex
 spec:
-  group: scheduling.cortex
+  group: cortex
   names:
     kind: Step
     listKind: StepList

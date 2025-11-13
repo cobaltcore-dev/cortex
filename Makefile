@@ -9,10 +9,6 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) crd:allowDangerousTypes=true object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
-.PHONY: cleanup
-cleanup:
-	rm -rf ./.github
-
 .PHONY: dekustomize
 dekustomize:
 	@echo "Backing up stuff that shouldn't be overridden by kubebuilder-helm..."
@@ -25,6 +21,13 @@ dekustomize:
 	fi; \
 	if [ -d "dist/chart/templates/metrics" ]; then \
 		cp -r dist/chart/templates/metrics "$$TEMP_DIR/metrics"; \
+	fi; \
+	if [ -n "$$(ls dist/chart/templates/crd/compute*.yaml 2>/dev/null)" ]; then \
+		mkdir -p "$$TEMP_DIR/crd"; \
+		cp dist/chart/templates/crd/compute*.yaml "$$TEMP_DIR/crd/"; \
+	fi; \
+	if [ -d ".github" ]; then \
+		cp -r .github "$$TEMP_DIR/github"; \
 	fi; \
 	echo "Generating helm chart..."; \
 	kubebuilder edit --plugins=helm/v1-alpha; \
@@ -41,14 +44,20 @@ dekustomize:
 		rm -rf dist/chart/templates/metrics; \
 		cp -r "$$TEMP_DIR/metrics" dist/chart/templates/metrics; \
 	fi; \
+	if [ -d "$$TEMP_DIR/crd" ]; then \
+		cp "$$TEMP_DIR/crd"/compute*.yaml dist/chart/templates/crd/; \
+	fi; \
+	if [ -d "$$TEMP_DIR/github" ]; then \
+		rm -rf .github; \
+		cp -r "$$TEMP_DIR/github" .github; \
+	fi; \
 	rm -rf "$$TEMP_DIR"; \
-	git checkout dist/chart/templates/crd/compute*
 	echo "Directories restored successfully."
 
 ##@ Build
 
 .PHONY: build
-build: manifests generate dekustomize cleanup
+build: manifests generate dekustomize
 
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):

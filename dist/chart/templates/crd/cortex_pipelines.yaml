@@ -10,9 +10,9 @@ metadata:
     "helm.sh/resource-policy": keep
     {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: pipelines.scheduling.cortex
+  name: pipelines.cortex
 spec:
-  group: scheduling.cortex
+  group: cortex
   names:
     kind: Pipeline
     listKind: PipelineList
