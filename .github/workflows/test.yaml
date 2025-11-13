@@ -44,50 +44,19 @@ jobs:
         run: |
           export GITHUB_ACTIONS=1
           export POSTGRES_CONTAINER=1
-          export RABBITMQ_CONTAINER=1
 
-          echo "Running tests for pkg module..."
-          cd pkg
+          echo "Running tests..."
           go test -v \
             -coverpkg=./... \
-            -coverprofile=pkg_profile.cov ./...
-          go tool cover -func pkg_profile.cov > pkg_func_coverage.txt
-          cd ..
-
-          echo "Running tests for reservations module..."
-          cd reservations
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=reservations_profile.cov ./internal/...
-          go tool cover -func reservations_profile.cov > reservations_func_coverage.txt
-          cd ..
-
-          echo "Running tests for the scheduling module..."
-          cd scheduling
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=scheduling_profile.cov ./internal/...
-          go tool cover -func scheduling_profile.cov > scheduling_func_coverage.txt
-          cd ..
-
-          echo "Running tests for the knowledge module..."
-          cd knowledge
-          go test -v \
-            -coverpkg=./internal/... \
-            -coverprofile=knowledge_profile.cov ./internal/...
-          go tool cover -func knowledge_profile.cov > knowledge_func_coverage.txt
-          cd ..
+            -coverprofile=profile.cov ./...
+          go tool cover -func profile.cov > func_coverage.txt
 
       - name: Upload coverage files
         uses: actions/upload-artifact@v5
         with:
           name: pr-func-coverage
           path: |
-            pkg/pkg_func_coverage.txt
-            reservations/reservations_func_coverage.txt
-            scheduling/scheduling_func_coverage.txt
-            kpis/kpis_func_coverage.txt
-            knowledge/knowledge_func_coverage.txt
+            func_coverage.txt
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
@@ -124,56 +93,17 @@ jobs:
             const path = require('path');
 
             // Read pkg module coverage report
-            let pkgCoverageReport = '';
-            let pkgCoveragePercentage = 'unknown';
+            let coverageReport = '';
+            let coveragePercentage = 'unknown';
             try {
-              pkgCoverageReport = fs.readFileSync('pkg/pkg_func_coverage.txt', 'utf8');
-              const pkgLines = pkgCoverageReport.trim().split('\n');
-              const pkgLastLine = pkgLines[pkgLines.length - 1];
-              const pkgCoverageMatch = pkgLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              pkgCoveragePercentage = pkgCoverageMatch ? pkgCoverageMatch[1] : 'unknown';
-              pkgCoveragePercentage = pkgCoverageMatch ? pkgCoverageMatch[1] : 'unknown';
+              coverageReport = fs.readFileSync('func_coverage.txt', 'utf8');
+              const lines = coverageReport.trim().split('\n');
+              const lastLine = lines[lines.length - 1];
+              const coverageMatch = lastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
+              coveragePercentage = coverageMatch ? coverageMatch[1] : 'unknown';
+              coveragePercentage = coverageMatch ? coverageMatch[1] : 'unknown';
             } catch (error) {
-              pkgCoverageReport = 'No coverage data available';
-            }
-
-            // Read reservations module coverage report
-            let reservationsCoverageReport = '';
-            let reservationsCoveragePercentage = 'unknown';
-            try {
-              reservationsCoverageReport = fs.readFileSync('reservations/reservations_func_coverage.txt', 'utf8');
-              const reservationsLines = reservationsCoverageReport.trim().split('\n');
-              const reservationsLastLine = reservationsLines[reservationsLines.length - 1];
-              const reservationsCoverageMatch = reservationsLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              reservationsCoveragePercentage = reservationsCoverageMatch ? reservationsCoverageMatch[1] : 'unknown';
-            } catch (error) {
-              reservationsCoverageReport = 'No coverage data available';
-            }
-
-            // Read scheduling module coverage report
-            let schedulingCoverageReport = '';
-            let schedulingCoveragePercentage = 'unknown';
-            try {
-              schedulingCoverageReport = fs.readFileSync('scheduling/scheduling_func_coverage.txt', 'utf8');
-              const schedulingLines = schedulingCoverageReport.trim().split('\n');
-              const schedulingLastLine = schedulingLines[schedulingLines.length - 1];
-              const schedulingCoverageMatch = schedulingLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              schedulingCoveragePercentage = schedulingCoverageMatch ? schedulingCoverageMatch[1] : 'unknown';
-            } catch (error) {
-              schedulingCoverageReport = 'No coverage data available';
-            }
-
-            // Read knowledge module coverage report
-            let knowledgeCoverageReport = '';
-            let knowledgeCoveragePercentage = 'unknown';
-            try {
-              knowledgeCoverageReport = fs.readFileSync('knowledge/knowledge_func_coverage.txt', 'utf8');
-              const knowledgeLines = knowledgeCoverageReport.trim().split('\n');
-              const knowledgeLastLine = knowledgeLines[knowledgeLines.length - 1];
-              const knowledgeCoverageMatch = knowledgeLastLine.match(/total:\s+\(statements\)\s+(\d+\.\d+)%/);
-              knowledgeCoveragePercentage = knowledgeCoverageMatch ? knowledgeCoverageMatch[1] : 'unknown';
-            } catch (error) {
-              knowledgeCoverageReport = 'No coverage data available';
+              coverageReport = 'No coverage data available';
             }
 
             let commentBody = '<!-- coverage-comment -->\n';
@@ -181,43 +111,13 @@ jobs:
 
             // Pkg module coverage
             commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in pkg module (pkg/): ';
-            commentBody += pkgCoveragePercentage;
+            commentBody += '<summary>Test Coverage 📊: ';
+            commentBody += coveragePercentage;
             commentBody += '%</summary>\n\n';
             commentBody += '```text\n';
-            commentBody += pkgCoverageReport;
+            commentBody += coverageReport;
             commentBody += '```\n';
             commentBody += '</details>\n\n';
-
-            // Reservations module coverage
-            commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in reservations module (reservations/internal/): ';
-            commentBody += reservationsCoveragePercentage;
-            commentBody += '%</summary>\n\n';
-            commentBody += '```text\n';
-            commentBody += reservationsCoverageReport;
-            commentBody += '```\n';
-            commentBody += '</details>\n\n';
-
-            // Scheduling module coverage
-            commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in scheduling module (scheduling/internal/): ';
-            commentBody += schedulingCoveragePercentage;
-            commentBody += '%</summary>\n\n';
-            commentBody += '```text\n';
-            commentBody += schedulingCoverageReport;
-            commentBody += '```\n';
-            commentBody += '</details>\n';
-
-            // Knowledge module coverage
-            commentBody += '<details>\n';
-            commentBody += '<summary>Coverage in knowledge module (knowledge/internal/): ';
-            commentBody += knowledgeCoveragePercentage;
-            commentBody += '%</summary>\n\n';
-            commentBody += '```text\n';
-            commentBody += knowledgeCoverageReport;
-            commentBody += '```\n';
-            commentBody += '</details>\n';
 
             // Post the comment
             await github.rest.issues.createComment({

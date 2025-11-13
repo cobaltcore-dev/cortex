@@ -30,27 +30,6 @@ jobs:
           files: |
             postgres/**
 
-      - name: Get all changed reservations/ files
-        id: changed_reservations_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            reservations/**
-
-      - name: Get all changed scheduling/ files
-        id: changed_scheduling_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            scheduling/**
-
-      - name: Get all changed knowledge/ files
-        id: changed_knowledge_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            knowledge/**
-
       # Only bumped if there are changes in the postgres directory.
       - name: Update appVersion in cortex-postgres Chart.yaml
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
@@ -65,44 +44,14 @@ jobs:
           git commit -m "Bump cortex-postgres chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
 
-      # Only bumped if there are changes in the reservations directory.
-      - name: Update appVersion in cortex-reservations Chart.yaml
-        if: steps.changed_reservations_files.outputs.all_changed_files != ''
+      - name: Update appVersion in dist/chart/Chart.yaml
         run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' reservations/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-reservations
-        if: steps.changed_reservations_files.outputs.all_changed_files != ''
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex
+        if: steps.changed_files.outputs.all_changed_files != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add reservations/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-reservations chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
-
-      # Only bumped if there are changes in the scheduling directory.
-      - name: Update appVersion in cortex-scheduling Chart.yaml
-        if: steps.changed_scheduling_files.outputs.all_changed_files != ''
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' scheduling/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-scheduling
-        if: steps.changed_scheduling_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add scheduling/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-scheduling chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
-
-      # Only bumped if there are changes in the knowledge directory.
-      - name: Update appVersion in cortex-knowledge Chart.yaml
-        if: steps.changed_knowledge_files.outputs.all_changed_files != ''
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' knowledge/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-knowledge
-        if: steps.changed_knowledge_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add knowledge/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-knowledge chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git add dist/chart/Chart.yaml
+          git commit -m "Bump cortex chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main

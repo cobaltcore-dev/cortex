@@ -15,5 +15,5 @@ spec:
       name: https
   selector:
     control-plane: controller-manager
-    app.kubernetes.io/name: cortex-scheduling-operator
+    app.kubernetes.io/name: {{ .Values.namePrefix }}
 {{- end }}
