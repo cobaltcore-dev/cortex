@@ -1,5 +1,5 @@
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: netapp-aggr-labels-cinder
@@ -22,7 +22,7 @@ spec:
     query: netapp_aggr_labels
     type: netapp_aggregate_labels_metric
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: netapp-node-cpu-busy-cinder
@@ -45,7 +45,7 @@ spec:
     query: netapp_node_cpu_busy
     type: netapp_node_metric
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: netapp-volume-aggr-labels
@@ -68,7 +68,7 @@ spec:
     query: netapp_volume_aggr_labels
     type: netapp_volume_aggregate_labels_metric
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: cinder-storage-pools

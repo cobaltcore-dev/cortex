@@ -4,33 +4,39 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: kpis.cortex
+  name: knowledges.cortex.cloud
 spec:
-  group: cortex
+  group: cortex.cloud
   names:
-    kind: KPI
-    listKind: KPIList
-    plural: kpis
-    singular: kpi
+    kind: Knowledge
+    listKind: KnowledgeList
+    plural: knowledges
+    singular: knowledge
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .metadata.creationTimestamp
-      name: Created
-      type: date
     - jsonPath: .spec.operator
       name: Operator
       type: string
-    - jsonPath: .status.ready
-      name: Ready
-      type: boolean
-    - jsonPath: .status.dependenciesReadyFrac
-      name: Dependencies
+    - jsonPath: .metadata.creationTimestamp
+      name: Created
+      type: date
+    - jsonPath: .status.lastExtracted
+      name: Extracted
+      type: date
+    - jsonPath: .status.took
+      name: Took
       type: string
+    - jsonPath: .spec.recency
+      name: Recency
+      type: string
+    - jsonPath: .status.rawLength
+      name: Features
+      type: integer
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: KPI is the Schema for the deschedulings API
+        description: Knowledge is the Schema for the knowledges API
         properties:
           apiVersion:
             description: |-
@@ -50,13 +56,41 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of KPI
+            description: spec defines the desired state of Knowledge
             properties:
+              databaseSecretRef:
+                description: |-
+                  Database credentials for the database where the knowledge will be stored.
+
+                  Note: this is a legacy feature to stay compatible with the cortex scheduler.
+                  Once the scheduler is moved to use the knowledge via CRs only, we can
+                  remove this.
+
+                  The secret should contain the following keys:
+                  - "username": The database username.
+                  - "password": The database password.
+                  - "host": The database host.
+                  - "port": The database port.
+                  - "database": The database name.
+                properties:
+                  name:
+                    description: name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               dependencies:
-                description: Dependencies required for extracting this kpi.
+                description: Dependencies required for extracting this knowledge.
                 properties:
                   datasources:
-                    description: Datasources required for extracting this kpi.
+                    description: |-
+                      Datasources required for extracting this knowledge.
+                      If provided, all datasources must have the same database secret reference
+                      so the knowledge can be joined across multiple database tables.
                     items:
                       description: ObjectReference contains enough information to
                         let you inspect or modify the referred object.
@@ -103,7 +137,7 @@ spec:
                       x-kubernetes-map-type: atomic
                     type: array
                   knowledges:
-                    description: Knowledges this kpi depends on.
+                    description: Other knowledges this knowledge depends on.
                     items:
                       description: ObjectReference contains enough information to
                         let you inspect or modify the referred object.
@@ -151,29 +185,46 @@ spec:
                     type: array
                 type: object
               description:
-                description: |-
-                  Additional description of the kpi which helps understand its purpose
-                  and decisions made by it.
+                description: A human-readable description of the knowledge to be extracted.
                 type: string
-              impl:
-                description: The name of the kpi in the cortex implementation.
-                type: string
-              operator:
-                description: The operator by which this kpi should be executed.
-                type: string
-              opts:
-                description: Additional configuration for the extractor that can be
-                  used
+              extractor:
+                description: The feature extractor to use for extracting this knowledge.
+                properties:
+                  config:
+                    description: Additional configuration for the extractor.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  name:
+                    description: The name of the extractor.
+                    type: string
                 type: object
-                x-kubernetes-preserve-unknown-fields: true
+              operator:
+                description: The operator by which this knowledge should be extracted.
+                type: string
+              recency:
+                default: 60s
+                description: |-
+                  The desired recency of this knowledge, i.e. how old it can be until
+                  it needs to be re-extracted.
+                type: string
+              storeInDatabaseOnly:
+                default: false
+                description: |-
+                  Whether the knowledge should only be stored in the database and not
+                  in the CR status.
+
+                  Note: this is a legacy feature. Features should always contain condensed
+                  knowledge in the CR status for easy access.
+                type: boolean
             required:
-            - impl
+            - databaseSecretRef
+            - recency
             type: object
           status:
-            description: status defines the observed state of KPI
+            description: status defines the observed state of Knowledge
             properties:
               conditions:
-                description: The current status conditions of the kpi.
+                description: The current status conditions of the knowledge.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -229,24 +280,22 @@ spec:
                   - type
                   type: object
                 type: array
-              dependenciesReadyFrac:
-                description: |-
-                  "ReadyDependencies / TotalDependencies ready" as a human-readable string
-                  or "ready" if there are no dependencies configured.
+              lastExtracted:
+                description: When the knowledge was last successfully extracted.
+                format: date-time
                 type: string
-              ready:
-                description: If the kpi is ready to be executed.
-                type: boolean
-              readyDependencies:
-                description: How many dependencies have been reconciled.
+              raw:
+                description: The raw data behind the extracted knowledge, e.g. a list
+                  of features.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              rawLength:
+                description: The number of features extracted, or 1 if the knowledge
+                  is not a list.
                 type: integer
-              totalDependencies:
-                description: Total number of dependencies configured.
-                type: integer
-            required:
-            - ready
-            - readyDependencies
-            - totalDependencies
+              took:
+                description: The time it took to perform the last extraction.
+                type: string
             type: object
         required:
         - spec

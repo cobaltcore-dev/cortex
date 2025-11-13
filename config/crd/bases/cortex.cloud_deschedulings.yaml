@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: deschedulings.cortex
+  name: deschedulings.cortex.cloud
 spec:
-  group: cortex
+  group: cortex.cloud
   names:
     kind: Descheduling
     listKind: DeschedulingList

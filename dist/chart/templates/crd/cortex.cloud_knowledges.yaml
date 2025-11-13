@@ -10,9 +10,9 @@ metadata:
     "helm.sh/resource-policy": keep
     {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: knowledges.cortex
+  name: knowledges.cortex.cloud
 spec:
-  group: cortex
+  group: cortex.cloud
   names:
     kind: Knowledge
     listKind: KnowledgeList

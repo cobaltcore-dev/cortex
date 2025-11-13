@@ -1,23 +1,17 @@
-{{- if .Values.crd.enable }}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  labels:
-    {{- include "chart.labels" . | nindent 4 }}
   annotations:
-    {{- if .Values.crd.keep }}
-    "helm.sh/resource-policy": keep
-    {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: kpis.cortex
+  name: pipelines.cortex.cloud
 spec:
-  group: cortex
+  group: cortex.cloud
   names:
-    kind: KPI
-    listKind: KPIList
-    plural: kpis
-    singular: kpi
+    kind: Pipeline
+    listKind: PipelineList
+    plural: pipelines
+    singular: pipeline
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -27,16 +21,19 @@ spec:
     - jsonPath: .spec.operator
       name: Operator
       type: string
+    - jsonPath: .spec.type
+      name: Type
+      type: string
     - jsonPath: .status.ready
       name: Ready
       type: boolean
-    - jsonPath: .status.dependenciesReadyFrac
-      name: Dependencies
+    - jsonPath: .status.stepsReadyFrac
+      name: Steps
       type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: KPI is the Schema for the deschedulings API
+        description: Pipeline is the Schema for the decisions API
         properties:
           apiVersion:
             description: |-
@@ -56,130 +53,82 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of KPI
+            description: spec defines the desired state of Pipeline
             properties:
-              dependencies:
-                description: Dependencies required for extracting this kpi.
-                properties:
-                  datasources:
-                    description: Datasources required for extracting this kpi.
-                    items:
-                      description: ObjectReference contains enough information to
-                        let you inspect or modify the referred object.
-                      properties:
-                        apiVersion:
-                          description: API version of the referent.
-                          type: string
-                        fieldPath:
-                          description: |-
-                            If referring to a piece of an object instead of an entire object, this string
-                            should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                            For example, if the object reference is to a container within a pod, this would take on a value like:
-                            "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                            the event) or if no container name is specified "spec.containers[2]" (container with
-                            index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                            referencing a part of an object.
-                          type: string
-                        kind:
-                          description: |-
-                            Kind of the referent.
-                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                          type: string
-                        name:
-                          description: |-
-                            Name of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          type: string
-                        namespace:
-                          description: |-
-                            Namespace of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                          type: string
-                        resourceVersion:
-                          description: |-
-                            Specific resourceVersion to which this reference is made, if any.
-                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                          type: string
-                        uid:
-                          description: |-
-                            UID of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                          type: string
-                      type: object
-                      x-kubernetes-map-type: atomic
-                    type: array
-                  knowledges:
-                    description: Knowledges this kpi depends on.
-                    items:
-                      description: ObjectReference contains enough information to
-                        let you inspect or modify the referred object.
-                      properties:
-                        apiVersion:
-                          description: API version of the referent.
-                          type: string
-                        fieldPath:
-                          description: |-
-                            If referring to a piece of an object instead of an entire object, this string
-                            should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                            For example, if the object reference is to a container within a pod, this would take on a value like:
-                            "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                            the event) or if no container name is specified "spec.containers[2]" (container with
-                            index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                            referencing a part of an object.
-                          type: string
-                        kind:
-                          description: |-
-                            Kind of the referent.
-                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                          type: string
-                        name:
-                          description: |-
-                            Name of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          type: string
-                        namespace:
-                          description: |-
-                            Namespace of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                          type: string
-                        resourceVersion:
-                          description: |-
-                            Specific resourceVersion to which this reference is made, if any.
-                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                          type: string
-                        uid:
-                          description: |-
-                            UID of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                          type: string
-                      type: object
-                      x-kubernetes-map-type: atomic
-                    type: array
-                type: object
               description:
-                description: |-
-                  Additional description of the kpi which helps understand its purpose
-                  and decisions made by it.
-                type: string
-              impl:
-                description: The name of the kpi in the cortex implementation.
+                description: An optional description of the pipeline.
                 type: string
               operator:
-                description: The operator by which this kpi should be executed.
+                description: The operator by which this pipeline should be handled.
                 type: string
-              opts:
-                description: Additional configuration for the extractor that can be
-                  used
-                type: object
-                x-kubernetes-preserve-unknown-fields: true
+              steps:
+                description: The ordered list of steps that make up this pipeline.
+                items:
+                  properties:
+                    mandatory:
+                      default: true
+                      description: Whether this step is mandatory for the pipeline
+                        to be runnable.
+                      type: boolean
+                    ref:
+                      description: Reference to the step.
+                      properties:
+                        apiVersion:
+                          description: API version of the referent.
+                          type: string
+                        fieldPath:
+                          description: |-
+                            If referring to a piece of an object instead of an entire object, this string
+                            should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                            For example, if the object reference is to a container within a pod, this would take on a value like:
+                            "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                            the event) or if no container name is specified "spec.containers[2]" (container with
+                            index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                            referencing a part of an object.
+                          type: string
+                        kind:
+                          description: |-
+                            Kind of the referent.
+                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                          type: string
+                        name:
+                          description: |-
+                            Name of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                        namespace:
+                          description: |-
+                            Namespace of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                          type: string
+                        resourceVersion:
+                          description: |-
+                            Specific resourceVersion to which this reference is made, if any.
+                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                          type: string
+                        uid:
+                          description: |-
+                            UID of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  required:
+                  - mandatory
+                  - ref
+                  type: object
+                type: array
+              type:
+                description: The type of the pipeline.
+                type: string
             required:
-            - impl
+            - type
             type: object
           status:
-            description: status defines the observed state of KPI
+            description: status defines the observed state of Pipeline
             properties:
               conditions:
-                description: The current status conditions of the kpi.
+                description: The current status conditions of the pipeline.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -235,24 +184,24 @@ spec:
                   - type
                   type: object
                 type: array
-              dependenciesReadyFrac:
-                description: |-
-                  "ReadyDependencies / TotalDependencies ready" as a human-readable string
-                  or "ready" if there are no dependencies configured.
-                type: string
               ready:
-                description: If the kpi is ready to be executed.
+                description: Whether the pipeline is ready to be used.
                 type: boolean
-              readyDependencies:
-                description: How many dependencies have been reconciled.
+              readySteps:
+                description: The number of steps that are ready.
                 type: integer
-              totalDependencies:
-                description: Total number of dependencies configured.
+              stepsReadyFrac:
+                description: |-
+                  An overview of the readiness of the steps in the pipeline.
+                  Format: "ReadySteps / TotalSteps steps ready".
+                type: string
+              totalSteps:
+                description: The total number of steps configured in the pipeline.
                 type: integer
             required:
             - ready
-            - readyDependencies
-            - totalDependencies
+            - readySteps
+            - totalSteps
             type: object
         required:
         - spec
@@ -261,4 +210,3 @@ spec:
     storage: true
     subresources:
       status: {}
-{{- end -}}

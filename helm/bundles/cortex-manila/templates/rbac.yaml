@@ -11,36 +11,10 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cortex-manila-knowledge-secret-reader-binding
+  name: cortex-manila-secret-reader-binding
 subjects:
   - kind: ServiceAccount
-    name: cortex-manila-knowledge-controller-manager
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: cortex-manila-secret-reader
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cortex-manila-scheduling-secret-reader-binding
-subjects:
-  - kind: ServiceAccount
-    name: cortex-manila-scheduling-controller-manager
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: cortex-manila-secret-reader
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cortex-manila-reservations-secret-reader-binding
-subjects:
-  - kind: ServiceAccount
-    name: cortex-manila-reservations-controller-manager
+    name: cortex-manila-controller-manager
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole

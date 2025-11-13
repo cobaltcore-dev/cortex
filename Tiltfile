@@ -160,11 +160,11 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
 if 'ironcore' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex IronCore bundle")
     k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=[tilt_values]))
-    k8s_resource('cortex-ironcore-scheduling-controller-manager', labels=['Cortex-IronCore'])
+    k8s_resource('cortex-ironcore-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
-    k8s_yaml('scheduling/samples/ironcore/machinepool.yaml')
-    k8s_yaml('scheduling/samples/ironcore/machineclass.yaml')
-    k8s_yaml('scheduling/samples/ironcore/machine.yaml')
+    k8s_yaml('samples/ironcore/machinepool.yaml')
+    k8s_yaml('samples/ironcore/machineclass.yaml')
+    k8s_yaml('samples/ironcore/machine.yaml')
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')

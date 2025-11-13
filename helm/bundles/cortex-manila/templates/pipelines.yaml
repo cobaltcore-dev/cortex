@@ -1,5 +1,5 @@
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: manila-external-scheduler

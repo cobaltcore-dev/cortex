@@ -10,7 +10,7 @@ kind: ClusterRole
 metadata:
   name: cortex-visualizer-decision-reader
 rules:
-- apiGroups: ["scheduling.cortex"]
+- apiGroups: ["cortex.cloud"]
   resources: ["decisions"]
   verbs: ["get", "list", "watch"]
 

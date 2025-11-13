@@ -61,9 +61,9 @@ spec:
           securityContext:
             {{- toYaml .Values.controllerManager.container.securityContext | nindent 12 }}
           volumeMounts:
-            - name: scheduling-controller-manager-config-volume
+            - name: controller-manager-config-volume
               mountPath: /etc/config
-            - name: scheduling-controller-manager-secrets-volume
+            - name: controller-manager-secrets-volume
               mountPath: /etc/secrets
               readOnly: true
             {{- if and .Values.metrics.enable .Values.certmanager.enable }}
@@ -77,10 +77,10 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
       volumes:
         # Custom values to configure the controller-manager.
-        - name: scheduling-controller-manager-config-volume
+        - name: controller-manager-config-volume
           configMap:
             name: {{ .Values.namePrefix }}-controller-manager-config
-        - name: scheduling-controller-manager-secrets-volume
+        - name: controller-manager-secrets-volume
           secret:
             secretName: {{ .Values.namePrefix }}-controller-manager-secrets
         {{- if and .Values.metrics.enable .Values.certmanager.enable }}
@@ -123,7 +123,7 @@ data:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.namePrefix }}-scheduler
+  name: {{ .Values.namePrefix }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 spec:

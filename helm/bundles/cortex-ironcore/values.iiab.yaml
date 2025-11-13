@@ -4,7 +4,7 @@
 # Custom values to deploy the cortex-ironcore bundle in ironcore-in-a-box.
 # See README.md for details.
 
-cortex-scheduling-operator:
+cortex:
   # Grant cortex access to ironcore resources.
   crd:
     enable: true
@@ -15,7 +15,7 @@ cortex-scheduling-operator:
   controllerManager:
     container:
       image:
-        repository: cortex-scheduling-operator
+        repository: cortex
         tag: dev
         pullPolicy: IfNotPresent
 

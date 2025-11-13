@@ -15,7 +15,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: cortex
-  group: cortex
+  group: cortex.cloud
   kind: Knowledge
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1
@@ -23,7 +23,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: cortex
-  group: cortex
+  group: cortex.cloud
   kind: Datasource
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1
@@ -31,7 +31,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: cortex
-  group: cortex
+  group: cortex.cloud
   kind: KPI
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1
@@ -39,7 +39,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: cortex
-  group: reservations
+  group: cortex.cloud
   kind: Reservation
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1
@@ -47,7 +47,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: cortex
-  group: cortex
+  group: cortex.cloud
   kind: Decision
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1
@@ -55,7 +55,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: cortex
-  group: cortex
+  group: cortex.cloud
   kind: Descheduling
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1
@@ -63,7 +63,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: cortex
-  group: cortex
+  group: cortex.cloud
   kind: Step
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1
@@ -71,7 +71,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: cortex
-  group: cortex
+  group: cortex.cloud
   kind: Pipeline
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1

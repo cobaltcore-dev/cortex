@@ -1,30 +1,45 @@
+{{- if .Values.crd.enable }}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
   annotations:
+    {{- if .Values.crd.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: reservations.cortex
+  name: deschedulings.cortex.cloud
 spec:
-  group: cortex
+  group: cortex.cloud
   names:
-    kind: Reservation
-    listKind: ReservationList
-    plural: reservations
-    singular: reservation
+    kind: Descheduling
+    listKind: DeschedulingList
+    plural: deschedulings
+    singular: descheduling
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.host
-      name: Host
-      type: string
     - jsonPath: .status.phase
       name: Phase
+      type: string
+    - jsonPath: .spec.prevHost
+      name: Previous Host
+      type: string
+    - jsonPath: .status.newHost
+      name: New Host
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Created
+      type: date
+    - jsonPath: .spec.reason
+      name: Reason(s)
       type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Reservation is the Schema for the reservations API
+        description: Descheduling is the Schema for the deschedulings API
         properties:
           apiVersion:
             description: |-
@@ -44,54 +59,31 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of Reservation
+            description: spec defines the desired state of Descheduling
             properties:
-              creator:
-                description: |-
-                  A remark that can be used to identify the creator of the reservation.
-                  This can be used to clean up reservations synced from external systems
-                  without touching reservations created manually or by other systems.
+              prevHost:
+                description: The name of the compute host from which the virtual machine
+                  should be descheduled.
                 type: string
-              requests:
-                additionalProperties:
-                  anyOf:
-                  - type: integer
-                  - type: string
-                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                  x-kubernetes-int-or-string: true
-                description: Resources requested to reserve for this instance.
-                type: object
-              scheduler:
-                description: Specification of the scheduler that will handle the reservation.
-                properties:
-                  cortexNova:
-                    description: |-
-                      If the type of scheduler is cortex-nova, this field will contain additional
-                      information used by cortex-nova to place the instance.
-                    properties:
-                      domainID:
-                        description: The domain ID to reserve for.
-                        type: string
-                      flavorExtraSpecs:
-                        additionalProperties:
-                          type: string
-                        description: Extra specifications relevant for initial placement
-                          of the instance.
-                        type: object
-                      flavorName:
-                        description: The flavor name of the instance to reserve.
-                        type: string
-                      projectID:
-                        description: The project ID to reserve for.
-                        type: string
-                    type: object
-                type: object
+              prevHostType:
+                description: The type of host from which the virtual machine should
+                  be descheduled.
+                type: string
+              reason:
+                description: The human-readable reason why the VM should be descheduled.
+                type: string
+              ref:
+                description: A reference to the virtual machine that should be descheduled.
+                type: string
+              refType:
+                description: The type of reference used to identify the virtual machine.
+                type: string
             type: object
           status:
-            description: status defines the observed state of Reservation
+            description: status defines the observed state of Descheduling
             properties:
               conditions:
-                description: The current status conditions of the reservation.
+                description: The current status conditions of the descheduling.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -147,14 +139,18 @@ spec:
                   - type
                   type: object
                 type: array
-              host:
-                description: The name of the compute host that was allocated.
+              newHost:
+                description: The name of the compute host where the VM was rescheduled
+                  to.
+                type: string
+              newHostType:
+                description: The type of host where the VM was rescheduled to.
                 type: string
               phase:
-                description: The current phase of the reservation.
+                description: The current phase of the descheduling.
                 type: string
             required:
-            - host
+            - phase
             type: object
         required:
         - spec
@@ -163,3 +159,4 @@ spec:
     storage: true
     subresources:
       status: {}
+{{- end -}}

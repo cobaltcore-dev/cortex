@@ -1,5 +1,5 @@
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: vmware-host-contention
@@ -13,7 +13,7 @@ spec:
     This KPI tracks the number of VMware hostsystems that have experienced
     long-term contention.
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: vmware-project-noisiness
@@ -27,7 +27,7 @@ spec:
     This KPI tracks how noisy projects are in terms of CPU contention
     on their VMs' hostsystems.
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: sap-host-total-allocatable-capacity
@@ -41,7 +41,7 @@ spec:
   description: |
     This KPI tracks the total allocatable capacity of SAP hosts.
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: sap-host-capacity
@@ -55,7 +55,7 @@ spec:
   description: |
     This KPI tracks the total allocatable capacity of SAP hosts.
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: sap-host-running-vms
@@ -69,7 +69,7 @@ spec:
   description: |
     This KPI tracks the total number of running VMs on SAP hosts.
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: vm-migration-statistics
@@ -82,7 +82,7 @@ spec:
   description: |
     This KPI tracks statistics about VM migrations.
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: vm-life-span
@@ -95,7 +95,7 @@ spec:
   description: |
     This KPI tracks the life span of VMs.
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: vm-commitments

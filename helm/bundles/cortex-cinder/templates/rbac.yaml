@@ -11,36 +11,10 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cortex-cinder-knowledge-secret-reader-binding
+  name: cortex-cinder-secret-reader-binding
 subjects:
   - kind: ServiceAccount
-    name: cortex-cinder-knowledge-controller-manager
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: cortex-cinder-secret-reader
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cortex-cinder-scheduling-secret-reader-binding
-subjects:
-  - kind: ServiceAccount
-    name: cortex-cinder-scheduling-controller-manager
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: cortex-cinder-secret-reader
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cortex-cinder-reservations-secret-reader-binding
-subjects:
-  - kind: ServiceAccount
-    name: cortex-cinder-reservations-controller-manager
+    name: cortex-cinder-controller-manager
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole

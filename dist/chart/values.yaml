@@ -7,7 +7,7 @@ controllerManager:
   replicas: 1
   container:
     image:
-      repository: ghcr.io/cobaltcore-dev/cortex-scheduling-operator
+      repository: ghcr.io/cobaltcore-dev/cortex
     args:
       - "--leader-elect"
       - "--metrics-bind-address=:8443"
@@ -41,7 +41,7 @@ controllerManager:
     seccompProfile:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
-  serviceAccountName: scheduling-controller-manager
+  serviceAccountName: controller-manager
 
 # Use this to unambiguate multiple cortex deployments in the same cluster.
 namePrefix: cortex

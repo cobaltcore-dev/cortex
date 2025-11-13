@@ -124,7 +124,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	decision := &v1alpha1.Decision{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Decision",
-			APIVersion: "scheduling.cortex/v1alpha1",
+			APIVersion: "cortex.cloud/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "nova-",

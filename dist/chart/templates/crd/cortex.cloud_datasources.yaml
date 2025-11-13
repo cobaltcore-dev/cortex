@@ -10,9 +10,9 @@ metadata:
     "helm.sh/resource-policy": keep
     {{- end }}
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: datasources.cortex
+  name: datasources.cortex.cloud
 spec:
-  group: cortex
+  group: cortex.cloud
   names:
     kind: Datasource
     listKind: DatasourceList

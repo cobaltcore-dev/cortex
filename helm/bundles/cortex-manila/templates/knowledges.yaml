@@ -1,5 +1,5 @@
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: netapp-storage-pool-cpu-usage-manila
