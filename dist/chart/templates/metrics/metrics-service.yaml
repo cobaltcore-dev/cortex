@@ -15,5 +15,6 @@ spec:
       name: https
   selector:
     control-plane: controller-manager
-    app.kubernetes.io/name: {{ .Values.namePrefix }}
+    app.kubernetes.io/name: {{ include "chart.name" . }}
+
 {{- end }}
