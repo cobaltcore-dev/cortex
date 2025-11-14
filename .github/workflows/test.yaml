@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'pkg/go.mod'
+          go-version-file: 'go.mod'
       - name: Test quickly without Docker
         run: go test -v ./...
 
@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'pkg/go.mod'
+          go-version-file: 'go.mod'
       - name: Run tests with Docker and calculate coverage
         run: |
           export GITHUB_ACTIONS=1
