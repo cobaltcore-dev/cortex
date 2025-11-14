@@ -93,3 +93,6 @@ mv $(1) $(1)-$(3) ;\
 } ;\
 ln -sf $(1)-$(3) $(1)
 endef
+
+lint:
+	golangci-lint run --config .golangci.yaml
