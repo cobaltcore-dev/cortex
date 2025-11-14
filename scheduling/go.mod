@@ -16,7 +16,7 @@ require (
 	github.com/cobaltcore-dev/cortex/scheduling/api v0.0.0-00010101000000-000000000000
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/sapcc/go-bits v0.0.0-20251106135743-875cf285580d
+	github.com/sapcc/go-bits v0.0.0-20251113131016-b7245870e76e
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
 	sigs.k8s.io/controller-runtime v0.22.4
