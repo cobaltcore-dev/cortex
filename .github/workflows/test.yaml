@@ -22,7 +22,7 @@ jobs:
         with:
           go-version-file: 'pkg/go.mod'
       - name: Test quickly without Docker
-        run: make test-fast
+        run: go test -v ./...
 
   test-with-docker:
     # We don't need to run this longer test if the previous one already failed.
