@@ -46,15 +46,6 @@
     },
     {
       "matchFileNames": [
-        "**/go.mod"
-      ],
-      "matchPackageNames": [
-        "github.com/cobaltcore-dev/cortex/**"
-      ],
-      "enabled": false
-    },
-    {
-      "matchFileNames": [
         "config/manager/kustomization.yaml"
       ],
       "enabled": false
