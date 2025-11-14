@@ -65,6 +65,8 @@ cortex:
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-manila
   conf:
+    # The operator will only touch CRs with this operator name.
+    operator: cortex-manila
     keystoneSecretRef:
       name: cortex-manila-openstack-keystone
       namespace: default
