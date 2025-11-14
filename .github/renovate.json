@@ -55,9 +55,7 @@
     },
     {
       "matchFileNames": [
-        "reservations/config/manager/kustomization.yaml",
-        "scheduling/config/manager/kustomization.yaml",
-        "knowledge/config/manager/kustomization.yaml"
+        "config/manager/kustomization.yaml"
       ],
       "enabled": false
     }
