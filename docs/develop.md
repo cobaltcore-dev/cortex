@@ -2,6 +2,27 @@
 
 This guide provides an overview of the Cortex development process, including setting up the development environment, developing plugins, and testing the service.
 
+## Repository structure
+
+Cortex' repository is structured into multiple distinct directories to separate concerns.  
+The following snippet provides an overview:
+
+```
+.
+├── api/<version>/     # CRD definitions and webhooks
+├── controllers/       # Reconcilers and controller logic
+├── config/            # Helm and Kustomize bases, such as CRDs, RBAC, manager, samples, and webhooks
+├── internal/          # Project-internal code
+│   ├── placement      # Initial placement related code
+│   ├── scheduling     # Scheduling related code
+│   ├── reservations   # Resource reservations related code
+│   ├── knowledge      # Knowledge Database related code
+│   └── plugins        # Code related to supported scheduling domains
+├── pkg/               # Reusable/public library code
+├── tools/             # Miscellaneous tools and scripts
+└── cmd/               # Binaries for each component
+```
+
 ## Golang Tooling, Testing, Linting
 
 Cortex is developed using the Go programming language. To get started with the development, follow these steps:
