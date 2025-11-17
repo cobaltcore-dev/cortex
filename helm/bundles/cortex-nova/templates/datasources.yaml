@@ -1,5 +1,5 @@
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: vrops-virtualmachine-cpu-demand-ratio
@@ -22,7 +22,7 @@ spec:
     query: vrops_virtualmachine_cpu_demand_ratio
     type: vrops_vm_metric
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: vrops-hostsystem-cpu-contention-long-term-percentage
@@ -45,7 +45,7 @@ spec:
     query: vrops_hostsystem_cpu_contention_percentage
     type: vrops_host_metric
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: vrops-hostsystem-cpu-contention-short-term-percentage
@@ -71,7 +71,7 @@ spec:
     interval: "300s" # 5 minutes
     resolution: "60s" # 1 minute
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: kvm-libvirt-domain-steal-pct
@@ -100,7 +100,7 @@ spec:
     interval: "300s" # 5 minutes
     resolution: "60s" # 1 minute
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: nova-servers
@@ -123,7 +123,7 @@ spec:
     nova:
       type: servers
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: nova-deleted-servers
@@ -146,7 +146,7 @@ spec:
     nova:
       type: deletedServers
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: nova-hypervisors
@@ -169,7 +169,7 @@ spec:
     nova:
       type: hypervisors
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: nova-flavors
@@ -192,7 +192,7 @@ spec:
     nova:
       type: flavors
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: nova-migrations
@@ -215,7 +215,7 @@ spec:
     nova:
       type: migrations
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: nova-aggregates
@@ -238,7 +238,7 @@ spec:
     nova:
       type: aggregates
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: placement-resource-providers
@@ -261,7 +261,7 @@ spec:
     placement:
       type: resourceProviders
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: placement-resource-provider-traits
@@ -284,7 +284,7 @@ spec:
     placement:
       type: resourceProviderTraits
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: placement-resource-provider-inventory-usages
@@ -307,7 +307,7 @@ spec:
     placement:
       type: resourceProviderInventoryUsages
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: identity-domains
@@ -330,7 +330,7 @@ spec:
     identity:
       type: domains
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: identity-projects
@@ -353,7 +353,7 @@ spec:
     identity:
       type: projects
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
   name: limes-project-commitments

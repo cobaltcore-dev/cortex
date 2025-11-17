@@ -1,5 +1,5 @@
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: nova-external-scheduler
@@ -21,7 +21,7 @@ spec:
     - ref: {name: vmware-avoid-short-term-contended-hosts}
       mandatory: false
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: nova-external-scheduler-reservations
@@ -53,7 +53,7 @@ spec:
     - ref: {name: filter-project-aggregates}
     - ref: {name: filter-compute-capabilities}
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: nova-descheduler

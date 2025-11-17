@@ -1,5 +1,5 @@
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: vmware-hana-binpacking
@@ -25,7 +25,7 @@ spec:
     ramUtilizedAfterActivationLowerBound: 0.0
     ramUtilizedAfterActivationUpperBound: 1.0
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: vmware-general-purpose-balancing
@@ -51,7 +51,7 @@ spec:
     ramUtilizedActivationLowerBound: 1.0
     ramUtilizedActivationUpperBound: 0.0
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: vmware-avoid-long-term-contended-hosts
@@ -81,7 +81,7 @@ spec:
     maxCPUContentionActivationLowerBound: 0.0
     maxCPUContentionActivationUpperBound: -0.25
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: vmware-avoid-short-term-contended-hosts
@@ -111,7 +111,7 @@ spec:
     maxCPUContentionActivationLowerBound: 0.0
     maxCPUContentionActivationUpperBound: -0.25
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-host-instructions
@@ -130,7 +130,7 @@ spec:
     certain hosts.
   knowledges: []
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-has-enough-capacity
@@ -159,7 +159,7 @@ spec:
     # and flavor to overlap.
     lockReserved: true
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-has-requested-traits
@@ -183,7 +183,7 @@ spec:
     # This should be changed to use the hypervisor CRD.
     - name: host-capabilities
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-has-accelerators
@@ -203,7 +203,7 @@ spec:
   # This should be changed to use the hypervisor CRD.
   knowledges: []
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-correct-az
@@ -225,7 +225,7 @@ spec:
     # This should be changed to use the hypervisor CRD.
     - name: host-az
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-disabled
@@ -246,7 +246,7 @@ spec:
   # This should be changed to use the hypervisor CRD.
   knowledges: []
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-external-customer
@@ -270,7 +270,7 @@ spec:
   opts:
     domainNamePrefixes: ["iaas-"]
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-packed-virtqueue
@@ -291,7 +291,7 @@ spec:
   # This should be changed to use the hypervisor CRD.
   knowledges: []
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-project-aggregates
@@ -314,7 +314,7 @@ spec:
     # This should be changed to use the hypervisor CRD.
     - name: host-pinned-projects
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: filter-compute-capabilities
@@ -339,7 +339,7 @@ spec:
   # the datasources. This should be changed to use the hypervisor CRD.
   knowledges: []
 ---
-apiVersion: scheduling.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
   name: avoid-high-steal-pct

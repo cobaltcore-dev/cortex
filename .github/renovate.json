@@ -7,8 +7,6 @@
     "docker:disable"
   ],
   "assignees": [
-    "auhlig",
-    "PhilippMatthes",
     "SoWieMarkus"
   ],
   "commitMessageAction": "Renovate: Update",
@@ -48,18 +46,7 @@
     },
     {
       "matchFileNames": [
-        "**/go.mod"
-      ],
-      "matchPackageNames": [
-        "github.com/cobaltcore-dev/cortex/**"
-      ],
-      "enabled": false
-    },
-    {
-      "matchFileNames": [
-        "reservations/config/manager/kustomization.yaml",
-        "scheduling/config/manager/kustomization.yaml",
-        "knowledge/config/manager/kustomization.yaml"
+        "config/manager/kustomization.yaml"
       ],
       "enabled": false
     }

@@ -59,27 +59,34 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
-monitoring: &globalMonitoring
-  labels:
-    github_org: cobaltcore-dev
-    github_repo: cortex
-
-# Features in early development that are not ready for production yet.
-cortex-reservations-operator:
-  enabled: false
+cortex:
   # CRDs are deployed in the cortex-crds chart.
   crd: {enable: false}
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-nova
   conf:
+    # The operator will only touch CRs with this operator name.
+    operator: cortex-nova
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
       namespace: default
-    monitoring: *globalMonitoring
-
     # ssoSecretRef:
     #   name: cortex-nova-openstack-sso
     #   namespace: default
+    monitoring:
+      labels:
+        github_org: cobaltcore-dev
+        github_repo: cortex
+    enabledControllers:
+      - nova-decisions-pipeline-controller
+      - nova-deschedulings-pipeline-controller
+      - explanation-controller
+      - reservations-controller
+      - datasource-controllers
+      - knowledge-controllers
+      - kpis-controller
+    enabledTasks:
+      - commitments-sync-task
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
@@ -90,34 +97,3 @@ cortex-alerts:
   fullnameOverride: cortex-nova
   alerts:
     componentPrefix: cortex-nova
-
-cortex-knowledge-operator:
-  # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-nova
-  conf:
-    # The operator will only touch CRs with this operator name.
-    operator: cortex-nova
-    monitoring: *globalMonitoring
-
-cortex-scheduling-operator:
-  # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-nova
-  conf:
-    # The operator will only touch CRs with this operator name.
-    operator: cortex-nova
-    keystoneSecretRef:
-      name: cortex-nova-openstack-keystone
-      namespace: default
-    monitoring: *globalMonitoring
-
-    # ssoSecretRef:
-    #   name: cortex-nova-openstack-sso
-    #   namespace: default
-    enabledControllers:
-      - nova-decisions-pipeline-controller
-      - nova-deschedulings-pipeline-controller
-      - explanation-controller

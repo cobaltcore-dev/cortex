@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Configuration for single-sign-on (SSO).
@@ -54,19 +56,39 @@ type KeystoneConfig struct {
 	OSProjectDomainName string `json:"projectDomainName"`
 }
 
-// Configuration for the cortex service.
-type Config interface {
-	GetDBConfig() DBConfig
-	GetMonitoringConfig() MonitoringConfig
-	GetKeystoneConfig() KeystoneConfig
-	// Check if the configuration is valid.
-	Validate() error
+// Endpoints for the reservations operator.
+type EndpointsConfig struct {
+	// The nova external scheduler endpoint.
+	NovaExternalScheduler string `json:"novaExternalScheduler"`
 }
 
-type SharedConfig struct {
-	DBConfig         `json:"db"`
-	MonitoringConfig `json:"monitoring"`
-	KeystoneConfig   `json:"keystone"`
+type Config struct {
+	// The operator will only touch CRs with this operator name.
+	Operator string `json:"operator"`
+
+	// The endpoint where to find the nova external scheduler endpoint.
+	Endpoints EndpointsConfig `json:"endpoints"`
+
+	// Hypervisor types for which reservations should be managed.
+	Hypervisors []string `json:"hypervisors"`
+
+	// Whether to disable dry-run for descheduler steps.
+	DisableDeschedulerDryRun bool `json:"disableDeschedulerDryRun"`
+
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+
+	// List of enabled controllers.
+	EnabledControllers []string `json:"enabledControllers"`
+
+	// List of enabled tasks.
+	EnabledTasks []string `json:"enabledTasks"`
+
+	// Monitoring configuration
+	Monitoring MonitoringConfig `json:"monitoring"`
 }
 
 // Create a new configuration from the default config json file.
@@ -152,7 +174,3 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 	}
 	return result
 }
-
-func (c *SharedConfig) GetDBConfig() DBConfig                 { return c.DBConfig }
-func (c *SharedConfig) GetMonitoringConfig() MonitoringConfig { return c.MonitoringConfig }
-func (c *SharedConfig) GetKeystoneConfig() KeystoneConfig     { return c.KeystoneConfig }

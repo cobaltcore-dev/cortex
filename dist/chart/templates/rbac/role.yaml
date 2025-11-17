@@ -1,0 +1,57 @@
+{{- if .Values.rbac.enable }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-manager-role
+rules:
+- apiGroups:
+  - cortex.cloud
+  resources:
+  - knowledges
+  - datasources
+  - reservations
+  - decisions
+  - deschedulings
+  - steps
+  - pipelines
+  - kpis
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cortex.cloud
+  resources:
+  - knowledges/finalizers
+  - datasources/finalizers
+  - reservations/finalizers
+  - decisions/finalizers
+  - deschedulings/finalizers
+  - steps/finalizers
+  - pipelines/finalizers
+  - kpis/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cortex.cloud
+  resources:
+  - knowledges/status
+  - datasources/status
+  - reservations/status
+  - decisions/status
+  - deschedulings/status
+  - steps/status
+  - pipelines/status
+  - kpis/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end -}}

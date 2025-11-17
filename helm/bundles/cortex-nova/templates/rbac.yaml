@@ -11,36 +11,10 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cortex-nova-knowledge-secret-reader-binding
+  name: cortex-nova-secret-reader-binding
 subjects:
   - kind: ServiceAccount
-    name: cortex-nova-knowledge-controller-manager
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: cortex-nova-secret-reader
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cortex-nova-scheduling-secret-reader-binding
-subjects:
-  - kind: ServiceAccount
-    name: cortex-nova-scheduling-controller-manager
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: cortex-nova-secret-reader
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cortex-nova-reservations-secret-reader-binding
-subjects:
-  - kind: ServiceAccount
-    name: cortex-nova-reservations-controller-manager
+    name: cortex-nova-controller-manager
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole

@@ -45,14 +45,9 @@ Bundle charts are **umbrella charts** that represent complete deployments for sp
 - `cortex-ironcore` - IronCore scheduling domain (compute, ...)
 - `cortex-crds` - Custom Resource Definitions for all operators
 
-### Operator Charts (from `*/dist/chart/`)
+### Operator Chart (from `dist/chart/`)
 
-Operator charts contain the core Kubernetes operators built from the Go modules. These are **not stored in the helm/ directory** but are generated in each service's `dist/chart` directory as they are [Kubebuilder](https://book.kubebuilder.io/reference/generating-crd) scaffolds.
-
-**Available operators:**
-- `cortex-knowledge-operator` (from `knowledge/dist/chart/`)
-- `cortex-scheduling-operator` (from `scheduling/dist/chart/`)
-- `cortex-reservations-operator` (from `reservations/dist/chart/`)
+The operator chart contains the core Kubernetes operators built from the Go modules. These are **not stored in the helm/ directory** but are generated in `dist/chart` directory as it is a [Kubebuilder](https://book.kubebuilder.io/reference/generating-crd) scaffold.
 
 ### Library Charts (`library/`)
 

@@ -302,7 +302,7 @@
     // List scheduling decisions, optionally filtered by vmId.
     async function listSchedulingDecisions(vmId) {
       // Get the port mapping from /portmappings.json
-      let url = `${kubernetesAPIServer}/apis/scheduling.cortex/v1alpha1/decisions`
+      let url = `${kubernetesAPIServer}/apis/cortex.cloud/v1alpha1/decisions`
 
       if (vmId) {
         url += `/${vmId}`

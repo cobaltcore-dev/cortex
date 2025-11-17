@@ -1,5 +1,5 @@
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: vmware-resolved-hostsystems
@@ -22,7 +22,7 @@ spec:
       # Any vrops vm metric suffices here.
       - name: vrops-virtualmachine-cpu-demand-ratio
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: vmware-project-noisiness
@@ -43,7 +43,7 @@ spec:
       - name: nova-servers
       - name: vrops-virtualmachine-cpu-demand-ratio
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: vmware-long-term-contended-hosts
@@ -63,7 +63,7 @@ spec:
     datasources:
       - name: vrops-hostsystem-cpu-contention-long-term-percentage
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: vmware-short-term-contended-hosts
@@ -83,7 +83,7 @@ spec:
     datasources:
       - name: vrops-hostsystem-cpu-contention-short-term-percentage
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: kvm-libvirt-domain-cpu-steal-pct
@@ -102,7 +102,7 @@ spec:
       - name: kvm-libvirt-domain-steal-pct
       - name: nova-servers
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: host-pinned-projects
@@ -122,7 +122,7 @@ spec:
       - name: nova-aggregates
       - name: nova-hypervisors
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: host-utilization
@@ -142,7 +142,7 @@ spec:
       - name: nova-hypervisors
       - name: placement-resource-provider-inventory-usages
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: host-capabilities
@@ -161,7 +161,7 @@ spec:
       - name: nova-hypervisors
       - name: placement-resource-provider-traits
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: vm-host-residency
@@ -184,7 +184,7 @@ spec:
       - name: nova-servers
       - name: nova-migrations
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: vm-life-span
@@ -205,7 +205,7 @@ spec:
       - name: nova-deleted-servers
       - name: nova-servers
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: host-az
@@ -224,7 +224,7 @@ spec:
       - name: nova-hypervisors
       - name: nova-aggregates
 ---
-apiVersion: knowledge.cortex/v1alpha1
+apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
   name: sap-host-details

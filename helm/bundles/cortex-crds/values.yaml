@@ -3,7 +3,7 @@
 
 owner-info:
   enabled: true
-  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-cinder"
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-crds"
   maintainers:
     - "arno.uhlig@sap.com"
     - "julius.clausnitzer@sap.com"
@@ -12,9 +12,9 @@ owner-info:
     - "markus.wieland@sap.com"
     - "p.matthes@sap.com"
   support-group: "workload-management"
-  service: "cortex-cinder"
+  service: "cortex-crds"
 
-common: &common
+cortex:
   # Deploy crds and cluster-rbac (clusterroles)
   crd: {enable: true}
   # Stuff we don't need in the CRD chart.
@@ -24,10 +24,3 @@ common: &common
   prometheus: {enable: false}
   certmanager: {enable: false}
   networkPolicy: {enable: false}
-
-cortex-knowledge-operator:
-  <<: *common
-cortex-reservations-operator:
-  <<: *common
-cortex-scheduling-operator:
-  <<: *common
