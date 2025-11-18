@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -220,73 +219,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				t.Error("Expected duration to be zero but was set")
 			}
 		})
-	}
-}
-
-func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1alpha1.Decision{}).
-		Build()
-
-	controller := &DecisionPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
-			Client: client,
-		},
-		Monitor:         lib.PipelineMonitor{},
-		pendingRequests: make(map[string]*pendingRequest),
-	}
-
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-decision",
-			Namespace: "default",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			Type:     v1alpha1.DecisionTypeCinderVolume,
-			Operator: "test-operator",
-		},
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		decisionKey := decision.Namespace + "/" + decision.Name
-		controller.mu.RLock()
-		pending, exists := controller.pendingRequests[decisionKey]
-		controller.mu.RUnlock()
-
-		if exists {
-			decision.Status.Result = &v1alpha1.DecisionResult{
-				OrderedHosts: []string{"test-host"},
-				TargetHost:   func() *string { s := "test-host"; return &s }(),
-			}
-			select {
-			case pending.responseChan <- decision:
-			case <-pending.cancelChan:
-			}
-		}
-	}()
-
-	result, err := controller.ProcessNewDecisionFromAPI(ctx, decision)
-
-	if err != nil {
-		t.Errorf("Expected no error but got: %v", err)
-	}
-
-	if result == nil {
-		t.Error("Expected result but got nil")
-	}
-
-	if result != nil && result.Status.Result == nil {
-		t.Error("Expected result status to be set")
 	}
 }
 

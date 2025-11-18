@@ -177,21 +177,20 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		},
 	}
 	ctx := r.Context()
-	result, err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision)
-	if err != nil {
+	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
 		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling decision")
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.
-	if meta.IsStatusConditionTrue(result.Status.Conditions, v1alpha1.DecisionConditionError) {
+	if meta.IsStatusConditionTrue(decision.Status.Conditions, v1alpha1.DecisionConditionError) {
 		c.Respond(http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
 		return
 	}
-	if result.Status.Result == nil {
+	if decision.Status.Result == nil {
 		c.Respond(http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
 		return
 	}
-	hosts := result.Status.Result.OrderedHosts
+	hosts := decision.Status.Result.OrderedHosts
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
