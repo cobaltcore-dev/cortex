@@ -46,6 +46,7 @@ var SupportedKPIsByImpl = map[string]plugins.KPI{
 	"sap_host_total_allocatable_capacity_kpi": &sap.HostTotalAllocatableCapacityKPI{},
 	"sap_host_capacity_kpi":                   &sap.HostAvailableCapacityKPI{},
 	"sap_host_running_vms_kpi":                &sap.HostRunningVMsKPI{},
+	"sap_flavor_running_vms_kpi":              &sap.FlavorRunningVMsKPI{},
 }
 
 // The kpi controller checks the status of kpi dependencies and populates

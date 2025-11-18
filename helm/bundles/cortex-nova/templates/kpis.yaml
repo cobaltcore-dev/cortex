@@ -72,6 +72,19 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
+  name: sap-flavors-running-vms
+spec:
+  operator: cortex-nova
+  impl: sap_flavor_running_vms_kpi
+  dependencies:
+    datasources:
+      - name: nova-servers
+  description: |
+    This KPI tracks the total number of running VMs per flavor and availability zone.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
   name: vm-migration-statistics
 spec:
   operator: cortex-nova-knowledge
