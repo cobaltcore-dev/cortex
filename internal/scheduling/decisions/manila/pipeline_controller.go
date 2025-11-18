@@ -94,16 +94,16 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 
 	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
 	if !ok {
-		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
+		log.Error(nil, "skipping decision, pipeline not found or not ready")
 		return errors.New("pipeline not found or not ready")
 	}
-	if decision.Spec.NovaRaw == nil {
-		log.Info("skipping decision, no novaRaw spec defined")
-		return errors.New("no novaRaw spec defined")
+	if decision.Spec.ManilaRaw == nil {
+		log.Error(nil, "skipping decision, no manilaRaw spec defined")
+		return errors.New("no manilaRaw spec defined")
 	}
 	var request api.ExternalSchedulerRequest
-	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
-		log.Error(err, "failed to unmarshal novaRaw spec")
+	if err := json.Unmarshal(decision.Spec.ManilaRaw.Raw, &request); err != nil {
+		log.Error(err, "failed to unmarshal manilaRaw spec")
 		return err
 	}
 

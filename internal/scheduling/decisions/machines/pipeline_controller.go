@@ -173,7 +173,10 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 	return handler.Funcs{
 		CreateFunc: func(ctx context.Context, evt event.CreateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			machine := evt.Object.(*ironcorev1alpha1.Machine)
-			c.ProcessNewMachine(ctx, machine)
+			if err := c.ProcessNewMachine(ctx, machine); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to process new machine for scheduling", "machine", machine.Name)
+			}
 		},
 		UpdateFunc: func(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			newMachine := evt.ObjectNew.(*ironcorev1alpha1.Machine)
@@ -181,7 +184,10 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 				// Machine is already scheduled, no need to create a decision.
 				return
 			}
-			c.ProcessNewMachine(ctx, newMachine)
+			if err := c.ProcessNewMachine(ctx, newMachine); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to process new machine for scheduling", "machine", newMachine.Name)
+			}
 		},
 		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			// Delete the associated decision(s).

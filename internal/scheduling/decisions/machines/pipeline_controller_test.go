@@ -101,7 +101,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				},
 			},
 			machinePools:   []ironcorev1alpha1.MachinePool{},
-			expectError:    false,
+			expectError:    true,
 			expectDecision: false,
 		},
 	}

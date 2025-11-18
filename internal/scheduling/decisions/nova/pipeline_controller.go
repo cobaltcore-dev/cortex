@@ -98,7 +98,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		return errors.New("pipeline not found or not ready")
 	}
 	if decision.Spec.NovaRaw == nil {
-		log.Info("skipping decision, no novaRaw spec defined")
+		log.Error(nil, "skipping decision, no novaRaw spec defined")
 		return errors.New("no novaRaw spec defined")
 	}
 	var request api.ExternalSchedulerRequest

@@ -316,6 +316,8 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 				Client:       client,
 				OperatorName: "test",
 			}
+			controller.Pipelines = make(map[string]mockPipeline)
+			controller.PipelineConfigs = make(map[string]v1alpha1.Pipeline)
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
 			evt := event.CreateEvent{Object: tt.pipeline}
@@ -457,10 +459,11 @@ func TestBasePipelineController_HandleStepCreated(t *testing.T) {
 
 			initializer := &mockInitializer{}
 			controller := &BasePipelineController[mockPipeline]{
-				Pipelines:    make(map[string]mockPipeline),
-				Initializer:  initializer,
-				Client:       client,
-				OperatorName: "test",
+				Pipelines:       make(map[string]mockPipeline),
+				PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+				Initializer:     initializer,
+				Client:          client,
+				OperatorName:    "test",
 			}
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -547,6 +550,8 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 				Client:       client,
 				OperatorName: "test",
 			}
+			controller.Pipelines = make(map[string]mockPipeline)
+			controller.PipelineConfigs = make(map[string]v1alpha1.Pipeline)
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
 			evt := event.UpdateEvent{

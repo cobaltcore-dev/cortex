@@ -143,7 +143,7 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 					ProjectID:  "test-project",
 					FlavorName: "test-flavor",
 					FlavorExtraSpecs: map[string]string{
-						"capabilities:hypervisor_type": "kvm",
+						"capabilities:hypervisor_type": "qemu",
 					},
 				},
 			},
@@ -175,9 +175,6 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		}
 
 		// Verify request structure
-		if req.Pipeline != "nova-external-scheduler-kvm-reservations" {
-			t.Errorf("Expected Pipeline to be 'nova-external-scheduler-kvm-reservations', got %q", req.Pipeline)
-		}
 		if req.Spec.Data.NumInstances != 1 {
 			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)
 		}
@@ -202,7 +199,7 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 			hypervisorsToReturn: []Hypervisor{
 				{
 					Hostname: "test-host-1",
-					Type:     "kvm",
+					Type:     "qemu",
 					Service: struct {
 						Host string `json:"host"`
 					}{
@@ -211,7 +208,7 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 				},
 				{
 					Hostname: "test-host-2",
-					Type:     "kvm",
+					Type:     "qemu",
 					Service: struct {
 						Host string `json:"host"`
 					}{

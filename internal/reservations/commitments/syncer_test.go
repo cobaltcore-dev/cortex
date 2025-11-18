@@ -163,6 +163,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 						"hw:cpu_policy":                         "dedicated",
 						"hw:numa_nodes":                         "1",
 						"aggregate_instance_extra_specs:pinned": "true",
+						"capabilities:hypervisor_type":          "qemu",
 					},
 				},
 			}, nil
@@ -293,6 +294,7 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 						"hw:cpu_policy":                         "shared",
 						"hw:numa_nodes":                         "2",
 						"aggregate_instance_extra_specs:pinned": "false",
+						"capabilities:hypervisor_type":          "qemu",
 					},
 				},
 			}, nil
@@ -385,6 +387,7 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 						"hw:cpu_policy":                         "dedicated",
 						"hw:numa_nodes":                         "1",
 						"aggregate_instance_extra_specs:pinned": "true",
+						"capabilities:hypervisor_type":          "qemu",
 					},
 				},
 			}, nil

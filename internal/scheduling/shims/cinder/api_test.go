@@ -263,7 +263,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 						return tt.processDecisionErr
 					}
 					if tt.decisionResult != nil {
-						decision = tt.decisionResult
+						decision.Status = tt.decisionResult.Status
 						return nil
 					}
 					return nil
@@ -315,6 +315,10 @@ func TestHTTPAPI_CinderExternalScheduler_DecisionCreation(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{
 		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
 			capturedDecision = decision
+			// Set a successful result to avoid "decision didn't produce a result" error
+			decision.Status.Result = &v1alpha1.DecisionResult{
+				OrderedHosts: []string{"host1"},
+			}
 			return nil
 		},
 	}
