@@ -84,7 +84,7 @@ cortex-scheduling-controllers:
   namePrefix: cortex-manila-scheduling
   conf:
     <<: *cortexConf
-    component: scheduling
+    leaderElectionID: cortex-manila-scheduling
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
@@ -98,7 +98,7 @@ cortex-knowledge-controllers:
   namePrefix: cortex-manila-knowledge
   conf:
     <<: *cortexConf
-    component: knowledge
+    leaderElectionID: cortex-manila-knowledge
     monitoring:
       labels:
         <<: *cortexMonitoringLabels

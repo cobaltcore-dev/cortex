@@ -66,8 +66,8 @@ type Config struct {
 	// The operator will only touch CRs with this operator name.
 	Operator string `json:"operator"`
 
-	// Component name for this deployment (e.g., "scheduling", "knowledge", "reservations")
-	Component string `json:"component,omitempty"`
+	// ID used to identify leader election participants.
+	LeaderElectionID string `json:"leaderElectionID,omitempty"`
 
 	// The endpoint where to find the nova external scheduler endpoint.
 	Endpoints EndpointsConfig `json:"endpoints"`
