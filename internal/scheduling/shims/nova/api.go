@@ -82,9 +82,9 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 // Note that the pipelines provided here need to be created in the cluster.
 // See also the helm/cortex-nova bundle.
 func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerRequest) (string, error) {
-	hvType, ok := requestData.Spec.Data.Flavor.Data.ExtraSpecs["hypervisor_type"]
+	hvType, ok := requestData.Spec.Data.Flavor.Data.ExtraSpecs["capabilities:hypervisor_type"]
 	if !ok {
-		return "", errors.New("missing hypervisor_type in flavor extra specs")
+		return "", fmt.Errorf("missing hypervisor_type in flavor extra specs: %v", requestData.Spec.Data.Flavor.Data.ExtraSpecs)
 	}
 	switch strings.ToLower(hvType) {
 	case "qemu", "ch":

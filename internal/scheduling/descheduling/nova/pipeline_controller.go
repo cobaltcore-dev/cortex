@@ -59,7 +59,7 @@ func (c *DeschedulingsPipelineController) CreateDeschedulingsPeriodically(ctx co
 			return
 		default:
 			// Get the pipeline for the current configuration.
-			p, ok := c.Pipelines["nova-descheduler"]
+			p, ok := c.Pipelines["nova-descheduler-kvm"]
 			if !ok {
 				slog.Error("descheduler: pipeline not found or not ready yet")
 				time.Sleep(jobloop.DefaultJitter(time.Minute))

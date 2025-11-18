@@ -47,6 +47,9 @@ type DecisionPipelineController struct {
 
 // Callback executed when kubernetes asks to reconcile a decision resource.
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	c.processMu.Lock()
+	defer c.processMu.Unlock()
+
 	decision := &v1alpha1.Decision{}
 	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -62,6 +65,9 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 
 // Process the decision from the API. Should create and return the updated decision.
 func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
+	c.processMu.Lock()
+	defer c.processMu.Unlock()
+
 	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
 	if !ok {
 		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
@@ -83,9 +89,6 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 }
 
 func (c *DecisionPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 

@@ -74,6 +74,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 
 	if obj.Spec.Operator != c.OperatorName {
 		delete(c.Pipelines, obj.Name) // Just to be sure.
+		delete(c.PipelineConfigs, obj.Name)
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
@@ -115,9 +116,11 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
 		}
 		delete(c.Pipelines, obj.Name)
+		delete(c.PipelineConfigs, obj.Name)
 		return
 	}
 	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, obj.Name, steps)
+	c.PipelineConfigs[obj.Name] = *obj
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
 		obj.Status.Ready = false
@@ -131,6 +134,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
 		}
 		delete(c.Pipelines, obj.Name)
+		delete(c.PipelineConfigs, obj.Name)
 		return
 	}
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
@@ -181,6 +185,7 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 
 	pipelineConf := evt.Object.(*v1alpha1.Pipeline)
 	delete(c.Pipelines, pipelineConf.Name)
+	delete(c.PipelineConfigs, pipelineConf.Name)
 }
 
 // Handle a step creation or update event from watching step resources.
