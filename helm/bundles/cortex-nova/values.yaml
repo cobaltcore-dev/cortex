@@ -61,6 +61,11 @@ openstack:
 
 cortex: &cortex
   crd: {enable: false}
+  # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
+  # A centralized ServiceMonitor and metrics service are defined in the cortex-nova chart.
+  metrics: {enable: false}
+  prometheus: {enable: false}
+  namePrefix: cortex-nova
   conf: &cortexConf
     operator: cortex-nova
     keystoneSecretRef:
