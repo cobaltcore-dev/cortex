@@ -62,6 +62,7 @@ openstack:
 cortex: &cortex
   crd: {enable: false}
   conf: &cortexConf
+    operator: cortex-cinder
     keystoneSecretRef:
       name: cortex-cinder-openstack-keystone
       namespace: default
@@ -79,7 +80,6 @@ cortex-scheduling-controllers:
   namePrefix: cortex-cinder-scheduling
   conf:
     <<: *cortexConf
-    operator: cortex-cinder-scheduling
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
@@ -93,7 +93,6 @@ cortex-knowledge-controllers:
   namePrefix: cortex-cinder-knowledge
   conf:
     <<: *cortexConf
-    operator: cortex-cinder-knowledge
     monitoring:
       labels:
         <<: *cortexMonitoringLabels

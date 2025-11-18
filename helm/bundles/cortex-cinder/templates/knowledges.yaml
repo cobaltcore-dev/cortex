@@ -4,7 +4,7 @@ kind: Knowledge
 metadata:
   name: netapp-storage-pool-cpu-usage-cinder
 spec:
-  operator: cortex-cinder-knowledge
+  operator: cortex-cinder
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}
