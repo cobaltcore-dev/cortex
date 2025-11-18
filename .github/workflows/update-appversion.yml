@@ -48,7 +48,6 @@ jobs:
         run: |
           sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' dist/chart/Chart.yaml
       - name: Commit and push changes for cortex
-        if: steps.changed_files.outputs.all_changed_files != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
