@@ -118,7 +118,7 @@ func (c *DecisionPipelineController) InitPipeline(
 }
 
 // Process the decision from the API. Should create and return the updated decision.
-func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
+func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
 	// Create the decision object in kubernetes.
 	if err := c.Create(ctx, decision); err != nil {
 		return nil, err

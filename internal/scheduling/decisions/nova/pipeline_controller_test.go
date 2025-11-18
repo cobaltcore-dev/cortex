@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -206,8 +205,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Client:    client,
 					Pipelines: make(map[string]lib.Pipeline[api.ExternalSchedulerRequest]),
 				},
-				Monitor:         lib.PipelineMonitor{},
-				pendingRequests: make(map[string]*pendingRequest),
+				Monitor: lib.PipelineMonitor{},
 				Conf: conf.Config{
 					Operator: "test-operator",
 				},
@@ -261,117 +259,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 			}
 			if !tt.expectDuration && updatedDecision.Status.Took.Duration != 0 {
 				t.Error("Expected duration to be zero but was set")
-			}
-		})
-	}
-}
-
-func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	tests := []struct {
-		name           string
-		decision       *v1alpha1.Decision
-		simulateResult bool
-		expectTimeout  bool
-		expectError    bool
-	}{
-		{
-			name: "successful API decision processing",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
-				},
-			},
-			simulateResult: true,
-			expectTimeout:  false,
-			expectError:    false,
-		},
-		{
-			name: "timeout waiting for decision",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-timeout",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
-				},
-			},
-			simulateResult: false,
-			expectTimeout:  true,
-			expectError:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithStatusSubresource(&v1alpha1.Decision{}).
-				Build()
-
-			controller := &DecisionPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
-					Client: client,
-				},
-				Monitor:         lib.PipelineMonitor{},
-				pendingRequests: make(map[string]*pendingRequest),
-			}
-
-			ctx := context.Background()
-			if tt.expectTimeout {
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond)
-				defer cancel()
-			}
-
-			if tt.simulateResult {
-				go func() {
-					time.Sleep(50 * time.Millisecond)
-					decisionKey := tt.decision.Namespace + "/" + tt.decision.Name
-					controller.mu.RLock()
-					pending, exists := controller.pendingRequests[decisionKey]
-					controller.mu.RUnlock()
-
-					if exists {
-						tt.decision.Status.Result = &v1alpha1.DecisionResult{
-							OrderedHosts: []string{"test-host"},
-							TargetHost:   func() *string { s := "test-host"; return &s }(),
-						}
-						select {
-						case pending.responseChan <- tt.decision:
-						case <-pending.cancelChan:
-						}
-					}
-				}()
-			}
-
-			result, err := controller.ProcessNewDecisionFromAPI(ctx, tt.decision)
-
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-			}
-
-			if !tt.expectError {
-				if result == nil {
-					t.Error("Expected result but got nil")
-				}
-				if result != nil && result.Status.Result == nil {
-					t.Error("Expected result status to be set")
-				}
 			}
 		})
 	}

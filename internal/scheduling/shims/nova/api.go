@@ -28,7 +28,7 @@ import (
 
 type HTTPAPIDelegate interface {
 	// Process the decision from the API. Should create and return the updated decision.
-	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error)
+	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error
 }
 
 type HTTPAPI interface {

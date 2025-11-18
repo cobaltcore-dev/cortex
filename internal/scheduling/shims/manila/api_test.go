@@ -24,7 +24,7 @@ type mockHTTPAPIDelegate struct {
 	processDecisionFunc func(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error)
 }
 
-func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
+func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
 	if m.processDecisionFunc != nil {
 		return m.processDecisionFunc(ctx, decision)
 	}
