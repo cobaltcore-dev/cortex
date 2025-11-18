@@ -85,6 +85,7 @@ cortex-scheduling-controllers:
   namePrefix: cortex-nova-scheduling
   conf:
     <<: *cortexConf
+    component: scheduling
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
@@ -99,6 +100,7 @@ cortex-knowledge-controllers:
   namePrefix: cortex-nova-knowledge
   conf:
     <<: *cortexConf
+    component: knowledge
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
@@ -113,6 +115,7 @@ cortex-reservations-controllers:
   namePrefix: cortex-nova-reservations
   conf:
     <<: *cortexConf
+    component: reservations
     monitoring:
       labels:
         <<: *cortexMonitoringLabels

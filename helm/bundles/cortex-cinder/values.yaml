@@ -84,6 +84,7 @@ cortex-scheduling-controllers:
   namePrefix: cortex-cinder-scheduling
   conf:
     <<: *cortexConf
+    component: scheduling
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
@@ -97,6 +98,7 @@ cortex-knowledge-controllers:
   namePrefix: cortex-cinder-knowledge
   conf:
     <<: *cortexConf
+    component: knowledge
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
