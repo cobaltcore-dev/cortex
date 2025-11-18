@@ -4,7 +4,7 @@ kind: KPI
 metadata:
   name: netapp-storage-pool-cpu-usage-manila
 spec:
-  operator: cortex-manila
+  operator: cortex-manila-knowledge
   impl: netapp_storage_pool_cpu_usage_kpi
   dependencies:
     knowledges:

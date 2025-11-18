@@ -4,7 +4,7 @@ kind: Datasource
 metadata:
   name: netapp-aggr-labels-cinder
 spec:
-  operator: cortex-cinder
+  operator: cortex-cinder-knowledge
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}
@@ -27,7 +27,7 @@ kind: Datasource
 metadata:
   name: netapp-node-cpu-busy-cinder
 spec:
-  operator: cortex-cinder
+  operator: cortex-cinder-knowledge
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}
@@ -50,7 +50,7 @@ kind: Datasource
 metadata:
   name: netapp-volume-aggr-labels
 spec:
-  operator: cortex-cinder
+  operator: cortex-cinder-knowledge
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}
@@ -73,7 +73,7 @@ kind: Datasource
 metadata:
   name: cinder-storage-pools
 spec:
-  operator: cortex-cinder
+  operator: cortex-cinder-knowledge
   databaseSecretRef:
     name: cortex-cinder-postgres
     namespace: {{ .Release.Namespace }}

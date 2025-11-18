@@ -14,7 +14,10 @@ metadata:
   name: cortex-manila-secret-reader-binding
 subjects:
   - kind: ServiceAccount
-    name: cortex-manila-controller-manager
+    name: cortex-manila-scheduling-controller-manager
+    namespace: {{ .Release.Namespace }}
+  - kind: ServiceAccount
+    name: cortex-manila-knowledge-controller-manager
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole

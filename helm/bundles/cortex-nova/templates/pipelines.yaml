@@ -4,7 +4,7 @@ kind: Pipeline
 metadata:
   name: nova-external-scheduler
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-scheduling
   description: |
     Nova provides virtual machine placement on compute hosts for OpenStack.
     After applying its own filtering and weighing logic, it delegates to cortex
@@ -26,7 +26,7 @@ kind: Pipeline
 metadata:
   name: nova-external-scheduler-reservations
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-scheduling
   description: |
     This pipeline can be used to place reservations the same way nova would place
     its virtual machines. It uses the same filtering steps as implemented in the
@@ -58,7 +58,7 @@ kind: Pipeline
 metadata:
   name: nova-descheduler
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-scheduling
   description:
     This pipeline runs steps that select virtual machines to deschedule from
     compute hosts in order to optimize resource usage and performance.

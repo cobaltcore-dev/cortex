@@ -4,7 +4,7 @@ kind: KPI
 metadata:
   name: vmware-host-contention
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-knowledge
   impl: vmware_host_contention_kpi
   dependencies:
     knowledges:
@@ -18,7 +18,7 @@ kind: KPI
 metadata:
   name: vmware-project-noisiness
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-knowledge
   impl: vmware_project_noisiness_kpi
   dependencies:
     knowledges:
@@ -32,7 +32,7 @@ kind: KPI
 metadata:
   name: sap-host-total-allocatable-capacity
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-knowledge
   impl: sap_host_total_allocatable_capacity_kpi
   dependencies:
     knowledges:
@@ -46,7 +46,7 @@ kind: KPI
 metadata:
   name: sap-host-capacity
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-knowledge
   impl: sap_host_capacity_kpi
   dependencies:
     knowledges:
@@ -60,7 +60,7 @@ kind: KPI
 metadata:
   name: sap-host-running-vms
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-knowledge
   impl: sap_host_running_vms_kpi
   dependencies:
     knowledges:
@@ -74,7 +74,7 @@ kind: KPI
 metadata:
   name: vm-migration-statistics
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-knowledge
   impl: vm_migration_statistics_kpi
   dependencies:
     knowledges:
@@ -87,7 +87,7 @@ kind: KPI
 metadata:
   name: vm-life-span
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-knowledge
   impl: vm_life_span_kpi
   dependencies:
     knowledges:
@@ -100,7 +100,7 @@ kind: KPI
 metadata:
   name: vm-commitments
 spec:
-  operator: cortex-nova
+  operator: cortex-nova-knowledge
   impl: vm_commitments_kpi
   dependencies:
     datasources:

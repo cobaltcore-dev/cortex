@@ -59,14 +59,9 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
-cortex:
-  # CRDs are deployed in the cortex-crds chart.
+cortex: &cortex
   crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-manila
-  conf:
-    # The operator will only touch CRs with this operator name.
-    operator: cortex-manila
+  conf: &cortexConf
     keystoneSecretRef:
       name: cortex-manila-openstack-keystone
       namespace: default
@@ -74,12 +69,36 @@ cortex:
     #   name: cortex-manila-openstack-sso
     #   namespace: default
     monitoring:
-      labels:
+      labels: &cortexMonitoringLabels
         github_org: cobaltcore-dev
         github_repo: cortex
+
+# Split deployments
+cortex-scheduling-controllers:
+  <<: *cortex
+  namePrefix: cortex-manila-scheduling
+  conf:
+    <<: *cortexConf
+    operator: cortex-manila-scheduling
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: manila-scheduling
     enabledControllers:
       - manila-decisions-pipeline-controller
       - explanation-controller
+
+cortex-knowledge-controllers:
+  <<: *cortex
+  namePrefix: cortex-manila-knowledge
+  conf:
+    <<: *cortexConf
+    operator: cortex-manila-knowledge
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: manila-knowledge
+    enabledControllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
