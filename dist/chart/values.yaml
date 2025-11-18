@@ -95,6 +95,8 @@ namePrefix: cortex
 conf:
   # The operator will only touch CRs with this operator name.
   operator: cortex
+  # Used to differentiate different cortex deployments in the same cluster (e.g. leader election ID)
+  leaderElectionID: cortex-unknown
   enabledControllers:
     # The explanation controller is available for all decision resources.
     - explanation-controller

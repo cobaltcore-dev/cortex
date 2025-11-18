@@ -59,13 +59,14 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
-cortex:
-  # CRDs are deployed in the cortex-crds chart.
+cortex: &cortex
   crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
+  # A centralized ServiceMonitor and metrics service are defined in the cortex-nova chart.
+  metrics: {enable: false}
+  prometheus: {enable: false}
   namePrefix: cortex-nova
-  conf:
-    # The operator will only touch CRs with this operator name.
+  conf: &cortexConf
     operator: cortex-nova
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
@@ -74,17 +75,53 @@ cortex:
     #   name: cortex-nova-openstack-sso
     #   namespace: default
     monitoring:
-      labels:
+      labels: &cortexMonitoringLabels
         github_org: cobaltcore-dev
         github_repo: cortex
+
+# Split deployments
+cortex-scheduling-controllers:
+  <<: *cortex
+  namePrefix: cortex-nova-scheduling
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-nova-scheduling
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: nova-scheduling
     enabledControllers:
       - nova-decisions-pipeline-controller
       - nova-deschedulings-pipeline-controller
       - explanation-controller
-      - reservations-controller
+
+cortex-knowledge-controllers:
+  <<: *cortex
+  namePrefix: cortex-nova-knowledge
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-nova-knowledge
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: nova-knowledge
+    enabledControllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
+
+cortex-reservations-controllers:
+  <<: *cortex
+  namePrefix: cortex-nova-reservations
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-nova-reservations
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: nova-reservations
+    enabledControllers:
+      - reservations-controller
     enabledTasks:
       - commitments-sync-task
 

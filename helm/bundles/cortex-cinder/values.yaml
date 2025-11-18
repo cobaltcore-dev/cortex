@@ -59,13 +59,13 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
-cortex:
-  # CRDs are deployed in the cortex-crds chart.
+cortex: &cortex
   crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-cinder
-  conf:
-    # The operator will only touch CRs with this operator name.
+  # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
+  # A centralized ServiceMonitor and metrics service are defined in the cortex-cinder chart.
+  metrics: {enable: false}
+  prometheus: {enable: false}
+  conf: &cortexConf
     operator: cortex-cinder
     keystoneSecretRef:
       name: cortex-cinder-openstack-keystone
@@ -74,12 +74,36 @@ cortex:
     #   name: cortex-cinder-openstack-sso
     #   namespace: default
     monitoring:
-      labels:
+      labels: &cortexMonitoringLabels
         github_org: cobaltcore-dev
         github_repo: cortex
+
+# Split deployments
+cortex-scheduling-controllers:
+  <<: *cortex
+  namePrefix: cortex-cinder-scheduling
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-cinder-scheduling
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: cinder-scheduling
     enabledControllers:
       - cinder-decisions-pipeline-controller
       - explanation-controller
+
+cortex-knowledge-controllers:
+  <<: *cortex
+  namePrefix: cortex-cinder-knowledge
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-cinder-knowledge
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: cinder-knowledge
+    enabledControllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
