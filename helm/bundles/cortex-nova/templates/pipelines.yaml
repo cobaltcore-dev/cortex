@@ -12,7 +12,6 @@ spec:
     Cortex returns a ranked list of hosts back to nova for final selection.
     This is the pipeline used for VMware.
   type: filter-weigher
-  createDecisions: true
   steps:
     - ref: {name: vmware-hana-binpacking}
       mandatory: false
