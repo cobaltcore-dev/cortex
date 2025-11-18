@@ -77,6 +77,14 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 	return true, ""
 }
 
+// Infer the pipeline name based on the request data.
+// Note that the pipelines provided here need to be created in the cluster.
+// See also the helm/cortex-manila bundle.
+func (httpAPI *httpAPI) inferPipelineName(_ api.ExternalSchedulerRequest) (string, error) {
+	// For now, we just return a default pipeline.
+	return "manila-external-scheduler", nil
+}
+
 // Handle the POST request from the Manila scheduler.
 // The request contains a spec of the volume to be scheduled, a list of hosts,
 // and a map of weights that were calculated by the Manila weigher pipeline.
@@ -119,6 +127,17 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
 		c.Respond(http.StatusBadRequest, internalErr, reason)
 		return
+	}
+
+	// If the pipeline name is not set, set it to a default value.
+	if requestData.Pipeline == "" {
+		var err error
+		requestData.Pipeline, err = httpAPI.inferPipelineName(requestData)
+		if err != nil {
+			c.Respond(http.StatusBadRequest, err, err.Error())
+			return
+		}
+		slog.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	// Create the decision object in kubernetes.

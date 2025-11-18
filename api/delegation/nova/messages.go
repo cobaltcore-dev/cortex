@@ -28,6 +28,9 @@ type ExternalSchedulerRequest struct {
 	// Request context from Nova that contains additional meta information.
 	Context NovaRequestContext `json:"context"`
 
+	// Whether the request is a reservation.
+	Reservation bool `json:"reservation"`
+
 	// Whether the Nova scheduling request is a rebuild request.
 	Rebuild bool `json:"rebuild"`
 	// Whether the Nova scheduling request is a resize request.

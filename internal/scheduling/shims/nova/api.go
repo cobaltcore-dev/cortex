@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -77,6 +78,31 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 	return true, ""
 }
 
+// Infer the pipeline name based on the request data.
+// Note that the pipelines provided here need to be created in the cluster.
+// See also the helm/cortex-nova bundle.
+func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerRequest) (string, error) {
+	hvType, ok := requestData.Spec.Data.Flavor.Data.ExtraSpecs["hypervisor_type"]
+	if !ok {
+		return "", errors.New("missing hypervisor_type in flavor extra specs")
+	}
+	switch strings.ToLower(hvType) {
+	case "qemu", "ch":
+		if requestData.Reservation {
+			return "nova-external-scheduler-kvm-reservations", nil
+		} else {
+			return "nova-external-scheduler-kvm", nil
+		}
+	case "vmware vcenter server":
+		if requestData.Reservation {
+			return "", errors.New("reservations are not supported on vmware hypervisors")
+		}
+		return "nova-external-scheduler-vmware", nil
+	default:
+		return "", fmt.Errorf("unsupported hypervisor_type: %s", hvType)
+	}
+}
+
 // Handle the POST request from the Nova scheduler.
 // The request contains a spec of the vm to be scheduled, a list of hosts,
 // and a map of weights that were calculated by the Nova weigher pipeline.
@@ -119,6 +145,17 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
 		c.Respond(http.StatusBadRequest, internalErr, reason)
 		return
+	}
+
+	// If the pipeline name is not set, infer it from the request data.
+	if requestData.Pipeline == "" {
+		var err error
+		requestData.Pipeline, err = httpAPI.inferPipelineName(requestData)
+		if err != nil {
+			c.Respond(http.StatusBadRequest, err, err.Error())
+			return
+		}
+		slog.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	decision := &v1alpha1.Decision{

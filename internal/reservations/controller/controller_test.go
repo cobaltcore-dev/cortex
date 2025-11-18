@@ -83,9 +83,6 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 			reconciler := &ReservationReconciler{
 				Client: client,
 				Scheme: scheme,
-				Conf: conf.Config{
-					Hypervisors: []string{"kvm", "vmware"},
-				},
 			}
 
 			req := ctrl.Request{
@@ -125,149 +122,6 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 				if tt.expectedError != "" && meta.IsStatusConditionFalse(updated.Status.Conditions, v1alpha1.ReservationConditionError) {
 					t.Errorf("Expected error %v, got %v", tt.expectedError, updated.Status.Conditions)
 				}
-			}
-		})
-	}
-}
-
-func TestReservationReconciler_reconcileInstanceReservation(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	tests := []struct {
-		name          string
-		reservation   *v1alpha1.Reservation
-		config        conf.Config
-		mockResponse  *schedulerdelegationapi.ExternalSchedulerResponse
-		expectedPhase v1alpha1.ReservationStatusPhase
-		expectedError string
-		shouldRequeue bool
-	}{
-		{
-			name: "unsupported hypervisor type",
-			reservation: &v1alpha1.Reservation{
-				ObjectMeta: ctrl.ObjectMeta{
-					Name: "test-reservation",
-				},
-				Spec: v1alpha1.ReservationSpec{
-					Scheduler: v1alpha1.ReservationSchedulerSpec{
-						CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-							ProjectID:  "test-project",
-							FlavorName: "test-flavor",
-							FlavorExtraSpecs: map[string]string{
-								"capabilities:hypervisor_type": "unsupported",
-							},
-						},
-					},
-					Requests: map[string]resource.Quantity{
-						"memory": resource.MustParse("1Gi"),
-						"cpu":    resource.MustParse("2"),
-					},
-				},
-			},
-			config: conf.Config{
-				Hypervisors: []string{"kvm", "vmware"},
-			},
-			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
-			expectedError: "hypervisor type is not supported: unsupported",
-			shouldRequeue: false,
-		},
-		{
-			name: "missing hypervisor type",
-			reservation: &v1alpha1.Reservation{
-				ObjectMeta: ctrl.ObjectMeta{
-					Name: "test-reservation",
-				},
-				Spec: v1alpha1.ReservationSpec{
-					Scheduler: v1alpha1.ReservationSchedulerSpec{
-						CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-							ProjectID:        "test-project",
-							FlavorName:       "test-flavor",
-							FlavorExtraSpecs: map[string]string{
-								// No hypervisor type specified
-							},
-						},
-					},
-					Requests: map[string]resource.Quantity{
-						"memory": resource.MustParse("1Gi"),
-						"cpu":    resource.MustParse("2"),
-					},
-				},
-			},
-			config: conf.Config{
-				Hypervisors: []string{"kvm", "vmware"},
-			},
-			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
-			expectedError: "hypervisor type is not supported: ",
-			shouldRequeue: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(tt.reservation).
-				WithStatusSubresource(&v1alpha1.Reservation{}).
-				Build()
-
-			// Create a mock server for the external scheduler
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tt.mockResponse != nil {
-					if err := json.NewEncoder(w).Encode(tt.mockResponse); err != nil {
-						t.Fatalf("failed to write response: %v", err)
-					}
-				} else {
-					w.WriteHeader(http.StatusInternalServerError)
-				}
-			}))
-			defer server.Close()
-
-			tt.config.Endpoints.NovaExternalScheduler = server.URL
-
-			reconciler := &ReservationReconciler{
-				Client: client,
-				Scheme: scheme,
-				Conf:   tt.config,
-			}
-
-			req := ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Name: tt.reservation.Name,
-				},
-			}
-
-			result, err := reconciler.Reconcile(context.Background(), req)
-
-			if err != nil && !tt.shouldRequeue {
-				t.Errorf("reconcileInstanceReservation() error = %v", err)
-				return
-			}
-
-			if tt.shouldRequeue && result.RequeueAfter == 0 {
-				t.Errorf("Expected requeue but got none")
-			}
-
-			if !tt.shouldRequeue && result.RequeueAfter > 0 {
-				t.Errorf("Expected no requeue but got %v", result.RequeueAfter)
-			}
-
-			// Verify the reservation status
-			var updated v1alpha1.Reservation
-			err = client.Get(context.Background(), req.NamespacedName, &updated)
-			if err != nil {
-				t.Errorf("Failed to get updated reservation: %v", err)
-				return
-			}
-
-			if updated.Status.Phase != tt.expectedPhase {
-				t.Errorf("Expected phase %v, got %v", tt.expectedPhase, updated.Status.Phase)
-			}
-
-			if tt.expectedError != "" && meta.IsStatusConditionFalse(updated.Status.Conditions, v1alpha1.ReservationConditionError) {
-				t.Errorf("Expected error %v, got %v", tt.expectedError, updated.Status.Conditions)
 			}
 		})
 	}
@@ -321,8 +175,8 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		}
 
 		// Verify request structure
-		if req.Pipeline != "nova-external-scheduler-reservations" {
-			t.Errorf("Expected Pipeline to be 'nova-external-scheduler-reservations', got %q", req.Pipeline)
+		if req.Pipeline != "nova-external-scheduler-kvm-reservations" {
+			t.Errorf("Expected Pipeline to be 'nova-external-scheduler-kvm-reservations', got %q", req.Pipeline)
 		}
 		if req.Spec.Data.NumInstances != 1 {
 			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)
@@ -335,7 +189,6 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 	defer server.Close()
 
 	config := conf.Config{
-		Hypervisors: []string{"kvm", "vmware"},
 		Endpoints: conf.EndpointsConfig{
 			NovaExternalScheduler: server.URL,
 		},

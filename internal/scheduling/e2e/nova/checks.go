@@ -285,7 +285,6 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
 	request := api.ExternalSchedulerRequest{
-		Pipeline: "nova-external-scheduler",
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
 			// Actual server that exists in nova but with mocked random properties.
 			InstanceUUID:     server.ID,

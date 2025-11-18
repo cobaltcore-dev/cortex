@@ -33,11 +33,9 @@ func checkCinderSchedulerReturnsValidHosts(
 	// TODO ADD THIS CHECK
 
 	//
-	pipelineName := "cinder-external-scheduler"
 	request := api.ExternalSchedulerRequest{
-		Pipeline: pipelineName,
-		Hosts:    []api.ExternalSchedulerHost{},
-		Weights:  map[string]float64{},
+		Hosts:   []api.ExternalSchedulerHost{},
+		Weights: map[string]float64{},
 	}
 	apiURL := "http://cortex-cinder-scheduler:8080/scheduler/cinder/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)

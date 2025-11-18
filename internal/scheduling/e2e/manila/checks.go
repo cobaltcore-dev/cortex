@@ -72,9 +72,8 @@ func checkManilaSchedulerReturnsValidHosts(
 		})
 	}
 	request := api.ExternalSchedulerRequest{
-		Pipeline: "manila-external-scheduler",
-		Hosts:    hosts,
-		Weights:  weights,
+		Hosts:   hosts,
+		Weights: weights,
 	}
 	apiURL := "http://cortex-manila-scheduler:8080/scheduler/manila/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
