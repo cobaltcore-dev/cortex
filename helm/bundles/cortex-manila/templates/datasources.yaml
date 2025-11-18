@@ -4,7 +4,7 @@ kind: Datasource
 metadata:
   name: netapp-aggr-labels-manila
 spec:
-  operator: cortex-manila-knowledge
+  operator: cortex-manila
   databaseSecretRef:
     name: cortex-manila-postgres
     namespace: {{ .Release.Namespace }}
@@ -27,7 +27,7 @@ kind: Datasource
 metadata:
   name: netapp-node-cpu-busy-manila
 spec:
-  operator: cortex-manila-knowledge
+  operator: cortex-manila
   databaseSecretRef:
     name: cortex-manila-postgres
     namespace: {{ .Release.Namespace }}
@@ -50,7 +50,7 @@ kind: Datasource
 metadata:
   name: manila-storage-pools
 spec:
-  operator: cortex-manila-knowledge
+  operator: cortex-manila
   databaseSecretRef:
     name: cortex-manila-postgres
     namespace: {{ .Release.Namespace }}

@@ -62,6 +62,7 @@ openstack:
 cortex: &cortex
   crd: {enable: false}
   conf: &cortexConf
+    operator: cortex-manila
     keystoneSecretRef:
       name: cortex-manila-openstack-keystone
       namespace: default
@@ -79,7 +80,6 @@ cortex-scheduling-controllers:
   namePrefix: cortex-manila-scheduling
   conf:
     <<: *cortexConf
-    operator: cortex-manila-scheduling
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
@@ -93,7 +93,6 @@ cortex-knowledge-controllers:
   namePrefix: cortex-manila-knowledge
   conf:
     <<: *cortexConf
-    operator: cortex-manila-knowledge
     monitoring:
       labels:
         <<: *cortexMonitoringLabels

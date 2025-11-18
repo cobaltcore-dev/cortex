@@ -4,7 +4,7 @@ kind: Knowledge
 metadata:
   name: netapp-storage-pool-cpu-usage-manila
 spec:
-  operator: cortex-manila-knowledge
+  operator: cortex-manila
   databaseSecretRef:
     name: cortex-manila-postgres
     namespace: {{ .Release.Namespace }}

@@ -4,7 +4,7 @@ kind: Pipeline
 metadata:
   name: manila-external-scheduler
 spec:
-  operator: cortex-manila-scheduling
+  operator: cortex-manila
   description: |
     Manila provides shared file system placement on storage hosts for OpenStack.
     After applying its own filtering and weighing logic, it delegates to cortex
