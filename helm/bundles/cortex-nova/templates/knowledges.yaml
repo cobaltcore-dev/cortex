@@ -4,7 +4,7 @@ kind: Knowledge
 metadata:
   name: vmware-resolved-hostsystems
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -27,7 +27,7 @@ kind: Knowledge
 metadata:
   name: vmware-project-noisiness
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -48,7 +48,7 @@ kind: Knowledge
 metadata:
   name: vmware-long-term-contended-hosts
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -68,7 +68,7 @@ kind: Knowledge
 metadata:
   name: vmware-short-term-contended-hosts
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -88,7 +88,7 @@ kind: Knowledge
 metadata:
   name: kvm-libvirt-domain-cpu-steal-pct
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -107,7 +107,7 @@ kind: Knowledge
 metadata:
   name: host-pinned-projects
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -127,7 +127,7 @@ kind: Knowledge
 metadata:
   name: host-utilization
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -147,7 +147,7 @@ kind: Knowledge
 metadata:
   name: host-capabilities
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -166,7 +166,7 @@ kind: Knowledge
 metadata:
   name: vm-host-residency
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   # TODO: This feature is currently too large to fit in the CR status.
   storeInDatabaseOnly: true
   databaseSecretRef:
@@ -189,7 +189,7 @@ kind: Knowledge
 metadata:
   name: vm-life-span
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -210,7 +210,7 @@ kind: Knowledge
 metadata:
   name: host-az
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -229,7 +229,7 @@ kind: Knowledge
 metadata:
   name: sap-host-details
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}

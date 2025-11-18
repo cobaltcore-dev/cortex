@@ -4,7 +4,7 @@ kind: Datasource
 metadata:
   name: vrops-virtualmachine-cpu-demand-ratio
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -27,7 +27,7 @@ kind: Datasource
 metadata:
   name: vrops-hostsystem-cpu-contention-long-term-percentage
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -50,7 +50,7 @@ kind: Datasource
 metadata:
   name: vrops-hostsystem-cpu-contention-short-term-percentage
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -76,7 +76,7 @@ kind: Datasource
 metadata:
   name: kvm-libvirt-domain-steal-pct
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -105,7 +105,7 @@ kind: Datasource
 metadata:
   name: nova-servers
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -128,7 +128,7 @@ kind: Datasource
 metadata:
   name: nova-deleted-servers
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -151,7 +151,7 @@ kind: Datasource
 metadata:
   name: nova-hypervisors
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -174,7 +174,7 @@ kind: Datasource
 metadata:
   name: nova-flavors
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -197,7 +197,7 @@ kind: Datasource
 metadata:
   name: nova-migrations
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -220,7 +220,7 @@ kind: Datasource
 metadata:
   name: nova-aggregates
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -243,7 +243,7 @@ kind: Datasource
 metadata:
   name: placement-resource-providers
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -266,7 +266,7 @@ kind: Datasource
 metadata:
   name: placement-resource-provider-traits
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -289,7 +289,7 @@ kind: Datasource
 metadata:
   name: placement-resource-provider-inventory-usages
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -312,7 +312,7 @@ kind: Datasource
 metadata:
   name: identity-domains
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -335,7 +335,7 @@ kind: Datasource
 metadata:
   name: identity-projects
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
@@ -358,7 +358,7 @@ kind: Datasource
 metadata:
   name: limes-project-commitments
 spec:
-  operator: cortex-nova-knowledge
+  operator: cortex-nova
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
