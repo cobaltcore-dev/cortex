@@ -15,7 +15,7 @@ dependencies:
   # from: file://../../library/cortex-postgres
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.5.4
+    version: 0.5.5
 
   # from: file://../../../dist/chart
   - name: cortex
