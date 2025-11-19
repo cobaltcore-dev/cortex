@@ -5,7 +5,10 @@ package machines
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/delegation/ironcore"
@@ -37,6 +40,9 @@ type DecisionPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[lib.Pipeline[ironcore.MachinePipelineRequest]]
 
+	// Mutex to only allow one process at a time
+	processMu sync.Mutex
+
 	// Config for the scheduling operator.
 	Conf conf.Config
 	// Monitor to pass down to all pipelines.
@@ -44,29 +50,83 @@ type DecisionPipelineController struct {
 }
 
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	startedAt := time.Now() // So we can measure sync duration.
-	log := ctrl.LoggerFrom(ctx)
+	c.processMu.Lock()
+	defer c.processMu.Unlock()
 
 	// Determine if this is a decision or machine reconciliation.
 	decision := &v1alpha1.Decision{}
 	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	if err := c.process(ctx, decision); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := c.Status().Update(ctx, decision); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (c *DecisionPipelineController) ProcessNewMachine(ctx context.Context, machine *ironcorev1alpha1.Machine) error {
+	c.processMu.Lock()
+	defer c.processMu.Unlock()
+
+	// Create a decision resource to schedule the machine.
+	decision := &v1alpha1.Decision{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "machine-",
+		},
+		Spec: v1alpha1.DecisionSpec{
+			Operator:   c.Conf.Operator,
+			Type:       v1alpha1.DecisionTypeIroncoreMachine,
+			ResourceID: machine.Name,
+			PipelineRef: corev1.ObjectReference{
+				Name: "machines-scheduler",
+			},
+			MachineRef: &corev1.ObjectReference{
+				Name:      machine.Name,
+				Namespace: machine.Namespace,
+			},
+		},
+	}
+
+	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
+	if !ok {
+		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
+	}
+	if pipelineConf.Spec.CreateDecisions {
+		if err := c.Create(ctx, decision); err != nil {
+			return err
+		}
+	}
+	if err := c.process(ctx, decision); err != nil {
+		return err
+	}
+	if pipelineConf.Spec.CreateDecisions {
+		if err := c.Status().Update(ctx, decision); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *DecisionPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
+	log := ctrl.LoggerFrom(ctx)
+	startedAt := time.Now() // So we can measure sync duration.
 
 	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
 	if !ok {
-		log.Error(nil, "pipeline not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return ctrl.Result{}, nil
+		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
+		return errors.New("pipeline not found or not ready")
 	}
 
 	// Find all available machine pools.
 	pools := &ironcorev1alpha1.MachinePoolList{}
 	if err := c.List(ctx, pools); err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 	if len(pools.Items) == 0 {
-		log.V(1).Info("skipping scheduling, no machine pools available")
-		return ctrl.Result{}, nil
+		return errors.New("no machine pools available for scheduling")
 	}
 
 	// Execute the scheduling pipeline.
@@ -74,14 +134,10 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 	result, err := pipeline.Run(request)
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
-		return ctrl.Result{}, err
+		return errors.New("failed to run scheduler pipeline")
 	}
 	decision.Status.Result = &result
 	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	if err := c.Status().Update(ctx, decision); err != nil {
-		log.Error(err, "failed to update decision status")
-		return ctrl.Result{}, err
-	}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
 	// Set the machine pool ref on the machine.
@@ -91,17 +147,16 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 		Namespace: decision.Spec.MachineRef.Namespace,
 	}, machine); err != nil {
 		log.Error(err, "failed to fetch machine for decision")
-		return ctrl.Result{}, err
+		return err
 	}
 	// Assign the first machine pool returned by the pipeline.
 	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: *result.TargetHost}
 	if err := c.Update(ctx, machine); err != nil {
 		log.V(1).Error(err, "failed to assign machine pool to instance")
-		return ctrl.Result{}, err
+		return err
 	}
 	log.V(1).Info("assigned machine pool to instance", "machinePool", *result.TargetHost)
-
-	return ctrl.Result{}, nil
+	return nil
 }
 
 // The base controller will delegate the pipeline creation down to this method.
@@ -115,34 +170,13 @@ func (c *DecisionPipelineController) InitPipeline(
 }
 
 func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
-	handle := func(ctx context.Context, newMachine *ironcorev1alpha1.Machine) {
-		log := ctrl.LoggerFrom(ctx)
-		// Create a decision resource to schedule the machine.
-		decision := &v1alpha1.Decision{
-			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "machine-",
-			},
-			Spec: v1alpha1.DecisionSpec{
-				Operator:   c.Conf.Operator,
-				Type:       v1alpha1.DecisionTypeIroncoreMachine,
-				ResourceID: newMachine.Name,
-				PipelineRef: corev1.ObjectReference{
-					Name: "machines-scheduler",
-				},
-				MachineRef: &corev1.ObjectReference{
-					Name:      newMachine.Name,
-					Namespace: newMachine.Namespace,
-				},
-			},
-		}
-		if err := c.Create(ctx, decision); err != nil {
-			log.Error(err, "failed to create decision for machine scheduling")
-		}
-	}
 	return handler.Funcs{
 		CreateFunc: func(ctx context.Context, evt event.CreateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			machine := evt.Object.(*ironcorev1alpha1.Machine)
-			handle(ctx, machine)
+			if err := c.ProcessNewMachine(ctx, machine); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to process new machine for scheduling", "machine", machine.Name)
+			}
 		},
 		UpdateFunc: func(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			newMachine := evt.ObjectNew.(*ironcorev1alpha1.Machine)
@@ -150,7 +184,10 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 				// Machine is already scheduled, no need to create a decision.
 				return
 			}
-			handle(ctx, newMachine)
+			if err := c.ProcessNewMachine(ctx, newMachine); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to process new machine for scheduling", "machine", newMachine.Name)
+			}
 		},
 		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			// Delete the associated decision(s).

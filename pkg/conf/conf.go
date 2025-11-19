@@ -72,9 +72,6 @@ type Config struct {
 	// The endpoint where to find the nova external scheduler endpoint.
 	Endpoints EndpointsConfig `json:"endpoints"`
 
-	// Hypervisor types for which reservations should be managed.
-	Hypervisors []string `json:"hypervisors"`
-
 	// Whether to disable dry-run for descheduler steps.
 	DisableDeschedulerDryRun bool `json:"disableDeschedulerDryRun"`
 

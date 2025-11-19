@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -72,24 +71,6 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
 
-	schedulerSpec := res.Spec.Scheduler.CortexNova
-	hvType, ok := schedulerSpec.FlavorExtraSpecs["capabilities:hypervisor_type"]
-	if !ok || !slices.Contains(r.Conf.Hypervisors, hvType) {
-		log.Info("hypervisor type is not supported", "reservation", req.Name)
-		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.ReservationConditionError,
-			Status:  metav1.ConditionTrue,
-			Reason:  "UnsupportedHypervisorType",
-			Message: "hypervisor type is not supported: " + hvType,
-		})
-		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
-		if err := r.Client.Status().Update(ctx, &res); err != nil {
-			log.Error(err, "failed to update reservation status")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil // No need to requeue, the reservation is now failed.
-	}
-
 	// Convert resource.Quantity to integers for the API
 	var memoryMB uint64
 	if memory, ok := res.Spec.Requests["memory"]; ok {
@@ -109,23 +90,20 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		cpu = uint64(cpuValue)
 	}
 
-	// Get all supported hosts and assign zero-weights to them.
+	// Get all hosts and assign zero-weights to them.
 	hypervisors, err := r.ListHypervisors(ctx)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list hypervisors: %w", err)
 	}
 	var eligibleHosts []schedulerdelegationapi.ExternalSchedulerHost
 	for _, hv := range hypervisors {
-		if hv.Type != hvType {
-			continue
-		}
 		eligibleHosts = append(eligibleHosts, schedulerdelegationapi.ExternalSchedulerHost{
 			ComputeHost:        hv.Service.Host,
 			HypervisorHostname: hv.Hostname,
 		})
 	}
 	if len(eligibleHosts) == 0 {
-		log.Info("no eligible hosts found for reservation", "reservation", req.Name, "hypervisor_type", hvType)
+		log.Info("no eligible hosts found for reservation", "reservation", req.Name)
 		return ctrl.Result{}, errors.New("no eligible hosts found for reservation")
 	}
 	weights := make(map[string]float64, len(eligibleHosts))
@@ -135,18 +113,18 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Call the external scheduler delegation API to get a host for the reservation.
 	externalSchedulerRequest := schedulerdelegationapi.ExternalSchedulerRequest{
-		Pipeline: "nova-external-scheduler-reservations",
-		Hosts:    eligibleHosts,
-		Weights:  weights,
+		Reservation: true,
+		Hosts:       eligibleHosts,
+		Weights:     weights,
 		Spec: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaSpec]{
 			Data: schedulerdelegationapi.NovaSpec{
 				InstanceUUID: res.Name,
 				NumInstances: 1, // One for each reservation.
-				ProjectID:    schedulerSpec.ProjectID,
+				ProjectID:    res.Spec.Scheduler.CortexNova.ProjectID,
 				Flavor: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaFlavor]{
 					Data: schedulerdelegationapi.NovaFlavor{
-						Name:       schedulerSpec.FlavorName,
-						ExtraSpecs: schedulerSpec.FlavorExtraSpecs,
+						Name:       res.Spec.Scheduler.CortexNova.FlavorName,
+						ExtraSpecs: res.Spec.Scheduler.CortexNova.FlavorExtraSpecs,
 						MemoryMB:   memoryMB,
 						VCPUs:      cpu,
 						// Disk is currently not considered.

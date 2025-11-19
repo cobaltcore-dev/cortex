@@ -101,7 +101,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				},
 			},
 			machinePools:   []ironcorev1alpha1.MachinePool{},
-			expectError:    false,
+			expectError:    true,
 			expectDecision: false,
 		},
 	}
@@ -267,6 +267,282 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 			if !tt.expectError && pipeline == nil {
 				t.Error("expected pipeline to be non-nil")
+			}
+		})
+	}
+}
+
+func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheduling scheme: %v", err)
+	}
+	if err := ironcorev1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add ironcore scheme: %v", err)
+	}
+
+	tests := []struct {
+		name                      string
+		machine                   *ironcorev1alpha1.Machine
+		machinePools              []ironcorev1alpha1.MachinePool
+		pipelineConfig            *v1alpha1.Pipeline
+		createDecisions           bool
+		expectError               bool
+		expectDecisionCreated     bool
+		expectMachinePoolAssigned bool
+		expectTargetHost          string
+	}{
+		{
+			name: "successful machine processing with decision creation",
+			machine: &ironcorev1alpha1.Machine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-machine",
+					Namespace: "default",
+				},
+				Spec: ironcorev1alpha1.MachineSpec{
+					Scheduler: "",
+				},
+			},
+			machinePools: []ironcorev1alpha1.MachinePool{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pool1"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pool2"},
+				},
+			},
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "machines-scheduler",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: true,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
+			},
+			createDecisions:           true,
+			expectError:               false,
+			expectDecisionCreated:     true,
+			expectMachinePoolAssigned: true,
+			expectTargetHost:          "pool1",
+		},
+		{
+			name: "successful machine processing without decision creation",
+			machine: &ironcorev1alpha1.Machine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-machine-no-decision",
+					Namespace: "default",
+				},
+				Spec: ironcorev1alpha1.MachineSpec{
+					Scheduler: "",
+				},
+			},
+			machinePools: []ironcorev1alpha1.MachinePool{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pool1"},
+				},
+			},
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "machines-scheduler",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: false,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
+			},
+			createDecisions:           false,
+			expectError:               false,
+			expectDecisionCreated:     false,
+			expectMachinePoolAssigned: true,
+			expectTargetHost:          "pool1",
+		},
+		{
+			name: "pipeline not configured",
+			machine: &ironcorev1alpha1.Machine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-machine-no-pipeline",
+					Namespace: "default",
+				},
+				Spec: ironcorev1alpha1.MachineSpec{
+					Scheduler: "",
+				},
+			},
+			machinePools:              []ironcorev1alpha1.MachinePool{},
+			pipelineConfig:            nil,
+			expectError:               true,
+			expectDecisionCreated:     false,
+			expectMachinePoolAssigned: false,
+		},
+		{
+			name: "no machine pools available",
+			machine: &ironcorev1alpha1.Machine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-machine-no-pools",
+					Namespace: "default",
+				},
+				Spec: ironcorev1alpha1.MachineSpec{
+					Scheduler: "",
+				},
+			},
+			machinePools: []ironcorev1alpha1.MachinePool{},
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "machines-scheduler",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: true,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
+			},
+			createDecisions:           true,
+			expectError:               true,
+			expectDecisionCreated:     true, // Decision is created but processing fails
+			expectMachinePoolAssigned: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []runtime.Object{tt.machine}
+			for i := range tt.machinePools {
+				objects = append(objects, &tt.machinePools[i])
+			}
+			if tt.pipelineConfig != nil {
+				objects = append(objects, tt.pipelineConfig)
+			}
+
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(objects...).
+				WithStatusSubresource(&v1alpha1.Decision{}).
+				Build()
+
+			controller := &DecisionPipelineController{
+				BasePipelineController: lib.BasePipelineController[lib.Pipeline[ironcore.MachinePipelineRequest]]{
+					Pipelines:       map[string]lib.Pipeline[ironcore.MachinePipelineRequest]{},
+					PipelineConfigs: map[string]v1alpha1.Pipeline{},
+				},
+				Conf: conf.Config{
+					Operator: "test-operator",
+				},
+				Monitor: lib.PipelineMonitor{},
+			}
+			controller.Client = client
+
+			if tt.pipelineConfig != nil {
+				controller.PipelineConfigs[tt.pipelineConfig.Name] = *tt.pipelineConfig
+				controller.Pipelines[tt.pipelineConfig.Name] = createMockPipeline()
+			}
+
+			err := controller.ProcessNewMachine(context.Background(), tt.machine)
+
+			if tt.expectError && err == nil {
+				t.Error("expected error but got none")
+				return
+			}
+
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error, got: %v", err)
+				return
+			}
+
+			// Check if decision was created (if expected)
+			if tt.expectDecisionCreated {
+				var decisions v1alpha1.DecisionList
+				err := client.List(context.Background(), &decisions)
+				if err != nil {
+					t.Errorf("Failed to list decisions: %v", err)
+					return
+				}
+
+				found := false
+				for _, decision := range decisions.Items {
+					if decision.Spec.MachineRef != nil &&
+						decision.Spec.MachineRef.Name == tt.machine.Name &&
+						decision.Spec.MachineRef.Namespace == tt.machine.Namespace {
+						found = true
+
+						// Verify decision properties
+						if decision.Spec.Operator != "test-operator" {
+							t.Errorf("expected operator %q, got %q", "test-operator", decision.Spec.Operator)
+						}
+						if decision.Spec.Type != v1alpha1.DecisionTypeIroncoreMachine {
+							t.Errorf("expected type %q, got %q", v1alpha1.DecisionTypeIroncoreMachine, decision.Spec.Type)
+						}
+						if decision.Spec.ResourceID != tt.machine.Name {
+							t.Errorf("expected resource ID %q, got %q", tt.machine.Name, decision.Spec.ResourceID)
+						}
+						if decision.Spec.PipelineRef.Name != "machines-scheduler" {
+							t.Errorf("expected pipeline ref %q, got %q", "machines-scheduler", decision.Spec.PipelineRef.Name)
+						}
+
+						// Check if result was set (only for successful cases)
+						if !tt.expectError && tt.expectTargetHost != "" {
+							if decision.Status.Result == nil {
+								t.Error("expected decision result to be set")
+								return
+							}
+							if decision.Status.Result.TargetHost == nil {
+								t.Error("expected target host to be set")
+								return
+							}
+							if *decision.Status.Result.TargetHost != tt.expectTargetHost {
+								t.Errorf("expected target host %q, got %q", tt.expectTargetHost, *decision.Status.Result.TargetHost)
+							}
+						}
+						break
+					}
+				}
+
+				if !found {
+					t.Error("expected decision to be created but was not found")
+				}
+			} else {
+				// Check that no decisions were created
+				var decisions v1alpha1.DecisionList
+				err := client.List(context.Background(), &decisions)
+				if err != nil {
+					t.Errorf("Failed to list decisions: %v", err)
+					return
+				}
+
+				for _, decision := range decisions.Items {
+					if decision.Spec.MachineRef != nil &&
+						decision.Spec.MachineRef.Name == tt.machine.Name &&
+						decision.Spec.MachineRef.Namespace == tt.machine.Namespace {
+						t.Error("expected no decision to be created but found one")
+						break
+					}
+				}
+			}
+
+			// Check if machine pool was assigned (if expected)
+			if tt.expectMachinePoolAssigned {
+				var updatedMachine ironcorev1alpha1.Machine
+				err := client.Get(context.Background(), types.NamespacedName{
+					Name:      tt.machine.Name,
+					Namespace: tt.machine.Namespace,
+				}, &updatedMachine)
+				if err != nil {
+					t.Errorf("Failed to get updated machine: %v", err)
+					return
+				}
+
+				if updatedMachine.Spec.MachinePoolRef == nil {
+					t.Error("expected machine pool ref to be set")
+					return
+				}
+
+				if updatedMachine.Spec.MachinePoolRef.Name != tt.expectTargetHost {
+					t.Errorf("expected machine pool %q, got %q", tt.expectTargetHost, updatedMachine.Spec.MachinePoolRef.Name)
+				}
 			}
 		})
 	}

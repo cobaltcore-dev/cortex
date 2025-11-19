@@ -27,7 +27,7 @@ import (
 
 type HTTPAPIDelegate interface {
 	// Process the decision from the API. Should create and return the updated decision.
-	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error)
+	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error
 }
 
 type HTTPAPI interface {
@@ -77,6 +77,14 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 	return true, ""
 }
 
+// Infer the pipeline name based on the request data.
+// Note that the pipelines provided here need to be created in the cluster.
+// See also the helm/cortex-cinder bundle.
+func (httpAPI *httpAPI) inferPipelineName(_ api.ExternalSchedulerRequest) (string, error) {
+	// For now, we just return a default pipeline.
+	return "cinder-external-scheduler", nil
+}
+
 // Handle the POST request from the Cinder scheduler.
 // The request contains a spec of the volume to be scheduled, a list of hosts,
 // and a map of weights that were calculated by the Cinder weigher pipeline.
@@ -121,6 +129,17 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// If the pipeline name is not set, set it to a default value.
+	if requestData.Pipeline == "" {
+		var err error
+		requestData.Pipeline, err = httpAPI.inferPipelineName(requestData)
+		if err != nil {
+			c.Respond(http.StatusBadRequest, err, err.Error())
+			return
+		}
+		slog.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+	}
+
 	// Create the decision object in kubernetes.
 	decision := &v1alpha1.Decision{
 		ObjectMeta: metav1.ObjectMeta{
@@ -137,21 +156,20 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		},
 	}
 	ctx := r.Context()
-	result, err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision)
-	if err != nil {
+	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
 		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling decision")
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.
-	if meta.IsStatusConditionTrue(result.Status.Conditions, v1alpha1.DecisionConditionError) {
+	if meta.IsStatusConditionTrue(decision.Status.Conditions, v1alpha1.DecisionConditionError) {
 		c.Respond(http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
 		return
 	}
-	if result.Status.Result == nil {
+	if decision.Status.Result == nil {
 		c.Respond(http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
 		return
 	}
-	hosts := result.Status.Result.OrderedHosts
+	hosts := decision.Status.Result.OrderedHosts
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {

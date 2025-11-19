@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -120,7 +119,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Steps:    []v1alpha1.StepInPipeline{},
 				},
 			},
-			expectError:    false,
+			expectError:    true,
 			expectResult:   false,
 			expectDuration: false,
 		},
@@ -143,7 +142,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				},
 			},
 			pipeline:       nil,
-			expectError:    false,
+			expectError:    true,
 			expectResult:   false,
 			expectDuration: false,
 		},
@@ -171,7 +170,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Conf: conf.Config{
 					Operator: "test-operator",
 				},
-				pendingRequests: make(map[string]*pendingRequest),
 			}
 
 			if tt.pipeline != nil {
@@ -227,94 +225,260 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
 	}
 
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1alpha1.Decision{}).
-		Build()
-
-	controller := &DecisionPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
-			Client: client,
+	manilaRequest := api.ExternalSchedulerRequest{
+		Spec: map[string]any{
+			"share_id": "test-share-id",
+			"size":     10,
 		},
-		Monitor:         lib.PipelineMonitor{},
-		pendingRequests: make(map[string]*pendingRequest),
+		Context: api.ManilaRequestContext{
+			ProjectID:       "test-project",
+			UserID:          "test-user",
+			RequestID:       "req-123",
+			GlobalRequestID: "global-req-123",
+		},
+		Hosts: []api.ExternalSchedulerHost{
+			{ShareHost: "manila-share-1@backend1"},
+			{ShareHost: "manila-share-2@backend2"},
+		},
+		Weights:  map[string]float64{"manila-share-1@backend1": 1.0, "manila-share-2@backend2": 0.5},
+		Pipeline: "test-pipeline",
 	}
 
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-decision",
-			Namespace: "default",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			Type:     v1alpha1.DecisionTypeManilaShare,
-			Operator: "test-operator",
-		},
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		decisionKey := decision.Namespace + "/" + decision.Name
-		controller.mu.RLock()
-		pending, exists := controller.pendingRequests[decisionKey]
-		controller.mu.RUnlock()
-
-		if exists {
-			decision.Status.Result = &v1alpha1.DecisionResult{
-				OrderedHosts: []string{"test-host"},
-				TargetHost:   func() *string { s := "test-host"; return &s }(),
-			}
-			select {
-			case pending.responseChan <- decision:
-			case <-pending.cancelChan:
-			}
-		}
-	}()
-
-	result, err := controller.ProcessNewDecisionFromAPI(ctx, decision)
-
+	manilaRaw, err := json.Marshal(manilaRequest)
 	if err != nil {
-		t.Errorf("Expected no error but got: %v", err)
+		t.Fatalf("Failed to marshal manila request: %v", err)
 	}
 
-	if result == nil {
-		t.Error("Expected result but got nil")
-	}
-
-	if result != nil && result.Status.Result == nil {
-		t.Error("Expected result status to be set")
-	}
-
-	// Test timeout scenario
-	t.Run("timeout scenario", func(t *testing.T) {
-		decision2 := &v1alpha1.Decision{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-decision-timeout",
-				Namespace: "default",
+	tests := []struct {
+		name                  string
+		decision              *v1alpha1.Decision
+		pipelineConfig        *v1alpha1.Pipeline
+		createDecisions       bool
+		expectError           bool
+		expectDecisionCreated bool
+		expectResult          bool
+		expectDuration        bool
+	}{
+		{
+			name: "successful decision processing with creation",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "test-decision-",
+					Namespace:    "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:     v1alpha1.DecisionTypeManilaShare,
+					Operator: "test-operator",
+					PipelineRef: corev1.ObjectReference{
+						Name: "test-pipeline",
+					},
+					ManilaRaw: &runtime.RawExtension{
+						Raw: manilaRaw,
+					},
+				},
 			},
-			Spec: v1alpha1.DecisionSpec{
-				Type:     v1alpha1.DecisionTypeManilaShare,
-				Operator: "test-operator",
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: true,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
 			},
-		}
+			createDecisions:       true,
+			expectError:           false,
+			expectDecisionCreated: true,
+			expectResult:          true,
+			expectDuration:        true,
+		},
+		{
+			name: "successful decision processing without creation",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision-no-create",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:     v1alpha1.DecisionTypeManilaShare,
+					Operator: "test-operator",
+					PipelineRef: corev1.ObjectReference{
+						Name: "test-pipeline",
+					},
+					ManilaRaw: &runtime.RawExtension{
+						Raw: manilaRaw,
+					},
+				},
+			},
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: false,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
+			},
+			createDecisions:       false,
+			expectError:           false,
+			expectDecisionCreated: false,
+			expectResult:          true,
+			expectDuration:        true,
+		},
+		{
+			name: "pipeline not configured",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision-no-pipeline",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:     v1alpha1.DecisionTypeManilaShare,
+					Operator: "test-operator",
+					PipelineRef: corev1.ObjectReference{
+						Name: "nonexistent-pipeline",
+					},
+					ManilaRaw: &runtime.RawExtension{
+						Raw: manilaRaw,
+					},
+				},
+			},
+			pipelineConfig:        nil,
+			expectError:           true,
+			expectDecisionCreated: false,
+			expectResult:          false,
+			expectDuration:        false,
+		},
+		{
+			name: "decision without manilaRaw spec",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision-no-raw",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:     v1alpha1.DecisionTypeManilaShare,
+					Operator: "test-operator",
+					PipelineRef: corev1.ObjectReference{
+						Name: "test-pipeline",
+					},
+					ManilaRaw: nil,
+				},
+			},
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: true,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
+			},
+			createDecisions:       true,
+			expectError:           true,
+			expectDecisionCreated: false,
+			expectResult:          false,
+			expectDuration:        false,
+		},
+	}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		defer cancel()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []client.Object{}
+			if tt.pipelineConfig != nil {
+				objects = append(objects, tt.pipelineConfig)
+			}
 
-		result, err := controller.ProcessNewDecisionFromAPI(ctx, decision2)
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&v1alpha1.Decision{}).
+				Build()
 
-		if err == nil {
-			t.Error("Expected timeout error but got none")
-		}
-		if result != nil {
-			t.Error("Expected nil result on timeout")
-		}
-	})
+			controller := &DecisionPipelineController{
+				BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
+					Client:          client,
+					Pipelines:       make(map[string]lib.Pipeline[api.ExternalSchedulerRequest]),
+					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+				},
+				Monitor: lib.PipelineMonitor{},
+				Conf: conf.Config{
+					Operator: "test-operator",
+				},
+			}
+
+			if tt.pipelineConfig != nil {
+				controller.PipelineConfigs[tt.pipelineConfig.Name] = *tt.pipelineConfig
+				pipeline, err := controller.InitPipeline(t.Context(), tt.pipelineConfig.Name, []v1alpha1.Step{})
+				if err != nil {
+					t.Fatalf("Failed to init pipeline: %v", err)
+				}
+				controller.Pipelines[tt.pipelineConfig.Name] = pipeline
+			}
+
+			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)
+
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+
+			// Check if decision was created (if expected)
+			if tt.expectDecisionCreated {
+				var decisions v1alpha1.DecisionList
+				err := client.List(context.Background(), &decisions)
+				if err != nil {
+					t.Errorf("Failed to list decisions: %v", err)
+					return
+				}
+
+				found := false
+				for _, decision := range decisions.Items {
+					if decision.Spec.Type == v1alpha1.DecisionTypeManilaShare &&
+						decision.Spec.Operator == "test-operator" {
+						found = true
+
+						// Verify decision properties
+						if decision.Spec.PipelineRef.Name != "test-pipeline" {
+							t.Errorf("expected pipeline ref %q, got %q", "test-pipeline", decision.Spec.PipelineRef.Name)
+						}
+
+						// Check if result was set
+						if tt.expectResult {
+							if decision.Status.Result == nil {
+								t.Error("expected decision result to be set")
+								return
+							}
+							if tt.expectDuration && decision.Status.Took.Duration <= 0 {
+								t.Error("expected duration to be positive")
+							}
+						}
+						break
+					}
+				}
+
+				if !found {
+					t.Error("expected decision to be created but was not found")
+				}
+			} else if !tt.expectError {
+				// For cases without creation, check that the decision has the right status
+				if tt.expectResult && tt.decision.Status.Result == nil {
+					t.Error("expected decision result to be set in original decision object")
+				}
+			}
+		})
+	}
 }
 
 func TestDecisionPipelineController_InitPipeline(t *testing.T) {

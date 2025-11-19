@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -91,6 +92,13 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 		flavor, ok := flavors[flavorName]
 		if !ok {
 			syncLog.Info("skipping commitment without known flavor", "id", id, "flavorName", flavorName)
+			delete(commitments, id)
+			continue
+		}
+		// We only support cloud-hypervisor and qemu hypervisors for commitments.
+		hvType, ok := flavor.ExtraSpecs["capabilities:hypervisor_type"]
+		if !ok || !slices.Contains([]string{"ch", "qemu"}, strings.ToLower(hvType)) {
+			syncLog.Info("skipping commitment with unsupported hv type", "commitmentID", commitment.UUID, "hypervisorType", hvType)
 			delete(commitments, id)
 			continue
 		}

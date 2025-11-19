@@ -61,6 +61,12 @@ spec:
           spec:
             description: spec defines the desired state of Pipeline
             properties:
+              createDecisions:
+                default: false
+                description: |-
+                  If this pipeline should create decision objects.
+                  When this is false, the pipeline will still process requests.
+                type: boolean
               description:
                 description: An optional description of the pipeline.
                 type: string

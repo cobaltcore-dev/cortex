@@ -156,6 +156,12 @@ func prepare(ctx context.Context, client client.Client, config conf.Config) data
 		// See: https://github.com/sapcc/nova/blob/5fcb125/nova/utils.py#L1234
 		// And: https://github.com/sapcc/nova/pull/570/files
 		if strings.Contains(f.ExtraSpecs, "capabilities:cpu_arch") {
+			slog.Info("skipping baremetal flavor", "flavorName", f.Name)
+			continue
+		}
+		// The hypervisor_type extra spec is required to infer the correct pipeline.
+		if !strings.Contains(f.ExtraSpecs, "capabilities:hypervisor_type") {
+			slog.Info("skipping flavor without hypervisor_type extra spec", "flavorName", f.Name)
 			continue
 		}
 		flavors = append(flavors, f)
@@ -285,7 +291,6 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
 	request := api.ExternalSchedulerRequest{
-		Pipeline: "nova-external-scheduler",
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
 			// Actual server that exists in nova but with mocked random properties.
 			InstanceUUID:     server.ID,

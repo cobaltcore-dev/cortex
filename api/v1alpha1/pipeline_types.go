@@ -33,6 +33,10 @@ type PipelineSpec struct {
 	// An optional description of the pipeline.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
+	// If this pipeline should create decision objects.
+	// When this is false, the pipeline will still process requests.
+	// +kubebuilder:default=false
+	CreateDecisions bool `json:"createDecisions,omitempty"`
 	// The type of the pipeline.
 	Type PipelineType `json:"type"`
 	// The ordered list of steps that make up this pipeline.

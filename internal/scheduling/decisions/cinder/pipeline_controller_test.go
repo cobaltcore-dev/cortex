@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -120,7 +119,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Steps:    []v1alpha1.StepInPipeline{},
 				},
 			},
-			expectError:    false,
+			expectError:    true,
 			expectResult:   false,
 			expectDuration: false,
 		},
@@ -143,7 +142,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				},
 			},
 			pipeline:       nil,
-			expectError:    false,
+			expectError:    true,
 			expectResult:   false,
 			expectDuration: false,
 		},
@@ -226,67 +225,259 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
 	}
 
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1alpha1.Decision{}).
-		Build()
-
-	controller := &DecisionPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
-			Client: client,
+	cinderRequest := api.ExternalSchedulerRequest{
+		Spec: map[string]any{
+			"volume_id": "test-volume-id",
+			"size":      10,
 		},
-		Monitor:         lib.PipelineMonitor{},
-		pendingRequests: make(map[string]*pendingRequest),
+		Context: api.CinderRequestContext{
+			ProjectID:       "test-project",
+			UserID:          "test-user",
+			RequestID:       "req-123",
+			GlobalRequestID: "global-req-123",
+		},
+		Hosts: []api.ExternalSchedulerHost{
+			{VolumeHost: "cinder-volume-1"},
+			{VolumeHost: "cinder-volume-2"},
+		},
+		Weights:  map[string]float64{"cinder-volume-1": 1.0, "cinder-volume-2": 0.5},
+		Pipeline: "test-pipeline",
 	}
 
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-decision",
-			Namespace: "default",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			Type:     v1alpha1.DecisionTypeCinderVolume,
-			Operator: "test-operator",
-		},
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		decisionKey := decision.Namespace + "/" + decision.Name
-		controller.mu.RLock()
-		pending, exists := controller.pendingRequests[decisionKey]
-		controller.mu.RUnlock()
-
-		if exists {
-			decision.Status.Result = &v1alpha1.DecisionResult{
-				OrderedHosts: []string{"test-host"},
-				TargetHost:   func() *string { s := "test-host"; return &s }(),
-			}
-			select {
-			case pending.responseChan <- decision:
-			case <-pending.cancelChan:
-			}
-		}
-	}()
-
-	result, err := controller.ProcessNewDecisionFromAPI(ctx, decision)
-
+	cinderRaw, err := json.Marshal(cinderRequest)
 	if err != nil {
-		t.Errorf("Expected no error but got: %v", err)
+		t.Fatalf("Failed to marshal cinder request: %v", err)
 	}
 
-	if result == nil {
-		t.Error("Expected result but got nil")
+	tests := []struct {
+		name                  string
+		decision              *v1alpha1.Decision
+		pipelineConfig        *v1alpha1.Pipeline
+		createDecisions       bool
+		expectError           bool
+		expectDecisionCreated bool
+		expectResult          bool
+		expectDuration        bool
+	}{
+		{
+			name: "successful decision processing with creation",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "test-decision-",
+					Namespace:    "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:     v1alpha1.DecisionTypeCinderVolume,
+					Operator: "test-operator",
+					PipelineRef: corev1.ObjectReference{
+						Name: "test-pipeline",
+					},
+					CinderRaw: &runtime.RawExtension{
+						Raw: cinderRaw,
+					},
+				},
+			},
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: true,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
+			},
+			createDecisions:       true,
+			expectError:           false,
+			expectDecisionCreated: true,
+			expectResult:          true,
+			expectDuration:        true,
+		},
+		{
+			name: "successful decision processing without creation",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision-no-create",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:     v1alpha1.DecisionTypeCinderVolume,
+					Operator: "test-operator",
+					PipelineRef: corev1.ObjectReference{
+						Name: "test-pipeline",
+					},
+					CinderRaw: &runtime.RawExtension{
+						Raw: cinderRaw,
+					},
+				},
+			},
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: false,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
+			},
+			createDecisions:       false,
+			expectError:           false,
+			expectDecisionCreated: false,
+			expectResult:          true,
+			expectDuration:        true,
+		},
+		{
+			name: "pipeline not configured",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision-no-pipeline",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:     v1alpha1.DecisionTypeCinderVolume,
+					Operator: "test-operator",
+					PipelineRef: corev1.ObjectReference{
+						Name: "nonexistent-pipeline",
+					},
+					CinderRaw: &runtime.RawExtension{
+						Raw: cinderRaw,
+					},
+				},
+			},
+			pipelineConfig:        nil,
+			expectError:           true,
+			expectDecisionCreated: false,
+			expectResult:          false,
+			expectDuration:        false,
+		},
+		{
+			name: "decision without cinderRaw spec",
+			decision: &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision-no-raw",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					Type:     v1alpha1.DecisionTypeCinderVolume,
+					Operator: "test-operator",
+					PipelineRef: corev1.ObjectReference{
+						Name: "test-pipeline",
+					},
+					CinderRaw: nil,
+				},
+			},
+			pipelineConfig: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:            v1alpha1.PipelineTypeFilterWeigher,
+					Operator:        "test-operator",
+					CreateDecisions: true,
+					Steps:           []v1alpha1.StepInPipeline{},
+				},
+			},
+			createDecisions:       true,
+			expectError:           true,
+			expectDecisionCreated: false,
+			expectResult:          false,
+			expectDuration:        false,
+		},
 	}
 
-	if result != nil && result.Status.Result == nil {
-		t.Error("Expected result status to be set")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []client.Object{}
+			if tt.pipelineConfig != nil {
+				objects = append(objects, tt.pipelineConfig)
+			}
+
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&v1alpha1.Decision{}).
+				Build()
+
+			controller := &DecisionPipelineController{
+				BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
+					Client:          client,
+					Pipelines:       make(map[string]lib.Pipeline[api.ExternalSchedulerRequest]),
+					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+				},
+				Monitor: lib.PipelineMonitor{},
+				Conf: conf.Config{
+					Operator: "test-operator",
+				},
+			}
+
+			if tt.pipelineConfig != nil {
+				controller.PipelineConfigs[tt.pipelineConfig.Name] = *tt.pipelineConfig
+				pipeline, err := controller.InitPipeline(t.Context(), tt.pipelineConfig.Name, []v1alpha1.Step{})
+				if err != nil {
+					t.Fatalf("Failed to init pipeline: %v", err)
+				}
+				controller.Pipelines[tt.pipelineConfig.Name] = pipeline
+			}
+
+			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)
+
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+
+			// Check if decision was created (if expected)
+			if tt.expectDecisionCreated {
+				var decisions v1alpha1.DecisionList
+				err := client.List(context.Background(), &decisions)
+				if err != nil {
+					t.Errorf("Failed to list decisions: %v", err)
+					return
+				}
+
+				found := false
+				for _, decision := range decisions.Items {
+					if decision.Spec.Type == v1alpha1.DecisionTypeCinderVolume &&
+						decision.Spec.Operator == "test-operator" {
+						found = true
+
+						// Verify decision properties
+						if decision.Spec.PipelineRef.Name != "test-pipeline" {
+							t.Errorf("expected pipeline ref %q, got %q", "test-pipeline", decision.Spec.PipelineRef.Name)
+						}
+
+						// Check if result was set
+						if tt.expectResult {
+							if decision.Status.Result == nil {
+								t.Error("expected decision result to be set")
+								return
+							}
+							if tt.expectDuration && decision.Status.Took.Duration <= 0 {
+								t.Error("expected duration to be positive")
+							}
+						}
+						break
+					}
+				}
+
+				if !found {
+					t.Error("expected decision to be created but was not found")
+				}
+			} else if !tt.expectError {
+				// For cases without creation, check that the decision has the right status
+				if tt.expectResult && tt.decision.Status.Result == nil {
+					t.Error("expected decision result to be set in original decision object")
+				}
+			}
+		})
 	}
 }
 

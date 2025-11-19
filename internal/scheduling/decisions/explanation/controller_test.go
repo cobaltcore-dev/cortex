@@ -35,6 +35,9 @@ func TestController_shouldReconcileDecision(t *testing.T) {
 				},
 				Status: v1alpha1.DecisionStatus{
 					Explanation: "",
+					Result: &v1alpha1.DecisionResult{
+						TargetHost: stringPtr("host-1"),
+					},
 				},
 			},
 			expected: true,
@@ -506,6 +509,9 @@ func TestController_StartupCallback(t *testing.T) {
 		},
 		Status: v1alpha1.DecisionStatus{
 			Explanation: "", // Empty explanation means it should be reconciled
+			Result: &v1alpha1.DecisionResult{
+				TargetHost: stringPtr("host-1"),
+			},
 		},
 	}
 

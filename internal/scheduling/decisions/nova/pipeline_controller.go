@@ -6,6 +6,8 @@ package nova
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -24,11 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-type pendingRequest struct {
-	responseChan chan *v1alpha1.Decision
-	cancelChan   chan struct{}
-}
-
 // The decision pipeline controller takes decision resources containing a
 // placement request spec and runs the scheduling pipeline to make a decision.
 // This decision is then written back to the decision resource status.
@@ -39,10 +36,8 @@ type DecisionPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]
 
-	// Map of pending API requests by decision key (namespace/name)
-	pendingRequests map[string]*pendingRequest
-	// Mutex to protect concurrent access to pendingRequests
-	mu sync.RWMutex
+	// Mutex to only allow one process at a time
+	processMu sync.Mutex
 
 	// Monitor to pass down to all pipelines.
 	Monitor lib.PipelineMonitor
@@ -50,61 +45,77 @@ type DecisionPipelineController struct {
 	Conf conf.Config
 }
 
+// Callback executed when kubernetes asks to reconcile a decision resource.
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	startedAt := time.Now() // So we can measure sync duration.
-	log := ctrl.LoggerFrom(ctx)
+	c.processMu.Lock()
+	defer c.processMu.Unlock()
 
 	decision := &v1alpha1.Decision{}
 	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	if err := c.process(ctx, decision); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := c.Status().Update(ctx, decision); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+// Process the decision from the API. Should create and return the updated decision.
+func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
+	c.processMu.Lock()
+	defer c.processMu.Unlock()
+
+	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
+	if !ok {
+		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
+	}
+	if pipelineConf.Spec.CreateDecisions {
+		if err := c.Create(ctx, decision); err != nil {
+			return err
+		}
+	}
+	if err := c.process(ctx, decision); err != nil {
+		return err
+	}
+	if pipelineConf.Spec.CreateDecisions {
+		if err := c.Status().Update(ctx, decision); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *DecisionPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
+	log := ctrl.LoggerFrom(ctx)
+	startedAt := time.Now() // So we can measure sync duration.
+
 	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return ctrl.Result{}, nil
+		return errors.New("pipeline not found or not ready")
 	}
 	if decision.Spec.NovaRaw == nil {
-		log.Info("skipping decision, no novaRaw spec defined")
-		return ctrl.Result{}, nil
+		log.Error(nil, "skipping decision, no novaRaw spec defined")
+		return errors.New("no novaRaw spec defined")
 	}
 	var request api.ExternalSchedulerRequest
 	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
 		log.Error(err, "failed to unmarshal novaRaw spec")
-		return ctrl.Result{}, err
+		return err
 	}
 
 	result, err := pipeline.Run(request)
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
-		return ctrl.Result{}, err
+		return err
 	}
 	decision.Status.Result = &result
 	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	if err := c.Status().Update(ctx, decision); err != nil {
-		log.Error(err, "failed to update decision status")
-		return ctrl.Result{}, err
-	}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-
-	// Check if there's a pending request waiting for this decision
-	decisionKey := req.Namespace + "/" + req.Name
-	c.mu.RLock()
-	pending, exists := c.pendingRequests[decisionKey]
-	c.mu.RUnlock()
-
-	if exists {
-		// Send the decision to the waiting API request
-		select {
-		case pending.responseChan <- decision:
-			log.Info("sent decision response to pending API request", "decisionKey", decisionKey)
-		case <-pending.cancelChan:
-			log.Info("pending request was cancelled", "decisionKey", decisionKey)
-		default:
-			log.Info("no receiver for decision response", "decisionKey", decisionKey)
-		}
-	}
-
-	return ctrl.Result{}, nil
+	return nil
 }
 
 // The base controller will delegate the pipeline creation down to this method.
@@ -117,46 +128,8 @@ func (c *DecisionPipelineController) InitPipeline(
 	return lib.NewPipeline(ctx, c.Client, name, supportedSteps, steps, c.Monitor)
 }
 
-// Process the decision from the API. Should create and return the updated decision.
-func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
-	// Create the decision object in kubernetes first
-	if err := c.Create(ctx, decision); err != nil {
-		return nil, err
-	}
-
-	// Create a pending request entry
-	decisionKey := decision.Namespace + "/" + decision.Name
-	pending := &pendingRequest{
-		responseChan: make(chan *v1alpha1.Decision, 1),
-		cancelChan:   make(chan struct{}),
-	}
-	c.mu.Lock()
-	if c.pendingRequests == nil {
-		c.pendingRequests = make(map[string]*pendingRequest)
-	}
-	c.pendingRequests[decisionKey] = pending
-	c.mu.Unlock()
-
-	defer func() {
-		c.mu.Lock()
-		delete(c.pendingRequests, decisionKey)
-		c.mu.Unlock()
-		close(pending.cancelChan)
-	}()
-	select {
-	case updatedDecision := <-pending.responseChan:
-		return updatedDecision, nil
-	case <-time.After(30 * time.Second):
-		return nil, context.DeadlineExceeded
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
 	c.Initializer = c
-	// Initialize the pending requests map
-	c.pendingRequests = make(map[string]*pendingRequest)
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

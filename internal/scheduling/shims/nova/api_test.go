@@ -21,14 +21,14 @@ import (
 )
 
 type mockHTTPAPIDelegate struct {
-	processDecisionFunc func(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error)
+	processDecisionFunc func(ctx context.Context, decision *v1alpha1.Decision) error
 }
 
-func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
+func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
 	if m.processDecisionFunc != nil {
 		return m.processDecisionFunc(ctx, decision)
 	}
-	return decision, nil
+	return nil
 }
 
 func TestNewAPI(t *testing.T) {
@@ -273,14 +273,15 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := conf.Config{Operator: "test-operator"}
 			delegate := &mockHTTPAPIDelegate{
-				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
+				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
 					if tt.processDecisionErr != nil {
-						return nil, tt.processDecisionErr
+						return tt.processDecisionErr
 					}
 					if tt.decisionResult != nil {
-						return tt.decisionResult, nil
+						decision.Status = tt.decisionResult.Status
+						return nil
 					}
-					return decision, nil
+					return nil
 				},
 			}
 
@@ -327,15 +328,13 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 
 	var capturedDecision *v1alpha1.Decision
 	delegate := &mockHTTPAPIDelegate{
-		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) (*v1alpha1.Decision, error) {
+		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
 			capturedDecision = decision
-			return &v1alpha1.Decision{
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						OrderedHosts: []string{"host1"},
-					},
-				},
-			}, nil
+			// Set a successful result to avoid "decision didn't produce a result" error
+			decision.Status.Result = &v1alpha1.DecisionResult{
+				OrderedHosts: []string{"host1"},
+			}
+			return nil
 		},
 	}
 

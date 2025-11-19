@@ -47,6 +47,10 @@ func (c *Controller) shouldReconcileDecision(decision *v1alpha1.Decision) bool {
 	if decision.Status.Explanation != "" {
 		return false
 	}
+	// Ignore decisions that have no result yet.
+	if decision.Status.Result == nil {
+		return false
+	}
 	// Only handle nova decisions.
 	return decision.Spec.Type == v1alpha1.DecisionTypeNovaServer
 }
