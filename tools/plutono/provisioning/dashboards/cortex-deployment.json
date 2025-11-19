@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 2,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -85,19 +85,19 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (service) (go_memstats_alloc_bytes{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"} / 1_000_000)",
+          "expr": "sum by (component) (go_memstats_alloc_bytes{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"} / 1_000_000)",
           "format": "time_series",
           "instant": false,
           "interval": "",
-          "legendFormat": "{{service}}",
+          "legendFormat": "{{component}}",
           "refId": "A"
         },
         {
           "exemplar": true,
-          "expr": "sum by (service) (go_memstats_alloc_bytes{pod=~\"cortex-.*-postgresql-0\"} / 1_000_000)",
+          "expr": "sum by (component) (go_memstats_alloc_bytes{pod=~\"cortex-.*-postgresql-0\"} / 1_000_000)",
           "hide": false,
           "interval": "",
-          "legendFormat": "{{service}}",
+          "legendFormat": "{{component}}",
           "refId": "B"
         }
       ],
@@ -216,20 +216,20 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (service) (rate(process_cpu_seconds_total{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[2m]))",
+          "expr": "sum by (component) (rate(process_cpu_seconds_total{github_org=\"cobaltcore-dev\",github_repo=\"cortex\"}[2m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{service}}",
+          "legendFormat": "{{component}}",
           "refId": "A"
         },
         {
           "exemplar": true,
-          "expr": "sum by (service) (rate(process_cpu_seconds_total{pod=~\"cortex-.*-postgresql-0\"}[2m]))",
+          "expr": "sum by (component) (rate(process_cpu_seconds_total{pod=~\"cortex-.*-postgresql-0\"}[2m]))",
           "hide": false,
           "interval": "",
-          "legendFormat": "{{service}}",
+          "legendFormat": "{{component}}",
           "refId": "B"
         }
       ],
@@ -356,9 +356,9 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (service) (rate(cortex_db_connection_attempts_total[5m]))",
+          "expr": "sum by (component) (rate(cortex_db_connection_attempts_total[5m]))",
           "interval": "",
-          "legendFormat": "{{service}}",
+          "legendFormat": "{{component}}",
           "queryType": "randomWalk",
           "refId": "A"
         }

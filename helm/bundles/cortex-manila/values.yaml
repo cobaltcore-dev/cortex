@@ -59,13 +59,13 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
-cortex:
-  # CRDs are deployed in the cortex-crds chart.
+cortex: &cortex
   crd: {enable: false}
-  # Use this to unambiguate multiple cortex deployments in the same cluster.
-  namePrefix: cortex-manila
-  conf:
-    # The operator will only touch CRs with this operator name.
+  # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
+  # A centralized ServiceMonitor and metrics service are defined in the cortex-manila chart.
+  metrics: {enable: false}
+  prometheus: {enable: false}
+  conf: &cortexConf
     operator: cortex-manila
     keystoneSecretRef:
       name: cortex-manila-openstack-keystone
@@ -74,12 +74,36 @@ cortex:
     #   name: cortex-manila-openstack-sso
     #   namespace: default
     monitoring:
-      labels:
+      labels: &cortexMonitoringLabels
         github_org: cobaltcore-dev
         github_repo: cortex
+
+# Split deployments
+cortex-scheduling-controllers:
+  <<: *cortex
+  namePrefix: cortex-manila-scheduling
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-manila-scheduling
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: manila-scheduling
     enabledControllers:
       - manila-decisions-pipeline-controller
       - explanation-controller
+
+cortex-knowledge-controllers:
+  <<: *cortex
+  namePrefix: cortex-manila-knowledge
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-manila-knowledge
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: manila-knowledge
+    enabledControllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller

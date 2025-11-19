@@ -21,6 +21,17 @@ dependencies:
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.1
+    alias: cortex-knowledge-controllers
+  # from: file://../../../dist/chart
+  - name: cortex
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.0.1
+    alias: cortex-scheduling-controllers
+  # from: file://../../../dist/chart
+  - name: cortex
+    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
+    version: 0.0.1
+    alias: cortex-reservations-controllers
 
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case

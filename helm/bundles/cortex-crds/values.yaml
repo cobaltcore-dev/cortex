@@ -18,9 +18,9 @@ cortex:
   # Deploy crds and cluster-rbac (clusterroles)
   crd: {enable: true}
   # Stuff we don't need in the CRD chart.
-  rbac: {enable: false}
-  controllerManager: {enable: false}
   metrics: {enable: false}
   prometheus: {enable: false}
+  rbac: {enable: false}
+  controllerManager: {enable: false}
   certmanager: {enable: false}
   networkPolicy: {enable: false}
