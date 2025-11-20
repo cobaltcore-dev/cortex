@@ -11,15 +11,18 @@ jobs:
     steps:
       - name: Checkout PR
         uses: actions/checkout@v5
+
       - name: Get changed rule and alert files
         id: changed
         uses: tj-actions/changed-files@v46
-      - name: Install Helm
-        uses: azure/setup-helm@v4
         with:
           files: |
             **/*.rules.yaml
             **/*.alerts.yaml
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
       - name: Check changed rule and alert files via promtool
         if: steps.changed.outputs.any_changed == 'true'
         uses: peimanja/promtool-github-actions@v0.0.2
