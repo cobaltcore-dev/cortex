@@ -2,7 +2,7 @@
 
 ## Custom Resource Definitions (CRDs)
 
-With cortex CRDs you can control cortex and see which actions are performed. Cortex CRDs are split into two domains: knowledge database and scheduling.
+With cortex CRDs you can control cortex and see which actions are performed. Cortex CRDs are split into two domains: `knowledge` and `scheduling`.
 
 ```mermaid
 graph LR;
