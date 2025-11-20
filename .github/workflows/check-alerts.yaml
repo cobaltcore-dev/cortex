@@ -7,7 +7,8 @@ on:
 
 jobs:
   lint:
-    jobs:
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout PR
         uses: actions/checkout@v5
       - name: Get changed rule and alert files
