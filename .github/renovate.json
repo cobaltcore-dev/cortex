@@ -15,6 +15,9 @@
   },
   "dependencyDashboardOSVVulnerabilitySummary": "all",
   "osvVulnerabilityAlerts": true,
+  "platformAutomerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
   "postUpdateOptions": [
     "gomodTidy",
     "gomodUpdateImportPaths"
@@ -42,6 +45,7 @@
         "minor",
         "patch"
       ],
+      "automerge": true,
       "groupName": "External dependencies"
     },
     {
