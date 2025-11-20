@@ -111,9 +111,3 @@ cortex-knowledge-controllers:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-manila-postgresql
-
-# Custom configuration for the cortex core chart.
-cortex-alerts:
-  fullnameOverride: cortex-manila
-  alerts:
-    componentPrefix: cortex-manila

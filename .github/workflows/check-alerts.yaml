@@ -1,0 +1,33 @@
+name: Check Alerts using Promtool
+on:
+  pull_request:
+    paths:
+      - '**/*.rules.yaml'
+      - '**/*.alerts.yaml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v5
+
+      - name: Get changed rule and alert files
+        id: changed
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            **/*.rules.yaml
+            **/*.alerts.yaml
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Check changed rule and alert files via promtool
+        if: steps.changed.outputs.any_changed == 'true'
+        uses: peimanja/promtool-github-actions@v0.0.2
+        with:
+          promtool_actions_subcommand: 'rules'
+          promtool_actions_files: ${{ steps.changed.outputs.all_changed_files }}
+          promtool_actions_version: 'latest'
+          promtool_actions_comment: 'false'

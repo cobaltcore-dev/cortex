@@ -51,17 +51,14 @@ dep_charts = {
         ('dist/chart', 'cortex'),
     ],
     'cortex-nova': [
-        ('helm/library/cortex-alerts', 'cortex-alerts'),
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('dist/chart', 'cortex'),
     ],
     'cortex-manila': [
-        ('helm/library/cortex-alerts', 'cortex-alerts'),
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('dist/chart', 'cortex'),
     ],
     'cortex-cinder': [
-        ('helm/library/cortex-alerts', 'cortex-alerts'),
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('dist/chart', 'cortex'),
     ],
