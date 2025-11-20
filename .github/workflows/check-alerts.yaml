@@ -7,10 +7,9 @@ on:
 
 jobs:
   lint:
-@@ -14,19 +20,42 @@ jobs:
+    jobs:
       - name: Checkout PR
         uses: actions/checkout@v5
-
       - name: Get changed rule and alert files
         id: changed
         uses: tj-actions/changed-files@v46
