@@ -128,9 +128,3 @@ cortex-reservations-controllers:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-nova-postgresql
-
-# Custom configuration for the cortex core chart.
-cortex-alerts:
-  fullnameOverride: cortex-nova
-  alerts:
-    componentPrefix: cortex-nova

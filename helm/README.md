@@ -25,7 +25,6 @@ helm/
 │   ├── cortex-ironcore/         # IronCore scheduling domain
 │   └── cortex-crds/             # CRDs for all operators
 ├── library/                   # Shared library charts
-│   ├── cortex-alerts/           # Common alerting infrastructure
 │   └── cortex-postgres/         # PostgreSQL database
 ├── dev/                       # Development-only charts
 │   └── cortex-prometheus-operator/  # Local monitoring stack
@@ -39,6 +38,7 @@ helm/
 Bundle charts are **umbrella charts** that represent complete deployments for specific scheduling domains. They aggregate operator charts and library charts into deployable units.
 
 **Available bundles:**
+
 - `cortex-nova` - Nova compute scheduling domain
 - `cortex-cinder` - Cinder block storage scheduling domain
 - `cortex-manila` - Manila shared filesystem scheduling domain
@@ -54,10 +54,11 @@ The operator chart contains the core Kubernetes operators built from the Go modu
 Library charts provide **shared, reusable components** that are consumed by bundle charts as dependencies.
 
 **Available library charts:**
-- `cortex-alerts` - Common alerting infrastructure and templates
+
 - `cortex-postgres` - PostgreSQL database deployment with monitoring
 
 **Integration with bundles:**
+
 - Library charts are **included as dependencies** in bundle Chart.yaml files
 - Provide common infrastructure components used across multiple domains
 - Reduce duplication of common services like databases and monitoring
@@ -68,15 +69,18 @@ Library charts provide **shared, reusable components** that are consumed by bund
 Dev charts support **local development and testing** but are not included in production releases.
 
 **Available dev charts:**
+
 - `cortex-prometheus-operator` - Prometheus operator setup for local development
 
 ## Usage Patterns
 
 ### Production Deployment
+
 1. Deploy CRDs first: `helm install cortex-crds bundles/cortex-crds/`
 2. Deploy domain-specific bundle: `helm install cortex-nova bundles/cortex-nova/`
 
 ### Development Setup
+
 1. Deploy monitoring: `helm install prometheus dev/cortex-prometheus-operator/`
 2. Deploy CRDs: `helm install cortex-crds bundles/cortex-crds/`
 3. Deploy and test bundles: `helm install cortex-nova bundles/cortex-nova/`
