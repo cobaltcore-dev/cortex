@@ -10,14 +10,14 @@ graph LR;
     datasource(Datasource CRD)
     kpi(KPI CRD)
     knowledge(Knowledge CRD)
-    datasource -- 1/n ready --> kpi
-    datasource -- 1/n ready --> knowledge
+    datasource -- n/n ready --> kpi
+    datasource -- n/n ready --> knowledge
     end
 
     subgraph scheduling [Scheduling]
     step(Step CRD)
     pipeline(Pipeline CRD)
-    step -- 1/n ready --> pipeline
+    step -- n/n ready --> pipeline
     descheduling(Descheduling CRD)
     decision(Decision CRD)
     reservation(Reservation CRD)
@@ -28,7 +28,7 @@ graph LR;
 
     prometheus(Prometheus)
     kpi --> prometheus
-    knowledge -- 1/n ready --> step
+    knowledge -- n/n ready --> step
 ```
 
 ### Datasources
