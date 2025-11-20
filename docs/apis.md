@@ -2,11 +2,36 @@
 
 ## Custom Resource Definitions (CRDs)
 
-With cortex CRDs you can control cortex and see which actions are performed.
+With cortex CRDs you can control cortex and see which actions are performed. Cortex CRDs are split into two domains: knowledge database and scheduling.
 
-### Knowledge Database CRDs
+```mermaid
+graph LR;
+    subgraph knowledgedb [Knowledge Database]
+    datasource(Datasource CRD)
+    kpi(KPI CRD)
+    knowledge(Knowledge CRD)
+    datasource -- 1/n ready --> kpi
+    datasource -- 1/n ready --> knowledge
+    end
 
-#### Datasources
+    subgraph scheduling [Scheduling]
+    step(Step CRD)
+    pipeline(Pipeline CRD)
+    step -- 1/n ready --> pipeline
+    descheduling(Descheduling CRD)
+    decision(Decision CRD)
+    reservation(Reservation CRD)
+    pipeline --> descheduling
+    pipeline --> decision
+    pipeline --> reservation
+    end
+
+    prometheus(Prometheus)
+    kpi --> prometheus
+    knowledge -- 1/n ready --> step
+```
+
+### Datasources
 
 ```bash
 kubectl get datasource
@@ -16,7 +41,7 @@ With datasources you can configure which raw data is ingested into the cortex sy
 
 When cortex sees new datasources, it will start downloading and expose how many objects were downloaded in the datasource's status. If cortex encounters an issue syncing, it will expose this as a status condition on the status objects as well. In this way you can keep track of which datasources have been synced, and which not. Use the timestamps provided by the resource to check if the data is recent enough to be processed further.
 
-#### Knowledges
+### Knowledges
 
 ```bash
 kubectl get knowledge
@@ -26,7 +51,7 @@ Knowledges provide condensed information from raw data. In the knowledge spec, y
 
 Compared to datasources, knowledges represent only condensed information and their payload is directly stored in the kubernetes resource status after the extraction has completed. This allows other cortex components to fetch these objects in a timely manner to reuse them for scheduling or analysis. Based on the knowledge status other components of cortex can check if the feature extraction has already completed and if the data can be used.
 
-#### KPIs
+### KPIs
 
 ```bash
 kubectl get kpis
@@ -36,9 +61,7 @@ KPIs expose metrics for knowledges. They contain a reference to the prometheus m
 
 Once the resource is created cortex will mount the KPI into the prometheus metrics endpoint and expose the implemented metrics.
 
-### Scheduling CRDs
-
-#### Steps
+### Steps
 
 ```bash
 kubectl get steps
@@ -48,7 +71,7 @@ Steps provide scheduling logic such as filtering, weighing, or descheduling. Eac
 
 Once created, cortex will check if the underlying step data is available and mark this step as ready. This allows the pipeline into which the step is mounted to react appropriately to changes in the step's dependencies.
 
-#### Pipelines
+### Pipelines
 
 ```bash
 kubectl get pipelines
@@ -58,7 +81,7 @@ Pipelines bundle scheduling steps together. As part of a pipeline, steps can be 
 
 The state of the pipeline is propagated automatically through the states of its steps. Check the pipeline state object to determine if the pipeline can currently be executed or not.
 
-#### Decisions
+### Decisions
 
 ```bash
 kubectl get decisions
@@ -68,7 +91,7 @@ Decisions are generated when pipelines are executed with an appropriate request,
 
 In its state, decisions reflect the outcome of the pipeline execution, for example the generated weights for each scheduling step. This outcome is reflected back to the caller of the pipeline. In addition, decisions provide a human-readable explanation why the workload was placed at this specific location.
 
-#### Reservations
+### Reservations
 
 ```bash
 kubectl get reservations
@@ -78,7 +101,7 @@ Reservations take away space for a workload that is expected to be spawned in th
 
 The reservation state reflects where this reservation is currently placed as outcome of a pipeline decision.
 
-#### Deschedulings
+### Deschedulings
 
 ```bash
 kubectl get deschedulings
