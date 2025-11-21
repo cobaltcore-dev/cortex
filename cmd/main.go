@@ -431,7 +431,7 @@ func main() {
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
 			Conf:   config,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "TriggerReconciler")
 			os.Exit(1)
 		}

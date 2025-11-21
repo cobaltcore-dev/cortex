@@ -11,8 +11,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 type Resource interface{ URI() string }
@@ -313,4 +320,35 @@ func (c *subResourceClient) Patch(ctx context.Context, obj client.Object, patch 
 	}
 	cl := c.multiclusterClient.ClusterForResource(resource.URI())
 	return cl.GetClient().SubResource(c.subResource).Patch(ctx, obj, patch, opts...)
+}
+
+func (c *Client) NewControllerManagedBy(mgr manager.Manager) MulticlusterBuilder {
+	return MulticlusterBuilder{
+		Builder:            ctrl.NewControllerManagedBy(mgr),
+		multiclusterClient: c,
+	}
+}
+
+type MulticlusterBuilder struct {
+	*builder.Builder
+	multiclusterClient *Client
+}
+
+func (b MulticlusterBuilder) Named(name string) MulticlusterBuilder {
+	b.Builder = b.Builder.Named(name)
+	return b
+}
+
+func (b MulticlusterBuilder) Watches(object client.Object, eventHandler handler.TypedEventHandler[client.Object, reconcile.Request], predicates ...predicate.Predicate) MulticlusterBuilder {
+	resource, ok := object.(Resource)
+	if !ok {
+		b.Builder = b.Builder.
+			Watches(object, eventHandler, builder.WithPredicates(predicates...))
+		return b
+	}
+	cl := b.multiclusterClient.ClusterForResource(resource.URI())
+	clusterCache := cl.GetCache()
+	b.Builder = b.Builder.
+		WatchesRawSource(source.Kind(clusterCache, object, eventHandler, predicates...))
+	return b
 }
