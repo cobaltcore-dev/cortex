@@ -174,6 +174,9 @@ type KnowledgeList struct {
 	Items           []Knowledge `json:"items"`
 }
 
+func (*Knowledge) URI() string     { return "knowledges.cortex.cloud/v1alpha1" }
+func (*KnowledgeList) URI() string { return "knowledges.cortex.cloud/v1alpha1" }
+
 func init() {
 	SchemeBuilder.Register(&Knowledge{}, &KnowledgeList{})
 }

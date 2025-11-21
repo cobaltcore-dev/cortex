@@ -22,6 +22,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -54,6 +55,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/must"
 	corev1 "k8s.io/api/core/v1"
@@ -243,6 +245,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	homeCluster, err := cluster.New(restConfig, func(o *cluster.Options) { o.Scheme = scheme })
+	if err != nil {
+		setupLog.Error(err, "unable to create home cluster")
+		os.Exit(1)
+	}
+	multiclusterClient := &multicluster.Client{
+		HomeCluster:    homeCluster,
+		HomeRestConfig: restConfig,
+		HomeScheme:     scheme,
+	}
+	for _, override := range config.APIServerOverrides {
+		cluster, err := multiclusterClient.AddRemote(override.Resource, override.Host)
+		if err != nil {
+			setupLog.Error(err, "unable to create cluster for apiserver override", "apiserver", override.Host)
+			os.Exit(1)
+		}
+		// Also tell the manager about this cluster so that controllers can use it.
+		if err := mgr.Add(cluster); err != nil {
+			setupLog.Error(err, "unable to add cluster for apiserver override", "apiserver", override.Host)
+			os.Exit(1)
+		}
+	}
+
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, config.Monitoring)
@@ -265,14 +290,14 @@ func main() {
 			Conf:    config,
 		}
 		// Inferred through the base controller.
-		decisionController.Client = mgr.GetClient()
+		decisionController.Client = multiclusterClient
 		decisionController.OperatorName = config.Operator
 		if err := (decisionController).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		novashims.NewAPI(config, decisionController).Init(mux)
-		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, mgr.GetClient(), config)
+		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
@@ -284,7 +309,7 @@ func main() {
 			CycleDetector: deschedulingnova.NewCycleDetector(),
 		}
 		// Inferred through the base controller.
-		deschedulingsController.Client = mgr.GetClient()
+		deschedulingsController.Client = multiclusterClient
 		deschedulingsController.OperatorName = config.Operator
 		if err := (deschedulingsController).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsReconciler")
@@ -293,7 +318,7 @@ func main() {
 		go deschedulingsController.CreateDeschedulingsPeriodically(ctx)
 		// Deschedulings cleanup on startup
 		if err := (&deschedulingnova.Cleanup{
-			Client: mgr.GetClient(),
+			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
@@ -306,14 +331,14 @@ func main() {
 			Conf:    config,
 		}
 		// Inferred through the base controller.
-		controller.Client = mgr.GetClient()
+		controller.Client = multiclusterClient
 		controller.OperatorName = config.Operator
 		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		manilashims.NewAPI(config, controller).Init(mux)
-		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, mgr.GetClient(), config)
+		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &decisionscinder.DecisionPipelineController{
@@ -321,14 +346,14 @@ func main() {
 			Conf:    config,
 		}
 		// Inferred through the base controller.
-		controller.Client = mgr.GetClient()
+		controller.Client = multiclusterClient
 		controller.OperatorName = config.Operator
 		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		cindershims.NewAPI(config, controller).Init(mux)
-		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, mgr.GetClient(), config)
+		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{
@@ -336,7 +361,7 @@ func main() {
 			Conf:    config,
 		}
 		// Inferred through the base controller.
-		controller.Client = mgr.GetClient()
+		controller.Client = multiclusterClient
 		controller.OperatorName = config.Operator
 		if err := (controller).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
@@ -347,7 +372,7 @@ func main() {
 		// Setup a controller which will reconcile the history and explanation for
 		// decision resources.
 		explanationController := &explanation.Controller{
-			Client:       mgr.GetClient(),
+			Client:       multiclusterClient,
 			OperatorName: config.Operator,
 		}
 		if err := explanationController.SetupWithManager(mgr); err != nil {
@@ -356,10 +381,10 @@ func main() {
 		}
 	}
 	if slices.Contains(config.EnabledControllers, "reservations-controller") {
-		monitor := reservationscontroller.NewControllerMonitor(mgr.GetClient())
+		monitor := reservationscontroller.NewControllerMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&reservationscontroller.ReservationReconciler{
-			Client:           mgr.GetClient(),
+			Client:           multiclusterClient,
 			Scheme:           mgr.GetScheme(),
 			Conf:             config,
 			HypervisorClient: reservationscontroller.NewHypervisorClient(),
@@ -372,7 +397,7 @@ func main() {
 		monitor := datasources.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&openstack.OpenStackDatasourceReconciler{
-			Client:  mgr.GetClient(),
+			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 			Conf:    config,
@@ -381,7 +406,7 @@ func main() {
 			os.Exit(1)
 		}
 		if err := (&prometheus.PrometheusDatasourceReconciler{
-			Client:  mgr.GetClient(),
+			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 			Conf:    config,
@@ -394,7 +419,7 @@ func main() {
 		monitor := extractor.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&extractor.KnowledgeReconciler{
-			Client:  mgr.GetClient(),
+			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 			Conf:    config,
@@ -403,7 +428,7 @@ func main() {
 			os.Exit(1)
 		}
 		if err := (&extractor.TriggerReconciler{
-			Client: mgr.GetClient(),
+			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
 			Conf:   config,
 		}).SetupWithManager(mgr); err != nil {
@@ -413,7 +438,7 @@ func main() {
 	}
 	if slices.Contains(config.EnabledControllers, "kpis-controller") {
 		if err := (&kpis.Controller{
-			Client:              mgr.GetClient(),
+			Client:              multiclusterClient,
 			SupportedKPIsByImpl: kpis.SupportedKPIsByImpl,
 			OperatorName:        config.Operator,
 		}).SetupWithManager(mgr); err != nil {
