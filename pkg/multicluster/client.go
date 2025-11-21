@@ -339,6 +339,11 @@ func (b MulticlusterBuilder) Named(name string) MulticlusterBuilder {
 	return b
 }
 
+func (b MulticlusterBuilder) For(object client.Object, opts ...builder.ForOption) MulticlusterBuilder {
+	b.Builder = b.Builder.For(object, opts...)
+	return b
+}
+
 func (b MulticlusterBuilder) Watches(object client.Object, eventHandler handler.TypedEventHandler[client.Object, reconcile.Request], predicates ...predicate.Predicate) MulticlusterBuilder {
 	resource, ok := object.(Resource)
 	if !ok {

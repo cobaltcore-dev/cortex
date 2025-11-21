@@ -250,6 +250,10 @@ func main() {
 		setupLog.Error(err, "unable to create home cluster")
 		os.Exit(1)
 	}
+	if err := mgr.Add(homeCluster); err != nil {
+		setupLog.Error(err, "unable to add home cluster")
+		os.Exit(1)
+	}
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
@@ -292,7 +296,7 @@ func main() {
 		// Inferred through the base controller.
 		decisionController.Client = multiclusterClient
 		decisionController.OperatorName = config.Operator
-		if err := (decisionController).SetupWithManager(mgr); err != nil {
+		if err := (decisionController).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
@@ -311,7 +315,7 @@ func main() {
 		// Inferred through the base controller.
 		deschedulingsController.Client = multiclusterClient
 		deschedulingsController.OperatorName = config.Operator
-		if err := (deschedulingsController).SetupWithManager(mgr); err != nil {
+		if err := (deschedulingsController).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsReconciler")
 			os.Exit(1)
 		}
@@ -320,7 +324,7 @@ func main() {
 		if err := (&deschedulingnova.Cleanup{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
 			os.Exit(1)
 		}
@@ -333,7 +337,7 @@ func main() {
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
 		controller.OperatorName = config.Operator
-		if err := (controller).SetupWithManager(mgr); err != nil {
+		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
@@ -348,7 +352,7 @@ func main() {
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
 		controller.OperatorName = config.Operator
-		if err := (controller).SetupWithManager(mgr); err != nil {
+		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
@@ -363,7 +367,7 @@ func main() {
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
 		controller.OperatorName = config.Operator
-		if err := (controller).SetupWithManager(mgr); err != nil {
+		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
@@ -375,7 +379,7 @@ func main() {
 			Client:       multiclusterClient,
 			OperatorName: config.Operator,
 		}
-		if err := explanationController.SetupWithManager(mgr); err != nil {
+		if err := explanationController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
 			os.Exit(1)
 		}
@@ -388,7 +392,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			Conf:             config,
 			HypervisorClient: reservationscontroller.NewHypervisorClient(),
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Reservation")
 			os.Exit(1)
 		}
@@ -401,7 +405,7 @@ func main() {
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 			Conf:    config,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "OpenStackDatasourceReconciler")
 			os.Exit(1)
 		}
@@ -410,7 +414,7 @@ func main() {
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 			Conf:    config,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")
 			os.Exit(1)
 		}
@@ -423,7 +427,7 @@ func main() {
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 			Conf:    config,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KnowledgeReconciler")
 			os.Exit(1)
 		}
@@ -441,7 +445,7 @@ func main() {
 			Client:              multiclusterClient,
 			SupportedKPIsByImpl: kpis.SupportedKPIsByImpl,
 			OperatorName:        config.Operator,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KPIController")
 			os.Exit(1)
 		}

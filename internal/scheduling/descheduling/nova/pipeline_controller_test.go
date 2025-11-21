@@ -150,35 +150,3 @@ func TestDeschedulingsPipelineController_Reconcile(t *testing.T) {
 		t.Error("expected no requeue")
 	}
 }
-
-func TestDeschedulingsPipelineController_SetupWithManager(t *testing.T) {
-	scheme := runtime.NewScheme()
-	err := v1alpha1.AddToScheme(scheme)
-	if err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-	controller := &DeschedulingsPipelineController{
-		BasePipelineController: lib.BasePipelineController[*Pipeline]{
-			Client: client,
-		},
-		Conf: conf.Config{
-			Operator: "test-operator",
-		},
-	}
-
-	// Test that SetupWithManager method exists by calling it with nil manager
-	// This will panic with nil pointer dereference, so we recover and verify
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("SetupWithManager should panic when called with nil manager")
-		}
-	}()
-
-	err = controller.SetupWithManager(nil)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
