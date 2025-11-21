@@ -29,6 +29,14 @@ type DBConfig struct {
 	Password string `json:"password"`
 }
 
+// Config which maps a kubernetes resource URI to a kubernetes apiserver url.
+type APIServerOverrideConfig struct {
+	// The resource URI, e.g. "steps.cortex.cloud/v1alpha1"
+	Resource string `json:"resource"`
+	// The kubernetes apiserver url, e.g. "https://my-apiserver:6443"
+	Host string `json:"host"`
+}
+
 // Configuration for the monitoring module.
 type MonitoringConfig struct {
 	// The labels to add to all metrics.
@@ -89,6 +97,9 @@ type Config struct {
 
 	// Monitoring configuration
 	Monitoring MonitoringConfig `json:"monitoring"`
+
+	// Apiserver overrides.
+	APIServerOverrides []APIServerOverrideConfig `json:"apiServerOverrides,omitempty"`
 }
 
 // Create a new configuration from the default config json file.

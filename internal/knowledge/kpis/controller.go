@@ -16,6 +16,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -438,11 +439,11 @@ func (c *Controller) handleKnowledgeDeleted(
 	c.handleKnowledgeChange(ctx, kn, queue)
 }
 
-func (c *Controller) SetupWithManager(mgr manager.Manager) error {
+func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllKPIs)); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+	return mcl.NewControllerManagedBy(mgr).
 		Named("cortex-kpis").
 		For(
 			&v1alpha1.KPI{},
@@ -460,11 +461,11 @@ func (c *Controller) SetupWithManager(mgr manager.Manager) error {
 				UpdateFunc: c.handleDatasourceUpdated,
 				DeleteFunc: c.handleDatasourceDeleted,
 			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only react to datasources matching the operator.
 				ds := obj.(*v1alpha1.Datasource)
 				return ds.Spec.Operator == c.OperatorName
-			})),
+			}),
 		).
 		// Watch knowledge changes so that we can reconfigure kpis as needed.
 		Watches(
@@ -474,11 +475,11 @@ func (c *Controller) SetupWithManager(mgr manager.Manager) error {
 				UpdateFunc: c.handleKnowledgeUpdated,
 				DeleteFunc: c.handleKnowledgeDeleted,
 			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only react to knowledges matching the operator.
 				kn := obj.(*v1alpha1.Knowledge)
 				return kn.Spec.Operator == c.OperatorName
-			})),
+			}),
 		).
 		Complete(c)
 }

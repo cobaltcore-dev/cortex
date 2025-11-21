@@ -15,6 +15,7 @@ import (
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
@@ -209,12 +210,12 @@ func (c *DecisionPipelineController) handleMachine() handler.EventHandler {
 	}
 }
 
-func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
+func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+	return mcl.NewControllerManagedBy(mgr).
 		Named("cortex-machine-scheduler").
 		For(
 			&v1alpha1.Decision{},
@@ -235,7 +236,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 			&ironcorev1alpha1.Machine{},
 			c.handleMachine(),
 			// Only schedule machines that have the custom scheduler set.
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				machine := obj.(*ironcorev1alpha1.Machine)
 				if machine.Spec.MachinePoolRef != nil {
 					// Skip machines that already have a machine pool assigned.
@@ -246,7 +247,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 				// We subscribe to all machines without a scheduler set for now.
 				// Otherwise when deployed the machine scheduler won't do anything.
 				return machine.Spec.Scheduler == ""
-			})),
+			}),
 		).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
 		Watches(
@@ -256,14 +257,14 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 				UpdateFunc: c.HandlePipelineUpdated,
 				DeleteFunc: c.HandlePipelineDeleted,
 			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
 				// Only react to pipelines matching the operator.
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
 				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
-			})),
+			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on
 		// unready steps.
@@ -274,7 +275,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 				UpdateFunc: c.HandleStepUpdated,
 				DeleteFunc: c.HandleStepDeleted,
 			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				step := obj.(*v1alpha1.Step)
 				// Only react to steps matching the operator.
 				if step.Spec.Operator != c.Conf.Operator {
@@ -286,7 +287,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 					v1alpha1.StepTypeWeigher,
 				}
 				return slices.Contains(supportedTypes, step.Spec.Type)
-			})),
+			}),
 		).
 		Complete(c)
 }
