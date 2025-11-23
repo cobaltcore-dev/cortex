@@ -60,7 +60,7 @@ type DeschedulingStatus struct {
 	Phase DeschedulingStatusPhase `json:"phase"`
 	// The current status conditions of the descheduling.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	// The name of the compute host where the VM was rescheduled to.
 	NewHost string `json:"newHost,omitempty"`
 	// The type of host where the VM was rescheduled to.

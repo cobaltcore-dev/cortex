@@ -1,6 +1,6 @@
 # Architecture Guide
 
-This guide provides an overview of the Cortex architecture, its components, and how they interact.
+This guide provides an overview of Cortex' architecture, its components, and how they interact.
 
 ## Architecture Decision Records (ADRs)
 

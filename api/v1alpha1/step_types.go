@@ -91,7 +91,7 @@ type StepStatus struct {
 	KnowledgesReadyFrac string `json:"knowledgesReadyFrac,omitempty"`
 	// The current status conditions of the step.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true

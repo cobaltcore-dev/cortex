@@ -4,19 +4,44 @@
 package v1alpha1
 
 import (
-	"k8s.io/apimachinery/pkg/api/resource"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Additional specifications needed to place the reservation.
-type ReservationSchedulerSpec struct {
-	// If the type of scheduler is cortex-nova, this field will contain additional
-	// information used by cortex-nova to place the instance.
-	CortexNova *ReservationSchedulerSpecCortexNova `json:"cortexNova,omitempty"`
+// ReservationSpec defines the desired state of Reservation.
+type ReservationSpec struct {
+	// Domain reflects the logical scheduling domain of this reservation, such as nova, cinder, manila.
+	Domain SchedulingDomain `json:"type"`
+
+	// Resources to be reserved for this reservation request.
+	Resources corev1.ResourceList `json:"requests"`
+
+	// StartTime reflects the start timestamp for the reservation.
+	StartTime metav1.Time `json:"startTime,omitempty"`
+
+	// EndTime reflects the expiry timestamp for the reservation.
+	// TODO: Alternative Duration?
+	EndTime metav1.Time `json:"endTime,omitempty"`
+
+	// ActiveTime reflects the time the reservation became used.
+	ActiveTime metav1.Time `json:"activeTime,omitempty"`
+
+	// ProjectID ...
+	ProjectID string `json:"projectID,omitempty"`
+
+	// Selector ...
+	Selector *metav1.LabelSelector `json:"selector,omitempty"`
+
+	// Affinity/Anti-Affinity
+
+	// Nova will contain additional information used by cortex-nova to place the instance.
+	// The field may be empty for non-Nova requests
+	Nova *ReservationSpecNova `json:"cortexNova,omitempty"`
 }
 
-// Additional specifications needed by cortex-nova to place the instance.
-type ReservationSchedulerSpecCortexNova struct {
+// ReservationSpecNova is an additional specification needed by OpenStack Nova to place the instance.
+// TODO: Generalize?
+type ReservationSpecNova struct {
 	// The project ID to reserve for.
 	ProjectID string `json:"projectID,omitempty"`
 	// The domain ID to reserve for.
@@ -27,31 +52,28 @@ type ReservationSchedulerSpecCortexNova struct {
 	FlavorExtraSpecs map[string]string `json:"flavorExtraSpecs,omitempty"`
 }
 
-// ReservationSpec defines the desired state of Reservation.
-type ReservationSpec struct {
-	// A remark that can be used to identify the creator of the reservation.
-	// This can be used to clean up reservations synced from external systems
-	// without touching reservations created manually or by other systems.
-	Creator string `json:"creator,omitempty"`
-	// Specification of the scheduler that will handle the reservation.
-	Scheduler ReservationSchedulerSpec `json:"scheduler,omitempty"`
-	// Resources requested to reserve for this instance.
-	Requests map[string]resource.Quantity `json:"requests,omitempty"`
-}
-
-// The phase in which the reservation is.
+// ReservationStatusPhase is a high-level summary of the reservation lifecycle.
 type ReservationStatusPhase string
 
 const (
-	// The reservation has been placed and is considered during scheduling.
-	ReservationStatusPhaseActive ReservationStatusPhase = "active"
-	// The reservation could not be fulfilled.
-	ReservationStatusPhaseFailed ReservationStatusPhase = "failed"
+	// ReservationStatusPhasePending reflects a not yet scheduled reservation.
+	ReservationStatusPhasePending ReservationStatusPhase = "Pending"
+
+	// ReservationStatusPhaseActive indicates that the reservation has been successfully scheduled.
+	ReservationStatusPhaseActive ReservationStatusPhase = "Active"
+
+	// ReservationStatusPhaseFailed indicated that the reservation could not be honored.
+	ReservationStatusPhaseFailed ReservationStatusPhase = "Failed"
+
+	// ReservationStatusPhaseExpired reflects a reservation past its lifetime ready for garbage collection.
+	ReservationStatusPhaseExpired ReservationStatusPhase = "Expired"
 )
 
+type ReservationConditionType string
+
 const (
-	// Something went wrong during the handling of the reservation.
-	ReservationConditionError = "Error"
+	// ReservationReady reflects the ready status during the handling of the reservation.
+	ReservationReady = "Ready"
 )
 
 // ReservationStatus defines the observed state of Reservation.
@@ -60,9 +82,28 @@ type ReservationStatus struct {
 	Phase ReservationStatusPhase `json:"phase,omitempty"`
 	// The current status conditions of the reservation.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []ReservationCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	// The name of the compute host that was allocated.
 	Host string `json:"host"`
+}
+
+type ReservationCondition struct {
+	// Type of reservation condition.
+	Type ReservationConditionType `json:"type"`
+	// Status of the condition, one of True, False, Unknown.
+	Status metav1.ConditionStatus `json:"status"`
+	// Last time we got an update on a given condition.
+	// +optional
+	LastHeartbeatTime metav1.Time `json:"lastHeartbeatTime,omitempty"`
+	// Last time the condition transit from one status to another.
+	// +optional
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+	// (brief) reason for the condition's last transition.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+	// Human-readable message indicating details about last transition.
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -76,8 +117,7 @@ type Reservation struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
-	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec defines the desired state of Reservation
 	// +required
@@ -85,12 +125,12 @@ type Reservation struct {
 
 	// status defines the observed state of Reservation
 	// +optional
-	Status ReservationStatus `json:"status,omitempty,omitzero"`
+	Status ReservationStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// ReservationList contains a list of Reservation
+// ReservationList contains a list of Reservation objects
 type ReservationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

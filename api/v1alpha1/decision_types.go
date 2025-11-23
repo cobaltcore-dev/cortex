@@ -6,23 +6,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
-)
-
-// The type of decision.
-type DecisionType string
-
-const (
-	// The decision was created by the nova external scheduler call.
-	// Usually we refer to this as nova initial placement, it also includes
-	// migrations or resizes.
-	DecisionTypeNovaServer DecisionType = "nova-server"
-	// The decision was created by the cinder external scheduler call.
-	DecisionTypeCinderVolume DecisionType = "cinder-volume"
-	// The decision was created by the manila external scheduler call.
-	DecisionTypeManilaShare DecisionType = "manila-share"
-	// The decision was created by spawning an ironcore machine.
-	DecisionTypeIroncoreMachine DecisionType = "ironcore-machine"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type DecisionSpec struct {
@@ -39,8 +23,10 @@ type DecisionSpec struct {
 	// This can be used to correlate multiple decisions for the same resource.
 	ResourceID string `json:"resourceID"`
 
-	// The type of decision, indicating what has initiated this decision.
-	Type DecisionType `json:"type"`
+	// The domain of the decision, indicating what has initiated this decision.
+	Domain SchedulingDomain `json:"type"`
+
+	// TODO: Avoid using RawExtension!
 	// If the type is "nova", this field contains the raw nova decision request.
 	// +kubebuilder:validation:Optional
 	NovaRaw *runtime.RawExtension `json:"novaRaw,omitempty"`

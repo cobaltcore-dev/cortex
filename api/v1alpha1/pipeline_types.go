@@ -4,53 +4,52 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type StepInPipeline struct {
-	// Reference to the step.
-	Ref corev1.ObjectReference `json:"ref"`
-	// Whether this step is mandatory for the pipeline to be runnable.
-	// +kubebuilder:default=true
-	Mandatory bool `json:"mandatory"`
+// Filter is a hard constraints to ensure valid placement and scheduling and must be executed.
+type Filter struct {
 }
 
-type PipelineType string
-
-const (
-	// Pipeline containing filter-weigher steps for initial placement,
-	// migration, etc. of instances.
-	PipelineTypeFilterWeigher PipelineType = "filter-weigher"
-	// Pipeline containing descheduler steps for generating descheduling
-	// recommendations.
-	PipelineTypeDescheduler PipelineType = "descheduler"
-)
+// Weigher is a scheduling objective and should be executed to achieve optimal placement and scheduling.
+type Weigher struct {
+}
 
 type PipelineSpec struct {
-	// The operator by which this pipeline should be handled.
-	Operator string `json:"operator,omitempty"`
-	// An optional description of the pipeline.
-	// +kubebuilder:validation:Optional
-	Description string `json:"description,omitempty"`
-	// If this pipeline should create decision objects.
-	// When this is false, the pipeline will still process requests.
-	// +kubebuilder:default=false
-	CreateDecisions bool `json:"createDecisions,omitempty"`
-	// The type of the pipeline.
-	Type PipelineType `json:"type"`
-	// The ordered list of steps that make up this pipeline.
-	Steps []StepInPipeline `json:"steps,omitempty"`
+	// Filters ...
+	Filters []Filter `json:"filters"`
+
+	// Weighers ...
+	Weighers []Weigher `json:"weighers"`
 }
 
+type PipelineConditionType string
+
 const (
-	// Something went wrong during the pipeline reconciliation.
-	PipelineConditionError = "Error"
+	// PipelineReady reflects the ready status of the pipeline.
+	PipelineReady PipelineConditionType = "Ready"
 )
 
+type PipelineCondition struct {
+	// Type of pipelne condition.
+	Type PipelineConditionType `json:"type"`
+	// Status of the condition, one of True, False, Unknown.
+	Status metav1.ConditionStatus `json:"status"`
+	// Last time we got an update on a given condition.
+	// +optional
+	LastHeartbeatTime metav1.Time `json:"lastHeartbeatTime,omitempty"`
+	// Last time the condition transit from one status to another.
+	// +optional
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+	// (brief) reason for the condition's last transition.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+	// Human-readable message indicating details about last transition.
+	// +optional
+	Message string `json:"message,omitempty"`
+}
+
 type PipelineStatus struct {
-	// Whether the pipeline is ready to be used.
-	Ready bool `json:"ready"`
 	// The total number of steps configured in the pipeline.
 	TotalSteps int `json:"totalSteps"`
 	// The number of steps that are ready.
@@ -60,7 +59,7 @@ type PipelineStatus struct {
 	StepsReadyFrac string `json:"stepsReadyFrac,omitempty"`
 	// The current status conditions of the pipeline.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []PipelineCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true
@@ -74,11 +73,8 @@ type PipelineStatus struct {
 
 // Pipeline is the Schema for the decisions API
 type Pipeline struct {
-	metav1.TypeMeta `json:",inline"`
-
-	// metadata is a standard object metadata
-	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec defines the desired state of Pipeline
 	// +required
