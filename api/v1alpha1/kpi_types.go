@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// Dependencies required for extracting the kpi.
+// KPIDependenciesSpec is required for extracting the kpi.
 // If provided, all datasources and knowledges must have the same
 // database secret reference so the kpi can be joined across multiple
 // database tables.

@@ -11,7 +11,7 @@ import (
 // ReservationSpec defines the desired state of Reservation.
 type ReservationSpec struct {
 	// Domain reflects the logical scheduling domain of this reservation, such as nova, cinder, manila.
-	Domain SchedulingDomain `json:"type"`
+	Domain SchedulingDomain `json:"domain"`
 
 	// Resources to be reserved for this reservation request.
 	Resources corev1.ResourceList `json:"requests"`
@@ -36,7 +36,7 @@ type ReservationSpec struct {
 
 	// Nova will contain additional information used by cortex-nova to place the instance.
 	// The field may be empty for non-Nova requests
-	Nova *ReservationSpecNova `json:"cortexNova,omitempty"`
+	Nova *ReservationSpecNova `json:"nova,omitempty"`
 }
 
 // ReservationSpecNova is an additional specification needed by OpenStack Nova to place the instance.

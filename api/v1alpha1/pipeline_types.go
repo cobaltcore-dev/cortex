@@ -7,20 +7,57 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Filter is a hard constraints to ensure valid placement and scheduling and must be executed.
-type Filter struct {
-}
+type (
+	// FilterSpec is a hard constraints to ensure valid placement and scheduling and must be executed.
+	FilterSpec struct {
+		// Name ...
+		Name string `json:"name"`
 
-// Weigher is a scheduling objective and should be executed to achieve optimal placement and scheduling.
-type Weigher struct {
-}
+		// Description ...
+		Description string `json:"description,omitempty"`
+
+		// Params ...
+		Params map[string]string `json:"params,omitempty"`
+	}
+
+	FilterStatus struct {
+		// Name ...
+		Name string `json:"name"`
+
+		Status string `json:"status"`
+	}
+)
+
+type (
+	// WeigherSpec is a scheduling objective and should be executed to achieve optimal placement and scheduling.
+	WeigherSpec struct {
+		// Name ...
+		Name string `json:"name"`
+
+		// Description ...
+		Description string `json:"description,omitempty"`
+
+		// Params ...
+		Params map[string]string `json:"params,omitempty"`
+
+		// Multiplier ...
+		Multiplier *float64 `json:"multiplier,omitempty"`
+	}
+
+	WeigherStatus struct {
+		// Name ...
+		Name string `json:"name"`
+
+		Status string `json:"status"`
+	}
+)
 
 type PipelineSpec struct {
 	// Filters ...
-	Filters []Filter `json:"filters"`
+	Filters []FilterSpec `json:"filters,omitempty"`
 
 	// Weighers ...
-	Weighers []Weigher `json:"weighers"`
+	Weighers []WeigherSpec `json:"weighers,omitempty"`
 }
 
 type PipelineConditionType string
@@ -50,14 +87,11 @@ type PipelineCondition struct {
 }
 
 type PipelineStatus struct {
-	// The total number of steps configured in the pipeline.
-	TotalSteps int `json:"totalSteps"`
-	// The number of steps that are ready.
-	ReadySteps int `json:"readySteps"`
-	// An overview of the readiness of the steps in the pipeline.
-	// Format: "ReadySteps / TotalSteps steps ready".
-	StepsReadyFrac string `json:"stepsReadyFrac,omitempty"`
-	// The current status conditions of the pipeline.
+	Filters []FilterStatus `json:"filters,omitempty"`
+
+	Weighers []WeigherStatus `json:"weighers,omitempty"`
+
+	// Conditions describe the status of the pipeline.
 	// +kubebuilder:validation:Optional
 	Conditions []PipelineCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
