@@ -135,8 +135,8 @@ func TestHanaBinpackingStep_Run(t *testing.T) {
 				},
 			},
 			expectedHosts: map[string]bool{
-				"host1": false, // HANA_EXCLUSIVE host but below range (50% - 25% = 25%, below 30% range)
-				"host2": true,  // HANA_EXCLUSIVE host should get activation (70% - 12.5% = 57.5%, in range 30-80%)
+				"host1": true,  // HANA_EXCLUSIVE host should get activation (50% + 25% = 75%, in range 30-80%)
+				"host2": false, // HANA_EXCLUSIVE host but above range (70% + 12.5% = 82.5%, above 80% range)
 				"host3": false, // non-HANA_EXCLUSIVE host should be no-effect
 			},
 		},

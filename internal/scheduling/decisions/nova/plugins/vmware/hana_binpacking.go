@@ -50,34 +50,7 @@ func (s *HanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSche
 
 	result.Statistics["ram utilized after"] = s.PrepareStats(request, "%")
 
-	var hostUtilizations []shared.HostUtilization
-	group := "scheduler-nova"
-	if _, err := s.DB.SelectTimed(
-		group, &hostUtilizations, "SELECT * FROM "+shared.HostUtilization{}.TableName(),
-	); err != nil {
-		return nil, err
-	}
-	for _, hostUtilization := range hostUtilizations {
-		// Only modify the weight if the host is in the scenario.
-		if _, ok := result.Activations[hostUtilization.ComputeHost]; !ok {
-			continue
-		}
-		after := hostUtilization.RAMUtilizedPct -
-			(float64(request.Spec.Data.Flavor.Data.MemoryMB) /
-				hostUtilization.TotalRAMAllocatableMB * 100)
-		result.
-			Statistics["ram utilized after"].
-			Subjects[hostUtilization.ComputeHost] = after
-		result.Activations[hostUtilization.ComputeHost] = scheduling.MinMaxScale(
-			after,
-			s.Options.RAMUtilizedAfterLowerBoundPct,
-			s.Options.RAMUtilizedAfterUpperBoundPct,
-			s.Options.RAMUtilizedAfterActivationLowerBound,
-			s.Options.RAMUtilizedAfterActivationUpperBound,
-		)
-	}
-
-	// Fetch the host capabilities.
+	// Fetch the host capabilities first to determine which hosts should be processed.
 	// Note: due to the vmware spec selector, it is expected that
 	// this step is only executed for VMware hosts.
 	var hostCapabilities []shared.HostCapabilities
@@ -90,6 +63,9 @@ func (s *HanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSche
 	for _, hostCapability := range hostCapabilities {
 		capabilityByHost[hostCapability.ComputeHost] = hostCapability
 	}
+
+	// Set no-effect for hosts without HANA_EXCLUSIVE trait
+	hanaExclusiveHosts := make(map[string]bool)
 	for _, host := range request.Hosts {
 		capability, ok := capabilityByHost[host.ComputeHost]
 		if !ok {
@@ -101,6 +77,44 @@ func (s *HanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSche
 			slog.Debug("Skipping hana binpacking for host without HANA_EXCLUSIVE trait", "host", host.ComputeHost)
 			result.Activations[host.ComputeHost] = s.NoEffect()
 			continue
+		}
+		hanaExclusiveHosts[host.ComputeHost] = true
+	}
+
+	// Only calculate activations for HANA_EXCLUSIVE hosts
+	var hostUtilizations []shared.HostUtilization
+	group := "scheduler-nova"
+	if _, err := s.DB.SelectTimed(
+		group, &hostUtilizations, "SELECT * FROM "+shared.HostUtilization{}.TableName(),
+	); err != nil {
+		return nil, err
+	}
+	for _, hostUtilization := range hostUtilizations {
+		// Only modify the weight if the host is in the scenario and has HANA_EXCLUSIVE trait.
+		if _, ok := result.Activations[hostUtilization.ComputeHost]; !ok {
+			continue
+		}
+		if !hanaExclusiveHosts[hostUtilization.ComputeHost] {
+			continue
+		}
+		after := hostUtilization.RAMUtilizedPct +
+			(float64(request.Spec.Data.Flavor.Data.MemoryMB) /
+				hostUtilization.TotalRAMAllocatableMB * 100)
+		result.
+			Statistics["ram utilized after"].
+			Subjects[hostUtilization.ComputeHost] = after
+
+		// Only apply activation if the projected utilization is within the acceptable range
+		if after < s.Options.RAMUtilizedAfterLowerBoundPct || after > s.Options.RAMUtilizedAfterUpperBoundPct {
+			result.Activations[hostUtilization.ComputeHost] = s.NoEffect()
+		} else {
+			result.Activations[hostUtilization.ComputeHost] = scheduling.MinMaxScale(
+				after,
+				s.Options.RAMUtilizedAfterLowerBoundPct,
+				s.Options.RAMUtilizedAfterUpperBoundPct,
+				s.Options.RAMUtilizedAfterActivationLowerBound,
+				s.Options.RAMUtilizedAfterActivationUpperBound,
+			)
 		}
 	}
 
