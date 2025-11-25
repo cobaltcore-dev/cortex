@@ -13,6 +13,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/sapcc/go-bits/jobloop"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -78,7 +79,7 @@ func (c *DeschedulingsPipelineController) Reconcile(ctx context.Context, req ctr
 	return ctrl.Result{}, nil
 }
 
-func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager) error {
+func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		// Initialize the cycle detector.
@@ -89,41 +90,34 @@ func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager) err
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		Named("cortex-nova-deschedulings").
-		For(
-			&v1alpha1.Descheduling{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				return false // This controller does not reconcile Descheduling resources directly.
-			})),
-		).
+	return multicluster.BuildController(mcl, mgr).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
-		Watches(
+		WatchesMulticluster(
 			&v1alpha1.Pipeline{},
 			handler.Funcs{
 				CreateFunc: c.HandlePipelineCreated,
 				UpdateFunc: c.HandlePipelineUpdated,
 				DeleteFunc: c.HandlePipelineDeleted,
 			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
 				// Only react to pipelines matching the operator.
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
 				return pipeline.Spec.Type == v1alpha1.PipelineTypeDescheduler
-			})),
+			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on
 		// unready steps.
-		Watches(
+		WatchesMulticluster(
 			&v1alpha1.Step{},
 			handler.Funcs{
 				CreateFunc: c.HandleStepCreated,
 				UpdateFunc: c.HandleStepUpdated,
 				DeleteFunc: c.HandleStepDeleted,
 			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				step := obj.(*v1alpha1.Step)
 				// Only react to steps matching the operator.
 				if step.Spec.Operator != c.Conf.Operator {
@@ -134,20 +128,27 @@ func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager) err
 					v1alpha1.StepTypeDescheduler,
 				}
 				return slices.Contains(supportedTypes, step.Spec.Type)
-			})),
+			}),
 		).
 		// Watch knowledge changes so that we can reconfigure pipelines as needed.
-		Watches(
+		WatchesMulticluster(
 			&v1alpha1.Knowledge{},
 			handler.Funcs{
 				CreateFunc: c.HandleKnowledgeCreated,
 				UpdateFunc: c.HandleKnowledgeUpdated,
 				DeleteFunc: c.HandleKnowledgeDeleted,
 			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
 				// Only react to knowledge matching the operator.
 				return knowledge.Spec.Operator == c.Conf.Operator
+			}),
+		).
+		Named("cortex-nova-deschedulings").
+		For(
+			&v1alpha1.Descheduling{},
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				return false // This controller does not reconcile Descheduling resources directly.
 			})),
 		).
 		Complete(c)

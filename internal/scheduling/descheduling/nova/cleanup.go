@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -90,11 +91,11 @@ func (r *Cleanup) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result,
 	return ctrl.Result{}, nil
 }
 
-func (r *Cleanup) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Cleanup) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(&CleanupOnStartup{r}); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+	return multicluster.BuildController(mcl, mgr).
 		For(&v1alpha1.Descheduling{}).
 		Named("descheduler-cleanup").
 		WithOptions(controller.Options{

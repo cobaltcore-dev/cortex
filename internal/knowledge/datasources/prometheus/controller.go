@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -188,8 +189,8 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	return ctrl.Result{RequeueAfter: time.Until(nextSync)}, nil
 }
 
-func (r *PrometheusDatasourceReconciler) SetupWithManager(mgr manager.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+func (r *PrometheusDatasourceReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+	return multicluster.BuildController(mcl, mgr).
 		Named("cortex-prometheus-datasource").
 		For(
 			&v1alpha1.Datasource{},

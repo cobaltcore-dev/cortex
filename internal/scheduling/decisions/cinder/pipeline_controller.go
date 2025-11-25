@@ -17,6 +17,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -128,13 +129,66 @@ func (c *DecisionPipelineController) InitPipeline(
 	return lib.NewPipeline(ctx, c.Client, name, supportedSteps, steps, c.Monitor)
 }
 
-func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error {
+func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		Named("cortex-cinder-decisions").
+	return multicluster.BuildController(mcl, mgr).
+		// Watch pipeline changes so that we can reconfigure pipelines as needed.
+		WatchesMulticluster(
+			&v1alpha1.Pipeline{},
+			handler.Funcs{
+				CreateFunc: c.HandlePipelineCreated,
+				UpdateFunc: c.HandlePipelineUpdated,
+				DeleteFunc: c.HandlePipelineDeleted,
+			},
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				pipeline := obj.(*v1alpha1.Pipeline)
+				// Only react to pipelines matching the operator.
+				if pipeline.Spec.Operator != c.Conf.Operator {
+					return false
+				}
+				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
+			}),
+		).
+		// Watch step changes so that we can turn on/off pipelines depending on
+		// unready steps.
+		WatchesMulticluster(
+			&v1alpha1.Step{},
+			handler.Funcs{
+				CreateFunc: c.HandleStepCreated,
+				UpdateFunc: c.HandleStepUpdated,
+				DeleteFunc: c.HandleStepDeleted,
+			},
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				step := obj.(*v1alpha1.Step)
+				// Only react to steps matching the operator.
+				if step.Spec.Operator != c.Conf.Operator {
+					return false
+				}
+				// Only react to filter and weigher steps.
+				supportedTypes := []v1alpha1.StepType{
+					v1alpha1.StepTypeFilter,
+					v1alpha1.StepTypeWeigher,
+				}
+				return slices.Contains(supportedTypes, step.Spec.Type)
+			}),
+		).
+		// Watch knowledge changes so that we can reconfigure pipelines as needed.
+		WatchesMulticluster(
+			&v1alpha1.Knowledge{},
+			handler.Funcs{
+				CreateFunc: c.HandleKnowledgeCreated,
+				UpdateFunc: c.HandleKnowledgeUpdated,
+				DeleteFunc: c.HandleKnowledgeDeleted,
+			},
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				knowledge := obj.(*v1alpha1.Knowledge)
+				// Only react to knowledge matching the operator.
+				return knowledge.Spec.Operator == c.Conf.Operator
+			}),
+		).
 		For(
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
@@ -150,59 +204,6 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager) error
 				return decision.Spec.Type == v1alpha1.DecisionTypeCinderVolume
 			})),
 		).
-		// Watch pipeline changes so that we can reconfigure pipelines as needed.
-		Watches(
-			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the operator.
-				if pipeline.Spec.Operator != c.Conf.Operator {
-					return false
-				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
-			})),
-		).
-		// Watch step changes so that we can turn on/off pipelines depending on
-		// unready steps.
-		Watches(
-			&v1alpha1.Step{},
-			handler.Funcs{
-				CreateFunc: c.HandleStepCreated,
-				UpdateFunc: c.HandleStepUpdated,
-				DeleteFunc: c.HandleStepDeleted,
-			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				step := obj.(*v1alpha1.Step)
-				// Only react to steps matching the operator.
-				if step.Spec.Operator != c.Conf.Operator {
-					return false
-				}
-				// Only react to filter and weigher steps.
-				supportedTypes := []v1alpha1.StepType{
-					v1alpha1.StepTypeFilter,
-					v1alpha1.StepTypeWeigher,
-				}
-				return slices.Contains(supportedTypes, step.Spec.Type)
-			})),
-		).
-		// Watch knowledge changes so that we can reconfigure pipelines as needed.
-		Watches(
-			&v1alpha1.Knowledge{},
-			handler.Funcs{
-				CreateFunc: c.HandleKnowledgeCreated,
-				UpdateFunc: c.HandleKnowledgeUpdated,
-				DeleteFunc: c.HandleKnowledgeDeleted,
-			},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				knowledge := obj.(*v1alpha1.Knowledge)
-				// Only react to knowledge matching the operator.
-				return knowledge.Spec.Operator == c.Conf.Operator
-			})),
-		).
+		Named("cortex-cinder-decisions").
 		Complete(c)
 }

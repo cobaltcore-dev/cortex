@@ -20,6 +20,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/sapcc/go-bits/jobloop"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -252,8 +253,8 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	return ctrl.Result{RequeueAfter: time.Until(nextTime)}, nil
 }
 
-func (r *OpenStackDatasourceReconciler) SetupWithManager(mgr manager.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+func (r *OpenStackDatasourceReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+	return multicluster.BuildController(mcl, mgr).
 		Named("cortex-openstack-datasource").
 		For(
 			&v1alpha1.Datasource{},

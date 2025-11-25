@@ -24,6 +24,7 @@ import (
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 )
 
 // ReservationReconciler reconciles a Reservation object
@@ -180,13 +181,13 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		return r.Init(ctx, mgr.GetClient(), r.Conf)
 	})); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+	return multicluster.BuildController(mcl, mgr).
 		For(&v1alpha1.Reservation{}).
 		Named("reservation").
 		WithOptions(controller.Options{

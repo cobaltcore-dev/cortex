@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 
 	"github.com/sapcc/go-bits/jobloop"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -235,8 +236,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	return ctrl.Result{}, nil
 }
 
-func (s *Executor) SetupWithManager(mgr manager.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+func (s *Executor) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+	return multicluster.BuildController(mcl, mgr).
 		Named("cortex-descheduler").
 		For(
 			&v1alpha1.Descheduling{},

@@ -8,7 +8,6 @@ spec:
   description: |
     This pipeline is used to schedule ironcore machines onto machinepools.
   type: filter-weigher
-  createDecisions: true
   steps:
     - ref: {name: machinepools-noop}
       mandatory: false
