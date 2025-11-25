@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -182,7 +183,7 @@ func (c *Controller) StartupCallback(ctx context.Context) error {
 }
 
 // This function sets up the controller with the provided manager.
-func (c *Controller) SetupWithManager(mgr manager.Manager) error {
+func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	// Index the decisions by ResourceID for efficient lookup.
 	if !c.SkipIndexFields {
 		if err := mgr.GetFieldIndexer().IndexField(
@@ -200,7 +201,7 @@ func (c *Controller) SetupWithManager(mgr manager.Manager) error {
 	if err := mgr.Add(manager.RunnableFunc(c.StartupCallback)); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+	return multicluster.BuildController(mcl, mgr).
 		Named("explanation-controller").
 		For(
 			&v1alpha1.Decision{},

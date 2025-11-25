@@ -129,6 +129,9 @@ type StepList struct {
 	Items           []Step `json:"items"`
 }
 
+func (*Step) URI() string     { return "steps.cortex.cloud/v1alpha1" }
+func (*StepList) URI() string { return "steps.cortex.cloud/v1alpha1" }
+
 func init() {
 	SchemeBuilder.Register(&Step{}, &StepList{})
 }

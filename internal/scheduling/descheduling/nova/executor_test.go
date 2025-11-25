@@ -427,18 +427,3 @@ func TestExecutor_ReconcileNotFound(t *testing.T) {
 		t.Error("expected no requeue for not found resource")
 	}
 }
-
-func TestExecutor_SetupWithManager(t *testing.T) {
-	// This test verifies that SetupWithManager can be called without errors
-	// We can't easily test the full controller setup without a real manager
-	executor := &Executor{}
-
-	// This would typically be tested in integration tests with a real manager
-	// For unit tests, we just verify the method exists and can be called
-	// Test that SetupWithManager method exists by calling it with a nil manager
-	// This will return an error, but confirms the method exists
-	err := executor.SetupWithManager(nil)
-	if err == nil {
-		t.Error("SetupWithManager should return an error when called with nil manager")
-	}
-}

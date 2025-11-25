@@ -17,7 +17,11 @@ if not os.getenv('TILT_VALUES_PATH'):
     fail("TILT_VALUES_PATH is not set.")
 if not os.path.exists(os.getenv('TILT_VALUES_PATH')):
     fail("TILT_VALUES_PATH "+ os.getenv('TILT_VALUES_PATH') + " does not exist.")
-tilt_values = os.getenv('TILT_VALUES_PATH')
+tilt_values = [os.getenv('TILT_VALUES_PATH')]
+
+tilt_overrides = os.getenv('TILT_OVERRIDES_PATH')
+if tilt_overrides and os.path.exists(tilt_overrides):
+    tilt_values.append(tilt_overrides)
 
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo(
@@ -106,7 +110,7 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=[
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=[tilt_values]))
+    k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=tilt_values))
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8000, 5432),
     ])
@@ -125,7 +129,7 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
 
 if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=[tilt_values]))
+    k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=tilt_values))
     k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
         port_forward(8002, 5432),
     ])
@@ -142,7 +146,7 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     )
 
 if 'cinder' in ACTIVE_DEPLOYMENTS:
-    k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=[tilt_values]))
+    k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=tilt_values))
     k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8004, 5432),
     ])
@@ -160,7 +164,7 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
 
 if 'ironcore' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex IronCore bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=[tilt_values]))
+    k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=tilt_values))
     k8s_resource('cortex-ironcore-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
     k8s_yaml('samples/ironcore/machinepool.yaml')

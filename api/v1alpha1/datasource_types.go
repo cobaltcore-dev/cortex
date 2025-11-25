@@ -293,6 +293,9 @@ type DatasourceList struct {
 	Items           []Datasource `json:"items"`
 }
 
+func (*Datasource) URI() string     { return "datasources.cortex.cloud/v1alpha1" }
+func (*DatasourceList) URI() string { return "datasources.cortex.cloud/v1alpha1" }
+
 func init() {
 	SchemeBuilder.Register(&Datasource{}, &DatasourceList{})
 }

@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grant-cortex-cluster-admin
+subjects:
+- kind: User
+  apiGroup: rbac.authorization.k8s.io
+  name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-nova-knowledge-controller-manager"
+- kind: User
+  apiGroup: rbac.authorization.k8s.io
+  name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-nova-scheduling-controller-manager"
+- kind: User
+  apiGroup: rbac.authorization.k8s.io
+  name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-nova-reservations-controller-manager"
+- kind: User
+  apiGroup: rbac.authorization.k8s.io
+  name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-ironcore-controller-manager"
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io

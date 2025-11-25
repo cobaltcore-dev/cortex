@@ -9,11 +9,11 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -246,26 +246,26 @@ func (r *TriggerReconciler) mapKnowledgeToKnowledge(ctx context.Context, obj cli
 }
 
 // SetupWithManager sets up the controller with the Manager
-func (r *TriggerReconciler) SetupWithManager(mgr manager.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		Named("cortex-knowledge-trigger").
+func (r *TriggerReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+	return multicluster.BuildController(mcl, mgr).
 		// Watch datasource changes and map them to trigger reconciliation
-		Watches(
+		WatchesMulticluster(
 			&v1alpha1.Datasource{},
 			handler.EnqueueRequestsFromMapFunc(r.mapDatasourceToKnowledge),
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				ds := obj.(*v1alpha1.Datasource)
 				return ds.Spec.Operator == r.Conf.Operator
-			})),
+			}),
 		).
 		// Watch knowledge changes and map them to trigger reconciliation
-		Watches(
+		WatchesMulticluster(
 			&v1alpha1.Knowledge{},
 			handler.EnqueueRequestsFromMapFunc(r.mapKnowledgeToKnowledge),
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				k := obj.(*v1alpha1.Knowledge)
 				return k.Spec.Operator == r.Conf.Operator
-			})),
+			}),
 		).
+		Named("cortex-knowledge-trigger").
 		Complete(r)
 }

@@ -754,30 +754,3 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 		})
 	}
 }
-
-func TestDecisionPipelineController_SetupWithManager(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	controller := &DecisionPipelineController{
-		Conf: conf.Config{
-			Operator: "test-operator",
-		},
-	}
-
-	// This test verifies that SetupWithManager method exists and has the correct signature
-	// We can't easily test the actual setup without a real manager, so we just verify the panic
-	// is handled gracefully when called with nil
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic when calling SetupWithManager with nil manager")
-		}
-	}()
-
-	err := controller.SetupWithManager(nil)
-	if err != nil {
-		t.Errorf("Unexpected error from SetupWithManager: %v", err)
-	}
-}

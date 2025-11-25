@@ -29,6 +29,19 @@ type DBConfig struct {
 	Password string `json:"password"`
 }
 
+// Config which maps a kubernetes resource URI to a remote kubernetes apiserver.
+// This override config can be used to manage CRDs in a different kubernetes cluster.
+// It is assumed that the remote apiserver accepts the serviceaccount tokens
+// issued by the local cluster.
+type APIServerOverrideConfig struct {
+	// The resource URI, e.g. "steps.cortex.cloud/v1alpha1"
+	Resource string `json:"resource"`
+	// The remote kubernetes apiserver url, e.g. "https://my-apiserver:6443"
+	Host string `json:"host"`
+	// The root CA certificate to verify the remote apiserver.
+	CACert string `json:"caCert,omitempty"`
+}
+
 // Configuration for the monitoring module.
 type MonitoringConfig struct {
 	// The labels to add to all metrics.
@@ -89,6 +102,9 @@ type Config struct {
 
 	// Monitoring configuration
 	Monitoring MonitoringConfig `json:"monitoring"`
+
+	// Apiserver overrides.
+	APIServerOverrides []APIServerOverrideConfig `json:"apiServerOverrides,omitempty"`
 }
 
 // Create a new configuration from the default config json file.
