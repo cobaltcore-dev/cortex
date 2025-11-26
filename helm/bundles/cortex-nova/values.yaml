@@ -59,6 +59,9 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
+pipelines:
+  createDecisions: false
+
 cortex: &cortex
   crd: {enable: false}
   # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
