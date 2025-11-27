@@ -11,22 +11,22 @@ dependencies:
   # from: file://../../library/cortex-postgres
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.5.5
+    version: 0.5.6
 
   # from: file://../../../dist/chart
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.1
+    version: 0.0.2
     alias: cortex-knowledge-controllers
   # from: file://../../../dist/chart
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.1
+    version: 0.0.2
     alias: cortex-scheduling-controllers
   # from: file://../../../dist/chart
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.1
+    version: 0.0.2
     alias: cortex-reservations-controllers
 
   # Owner info adds a configmap to the kubernetes cluster with information on
