@@ -1,17 +1,17 @@
 # Copyright 2025 SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-apiVersion: v3
+apiVersion: v2
 name: cortex-cinder
 description: A Helm chart deploying Cortex for Cinder.
 type: application
-version: 0.0.10
+version: 0.0.11
 appVersion: 0.1.0
 dependencies:
   # from: file://../../library/cortex-postgres
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.5.6
+    version: 0.5.7
 
   # from: file://../../../dist/chart
   - name: cortex
