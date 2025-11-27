@@ -60,6 +60,7 @@ openstack:
     <<: *sharedSSOCert
 
 pipelines:
+  # Use this flag to disable the creation of decisions across all pipelines.
   createDecisions: false
 
 cortex: &cortex
