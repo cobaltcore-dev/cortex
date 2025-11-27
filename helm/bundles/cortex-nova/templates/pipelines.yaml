@@ -1,3 +1,4 @@
+{{- $createDecisions := .Values.pipelines.createDecisions | default false }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -12,6 +13,7 @@ spec:
     Cortex returns a ranked list of hosts back to nova for final selection.
     This is the pipeline used for VMware.
   type: filter-weigher
+  createDecisions: false
   steps:
     - ref: {name: vmware-hana-binpacking}
       mandatory: false
@@ -35,7 +37,9 @@ spec:
     Cortex returns a ranked list of hosts back to nova for final selection.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: filter-weigher
+  {{- if $createDecisions }}
   createDecisions: true
+  {{- end }}
   steps: []
 ---
 apiVersion: cortex.cloud/v1alpha1
@@ -51,7 +55,9 @@ spec:
     cortex's weighing steps to provide an optimized host selection for the reservation.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: filter-weigher
+  {{- if $createDecisions }}
   createDecisions: true
+  {{- end }}
   steps:
     - ref: {name: filter-host-instructions}
     - ref: {name: filter-has-enough-capacity}
@@ -75,7 +81,9 @@ spec:
     compute hosts in order to optimize resource usage and performance.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: descheduler
+  {{- if $createDecisions }}
   createDecisions: true
+  {{- end }}
   steps:
     - ref: {name: avoid-high-steal-pct}
       mandatory: false
