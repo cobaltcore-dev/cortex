@@ -1,0 +1,470 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "-- Plutono --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 0,
+    "iteration": 1762778172153,
+    "links": [],
+    "panels": [
+        {
+            "datasource": null,
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "id": 34,
+            "options": {
+                "content": "# COMMITMENTS ARE NOT YET DISPLAYED HERE!\n\nIn these charts you can see the current available capacity per resource (vCPU, RAM, Disk). \n\nCurrent formula: total - failover capacity - used",
+                "mode": "markdown"
+            },
+            "pluginVersion": "7.5.43",
+            "targets": [
+                {
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "title": "README",
+            "type": "text"
+        },
+        {
+            "aliasColors": {},
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "metrics-global",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percentunit"
+                },
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 9,
+                "w": 6,
+                "x": 6,
+                "y": 13
+            },
+            "hiddenSeries": false,
+            "id": 2,
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": false
+            },
+            "lines": true,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.43",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "repeat": "availability_zone",
+            "scopedVars": {},
+            "seriesOverrides": [
+                {
+                    "$$hashKey": "object:252",
+                    "alias": "Available vCPU (%)",
+                    "fill": 0
+                },
+                {
+                    "$$hashKey": "object:259",
+                    "alias": "Available RAM (%)",
+                    "fill": 0
+                },
+                {
+                    "$$hashKey": "object:266",
+                    "alias": "Available Disk (%)",
+                    "fill": 0
+                }
+            ],
+            "spaceLength": 10,
+            "stack": false,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+                    "interval": "",
+                    "legendFormat": "Available CPU",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total CPU",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available RAM",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total RAM",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available Disk",
+                    "refId": "E"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total Disk",
+                    "refId": "F"
+                }
+            ],
+            "thresholds": [
+                {
+                    "$$hashKey": "object:244",
+                    "colorMode": "critical",
+                    "fill": true,
+                    "line": true,
+                    "op": "lt",
+                    "value": 0.2,
+                    "yaxis": "left"
+                }
+            ],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "$availability_zone",
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "transformations": [
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available vCPU (%)",
+                        "binary": {
+                            "left": "Available CPU",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total CPU"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available RAM (%)",
+                        "binary": {
+                            "left": "Available RAM",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total RAM"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available Disk (%)",
+                        "binary": {
+                            "left": "Available Disk",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total Disk"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Available CPU": true,
+                            "Available Disk": true,
+                            "Available RAM": true,
+                            "Total CPU": true,
+                            "Total Disk": true,
+                            "Total RAM": true
+                        },
+                        "indexByName": {},
+                        "renameByName": {}
+                    }
+                }
+            ],
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+            },
+            "yaxes": [
+                {
+                    "$$hashKey": "object:45",
+                    "format": "percentunit",
+                    "label": null,
+                    "logBase": 1,
+                    "max": "1",
+                    "min": "0",
+                    "show": true
+                },
+                {
+                    "$$hashKey": "object:46",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        }
+    ],
+    "schemaVersion": 27,
+    "style": "dark",
+    "tags": [],
+    "templating": {
+        "list": [
+            {
+                "allValue": null,
+                "current": {
+                    "selected": false,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
+                },
+                "datasource": "metrics-global",
+                "definition": "label_values(cortex_sap_available_capacity_per_host, availability_zone)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "Availability Zone",
+                "multi": true,
+                "name": "availability_zone",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_sap_available_capacity_per_host, availability_zone)",
+                    "refId": "metrics-global-availability_zone-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": null,
+                "current": {
+                    "selected": false,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
+                },
+                "datasource": "metrics-global",
+                "definition": "label_values(cortex_sap_available_capacity_per_host, hypervisor_family)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "Hypervisor Family",
+                "multi": true,
+                "name": "hypervisor_family",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_sap_available_capacity_per_host, hypervisor_family)",
+                    "refId": "metrics-global-hypervisor_family-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": null,
+                "current": {
+                    "selected": false,
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "datasource": "metrics-global",
+                "definition": "label_values(cortex_sap_available_capacity_per_host, enabled)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "Enabled",
+                "multi": false,
+                "name": "enabled",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_sap_available_capacity_per_host, enabled)",
+                    "refId": "metrics-global-enabled-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": null,
+                "current": {
+                    "selected": false,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
+                },
+                "datasource": "metrics-global",
+                "definition": "label_values(cortex_sap_available_capacity_per_host, workload_type)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "Workload Type",
+                "multi": true,
+                "name": "workload_type",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_sap_available_capacity_per_host, workload_type)",
+                    "refId": "metrics-global-workload_type-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": null,
+                "current": {
+                    "selected": false,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
+                },
+                "datasource": "metrics-global",
+                "definition": "label_values(cortex_sap_available_capacity_per_host, cpu_architecture)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "CPU Architecture",
+                "multi": true,
+                "name": "cpu_architecture",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_sap_available_capacity_per_host, cpu_architecture)",
+                    "refId": "metrics-global-cpu_architecture-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            }
+        ]
+    },
+    "time": {
+        "from": "now-6h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "Global Cortex Infrastructure Dashboard - Compute",
+    "uid": "global-cortex-infrastructure-dashboard",
+    "version": 7
+}

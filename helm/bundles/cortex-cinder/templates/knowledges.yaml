@@ -1,0 +1,21 @@
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Knowledge
+metadata:
+  name: netapp-storage-pool-cpu-usage-cinder
+spec:
+  operator: cortex-cinder
+  databaseSecretRef:
+    name: cortex-cinder-postgres
+    namespace: {{ .Release.Namespace }}
+  extractor:
+    name: netapp_storage_pool_cpu_usage_extractor
+  description: |
+    This knowledge aggregates CPU usage information for NetApp storage pools.
+  recency: "60s"
+  dependencies:
+    datasources:
+      - name: cinder-storage-pools
+      - name: netapp-node-cpu-busy-cinder
+      - name: netapp-volume-aggr-labels
+      - name: netapp-aggr-labels-cinder

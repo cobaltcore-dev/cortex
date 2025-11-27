@@ -1,0 +1,25 @@
+apiVersion: rbac.authorization.k8s.io/v1
+# Cluster level access is required as the controller manager has no default namespace set.
+kind: ClusterRole
+metadata:
+  name: cortex-cinder-secret-reader
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cortex-cinder-secret-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: cortex-cinder-scheduling-controller-manager
+    namespace: {{ .Release.Namespace }}
+  - kind: ServiceAccount
+    name: cortex-cinder-knowledge-controller-manager
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: cortex-cinder-secret-reader
+  apiGroup: rbac.authorization.k8s.io

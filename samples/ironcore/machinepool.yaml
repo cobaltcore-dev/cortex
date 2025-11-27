@@ -1,0 +1,10 @@
+apiVersion: compute.ironcore.dev/v1alpha1
+kind: MachinePool
+metadata:
+  name: machinepool-sample
+  labels:
+    ironcore.dev/az: az1
+spec:
+  providerID: ironcore://shared
+# status:
+#   state: Available

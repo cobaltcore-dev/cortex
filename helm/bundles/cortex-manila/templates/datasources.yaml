@@ -1,0 +1,69 @@
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: netapp-aggr-labels-manila
+spec:
+  operator: cortex-manila
+  databaseSecretRef:
+    name: cortex-manila-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-manila-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-manila-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: netapp_aggr_labels
+    query: netapp_aggr_labels
+    type: netapp_aggregate_labels_metric
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: netapp-node-cpu-busy-manila
+spec:
+  operator: cortex-manila
+  databaseSecretRef:
+    name: cortex-manila-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-manila-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-manila-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: netapp_node_cpu_busy
+    query: netapp_node_cpu_busy
+    type: netapp_node_metric
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: manila-storage-pools
+spec:
+  operator: cortex-manila
+  databaseSecretRef:
+    name: cortex-manila-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.openstack.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-manila-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-manila-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: manila
+    manila:
+      type: storagePools

@@ -1,0 +1,14 @@
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Step
+metadata:
+  name: machinepools-noop
+spec:
+  operator: cortex-ironcore
+  type: weigher
+  impl: noop
+  description: |
+    This is only a passthrough step which assigns a zero-weight to all machinepool
+    candidates. It is used as a placeholder step in the ironcore machines scheduler
+    pipeline.
+  knowledges: []

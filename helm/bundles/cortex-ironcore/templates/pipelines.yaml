@@ -1,0 +1,14 @@
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: machines-scheduler
+spec:
+  operator: cortex-ironcore
+  description: |
+    This pipeline is used to schedule ironcore machines onto machinepools.
+  type: filter-weigher
+  createDecisions: true
+  steps:
+    - ref: {name: machinepools-noop}
+      mandatory: false

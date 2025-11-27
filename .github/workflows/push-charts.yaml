@@ -17,7 +17,7 @@ jobs:
       packages: write
     runs-on: [ ubuntu-latest ]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Set up Helm
         uses: azure/setup-helm@v4.3.1
       - name: Log into registry
@@ -26,6 +26,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Get all changed library Chart.yaml files
         id: changed-chart-yaml-files-library
         uses: tj-actions/changed-files@v47
@@ -44,6 +45,7 @@ jobs:
             CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
+
       - name: Get all changed bundle Chart.yaml files
         id: changed-chart-yaml-files-bundle
         uses: tj-actions/changed-files@v47
@@ -62,17 +64,18 @@ jobs:
             CHART_PACKAGE=$(ls $CHART_DIR/*.tgz)
             helm push $CHART_PACKAGE oci://${{ env.REGISTRY }}/${{ github.repository }}/charts/
           done
-      - name: Get all changed reservations Chart.yaml files
-        id: changed-chart-yaml-files-reservations
+
+      - name: Get all changed dist/chart Chart.yaml files
+        id: changed-chart-yaml-files-dist
         uses: tj-actions/changed-files@v47
         with:
           files: |
-            reservations/dist/chart/Chart.yaml
-      - name: Push reservations charts to registry
-        if: steps.changed-chart-yaml-files-reservations.outputs.all_changed_files != ''
+            dist/chart/Chart.yaml
+      - name: Push dist charts to registry
+        if: steps.changed-chart-yaml-files-dist.outputs.all_changed_files != ''
         shell: bash
         env:
-          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-reservations.outputs.all_changed_files }}
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-dist.outputs.all_changed_files }}
         run: |
           for CHART_FILE in ${ALL_CHANGED_FILES}; do
             CHART_DIR=$(dirname $CHART_FILE)

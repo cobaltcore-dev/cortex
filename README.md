@@ -30,13 +30,12 @@ Learn more about [CobaltCore](https://cobaltcore-dev.github.io/docs/) and the br
   Cortex combines initial placement and continuous scheduling into a single service.
 
 - **Cross-domain support**  
-  Cortex supports a wide range of workloads from various scheduling domains, including compute, storage, and network. 
+  Cortex supports a wide range of workloads from various scheduling domains, including compute, storage, network, and Kubernetes. 
   The architecture allows handling the domains either independently or through coordinated multi-domain decisions.
 
 - **Performance and scalability**
-  Cortex is designed for production-scale deployments using algorithmic and heuristic approaches to balance decision quality and execution efficiency.
+  Cortex is designed for production-scale deployments using algorithmic approaches to balance decision quality, execution efficiency, and maintaining a low resource footprint.
   It is battle-tested in large-scale, production cloud computing environments and can handle thousands of placement requests per second.
-
 
 ## Documentation
 

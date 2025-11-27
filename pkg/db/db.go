@@ -1,0 +1,296 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package db
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"log/slog"
+	"net/url"
+	"reflect"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/go-gorp/gorp"
+	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/easypg"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// Wrapper around gorp.DbMap that adds some convenience functions.
+type DB struct {
+	*gorp.DbMap
+	host         string
+	databaseName string
+}
+
+type Table interface {
+	TableName() string
+	// Map of index name to column names.
+	Indexes() map[string][]string
+}
+
+// Available initialized connections by the db url.
+//
+// The access to this map is thread-safe meaning FromSecretRef can be called
+// concurrently.
+var connections = sync.Map{} // map[string]*DB
+
+// Kubernetes connector which initializes the database connection from a secret.
+type Connector struct{ client.Client }
+
+var Monitor = newMonitor()
+
+// Create a new database client with authentication from the provided secret reference.
+func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference) (*DB, error) {
+	authSecret := &corev1.Secret{}
+	if err := c.Get(ctx, client.ObjectKey{
+		Namespace: ref.Namespace,
+		Name:      ref.Name,
+	}, authSecret); err != nil {
+		return nil, err
+	}
+	host, ok := authSecret.Data["host"]
+	if !ok {
+		return nil, errors.New("missing host in secret data")
+	}
+	user, ok := authSecret.Data["user"]
+	if !ok {
+		return nil, errors.New("missing user in secret data")
+	}
+	password, ok := authSecret.Data["password"]
+	if !ok {
+		return nil, errors.New("missing password in secret data")
+	}
+	database, ok := authSecret.Data["database"]
+	if !ok {
+		return nil, errors.New("missing database in secret data")
+	}
+	port, ok := authSecret.Data["port"]
+	if !ok {
+		return nil, errors.New("missing port in secret data")
+	}
+	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
+	dbURL, err := easypg.URLFrom(easypg.URLParts{
+		HostName:          strip(string(host)),
+		Port:              strip(string(port)),
+		UserName:          strip(string(user)),
+		Password:          strip(string(password)),
+		DatabaseName:      strip(string(database)),
+		ConnectionOptions: "sslmode=disable",
+	})
+	if err != nil {
+		return nil, err
+	}
+	dbUrlStr := dbURL.String()
+	// Strip the password from the URL for logging.
+	urlForLog := strings.ReplaceAll(dbUrlStr, strip(string(password)), "****")
+	slog.Info("connecting to database", "url", urlForLog)
+
+	// Check if we already have a connection for this url.
+	if conn, ok := connections.Load(dbUrlStr); ok {
+		slog.Info("reusing existing database connection", "url", urlForLog)
+		return conn.(*DB), nil
+	}
+
+	Monitor.connectionAttempts.WithLabelValues(string(host), string(database)).Inc()
+
+	db, err := sql.Open("postgres", dbUrlStr)
+	if err != nil {
+		panic(err)
+	}
+
+	// If the wait time exceeds 10 seconds, we will panic.
+	maxRetries := 10
+	for i := range maxRetries {
+		err := db.PingContext(ctx)
+		if err == nil {
+			break
+		}
+		if i == maxRetries-1 {
+			panic("giving up connecting to database")
+		}
+		slog.Error("failed to connect to database, retrying...", "error", err)
+		time.Sleep(1 * time.Second)
+	}
+
+	db.SetMaxOpenConns(16)
+	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
+	slog.Info("database is ready")
+	wrapped := &DB{DbMap: dbMap, host: string(host), databaseName: string(database)}
+	connections.Store(dbUrlStr, wrapped)
+	return wrapped, nil
+}
+
+// Executes a select query while monitoring its execution time.
+func (d *DB) SelectTimed(group string, i any, query string, args ...any) ([]any, error) {
+	queryURL := url.QueryEscape(query)
+	observer := Monitor.selectTimer.WithLabelValues(group, queryURL)
+	timer := prometheus.NewTimer(observer)
+	defer timer.ObserveDuration()
+	return d.Select(i, query, args...)
+}
+
+// Adds missing functionality to gorp.DbMap which creates one table.
+func (d *DB) CreateTable(table ...*gorp.TableMap) error {
+	tx, err := d.Begin()
+	if err != nil {
+		slog.Error("failed to begin transaction", "error", err)
+		return tx.Rollback()
+	}
+	for _, t := range table {
+		slog.Info("creating table if exists", "table", t.TableName)
+		sql := t.SqlForCreate(true) // true means to add IF NOT EXISTS
+		if _, err := tx.Exec(sql); err != nil {
+			return tx.Rollback()
+		}
+	}
+	return tx.Commit()
+}
+
+// Adds a Model table to the database.
+func (d *DB) AddTable(t Table) *gorp.TableMap {
+	slog.Info("adding table", "table", t.TableName(), "model", t)
+	tablemap := d.AddTableWithName(t, t.TableName())
+	for indexName, columnNames := range t.Indexes() {
+		slog.Info("adding index", "index", indexName, "table", t.TableName(), "columns", columnNames)
+		tablemap.AddIndex(indexName, "Btree", columnNames)
+	}
+	return tablemap
+}
+
+// Check if a table exists in the database.
+func (d *DB) TableExists(t Table) bool {
+	var query string
+	switch d.Dialect.(type) {
+	case gorp.PostgresDialect:
+		query = `SELECT EXISTS (
+			SELECT 1
+			FROM   information_schema.tables
+			WHERE  table_name = :table_name
+		);`
+	case gorp.SqliteDialect:
+		query = `SELECT EXISTS (
+			SELECT 1
+			FROM sqlite_master
+			WHERE type='table' AND name = :table_name
+		);`
+	default:
+		slog.Error("unsupported database dialect")
+		return false
+	}
+	var exists bool
+	err := d.SelectOne(&exists, query, map[string]any{"table_name": t.TableName()})
+	if err != nil {
+		slog.Error("failed to check if table exists", "error", err)
+		return false
+	}
+	return exists
+}
+
+// Replace all old objects of a table with new objects.
+func ReplaceAll[T Table](db DB, objs ...T) error {
+	var model T
+	tableName := model.TableName()
+	tx, err := db.Begin()
+	if err != nil {
+		slog.Error("failed to begin transaction", "error", err)
+		return tx.Rollback()
+	}
+	if _, err = tx.Exec("DELETE FROM " + tableName); err != nil {
+		slog.Error("failed to delete old objects", "tableName", tableName, "error", err)
+		return tx.Rollback()
+	}
+	if err = BulkInsert(tx, db, objs...); err != nil {
+		slog.Error("failed to insert new objects", "tableName", tableName, "error", err)
+		return tx.Rollback()
+	}
+	if err = tx.Commit(); err != nil {
+		slog.Error("failed to commit transaction", "error", err)
+		return err
+	}
+	return nil
+}
+
+// Bulk insert objects into the database, using an executor which
+// can be a transaction or a database connection itself.
+//
+// Note: This function does NOT support auto-incrementing primary keys.
+func BulkInsert[T Table](executor gorp.SqlExecutor, db DB, allObjs ...T) error {
+	if len(allObjs) == 0 {
+		// Nothing to do.
+		return nil
+	}
+
+	// Commit every n objects to avoid running out of memory and avoid
+	// hitting the database parameter limit.
+	const batchSize = 1000
+
+	for i := 0; i < len(allObjs); i += batchSize {
+		end := min(i+batchSize, len(allObjs))
+		objs := allObjs[i:end]
+		// Detect the table based on the first object.
+		objType := reflect.ValueOf(objs).Index(0).Type()
+		table, err := db.TableFor(objType, false)
+		if err != nil {
+			slog.Error("failed to get table for object", "error", err)
+			return err
+		}
+
+		// Using a strings.Builder is much faster than string concatenation.
+		var builder strings.Builder
+		builder.WriteString("INSERT INTO ")
+		builder.WriteString(db.Dialect.QuotedTableForQuery(table.SchemaName, table.TableName))
+		builder.WriteString(" (")
+
+		// Build the column names.
+		for idx, col := range table.Columns {
+			if col.Transient {
+				continue
+			}
+			builder.WriteString(db.Dialect.QuoteField(col.ColumnName))
+			if idx < len(table.Columns)-1 {
+				builder.WriteString(", ")
+			}
+		}
+		builder.WriteString(") VALUES ")
+
+		var params []any
+		// Build the values.
+		paramIdx := 0
+		for i, obj := range objs {
+			if i > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteString("(")
+			for j, col := range table.Columns {
+				if col.Transient {
+					continue
+				}
+				val := reflect.ValueOf(obj).FieldByIndex([]int{j}).Interface()
+				params = append(params, val)
+				builder.WriteString(db.Dialect.BindVar(paramIdx))
+				if j < len(table.Columns)-1 {
+					builder.WriteString(", ")
+				}
+				paramIdx++
+			}
+			builder.WriteString(")")
+		}
+
+		builder.WriteString(db.Dialect.QuerySuffix())
+		query := builder.String()
+
+		slog.Debug("bulk inserting objects", "n", len(objs))
+		if _, err = executor.Exec(query, params...); err != nil {
+			slog.Error("failed to execute bulk insert", "error", err)
+			return err
+		}
+	}
+	return nil
+}

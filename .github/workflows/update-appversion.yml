@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
@@ -30,18 +30,6 @@ jobs:
           files: |
             postgres/**
 
-      # Always bumped
-      - name: Update appVersion in cortex-core Chart.yaml
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' helm/library/cortex-core/Chart.yaml
-      - name: Commit and push changes for cortex-core
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add helm/library/cortex-core/Chart.yaml
-          git commit -m "Bump cortex-core chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
-
       # Only bumped if there are changes in the postgres directory.
       - name: Update appVersion in cortex-postgres Chart.yaml
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
@@ -56,16 +44,13 @@ jobs:
           git commit -m "Bump cortex-postgres chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
 
-      # Only bumped if there are changes in the reservations directory.
-      - name: Update appVersion in cortex-reservations Chart.yaml
-        if: steps.changed_reservations_files.outputs.all_changed_files != ''
+      - name: Update appVersion in dist/chart/Chart.yaml
         run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' reservations/dist/chart/Chart.yaml
-      - name: Commit and push changes for cortex-reservations
-        if: steps.changed_reservations_files.outputs.all_changed_files != ''
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' dist/chart/Chart.yaml
+      - name: Commit and push changes for cortex
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add reservations/dist/chart/Chart.yaml
-          git commit -m "Bump cortex-reservations chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git add dist/chart/Chart.yaml
+          git commit -m "Bump cortex chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main

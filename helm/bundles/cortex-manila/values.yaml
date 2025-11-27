@@ -5,9 +5,12 @@ owner-info:
   enabled: true
   helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-manila"
   maintainers:
-    - "p.matthes@sap.com"
-    - "markus.wieland@sap.com"
     - "arno.uhlig@sap.com"
+    - "julius.clausnitzer@sap.com"
+    - "malte.viering@sap.com"
+    - "marcel.bloecher@sap.com"
+    - "markus.wieland@sap.com"
+    - "p.matthes@sap.com"
   support-group: "workload-management"
   service: "cortex-manila"
 
@@ -15,156 +18,96 @@ alerts:
   enabled: true
   prometheus: openstack
 
+# SSO certificate to use.
+sharedSSOCert: &sharedSSOCert
+  # Certificate "public key". (Optional, remove this key if not needed)
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    Your certificate here
+    -----END CERTIFICATE-----
+  # Certificate private key. (Optional, remove this key if not needed)
+  key: |
+    -----BEGIN PRIVATE KEY-----
+    Your private key here
+    -----END PRIVATE KEY-----
+  # Whether the certificate is self-signed.
+  # If true, the certificate is not verified.
+  selfSigned: "false"
+
+postgres:
+  host: cortex-manila-postgresql
+  user: postgres
+  password: secret
+  database: postgres
+  port: "5432"
+
+prometheus:
+  url: "https://path-to-your-prometheus"
+  sso:
+    enabled: false
+    <<: *sharedSSOCert
+
+openstack:
+  url: "https://path-to-keystone/v3"
+  availability: public
+  username: openstack-user-with-all-project-read-access
+  password: openstack-user-password
+  projectName: openstack-project-of-user
+  userDomainName: openstack-domain-of-user
+  projectDomainName: openstack-domain-of-project-scoped-to
+  sso:
+    enabled: false
+    <<: *sharedSSOCert
+
+cortex: &cortex
+  crd: {enable: false}
+  # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
+  # A centralized ServiceMonitor and metrics service are defined in the cortex-manila chart.
+  metrics: {enable: false}
+  prometheus: {enable: false}
+  conf: &cortexConf
+    operator: cortex-manila
+    keystoneSecretRef:
+      name: cortex-manila-openstack-keystone
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-manila-openstack-sso
+    #   namespace: default
+    monitoring:
+      labels: &cortexMonitoringLabels
+        github_org: cobaltcore-dev
+        github_repo: cortex
+
+# Split deployments
+cortex-scheduling-controllers:
+  <<: *cortex
+  namePrefix: cortex-manila-scheduling
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-manila-scheduling
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: manila-scheduling
+    enabledControllers:
+      - manila-decisions-pipeline-controller
+      - explanation-controller
+
+cortex-knowledge-controllers:
+  <<: *cortex
+  namePrefix: cortex-manila-knowledge
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-manila-knowledge
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: manila-knowledge
+    enabledControllers:
+      - datasource-controllers
+      - knowledge-controllers
+      - kpis-controller
+
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-manila-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-manila-mqtt
-
-# Custom configuration for the cortex core chart.
-cortex-core:
-  fullnameOverride: cortex-manila
-  alerts:
-    componentPrefix: cortex-manila
-  service:
-    extraLabels:
-      app: cortex-manila # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-manila
-  # Modes in which the service should be run.
-  # Each mode is translated into a separate service and deployment.
-  modes:
-    # The name of the mode will be used for the kubernetes deployments.
-    # The args will be passed to the service as command line arguments, meaning
-    # the passed arg need to be baked into the service binary.
-    #
-    # Syncer syncs data from external sources into the database(s).
-    - name: syncer
-      args: ["syncer"]
-      replicas: 1
-
-    # Extractor extracts features from the synced data.
-    - name: extractor
-      args: ["extractor"]
-      replicas: 1
-
-    # Service that extracts and exposes KPIs.
-    - name: kpis
-      args: ["kpis"]
-      replicas: 1
-
-    # External scheduler for Manila.
-    - name: scheduler
-      args: ["scheduler-manila"]
-      replicas: 1
-
-  # Values passed to the service through a configmap.
-  conf:
-    # E2E tests to run when executed with -checks flag.
-    checks: ["manila"]
-
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-manila-mqtt:1883"
-
-    # Connection parameters for the database where data is stored.
-    db:
-      # Must match postgresql settings from the cortex-postgres chart.
-      host: cortex-manila-postgresql
-
-    sync:
-      prometheus:
-        # Prometheus metrics to sync into the database.
-        # Each metric can be synced from a different Prometheus instance.
-        # The `type` parameter should map to a known metric model in the database.
-        metrics:
-          # NetApp harvest exporter metrics for Manila storage pools.
-        - alias: netapp_aggr_labels
-          query: netapp_aggr_labels
-          type: netapp_aggregate_labels_metric
-        - alias: netapp_node_cpu_busy
-          query: netapp_node_cpu_busy
-          type: netapp_node_metric
-
-      openstack:
-        manila:
-          # Manila objects to sync into the database.
-          types:
-            - storage_pools
-
-    extractor:
-      # Configuration of features that should be extracted from the synced data.
-      # Each extractor can specify its own dependencies on other extractors or
-      # synced data.
-      #
-      # The `name` should correspond to a known feature extractor plugin.
-      # Note that the order defined here will also be the order in which the
-      # extractors are executed. If possible, extractors whose dependencies have
-      # been executed will be executed in parallel to speed up the process.
-      plugins:
-        # NetApp-specific extractors.
-        - name: netapp_storage_pool_cpu_usage_extractor
-          recencySeconds: 60 # 1 minute
-          dependencies:
-            sync:
-              prometheus:
-                metrics:
-                  - alias: netapp_node_cpu_busy
-                  - alias: netapp_aggr_labels
-
-    kpis:
-      # Configuration of KPIs that should be extracted from the synced data.
-      # Each KPI can specify its own dependencies on other extractors and
-      # synced data.
-      #
-      # The `name` should correspond to a known KPI extractor plugin.
-      plugins:
-        # NetApp-specific KPIs.
-        - name: netapp_storage_pool_cpu_usage_kpi
-          dependencies:
-            extractors:
-              - netapp_storage_pool_cpu_usage_extractor
-
-    scheduler:
-      manila:
-        pipelines:
-          # Note: there needs to be at least one pipeline with the name "default".
-          - name: default
-            # Configuration of scheduler steps that modify the Manila scheduler weights.
-            # Each scheduler step can specify its own dependencies on extractors and
-            # synced data.
-            #
-            # The `name` should correspond to a known scheduler plugin.
-            # Note that all scheduler steps will be executed in parallel. However,
-            # the order will be maintained when the weights are applied to the
-            # input weights.
-            plugins:
-              # Balance cpu utilization of Manila storage pools.
-              - name: netapp_cpu_usage_balancing
-                options:
-                  # Min-max scaling for gap-fitting based on CPU usage (pct)
-                  avgCPUUsageLowerBound: 0 # pct
-                  avgCPUUsageUpperBound: 10 # pct
-                  avgCPUUsageActivationLowerBound: 0.0
-                  avgCPUUsageActivationUpperBound: -0.75
-                  maxCPUUsageLowerBound: 0 # pct
-                  maxCPUUsageUpperBound: 10 # pct
-                  maxCPUUsageActivationLowerBound: 0.0
-                  maxCPUUsageActivationUpperBound: -0.25
-                dependencies:
-                  extractors: [netapp_storage_pool_cpu_usage_extractor]
-
-  # Values passed to the service through a kubernetes secret.
-  # The keys of these values should correspond to the keys used above in the conf.
-  secrets:
-    sync:
-      prometheus:
-        # Prometheus hosts to consider when syncing the metrics.
-        hosts:
-          - name: netapp_prometheus
-            url: "" # e.g. "https://netapp-prometheus:9090"
-            provides: [netapp_aggregate_labels_metric, netapp_node_metric]

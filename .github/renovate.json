@@ -7,8 +7,6 @@
     "docker:disable"
   ],
   "assignees": [
-    "auhlig",
-    "PhilippMatthes",
     "SoWieMarkus"
   ],
   "commitMessageAction": "Renovate: Update",
@@ -17,6 +15,9 @@
   },
   "dependencyDashboardOSVVulnerabilitySummary": "all",
   "osvVulnerabilityAlerts": true,
+  "platformAutomerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
   "postUpdateOptions": [
     "gomodTidy",
     "gomodUpdateImportPaths"
@@ -44,22 +45,12 @@
         "minor",
         "patch"
       ],
+      "automerge": true,
       "groupName": "External dependencies"
     },
     {
       "matchFileNames": [
-        "reservations/go.mod",
-        "go.mod"
-      ],
-      "matchPackageNames": [
-        "github.com/cobaltcore-dev/cortex",
-        "github.com/cobaltcore-dev/cortex/reservations/api"
-      ],
-      "enabled": false
-    },
-    {
-      "matchFileNames": [
-        "reservations/config/manager/kustomization.yaml"
+        "config/manager/kustomization.yaml"
       ],
       "enabled": false
     }

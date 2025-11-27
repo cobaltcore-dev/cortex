@@ -1,0 +1,123 @@
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vmware-host-contention
+spec:
+  operator: cortex-nova
+  impl: vmware_host_contention_kpi
+  dependencies:
+    knowledges:
+      - name: vmware-long-term-contended-hosts
+  description: |
+    This KPI tracks the number of VMware hostsystems that have experienced
+    long-term contention.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vmware-project-noisiness
+spec:
+  operator: cortex-nova
+  impl: vmware_project_noisiness_kpi
+  dependencies:
+    knowledges:
+      - name: vmware-project-noisiness
+  description: |
+    This KPI tracks how noisy projects are in terms of CPU contention
+    on their VMs' hostsystems.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: sap-host-total-allocatable-capacity
+spec:
+  operator: cortex-nova
+  impl: sap_host_total_allocatable_capacity_kpi
+  dependencies:
+    knowledges:
+      - name: sap-host-details
+      - name: host-utilization
+  description: |
+    This KPI tracks the total allocatable capacity of SAP hosts.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: sap-host-capacity
+spec:
+  operator: cortex-nova
+  impl: sap_host_capacity_kpi
+  dependencies:
+    knowledges:
+      - name: sap-host-details
+      - name: host-utilization
+  description: |
+    This KPI tracks the total allocatable capacity of SAP hosts.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: sap-host-running-vms
+spec:
+  operator: cortex-nova
+  impl: sap_host_running_vms_kpi
+  dependencies:
+    knowledges:
+      - name: sap-host-details
+      - name: host-utilization
+  description: |
+    This KPI tracks the total number of running VMs on SAP hosts.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: sap-flavors-running-vms
+spec:
+  operator: cortex-nova
+  impl: sap_flavor_running_vms_kpi
+  dependencies:
+    datasources:
+      - name: nova-servers
+  description: |
+    This KPI tracks the total number of running VMs per flavor and availability zone.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vm-migration-statistics
+spec:
+  operator: cortex-nova
+  impl: vm_migration_statistics_kpi
+  dependencies:
+    knowledges:
+      - name: vm-host-residency
+  description: |
+    This KPI tracks statistics about VM migrations.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vm-life-span
+spec:
+  operator: cortex-nova
+  impl: vm_life_span_kpi
+  dependencies:
+    knowledges:
+      - name: vm-life-span
+  description: |
+    This KPI tracks the life span of VMs.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vm-commitments
+spec:
+  operator: cortex-nova
+  impl: vm_commitments_kpi
+  dependencies:
+    datasources:
+      - name: limes-project-commitments
+      - name: nova-flavors
+  description: |
+    This KPI tracks VM commitments based on project commitments and VM flavors.

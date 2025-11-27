@@ -1,0 +1,36 @@
+# Copyright 2025 SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+owner-info:
+  enabled: true
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-ironcore"
+  maintainers:
+    - "arno.uhlig@sap.com"
+    - "julius.clausnitzer@sap.com"
+    - "malte.viering@sap.com"
+    - "marcel.bloecher@sap.com"
+    - "markus.wieland@sap.com"
+    - "p.matthes@sap.com"
+  support-group: "workload-management"
+  service: "cortex-ironcore"
+
+alerts:
+  enabled: true
+  prometheus: openstack
+
+cortex:
+  enabled: false
+  # CRDs are deployed in the cortex-crds chart.
+  crd: {enable: false}
+  # Use this to unambiguate multiple cortex deployments in the same cluster.
+  namePrefix: cortex-ironcore
+  conf:
+    # The operator will only touch CRs with this operator name.
+    operator: cortex-ironcore
+    enabledControllers:
+      - ironcore-decisions-pipeline-controller
+      - explanation-controller
+    monitoring:
+      labels:
+        github_org: cobaltcore-dev
+        github_repo: cortex

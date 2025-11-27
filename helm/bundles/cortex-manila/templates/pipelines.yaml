@@ -1,0 +1,16 @@
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: manila-external-scheduler
+spec:
+  operator: cortex-manila
+  description: |
+    Manila provides shared file system placement on storage hosts for OpenStack.
+    After applying its own filtering and weighing logic, it delegates to cortex
+    for additional filtering and weighing via this external scheduler pipeline.
+    Cortex returns a ranked list of hosts back to manila for final selection.
+  type: filter-weigher
+  steps:
+    - ref: {name: netapp-cpu-usage-balancing-manila}
+      mandatory: false

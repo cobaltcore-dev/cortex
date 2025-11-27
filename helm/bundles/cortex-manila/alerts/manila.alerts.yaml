@@ -1,10 +1,10 @@
 groups:
 - name: cortex-manila-alerts
   rules:
-  - alert: CortexManilaInitialPlacementDown
+  - alert: CortexManilaSchedulingDown
     expr: |
-      up{component="cortex-manila-scheduler", namespace="cortex-manila"} != 1 or
-      absent(up{component="cortex-manila-scheduler", namespace="cortex-manila"})
+      up{pod=~"cortex-manila-scheduling-.*"} != 1 or
+      absent(up{pod=~"cortex-manila-scheduling-.*"})
     for: 5m
     labels:
       context: liveness
@@ -14,16 +14,15 @@ groups:
       support_group: workload-management
       playbook: docs/support/playbook/cortex/down
     annotations:
-      summary: "Cortex initial placement for Manila is down"
+      summary: "Cortex Scheduling for Manila is down"
       description: >
-        The Cortex initial placement is down. Initial placement requests from Manila will
+        The Cortex scheduling service is down. Scheduling requests from Manila will
         not be served. This is no immediate problem, since Manila will continue
-        placing new shares. However, the placement will be less desirable.
-
-  - alert: CortexManilaSyncerDown
+        placing new VMs. However, the placement will be less desirable.
+  - alert: CortexManilaKnowledgeDown
     expr: |
-      up{component="cortex-manila-syncer", namespace="cortex-manila"} != 1 or
-      absent(up{component="cortex-manila-syncer", namespace="cortex-manila"})
+      up{pod=~"cortex-manila-knowledge-.*"} != 1 or
+      absent(up{pod=~"cortex-manila-knowledge-.*"})
     for: 5m
     labels:
       context: liveness
@@ -31,32 +30,86 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/down
     annotations:
-      summary: "Cortex syncer is down"
+      summary: "Cortex Knowledge for Manila is down"
       description: >
-        The Cortex syncer is down. Cortex requires somewhat recent data from
-        it's datasources (OpenStack, Prometheus, etc.) to make accurate
-        scheduling decisions. If this issue persists for a longer time, the
-        data based will slowly drift away from the actual state of the
-        datacenter, which may lead to less desirable placement decisions.
-        This is no immediate problem, since Manila will continue placing new
-        shares.
-
-  - alert: CortexManilaExtractorDown
-    expr: |
-      up{component="cortex-manila-extractor", namespace="cortex-manila"} != 1 or
-      absent(up{component="cortex-manila-extractor", namespace="cortex-manila"})
+        The Cortex Knowledge service is down. This is no immediate problem,
+        since cortex is still able to process requests,
+        but the quality of the responses may be affected.
+  - alert: CortexManilaHttpRequest400sTooHigh
+    expr: rate(cortex_scheduler_api_request_duration_seconds_count{service="cortex-manila-metrics", status=~"4.+"}[5m]) > 0.1
     for: 5m
     labels:
-      context: liveness
+      context: api
       dashboard: cortex/cortex
       service: cortex
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Cortex extractor is down"
+      summary: "Manila Scheduler HTTP request 400 errors too high"
       description: >
-        The Cortex extractor is down. This means that newly available data
-        about the datacenter will not be used to extract scheduling knowledge.
-        This is no immediate problem, since Manila will continue placing new
-        shares. However, the placement will be less desirable.
+        Manila Scheduler is responding to placement requests with HTTP 4xx
+        errors. This is expected when the scheduling request cannot be served
+        by Cortex. However, it could also indicate that the request format has
+        changed and Cortex is unable to parse it.
+  - alert: CortexManilaSchedulingHttpRequest500sTooHigh
+    expr: rate(cortex_scheduler_api_request_duration_seconds_count{service="cortex-manila-metrics", status=~"5.+" }[5m]) > 0.1
+    for: 5m
+    labels:
+      context: api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Manila Scheduler HTTP request 500 errors too high"
+      description: >
+        Manila Scheduler is responding to placement requests with HTTP 5xx errors.
+        This is not expected and indicates that Cortex is having some internal problem.
+        Manila will continue to place new VMs, but the placement will be less desirable.
+        Thus, no immediate action is needed.
+  - alert: CortexManilaHighMemoryUsage
+    expr: process_resident_memory_bytes{service="cortex-manila-metrics"} > 6000 * 1024 * 1024
+    for: 5m
+    labels:
+      context: memory
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` uses too much memory"
+      description: >
+        `{{$labels.component}}` should not be using more than 6000 MiB of memory. Usually it
+        should use much less, so there may be a memory leak or other changes
+        that are causing the memory usage to increase significantly.
+  - alert: CortexManilaHighCPUUsage
+    expr: rate(process_cpu_seconds_total{service="cortex-manila-metrics"}[1m]) > 0.5
+    for: 5m
+    labels:
+      context: cpu
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` uses too much CPU"
+      description: >
+        `{{$labels.component}}` should not be using more than 50% of a single CPU core. Usually
+        it should use much less, so there may be a CPU leak or other changes
+        that are causing the CPU usage to increase significantly.
+  - alert: CortexManilaTooManyDBConnectionAttempts
+    expr: rate(cortex_db_connection_attempts_total{service="cortex-manila-metrics"}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: db
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` is trying to connect to the database too often"
+      description: >
+        `{{$labels.component}}` is trying to connect to the database too often. This may happen
+        when the database is down or the connection parameters are misconfigured.

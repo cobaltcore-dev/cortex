@@ -1,0 +1,92 @@
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: netapp-aggr-labels-cinder
+spec:
+  operator: cortex-cinder
+  databaseSecretRef:
+    name: cortex-cinder-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-cinder-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-cinder-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: netapp_aggr_labels
+    query: netapp_aggr_labels
+    type: netapp_aggregate_labels_metric
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: netapp-node-cpu-busy-cinder
+spec:
+  operator: cortex-cinder
+  databaseSecretRef:
+    name: cortex-cinder-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-cinder-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-cinder-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: netapp_node_cpu_busy
+    query: netapp_node_cpu_busy
+    type: netapp_node_metric
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: netapp-volume-aggr-labels
+spec:
+  operator: cortex-cinder
+  databaseSecretRef:
+    name: cortex-cinder-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.prometheus.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-cinder-prometheus-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: prometheus
+  prometheus:
+    secretRef:
+      name: cortex-cinder-prometheus
+      namespace: {{ .Release.Namespace }}
+    alias: netapp_volume_aggr_labels
+    query: netapp_volume_aggr_labels
+    type: netapp_volume_aggregate_labels_metric
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: cinder-storage-pools
+spec:
+  operator: cortex-cinder
+  databaseSecretRef:
+    name: cortex-cinder-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.openstack.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-cinder-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    secretRef:
+      name: cortex-cinder-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: cinder
+    cinder:
+      type: storagePools

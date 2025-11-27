@@ -1,0 +1,89 @@
+{{- $createDecisions := .Values.pipelines.createDecisions | default false }}
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-external-scheduler-vmware
+spec:
+  operator: cortex-nova
+  description: |
+    Nova provides virtual machine placement on compute hosts for OpenStack.
+    After applying its own filtering and weighing logic, it delegates to cortex
+    for additional filtering and weighing via this external scheduler pipeline.
+    Cortex returns a ranked list of hosts back to nova for final selection.
+    This is the pipeline used for VMware.
+  type: filter-weigher
+  createDecisions: false
+  steps:
+    - ref: {name: vmware-hana-binpacking}
+      mandatory: false
+    - ref: {name: vmware-general-purpose-balancing}
+      mandatory: false
+    - ref: {name: vmware-avoid-long-term-contended-hosts}
+      mandatory: false
+    - ref: {name: vmware-avoid-short-term-contended-hosts}
+      mandatory: false
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-external-scheduler-kvm
+spec:
+  operator: cortex-nova
+  description: |
+    Nova provides virtual machine placement on compute hosts for OpenStack.
+    After applying its own filtering and weighing logic, it delegates to cortex
+    for additional filtering and weighing via this external scheduler pipeline.
+    Cortex returns a ranked list of hosts back to nova for final selection.
+    This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+  type: filter-weigher
+  {{- if $createDecisions }}
+  createDecisions: true
+  {{- end }}
+  steps: []
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-external-scheduler-kvm-reservations
+spec:
+  operator: cortex-nova
+  description: |
+    This pipeline can be used to place reservations the same way nova would place
+    its virtual machines. It uses the same filtering steps as implemented in the
+    nova service, ensuring a valid placement of the reservation. It then leverages
+    cortex's weighing steps to provide an optimized host selection for the reservation.
+    This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+  type: filter-weigher
+  {{- if $createDecisions }}
+  createDecisions: true
+  {{- end }}
+  steps:
+    - ref: {name: filter-host-instructions}
+    - ref: {name: filter-has-enough-capacity}
+    - ref: {name: filter-has-requested-traits}
+    - ref: {name: filter-has-accelerators}
+    - ref: {name: filter-correct-az}
+    - ref: {name: filter-disabled}
+    - ref: {name: filter-external-customer}
+    - ref: {name: filter-packed-virtqueue}
+    - ref: {name: filter-project-aggregates}
+    - ref: {name: filter-compute-capabilities}
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-descheduler-kvm
+spec:
+  operator: cortex-nova
+  description:
+    This pipeline runs steps that select virtual machines to deschedule from
+    compute hosts in order to optimize resource usage and performance.
+    This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+  type: descheduler
+  {{- if $createDecisions }}
+  createDecisions: true
+  {{- end }}
+  steps:
+    - ref: {name: avoid-high-steal-pct}
+      mandatory: false

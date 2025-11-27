@@ -5,9 +5,12 @@ owner-info:
   enabled: true
   helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-cinder"
   maintainers:
-    - "p.matthes@sap.com"
-    - "markus.wieland@sap.com"
     - "arno.uhlig@sap.com"
+    - "julius.clausnitzer@sap.com"
+    - "malte.viering@sap.com"
+    - "marcel.bloecher@sap.com"
+    - "markus.wieland@sap.com"
+    - "p.matthes@sap.com"
   support-group: "workload-management"
   service: "cortex-cinder"
 
@@ -15,118 +18,96 @@ alerts:
   enabled: true
   prometheus: openstack
 
+# SSO certificate to use.
+sharedSSOCert: &sharedSSOCert
+  # Certificate "public key". (Optional, remove this key if not needed)
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    Your certificate here
+    -----END CERTIFICATE-----
+  # Certificate private key. (Optional, remove this key if not needed)
+  key: |
+    -----BEGIN PRIVATE KEY-----
+    Your private key here
+    -----END PRIVATE KEY-----
+  # Whether the certificate is self-signed.
+  # If true, the certificate is not verified.
+  selfSigned: "false"
+
+postgres:
+  host: cortex-cinder-postgresql
+  user: postgres
+  password: secret
+  database: postgres
+  port: "5432"
+
+prometheus:
+  url: "https://path-to-your-prometheus"
+  sso:
+    enabled: false
+    <<: *sharedSSOCert
+
+openstack:
+  url: "https://path-to-keystone/v3"
+  availability: public
+  username: openstack-user-with-all-project-read-access
+  password: openstack-user-password
+  projectName: openstack-project-of-user
+  userDomainName: openstack-domain-of-user
+  projectDomainName: openstack-domain-of-project-scoped-to
+  sso:
+    enabled: false
+    <<: *sharedSSOCert
+
+cortex: &cortex
+  crd: {enable: false}
+  # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
+  # A centralized ServiceMonitor and metrics service are defined in the cortex-cinder chart.
+  metrics: {enable: false}
+  prometheus: {enable: false}
+  conf: &cortexConf
+    operator: cortex-cinder
+    keystoneSecretRef:
+      name: cortex-cinder-openstack-keystone
+      namespace: default
+    # ssoSecretRef:
+    #   name: cortex-cinder-openstack-sso
+    #   namespace: default
+    monitoring:
+      labels: &cortexMonitoringLabels
+        github_org: cobaltcore-dev
+        github_repo: cortex
+
+# Split deployments
+cortex-scheduling-controllers:
+  <<: *cortex
+  namePrefix: cortex-cinder-scheduling
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-cinder-scheduling
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: cinder-scheduling
+    enabledControllers:
+      - cinder-decisions-pipeline-controller
+      - explanation-controller
+
+cortex-knowledge-controllers:
+  <<: *cortex
+  namePrefix: cortex-cinder-knowledge
+  conf:
+    <<: *cortexConf
+    leaderElectionID: cortex-cinder-knowledge
+    monitoring:
+      labels:
+        <<: *cortexMonitoringLabels
+        component: cinder-knowledge
+    enabledControllers:
+      - datasource-controllers
+      - knowledge-controllers
+      - kpis-controller
+
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-cinder-postgresql
-
-# Custom configuration for the cortex mqtt chart.
-cortex-mqtt:
-  fullnameOverride: cortex-cinder-mqtt
-
-# Custom configuration for the cortex core chart.
-cortex-core:
-  fullnameOverride: cortex-cinder
-  alerts:
-    componentPrefix: cortex-cinder
-  service:
-    extraLabels:
-      app: cortex-cinder # See below, used for the service monitor.
-  serviceMonitor:
-    matchLabels: # See above, this is used to select the postgresql service.
-      app: cortex-cinder
-  # Modes in which the service should be run.
-  # Each mode is translated into a separate service and deployment.
-  modes:
-    # The name of the mode will be used for the kubernetes deployments.
-    # The args will be passed to the service as command line arguments, meaning
-    # the passed arg need to be baked into the service binary.
-    #
-    # Syncer syncs data from external sources into the database(s).
-    - name: syncer
-      args: ["syncer"]
-      replicas: 1
-
-    # Extractor extracts features from the synced data.
-    - name: extractor
-      args: ["extractor"]
-      replicas: 1
-
-    # Service that extracts and exposes KPIs.
-    - name: kpis
-      args: ["kpis"]
-      replicas: 1
-
-    # External scheduler for Cinder.
-    - name: scheduler
-      args: ["scheduler-cinder"]
-      replicas: 1
-
-  # Values passed to the service through a configmap.
-  conf:
-    # E2E tests to run when executed with -checks flag.
-    checks: ["cinder"]
-
-    # MQTT broker connection parameters.
-    mqtt:
-      # Must match rabbitmq settings from the cortex-mqtt chart.
-      url: "tcp://cortex-cinder-mqtt:1883"
-
-    # Connection parameters for the database where data is stored.
-    db:
-      # Must match postgresql settings from the cortex-postgres chart.
-      host: cortex-cinder-postgresql
-
-    sync:
-      prometheus:
-        # Prometheus metrics to sync into the database.
-        # Each metric can be synced from a different Prometheus instance.
-        # The `type` parameter should map to a known metric model in the database.
-        metrics:
-          # NetApp harvest exporter metrics for Cinder storage pools.
-        - alias: netapp_aggr_labels
-          query: netapp_aggr_labels
-          type: netapp_aggregate_labels_metric
-        - alias: netapp_node_cpu_busy
-          query: netapp_node_cpu_busy
-          type: netapp_node_metric
-        - alias: netapp_volume_aggr_labels
-          query: netapp_volume_aggr_labels
-          type: netapp_volume_aggregate_labels_metric
-
-      openstack:
-        cinder:
-          types:
-            - storage_pools
-
-    extractor:
-      plugins: []
-
-    kpis:
-      plugins: []
-
-    scheduler:
-      cinder:
-        pipelines:
-          # Note: there needs to be at least one pipeline with the name "default".
-          - name: default
-            # Configuration of scheduler steps that modify the Cinder scheduler weights.
-            # Each scheduler step can specify its own dependencies on extractors and
-            # synced data.
-            #
-            # The `name` should correspond to a known scheduler plugin.
-            plugins: []
-
-  # Values passed to the service through a kubernetes secret.
-  # The keys of these values should correspond to the keys used above in the conf.
-  secrets:
-    sync:
-      prometheus:
-        # Prometheus hosts to consider when syncing the metrics.
-        hosts:
-          - name: netapp_prometheus
-            url: "" # e.g. "https://netapp-prometheus:9090"
-            provides: [
-              netapp_aggregate_labels_metric,
-              netapp_node_metric,
-              netapp_volume_aggregate_labels_metric
-            ]
