@@ -6,12 +6,12 @@ package pods
 import (
 	"log/slog"
 
-	corev1 "k8s.io/api/core/v1"
+	podsv1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/pods/v1alpha1"
 )
 
 type PodPipelineRequest struct {
 	// The available nodes.
-	Nodes []corev1.Node `json:"nodes"`
+	Nodes []podsv1alpha1.Node `json:"nodes"`
 }
 
 func (r PodPipelineRequest) GetSubjects() []string {

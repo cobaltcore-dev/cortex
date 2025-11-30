@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
+	podsv1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/pods/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -25,15 +26,15 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheduling scheme: %v", err)
 	}
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add corev1 scheme: %v", err)
+	if err := podsv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add podsv1alpha1 scheme: %v", err)
 	}
 
 	tests := []struct {
 		name             string
 		decision         *v1alpha1.Decision
-		nodes            []corev1.Node
-		pod              *corev1.Pod
+		nodes            []podsv1alpha1.Node
+		pod              *podsv1alpha1.Pod
 		expectError      bool
 		expectDecision   bool
 		expectTargetHost string
@@ -57,7 +58,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			nodes: []corev1.Node{
+			nodes: []podsv1alpha1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "node1"},
 				},
@@ -65,13 +66,13 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "node2"},
 				},
 			},
-			pod: &corev1.Pod{
+			pod: &podsv1alpha1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: "default",
 				},
-				Spec: corev1.PodSpec{
-					SchedulerName: "",
+				Spec: podsv1alpha1.PodSpec{
+					Scheduler: "",
 				},
 			},
 			expectError:      false,
@@ -97,7 +98,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			nodes:          []corev1.Node{},
+			nodes:          []podsv1alpha1.Node{},
 			expectError:    true,
 			expectDecision: false,
 		},
@@ -252,14 +253,14 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheduling scheme: %v", err)
 	}
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add corev1 scheme: %v", err)
+	if err := podsv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add podsv1alpha1 scheme: %v", err)
 	}
 
 	tests := []struct {
 		name                  string
-		pod                   *corev1.Pod
-		nodes                 []corev1.Node
+		pod                   *podsv1alpha1.Pod
+		nodes                 []podsv1alpha1.Node
 		pipelineConfig        *v1alpha1.Pipeline
 		createDecisions       bool
 		expectError           bool
@@ -269,16 +270,16 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 	}{
 		{
 			name: "successful pod processing with decision creation",
-			pod: &corev1.Pod{
+			pod: &podsv1alpha1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: "default",
 				},
-				Spec: corev1.PodSpec{
-					SchedulerName: "",
+				Spec: podsv1alpha1.PodSpec{
+					Scheduler: "",
 				},
 			},
-			nodes: []corev1.Node{
+			nodes: []podsv1alpha1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "node1"},
 				},
@@ -305,16 +306,16 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 		},
 		{
 			name: "successful pod processing without decision creation",
-			pod: &corev1.Pod{
+			pod: &podsv1alpha1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod-no-decision",
 					Namespace: "default",
 				},
-				Spec: corev1.PodSpec{
-					SchedulerName: "",
+				Spec: podsv1alpha1.PodSpec{
+					Scheduler: "",
 				},
 			},
-			nodes: []corev1.Node{
+			nodes: []podsv1alpha1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "node1"},
 				},
@@ -338,16 +339,16 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 		},
 		{
 			name: "pipeline not configured",
-			pod: &corev1.Pod{
+			pod: &podsv1alpha1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod-no-pipeline",
 					Namespace: "default",
 				},
-				Spec: corev1.PodSpec{
-					SchedulerName: "",
+				Spec: podsv1alpha1.PodSpec{
+					Scheduler: "",
 				},
 			},
-			nodes:                 []corev1.Node{},
+			nodes:                 []podsv1alpha1.Node{},
 			pipelineConfig:        nil,
 			expectError:           true,
 			expectDecisionCreated: false,
@@ -355,16 +356,16 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 		},
 		{
 			name: "no nodes available",
-			pod: &corev1.Pod{
+			pod: &podsv1alpha1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod-no-nodes",
 					Namespace: "default",
 				},
-				Spec: corev1.PodSpec{
-					SchedulerName: "",
+				Spec: podsv1alpha1.PodSpec{
+					Scheduler: "",
 				},
 			},
-			nodes: []corev1.Node{},
+			nodes: []podsv1alpha1.Node{},
 			pipelineConfig: &v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pods-scheduler",
@@ -500,21 +501,23 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 
 			// Check if node was assigned (if expected)
 			if tt.expectNodeAssigned {
-				var binding corev1.Binding
+				var updatedPod podsv1alpha1.Pod
 				err := client.Get(context.Background(), types.NamespacedName{
 					Name:      tt.pod.Name,
 					Namespace: tt.pod.Namespace,
-				}, &binding)
+				}, &updatedPod)
 				if err != nil {
-					t.Errorf("Failed to get binding: %v", err)
+					t.Errorf("Failed to get updated pod: %v", err)
 					return
 				}
 
-				if binding.Target.Kind != "Node" {
-					t.Errorf("expected binding target kind Node, got %q", binding.Target.Kind)
+				if updatedPod.Spec.NodeName == "" {
+					t.Error("expected node ref to be set")
+					return
 				}
-				if binding.Target.Name != tt.expectTargetHost {
-					t.Errorf("expected binding target name %q, got %q", tt.expectTargetHost, binding.Target.Name)
+
+				if updatedPod.Spec.NodeName != tt.expectTargetHost {
+					t.Errorf("expected node %q, got %q", tt.expectTargetHost, updatedPod.Spec.NodeName)
 				}
 			}
 		})

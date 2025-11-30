@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
+	podsv1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/pods/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -49,11 +50,6 @@ type DecisionPipelineController struct {
 	Monitor lib.PipelineMonitor
 }
 
-// The type of pipeline this controller manages.
-func (c *DecisionPipelineController) PipelineType() v1alpha1.PipelineType {
-	return v1alpha1.PipelineTypeFilterWeigher
-}
-
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
@@ -72,7 +68,7 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-func (c *DecisionPipelineController) ProcessNewPod(ctx context.Context, pod *corev1.Pod) error {
+func (c *DecisionPipelineController) ProcessNewPod(ctx context.Context, pod *podsv1alpha1.Pod) error {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
@@ -126,7 +122,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 	}
 
 	// Find all available nodes.
-	nodes := &corev1.NodeList{}
+	nodes := &podsv1alpha1.NodeList{}
 	if err := c.List(ctx, nodes); err != nil {
 		return err
 	}
@@ -145,8 +141,8 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
-	// Check if the pod is already assigned to a node.
-	pod := &corev1.Pod{}
+	// Set the node name on the pod.
+	pod := &podsv1alpha1.Pod{}
 	if err := c.Get(ctx, client.ObjectKey{
 		Name:      decision.Spec.PodRef.Name,
 		Namespace: decision.Spec.PodRef.Namespace,
@@ -154,24 +150,10 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		log.Error(err, "failed to fetch pod for decision")
 		return err
 	}
-	if pod.Spec.NodeName != "" {
-		log.Info("pod is already assigned to a node", "node", pod.Spec.NodeName)
-		return nil
-	}
-
-	// Assign the first node returned by the pipeline using a Binding.
-	binding := &corev1.Binding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      decision.Spec.PodRef.Name,
-			Namespace: decision.Spec.PodRef.Namespace,
-		},
-		Target: corev1.ObjectReference{
-			Kind: "Node",
-			Name: *result.TargetHost,
-		},
-	}
-	if err := c.Create(ctx, binding); err != nil {
-		log.V(1).Error(err, "failed to assign node to pod via binding")
+	// Assign the first node returned by the pipeline.
+	pod.Spec.NodeName = *result.TargetHost
+	if err := c.Update(ctx, pod); err != nil {
+		log.V(1).Error(err, "failed to assign node to pod")
 		return err
 	}
 	log.V(1).Info("assigned node to pod", "node", *result.TargetHost)
@@ -184,21 +166,20 @@ func (c *DecisionPipelineController) InitPipeline(
 	name string,
 	steps []v1alpha1.Step,
 ) (lib.Pipeline[pods.PodPipelineRequest], error) {
-
 	return lib.NewPipeline(ctx, c.Client, name, supportedSteps, steps, c.Monitor)
 }
 
 func (c *DecisionPipelineController) handlePod() handler.EventHandler {
 	return handler.Funcs{
 		CreateFunc: func(ctx context.Context, evt event.CreateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			pod := evt.Object.(*corev1.Pod)
+			pod := evt.Object.(*podsv1alpha1.Pod)
 			if err := c.ProcessNewPod(ctx, pod); err != nil {
 				log := ctrl.LoggerFrom(ctx)
 				log.Error(err, "failed to process new pod for scheduling", "pod", pod.Name)
 			}
 		},
 		UpdateFunc: func(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			newPod := evt.ObjectNew.(*corev1.Pod)
+			newPod := evt.ObjectNew.(*podsv1alpha1.Pod)
 			if newPod.Spec.NodeName != "" {
 				// Pod is already scheduled, no need to create a decision.
 				return
@@ -211,7 +192,7 @@ func (c *DecisionPipelineController) handlePod() handler.EventHandler {
 		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			// Delete the associated decision(s).
 			log := ctrl.LoggerFrom(ctx)
-			pod := evt.Object.(*corev1.Pod)
+			pod := evt.Object.(*podsv1alpha1.Pod)
 			var decisions v1alpha1.DecisionList
 			if err := c.List(ctx, &decisions); err != nil {
 				log.Error(err, "failed to list decisions for deleted pod")
@@ -235,15 +216,16 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 	}
 	return multicluster.BuildController(mcl, mgr).
 		WatchesMulticluster(
-			&corev1.Pod{},
+			&podsv1alpha1.Pod{},
 			c.handlePod(),
 			// Only schedule pods that have a custom scheduler set.
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pod := obj.(*corev1.Pod)
+				pod := obj.(*podsv1alpha1.Pod)
 				if pod.Spec.NodeName != "" {
 					// Skip pods that already have a node assigned.
 					return false
 				}
+				// FIXME: is this correct?
 				return pod.Spec.SchedulerName == c.Conf.Operator
 			}),
 		).

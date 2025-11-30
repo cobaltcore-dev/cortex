@@ -12,7 +12,7 @@ owner-info:
     - "markus.wieland@sap.com"
     - "p.matthes@sap.com"
   support-group: "workload-management"
-  service: "cortex-pods"
+  service: "cortex-ironcore"
 
 alerts:
   enabled: true
@@ -21,12 +21,12 @@ alerts:
 cortex:
   enabled: false
   # CRDs are deployed in the cortex-crds chart.
-  crd: { enable: false }
+  crd: {enable: false}
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-pods
   conf:
     # The operator will only touch CRs with this operator name.
-    operator: cortex
+    operator: cortex-pods
     enabledControllers:
       - pods-decisions-pipeline-controller
       - explanation-controller
@@ -34,7 +34,3 @@ cortex:
       labels:
         github_org: cobaltcore-dev
         github_repo: cortex
-
-# Custom configuration for the cortex postgres chart.
-cortex-postgres:
-  fullnameOverride: cortex-pods-postgresql

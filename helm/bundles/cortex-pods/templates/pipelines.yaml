@@ -4,11 +4,11 @@ kind: Pipeline
 metadata:
   name: pods-scheduler
 spec:
-  operator: cortex
+  operator: cortex-pods
   description: |
     This pipeline is used to schedule pods onto nodes.
   type: filter-weigher
   createDecisions: true
   steps:
-    - ref: { name: pods-noop }
+    - ref: {name: pods-noop}
       mandatory: false

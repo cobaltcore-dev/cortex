@@ -3,7 +3,7 @@ kind: Pod
 metadata:
   name: test-pod
 spec:
-  schedulerName: cortex
+  schedulerName: cortex-pods
   containers:
-    - name: nginx
-      image: nginx:latest
+  - name: nginx
+    image: nginx:latest

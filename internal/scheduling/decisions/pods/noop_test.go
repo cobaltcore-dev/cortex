@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
-	corev1 "k8s.io/api/core/v1"
+	podsv1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/pods/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -21,14 +21,14 @@ func TestNoopFilter_Run(t *testing.T) {
 		{
 			name: "empty nodes",
 			request: pods.PodPipelineRequest{
-				Nodes: []corev1.Node{},
+				Nodes: []podsv1alpha1.Node{},
 			},
 			expected: map[string]float64{},
 		},
 		{
 			name: "single node",
 			request: pods.PodPipelineRequest{
-				Nodes: []corev1.Node{
+				Nodes: []podsv1alpha1.Node{
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: "node1"},
 					},
@@ -41,7 +41,7 @@ func TestNoopFilter_Run(t *testing.T) {
 		{
 			name: "multiple nodes",
 			request: pods.PodPipelineRequest{
-				Nodes: []corev1.Node{
+				Nodes: []podsv1alpha1.Node{
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: "node1"},
 					},
