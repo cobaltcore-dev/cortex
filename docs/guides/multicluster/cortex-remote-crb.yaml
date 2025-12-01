@@ -14,6 +14,9 @@ subjects:
   name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-ironcore-controller-manager"
 - kind: User
   apiGroup: rbac.authorization.k8s.io
+  name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-ironcore-controller-manager"
+- kind: User
+  apiGroup: rbac.authorization.k8s.io
   name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-pods-controller-manager"
 roleRef:
   kind: ClusterRole
