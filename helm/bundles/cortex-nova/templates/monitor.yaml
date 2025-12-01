@@ -7,6 +7,9 @@ metadata:
   labels:
     app.kubernetes.io/instance: cortex-nova
     control-plane: controller-manager
+    {{- if $.Values.serviceMonitor.extraLabels }}
+    {{- toYaml $.Values.serviceMonitor.extraLabels | nindent 4 }}
+    {{- end }}
 spec:
   endpoints:
     - path: /metrics
