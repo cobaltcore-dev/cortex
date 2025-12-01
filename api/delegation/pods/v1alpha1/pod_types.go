@@ -29,7 +29,7 @@ type Pod struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PodSpec           `json:"spec,omitempty"`
+	Spec   PodSpec          `json:"spec,omitempty"`
 	Status corev1.PodStatus `json:"status,omitempty"`
 }
 
