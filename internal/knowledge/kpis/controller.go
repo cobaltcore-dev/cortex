@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/netapp"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/shared"
@@ -34,6 +35,8 @@ import (
 
 // Configuration of supported kpis.
 var SupportedKPIsByImpl = map[string]plugins.KPI{
+	// KVM kpis.
+	"kvm_host_capacity_kpi": &kvm.HostCapacityKPI{},
 	// VMware kpis.
 	"vmware_host_contention_kpi":   &vmware.VMwareHostContentionKPI{},
 	"vmware_project_noisiness_kpi": &vmware.VMwareProjectNoisinessKPI{},
