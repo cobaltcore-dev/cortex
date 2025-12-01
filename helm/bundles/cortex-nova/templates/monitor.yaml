@@ -7,6 +7,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: cortex-nova
     control-plane: controller-manager
+    prometheus: openstack
 spec:
   endpoints:
     - path: /metrics
