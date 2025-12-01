@@ -166,6 +166,7 @@ func (c *DecisionPipelineController) InitPipeline(
 	name string,
 	steps []v1alpha1.Step,
 ) (lib.Pipeline[pods.PodPipelineRequest], error) {
+
 	return lib.NewPipeline(ctx, c.Client, name, supportedSteps, steps, c.Monitor)
 }
 
