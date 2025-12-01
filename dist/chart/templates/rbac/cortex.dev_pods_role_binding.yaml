@@ -1,0 +1,16 @@
+{{- if .Values.rbac.pods.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-manager-rolebinding-pods
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.namePrefix }}-manager-role-pods
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.namePrefix }}-{{ .Values.controllerManager.serviceAccountName }}
+  namespace: {{ .Release.Namespace }}
+{{- end -}}
