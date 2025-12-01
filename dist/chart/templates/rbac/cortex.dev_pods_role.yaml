@@ -1,0 +1,36 @@
+{{- if .Values.rbac.pods.enable }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-manager-role-pods
+rules:
+- apiGroups:
+  - cortex.dev
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cortex.dev
+  resources:
+  - pods/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cortex.dev
+  resources:
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end -}}
