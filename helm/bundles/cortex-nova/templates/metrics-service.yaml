@@ -9,10 +9,10 @@ metadata:
     control-plane: controller-manager
 spec:
   ports:
-    - port: 8443
-      targetPort: 8443
+    - port: 2112
+      targetPort: metrics
       protocol: TCP
-      name: https
+      name: metrics
   selector:
     app.kubernetes.io/instance: cortex-nova
     control-plane: controller-manager
