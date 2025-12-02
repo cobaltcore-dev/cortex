@@ -10,8 +10,9 @@ controllerManager:
       repository: ghcr.io/cobaltcore-dev/cortex
     args:
       - "--leader-elect"
-      - "--metrics-bind-address=:8443"
+      - "--metrics-bind-address=:2112"
       - "--health-probe-bind-address=:8081"
+      - "--metrics-secure=false"
     resources:
       limits:
         cpu: 500m
