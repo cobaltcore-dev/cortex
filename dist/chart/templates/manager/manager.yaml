@@ -39,6 +39,9 @@ spec:
             - name: api
               containerPort: 8080
               protocol: TCP
+            - name: metrics
+              containerPort: 2112
+              protocol: TCP
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
