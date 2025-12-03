@@ -438,7 +438,9 @@ func TestCleanupNovaDecisionsRegularly(t *testing.T) {
 
 	// This should exit quickly due to context cancellation
 	// We're mainly testing that it doesn't panic and handles context cancellation
-	Cleanup(ctx, client, config)
+	if err := Cleanup(ctx, client, config); err != nil {
+		t.Errorf("Cleanup() error = %v, expected nil", err)
+	}
 
 	// If we reach here without hanging, the test passed
 }

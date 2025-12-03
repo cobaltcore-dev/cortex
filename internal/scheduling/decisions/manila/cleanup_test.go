@@ -433,7 +433,9 @@ func TestCleanupManilaDecisionsRegularly(t *testing.T) {
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
-	Cleanup(ctx, client, config)
+	if err := Cleanup(ctx, client, config); err != nil {
+		t.Errorf("Cleanup() error = %v, expected nil", err)
+	}
 }
 
 type mockShare struct {
