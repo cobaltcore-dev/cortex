@@ -114,25 +114,15 @@ func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) (int64, error) {
 		since = time.Now().Add(-time.Duration(*s.Conf.DeletedServersChangesSinceMinutes) * time.Minute)
 	}
 
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	slog.Info("syncing deleted servers", "current ram", m.Alloc/1024/1024)
-
 	deletedServers, err := s.API.GetDeletedServers(ctx, since)
 	if err != nil {
 		return 0, err
 	}
 
-	runtime.ReadMemStats(&m)
-	slog.Info("syncing deleted servers II", "current ram", m.Alloc/1024/1024)
-
 	err = db.ReplaceAll(s.DB, deletedServers...)
 	if err != nil {
 		return 0, err
 	}
-
-	runtime.ReadMemStats(&m)
-	slog.Info("syncing deleted servers III", "current ram", m.Alloc/1024/1024)
 
 	label := DeletedServer{}.TableName()
 	if s.Mon.ObjectsGauge != nil {
@@ -143,9 +133,6 @@ func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) (int64, error) {
 		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
-
-	runtime.ReadMemStats(&m)
-	slog.Info("syncing deleted servers IV", "current ram", m.Alloc/1024/1024)
 
 	return int64(len(deletedServers)), nil
 }

@@ -6,9 +6,7 @@ package openstack
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
-	rt "runtime"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -131,10 +129,6 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	var m rt.MemStats
-	rt.ReadMemStats(&m)
-	slog.Info("syncing the dings II before ", "type", datasource.Spec.OpenStack.Type, "current ram", m.Alloc/1024/1024)
-
 	var syncer Syncer
 	switch datasource.Spec.OpenStack.Type {
 	case v1alpha1.OpenStackDatasourceTypeNova:
@@ -254,9 +248,6 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		log.Error(err, "failed to update datasource status", "name", datasource.Name)
 		return ctrl.Result{}, err
 	}
-
-	rt.ReadMemStats(&m)
-	slog.Info("syncing the dings II after", "type", datasource.Spec.OpenStack.Type, "current ram", m.Alloc/1024/1024)
 
 	// Calculate the next sync time based on the configured sync interval.
 	return ctrl.Result{RequeueAfter: time.Until(nextTime)}, nil

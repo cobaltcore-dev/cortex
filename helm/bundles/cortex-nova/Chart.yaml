@@ -17,18 +17,6 @@ dependencies:
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.3
-    alias: cortex-kpi-controllers
-
-  # from: file://../../../dist/chart
-  - name: cortex
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.3
-    alias: cortex-data-controllers
-
-  # from: file://../../../dist/chart
-  - name: cortex
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.3
     alias: cortex-knowledge-controllers
   # from: file://../../../dist/chart
   - name: cortex

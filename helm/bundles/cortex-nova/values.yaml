@@ -113,33 +113,9 @@ cortex-knowledge-controllers:
         <<: *cortexMonitoringLabels
         component: nova-knowledge
     enabledControllers:
-      - knowledge-controllers
-
-cortex-data-controllers:
-  <<: *cortex
-  namePrefix: cortex-nova-data
-  conf:
-    <<: *cortexConf
-    leaderElectionID: cortex-nova-data
-    monitoring:
-      labels:
-        <<: *cortexMonitoringLabels
-        component: nova-data
-    enabledControllers:
       - datasource-controllers
-
-cortex-kpi-controllers:
-  <<: *cortex
-  namePrefix: cortex-nova-kpi
-  conf:
-    <<: *cortexConf
-    leaderElectionID: cortex-nova-kpi
-    monitoring:
-      labels:
-        <<: *cortexMonitoringLabels
-        component: nova-kpi
-    enabledControllers:
-      - kpi-controllers
+      - knowledge-controllers
+      - kpi-controller
 
 cortex-reservations-controllers:
   <<: *cortex
