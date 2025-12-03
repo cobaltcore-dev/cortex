@@ -54,7 +54,6 @@ func (s *NovaSyncer) Sync(ctx context.Context) (int64, error) {
 	// Only sync the objects that are configured in the yaml conf.
 	var err error
 	var nResults int64
-
 	switch s.Conf.Type {
 	case v1alpha1.NovaDatasourceTypeServers:
 		nResults, err = s.SyncAllServers(ctx)
@@ -69,7 +68,6 @@ func (s *NovaSyncer) Sync(ctx context.Context) (int64, error) {
 	case v1alpha1.NovaDatasourceTypeAggregates:
 		nResults, err = s.SyncAllAggregates(ctx)
 	}
-
 	return nResults, err
 }
 
@@ -110,12 +108,10 @@ func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-
 	err = db.ReplaceAll(s.DB, deletedServers...)
 	if err != nil {
 		return 0, err
 	}
-
 	label := DeletedServer{}.TableName()
 	if s.Mon.ObjectsGauge != nil {
 		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
@@ -125,7 +121,6 @@ func (s *NovaSyncer) SyncDeletedServers(ctx context.Context) (int64, error) {
 		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
 		counter.Inc()
 	}
-
 	return int64(len(deletedServers)), nil
 }
 
