@@ -115,7 +115,7 @@ cortex-knowledge-controllers:
     enabledControllers:
       - datasource-controllers
       - knowledge-controllers
-      - kpi-controller
+      - kpis-controller
 
 cortex-reservations-controllers:
   <<: *cortex
