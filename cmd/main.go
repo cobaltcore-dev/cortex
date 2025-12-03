@@ -301,7 +301,6 @@ func main() {
 			os.Exit(1)
 		}
 		novashims.NewAPI(config, decisionController).Init(mux)
-		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
@@ -342,7 +341,6 @@ func main() {
 			os.Exit(1)
 		}
 		manilashims.NewAPI(config, controller).Init(mux)
-		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &decisionscinder.DecisionPipelineController{
@@ -357,7 +355,6 @@ func main() {
 			os.Exit(1)
 		}
 		cindershims.NewAPI(config, controller).Init(mux)
-		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{
@@ -492,6 +489,18 @@ func main() {
 			os.Exit(1)
 		}
 		go syncer.Run(ctx)
+	}
+	if slices.Contains(config.EnabledTasks, "nova-decisions-cleanup-task") {
+		setupLog.Info("starting nova decisions cleanup task")
+		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, multiclusterClient, config)
+	}
+	if slices.Contains(config.EnabledTasks, "manila-decisions-cleanup-task") {
+		setupLog.Info("starting manila decisions cleanup task")
+		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, multiclusterClient, config)
+	}
+	if slices.Contains(config.EnabledTasks, "cinder-decisions-cleanup-task") {
+		setupLog.Info("starting cinder decisions cleanup task")
+		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 
 	errchan := make(chan error)
