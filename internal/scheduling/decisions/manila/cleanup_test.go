@@ -345,7 +345,7 @@ func TestCleanupManila(t *testing.T) {
 					Namespace: "default",
 				},
 			}
-			err := cleanupManila(context.Background(), client, config)
+			err := Cleanup(context.Background(), client, config)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -433,7 +433,7 @@ func TestCleanupManilaDecisionsRegularly(t *testing.T) {
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
-	CleanupManilaDecisionsRegularly(ctx, client, config)
+	Cleanup(ctx, client, config)
 }
 
 type mockShare struct {

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -22,7 +21,7 @@ import (
 )
 
 // Delete all decisions for manila shares that have been deleted.
-func cleanupManila(ctx context.Context, client client.Client, conf conf.Config) error {
+func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error
@@ -97,18 +96,4 @@ func cleanupManila(ctx context.Context, client client.Client, conf conf.Config) 
 		}
 	}
 	return nil
-}
-
-func CleanupManilaDecisionsRegularly(ctx context.Context, client client.Client, conf conf.Config) {
-	for {
-		if err := cleanupManila(ctx, client, conf); err != nil {
-			slog.Error("failed to cleanup manila decisions", "error", err)
-		}
-		// Wait for 1 hour before the next cleanup.
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(1 * time.Hour):
-		}
-	}
 }

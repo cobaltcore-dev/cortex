@@ -293,7 +293,7 @@ func TestCleanupCinder(t *testing.T) {
 					Namespace: "default",
 				},
 			}
-			err := cleanupCinder(context.Background(), client, config)
+			err := Cleanup(context.Background(), client, config)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -382,7 +382,7 @@ func TestCleanupCinderDecisionsRegularly(t *testing.T) {
 
 	// This should exit quickly due to context cancellation
 	// We're mainly testing that it doesn't panic and handles context cancellation
-	CleanupCinderDecisionsRegularly(ctx, client, config)
+	Cleanup(ctx, client, config)
 
 	// If we reach here without hanging, the test passed
 }
