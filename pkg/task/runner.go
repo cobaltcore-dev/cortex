@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -15,6 +16,7 @@ import (
 type Runner struct {
 	Client   client.Client
 	Interval time.Duration
+	Name     string
 
 	Init func(ctx context.Context) error
 	Run  func(ctx context.Context) error
@@ -23,6 +25,8 @@ type Runner struct {
 }
 
 func (r *Runner) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+	log.Info("running task", "name", r.Name)
 	// Trigger a run of the task when an event is received
 	if r.Run != nil {
 		if err := r.Run(ctx); err != nil {
@@ -33,6 +37,9 @@ func (r *Runner) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 }
 
 func (r *Runner) Start(ctx context.Context) error {
+	log := log.FromContext(ctx)
+	log.Info("starting task runner", "name", r.Name, "interval", r.Interval)
+
 	ticker := time.NewTicker(r.Interval)
 	defer ticker.Stop()
 	defer close(r.eventCh)
@@ -43,6 +50,8 @@ func (r *Runner) Start(ctx context.Context) error {
 		}
 	}
 
+	// Initial trigger
+	r.eventCh <- event.GenericEvent{}
 	for {
 		select {
 		case <-ticker.C:
@@ -56,9 +65,12 @@ func (r *Runner) Start(ctx context.Context) error {
 
 func (r *Runner) SetupWithManager(mgr manager.Manager) error {
 	r.eventCh = make(chan event.GenericEvent)
-	handler := &handler.EnqueueRequestForObject{}
-	src := source.Channel(r.eventCh, handler, nil)
+	src := source.Channel(r.eventCh, &handler.EnqueueRequestForObject{})
+	if err := mgr.Add(r); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(r.Name).
 		WatchesRawSource(src).
 		Complete(r)
 }

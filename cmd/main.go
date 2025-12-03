@@ -480,51 +480,55 @@ func main() {
 	if slices.Contains(config.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
 		syncer := commitments.NewSyncer(multiclusterClient)
-		if err := mgr.Add(&task.Runner{
+		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
+			Name:     "commitments-sync-task",
 			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
 			Init:     func(ctx context.Context) error { return syncer.Init(ctx, config) },
-		}); err != nil {
-			setupLog.Error(err, "unable to add commitments syncer to manager")
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to add commitments sync task to manager")
 			os.Exit(1)
 		}
 	}
 	if slices.Contains(config.EnabledTasks, "nova-decisions-cleanup-task") {
 		setupLog.Info("starting nova decisions cleanup task")
-		if err := mgr.Add(&task.Runner{
+		if err := (&task.Runner{
 			Client:   multiclusterClient,
-			Interval: time.Hour,
+			Interval: time.Second,
+			Name:     "nova-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
 				return decisionsnova.Cleanup(ctx, multiclusterClient, config)
 			},
-		}); err != nil {
+		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add nova decisions cleanup task to manager")
 			os.Exit(1)
 		}
 	}
 	if slices.Contains(config.EnabledTasks, "manila-decisions-cleanup-task") {
 		setupLog.Info("starting manila decisions cleanup task")
-		if err := mgr.Add(&task.Runner{
+		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
+			Name:     "manila-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
 				return decisionsmanila.Cleanup(ctx, multiclusterClient, config)
 			},
-		}); err != nil {
+		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add manila decisions cleanup task to manager")
 			os.Exit(1)
 		}
 	}
 	if slices.Contains(config.EnabledTasks, "cinder-decisions-cleanup-task") {
 		setupLog.Info("starting cinder decisions cleanup task")
-		if err := mgr.Add(&task.Runner{
+		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
+			Name:     "cinder-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
 				return decisionscinder.Cleanup(ctx, multiclusterClient, config)
 			},
-		}); err != nil {
+		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add cinder decisions cleanup task to manager")
 			os.Exit(1)
 		}
