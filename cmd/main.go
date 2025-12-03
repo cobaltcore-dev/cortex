@@ -495,7 +495,7 @@ func main() {
 		setupLog.Info("starting nova decisions cleanup task")
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
-			Interval: time.Second,
+			Interval: time.Hour,
 			Name:     "nova-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
 				return decisionsnova.Cleanup(ctx, multiclusterClient, config)

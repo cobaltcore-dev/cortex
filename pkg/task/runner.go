@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -51,12 +53,28 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 
 	// Initial trigger
-	r.eventCh <- event.GenericEvent{}
+	r.eventCh <- event.GenericEvent{
+		Object: &batchv1.Job{
+			TypeMeta: v1.TypeMeta{
+				Kind:       "Job",
+				APIVersion: "batch/v1",
+			},
+			ObjectMeta: v1.ObjectMeta{Name: "initial-trigger"},
+		},
+	}
 	for {
 		select {
 		case <-ticker.C:
 			// Send an event to trigger the task run
-			r.eventCh <- event.GenericEvent{}
+			r.eventCh <- event.GenericEvent{
+				Object: &batchv1.Job{
+					TypeMeta: v1.TypeMeta{
+						Kind:       "Job",
+						APIVersion: "batch/v1",
+					},
+					ObjectMeta: v1.ObjectMeta{Name: "scheduled-trigger"},
+				},
+			}
 		case <-ctx.Done():
 			return nil
 		}
