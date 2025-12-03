@@ -5,8 +5,6 @@ package nova
 
 import (
 	"context"
-	"log/slog"
-	"runtime"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -57,10 +55,6 @@ func (s *NovaSyncer) Sync(ctx context.Context) (int64, error) {
 	var err error
 	var nResults int64
 
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	slog.Info("syncing the dings", "type", s.Conf.Type, "current ram", m.Alloc/1024/1024)
-
 	switch s.Conf.Type {
 	case v1alpha1.NovaDatasourceTypeServers:
 		nResults, err = s.SyncAllServers(ctx)
@@ -75,8 +69,6 @@ func (s *NovaSyncer) Sync(ctx context.Context) (int64, error) {
 	case v1alpha1.NovaDatasourceTypeAggregates:
 		nResults, err = s.SyncAllAggregates(ctx)
 	}
-	runtime.ReadMemStats(&m)
-	slog.Info("syncing the dings after", "type", s.Conf.Type, "current ram", m.Alloc/1024/1024)
 
 	return nResults, err
 }
