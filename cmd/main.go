@@ -34,6 +34,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/reservations/commitments"
@@ -408,7 +409,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "OpenStackDatasourceReconciler")
 			os.Exit(1)
 		}
-		/*if err := (&prometheus.PrometheusDatasourceReconciler{
+		if err := (&prometheus.PrometheusDatasourceReconciler{
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
@@ -416,7 +417,7 @@ func main() {
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")
 			os.Exit(1)
-		}*/
+		}
 	}
 	if slices.Contains(config.EnabledControllers, "knowledge-controllers") {
 		monitor := extractor.NewMonitor()
