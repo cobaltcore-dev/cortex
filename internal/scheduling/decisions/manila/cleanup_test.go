@@ -6,10 +6,10 @@ package manila
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -389,7 +389,7 @@ func TestCleanupManila(t *testing.T) {
 	}
 }
 
-func TestCleanupManilaDecisionsRegularly(t *testing.T) {
+func TestCleanupManilaDecisionsCancel(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -429,13 +429,17 @@ func TestCleanupManilaDecisionsRegularly(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
 	if err := Cleanup(ctx, client, config); err != nil {
-		t.Errorf("Cleanup() error = %v, expected nil", err)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("Unexpected error during cleanup: %v", err)
+		}
 	}
+
+	// If we reach here without hanging, the test passed
 }
 
 type mockShare struct {

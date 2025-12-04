@@ -6,10 +6,10 @@ package cinder
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -337,7 +337,7 @@ func TestCleanupCinder(t *testing.T) {
 	}
 }
 
-func TestCleanupCinderDecisionsRegularly(t *testing.T) {
+func TestCleanupCinderDecisionsCancel(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -377,13 +377,14 @@ func TestCleanupCinderDecisionsRegularly(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
-	// We're mainly testing that it doesn't panic and handles context cancellation
 	if err := Cleanup(ctx, client, config); err != nil {
-		t.Errorf("Cleanup() error = %v, expected nil", err)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("Unexpected error during cleanup: %v", err)
+		}
 	}
 
 	// If we reach here without hanging, the test passed
