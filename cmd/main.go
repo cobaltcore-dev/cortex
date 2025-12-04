@@ -268,6 +268,7 @@ func main() {
 			os.Exit(1)
 		}
 		// Also tell the manager about this cluster so that controllers can use it.
+		// This will execute the cluster.Start function when the manager starts.
 		if err := mgr.Add(cluster); err != nil {
 			setupLog.Error(err, "unable to add cluster for apiserver override", "apiserver", override.Host)
 			os.Exit(1)
