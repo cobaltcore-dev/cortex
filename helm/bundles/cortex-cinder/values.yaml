@@ -95,6 +95,8 @@ cortex-scheduling-controllers:
     enabledControllers:
       - cinder-decisions-pipeline-controller
       - explanation-controller
+    enabledTasks:
+      - cinder-decisions-cleanup-task
 
 cortex-knowledge-controllers:
   <<: *cortex

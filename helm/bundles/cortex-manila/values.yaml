@@ -95,6 +95,8 @@ cortex-scheduling-controllers:
     enabledControllers:
       - manila-decisions-pipeline-controller
       - explanation-controller
+    enabledTasks:
+      - manila-decisions-cleanup-task
 
 cortex-knowledge-controllers:
   <<: *cortex
