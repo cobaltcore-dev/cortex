@@ -7,7 +7,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -20,7 +19,7 @@ import (
 )
 
 // Delete all decisions for cinder volumes that have been deleted.
-func cleanupCinder(ctx context.Context, client client.Client, conf conf.Config) error {
+func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error
@@ -94,18 +93,4 @@ func cleanupCinder(ctx context.Context, client client.Client, conf conf.Config) 
 		}
 	}
 	return nil
-}
-
-func CleanupCinderDecisionsRegularly(ctx context.Context, client client.Client, conf conf.Config) {
-	for {
-		if err := cleanupCinder(ctx, client, conf); err != nil {
-			slog.Error("failed to cleanup cinder decisions", "error", err)
-		}
-		// Wait for 1 hour before the next cleanup.
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(1 * time.Hour):
-		}
-	}
 }

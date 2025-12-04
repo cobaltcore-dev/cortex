@@ -10,13 +10,11 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/sapcc/go-bits/jobloop"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
@@ -269,16 +267,4 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	syncLog.Info("synced reservations", "count", len(reservationsByName))
 	return nil
-}
-
-// Run a sync loop for reservations.
-func (s *Syncer) Run(ctx context.Context) {
-	go func() {
-		for {
-			if err := s.SyncReservations(ctx); err != nil {
-				syncLog.Error(err, "failed to sync reservations")
-			}
-			time.Sleep(jobloop.DefaultJitter(time.Hour))
-		}
-	}()
 }
