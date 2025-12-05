@@ -8,26 +8,20 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
 	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
-
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestFilterProjectAggregatesStep_Run(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostPinnedProjects{}),
-	)
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	hostPinnedProjects := []any{
+	hostPinnedProjects, err := v1alpha1.BoxFeatureList([]any{
 		// Host1 has no assigned filter_tenant_id - should always be included
 		&shared.HostPinnedProjects{
 			AggregateName: nil,
@@ -84,9 +78,8 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 			ComputeHost:   testlib.Ptr("host2"),
 			ProjectID:     testlib.Ptr("project-123"),
 		},
-	}
-
-	if err := testDB.Insert(hostPinnedProjects...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -272,7 +265,15 @@ func TestFilterProjectAggregatesStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterProjectAggregatesStep{}
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(
+					&v1alpha1.Knowledge{
+						ObjectMeta: metav1.ObjectMeta{Name: "host-pinned-projects"},
+						Status:     v1alpha1.KnowledgeStatus{Raw: hostPinnedProjects},
+					},
+				).
+				Build()
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)

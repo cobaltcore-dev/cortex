@@ -16,18 +16,6 @@ type HostAZ struct {
 	AvailabilityZone *string `db:"availability_zone"`
 }
 
-// Table under which the feature is stored.
-func (HostAZ) TableName() string {
-	return "feature_host_az"
-}
-
-// Indexes for the feature.
-func (HostAZ) Indexes() map[string][]string {
-	return map[string][]string{
-		"idx_host_az_compute_host": {"compute_host"},
-	}
-}
-
 type HostAZExtractor struct {
 	// Common base for all extractors that provides standard functionality.
 	plugins.BaseExtractor[

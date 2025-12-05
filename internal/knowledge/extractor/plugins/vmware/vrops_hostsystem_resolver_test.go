@@ -14,19 +14,11 @@ import (
 )
 
 func TestVROpsHostsystemResolver_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &VROpsHostsystemResolver{}
 
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Verify the table was created
-	if !testDB.TableExists(ResolvedVROpsHostsystem{}) {
-		t.Error("expected table to be created")
 	}
 }
 
@@ -60,28 +52,23 @@ func TestVROpsHostsystemResolver_Extract(t *testing.T) {
 
 	extractor := &VROpsHostsystemResolver{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(&testDB, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Verify the data was inserted into the feature_vrops_resolved_hostsystem table
-	var resolvedHostsystems []ResolvedVROpsHostsystem
-	table := ResolvedVROpsHostsystem{}.TableName()
-	_, err := testDB.Select(&resolvedHostsystems, "SELECT * FROM "+table)
+	features, err := extractor.Extract()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+
 	expected := map[string]string{
 		"hostsystem1": "service_host1",
 		"hostsystem2": "service_host2",
 	}
-	if len(resolvedHostsystems) != len(expected) {
-		t.Errorf("expected %d rows, got %d", len(expected), len(resolvedHostsystems))
+	if len(features) != len(expected) {
+		t.Errorf("expected %d rows, got %d", len(expected), len(features))
 	}
-	for _, r := range resolvedHostsystems {
+	for _, f := range features {
+		r := f.(ResolvedVROpsHostsystem)
 		if expected[r.VROpsHostsystem] != r.NovaComputeHost {
 			t.Errorf("expected nova_compute_host for vrops_hostsystem %s to be %s, got %s", r.VROpsHostsystem, expected[r.VROpsHostsystem], r.NovaComputeHost)
 		}

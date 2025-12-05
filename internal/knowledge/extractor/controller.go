@@ -155,31 +155,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	// Connect to the extractor database if specified.
-	var authenticatedExtractorDB *db.DB
-	if knowledge.Spec.DatabaseSecretRef != nil {
-		var err error
-		authenticatedExtractorDB, err = db.Connector{Client: r.Client}.
-			FromSecretRef(ctx, *knowledge.Spec.DatabaseSecretRef)
-		if err != nil {
-			log.Error(err, "failed to authenticate with extractor database", "secretRef", *knowledge.Spec.DatabaseSecretRef)
-			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.KnowledgeConditionError,
-				Status:  metav1.ConditionTrue,
-				Reason:  "ExtractorDatabaseAuthenticationFailed",
-				Message: "failed to authenticate with extractor database: " + err.Error(),
-			})
-			if err := r.Status().Update(ctx, knowledge); err != nil {
-				log.Error(err, "failed to update knowledge status")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, err
-		}
-	}
-
 	// Initialize and run the extractor.
 	wrapped := monitorFeatureExtractor(knowledge.Spec.Extractor.Name, extractor, r.Monitor)
-	if err := wrapped.Init(authenticatedDatasourceDB, authenticatedExtractorDB, knowledge.Spec); err != nil {
+	if err := wrapped.Init(authenticatedDatasourceDB, r.Client, knowledge.Spec); err != nil {
 		log.Error(err, "failed to initialize feature extractor", "name", knowledge.Spec)
 		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.KnowledgeConditionError,

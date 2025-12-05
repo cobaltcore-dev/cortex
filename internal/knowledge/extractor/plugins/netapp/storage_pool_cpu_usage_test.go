@@ -14,17 +14,10 @@ import (
 )
 
 func TestStoragePoolCPUUsageExtractor_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &StoragePoolCPUUsageExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if !testDB.TableExists(StoragePoolCPUUsage{}) {
-		t.Error("expected table to be created")
 	}
 }
 
@@ -70,7 +63,7 @@ func TestStoragePoolCPUUsageExtractor_Extract(t *testing.T) {
 
 	extractor := &StoragePoolCPUUsageExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(&testDB, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	features, err := extractor.Extract()

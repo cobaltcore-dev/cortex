@@ -20,7 +20,7 @@ func TestFlavorRunningVMsKPI_Init(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	kpi := &FlavorRunningVMsKPI{}
-	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -63,7 +63,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 	}
 
 	kpi := &FlavorRunningVMsKPI{}
-	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

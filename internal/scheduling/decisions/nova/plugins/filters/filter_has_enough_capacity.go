@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type FilterHasEnoughCapacityOpts struct {
@@ -41,11 +42,17 @@ type FilterHasEnoughCapacity struct {
 // Please also note that disk space is currently not considered by this filter.
 func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
-	var hostUtilizations []shared.HostUtilization
-	group := "scheduler-nova"
-	if _, err := s.DB.SelectTimed(
-		group, &hostUtilizations, "SELECT * FROM "+shared.HostUtilization{}.TableName(),
+	knowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-utilization"},
+		knowledge,
 	); err != nil {
+		return nil, err
+	}
+	hostUtilizations, err := v1alpha1.
+		UnboxFeatureList[shared.HostUtilization](knowledge.Status.Raw)
+	if err != nil {
 		return nil, err
 	}
 	var reservations v1alpha1.ReservationList

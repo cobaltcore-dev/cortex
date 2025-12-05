@@ -4,12 +4,15 @@
 package sap
 
 import (
+	"context"
 	"log/slog"
 	"strconv"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/pkg/tools"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -30,8 +33,8 @@ func (HostAvailableCapacityKPI) GetName() string {
 	return "sap_host_capacity_kpi"
 }
 
-func (k *HostAvailableCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, opts); err != nil {
+func (k *HostAvailableCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.hostResourcesAvailableCapacityPerHost = prometheus.NewDesc(
@@ -86,193 +89,200 @@ func (k *HostAvailableCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
-	type HostUtilizationPerAvailabilityZone struct {
-		ComputeHostName  string `db:"compute_host"`
-		AvailabilityZone string `db:"availability_zone"`
-		CPUArchitecture  string `db:"cpu_architecture"`
-		HypervisorFamily string `db:"hypervisor_family"`
-		WorkloadType     string `db:"workload_type"`
-		Enabled          bool   `db:"enabled"`
-		Decommissioned   bool   `db:"decommissioned"`
-		ExternalCustomer bool   `db:"external_customer"`
-		DisabledReason   string `db:"disabled_reason"`
-		PinnedProjects   string `db:"pinned_projects"`
-		shared.HostUtilization
+	hostDetailsKnowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "sap-host-details"},
+		hostDetailsKnowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge sap-host-details", "err", err)
+		return
+	}
+	hostDetails, err := v1alpha1.
+		UnboxFeatureList[sap.HostDetails](hostDetailsKnowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox storage pool cpu usage", "err", err)
+		return
+	}
+	detailsByComputeHost := make(map[string]sap.HostDetails)
+	for _, detail := range hostDetails {
+		detailsByComputeHost[detail.ComputeHost] = detail
 	}
 
-	var hostUtilization []HostUtilizationPerAvailabilityZone
-
-	// Include hosts with no usage data (LEFT JOIN) so that we can log out hosts that are filtered out due to zero capacity
-	// Also exclude ironic hosts as they do not run VMs/instances
-	query := `
-		SELECT
-    		hd.compute_host,
-    		hd.availability_zone,
-    		hd.cpu_architecture,
-    		hd.hypervisor_family,
-    		hd.workload_type,
-    		hd.enabled,
-			hd.decommissioned,
-			hd.external_customer,
-    		COALESCE(hd.disabled_reason, '-') AS disabled_reason,
-			COALESCE(hd.pinned_projects, '') AS pinned_projects,
-			COALESCE(hu.ram_used_mb, 0) AS ram_used_mb,
-			COALESCE(hu.vcpus_used, 0) AS vcpus_used,
-			COALESCE(hu.disk_used_gb, 0) AS disk_used_gb,
-			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
-			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
-			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
-		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
-		LEFT JOIN ` + shared.HostUtilization{}.TableName() + ` AS hu
-		    ON hu.compute_host = hd.compute_host
-		WHERE hd.hypervisor_type != 'ironic';
-    `
-	if _, err := k.DB.Select(&hostUtilization, query); err != nil {
-		slog.Error("failed to select host utilization", "err", err)
+	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-utilization"},
+		hostUtilizationKnowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge host-utilization", "err", err)
+		return
+	}
+	hostUtilizations, err := v1alpha1.
+		UnboxFeatureList[shared.HostUtilization](hostUtilizationKnowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox host utilization", "err", err)
 		return
 	}
 
-	for _, host := range hostUtilization {
-		if host.TotalRAMAllocatableMB == 0 || host.TotalVCPUsAllocatable == 0 || host.TotalDiskAllocatableGB == 0 {
+	for _, utilization := range hostUtilizations {
+		detail, exists := detailsByComputeHost[utilization.ComputeHost]
+		if !exists {
+			slog.Warn("host_available_capacity: missing host details for compute host", "compute_host", utilization.ComputeHost)
+			continue
+		}
+		if detail.HypervisorType == "ironic" {
+			continue // Ironic hosts do not run VMs/instances
+		}
+
+		if utilization.TotalRAMAllocatableMB == 0 || utilization.TotalVCPUsAllocatable == 0 || utilization.TotalDiskAllocatableGB == 0 {
 			slog.Info(
 				"Skipping host since placement is reporting zero allocatable resources",
 				"metric", "cortex_sap_available_capacity_per_host",
-				"host", host.ComputeHostName,
-				"cpu", host.TotalVCPUsAllocatable,
-				"ram", host.TotalRAMAllocatableMB,
-				"disk", host.TotalDiskAllocatableGB,
+				"host", utilization.ComputeHost,
+				"cpu", utilization.TotalVCPUsAllocatable,
+				"ram", utilization.TotalRAMAllocatableMB,
+				"disk", utilization.TotalDiskAllocatableGB,
 			)
 			continue
 		}
 
-		enabled := strconv.FormatBool(host.Enabled)
-		decommissioned := strconv.FormatBool(host.Decommissioned)
-		externalCustomer := strconv.FormatBool(host.ExternalCustomer)
+		enabled := strconv.FormatBool(detail.Enabled)
+		decommissioned := strconv.FormatBool(detail.Decommissioned)
+		externalCustomer := strconv.FormatBool(detail.ExternalCustomer)
+		pinnedProjects := ""
+		if detail.PinnedProjects != nil {
+			pinnedProjects = *detail.PinnedProjects
+		}
+		disabledReason := "-"
+		if detail.DisabledReason != nil {
+			disabledReason = *detail.DisabledReason
+		}
 
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHost,
 			prometheus.GaugeValue,
-			host.TotalRAMAllocatableMB-host.RAMUsedMB,
-			host.ComputeHostName,
+			utilization.TotalRAMAllocatableMB-utilization.RAMUsedMB,
+			utilization.ComputeHost,
 			"ram",
-			host.AvailabilityZone,
-			host.CPUArchitecture,
-			host.WorkloadType,
-			host.HypervisorFamily,
+			detail.AvailabilityZone,
+			detail.CPUArchitecture,
+			detail.WorkloadType,
+			detail.HypervisorFamily,
 			enabled,
 			decommissioned,
 			externalCustomer,
-			host.DisabledReason,
-			host.PinnedProjects,
+			disabledReason,
+			pinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHostPct,
 			prometheus.GaugeValue,
-			(host.TotalRAMAllocatableMB-host.RAMUsedMB)/host.TotalRAMAllocatableMB*100,
-			host.ComputeHostName,
+			(utilization.TotalRAMAllocatableMB-utilization.RAMUsedMB)/utilization.TotalRAMAllocatableMB*100,
+			utilization.ComputeHost,
 			"ram",
-			host.AvailabilityZone,
-			host.CPUArchitecture,
-			host.WorkloadType,
-			host.HypervisorFamily,
+			detail.AvailabilityZone,
+			detail.CPUArchitecture,
+			detail.WorkloadType,
+			detail.HypervisorFamily,
 			enabled,
 			decommissioned,
 			externalCustomer,
-			host.DisabledReason,
-			host.PinnedProjects,
+			disabledReason,
+			pinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHost,
 			prometheus.GaugeValue,
-			host.TotalVCPUsAllocatable-host.VCPUsUsed,
-			host.ComputeHostName,
+			utilization.TotalVCPUsAllocatable-utilization.VCPUsUsed,
+			utilization.ComputeHost,
 			"cpu",
-			host.AvailabilityZone,
-			host.CPUArchitecture,
-			host.WorkloadType,
-			host.HypervisorFamily,
+			detail.AvailabilityZone,
+			detail.CPUArchitecture,
+			detail.WorkloadType,
+			detail.HypervisorFamily,
 			enabled,
 			decommissioned,
 			externalCustomer,
-			host.DisabledReason,
-			host.PinnedProjects,
+			disabledReason,
+			pinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHostPct,
 			prometheus.GaugeValue,
-			(host.TotalVCPUsAllocatable-host.VCPUsUsed)/host.TotalVCPUsAllocatable*100,
-			host.ComputeHostName,
+			(utilization.TotalVCPUsAllocatable-utilization.VCPUsUsed)/utilization.TotalVCPUsAllocatable*100,
+			utilization.ComputeHost,
 			"cpu",
-			host.AvailabilityZone,
-			host.CPUArchitecture,
-			host.WorkloadType,
-			host.HypervisorFamily,
+			detail.AvailabilityZone,
+			detail.CPUArchitecture,
+			detail.WorkloadType,
+			detail.HypervisorFamily,
 			enabled,
 			decommissioned,
 			externalCustomer,
-			host.DisabledReason,
-			host.PinnedProjects,
+			disabledReason,
+			pinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHost,
 			prometheus.GaugeValue,
-			host.TotalDiskAllocatableGB-host.DiskUsedGB,
-			host.ComputeHostName,
+			utilization.TotalDiskAllocatableGB-utilization.DiskUsedGB,
+			utilization.ComputeHost,
 			"disk",
-			host.AvailabilityZone,
-			host.CPUArchitecture,
-			host.WorkloadType,
-			host.HypervisorFamily,
+			detail.AvailabilityZone,
+			detail.CPUArchitecture,
+			detail.WorkloadType,
+			detail.HypervisorFamily,
 			enabled,
 			decommissioned,
 			externalCustomer,
-			host.DisabledReason,
-			host.PinnedProjects,
+			disabledReason,
+			pinnedProjects,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			k.hostResourcesAvailableCapacityPerHostPct,
 			prometheus.GaugeValue,
-			(host.TotalDiskAllocatableGB-host.DiskUsedGB)/host.TotalDiskAllocatableGB*100,
-			host.ComputeHostName,
+			(utilization.TotalDiskAllocatableGB-utilization.DiskUsedGB)/utilization.TotalDiskAllocatableGB*100,
+			utilization.ComputeHost,
 			"disk",
-			host.AvailabilityZone,
-			host.CPUArchitecture,
-			host.WorkloadType,
-			host.HypervisorFamily,
+			detail.AvailabilityZone,
+			detail.CPUArchitecture,
+			detail.WorkloadType,
+			detail.HypervisorFamily,
 			enabled,
 			decommissioned,
 			externalCustomer,
-			host.DisabledReason,
-			host.PinnedProjects,
+			disabledReason,
+			pinnedProjects,
 		)
-	}
 
-	buckets := prometheus.LinearBuckets(0, 5, 20)
-	// Histogram for CPU
-	keysFunc := func(hs HostUtilizationPerAvailabilityZone) []string { return []string{"cpu"} }
-	valueFunc := func(hs HostUtilizationPerAvailabilityZone) float64 {
-		return (hs.TotalVCPUsAllocatable - hs.VCPUsUsed) / hs.TotalVCPUsAllocatable * 100
-	}
-	hists, counts, sums := tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
-	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
-	}
-	// Histogram for RAM
-	keysFunc = func(hs HostUtilizationPerAvailabilityZone) []string { return []string{"ram"} }
-	valueFunc = func(hs HostUtilizationPerAvailabilityZone) float64 {
-		return (hs.TotalRAMAllocatableMB - hs.RAMUsedMB) / hs.TotalRAMAllocatableMB * 100
-	}
-	hists, counts, sums = tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
-	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
-	}
-	// Histogram for Disk
-	keysFunc = func(hs HostUtilizationPerAvailabilityZone) []string { return []string{"disk"} }
-	valueFunc = func(hs HostUtilizationPerAvailabilityZone) float64 {
-		return (hs.TotalDiskAllocatableGB - hs.DiskUsedGB) / hs.TotalDiskAllocatableGB * 100
-	}
-	hists, counts, sums = tools.Histogram(hostUtilization, buckets, keysFunc, valueFunc)
-	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+		buckets := prometheus.LinearBuckets(0, 5, 20)
+		// Histogram for CPU
+		keysFunc := func(hs shared.HostUtilization) []string { return []string{"cpu"} }
+		valueFunc := func(hs shared.HostUtilization) float64 {
+			return (hs.TotalVCPUsAllocatable - hs.VCPUsUsed) / hs.TotalVCPUsAllocatable * 100
+		}
+		hists, counts, sums := tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
+		for key, hist := range hists {
+			ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+		}
+		// Histogram for RAM
+		keysFunc = func(hs shared.HostUtilization) []string { return []string{"ram"} }
+		valueFunc = func(hs shared.HostUtilization) float64 {
+			return (hs.TotalRAMAllocatableMB - hs.RAMUsedMB) / hs.TotalRAMAllocatableMB * 100
+		}
+		hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
+		for key, hist := range hists {
+			ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+		}
+		// Histogram for Disk
+		keysFunc = func(hs shared.HostUtilization) []string { return []string{"disk"} }
+		valueFunc = func(hs shared.HostUtilization) float64 {
+			return (hs.TotalDiskAllocatableGB - hs.DiskUsedGB) / hs.TotalDiskAllocatableGB * 100
+		}
+		hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
+		for key, hist := range hists {
+			ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+		}
 	}
 }

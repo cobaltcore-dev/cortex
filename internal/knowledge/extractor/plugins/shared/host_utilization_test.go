@@ -15,17 +15,10 @@ import (
 )
 
 func TestHostUtilizationExtractor_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &HostUtilizationExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if !testDB.TableExists(HostUtilization{}) {
-		t.Error("expected table to be created")
 	}
 }
 
@@ -211,27 +204,24 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 			extractor := &HostUtilizationExtractor{}
 			config := v1alpha1.KnowledgeSpec{}
 
-			if err := extractor.Init(&testDB, &testDB, config); err != nil {
+			if err := extractor.Init(&testDB, nil, config); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
-			if _, err := extractor.Extract(); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
-			var hostUtilizations []HostUtilization
-			table := HostUtilization{}.TableName()
-			if _, err := testDB.Select(&hostUtilizations, "SELECT * FROM "+table); err != nil {
+			features, err := extractor.Extract()
+			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
 			// Check if the expected hosts match the extracted ones
-			if len(hostUtilizations) != len(tt.expected) {
-				t.Fatalf("expected %d host utilizations, got %d", len(tt.expected), len(hostUtilizations))
+			if len(features) != len(tt.expected) {
+				t.Fatalf("expected %d host utilizations, got %d", len(tt.expected), len(features))
 			}
 			// Compare each expected host with the extracted ones
-			if !reflect.DeepEqual(tt.expected, hostUtilizations) {
-				t.Errorf("expected %v, got %v", tt.expected, hostUtilizations)
+			for i, exp := range tt.expected {
+				if !reflect.DeepEqual(exp, features[i]) {
+					t.Errorf("expected host utilization %v, got %v", exp, features[i])
+				}
 			}
 		})
 	}

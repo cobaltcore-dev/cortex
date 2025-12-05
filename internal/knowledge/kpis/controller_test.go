@@ -33,7 +33,7 @@ type mockKPI struct {
 	initCalled bool
 }
 
-func (m *mockKPI) Init(db db.DB, opts conf.RawOpts) error {
+func (m *mockKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
 	m.initCalled = true
 	return m.initError
 }
@@ -51,8 +51,8 @@ type mockKPILogger struct {
 	kpi plugins.KPI
 }
 
-func (l *mockKPILogger) Init(db db.DB, opts conf.RawOpts) error {
-	return l.kpi.Init(db, opts)
+func (l *mockKPILogger) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	return l.kpi.Init(db, client, opts)
 }
 
 func (l *mockKPILogger) Collect(ch chan<- prometheus.Metric) {
@@ -239,12 +239,7 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 		if len(obj.Spec.Opts.Raw) > 0 {
 			rawOpts = conf.NewRawOptsBytes(obj.Spec.Opts.Raw)
 		}
-		// Initialize KPI with database if available, otherwise with empty DB
-		var dbToUse db.DB
-		if jointDB != nil {
-			dbToUse = *jointDB
-		}
-		if err := registeredKPI.Init(dbToUse, rawOpts); err != nil {
+		if err := registeredKPI.Init(jointDB, mc.Client, rawOpts); err != nil {
 			return fmt.Errorf("failed to initialize kpi %s: %w", obj.Name, err)
 		}
 		if err := metrics.Registry.Register(registeredKPI); err != nil {
@@ -604,10 +599,8 @@ func TestController_handleKPIChange(t *testing.T) {
 			knowledges: []v1alpha1.Knowledge{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "ready-kn", Namespace: "default"},
-					Spec: v1alpha1.KnowledgeSpec{
-						DatabaseSecretRef: &corev1.SecretReference{Name: "db-secret", Namespace: "default"},
-					},
-					Status: v1alpha1.KnowledgeStatus{RawLength: 1},
+					Spec:       v1alpha1.KnowledgeSpec{},
+					Status:     v1alpha1.KnowledgeStatus{RawLength: 1},
 				},
 			},
 			secrets: []corev1.Secret{

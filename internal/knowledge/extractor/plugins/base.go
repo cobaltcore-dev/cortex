@@ -6,29 +6,29 @@ package plugins
 import (
 	"errors"
 	"log/slog"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Common base for all extractors that provides some functionality
 // that would otherwise be duplicated across all extractors.
-type BaseExtractor[Opts any, Feature db.Table] struct {
+type BaseExtractor[Opts any, Feature any] struct {
 	// Options to pass via yaml to this step.
 	conf.JsonOpts[Opts]
 	// Database connection where the datasources are stored.
 	DB *db.DB
-	// Database connection where the features will be stored.
-	// TODO: Remove this once we don't fetch features from the DB anymore.
-	extractorDB    *db.DB
-	RecencySeconds int
-	UpdatedAt      *time.Time
+	// Kubernetes client to access other resources.
+	Client client.Client
 }
 
 // Init the extractor with the database and options.
-func (e *BaseExtractor[Opts, Feature]) Init(datasourceDB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (e *BaseExtractor[Opts, Feature]) Init(
+	datasourceDB *db.DB, client client.Client, spec v1alpha1.KnowledgeSpec,
+) error {
+
 	rawOpts := conf.NewRawOpts(`{}`)
 	if len(spec.Extractor.Config.Raw) > 0 {
 		rawOpts = conf.NewRawOptsBytes(spec.Extractor.Config.Raw)
@@ -37,18 +37,7 @@ func (e *BaseExtractor[Opts, Feature]) Init(datasourceDB, extractorDB *db.DB, sp
 		return err
 	}
 	e.DB = datasourceDB
-	e.RecencySeconds = 0
-	if int(spec.Recency.Seconds()) != 0 {
-		e.RecencySeconds = int(spec.Recency.Seconds())
-	}
-	var f Feature
-	// TODO: Remove this once we don't fetch features from the DB anymore.
-	if extractorDB != nil {
-		if err := extractorDB.CreateTable(extractorDB.AddTable(f)); err != nil {
-			return err
-		}
-	}
-	e.extractorDB = extractorDB
+	e.Client = client
 	return nil
 }
 
@@ -67,17 +56,10 @@ func (e *BaseExtractor[Opts, F]) ExtractSQL(query string) ([]Feature, error) {
 
 // Return the extracted features as a slice of generic features for counting.
 func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {
-	// TODO: Remove this once we don't fetch features from the DB anymore.
-	if e.extractorDB != nil {
-		if err := db.ReplaceAll(*e.extractorDB, fs...); err != nil {
-			return nil, err
-		}
-	}
 	output := make([]Feature, len(fs))
 	for i, f := range fs {
 		output[i] = f
 	}
-	var model F
-	slog.Info("features: extracted", model.TableName(), len(output))
+	slog.Info("features: extracted", "count", len(output))
 	return output, nil
 }

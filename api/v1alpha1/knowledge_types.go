@@ -53,20 +53,6 @@ type KnowledgeSpec struct {
 	// Dependencies required for extracting this knowledge.
 	// +kubebuilder:validation:Optional
 	Dependencies KnowledgeDependenciesSpec `json:"dependencies"`
-
-	// Database credentials for the database where the knowledge will be stored.
-	//
-	// Note: this is a legacy feature to stay compatible with the cortex scheduler.
-	// Once the scheduler is moved to use the knowledge via CRs only, we can
-	// remove this.
-	//
-	// The secret should contain the following keys:
-	// - "username": The database username.
-	// - "password": The database password.
-	// - "host": The database host.
-	// - "port": The database port.
-	// - "database": The database name.
-	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef"`
 }
 
 // Convert raw features to a list of strongly typed feature structs.

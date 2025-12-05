@@ -14,17 +14,10 @@ import (
 )
 
 func TestVMHostResidencyExtractor_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &VMHostResidencyExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
-	}
-
-	if !testDB.TableExists(VMHostResidencyHistogramBucket{}) {
-		t.Error("expected table to be created")
 	}
 }
 
@@ -72,7 +65,7 @@ func TestVMHostResidencyExtractor_Extract(t *testing.T) {
 
 	extractor := &VMHostResidencyExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(&testDB, nil, config); err != nil {
 		t.Fatalf("expected no error during initialization, got %v", err)
 	}
 

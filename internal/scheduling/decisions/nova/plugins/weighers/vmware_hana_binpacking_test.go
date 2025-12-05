@@ -92,7 +92,14 @@ func TestVMwareHanaBinpackingStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	client := fake.NewClientBuilder().
+	step := &VMwareHanaBinpackingStep{}
+	step.Options = VMwareHanaBinpackingStepOpts{
+		RAMUtilizedAfterLowerBoundPct:        30.0,
+		RAMUtilizedAfterUpperBoundPct:        80.0,
+		RAMUtilizedAfterActivationLowerBound: 0.0,
+		RAMUtilizedAfterActivationUpperBound: 1.0,
+	}
+	step.Client = fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(&v1alpha1.Knowledge{
 			ObjectMeta: v1.ObjectMeta{Name: "host-utilization"},
@@ -103,15 +110,6 @@ func TestVMwareHanaBinpackingStep_Run(t *testing.T) {
 			Status:     v1alpha1.KnowledgeStatus{Raw: hostCapabilities},
 		}).
 		Build()
-
-	step := &VMwareHanaBinpackingStep{}
-	step.Options = VMwareHanaBinpackingStepOpts{
-		RAMUtilizedAfterLowerBoundPct:        30.0,
-		RAMUtilizedAfterUpperBoundPct:        80.0,
-		RAMUtilizedAfterActivationLowerBound: 0.0,
-		RAMUtilizedAfterActivationUpperBound: 1.0,
-	}
-	step.Client = client
 
 	tests := []struct {
 		name          string

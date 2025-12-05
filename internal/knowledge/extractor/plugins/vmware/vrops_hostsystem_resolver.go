@@ -16,18 +16,6 @@ type ResolvedVROpsHostsystem struct {
 	NovaComputeHost string `db:"nova_compute_host"`
 }
 
-// Table under which the feature is stored.
-func (ResolvedVROpsHostsystem) TableName() string {
-	return "feature_vrops_resolved_hostsystem"
-}
-
-// Indexes for the feature.
-func (ResolvedVROpsHostsystem) Indexes() map[string][]string {
-	return map[string][]string{
-		"idx_vrops_resolved_hostsystem": {"vrops_hostsystem"},
-	}
-}
-
 // Extractor that resolves the vROps metrics hostsystem label to the
 // corresponding Nova compute host and stores it as a feature into the database.
 type VROpsHostsystemResolver struct {

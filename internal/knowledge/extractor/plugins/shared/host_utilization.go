@@ -30,18 +30,6 @@ type HostUtilization struct {
 	TotalDiskAllocatableGB float64 `db:"total_disk_allocatable_gb" json:"totalDiskAllocatableGB"`
 }
 
-// Table under which the feature is stored.
-func (HostUtilization) TableName() string {
-	return "feature_host_utilization_v2"
-}
-
-// Indexes for the feature.
-func (HostUtilization) Indexes() map[string][]string {
-	return map[string][]string{
-		"idx_host_utilization_compute_host": {"compute_host"},
-	}
-}
-
 // Extractor that extracts the utilization on a compute host.
 type HostUtilizationExtractor struct {
 	// Common base for all extractors that provides standard functionality.

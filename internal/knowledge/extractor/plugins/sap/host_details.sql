@@ -11,18 +11,10 @@ WITH host_traits AS (
     LEFT JOIN openstack_resource_provider_traits t
         ON h.id = t.resource_provider_uuid
     GROUP BY h.service_host, h.hypervisor_type, h.running_vms, h.state, h.status, h.service_disabled_reason
-),
-pinned_projects AS (
-    SELECT
-        compute_host,
-        STRING_AGG(label, ',' ORDER BY label) AS pinned_projects
-    FROM feature_host_pinned_projects_v2
-    GROUP BY compute_host
 )
 SELECT
     ht.service_host AS compute_host,
     ht.running_vms AS running_vms,
-    COALESCE(haz.availability_zone, 'unknown') AS availability_zone,
     -- CPU Architecture
     CASE
         WHEN ht.traits LIKE '%CUSTOM_HW_SAPPHIRE_RAPIDS%' THEN 'sapphire-rapids'
@@ -57,8 +49,5 @@ SELECT
         WHEN ht.status != 'enabled' THEN '[disabled] ' || COALESCE(ht.service_disabled_reason, '--')
         WHEN ht.state != 'up' THEN '[down] ' || COALESCE(ht.service_disabled_reason, '--')
         ELSE NULL
-    END AS disabled_reason,
-    COALESCE(pp.pinned_projects, NULL) AS pinned_projects
-FROM host_traits ht
-LEFT JOIN pinned_projects pp ON ht.service_host = pp.compute_host
-LEFT JOIN feature_host_az haz ON ht.service_host = haz.compute_host;
+    END AS disabled_reason
+FROM host_traits ht;

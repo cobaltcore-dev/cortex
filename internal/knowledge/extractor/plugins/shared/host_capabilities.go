@@ -19,18 +19,6 @@ type HostCapabilities struct {
 	HypervisorType string `db:"hypervisor_type"`
 }
 
-// Table under which the feature is stored.
-func (HostCapabilities) TableName() string {
-	return "feature_host_capabilities"
-}
-
-// Indexes for the feature.
-func (HostCapabilities) Indexes() map[string][]string {
-	return map[string][]string{
-		"idx_host_capabilities_compute_host": {"compute_host"},
-	}
-}
-
 // Extractor that extracts the traits of a compute host.
 type HostCapabilitiesExtractor struct {
 	// Common base for all extractors that provides standard functionality.

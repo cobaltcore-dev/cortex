@@ -4,12 +4,15 @@
 package filters
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type FilterCorrectAZStep struct {
@@ -23,14 +26,28 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 		traceLog.Debug("no availability zone requested, skipping filter_correct_az step")
 		return result, nil
 	}
-	var computeHostsInAZ []string
-	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsInAZ, `
-        SELECT DISTINCT compute_host
-        FROM `+shared.HostAZ{}.TableName()+`
-        WHERE availability_zone = :az`,
-		map[string]any{"az": request.Spec.Data.AvailabilityZone},
+	knowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-az"},
+		knowledge,
 	); err != nil {
 		return nil, err
+	}
+	hostAZs, err := v1alpha1.
+		UnboxFeatureList[shared.HostAZ](knowledge.Status.Raw)
+	if err != nil {
+		return nil, err
+	}
+	var computeHostsInAZ []string
+	for _, hostAZ := range hostAZs {
+		if hostAZ.AvailabilityZone == nil {
+			traceLog.Warn("host az knowledge has nil availability zone", "host", hostAZ.ComputeHost)
+			continue
+		}
+		if *hostAZ.AvailabilityZone == request.Spec.Data.AvailabilityZone {
+			computeHostsInAZ = append(computeHostsInAZ, hostAZ.ComputeHost)
+		}
 	}
 	lookupStr := strings.Join(computeHostsInAZ, ",")
 	for host := range result.Activations {

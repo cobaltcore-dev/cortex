@@ -4,9 +4,15 @@
 package sap
 
 import (
+	"context"
 	_ "embed"
+	"errors"
+	"strings"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type HostDetails struct {
@@ -39,18 +45,6 @@ type HostDetails struct {
 	PinnedProjects *string `db:"pinned_projects"`
 }
 
-// Table under which the feature is stored.
-func (HostDetails) TableName() string {
-	return "feature_sap_host_details_v3"
-}
-
-// Indexes for the feature.
-func (HostDetails) Indexes() map[string][]string {
-	return map[string][]string{
-		"idx_host_details_compute_host": {"compute_host"},
-	}
-}
-
 type HostDetailsExtractor struct {
 	// Common base for all extractors that provides standard functionality.
 	plugins.BaseExtractor[
@@ -64,5 +58,75 @@ var hostDetailsQuery string
 
 // Extract the traits of a compute host from the database.
 func (e *HostDetailsExtractor) Extract() ([]plugins.Feature, error) {
-	return e.ExtractSQL(hostDetailsQuery)
+	if e.DB == nil {
+		return nil, errors.New("database connection is not initialized")
+	}
+	var hostDetails []HostDetails
+	if _, err := e.DB.Select(&hostDetails, hostDetailsQuery); err != nil {
+		return nil, err
+	}
+
+	// Add the pinned projects to the host details.
+	pinnedProjectsKnowledge := &v1alpha1.Knowledge{}
+	if err := e.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-pinned-projects"},
+		pinnedProjectsKnowledge,
+	); err != nil {
+		return nil, err
+	}
+	pinnedProjects, err := v1alpha1.
+		UnboxFeatureList[shared.HostPinnedProjects](pinnedProjectsKnowledge.Status.Raw)
+	if err != nil {
+		return nil, err
+	}
+	pinnedProjectsByComputeHost := make(map[string][]string)
+	for _, pp := range pinnedProjects {
+		if pp.ComputeHost != nil && pp.Label != nil {
+			pinnedProjectsByComputeHost[*pp.ComputeHost] = append(
+				pinnedProjectsByComputeHost[*pp.ComputeHost],
+				*pp.Label,
+			)
+		}
+	}
+	for i, hd := range hostDetails {
+		pps, ok := pinnedProjectsByComputeHost[hd.ComputeHost]
+		if !ok {
+			// No pinned projects for this host.
+			continue
+		}
+		joined := strings.Join(pps, ",")
+		hostDetails[i].PinnedProjects = &joined
+	}
+
+	// Add the availability zones to the host details.
+	azKnowledge := &v1alpha1.Knowledge{}
+	if err := e.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-az"},
+		azKnowledge,
+	); err != nil {
+		return nil, err
+	}
+	hostAZs, err := v1alpha1.
+		UnboxFeatureList[shared.HostAZ](azKnowledge.Status.Raw)
+	if err != nil {
+		return nil, err
+	}
+	azByComputeHost := make(map[string]string)
+	for _, hostAZ := range hostAZs {
+		if hostAZ.AvailabilityZone == nil {
+			continue
+		}
+		azByComputeHost[hostAZ.ComputeHost] = *hostAZ.AvailabilityZone
+	}
+	for i, hd := range hostDetails {
+		az, ok := azByComputeHost[hd.ComputeHost]
+		if !ok {
+			hostDetails[i].AvailabilityZone = "unknown"
+			continue
+		}
+		hostDetails[i].AvailabilityZone = az
+	}
+	return e.Extracted(hostDetails)
 }

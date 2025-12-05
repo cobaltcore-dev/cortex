@@ -8,34 +8,28 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
-
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestFilterHasRequestedTraits_Run(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostCapabilities{}),
-	)
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_host_capabilities table
-	hostCapabilities := []any{
+	hostCapabilities, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostCapabilities{ComputeHost: "host1", Traits: "COMPUTE_ACCELERATORS,COMPUTE_NET_VIRTIO_PACKED,CUSTOM_GPU_NVIDIA", HypervisorType: "QEMU"},
 		&shared.HostCapabilities{ComputeHost: "host2", Traits: "COMPUTE_STATUS_ENABLED,COMPUTE_NET_VIRTIO", HypervisorType: "QEMU"},
 		&shared.HostCapabilities{ComputeHost: "host3", Traits: "COMPUTE_ACCELERATORS,COMPUTE_STATUS_ENABLED,CUSTOM_STORAGE_SSD", HypervisorType: "VMware"},
 		&shared.HostCapabilities{ComputeHost: "host4", Traits: "COMPUTE_NET_VIRTIO_PACKED,CUSTOM_CPU_AVX512", HypervisorType: "QEMU"},
 		&shared.HostCapabilities{ComputeHost: "host5", Traits: "", HypervisorType: "QEMU"},
 		&shared.HostCapabilities{ComputeHost: "host6", Traits: "COMPUTE_ACCELERATORS,CUSTOM_GPU_AMD,CUSTOM_STORAGE_NVME", HypervisorType: "QEMU"},
-	}
-	if err := testDB.Insert(hostCapabilities...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -455,7 +449,15 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterHasRequestedTraits{}
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(
+					&v1alpha1.Knowledge{
+						ObjectMeta: metav1.ObjectMeta{Name: "host-capabilities"},
+						Status:     v1alpha1.KnowledgeStatus{Raw: hostCapabilities},
+					},
+				).
+				Build()
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
@@ -487,25 +489,18 @@ func TestFilterHasRequestedTraits_TraitParsing(t *testing.T) {
 	// Set log level debug
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
-	// Test the trait parsing logic with edge cases
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostCapabilities{}),
-	)
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert test data with edge cases in trait names
-	hostCapabilitiesEdgeCases := []any{
+	hostCapabilitiesEdgeCases, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostCapabilities{ComputeHost: "host1", Traits: "TRAIT_WITH_UNDERSCORES,TRAIT-WITH-DASHES,TRAIT.WITH.DOTS", HypervisorType: "QEMU"},
 		&shared.HostCapabilities{ComputeHost: "host2", Traits: "VERY_LONG_TRAIT_NAME_WITH_MANY_CHARACTERS_AND_NUMBERS_123", HypervisorType: "QEMU"},
 		&shared.HostCapabilities{ComputeHost: "host3", Traits: "SHORT,A,B,C", HypervisorType: "QEMU"},
-	}
-	if err := testDB.Insert(hostCapabilitiesEdgeCases...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -586,7 +581,15 @@ func TestFilterHasRequestedTraits_TraitParsing(t *testing.T) {
 			}
 
 			step := &FilterHasRequestedTraits{}
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(
+					&v1alpha1.Knowledge{
+						ObjectMeta: metav1.ObjectMeta{Name: "host-capabilities"},
+						Status:     v1alpha1.KnowledgeStatus{Raw: hostCapabilitiesEdgeCases},
+					},
+				).
+				Build()
 			result, err := step.Run(slog.Default(), request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
