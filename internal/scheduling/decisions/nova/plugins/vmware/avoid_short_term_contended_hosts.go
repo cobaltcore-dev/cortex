@@ -4,12 +4,15 @@
 package vmware
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Options for the scheduling step, given through the
@@ -57,12 +60,17 @@ func (s *AvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request ap
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 
-	var highlyContendedHosts []vmware.VROpsHostsystemContentionShortTerm
-	group := "scheduler-nova"
-	table := vmware.VROpsHostsystemContentionShortTerm{}.TableName()
-	if _, err := s.DB.SelectTimed(group, &highlyContendedHosts,
-		"SELECT * FROM "+table,
+	knowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "vmware-short-term-contended-hosts"},
+		knowledge,
 	); err != nil {
+		return nil, err
+	}
+	highlyContendedHosts, err := v1alpha1.
+		UnboxFeatureList[vmware.VROpsHostsystemContentionShortTerm](knowledge.Status.Raw)
+	if err != nil {
 		return nil, err
 	}
 

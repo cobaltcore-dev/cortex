@@ -4,13 +4,16 @@
 package vmware
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -50,11 +53,17 @@ func (s *GeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.Ext
 
 	result.Statistics["ram utilized"] = s.PrepareStats(request, "%")
 
-	var hostUtilizations []shared.HostUtilization
-	group := "scheduler-nova"
-	if _, err := s.DB.SelectTimed(
-		group, &hostUtilizations, "SELECT * FROM "+shared.HostUtilization{}.TableName(),
+	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-utilization"},
+		hostUtilizationKnowledge,
 	); err != nil {
+		return nil, err
+	}
+	hostUtilizations, err := v1alpha1.
+		UnboxFeatureList[shared.HostUtilization](hostUtilizationKnowledge.Status.Raw)
+	if err != nil {
 		return nil, err
 	}
 	for _, hostUtilization := range hostUtilizations {
@@ -77,10 +86,17 @@ func (s *GeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.Ext
 	// Fetch the host capabilities.
 	// Note: due to the vmware spec selector, it is expected that
 	// this step is only executed for VMware hosts.
-	var hostCapabilities []shared.HostCapabilities
-	if _, err := s.DB.Select(
-		&hostCapabilities, "SELECT * FROM "+shared.HostCapabilities{}.TableName(),
+	hostCapabilitiesKnowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-capabilities"},
+		hostCapabilitiesKnowledge,
 	); err != nil {
+		return nil, err
+	}
+	hostCapabilities, err := v1alpha1.
+		UnboxFeatureList[shared.HostCapabilities](hostCapabilitiesKnowledge.Status.Raw)
+	if err != nil {
 		return nil, err
 	}
 	capabilityByHost := make(map[string]shared.HostCapabilities, len(request.Hosts))
