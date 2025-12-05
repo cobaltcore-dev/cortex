@@ -211,28 +211,23 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Update the knowledge status.
-	// TODO: Remove StoreInDatabaseOnly option in future release.
-	if knowledge.Spec.StoreInDatabaseOnly {
-		knowledge.Status.Raw = runtime.RawExtension{}
-	} else {
-		raw, err := v1alpha1.BoxFeatureList(features)
-		if err != nil {
-			log.Error(err, "failed to marshal extracted features", "name", knowledge.Spec.Extractor.Name)
-			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.KnowledgeConditionError,
-				Status:  metav1.ConditionTrue,
-				Reason:  "FeatureMarshalingFailed",
-				Message: "failed to marshal extracted features: " + err.Error(),
-			})
-			if err := r.Status().Update(ctx, knowledge); err != nil {
-				log.Error(err, "failed to update knowledge status")
-				return ctrl.Result{}, err
-			}
+	meta.RemoveStatusCondition(&knowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	raw, err := v1alpha1.BoxFeatureList(features)
+	if err != nil {
+		log.Error(err, "failed to marshal extracted features", "name", knowledge.Spec.Extractor.Name)
+		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KnowledgeConditionError,
+			Status:  metav1.ConditionTrue,
+			Reason:  "FeatureMarshalingFailed",
+			Message: "failed to marshal extracted features: " + err.Error(),
+		})
+		if err := r.Status().Update(ctx, knowledge); err != nil {
+			log.Error(err, "failed to update knowledge status")
 			return ctrl.Result{}, err
 		}
-		knowledge.Status.Raw = raw
+		return ctrl.Result{}, err
 	}
-	meta.RemoveStatusCondition(&knowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	knowledge.Status.Raw = raw
 	knowledge.Status.LastExtracted = metav1.NewTime(time.Now())
 	knowledge.Status.RawLength = len(features)
 	knowledge.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}

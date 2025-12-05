@@ -67,14 +67,6 @@ type KnowledgeSpec struct {
 	// - "port": The database port.
 	// - "database": The database name.
 	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef"`
-
-	// Whether the knowledge should only be stored in the database and not
-	// in the CR status.
-	//
-	// Note: this is a legacy feature. Features should always contain condensed
-	// knowledge in the CR status for easy access.
-	// +kubebuilder:default=false
-	StoreInDatabaseOnly bool `json:"storeInDatabaseOnly,omitempty"`
 }
 
 // Convert raw features to a list of strongly typed feature structs.
