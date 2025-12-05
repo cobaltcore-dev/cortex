@@ -289,6 +289,11 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	} else if err := json.Unmarshal([]byte(flavor.ExtraSpecs), &extraSpecs); err != nil {
 		panic(err)
 	}
+	// Check if the flavor is for vmware.
+	vmware := false
+	if val, ok := extraSpecs["capabilities:hypervisor_type"]; ok {
+		vmware = strings.EqualFold(val, "VMware vCenter Server")
+	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
 	request := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
@@ -308,6 +313,7 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 		}},
 		Hosts:   hosts,
 		Weights: weights,
+		VMware:  vmware,
 	}
 	return request
 }

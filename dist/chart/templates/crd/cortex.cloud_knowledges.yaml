@@ -213,15 +213,6 @@ spec:
                   The desired recency of this knowledge, i.e. how old it can be until
                   it needs to be re-extracted.
                 type: string
-              storeInDatabaseOnly:
-                default: false
-                description: |-
-                  Whether the knowledge should only be stored in the database and not
-                  in the CR status.
-
-                  Note: this is a legacy feature. Features should always contain condensed
-                  knowledge in the CR status for easy access.
-                type: boolean
             required:
             - databaseSecretRef
             - recency

@@ -167,8 +167,6 @@ metadata:
   name: vm-host-residency
 spec:
   operator: cortex-nova
-  # TODO: This feature is currently too large to fit in the CR status.
-  storeInDatabaseOnly: true
   databaseSecretRef:
     name: cortex-nova-postgres
     namespace: {{ .Release.Namespace }}
