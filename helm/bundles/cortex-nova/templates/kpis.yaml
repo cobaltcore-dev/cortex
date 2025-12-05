@@ -121,3 +121,17 @@ spec:
       - name: nova-flavors
   description: |
     This KPI tracks VM commitments based on project commitments and VM flavors.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: kvm-host-capacity
+spec:
+  operator: cortex-nova
+  impl: kvm_host_capacity_kpi
+  dependencies:
+    knowledges:
+      - name: sap-host-details
+      - name: host-utilization
+  description: |
+    This KPI tracks the total, utilized, reserved and failover capacity of KVM hosts.
