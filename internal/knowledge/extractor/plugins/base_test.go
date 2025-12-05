@@ -5,12 +5,10 @@ package plugins
 
 import (
 	"testing"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -19,17 +17,22 @@ type MockOptions struct {
 	Option2 int    `json:"option2"`
 }
 
-type MockFeature struct {
+type MockDatasource struct {
 	ID   int    `db:"id,primarykey"`
 	Name string `db:"name"`
 }
 
-func (MockFeature) TableName() string {
-	return "mock_feature"
+func (md MockDatasource) TableName() string {
+	return "mock_datasource"
 }
 
-func (MockFeature) Indexes() map[string][]string {
-	return nil
+func (md MockDatasource) Indexes() map[string][]string {
+	return map[string][]string{}
+}
+
+type MockFeature struct {
+	ID   int    `db:"id,primarykey"`
+	Name string `db:"name"`
 }
 
 func TestBaseExtractor_Init(t *testing.T) {
@@ -49,13 +52,9 @@ func TestBaseExtractor_Init(t *testing.T) {
 	}
 
 	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(&testDB, &testDB, config)
+	err := extractor.Init(&testDB, nil, config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if extractor.RecencySeconds != 0 {
-		t.Errorf("expected RecencySeconds to be 0, got %d", extractor.RecencySeconds)
 	}
 
 	if extractor.Options.Option1 != "value1" {
@@ -65,44 +64,10 @@ func TestBaseExtractor_Init(t *testing.T) {
 	if extractor.Options.Option2 != 2 {
 		t.Errorf("expected Option2 to be 2, got %d", extractor.Options.Option2)
 	}
-
-	if !testDB.TableExists(MockFeature{}) {
-		t.Fatal("expected table to exist")
-	}
-}
-
-func TestBaseExtractor_InitWithRecency(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	recencySeconds := 3600 // One hour
-	config := v1alpha1.KnowledgeSpec{
-		Extractor: v1alpha1.KnowledgeExtractorSpec{
-			Name: "mock_extractor",
-		},
-		Recency: metav1.Duration{Duration: time.Duration(recencySeconds) * time.Second},
-	}
-	extractor := BaseExtractor[MockOptions, MockFeature]{}
-	err := extractor.Init(&testDB, &testDB, config)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if extractor.RecencySeconds != recencySeconds {
-		t.Errorf("expected RecencySeconds to be %d, got %d", recencySeconds, extractor.RecencySeconds)
-	}
 }
 
 func TestBaseExtractor_Extracted(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create the table for MockFeature
-	err := testDB.CreateTable(testDB.AddTable(MockFeature{}))
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	extractor := BaseExtractor[MockOptions, MockFeature]{DB: &testDB, extractorDB: &testDB}
+	extractor := BaseExtractor[MockOptions, MockFeature]{}
 
 	// Insert mock data into the mock_feature table
 	mockFeatures := []MockFeature{
@@ -111,15 +76,7 @@ func TestBaseExtractor_Extracted(t *testing.T) {
 	}
 
 	// Call the Extracted function
-	extractedFeatures, err := extractor.Extracted(mockFeatures)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Verify the data was replaced in the mock_feature table
-	var features []MockFeature
-	table := MockFeature{}.TableName()
-	_, err = testDB.Select(&features, "SELECT * FROM "+table)
+	features, err := extractor.Extracted(mockFeatures)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -133,18 +90,9 @@ func TestBaseExtractor_Extracted(t *testing.T) {
 		2: "feature2",
 	}
 	for _, f := range features {
+		f := f.(MockFeature)
 		if expected[f.ID] != f.Name {
 			t.Errorf("expected name for ID %d to be %s, got %s", f.ID, expected[f.ID], f.Name)
-		}
-	}
-
-	// Verify the returned slice of features
-	if len(extractedFeatures) != 2 {
-		t.Errorf("expected 2 extracted features, got %d", len(extractedFeatures))
-	}
-	for i, f := range extractedFeatures {
-		if f.(MockFeature).ID != mockFeatures[i].ID || f.(MockFeature).Name != mockFeatures[i].Name {
-			t.Errorf("expected extracted feature %v, got %v", mockFeatures[i], f)
 		}
 	}
 }
@@ -153,19 +101,19 @@ func TestBaseExtractor_ExtractSQL(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
-	// Create the table for MockFeature
-	err := testDB.CreateTable(testDB.AddTable(MockFeature{}))
+	// Create the table for MockDatasource
+	err := testDB.CreateTable(testDB.AddTable(MockDatasource{}))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the mock_feature table
-	mockFeatures := []MockFeature{
+	mockDs := []MockDatasource{
 		{ID: 1, Name: "feature1"},
 		{ID: 2, Name: "feature2"},
 	}
-	for _, feature := range mockFeatures {
-		if err := testDB.Insert(&feature); err != nil {
+	for _, d := range mockDs {
+		if err := testDB.Insert(&d); err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
 	}
@@ -173,7 +121,7 @@ func TestBaseExtractor_ExtractSQL(t *testing.T) {
 	extractor := BaseExtractor[MockOptions, MockFeature]{DB: &testDB}
 
 	// Define the SQL query to extract features
-	table := MockFeature{}.TableName()
+	table := MockDatasource{}.TableName()
 	query := "SELECT * FROM " + table
 
 	// Call the ExtractSQL function

@@ -10,56 +10,29 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
 
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// Create a runtime scheme with all cortex CRDs registered.
-func testScheme() *runtime.Scheme {
-	scheme, err := v1alpha1.SchemeBuilder.Build()
-	if err != nil {
-		panic(err)
-	}
-	return scheme
-}
-
-// Create a fake kubernetes client with no runtime objects.
-func testClient() client.Client {
-	var runtimeObjects []runtime.Object // None
-	return fake.NewClientBuilder().
-		WithScheme(testScheme()).
-		WithRuntimeObjects(runtimeObjects...).
-		Build()
-}
-
 func TestFilterHasEnoughCapacity_Run(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostUtilization{}),
-	)
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_host_utilization table
-	hostUtilizations := []any{
+	hostUtilizations, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalRAMAllocatableMB: 32768, TotalVCPUsAllocatable: 16, TotalDiskAllocatableGB: 1000}, // High capacity host
 		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 80.0, VCPUsUtilizedPct: 70.0, DiskUtilizedPct: 60.0, TotalRAMAllocatableMB: 16384, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500},   // Medium capacity host
 		&shared.HostUtilization{ComputeHost: "host3", RAMUtilizedPct: 90.0, VCPUsUtilizedPct: 85.0, DiskUtilizedPct: 75.0, TotalRAMAllocatableMB: 8192, TotalVCPUsAllocatable: 4, TotalDiskAllocatableGB: 250},    // Low capacity host
 		&shared.HostUtilization{ComputeHost: "host4", RAMUtilizedPct: 20.0, VCPUsUtilizedPct: 15.0, DiskUtilizedPct: 10.0, TotalRAMAllocatableMB: 65536, TotalVCPUsAllocatable: 32, TotalDiskAllocatableGB: 2000}, // Very high capacity host
 		&shared.HostUtilization{ComputeHost: "host5", RAMUtilizedPct: 95.0, VCPUsUtilizedPct: 90.0, DiskUtilizedPct: 85.0, TotalRAMAllocatableMB: 4096, TotalVCPUsAllocatable: 2, TotalDiskAllocatableGB: 100},    // Very low capacity host
 		&shared.HostUtilization{ComputeHost: "host6", RAMUtilizedPct: 0.0, VCPUsUtilizedPct: 0.0, DiskUtilizedPct: 0.0, TotalRAMAllocatableMB: 0, TotalVCPUsAllocatable: 0, TotalDiskAllocatableGB: 0},            // Zero capacity host (edge case)
-	}
-	if err := testDB.Insert(hostUtilizations...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -430,8 +403,13 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Running test case: %s", tt.name)
 			step := &FilterHasEnoughCapacity{}
-			step.Client = testClient() // Override the real client with our fake client
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(&v1alpha1.Knowledge{
+					ObjectMeta: metav1.ObjectMeta{Name: "host-utilization"},
+					Status:     v1alpha1.KnowledgeStatus{Raw: hostUtilizations},
+				}).
+				Build()
 			// Override the real client with our fake client after Init()
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
@@ -461,23 +439,17 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 }
 
 func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostUtilization{}),
-	)
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_host_utilization table
-	hostUtilizations := []any{
+	hostUtilizations, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalRAMAllocatableMB: 32768, TotalVCPUsAllocatable: 16, TotalDiskAllocatableGB: 1000}, // High capacity host
 		&shared.HostUtilization{ComputeHost: "host2", RAMUtilizedPct: 80.0, VCPUsUtilizedPct: 70.0, DiskUtilizedPct: 60.0, TotalRAMAllocatableMB: 16384, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500},   // Medium capacity host
-	}
-	if err := testDB.Insert(hostUtilizations...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -554,20 +526,23 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 		},
 	}
 
-	// Create fake Kubernetes client with reservations
-	scheme := testScheme()
-	var runtimeObjects []runtime.Object
-	for i := range reservations {
-		runtimeObjects = append(runtimeObjects, &reservations[i])
-	}
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithRuntimeObjects(runtimeObjects...).
-		Build()
-
 	step := &FilterHasEnoughCapacity{}
-	step.Client = fakeClient // Override the real client with our fake client
-	step.DB = &testDB
+	step.Client = fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRuntimeObjects(
+			&v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{Name: "host-utilization"},
+				Status:     v1alpha1.KnowledgeStatus{Raw: hostUtilizations},
+			},
+		).
+		WithRuntimeObjects(func() []runtime.Object {
+			objs := []runtime.Object{}
+			for i := range reservations {
+				objs = append(objs, &reservations[i])
+			}
+			return objs
+		}()...).
+		Build()
 
 	// Test case: Request that would fit on host1 without reservations, but not with reservations
 	request := api.ExternalSchedulerRequest{
@@ -644,22 +619,16 @@ func TestFilterHasEnoughCapacity_WithReservations(t *testing.T) {
 }
 
 func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostUtilization{}),
-	)
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_host_utilization table
-	hostUtilizations := []any{
+	hostUtilizations, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostUtilization{ComputeHost: "host1", RAMUtilizedPct: 50.0, VCPUsUtilizedPct: 40.0, DiskUtilizedPct: 30.0, TotalRAMAllocatableMB: 16384, TotalVCPUsAllocatable: 8, TotalDiskAllocatableGB: 500}, // Limited capacity host
-	}
-	if err := testDB.Insert(hostUtilizations...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -821,20 +790,23 @@ func TestFilterHasEnoughCapacity_ReservationMatching(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create fake Kubernetes client with reservations
-			scheme := testScheme()
-			var runtimeObjects []runtime.Object
-			for i := range tt.reservations {
-				runtimeObjects = append(runtimeObjects, &tt.reservations[i])
-			}
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(runtimeObjects...).
-				Build()
-
 			step := &FilterHasEnoughCapacity{}
-			step.Client = fakeClient // Override the real client with our fake client
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(
+					&v1alpha1.Knowledge{
+						ObjectMeta: metav1.ObjectMeta{Name: "host-utilization"},
+						Status:     v1alpha1.KnowledgeStatus{Raw: hostUtilizations},
+					},
+				).
+				WithRuntimeObjects(func() []runtime.Object {
+					objs := []runtime.Object{}
+					for i := range tt.reservations {
+						objs = append(objs, &tt.reservations[i])
+					}
+					return objs
+				}()...).
+				Build()
 
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {

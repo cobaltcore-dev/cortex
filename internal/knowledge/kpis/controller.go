@@ -144,12 +144,11 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 	return nil
 }
 
-// Find a joint database connection for all given datasources and knowledges.
+// Find a joint database connection for all given datasources.
 // The returned database can be nil if no database is needed.
 func (c *Controller) getJointDB(
 	ctx context.Context,
 	datasources []corev1.ObjectReference,
-	knowledges []corev1.ObjectReference,
 ) (*db.DB, error) {
 	// Check if all datasources configured share the same database secret ref.
 	var databaseSecretRef *corev1.SecretReference
@@ -168,27 +167,6 @@ func (c *Controller) getJointDB(
 			databaseSecretRef = &ds.Spec.DatabaseSecretRef
 		} else if databaseSecretRef.Name != ds.Spec.DatabaseSecretRef.Name ||
 			databaseSecretRef.Namespace != ds.Spec.DatabaseSecretRef.Namespace {
-			return nil, errors.New("datasources have different database secret refs")
-		}
-	}
-	for _, knRef := range knowledges {
-		kn := &v1alpha1.Knowledge{}
-		if err := c.Get(ctx, client.ObjectKey{
-			Namespace: knRef.Namespace,
-			Name:      knRef.Name,
-		}, kn); err != nil {
-			if client.IgnoreNotFound(err) == nil {
-				continue
-			}
-			return nil, err
-		}
-		if kn.Spec.DatabaseSecretRef == nil {
-			continue
-		}
-		if databaseSecretRef == nil {
-			databaseSecretRef = kn.Spec.DatabaseSecretRef
-		} else if databaseSecretRef.Name != kn.Spec.DatabaseSecretRef.Name ||
-			databaseSecretRef.Namespace != kn.Spec.DatabaseSecretRef.Namespace {
 			return nil, errors.New("datasources have different database secret refs")
 		}
 	}
@@ -265,9 +243,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		}
 		registeredKPI = &kpilogger{kpi: registeredKPI}
 		// Get joint database connection for all dependencies.
-		jointDB, err := c.getJointDB(ctx,
-			obj.Spec.Dependencies.Datasources,
-			obj.Spec.Dependencies.Knowledges)
+		jointDB, err := c.getJointDB(ctx, obj.Spec.Dependencies.Datasources)
 		if err != nil {
 			return fmt.Errorf("failed to get joint database for kpi %s: %w", obj.Name, err)
 		}
@@ -278,12 +254,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		if len(obj.Spec.Opts.Raw) > 0 {
 			rawOpts = conf.NewRawOptsBytes(obj.Spec.Opts.Raw)
 		}
-		// Initialize KPI with database if available, otherwise with empty DB
-		var dbToUse db.DB
-		if jointDB != nil {
-			dbToUse = *jointDB
-		}
-		if err := registeredKPI.Init(dbToUse, rawOpts); err != nil {
+		if err := registeredKPI.Init(jointDB, c.Client, rawOpts); err != nil {
 			return fmt.Errorf("failed to initialize kpi %s: %w", obj.Name, err)
 		}
 		if err := metrics.Registry.Register(registeredKPI); err != nil {

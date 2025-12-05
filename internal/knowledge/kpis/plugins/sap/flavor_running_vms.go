@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type FlavorRunningVMs struct {
@@ -29,8 +30,8 @@ func (FlavorRunningVMsKPI) GetName() string {
 	return "sap_flavor_running_vms_kpi"
 }
 
-func (k *FlavorRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, opts); err != nil {
+func (k *FlavorRunningVMsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.flavorRunningVMs = prometheus.NewDesc(

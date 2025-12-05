@@ -4,12 +4,15 @@
 package filters
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type FilterHasRequestedTraits struct {
@@ -38,11 +41,18 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 		traceLog.Debug("no traits requested, skipping filter")
 		return result, nil
 	}
-	var hostCapabilities []shared.HostCapabilities
-	if _, err := s.DB.SelectTimed(
-		"scheduler-nova", &hostCapabilities, "SELECT * FROM "+shared.HostCapabilities{}.TableName(),
+	knowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-capabilities"},
+		knowledge,
 	); err != nil {
-		return result, err
+		return nil, err
+	}
+	hostCapabilities, err := v1alpha1.
+		UnboxFeatureList[shared.HostCapabilities](knowledge.Status.Raw)
+	if err != nil {
+		return nil, err
 	}
 	hostsEncountered := map[string]struct{}{}
 	for _, cap := range hostCapabilities {

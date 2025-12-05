@@ -4,12 +4,15 @@
 package filters
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type FilterProjectAggregatesStep struct {
@@ -24,14 +27,33 @@ func (s *FilterProjectAggregatesStep) Run(traceLog *slog.Logger, request api.Ext
 		traceLog.Debug("no project ID in request, skipping filter")
 		return result, nil
 	}
-	var computeHostsMatchingProject []string
-	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsMatchingProject, `
-        SELECT DISTINCT compute_host
-        FROM `+shared.HostPinnedProjects{}.TableName()+`
-        WHERE (compute_host IS NOT NULL AND project_id = :projectID) OR (compute_host IS NOT NULL AND project_id IS NULL)`,
-		map[string]any{"projectID": request.Spec.Data.ProjectID},
+	knowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-pinned-projects"},
+		knowledge,
 	); err != nil {
 		return nil, err
+	}
+	hostPinnedProjects, err := v1alpha1.
+		UnboxFeatureList[shared.HostPinnedProjects](knowledge.Status.Raw)
+	if err != nil {
+		return nil, err
+	}
+	var computeHostsMatchingProject []string
+	for _, hostProj := range hostPinnedProjects {
+		if hostProj.ComputeHost == nil {
+			traceLog.Warn("host pinned projects knowledge has nil compute host", "entry", hostProj)
+			continue
+		}
+		if hostProj.ProjectID == nil {
+			// Host is available for all projects.
+			computeHostsMatchingProject = append(computeHostsMatchingProject, *hostProj.ComputeHost)
+			continue
+		}
+		if *hostProj.ProjectID == request.Spec.Data.ProjectID {
+			computeHostsMatchingProject = append(computeHostsMatchingProject, *hostProj.ComputeHost)
+		}
 	}
 	lookupStr := strings.Join(computeHostsMatchingProject, ",")
 	for host := range result.Activations {

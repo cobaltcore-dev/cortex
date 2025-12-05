@@ -15,9 +15,6 @@ import (
 )
 
 func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &VROpsProjectNoisinessExtractor{}
 
 	config := v1alpha1.KnowledgeSpec{
@@ -26,15 +23,8 @@ func TestVROpsProjectNoisinessExtractor_Init(t *testing.T) {
 			Config: runtime.RawExtension{Raw: []byte(`{}`)},
 		},
 	}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Will fail when the table does not exist
-	table := VROpsProjectNoisiness{}.TableName()
-	err := testDB.SelectOne(&VROpsProjectNoisiness{}, "SELECT * FROM "+table+" LIMIT 1")
-	if err == nil {
-		t.Fatalf("expected error, got nil")
 	}
 }
 
@@ -86,30 +76,34 @@ func TestVROpsProjectNoisinessExtractor_Extract(t *testing.T) {
 		},
 	}
 
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(&testDB, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if _, err := extractor.Extract(); err != nil {
+	features, err := extractor.Extract()
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Verify the data was inserted into the feature_vrops_project_noisiness table
-	var noisiness []VROpsProjectNoisiness
-	q := `SELECT * FROM feature_vrops_project_noisiness ORDER BY project, compute_host`
-	if _, err := testDB.Select(&noisiness, q); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
 	expected := []VROpsProjectNoisiness{
 		{Project: "project1", ComputeHost: "service_host1", AvgCPUOfProject: 55},
 		{Project: "project1", ComputeHost: "service_host2", AvgCPUOfProject: 55},
 		{Project: "project2", ComputeHost: "service_host1", AvgCPUOfProject: 70},
 	}
-	if len(noisiness) != len(expected) {
-		t.Fatalf("expected %d rows, got %d", len(expected), len(noisiness))
+	if len(features) != len(expected) {
+		t.Fatalf("expected %d rows, got %d", len(expected), len(features))
 	}
-	for i, n := range noisiness {
-		if n != expected[i] {
-			t.Fatalf("expected %v, got %v", expected[i], n)
+	for i, f := range features {
+		n := f.(VROpsProjectNoisiness)
+		// Find the expected row
+		found := false
+		for _, e := range expected {
+			if n.Project == e.Project && n.ComputeHost == e.ComputeHost && n.AvgCPUOfProject == e.AvgCPUOfProject {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("unexpected row at index %d: %+v", i, n)
 		}
 	}
 }

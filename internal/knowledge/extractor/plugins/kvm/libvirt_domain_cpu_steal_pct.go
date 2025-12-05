@@ -18,14 +18,6 @@ type LibvirtDomainCPUStealPct struct {
 	MaxStealTimePct float64 `db:"max_steal_time_pct"`
 }
 
-// Table under which the feature is stored.
-func (LibvirtDomainCPUStealPct) TableName() string {
-	return "feature_libvirt_domain_cpu_steal_pct"
-}
-
-// Indexes for the feature.
-func (LibvirtDomainCPUStealPct) Indexes() map[string][]string { return nil }
-
 // Extractor that extracts CPU steal percentage of kvm instances and stores
 // it as a feature into the database.
 type LibvirtDomainCPUStealPctExtractor struct {

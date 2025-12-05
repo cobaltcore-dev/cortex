@@ -8,34 +8,29 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 func TestFilterCorrectAZStep_Run(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(shared.HostAZ{}),
-	)
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Insert mock data into the feature_host_az table
-	hostAZs := []any{
+	hostAZs, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostAZ{ComputeHost: "host1", AvailabilityZone: testlib.Ptr("az-1")},
 		&shared.HostAZ{ComputeHost: "host2", AvailabilityZone: testlib.Ptr("az-1")},
 		&shared.HostAZ{ComputeHost: "host3", AvailabilityZone: testlib.Ptr("az-2")},
 		&shared.HostAZ{ComputeHost: "host4", AvailabilityZone: testlib.Ptr("az-3")},
 		&shared.HostAZ{ComputeHost: "host5", AvailabilityZone: nil},
-	}
-	if err := testDB.Insert(hostAZs...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -151,7 +146,13 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterCorrectAZStep{}
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(&v1alpha1.Knowledge{
+					ObjectMeta: v1.ObjectMeta{Name: "host-az"},
+					Status:     v1alpha1.KnowledgeStatus{Raw: hostAZs},
+				}).
+				Build()
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)

@@ -4,11 +4,14 @@
 package kvm
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type AvoidHighStealPctStepOpts struct {
@@ -27,12 +30,20 @@ func (s *AvoidHighStealPctStep) Run() ([]plugins.Decision, error) {
 		return nil, nil
 	}
 	// Get VMs matching the MaxStealPctOverObservedTimeSpan option.
-	var decisions []plugins.Decision
-	var features []kvm.LibvirtDomainCPUStealPct
-	table := kvm.LibvirtDomainCPUStealPct{}.TableName()
-	if _, err := s.DB.Select(&features, "SELECT * FROM "+table); err != nil {
+	knowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "kvm-libvirt-domain-cpu-steal-pct"},
+		knowledge,
+	); err != nil {
 		return nil, err
 	}
+	features, err := v1alpha1.
+		UnboxFeatureList[kvm.LibvirtDomainCPUStealPct](knowledge.Status.Raw)
+	if err != nil {
+		return nil, err
+	}
+	var decisions []plugins.Decision
 	for _, f := range features {
 		if f.MaxStealTimePct > s.Options.MaxStealPctOverObservedTimeSpan {
 			decisions = append(decisions, plugins.Decision{

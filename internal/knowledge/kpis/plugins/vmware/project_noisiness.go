@@ -4,14 +4,17 @@
 package vmware
 
 import (
+	"context"
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/tools"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type VMwareProjectNoisinessKPI struct {
@@ -25,8 +28,8 @@ func (VMwareProjectNoisinessKPI) GetName() string {
 	return "vmware_project_noisiness_kpi"
 }
 
-func (k *VMwareProjectNoisinessKPI) Init(db db.DB, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, opts); err != nil {
+func (k *VMwareProjectNoisinessKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.projectNoisinessDesc = prometheus.NewDesc(
@@ -42,10 +45,19 @@ func (k *VMwareProjectNoisinessKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *VMwareProjectNoisinessKPI) Collect(ch chan<- prometheus.Metric) {
-	var features []vmware.VROpsProjectNoisiness
-	tableName := vmware.VROpsProjectNoisiness{}.TableName()
-	if _, err := k.DB.Select(&features, "SELECT * FROM "+tableName); err != nil {
-		slog.Error("failed to select project noisiness", "err", err)
+	knowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "vmware-project-noisiness"},
+		knowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge vmware-project-noisiness", "err", err)
+		return
+	}
+	features, err := v1alpha1.
+		UnboxFeatureList[vmware.VROpsProjectNoisiness](knowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox vmware project noisiness", "err", err)
 		return
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)

@@ -5,9 +5,6 @@ metadata:
   name: netapp-storage-pool-cpu-usage-cinder
 spec:
   operator: cortex-cinder
-  databaseSecretRef:
-    name: cortex-cinder-postgres
-    namespace: {{ .Release.Namespace }}
   extractor:
     name: netapp_storage_pool_cpu_usage_extractor
   description: |

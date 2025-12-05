@@ -6,6 +6,7 @@ package plugins
 import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Common base for all KPIs that provides some functionality
@@ -13,15 +14,18 @@ import (
 type BaseKPI[Opts any] struct {
 	// Options to pass via json to this step.
 	conf.JsonOpts[Opts]
-	// Database connection.
-	DB db.DB
+	// (Optional) database connection where datasources are stored.
+	DB *db.DB
+	// Kubernetes client to access other resources.
+	Client client.Client
 }
 
 // Init the KPI with the database, options, and the registry to publish metrics on.
-func (k *BaseKPI[Opts]) Init(db db.DB, opts conf.RawOpts) error {
+func (k *BaseKPI[Opts]) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
 	if err := k.Load(opts); err != nil {
 		return err
 	}
 	k.DB = db
+	k.Client = client
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Mock feature extractor for testing
@@ -21,7 +22,7 @@ type mockFeatureExtractor struct {
 	features     []plugins.Feature
 }
 
-func (m *mockFeatureExtractor) Init(datasourceDB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (m *mockFeatureExtractor) Init(datasourceDB *db.DB, client client.Client, spec v1alpha1.KnowledgeSpec) error {
 	return m.initError
 }
 
