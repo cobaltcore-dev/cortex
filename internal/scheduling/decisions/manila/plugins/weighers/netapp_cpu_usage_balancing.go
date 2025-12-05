@@ -1,20 +1,23 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package netapp
+package weighers
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/netapp"
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Options for the scheduling step, given through the step config in the service
 // yaml file.
-type CPUUsageBalancingStepOpts struct {
+type NetappCPUUsageBalancingStepOpts struct {
 	AvgCPUUsageLowerBound float64 `json:"avgCPUUsageLowerBound"` // -> mapped to ActivationLowerBound
 	AvgCPUUsageUpperBound float64 `json:"avgCPUUsageUpperBound"` // -> mapped to ActivationUpperBound
 
@@ -28,7 +31,7 @@ type CPUUsageBalancingStepOpts struct {
 	MaxCPUUsageActivationUpperBound float64 `json:"maxCPUUsageActivationUpperBound"`
 }
 
-func (o CPUUsageBalancingStepOpts) Validate() error {
+func (o NetappCPUUsageBalancingStepOpts) Validate() error {
 	// Avoid zero-division during min-max scaling.
 	if o.AvgCPUUsageLowerBound == o.AvgCPUUsageUpperBound {
 		return errors.New("avgCPUUsageLowerBound and avgCPUUsageUpperBound must not be equal")
@@ -40,22 +43,28 @@ func (o CPUUsageBalancingStepOpts) Validate() error {
 }
 
 // Step to balance CPU usage by avoiding highly used storage pools.
-type CPUUsageBalancingStep struct {
+type NetappCPUUsageBalancingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	scheduling.BaseStep[api.ExternalSchedulerRequest, CPUUsageBalancingStepOpts]
+	scheduling.BaseStep[api.ExternalSchedulerRequest, NetappCPUUsageBalancingStepOpts]
 }
 
 // Downvote hosts that are highly contended.
-func (s *CPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
+func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 
-	var usages []netapp.StoragePoolCPUUsage
-	group := "scheduler-manila"
-	if _, err := s.DB.SelectTimed(group, &usages,
-		"SELECT * FROM "+netapp.StoragePoolCPUUsage{}.TableName(),
+	knowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "netapp-storage-pool-cpu-usage-manila"},
+		knowledge,
 	); err != nil {
+		return nil, err
+	}
+	usages, err := v1alpha1.
+		UnboxFeatureList[netapp.StoragePoolCPUUsage](knowledge.Status.Raw)
+	if err != nil {
 		return nil, err
 	}
 

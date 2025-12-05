@@ -1,41 +1,37 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package netapp
+package weighers
 
 import (
 	"log/slog"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/netapp"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestCPUUsageBalancingStep_Run(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency table
-	err := testDB.CreateTable(testDB.AddTable(netapp.StoragePoolCPUUsage{}))
+func TestNetappCPUUsageBalancingStep_Run(t *testing.T) {
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	storagePoolCPUUsage := []any{
+	storagePoolCPUUsage, err := v1alpha1.BoxFeatureList([]any{
 		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool1", AvgCPUUsagePct: 0.0, MaxCPUUsagePct: 0.0},
 		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool2", AvgCPUUsagePct: 100.0, MaxCPUUsagePct: 0.0},
 		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool3", AvgCPUUsagePct: 0.0, MaxCPUUsagePct: 100.0},
 		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool4", AvgCPUUsagePct: 100.0, MaxCPUUsagePct: 100.0},
-	}
-
-	if err := testDB.Insert(storagePoolCPUUsage...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Create an instance of the step
-	step := &CPUUsageBalancingStep{}
+	step := &NetappCPUUsageBalancingStep{}
 	step.Options.AvgCPUUsageLowerBound = 0.0
 	step.Options.AvgCPUUsageUpperBound = 100.0
 	step.Options.AvgCPUUsageActivationLowerBound = 0.0
@@ -44,7 +40,13 @@ func TestCPUUsageBalancingStep_Run(t *testing.T) {
 	step.Options.MaxCPUUsageUpperBound = 100.0
 	step.Options.MaxCPUUsageActivationLowerBound = 0.0
 	step.Options.MaxCPUUsageActivationUpperBound = -1.0
-	step.DB = &testDB
+	step.Client = fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(&v1alpha1.Knowledge{
+			ObjectMeta: v1.ObjectMeta{Name: "netapp-storage-pool-cpu-usage-manila"},
+			Status:     v1alpha1.KnowledgeStatus{Raw: storagePoolCPUUsage},
+		}).
+		Build()
 
 	tests := []struct {
 		name     string
