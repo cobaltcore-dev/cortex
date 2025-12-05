@@ -4,12 +4,15 @@
 package vmware
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Options for the scheduling step, given through the step config in the service yaml file.
@@ -47,20 +50,23 @@ func (s *AntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.E
 
 	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")
 
-	// Check how noisy the project is on the compute hosts.
-	var projectNoisinessOnHosts []vmware.VROpsProjectNoisiness
-	group := "scheduler-nova"
-	table := vmware.VROpsProjectNoisiness{}.TableName()
-	if _, err := s.DB.SelectTimed(group, &projectNoisinessOnHosts, `
-		SELECT * FROM `+table+`
-		WHERE project = :project_id
-	`, map[string]any{
-		"project_id": request.Spec.Data.ProjectID,
-	}); err != nil {
+	knowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "vmware-project-noisiness"},
+		knowledge,
+	); err != nil {
 		return nil, err
 	}
-
+	projectNoisinessOnHosts, err := v1alpha1.
+		UnboxFeatureList[vmware.VROpsProjectNoisiness](knowledge.Status.Raw)
+	if err != nil {
+		return nil, err
+	}
 	for _, p := range projectNoisinessOnHosts {
+		if p.Project != request.Spec.Data.ProjectID {
+			continue
+		}
 		// Only modify the weight if the host is in the scenario.
 		if _, ok := result.Activations[p.ComputeHost]; !ok {
 			continue
