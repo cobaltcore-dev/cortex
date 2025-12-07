@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type VMCommitmentsKPI struct {
@@ -30,8 +31,8 @@ func (VMCommitmentsKPI) GetName() string {
 	return "vm_commitments_kpi"
 }
 
-func (k *VMCommitmentsKPI) Init(db db.DB, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, opts); err != nil {
+func (k *VMCommitmentsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.vmCommitmentsTotalDesc = prometheus.NewDesc(

@@ -184,12 +184,10 @@ func (c *Controller) StartupCallback(ctx context.Context) error {
 
 // This function sets up the controller with the provided manager.
 func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
-	// Index the decisions by ResourceID for efficient lookup.
 	if !c.SkipIndexFields {
-		if err := mgr.GetFieldIndexer().IndexField(
-			context.Background(),
-			&v1alpha1.Decision{},
-			"spec.resourceID",
+		cluster := mcl.ClusterForResource((&v1alpha1.Decision{}).URI())
+		if err := cluster.GetCache().IndexField(
+			context.Background(), &v1alpha1.Decision{}, "spec.resourceID",
 			func(obj client.Object) []string {
 				decision := obj.(*v1alpha1.Decision)
 				return []string{decision.Spec.ResourceID}

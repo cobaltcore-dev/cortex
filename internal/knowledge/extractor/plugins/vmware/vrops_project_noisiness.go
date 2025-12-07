@@ -17,18 +17,6 @@ type VROpsProjectNoisiness struct {
 	AvgCPUOfProject float64 `db:"avg_cpu_of_project"`
 }
 
-// Table under which the feature is stored.
-func (VROpsProjectNoisiness) TableName() string {
-	return "feature_vrops_project_noisiness"
-}
-
-// Indexes for the feature.
-func (VROpsProjectNoisiness) Indexes() map[string][]string {
-	return map[string][]string{
-		"idx_vrops_project_noisiness_project": {"project"},
-	}
-}
-
 // Extractor that extracts the noisiness of projects and on which compute
 // hosts they are currently running and stores it as a feature into the database.
 type VROpsProjectNoisinessExtractor struct {

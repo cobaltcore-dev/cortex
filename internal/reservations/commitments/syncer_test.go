@@ -429,32 +429,3 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 		t.Errorf("Expected 0 reservations due to short UUID, got %d", len(reservations.Items))
 	}
 }
-
-// Note: The Run method starts a goroutine and runs indefinitely, so it's difficult to test
-// in a unit test without complex synchronization. In a real-world scenario, you might
-// want to add a context cancellation mechanism or a way to stop the sync loop for testing.
-func TestSyncer_Run(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
-
-	mockClient := &mockCommitmentsClient{}
-
-	syncer := &Syncer{
-		CommitmentsClient: mockClient,
-		Client:            k8sClient,
-	}
-
-	// Test that Run doesn't panic when called
-	// We can't easily test the actual loop behavior without complex timing
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately to avoid infinite loop
-
-	// This should not panic
-	syncer.Run(ctx)
-}

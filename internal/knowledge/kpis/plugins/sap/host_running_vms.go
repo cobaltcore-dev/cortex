@@ -4,11 +4,14 @@
 package sap
 
 import (
+	"context"
 	"log/slog"
 	"strconv"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -41,8 +44,8 @@ func (HostRunningVMsKPI) GetName() string {
 	return "sap_host_running_vms_kpi"
 }
 
-func (k *HostRunningVMsKPI) Init(db db.DB, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, opts); err != nil {
+func (k *HostRunningVMsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.hostRunningVMsPerHost = prometheus.NewDesc(
@@ -69,65 +72,85 @@ func (k *HostRunningVMsKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *HostRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
-	var hostRunningVMs []HostRunningVMs
+	hostDetailsKnowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "sap-host-details"},
+		hostDetailsKnowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge sap-host-details", "err", err)
+		return
+	}
+	hostDetails, err := v1alpha1.
+		UnboxFeatureList[sap.HostDetails](hostDetailsKnowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox storage pool cpu usage", "err", err)
+		return
+	}
+	detailsByComputeHost := make(map[string]sap.HostDetails)
+	for _, detail := range hostDetails {
+		detailsByComputeHost[detail.ComputeHost] = detail
+	}
 
-	// We NEED to join with host_utilization to filter out hosts that do not report any capacity.
-	// We are using a LEFT JOIN with host_details to be able to log out hosts that are filtered out due to zero capacity.
-	query := `
-		SELECT
-    		hd.compute_host,
-    		hd.availability_zone,
-    		hd.cpu_architecture,
-    		hd.hypervisor_family,
-    		hd.workload_type,
-    		hd.enabled,
-			hd.decommissioned,
-			hd.external_customer,
-			COALESCE(hd.pinned_projects, '') AS pinned_projects,
-    		hd.running_vms,
-			COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
-			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
-			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
-		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
-		LEFT JOIN ` + shared.HostUtilization{}.TableName() + ` AS hu
-		    ON hu.compute_host = hd.compute_host
-		WHERE hypervisor_type != 'ironic';
-    `
-	if _, err := k.DB.Select(&hostRunningVMs, query); err != nil {
-		slog.Error("failed to select host details", "err", err)
+	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-utilization"},
+		hostUtilizationKnowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge host-utilization", "err", err)
+		return
+	}
+	hostUtilizations, err := v1alpha1.
+		UnboxFeatureList[shared.HostUtilization](hostUtilizationKnowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox host utilization", "err", err)
 		return
 	}
 
-	for _, host := range hostRunningVMs {
-		if host.TotalRAMAllocatableMB == 0 || host.TotalVCPUsAllocatable == 0 || host.TotalDiskAllocatableGB == 0 {
+	for _, utilization := range hostUtilizations {
+		detail, exists := detailsByComputeHost[utilization.ComputeHost]
+		if !exists {
+			slog.Warn("host_running_vms: no host details for compute host", "compute_host", utilization.ComputeHost)
+			continue
+		}
+		if utilization.TotalDiskAllocatableGB == 0 ||
+			utilization.TotalRAMAllocatableMB == 0 ||
+			utilization.TotalVCPUsAllocatable == 0 {
 			slog.Info(
 				"Skipping host since placement is reporting zero allocatable resources",
 				"metric", "cortex_sap_running_vms_per_host",
-				"host", host.ComputeHostName,
-				"cpu", host.TotalVCPUsAllocatable,
-				"ram", host.TotalRAMAllocatableMB,
-				"disk", host.TotalDiskAllocatableGB,
+				"host", utilization.ComputeHost,
+				"cpu", utilization.TotalVCPUsAllocatable,
+				"ram", utilization.TotalRAMAllocatableMB,
+				"disk", utilization.TotalDiskAllocatableGB,
 			)
 			continue
 		}
-
-		enabled := strconv.FormatBool(host.Enabled)
-		decommissioned := strconv.FormatBool(host.Decommissioned)
-		externalCustomer := strconv.FormatBool(host.ExternalCustomer)
+		if detail.HypervisorType == "ironic" {
+			continue // Ignore ironic hosts
+		}
+		enabled := strconv.FormatBool(detail.Enabled)
+		decommissioned := strconv.FormatBool(detail.Decommissioned)
+		externalCustomer := strconv.FormatBool(detail.ExternalCustomer)
+		pinnedProjects := ""
+		if detail.PinnedProjects != nil {
+			pinnedProjects = *detail.PinnedProjects
+		}
 
 		ch <- prometheus.MustNewConstMetric(
 			k.hostRunningVMsPerHost,
 			prometheus.GaugeValue,
-			host.RunningVMs,
-			host.ComputeHostName,
-			host.AvailabilityZone,
-			host.CPUArchitecture,
-			host.WorkloadType,
-			host.HypervisorFamily,
+			float64(detail.RunningVMs),
+			utilization.ComputeHost,
+			detail.AvailabilityZone,
+			detail.CPUArchitecture,
+			detail.WorkloadType,
+			detail.HypervisorFamily,
 			enabled,
 			decommissioned,
 			externalCustomer,
-			host.PinnedProjects,
+			pinnedProjects,
 		)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -56,6 +57,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/task"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/must"
 	corev1 "k8s.io/api/core/v1"
@@ -266,6 +268,7 @@ func main() {
 			os.Exit(1)
 		}
 		// Also tell the manager about this cluster so that controllers can use it.
+		// This will execute the cluster.Start function when the manager starts.
 		if err := mgr.Add(cluster); err != nil {
 			setupLog.Error(err, "unable to add cluster for apiserver override", "apiserver", override.Host)
 			os.Exit(1)
@@ -301,7 +304,6 @@ func main() {
 			os.Exit(1)
 		}
 		novashims.NewAPI(config, decisionController).Init(mux)
-		go decisionsnova.CleanupNovaDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
@@ -342,7 +344,6 @@ func main() {
 			os.Exit(1)
 		}
 		manilashims.NewAPI(config, controller).Init(mux)
-		go decisionsmanila.CleanupManilaDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &decisionscinder.DecisionPipelineController{
@@ -357,7 +358,6 @@ func main() {
 			os.Exit(1)
 		}
 		cindershims.NewAPI(config, controller).Init(mux)
-		go decisionscinder.CleanupCinderDecisionsRegularly(ctx, multiclusterClient, config)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{
@@ -480,18 +480,59 @@ func main() {
 
 	if slices.Contains(config.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
-		copts := client.Options{Scheme: scheme}
-		commitmentsKubernetesClient, err := client.New(restConfig, copts)
-		if err != nil {
-			setupLog.Error(err, "unable to create commitments kubernetes client")
+		syncer := commitments.NewSyncer(multiclusterClient)
+		if err := (&task.Runner{
+			Client:   multiclusterClient,
+			Interval: time.Hour,
+			Name:     "commitments-sync-task",
+			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
+			Init:     func(ctx context.Context) error { return syncer.Init(ctx, config) },
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to add commitments sync task to manager")
 			os.Exit(1)
 		}
-		syncer := commitments.NewSyncer(commitmentsKubernetesClient)
-		if err := syncer.Init(ctx, config); err != nil {
-			setupLog.Error(err, "unable to initialize commitments syncer")
+	}
+	if slices.Contains(config.EnabledTasks, "nova-decisions-cleanup-task") {
+		setupLog.Info("starting nova decisions cleanup task")
+		if err := (&task.Runner{
+			Client:   multiclusterClient,
+			Interval: time.Hour,
+			Name:     "nova-decisions-cleanup-task",
+			Run: func(ctx context.Context) error {
+				return decisionsnova.Cleanup(ctx, multiclusterClient, config)
+			},
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to add nova decisions cleanup task to manager")
 			os.Exit(1)
 		}
-		go syncer.Run(ctx)
+	}
+	if slices.Contains(config.EnabledTasks, "manila-decisions-cleanup-task") {
+		setupLog.Info("starting manila decisions cleanup task")
+		if err := (&task.Runner{
+			Client:   multiclusterClient,
+			Interval: time.Hour,
+			Name:     "manila-decisions-cleanup-task",
+			Run: func(ctx context.Context) error {
+				return decisionsmanila.Cleanup(ctx, multiclusterClient, config)
+			},
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to add manila decisions cleanup task to manager")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(config.EnabledTasks, "cinder-decisions-cleanup-task") {
+		setupLog.Info("starting cinder decisions cleanup task")
+		if err := (&task.Runner{
+			Client:   multiclusterClient,
+			Interval: time.Hour,
+			Name:     "cinder-decisions-cleanup-task",
+			Run: func(ctx context.Context) error {
+				return decisionscinder.Cleanup(ctx, multiclusterClient, config)
+			},
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to add cinder decisions cleanup task to manager")
+			os.Exit(1)
+		}
 	}
 
 	errchan := make(chan error)

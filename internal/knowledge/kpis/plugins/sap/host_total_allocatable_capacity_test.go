@@ -7,38 +7,31 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestHostTotalAllocatableCapacityKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	kpi := &HostTotalAllocatableCapacityKPI{}
-	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
 func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	if err := testDB.CreateTable(
-		testDB.AddTable(sap.HostDetails{}),
-		testDB.AddTable(shared.HostUtilization{}),
-	); err != nil {
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	hypervisors := []any{
+	hostDetails, err := v1alpha1.BoxFeatureList([]any{
 		&sap.HostDetails{
 			ComputeHost:      "vmware-host",
 			AvailabilityZone: "az1",
@@ -87,13 +80,12 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			ExternalCustomer: false,
 			PinnedProjects:   nil,
 		},
-	}
-
-	if err := testDB.Insert(hypervisors...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	hostUtilizations := []any{
+	hostUtilizations, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostUtilization{
 			ComputeHost:            "vmware-host",
 			TotalVCPUsAllocatable:  100,
@@ -113,14 +105,22 @@ func TestHostTotalAllocatableCapacityKPI_Collect(t *testing.T) {
 			TotalDiskAllocatableGB: 0,
 		},
 		// No usage data for kvm-host-2
-	}
-
-	if err := testDB.Insert(hostUtilizations...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	kpi := &HostTotalAllocatableCapacityKPI{}
-	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRuntimeObjects(&v1alpha1.Knowledge{
+			ObjectMeta: v1.ObjectMeta{Name: "sap-host-details"},
+			Status:     v1alpha1.KnowledgeStatus{Raw: hostDetails},
+		}, &v1alpha1.Knowledge{
+			ObjectMeta: v1.ObjectMeta{Name: "host-utilization"},
+			Status:     v1alpha1.KnowledgeStatus{Raw: hostUtilizations},
+		}).Build()
+	if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

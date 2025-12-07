@@ -7,18 +7,15 @@ metadata:
   labels:
     app.kubernetes.io/instance: cortex-cinder
     control-plane: controller-manager
-    {{- if $.Values.serviceMonitor.extraLabels }}
-    {{- toYaml $.Values.serviceMonitor.extraLabels | nindent 4 }}
+    {{- if .Values.serviceMonitor.extraLabels }}
+    {{- toYaml .Values.serviceMonitor.extraLabels | nindent 4 }}
     {{- end }}
 spec:
   endpoints:
-    - path: /metrics
-      port: https
-      scheme: https
-      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-      tlsConfig:
-        insecureSkipVerify: true
+    - port: metrics
   selector:
     matchLabels:
       app.kubernetes.io/instance: cortex-cinder
       control-plane: controller-manager
+  namespaceSelector:
+    any: true

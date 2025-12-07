@@ -15,23 +15,15 @@ import (
 )
 
 func TestLibvirtDomainCPUStealPctExtractor_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &LibvirtDomainCPUStealPctExtractor{}
-
 	config := v1alpha1.KnowledgeSpec{
 		Extractor: v1alpha1.KnowledgeExtractorSpec{
 			Name:   "kvm_libvirt_domain_cpu_steal_pct_extractor",
 			Config: runtime.RawExtension{Raw: []byte(`{}`)},
 		},
 	}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if !testDB.TableExists(LibvirtDomainCPUStealPct{}) {
-		t.Error("expected table to be created")
 	}
 }
 
@@ -95,23 +87,16 @@ func TestLibvirtDomainCPUStealPctExtractor_Extract(t *testing.T) {
 			Config: runtime.RawExtension{Raw: []byte(`{}`)},
 		},
 	}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(&testDB, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Verify the data was inserted into the feature_libvirt_domain_cpu_steal_pct table
-	var stealPcts []LibvirtDomainCPUStealPct
-	table := LibvirtDomainCPUStealPct{}.TableName()
-	_, err := testDB.Select(&stealPcts, "SELECT * FROM "+table)
+	features, err := extractor.Extract()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if len(stealPcts) != 3 {
-		t.Errorf("expected 3 rows, got %d", len(stealPcts))
+	if len(features) != 3 {
+		t.Errorf("expected 3 rows, got %d", len(features))
 	}
 
 	expected := map[string]struct {
@@ -123,7 +108,8 @@ func TestLibvirtDomainCPUStealPctExtractor_Extract(t *testing.T) {
 		"uuid-3": {Host: "compute-host-1", MaxStealTimePct: 30.8}, // Single value of 30.8
 	}
 
-	for _, s := range stealPcts {
+	for _, f := range features {
+		s := f.(LibvirtDomainCPUStealPct)
 		if expected[s.InstanceUUID].Host != s.Host {
 			t.Errorf(
 				"expected host for instance_uuid %s to be %s, got %s",

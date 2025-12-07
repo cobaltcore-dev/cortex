@@ -58,31 +58,6 @@ spec:
           spec:
             description: spec defines the desired state of Knowledge
             properties:
-              databaseSecretRef:
-                description: |-
-                  Database credentials for the database where the knowledge will be stored.
-
-                  Note: this is a legacy feature to stay compatible with the cortex scheduler.
-                  Once the scheduler is moved to use the knowledge via CRs only, we can
-                  remove this.
-
-                  The secret should contain the following keys:
-                  - "username": The database username.
-                  - "password": The database password.
-                  - "host": The database host.
-                  - "port": The database port.
-                  - "database": The database name.
-                properties:
-                  name:
-                    description: name is unique within a namespace to reference a
-                      secret resource.
-                    type: string
-                  namespace:
-                    description: namespace defines the space within which the secret
-                      name must be unique.
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               dependencies:
                 description: Dependencies required for extracting this knowledge.
                 properties:
@@ -207,17 +182,7 @@ spec:
                   The desired recency of this knowledge, i.e. how old it can be until
                   it needs to be re-extracted.
                 type: string
-              storeInDatabaseOnly:
-                default: false
-                description: |-
-                  Whether the knowledge should only be stored in the database and not
-                  in the CR status.
-
-                  Note: this is a legacy feature. Features should always contain condensed
-                  knowledge in the CR status for easy access.
-                type: boolean
             required:
-            - databaseSecretRef
             - recency
             type: object
           status:

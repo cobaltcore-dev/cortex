@@ -6,9 +6,10 @@ package kvm
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/kvm"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // Decision represents a descheduling decision for testing
@@ -19,15 +20,9 @@ type Decision struct {
 }
 
 func TestAvoidHighStealPctStep_Run(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-
-	// Create the feature table
-	tablemap := testDB.AddTable(kvm.LibvirtDomainCPUStealPct{})
-	err := testDB.CreateTable(tablemap)
+	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
-		t.Fatalf("failed to create tables: %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	tests := []struct {
@@ -114,23 +109,19 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clean up the table before each test
-			_, err := testDB.Exec("DELETE FROM " + kvm.LibvirtDomainCPUStealPct{}.TableName())
+			boxed, err := v1alpha1.BoxFeatureList(tt.features)
 			if err != nil {
-				t.Fatalf("failed to clean table: %v", err)
+				t.Fatalf("expected no error, got %v", err)
 			}
-
-			// Insert test data
-			for _, feature := range tt.features {
-				err := testDB.Insert(&feature)
-				if err != nil {
-					t.Fatalf("failed to insert feature: %v", err)
-				}
-			}
-
 			step := &AvoidHighStealPctStep{}
 			step.Options.MaxStealPctOverObservedTimeSpan = tt.threshold
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(&v1alpha1.Knowledge{
+					ObjectMeta: metav1.ObjectMeta{Name: "kvm-libvirt-domain-cpu-steal-pct"},
+					Status:     v1alpha1.KnowledgeStatus{Raw: boxed},
+				}).
+				Build()
 
 			// Run the step
 			decisions, err := step.Run()

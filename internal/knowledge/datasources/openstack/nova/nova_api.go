@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -119,36 +120,56 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 //   - This means historical server data is limited to 3 weeks
 func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
-
 	slog.Info("fetching nova data", "label", label, "changedSince", since)
-	// Fetch all pages.
-	pages, err := func() (pagination.Page, error) {
-		if api.mon.RequestTimer != nil {
-			hist := api.mon.RequestTimer.WithLabelValues(label)
-			timer := prometheus.NewTimer(hist)
-			defer timer.ObserveDuration()
-		}
-		// It is important to omit the changes-since parameter if it is nil.
-		// Otherwise Nova will return huge amounts of data since the beginning of time.
-		lo := servers.ListOpts{
-			Status:     "DELETED",
-			AllTenants: true,
-		}
-		lo.ChangesSince = since.Format(time.RFC3339)
-		return servers.List(api.sc, lo).AllPages(ctx)
-	}()
-	if err != nil {
-		return nil, err
+
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
 	}
-	// Parse the json data into our custom model.
-	var data = &struct {
-		Servers []DeletedServer `json:"servers"`
-	}{}
-	if err := pages.(servers.ServerPage).ExtractInto(data); err != nil {
-		return nil, err
+
+	initialURL := api.sc.Endpoint + "servers/detail?status=DELETED&all_tenants=true&changes-since=" + url.QueryEscape(since.Format(time.RFC3339))
+	var nextURL = &initialURL
+	var deletedServers []DeletedServer
+
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Auth-Token", api.sc.Token())
+		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
+		resp, err := api.sc.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			Servers []DeletedServer `json:"servers"`
+			Links   []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"servers_links"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&list)
+		if err != nil {
+			return nil, err
+		}
+		deletedServers = append(deletedServers, list.Servers...)
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
 	}
-	slog.Info("fetched", "label", label, "count", len(data.Servers))
-	return data.Servers, nil
+
+	slog.Info("fetched", "label", label, "count", len(deletedServers))
+	return deletedServers, nil
 }
 
 // Get all Nova hypervisors.

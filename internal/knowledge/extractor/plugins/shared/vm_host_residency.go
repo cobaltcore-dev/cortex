@@ -29,14 +29,6 @@ type VMHostResidencyHistogramBucket struct {
 	Sum float64 `db:"sum"`
 }
 
-// Table under which the feature is stored.
-func (VMHostResidencyHistogramBucket) TableName() string {
-	return "feature_vm_host_residency_histogram_bucket"
-}
-
-// Indexes for the feature.
-func (VMHostResidencyHistogramBucket) Indexes() map[string][]string { return nil }
-
 // Extractor that extracts the time elapsed until the first migration of a virtual machine.
 type VMHostResidencyExtractor struct {
 	// Common base for all extractors that provides standard functionality.

@@ -18,17 +18,10 @@ import (
 )
 
 func TestHostPinnedProjectsExtractor_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &HostPinnedProjectsExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if !testDB.TableExists(HostPinnedProjects{}) {
-		t.Error("expected table to be created")
 	}
 }
 
@@ -536,26 +529,22 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 			extractor := &HostPinnedProjectsExtractor{}
 			config := v1alpha1.KnowledgeSpec{}
 
-			if err := extractor.Init(&testDB, &testDB, config); err != nil {
+			if err := extractor.Init(&testDB, nil, config); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
-			if _, err := extractor.Extract(); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
-			var hostPinnedProjects []HostPinnedProjects
-			table := HostPinnedProjects{}.TableName()
-			if _, err := testDB.Select(&hostPinnedProjects, "SELECT * FROM "+table); err != nil {
+			features, err := extractor.Extract()
+			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
 			// Check if the expected hosts match the extracted ones
-			if len(hostPinnedProjects) != len(tt.expected) {
-				t.Fatalf("expected %d host pinned projects, got %d", len(tt.expected), len(hostPinnedProjects))
+			if len(features) != len(tt.expected) {
+				t.Fatalf("expected %d host pinned projects, got %d", len(tt.expected), len(features))
 			}
 
-			for _, hpp := range hostPinnedProjects {
+			for _, f := range features {
+				hpp := f.(HostPinnedProjects)
 				found := false
 				for _, exp := range tt.expected {
 					if reflect.DeepEqual(hpp, exp) {

@@ -18,6 +18,9 @@ alerts:
   enabled: true
   prometheus: openstack
 
+serviceMonitor:
+  extraLabels: {}
+
 # SSO certificate to use.
 sharedSSOCert: &sharedSSOCert
   # Certificate "public key". (Optional, remove this key if not needed)
@@ -98,6 +101,8 @@ cortex-scheduling-controllers:
       - nova-decisions-pipeline-controller
       - nova-deschedulings-pipeline-controller
       - explanation-controller
+    enabledTasks:
+      - nova-decisions-cleanup-task
 
 cortex-knowledge-controllers:
   <<: *cortex

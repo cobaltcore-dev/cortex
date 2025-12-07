@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 )
 
 type MockOptions struct {
@@ -27,15 +25,12 @@ func (MockKPI) TableName() string {
 }
 
 func TestBaseKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	opts := conf.NewRawOpts(`{
         "option1": "value1",
         "option2": 2
     }`)
 	baseKPI := MockKPI{}
-	err := baseKPI.Init(testDB, opts)
+	err := baseKPI.Init(nil, nil, opts)
 	if err != nil {
 		t.Errorf("Init() failed: %v", err)
 	}
