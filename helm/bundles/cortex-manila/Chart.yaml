@@ -5,7 +5,7 @@ apiVersion: v2
 name: cortex-manila
 description: A Helm chart deploying Cortex for Manila.
 type: application
-version: 0.0.16
+version: 0.0.17
 appVersion: 0.1.0
 dependencies:
   # from: file://../../library/cortex-postgres
