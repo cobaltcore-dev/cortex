@@ -187,6 +187,8 @@ func (c *Controller) getJointDB(
 func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) error {
 	log := ctrl.LoggerFrom(ctx)
 
+	var datasourcesWithDB int
+
 	// Get all the datasources this kpi depends on, if any.
 	var datasourcesReady int
 	for _, dsRef := range obj.Spec.Dependencies.Datasources {
@@ -204,6 +206,11 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		// Check if datasource is ready
 		if ds.Status.IsReady() {
 			datasourcesReady++
+		}
+
+		// Check if datasource requires a database connection.
+		if ds.Spec.DatabaseSecretRef.Name != "" {
+			datasourcesWithDB++
 		}
 	}
 
@@ -247,8 +254,8 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		if err != nil {
 			return fmt.Errorf("failed to get joint database for kpi %s: %w", obj.Name, err)
 		}
-		if jointDB == nil && dependenciesTotal > 0 {
-			return fmt.Errorf("kpi %s requires at least one datasource or knowledge with a database", obj.Name)
+		if jointDB == nil && datasourcesWithDB > 0 {
+			return fmt.Errorf("kpi %s has datasources requiring database but no connection available", obj.Name)
 		}
 		rawOpts := conf.NewRawOpts(`{}`)
 		if len(obj.Spec.Opts.Raw) > 0 {
