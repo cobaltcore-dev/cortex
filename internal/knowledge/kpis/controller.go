@@ -187,6 +187,7 @@ func (c *Controller) getJointDB(
 func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) error {
 	log := ctrl.LoggerFrom(ctx)
 
+	// Track if any datasource requires a database connection.
 	var datasourcesWithDB int
 
 	// Get all the datasources this kpi depends on, if any.
