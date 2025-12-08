@@ -135,10 +135,6 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			continue // Ironic hosts do not run VMs/instances
 		}
 
-		if detail.HypervisorFamily != "kvm" {
-			continue // This KPI only applies to KVM hosts
-		}
-
 		if utilization.TotalRAMAllocatableMB == 0 || utilization.TotalVCPUsAllocatable == 0 || utilization.TotalDiskAllocatableGB == 0 {
 			slog.Info(
 				"Skipping host since placement is reporting zero allocatable resources",
