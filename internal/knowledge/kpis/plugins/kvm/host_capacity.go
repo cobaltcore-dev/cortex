@@ -63,7 +63,7 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 		nil,
 	)
 	k.hostPAYGCapacityPerHost = prometheus.NewDesc(
-		"cortex_kvm_host_capacity_payg_allocatable",
+		"cortex_kvm_host_capacity_payg",
 		"PAYG resources available on the KVM hosts (individually by host).",
 		[]string{
 			"compute_host",
