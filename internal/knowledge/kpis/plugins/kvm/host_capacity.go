@@ -32,9 +32,10 @@ type HostCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}]   // No options passed through yaml config
 	hostUtilizedCapacityPerHost *prometheus.Desc
-	hostTotalCapacityPerHost    *prometheus.Desc
+	hostPAYGCapacityPerHost     *prometheus.Desc
 	hostFailoverCapacityPerHost *prometheus.Desc
 	hostReservedCapacityPerHost *prometheus.Desc
+	hostTotalCapacityPerHost    *prometheus.Desc
 }
 
 func (HostCapacityKPI) GetName() string {
@@ -61,9 +62,9 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 		},
 		nil,
 	)
-	k.hostTotalCapacityPerHost = prometheus.NewDesc(
-		"cortex_kvm_host_capacity_total_allocatable",
-		"Total resources available on the KVM hosts (individually by host).",
+	k.hostPAYGCapacityPerHost = prometheus.NewDesc(
+		"cortex_kvm_host_capacity_payg_allocatable",
+		"PAYG resources available on the KVM hosts (individually by host).",
 		[]string{
 			"compute_host",
 			"resource",
@@ -109,14 +110,31 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 		},
 		nil,
 	)
+	k.hostTotalCapacityPerHost = prometheus.NewDesc(
+		"cortex_kvm_host_capacity_total",
+		"Total resources on the KVM hosts (individually by host).",
+		[]string{
+			"compute_host",
+			"resource",
+			"availability_zone",
+			"building_block",
+			"cpu_architecture",
+			"workload_type",
+			"enabled",
+			"decommissioned",
+			"external_customer",
+		},
+		nil,
+	)
 	return nil
 }
 
 func (k *HostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.hostUtilizedCapacityPerHost
-	ch <- k.hostTotalCapacityPerHost
+	ch <- k.hostPAYGCapacityPerHost
 	ch <- k.hostReservedCapacityPerHost
 	ch <- k.hostFailoverCapacityPerHost
+	ch <- k.hostTotalCapacityPerHost
 }
 
 func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
@@ -176,23 +194,49 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 
-		export(ch, k.hostUtilizedCapacityPerHost, "cpu", utilization.VCPUsUsed, host)
-		export(ch, k.hostUtilizedCapacityPerHost, "ram", utilization.RAMUsedMB, host)
-		export(ch, k.hostUtilizedCapacityPerHost, "disk", utilization.DiskUsedGB, host)
+		cpuUsed := utilization.VCPUsUsed
+		ramUsed := utilization.RAMUsedMB
+		diskUsed := utilization.DiskUsedGB
 
-		export(ch, k.hostTotalCapacityPerHost, "cpu", utilization.TotalVCPUsAllocatable, host)
-		export(ch, k.hostTotalCapacityPerHost, "ram", utilization.TotalRAMAllocatableMB, host)
-		export(ch, k.hostTotalCapacityPerHost, "disk", utilization.TotalDiskAllocatableGB, host)
+		export(ch, k.hostUtilizedCapacityPerHost, "cpu", cpuUsed, host)
+		export(ch, k.hostUtilizedCapacityPerHost, "ram", ramUsed, host)
+		export(ch, k.hostUtilizedCapacityPerHost, "disk", diskUsed, host)
 
-		// TODO join reservations and failover capacity crds with the current hypervisor
-		// TODO USING DUMMY VALUES FOR NOW
-		export(ch, k.hostReservedCapacityPerHost, "cpu", 100, host)
-		export(ch, k.hostReservedCapacityPerHost, "ram", 1024, host)
-		export(ch, k.hostReservedCapacityPerHost, "disk", 64, host)
+		// WARNING: Using dummy data for now.
+		// TODO Replace with actual data from reservations capacity CRDs
+		cpuReserved := 100.0
+		ramReserved := 1024.0
+		diskReserved := 64.0
 
-		export(ch, k.hostFailoverCapacityPerHost, "cpu", 100, host)
-		export(ch, k.hostFailoverCapacityPerHost, "ram", 2048, host)
-		export(ch, k.hostFailoverCapacityPerHost, "disk", 128, host)
+		export(ch, k.hostReservedCapacityPerHost, "cpu", cpuReserved, host)
+		export(ch, k.hostReservedCapacityPerHost, "ram", ramReserved, host)
+		export(ch, k.hostReservedCapacityPerHost, "disk", diskReserved, host)
+
+		// WARNING: Using dummy data for now.
+		// TODO Replace with actual data from failover capacity CRDs
+		cpuFailover := 100.0
+		ramFailover := 1024.0
+		diskFailover := 128.0
+
+		export(ch, k.hostFailoverCapacityPerHost, "cpu", cpuFailover, host)
+		export(ch, k.hostFailoverCapacityPerHost, "ram", ramFailover, host)
+		export(ch, k.hostFailoverCapacityPerHost, "disk", diskFailover, host)
+
+		totalCPU := utilization.TotalVCPUsAllocatable
+		totalRAM := utilization.TotalRAMAllocatableMB
+		totalDisk := utilization.TotalDiskAllocatableGB
+
+		export(ch, k.hostTotalCapacityPerHost, "cpu", totalCPU, host)
+		export(ch, k.hostTotalCapacityPerHost, "ram", totalRAM, host)
+		export(ch, k.hostTotalCapacityPerHost, "disk", totalDisk, host)
+
+		paygCPU := totalCPU - cpuUsed - cpuReserved - cpuFailover
+		paygRAM := totalRAM - ramUsed - ramReserved - ramFailover
+		paygDisk := totalDisk - diskUsed - diskReserved - diskFailover
+
+		export(ch, k.hostPAYGCapacityPerHost, "cpu", paygCPU, host)
+		export(ch, k.hostPAYGCapacityPerHost, "ram", paygRAM, host)
+		export(ch, k.hostPAYGCapacityPerHost, "disk", paygDisk, host)
 	}
 }
 
