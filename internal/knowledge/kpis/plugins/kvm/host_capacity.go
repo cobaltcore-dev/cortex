@@ -4,12 +4,15 @@
 package kvm
 
 import (
+	"context"
 	"log/slog"
 	"strconv"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -25,18 +28,6 @@ func getBuildingBlock(hostName string) string {
 	return "unknown"
 }
 
-type hostUtilizedCapacity struct {
-	ComputeHostName  string `db:"compute_host"`
-	AvailabilityZone string `db:"availability_zone"`
-	CPUArchitecture  string `db:"cpu_architecture"`
-	WorkloadType     string `db:"workload_type"`
-	BuildingBlock    string `db:"building_block"`
-	Enabled          bool   `db:"enabled"`
-	Decommissioned   bool   `db:"decommissioned"`
-	ExternalCustomer bool   `db:"external_customer"`
-	shared.HostUtilization
-}
-
 type HostCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}]   // No options passed through yaml config
@@ -50,8 +41,8 @@ func (HostCapacityKPI) GetName() string {
 	return "cortex_kvm_host_capacity_kpi"
 }
 
-func (k *HostCapacityKPI) Init(db db.DB, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, opts); err != nil {
+func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.hostUtilizedCapacityPerHost = prometheus.NewDesc(
@@ -127,49 +118,64 @@ func (k *HostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 
 func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	// TODO use hypervisor CRD as data source
-	var hostUtilizedCapacity []hostUtilizedCapacity
+	hostDetailsKnowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "sap-host-details"},
+		hostDetailsKnowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge sap-host-details", "err", err)
+		return
+	}
+	hostDetails, err := v1alpha1.
+		UnboxFeatureList[sap.HostDetails](hostDetailsKnowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox storage pool cpu usage", "err", err)
+		return
+	}
+	detailsByComputeHost := make(map[string]sap.HostDetails)
+	for _, detail := range hostDetails {
+		detailsByComputeHost[detail.ComputeHost] = detail
+	}
 
-	query := `
-		SELECT
-    		hd.compute_host,
-    		hd.availability_zone,
-    		hd.cpu_architecture,
-    		hd.workload_type,
-    		hd.enabled,
-			hd.decommissioned,
-			hd.external_customer,
-            COALESCE(hu.ram_used_mb, 0) AS ram_used_mb,
-			COALESCE(hu.vcpus_used, 0) AS vcpus_used,
-			COALESCE(hu.disk_used_gb, 0) AS disk_used_gb,
-            COALESCE(hu.total_ram_allocatable_mb, 0) AS total_ram_allocatable_mb,
-			COALESCE(hu.total_vcpus_allocatable, 0) AS total_vcpus_allocatable,
-			COALESCE(hu.total_disk_allocatable_gb, 0) AS total_disk_allocatable_gb
-		FROM ` + sap.HostDetails{}.TableName() + ` AS hd
-		LEFT JOIN ` + shared.HostUtilization{}.TableName() + ` AS hu
-		    ON hu.compute_host = hd.compute_host
-		WHERE hd.hypervisor_type != 'ironic' AND hd.hypervisor_family = 'kvm';
-    `
-	if _, err := k.DB.Select(&hostUtilizedCapacity, query); err != nil {
-		slog.Error("failed to select host total capacity", "err", err)
+	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-utilization"},
+		hostUtilizationKnowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge host-utilization", "err", err)
+		return
+	}
+	hostUtilizations, err := v1alpha1.
+		UnboxFeatureList[shared.HostUtilization](hostUtilizationKnowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox host utilization", "err", err)
 		return
 	}
 
 	// TODO get all reservations and failover capacity crds
 
-	for _, host := range hostUtilizedCapacity {
+	for _, utilization := range hostUtilizations {
+		host, exists := detailsByComputeHost[utilization.ComputeHost]
+		if !exists {
+			slog.Warn("no host details found for compute host", "compute_host", utilization.ComputeHost)
+			continue
+		}
+
 		// TODO check if there is a flag for this in the hypervisor CRD
-		if host.TotalRAMAllocatableMB == 0 || host.TotalVCPUsAllocatable == 0 || host.TotalDiskAllocatableGB == 0 {
+		if utilization.TotalRAMAllocatableMB == 0 || utilization.TotalVCPUsAllocatable == 0 || utilization.TotalDiskAllocatableGB == 0 {
 			// Skip hosts with no capacity information
 			continue
 		}
 
-		export(ch, k.hostUtilizedCapacityPerHost, "cpu", host.VCPUsUsed, host)
-		export(ch, k.hostUtilizedCapacityPerHost, "ram", host.RAMUsedMB, host)
-		export(ch, k.hostUtilizedCapacityPerHost, "disk", host.DiskUsedGB, host)
+		export(ch, k.hostUtilizedCapacityPerHost, "cpu", utilization.VCPUsUsed, host)
+		export(ch, k.hostUtilizedCapacityPerHost, "ram", utilization.RAMUsedMB, host)
+		export(ch, k.hostUtilizedCapacityPerHost, "disk", utilization.DiskUsedGB, host)
 
-		export(ch, k.hostTotalCapacityPerHost, "cpu", host.TotalVCPUsAllocatable, host)
-		export(ch, k.hostTotalCapacityPerHost, "ram", host.TotalRAMAllocatableMB, host)
-		export(ch, k.hostTotalCapacityPerHost, "disk", host.TotalDiskAllocatableGB, host)
+		export(ch, k.hostTotalCapacityPerHost, "cpu", utilization.TotalVCPUsAllocatable, host)
+		export(ch, k.hostTotalCapacityPerHost, "ram", utilization.TotalRAMAllocatableMB, host)
+		export(ch, k.hostTotalCapacityPerHost, "disk", utilization.TotalDiskAllocatableGB, host)
 
 		// TODO join reservations and failover capacity crds with the current hypervisor
 		// TODO USING DUMMY VALUES FOR NOW
@@ -183,8 +189,8 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func export(ch chan<- prometheus.Metric, metric *prometheus.Desc, resource string, value float64, host hostUtilizedCapacity) {
-	bb := getBuildingBlock(host.ComputeHostName)
+func export(ch chan<- prometheus.Metric, metric *prometheus.Desc, resource string, value float64, host sap.HostDetails) {
+	bb := getBuildingBlock(host.ComputeHost)
 
 	enabled := strconv.FormatBool(host.Enabled)
 	decommissioned := strconv.FormatBool(host.Decommissioned)
@@ -194,7 +200,7 @@ func export(ch chan<- prometheus.Metric, metric *prometheus.Desc, resource strin
 		metric,
 		prometheus.GaugeValue,
 		value,
-		host.ComputeHostName,
+		host.ComputeHost,
 		resource,
 		host.AvailabilityZone,
 		bb,
