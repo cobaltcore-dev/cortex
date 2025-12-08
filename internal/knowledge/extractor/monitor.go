@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Collection of Prometheus metrics to monitor feature extraction.
@@ -65,9 +66,12 @@ type FeatureExtractorMonitor[F plugins.FeatureExtractor] struct {
 }
 
 // Initialize the wrapped feature extractor with the database and options.
-func (m FeatureExtractorMonitor[F]) Init(datasourceDB, extractorDB *db.DB, spec v1alpha1.KnowledgeSpec) error {
+func (m FeatureExtractorMonitor[F]) Init(
+	datasourceDB *db.DB, client client.Client, spec v1alpha1.KnowledgeSpec,
+) error {
+
 	// Configure the wrapped feature extractor.
-	return m.FeatureExtractor.Init(datasourceDB, extractorDB, spec)
+	return m.FeatureExtractor.Init(datasourceDB, client, spec)
 }
 
 // Extract features using the wrapped feature extractor and measure the time it takes.

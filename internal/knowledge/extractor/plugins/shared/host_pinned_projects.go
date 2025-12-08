@@ -29,14 +29,6 @@ type HostPinnedProjects struct {
 	ComputeHost *string `db:"compute_host"`
 }
 
-// Table under which the feature is stored.
-func (HostPinnedProjects) TableName() string {
-	return "feature_host_pinned_projects_v2"
-}
-
-// Indexes for the feature.
-func (HostPinnedProjects) Indexes() map[string][]string { return nil }
-
 // Extractor that extracts the pinned projects of a compute host.
 type HostPinnedProjectsExtractor struct {
 	// Common base for all extractors that provides standard functionality.

@@ -6,44 +6,44 @@ package vmware
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	"github.com/prometheus/client_golang/prometheus"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestVMwareProjectNoisinessKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	kpi := &VMwareProjectNoisinessKPI{}
-	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
 func TestVMwareProjectNoisinessKPI_Collect(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	if err := testDB.CreateTable(
-		testDB.AddTable(vmware.VROpsProjectNoisiness{}),
-	); err != nil {
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	vropsProjectNoisiness := []any{
+	vropsProjectNoisiness, err := v1alpha1.BoxFeatureList([]any{
 		&vmware.VROpsProjectNoisiness{Project: "project1", ComputeHost: "host1", AvgCPUOfProject: 10.5},
 		&vmware.VROpsProjectNoisiness{Project: "project2", ComputeHost: "host2", AvgCPUOfProject: 15.0},
-	}
-	if err := testDB.Insert(vropsProjectNoisiness...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	kpi := &VMwareProjectNoisinessKPI{}
-	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(&v1alpha1.Knowledge{
+			ObjectMeta: v1.ObjectMeta{Name: "vmware-project-noisiness"},
+			Status:     v1alpha1.KnowledgeStatus{Raw: vropsProjectNoisiness},
+		}).
+		Build()
+	if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

@@ -14,20 +14,15 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestHostDetailsExtractor_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &HostDetailsExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if !testDB.TableExists(HostDetails{}) {
-		t.Error("expected table to be created")
 	}
 }
 
@@ -35,18 +30,21 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
+
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
 	// Create dependency tables
 	if err := testDB.CreateTable(
-		testDB.AddTable(HostDetails{}),
-		testDB.AddTable(shared.HostAZ{}),
 		testDB.AddTable(nova.Hypervisor{}),
 		testDB.AddTable(placement.Trait{}),
-		testDB.AddTable(shared.HostPinnedProjects{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	hostPinnedProjects := []any{
+	hostPinnedProjects, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), Label: testlib.Ptr("project-123")},
 		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), Label: testlib.Ptr("project-456")},
 		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("node001-bb02"), Label: nil},
@@ -54,9 +52,8 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("node002-bb03"), Label: nil},
 		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("node003-bb03"), Label: nil},
 		&shared.HostPinnedProjects{ComputeHost: testlib.Ptr("node004-bb03"), Label: nil},
-	}
-
-	if err := testDB.Insert(hostPinnedProjects...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -99,32 +96,37 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	hostAvailabilityZones := []any{
+	hostAvailabilityZones, err := v1alpha1.BoxFeatureList([]any{
 		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az1"), ComputeHost: "nova-compute-bb01"},
 		&shared.HostAZ{AvailabilityZone: nil, ComputeHost: "node001-bb02"},
 		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node002-bb03"},
 		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "ironic-host-01"},
 		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node003-bb03"},
 		&shared.HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node004-bb03"},
-	}
-
-	if err := testDB.Insert(hostAvailabilityZones...); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	extractor := &HostDetailsExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(&v1alpha1.Knowledge{
+			ObjectMeta: v1.ObjectMeta{Name: "host-pinned-projects"},
+			Status:     v1alpha1.KnowledgeStatus{Raw: hostPinnedProjects},
+		}).
+		WithObjects(&v1alpha1.Knowledge{
+			ObjectMeta: v1.ObjectMeta{Name: "host-az"},
+			Status:     v1alpha1.KnowledgeStatus{Raw: hostAvailabilityZones},
+		}).
+		Build()
+	if err := extractor.Init(&testDB, client, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if _, err := extractor.Extract(); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	var hostDetails []HostDetails
-	_, err := testDB.Select(&hostDetails, "SELECT * FROM "+HostDetails{}.TableName()+" ORDER BY compute_host")
+	features, err := extractor.Extract()
 	if err != nil {
-		t.Fatalf("expected no error from Extract, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
 
 	expected := []HostDetails{
@@ -215,14 +217,25 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	}
 
 	// Check if the expected details match the extracted ones
-	if len(hostDetails) != len(expected) {
-		t.Fatalf("expected %d host details, got %d", len(expected), len(hostDetails))
+	if len(features) != len(expected) {
+		t.Fatalf("expected %d host details, got %d", len(expected), len(features))
 	}
 	// Compare each expected detail with the extracted ones
-	for idx, expectedDetail := range expected {
-		details := hostDetails[idx]
-		if !reflect.DeepEqual(details, expectedDetail) {
-			t.Errorf("expected %v, got %v", expectedDetail, details)
+	for _, expectedDetail := range expected {
+		found := false
+		for _, feature := range features {
+			extractedDetail := feature.(HostDetails)
+			if extractedDetail.ComputeHost == expectedDetail.ComputeHost {
+				found = true
+				if !reflect.DeepEqual(extractedDetail, expectedDetail) {
+					t.Errorf("mismatch for host %s:\nexpected: %+v\ngot:      %+v",
+						expectedDetail.ComputeHost, expectedDetail, extractedDetail)
+				}
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected host detail for %s not found", expectedDetail.ComputeHost)
 		}
 	}
 }

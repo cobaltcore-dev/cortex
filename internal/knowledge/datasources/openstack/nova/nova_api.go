@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -127,7 +128,7 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 		defer timer.ObserveDuration()
 	}
 
-	initialURL := api.sc.Endpoint + "servers/detail?status=DELETED&all_tenants=true&changes-since=" + since.Format(time.RFC3339)
+	initialURL := api.sc.Endpoint + "servers/detail?status=DELETED&all_tenants=true&changes-since=" + url.QueryEscape(since.Format(time.RFC3339))
 	var nextURL = &initialURL
 	var deletedServers []DeletedServer
 

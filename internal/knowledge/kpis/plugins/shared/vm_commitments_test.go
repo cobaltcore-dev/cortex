@@ -19,7 +19,7 @@ func TestVMCommitmentsKPI_Init(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	kpi := &VMCommitmentsKPI{}
-	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -35,14 +35,6 @@ func TestVMCommitmentsKPI_Init(t *testing.T) {
 	}
 	if kpi.committedMemoryDesc == nil {
 		t.Error("committedMemoryDesc should be initialized")
-	}
-}
-
-func TestVMCommitmentsKPI_GetName(t *testing.T) {
-	kpi := &VMCommitmentsKPI{}
-	expected := "vm_commitments_kpi"
-	if got := kpi.GetName(); got != expected {
-		t.Errorf("expected %s, got %s", expected, got)
 	}
 }
 
@@ -182,7 +174,7 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 	}
 
 	kpi := &VMCommitmentsKPI{}
-	if err := kpi.Init(testDB, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type kpilogger struct {
@@ -28,9 +29,9 @@ func (l kpilogger) Collect(ch chan<- prometheus.Metric) {
 	slog.Info("kpi: collected", "name", l.kpi.GetName())
 }
 
-func (l kpilogger) Init(db db.DB, opts conf.RawOpts) error {
+func (l kpilogger) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
 	slog.Info("kpi: initializing", "name", l.kpi.GetName())
-	return l.kpi.Init(db, opts)
+	return l.kpi.Init(db, client, opts)
 }
 
 func (l kpilogger) GetName() string {

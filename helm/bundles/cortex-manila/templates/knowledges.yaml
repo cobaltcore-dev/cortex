@@ -5,9 +5,6 @@ metadata:
   name: netapp-storage-pool-cpu-usage-manila
 spec:
   operator: cortex-manila
-  databaseSecretRef:
-    name: cortex-manila-postgres
-    namespace: {{ .Release.Namespace }}
   extractor:
     name: netapp_storage_pool_cpu_usage_extractor
   description: |

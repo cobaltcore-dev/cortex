@@ -8,7 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type MockOptions struct {
@@ -22,11 +22,13 @@ func (o MockOptions) Validate() error {
 
 type BaseStep struct {
 	Options MockOptions
-	DB      db.DB
+	DB      *db.DB
+	Client  client.Client
 }
 
-func (s *BaseStep) Init(db db.DB, opts conf.RawOpts) error {
+func (s *BaseStep) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
 	s.DB = db
+	s.Client = client
 	// Use the actual unmarshal logic from conf.RawOpts
 	if err := opts.Unmarshal(&s.Options); err != nil {
 		return err
@@ -35,17 +37,13 @@ func (s *BaseStep) Init(db db.DB, opts conf.RawOpts) error {
 }
 
 func TestBaseStep_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-
 	opts := conf.NewRawOpts(`{
         "option1": "value1",
         "option2": 2
     }`)
 
 	step := &BaseStep{}
-	err := step.Init(testDB, opts)
+	err := step.Init(nil, nil, opts)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/kvm"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/netapp"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/sap"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/shared"
@@ -34,6 +35,8 @@ import (
 
 // Configuration of supported kpis.
 var SupportedKPIsByImpl = map[string]plugins.KPI{
+	// KVM kpis.
+	"kvm_host_capacity_kpi": &kvm.HostCapacityKPI{},
 	// VMware kpis.
 	"vmware_host_contention_kpi":   &vmware.VMwareHostContentionKPI{},
 	"vmware_project_noisiness_kpi": &vmware.VMwareProjectNoisinessKPI{},
@@ -144,12 +147,11 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 	return nil
 }
 
-// Find a joint database connection for all given datasources and knowledges.
+// Find a joint database connection for all given datasources.
 // The returned database can be nil if no database is needed.
 func (c *Controller) getJointDB(
 	ctx context.Context,
 	datasources []corev1.ObjectReference,
-	knowledges []corev1.ObjectReference,
 ) (*db.DB, error) {
 	// Check if all datasources configured share the same database secret ref.
 	var databaseSecretRef *corev1.SecretReference
@@ -171,27 +173,6 @@ func (c *Controller) getJointDB(
 			return nil, errors.New("datasources have different database secret refs")
 		}
 	}
-	for _, knRef := range knowledges {
-		kn := &v1alpha1.Knowledge{}
-		if err := c.Get(ctx, client.ObjectKey{
-			Namespace: knRef.Namespace,
-			Name:      knRef.Name,
-		}, kn); err != nil {
-			if client.IgnoreNotFound(err) == nil {
-				continue
-			}
-			return nil, err
-		}
-		if kn.Spec.DatabaseSecretRef == nil {
-			continue
-		}
-		if databaseSecretRef == nil {
-			databaseSecretRef = kn.Spec.DatabaseSecretRef
-		} else if databaseSecretRef.Name != kn.Spec.DatabaseSecretRef.Name ||
-			databaseSecretRef.Namespace != kn.Spec.DatabaseSecretRef.Namespace {
-			return nil, errors.New("datasources have different database secret refs")
-		}
-	}
 	// When we have datasources reading from a database, connect to it.
 	var authenticatedDB *db.DB
 	if databaseSecretRef != nil {
@@ -208,6 +189,9 @@ func (c *Controller) getJointDB(
 // Handle changes to a kpi resource.
 func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) error {
 	log := ctrl.LoggerFrom(ctx)
+
+	// Track if any datasource requires a database connection.
+	var datasourcesWithDB int
 
 	// Get all the datasources this kpi depends on, if any.
 	var datasourcesReady int
@@ -226,6 +210,11 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		// Check if datasource is ready
 		if ds.Status.IsReady() {
 			datasourcesReady++
+		}
+
+		// Check if datasource requires a database connection.
+		if ds.Spec.DatabaseSecretRef.Name != "" {
+			datasourcesWithDB++
 		}
 	}
 
@@ -265,25 +254,18 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		}
 		registeredKPI = &kpilogger{kpi: registeredKPI}
 		// Get joint database connection for all dependencies.
-		jointDB, err := c.getJointDB(ctx,
-			obj.Spec.Dependencies.Datasources,
-			obj.Spec.Dependencies.Knowledges)
+		jointDB, err := c.getJointDB(ctx, obj.Spec.Dependencies.Datasources)
 		if err != nil {
 			return fmt.Errorf("failed to get joint database for kpi %s: %w", obj.Name, err)
 		}
-		if jointDB == nil && dependenciesTotal > 0 {
-			return fmt.Errorf("kpi %s requires at least one datasource or knowledge with a database", obj.Name)
+		if jointDB == nil && datasourcesWithDB > 0 {
+			return fmt.Errorf("kpi %s has datasources requiring database but no connection available", obj.Name)
 		}
 		rawOpts := conf.NewRawOpts(`{}`)
 		if len(obj.Spec.Opts.Raw) > 0 {
 			rawOpts = conf.NewRawOptsBytes(obj.Spec.Opts.Raw)
 		}
-		// Initialize KPI with database if available, otherwise with empty DB
-		var dbToUse db.DB
-		if jointDB != nil {
-			dbToUse = *jointDB
-		}
-		if err := registeredKPI.Init(dbToUse, rawOpts); err != nil {
+		if err := registeredKPI.Init(jointDB, c.Client, rawOpts); err != nil {
 			return fmt.Errorf("failed to initialize kpi %s: %w", obj.Name, err)
 		}
 		if err := metrics.Registry.Register(registeredKPI); err != nil {

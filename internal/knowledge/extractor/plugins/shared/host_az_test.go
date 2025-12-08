@@ -16,17 +16,10 @@ import (
 )
 
 func TestHostDetailsExtractor_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	extractor := &HostAZExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(nil, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if !testDB.TableExists(HostAZ{}) {
-		t.Error("expected table to be created")
 	}
 }
 
@@ -74,10 +67,11 @@ func TestHostAZExtractor_Extract(t *testing.T) {
 
 	extractor := &HostAZExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, &testDB, config); err != nil {
+	if err := extractor.Init(&testDB, nil, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if _, err := extractor.Extract(); err != nil {
+	features, err := extractor.Extract()
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -102,17 +96,12 @@ func TestHostAZExtractor_Extract(t *testing.T) {
 		},
 	}
 
-	var hostAZs []HostAZ
-	_, err := testDB.Select(&hostAZs, "SELECT * FROM "+HostAZ{}.TableName()+` ORDER BY compute_host`)
-	if err != nil {
-		t.Fatalf("expected no error from Extract, got %v", err)
+	if len(features) != len(expectedHostAZs) {
+		t.Errorf("expected %d host AZs, got %d", len(expectedHostAZs), len(features))
 	}
 
-	if len(hostAZs) != len(expectedHostAZs) {
-		t.Errorf("expected %d host AZs, got %d", len(expectedHostAZs), len(hostAZs))
-	}
-
-	for idx, hostAZ := range hostAZs {
+	for idx, f := range features {
+		hostAZ := f.(HostAZ)
 		if !reflect.DeepEqual(hostAZ, expectedHostAZs[idx]) {
 			t.Errorf("expected host AZ for %s to be %+v, got %+v", hostAZ.ComputeHost, expectedHostAZs[idx], hostAZ)
 		}

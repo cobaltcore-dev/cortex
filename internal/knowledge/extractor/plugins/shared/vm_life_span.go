@@ -39,14 +39,6 @@ type VMLifeSpanHistogramBucket struct {
 	Deleted bool `db:"deleted"`
 }
 
-// Table under which the feature is stored.
-func (VMLifeSpanHistogramBucket) TableName() string {
-	return "feature_vm_life_span_histogram_bucket_v2"
-}
-
-// Indexes for the feature.
-func (VMLifeSpanHistogramBucket) Indexes() map[string][]string { return nil }
-
 // Extractor that extracts the time elapsed until the vm was deleted.
 type VMLifeSpanHistogramExtractor struct {
 	// Common base for all extractors that provides standard functionality.

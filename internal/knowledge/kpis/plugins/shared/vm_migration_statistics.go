@@ -4,13 +4,16 @@
 package shared
 
 import (
+	"context"
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Advanced statistics about openstack migrations.
@@ -26,8 +29,8 @@ func (VMMigrationStatisticsKPI) GetName() string {
 	return "vm_migration_statistics_kpi"
 }
 
-func (k *VMMigrationStatisticsKPI) Init(db db.DB, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, opts); err != nil {
+func (k *VMMigrationStatisticsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.timeUntilMigrationDesc = prometheus.NewDesc(
@@ -44,11 +47,19 @@ func (k *VMMigrationStatisticsKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *VMMigrationStatisticsKPI) Collect(ch chan<- prometheus.Metric) {
-	// The buckets are already aggregated in the database, so we can just select them.
-	var buckets []shared.VMHostResidencyHistogramBucket
-	tableName := shared.VMHostResidencyHistogramBucket{}.TableName()
-	if _, err := k.DB.Select(&buckets, "SELECT * FROM "+tableName); err != nil {
-		slog.Error("failed to select vm host residencies", "err", err)
+	knowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "vm-host-residency"},
+		knowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge vm-host-residency", "err", err)
+		return
+	}
+	buckets, err := v1alpha1.
+		UnboxFeatureList[shared.VMHostResidencyHistogramBucket](knowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox vm host residency", "err", err)
 		return
 	}
 	bucketsByFlavor := make(map[string][]shared.VMHostResidencyHistogramBucket)

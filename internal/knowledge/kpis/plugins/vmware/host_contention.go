@@ -4,14 +4,17 @@
 package vmware
 
 import (
+	"context"
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/tools"
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type VMwareHostContentionKPI struct {
@@ -26,8 +29,8 @@ func (VMwareHostContentionKPI) GetName() string {
 	return "vmware_host_contention_kpi"
 }
 
-func (k *VMwareHostContentionKPI) Init(db db.DB, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, opts); err != nil {
+func (k *VMwareHostContentionKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.hostCPUContentionMax = prometheus.NewDesc(
@@ -49,10 +52,19 @@ func (k *VMwareHostContentionKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *VMwareHostContentionKPI) Collect(ch chan<- prometheus.Metric) {
-	var contentions []vmware.VROpsHostsystemContentionLongTerm
-	tableName := vmware.VROpsHostsystemContentionLongTerm{}.TableName()
-	if _, err := k.DB.Select(&contentions, "SELECT * FROM "+tableName); err != nil {
-		slog.Error("failed to select hostsystem contention", "err", err)
+	knowledge := &v1alpha1.Knowledge{}
+	if err := k.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "vmware-long-term-contended-hosts"},
+		knowledge,
+	); err != nil {
+		slog.Error("failed to get knowledge vmware-long-term-contended-hosts", "err", err)
+		return
+	}
+	contentions, err := v1alpha1.
+		UnboxFeatureList[vmware.VROpsHostsystemContentionLongTerm](knowledge.Status.Raw)
+	if err != nil {
+		slog.Error("failed to unbox vmware hostsystem contention", "err", err)
 		return
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)
