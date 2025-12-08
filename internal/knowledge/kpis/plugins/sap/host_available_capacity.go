@@ -255,34 +255,34 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			disabledReason,
 			pinnedProjects,
 		)
+	}
 
-		buckets := prometheus.LinearBuckets(0, 5, 20)
-		// Histogram for CPU
-		keysFunc := func(hs shared.HostUtilization) []string { return []string{"cpu"} }
-		valueFunc := func(hs shared.HostUtilization) float64 {
-			return (hs.TotalVCPUsAllocatable - hs.VCPUsUsed) / hs.TotalVCPUsAllocatable * 100
-		}
-		hists, counts, sums := tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
-		for key, hist := range hists {
-			ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
-		}
-		// Histogram for RAM
-		keysFunc = func(hs shared.HostUtilization) []string { return []string{"ram"} }
-		valueFunc = func(hs shared.HostUtilization) float64 {
-			return (hs.TotalRAMAllocatableMB - hs.RAMUsedMB) / hs.TotalRAMAllocatableMB * 100
-		}
-		hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
-		for key, hist := range hists {
-			ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
-		}
-		// Histogram for Disk
-		keysFunc = func(hs shared.HostUtilization) []string { return []string{"disk"} }
-		valueFunc = func(hs shared.HostUtilization) float64 {
-			return (hs.TotalDiskAllocatableGB - hs.DiskUsedGB) / hs.TotalDiskAllocatableGB * 100
-		}
-		hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
-		for key, hist := range hists {
-			ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
-		}
+	buckets := prometheus.LinearBuckets(0, 5, 20)
+	// Histogram for CPU
+	keysFunc := func(hs shared.HostUtilization) []string { return []string{"cpu"} }
+	valueFunc := func(hs shared.HostUtilization) float64 {
+		return (hs.TotalVCPUsAllocatable - hs.VCPUsUsed) / hs.TotalVCPUsAllocatable * 100
+	}
+	hists, counts, sums := tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
+	for key, hist := range hists {
+		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+	}
+	// Histogram for RAM
+	keysFunc = func(hs shared.HostUtilization) []string { return []string{"ram"} }
+	valueFunc = func(hs shared.HostUtilization) float64 {
+		return (hs.TotalRAMAllocatableMB - hs.RAMUsedMB) / hs.TotalRAMAllocatableMB * 100
+	}
+	hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
+	for key, hist := range hists {
+		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+	}
+	// Histogram for Disk
+	keysFunc = func(hs shared.HostUtilization) []string { return []string{"disk"} }
+	valueFunc = func(hs shared.HostUtilization) float64 {
+		return (hs.TotalDiskAllocatableGB - hs.DiskUsedGB) / hs.TotalDiskAllocatableGB * 100
+	}
+	hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
+	for key, hist := range hists {
+		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
 	}
 }
