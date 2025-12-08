@@ -165,6 +165,10 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 
+		if host.HypervisorType == "ironic" || host.HypervisorFamily != "kvm" {
+			continue
+		}
+
 		// TODO check if there is a flag for this in the hypervisor CRD
 		if utilization.TotalRAMAllocatableMB == 0 || utilization.TotalVCPUsAllocatable == 0 || utilization.TotalDiskAllocatableGB == 0 {
 			// Skip hosts with no capacity information
