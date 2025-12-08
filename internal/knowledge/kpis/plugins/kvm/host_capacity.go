@@ -114,6 +114,9 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 
 func (k *HostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.hostUtilizedCapacityPerHost
+	ch <- k.hostTotalCapacityPerHost
+	ch <- k.hostReservedCapacityPerHost
+	ch <- k.hostFailoverCapacityPerHost
 }
 
 func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
@@ -155,7 +158,6 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// TODO get all reservations and failover capacity crds
-
 	for _, utilization := range hostUtilizations {
 		host, exists := detailsByComputeHost[utilization.ComputeHost]
 		if !exists {
@@ -166,6 +168,7 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		// TODO check if there is a flag for this in the hypervisor CRD
 		if utilization.TotalRAMAllocatableMB == 0 || utilization.TotalVCPUsAllocatable == 0 || utilization.TotalDiskAllocatableGB == 0 {
 			// Skip hosts with no capacity information
+			slog.Warn("skipping host with zero total allocatable capacity", "compute_host", utilization.ComputeHost)
 			continue
 		}
 
