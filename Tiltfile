@@ -72,7 +72,6 @@ dep_charts = {
         ('dist/chart', 'cortex'),
     ],
     'cortex-pods': [
-        ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('dist/chart', 'cortex'),
     ],
 }
