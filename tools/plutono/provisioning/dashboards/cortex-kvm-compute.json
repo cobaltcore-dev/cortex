@@ -1321,7 +1321,7 @@
                     "targets": [
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "interval": "",
                             "legendFormat": "Workload",
                             "queryType": "randomWalk",
@@ -1329,7 +1329,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Reservations",
@@ -1337,7 +1337,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Failover",
@@ -1345,7 +1345,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "PAYG",
@@ -1353,7 +1353,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Total",
@@ -1482,7 +1482,7 @@
                     "targets": [
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "interval": "",
                             "legendFormat": "Workload",
                             "queryType": "randomWalk",
@@ -1490,7 +1490,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Failover",
@@ -1498,7 +1498,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Available",
@@ -1506,7 +1506,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Total",
@@ -1514,7 +1514,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"cpu\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"cpu\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Reserved",
@@ -1642,7 +1642,7 @@
                     "targets": [
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"ram\",compute_host=\"$nodes\"})",
                             "interval": "",
                             "legendFormat": "Workload",
                             "queryType": "randomWalk",
@@ -1650,7 +1650,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"ram\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Reservations",
@@ -1658,7 +1658,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"ram\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Failover",
@@ -1666,7 +1666,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"ram\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "PAYG",
@@ -1674,7 +1674,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"ram\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Total",
@@ -1803,7 +1803,7 @@
                     "targets": [
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"ram\",compute_host=\"$nodes\"})",
                             "interval": "",
                             "legendFormat": "Workload",
                             "queryType": "randomWalk",
@@ -1811,7 +1811,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"ram\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Failover",
@@ -1819,7 +1819,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"ram\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Available",
@@ -1827,7 +1827,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"ram\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Total",
@@ -1835,7 +1835,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"ram\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"ram\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Reserved",
@@ -1963,7 +1963,7 @@
                     "targets": [
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"disk\",compute_host=\"$nodes\"})",
                             "interval": "",
                             "legendFormat": "Workload",
                             "queryType": "randomWalk",
@@ -1971,7 +1971,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"disk\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Reservations",
@@ -1979,7 +1979,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"disk\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Failover",
@@ -1987,7 +1987,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"disk\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "PAYG",
@@ -1995,7 +1995,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"disk\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Total",
@@ -2124,7 +2124,7 @@
                     "targets": [
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"disk\",compute_host=\"$nodes\"})",
                             "interval": "",
                             "legendFormat": "Workload",
                             "queryType": "randomWalk",
@@ -2132,7 +2132,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"disk\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Failover",
@@ -2140,7 +2140,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"disk\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Available",
@@ -2148,7 +2148,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_total{resource=\"disk\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Total",
@@ -2156,7 +2156,7 @@
                         },
                         {
                             "exemplar": true,
-                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"disk\",compute_host=\"node001-bb086\"})",
+                            "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"disk\",compute_host=\"$nodes\"})",
                             "hide": false,
                             "interval": "",
                             "legendFormat": "Reserved",
@@ -2254,10 +2254,10 @@
                 "current": {
                     "selected": false,
                     "text": [
-                        "bb087"
+                        "All"
                     ],
                     "value": [
-                        "bb087"
+                        "$__all"
                     ]
                 },
                 "datasource": "prometheus-openstack",
