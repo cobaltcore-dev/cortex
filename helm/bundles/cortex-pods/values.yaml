@@ -12,7 +12,7 @@ owner-info:
     - "markus.wieland@sap.com"
     - "p.matthes@sap.com"
   support-group: "workload-management"
-  service: "cortex-ironcore"
+  service: "cortex-pods"
 
 alerts:
   enabled: true
