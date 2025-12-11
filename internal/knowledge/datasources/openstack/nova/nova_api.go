@@ -18,7 +18,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -86,30 +85,55 @@ func (api *novaAPI) Init(ctx context.Context) error {
 func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	label := Server{}.TableName()
 	slog.Info("fetching nova data", "label", label)
-	// Fetch all pages.
-	pages, err := func() (pagination.Page, error) {
-		if api.mon.RequestTimer != nil {
-			hist := api.mon.RequestTimer.WithLabelValues(label)
-			timer := prometheus.NewTimer(hist)
-			defer timer.ObserveDuration()
-		}
-		lo := servers.ListOpts{
-			AllTenants: true,
-		}
-		return servers.List(api.sc, lo).AllPages(ctx)
-	}()
-	if err != nil {
-		return nil, err
+
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
 	}
-	// Parse the json data into our custom model.
-	var data = &struct {
-		Servers []Server `json:"servers"`
-	}{}
-	if err := pages.(servers.ServerPage).ExtractInto(data); err != nil {
-		return nil, err
+
+	initialURL := api.sc.Endpoint + "servers/detail?all_tenants=true"
+	var nextURL = &initialURL
+	var allServers []Server
+
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Auth-Token", api.sc.Token())
+		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
+		resp, err := api.sc.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			Servers []Server `json:"servers"`
+			Links   []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"servers_links"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&list)
+		if err != nil {
+			return nil, err
+		}
+		allServers = append(allServers, list.Servers...)
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
 	}
-	slog.Info("fetched", "label", label, "count", len(data.Servers))
-	return data.Servers, nil
+
+	slog.Info("fetched", "label", label, "count", len(allServers))
+	return allServers, nil
 }
 
 // Get all deleted Nova servers.
