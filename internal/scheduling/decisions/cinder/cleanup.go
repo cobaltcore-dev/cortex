@@ -5,6 +5,8 @@ package cinder
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -14,7 +16,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -45,24 +46,53 @@ func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 	cinderSC := &gophercloud.ServiceClient{
 		ProviderClient: pc,
 		Endpoint:       cinderURL,
-		Type:           "volumev3",
 		Microversion:   "3.70",
 	}
 
-	slo := volumes.ListOpts{AllTenants: true}
-	pages, err := volumes.List(cinderSC, slo).AllPages(ctx)
-	if err != nil {
-		return err
+	initialURL := cinderSC.Endpoint + "volumes/detail?all_tenants=true"
+	var nextURL = &initialURL
+	var volumes []struct {
+		ID string `json:"id"`
 	}
-	dataVolumes := &struct {
-		Volumes []struct {
-			ID string `json:"id"`
-		} `json:"volumes"`
-	}{}
-	if err := pages.(volumes.VolumePage).ExtractInto(dataVolumes); err != nil {
-		return err
+
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("X-Auth-Token", cinderSC.Token())
+		req.Header.Set("OpenStack-API-Version", "volume "+cinderSC.Microversion)
+		resp, err := cinderSC.HTTPClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			Volumes []struct {
+				ID string `json:"id"`
+			} `json:"volumes"`
+			Links []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"volumes_links"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&list)
+		if err != nil {
+			return err
+		}
+		volumes = append(volumes, list.Volumes...)
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
 	}
-	volumes := dataVolumes.Volumes
+
 	slog.Info("found volumes", "count", len(volumes))
 	volumesByID := make(map[string]struct{})
 	for _, volume := range volumes {
