@@ -5,6 +5,8 @@ package nova
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -14,7 +16,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -46,26 +47,55 @@ func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 	novaSC := &gophercloud.ServiceClient{
 		ProviderClient: pc,
 		Endpoint:       novaURL,
-		Type:           "compute",
 		// Since 2.53, the hypervisor id and service id is a UUID.
 		// Since 2.61, the extra_specs are returned in the flavor details.
 		Microversion: "2.61",
 	}
 
-	slo := servers.ListOpts{AllTenants: true}
-	pages, err := servers.List(novaSC, slo).AllPages(ctx)
-	if err != nil {
-		return err
+	initialURL := novaSC.Endpoint + "servers/detail?all_tenants=true"
+	var nextURL = &initialURL
+	var servers []struct {
+		ID string `json:"id"`
 	}
-	dataServers := &struct {
-		Servers []struct {
-			ID string `json:"id"`
-		} `json:"servers"`
-	}{}
-	if err := pages.(servers.ServerPage).ExtractInto(dataServers); err != nil {
-		return err
+
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("X-Auth-Token", novaSC.Token())
+		req.Header.Set("X-OpenStack-Nova-API-Version", novaSC.Microversion)
+		resp, err := novaSC.HTTPClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			Servers []struct {
+				ID string `json:"id"`
+			} `json:"servers"`
+			Links []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"servers_links"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&list)
+		if err != nil {
+			return err
+		}
+		servers = append(servers, list.Servers...)
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
 	}
-	servers := dataServers.Servers
+
 	slog.Info("found servers", "count", len(servers))
 	serversByID := make(map[string]struct{})
 	for _, server := range servers {
