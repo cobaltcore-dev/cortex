@@ -49,7 +49,7 @@ func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 		Microversion:   "3.70",
 	}
 
-	initialURL := cinderSC.Endpoint + "/volumes/detail?all_tenants=true"
+	initialURL := cinderSC.Endpoint + "volumes/detail?all_tenants=true"
 	var nextURL = &initialURL
 	var volumes []struct {
 		ID string `json:"id"`

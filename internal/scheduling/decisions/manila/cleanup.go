@@ -50,7 +50,7 @@ func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 	}
 	manilaSC.Microversion = "2.65"
 
-	initialURL := manilaSC.Endpoint + "/shares/detail?all_tenants=true"
+	initialURL := manilaSC.Endpoint + "shares/detail?all_tenants=true"
 	var nextURL = &initialURL
 	var shares []struct {
 		ID string `json:"id"`
