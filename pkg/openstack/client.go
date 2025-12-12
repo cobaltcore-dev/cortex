@@ -104,7 +104,7 @@ func CinderClient(ctx context.Context, keystoneAPI keystone.KeystoneAPI) (*Opens
 		keystoneAPI:         keystoneAPI,
 		serviceClient:       serviceClient,
 		apiVersionHeaderKey: "OpenStack-API-Version",
-		apiVersionHeader:    fmt.Sprintf("volume %s", microversion),
+		apiVersionHeader:    "volume " + microversion,
 	}, nil
 }
 
@@ -127,7 +127,7 @@ func (c *OpenstackClient) List(ctx context.Context, path string, query url.Value
 			return err
 		}
 		req.Header.Set("X-Auth-Token", c.keystoneAPI.Client().Token())
-		req.Header.Set("OpenStack-API-Version", c.apiVersionHeader)
+		req.Header.Set(c.apiVersionHeaderKey, c.apiVersionHeader)
 		resp, err := c.serviceClient.HTTPClient.Do(req)
 		if err != nil {
 			return err
@@ -157,7 +157,9 @@ func (c *OpenstackClient) List(ctx context.Context, path string, query url.Value
 		}
 		linksKey := resource + "_links"
 		if linksData, ok := raw[linksKey]; ok {
-			json.Unmarshal(linksData, &links)
+			if err := json.Unmarshal(linksData, &links); err != nil {
+				return err
+			}
 		}
 
 		nextURL = nil
