@@ -50,6 +50,11 @@ type DecisionPipelineController struct {
 	Monitor lib.PipelineMonitor
 }
 
+// The type of pipeline this controller manages.
+func (c *DecisionPipelineController) PipelineType() v1alpha1.PipelineType {
+	return v1alpha1.PipelineTypeFilterWeigher
+}
+
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
@@ -247,7 +252,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
+				return pipeline.Spec.Type == c.PipelineType()
 			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on

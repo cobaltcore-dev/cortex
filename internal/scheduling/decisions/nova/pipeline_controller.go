@@ -46,6 +46,11 @@ type DecisionPipelineController struct {
 	Conf conf.Config
 }
 
+// The type of pipeline this controller manages.
+func (c *DecisionPipelineController) PipelineType() v1alpha1.PipelineType {
+	return v1alpha1.PipelineTypeFilterWeigher
+}
+
 // Callback executed when kubernetes asks to reconcile a decision resource.
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	c.processMu.Lock()
@@ -149,7 +154,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
+				return pipeline.Spec.Type == c.PipelineType()
 			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on

@@ -41,6 +41,11 @@ type DeschedulingsPipelineController struct {
 	CycleDetector CycleDetector
 }
 
+// The type of pipeline this controller manages.
+func (c *DeschedulingsPipelineController) PipelineType() v1alpha1.PipelineType {
+	return v1alpha1.PipelineTypeDescheduler
+}
+
 // The base controller will delegate the pipeline creation down to this method.
 func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (*Pipeline, error) {
 	pipeline := &Pipeline{
@@ -105,7 +110,7 @@ func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager, mcl
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeDescheduler
+				return pipeline.Spec.Type == c.PipelineType()
 			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on

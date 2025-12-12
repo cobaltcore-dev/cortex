@@ -27,6 +27,11 @@ type PipelineInitializer[PipelineType any] interface {
 	// to be newly initialized or re-initialized to update it in the pipeline
 	// map.
 	InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (PipelineType, error)
+	// Get the accepted pipeline type for this controller.
+	//
+	// This is used to filter pipelines when listing existing pipelines on
+	// startup or when reacting to pipeline events.
+	PipelineType() v1alpha1.PipelineType
 }
 
 // Base controller for decision pipelines.
@@ -56,6 +61,9 @@ func (c *BasePipelineController[PipelineType]) InitAllPipelines(ctx context.Cont
 	}
 	for _, pipelineConf := range pipelines.Items {
 		if pipelineConf.Spec.Operator != c.OperatorName {
+			continue
+		}
+		if pipelineConf.Spec.Type != c.Initializer.PipelineType() {
 			continue
 		}
 		log.Info("initializing existing pipeline", "pipelineName", pipelineConf.Name)
