@@ -93,7 +93,7 @@ spec:
     alias: kvm_libvirt_domain_steal_pct
     # This metric is exported by https://github.com/cobaltcore-dev/kvm-monitoring
     query: |
-      max by (domain) (rate(kvm_libvirt_domain_vcpu_delay_nanoseconds[5m])) / 1e9 * 100
+      max by (domain) (rate(kvm_domain_libvirt_vcpu_delay_nanoseconds[5m])) / 1e9 * 100
     type: kvm_libvirt_domain_metric
     # It's ok to only look at a short time period here.
     timeRange: "1200s" # 20 minutes
