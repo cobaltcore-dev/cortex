@@ -6,14 +6,13 @@ package identity
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
-	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
-	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
+	"github.com/cobaltcore-dev/cortex/pkg/openstack"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -28,7 +27,7 @@ type IdentityAPI interface {
 type identityAPI struct {
 	mon         datasources.Monitor
 	keystoneAPI keystone.KeystoneAPI
-	sc          *gophercloud.ServiceClient
+	client      *openstack.OpenstackClient
 	conf        v1alpha1.IdentityDatasource
 }
 
@@ -37,21 +36,11 @@ func NewIdentityAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alph
 }
 
 func (api *identityAPI) Init(ctx context.Context) error {
-	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		return err
-	}
-	provider := api.keystoneAPI.Client()
-	serviceType := "identity"
-	url, err := api.keystoneAPI.FindEndpoint("public", serviceType)
+	client, err := openstack.IdentityClient(ctx, api.keystoneAPI)
 	if err != nil {
 		return err
 	}
-	slog.Info("using identity endpoint", "url", url)
-	api.sc = &gophercloud.ServiceClient{
-		ProviderClient: provider,
-		Endpoint:       url,
-		Type:           serviceType,
-	}
+	api.client = client
 	return nil
 }
 
@@ -64,19 +53,14 @@ func (api *identityAPI) GetAllDomains(ctx context.Context) ([]Domain, error) {
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
-	client := api.sc
-	allPages, err := domains.List(client, nil).AllPages(ctx)
-	if err != nil {
+
+	var domains []Domain
+	if err := api.client.List(ctx, "domains", nil, "domains", &domains); err != nil {
 		return nil, err
 	}
-	var data = &struct {
-		Domains []Domain `json:"domains"`
-	}{}
-	if err := allPages.(domains.DomainPage).ExtractInto(data); err != nil {
-		return nil, err
-	}
-	slog.Info("fetched identity data", "label", "domains", "count", len(data.Domains))
-	return data.Domains, nil
+
+	slog.Info("fetched identity data", "label", "domains", "count", len(domains))
+	return domains, nil
 }
 
 // Get all the projects from the OpenStack identity service.
@@ -88,21 +72,16 @@ func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
-	client := api.sc
-	allPages, err := projects.List(client, nil).AllPages(ctx)
-	if err != nil {
+
+	var rawProjects []RawProject
+	if err := api.client.List(ctx, "projects", url.Values{}, "projects", &rawProjects); err != nil {
 		return nil, err
 	}
 
-	var data = &struct {
-		Projects []RawProject `json:"projects"`
-	}{}
-	if err := allPages.(projects.ProjectPage).ExtractInto(data); err != nil {
-		return nil, err
-	}
-	var result []Project
-	for _, p := range data.Projects {
-		result = append(result, Project{
+	slog.Info("fetched identity data", "label", "projects", "count", len(rawProjects))
+	var projects []Project
+	for _, p := range rawProjects {
+		projects = append(projects, Project{
 			ID:       p.ID,
 			Name:     p.Name,
 			DomainID: p.DomainID,
@@ -112,6 +91,6 @@ func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 			Tags:     strings.Join(p.Tags, ","),
 		})
 	}
-	slog.Info("fetched identity data", "label", "projects", "count", len(data.Projects))
-	return result, nil
+	slog.Info("fetched identity data", "label", "projects", "count", len(projects))
+	return projects, nil
 }
