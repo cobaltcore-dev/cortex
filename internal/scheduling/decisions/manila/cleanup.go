@@ -5,7 +5,9 @@ package manila
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -16,7 +18,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/shares"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -49,20 +50,50 @@ func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 	}
 	manilaSC.Microversion = "2.65"
 
-	slo := shares.ListOpts{AllTenants: true}
-	pages, err := shares.ListDetail(manilaSC, slo).AllPages(ctx)
-	if err != nil {
-		return err
+	initialURL := manilaSC.Endpoint + "shares/detail?all_tenants=true"
+	var nextURL = &initialURL
+	var shares []struct {
+		ID string `json:"id"`
 	}
-	dataShares := &struct {
-		Shares []struct {
-			ID string `json:"id"`
-		} `json:"shares"`
-	}{}
-	if err := pages.(shares.SharePage).ExtractInto(dataShares); err != nil {
-		return err
+
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("X-Auth-Token", manilaSC.Token())
+		req.Header.Set("X-OpenStack-Manila-API-Version", manilaSC.Microversion)
+		resp, err := manilaSC.HTTPClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			Shares []struct {
+				ID string `json:"id"`
+			} `json:"shares"`
+			Links []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"shares_links"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&list)
+		if err != nil {
+			return err
+		}
+		shares = append(shares, list.Shares...)
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
 	}
-	shares := dataShares.Shares
+
 	if len(shares) == 0 {
 		return errors.New("no shares found")
 	}
