@@ -49,6 +49,11 @@ type DecisionPipelineController struct {
 	Monitor lib.PipelineMonitor
 }
 
+// The type of pipeline this controller manages.
+func (c *DecisionPipelineController) PipelineType() v1alpha1.PipelineType {
+	return v1alpha1.PipelineTypeFilterWeigher
+}
+
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
