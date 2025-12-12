@@ -113,3 +113,39 @@ groups:
       description: >
         `{{$labels.component}}` is trying to connect to the database too often. This may happen
         when the database is down or the connection parameters are misconfigured.
+  - alert: CortexCinderSyncNotSuccessful
+    expr: cortex_sync_request_processed_total{service="cortex-cinder-metrics"} - cortex_sync_request_duration_seconds_count{service="cortex-cinder-metrics"} > 0
+    for: 5m
+    labels:
+      context: syncstatus
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` Sync not successful"
+      description: >
+        `{{$labels.component}}` experienced an issue syncing data from the datasource `{{$labels.datasource}}`. This may
+        happen when the datasource (OpenStack, Prometheus, etc.) is down or
+        the sync module is misconfigured. No immediate action is needed, since
+        the sync module will retry the sync operation and the currently synced
+        data will be kept. However, when this problem persists for a longer
+        time the service will have a less recent view of the datacenter.
+  - alert: CortexCinderSyncObjectsDroppedToZero
+    expr: cortex_sync_objects{service="cortex-cinder-metrics"} == 0
+    for: 60m
+    labels:
+      context: syncobjects
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` is not syncing any new data from `{{$labels.datasource}}`"
+      description: >
+        `{{$labels.component}}` is not syncing any objects from the datasource `{{$labels.datasource}}`. This may happen
+        when the datasource (OpenStack, Prometheus, etc.) is down or the sync
+        module is misconfigured. No immediate action is needed, since the sync
+        module will retry the sync operation and the currently synced data will
+        be kept. However, when this problem persists for a longer time the
+        service will have a less recent view of the datacenter.
