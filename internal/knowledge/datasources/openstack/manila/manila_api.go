@@ -61,8 +61,7 @@ func (api *manilaAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, er
 	}
 
 	var pools []StoragePool
-	err := api.client.List(ctx, "shares/detail", url.Values{"all_tenants": []string{"true"}}, "pools", &pools)
-	if err != nil {
+	if err := api.client.List(ctx, "shares/detail", url.Values{"all_tenants": []string{"true"}}, "pools", &pools); err != nil {
 		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(pools))

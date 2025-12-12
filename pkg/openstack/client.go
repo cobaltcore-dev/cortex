@@ -1,111 +1,27 @@
+// Copyright 2025 SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
 package openstack
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack"
 )
 
 type OpenstackClient struct {
-	keystoneAPI         keystone.KeystoneAPI
-	serviceClient       *gophercloud.ServiceClient
-	apiVersionHeaderKey string
-	apiVersionHeader    string
-}
-
-func NovaClient(ctx context.Context, keystoneAPI keystone.KeystoneAPI) (*OpenstackClient, error) {
-	if err := keystoneAPI.Authenticate(ctx); err != nil {
-		return nil, fmt.Errorf("failed to authenticate keystone: %w", err)
-	}
-	// Automatically fetch the nova endpoint from the keystone service catalog.
-	provider := keystoneAPI.Client()
-	serviceType := "compute"
-	sameAsKeystone := keystoneAPI.Availability()
-	url, err := keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find nova endpoint: %w", err)
-	}
-
-	microversion := "2.61"
-	slog.Info("using nova endpoint", "url", url)
-	serviceClient := &gophercloud.ServiceClient{
-		ProviderClient: provider,
-		Endpoint:       url,
-		// Since microversion 2.53, the hypervisor id and service id is a UUID.
-		// We need that to find placement resource providers for hypervisors.
-		// Since 2.61, the extra_specs are returned in the flavor details.
-		Microversion: microversion,
-	}
-	return &OpenstackClient{
-		keystoneAPI:         keystoneAPI,
-		serviceClient:       serviceClient,
-		apiVersionHeaderKey: "X-OpenStack-Nova-API-Version",
-		apiVersionHeader:    microversion,
-	}, nil
-}
-
-func ManilaClient(ctx context.Context, keystoneAPI keystone.KeystoneAPI) (*OpenstackClient, error) {
-	if err := keystoneAPI.Authenticate(ctx); err != nil {
-		return nil, fmt.Errorf("failed to authenticate keystone: %w", err)
-	}
-	// Automatically fetch the nova endpoint from the keystone service catalog.
-	provider := keystoneAPI.Client()
-
-	gophercloud.ServiceTypeAliases["shared-file-system"] = []string{"sharev2"}
-	manilaSC, err := openstack.NewSharedFileSystemV2(provider, gophercloud.EndpointOpts{
-		Type:         "sharev2",
-		Availability: gophercloud.Availability(keystoneAPI.Availability()),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	microversion := "2.65"
-	manilaSC.Microversion = microversion
-
-	slog.Info("using manila endpoint", "url", manilaSC.Endpoint)
-	return &OpenstackClient{
-		keystoneAPI:         keystoneAPI,
-		serviceClient:       manilaSC,
-		apiVersionHeaderKey: "X-OpenStack-Manila-API-Version",
-		apiVersionHeader:    microversion,
-	}, nil
-}
-
-func CinderClient(ctx context.Context, keystoneAPI keystone.KeystoneAPI) (*OpenstackClient, error) {
-	if err := keystoneAPI.Authenticate(ctx); err != nil {
-		return nil, fmt.Errorf("failed to authenticate keystone: %w", err)
-	}
-	// Automatically fetch the nova endpoint from the keystone service catalog.
-	provider := keystoneAPI.Client()
-	serviceType := "volumev3"
-	sameAsKeystone := keystoneAPI.Availability()
-	url, err := keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find cinder endpoint: %w", err)
-	}
-
-	microversion := "3.70"
-	slog.Info("using cinder endpoint", "url", url)
-	serviceClient := &gophercloud.ServiceClient{
-		ProviderClient: provider,
-		Endpoint:       url,
-		Microversion:   microversion,
-	}
-	return &OpenstackClient{
-		keystoneAPI:         keystoneAPI,
-		serviceClient:       serviceClient,
-		apiVersionHeaderKey: "OpenStack-API-Version",
-		apiVersionHeader:    "volume " + microversion,
-	}, nil
+	keystoneAPI   keystone.KeystoneAPI
+	serviceClient *gophercloud.ServiceClient
+	// Http Request headers for openstack api microversion, eg. "OpenStack-API-Version"
+	apiVersionHeaderKey *string
+	// Http Request header value for openstack api microversion, eg. "volume 3.70"
+	apiVersionHeader *string
 }
 
 func (c *OpenstackClient) List(ctx context.Context, path string, query url.Values, resource string, result interface{}) error {
@@ -127,7 +43,9 @@ func (c *OpenstackClient) List(ctx context.Context, path string, query url.Value
 			return err
 		}
 		req.Header.Set("X-Auth-Token", c.keystoneAPI.Client().Token())
-		req.Header.Set(c.apiVersionHeaderKey, c.apiVersionHeader)
+		if c.apiVersionHeaderKey != nil && c.apiVersionHeader != nil {
+			req.Header.Set(*c.apiVersionHeaderKey, *c.apiVersionHeader)
+		}
 		resp, err := c.serviceClient.HTTPClient.Do(req)
 		if err != nil {
 			return err

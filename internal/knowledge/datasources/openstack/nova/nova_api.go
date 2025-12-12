@@ -72,8 +72,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	}
 
 	var allServers []Server
-	err := api.client.List(ctx, "servers/detail", url.Values{"all_tenants": []string{"true"}}, "servers", &allServers)
-	if err != nil {
+	if err := api.client.List(ctx, "servers/detail", url.Values{"all_tenants": []string{"true"}}, "servers", &allServers); err != nil {
 		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(allServers))
@@ -102,8 +101,7 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 		"all_tenants":   []string{"true"},
 		"changes-since": []string{since.Format(time.RFC3339)},
 	}
-	err := api.client.List(ctx, "servers/detail", query, "servers", &allDeletedServers)
-	if err != nil {
+	if err := api.client.List(ctx, "servers/detail", query, "servers", &allDeletedServers); err != nil {
 		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(allDeletedServers))
@@ -121,8 +119,7 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	}
 
 	var hypervisors []Hypervisor
-	err := api.client.List(ctx, "os-hypervisors/detail", url.Values{}, "hypervisors", &hypervisors)
-	if err != nil {
+	if err := api.client.List(ctx, "os-hypervisors/detail", url.Values{}, "hypervisors", &hypervisors); err != nil {
 		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(hypervisors))
@@ -139,8 +136,7 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 		"all_tenants": []string{"true"},
 	}
 
-	err := api.client.List(ctx, "flavors/detail", query, "flavors", &flavors)
-	if err != nil {
+	if err := api.client.List(ctx, "flavors/detail", query, "flavors", &flavors); err != nil {
 		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(flavors))
@@ -169,8 +165,7 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	}
 
 	var migrations []Migration
-	err := api.client.List(ctx, "os-migrations", url.Values{}, "migrations", &migrations)
-	if err != nil {
+	if err := api.client.List(ctx, "os-migrations", url.Values{}, "migrations", &migrations); err != nil {
 		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(migrations))
@@ -183,8 +178,7 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	slog.Info("fetching nova data", "label", label)
 
 	var rawAggregates []RawAggregate
-	err := api.client.List(ctx, "os-aggregates", url.Values{}, "aggregates", &rawAggregates)
-	if err != nil {
+	if err := api.client.List(ctx, "os-aggregates", url.Values{}, "aggregates", &rawAggregates); err != nil {
 		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(rawAggregates))
