@@ -6,19 +6,14 @@ package nova
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
-	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/v2/pagination"
+	"github.com/cobaltcore-dev/cortex/pkg/openstack"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -48,7 +43,7 @@ type novaAPI struct {
 	// Nova configuration.
 	conf v1alpha1.NovaDatasource
 	// Authenticated OpenStack service client to fetch the data.
-	sc *gophercloud.ServiceClient
+	client *openstack.OpenstackClient
 }
 
 func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.NovaDatasource) NovaAPI {
@@ -57,27 +52,11 @@ func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.N
 
 // Init the nova API.
 func (api *novaAPI) Init(ctx context.Context) error {
-	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
-		return err
-	}
-	// Automatically fetch the nova endpoint from the keystone service catalog.
-	provider := api.keystoneAPI.Client()
-	serviceType := "compute"
-	sameAsKeystone := api.keystoneAPI.Availability()
-	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
+	client, err := openstack.NovaClient(ctx, api.keystoneAPI)
 	if err != nil {
 		return err
 	}
-	slog.Info("using nova endpoint", "url", url)
-	api.sc = &gophercloud.ServiceClient{
-		ProviderClient: provider,
-		Endpoint:       url,
-		Type:           serviceType,
-		// Since microversion 2.53, the hypervisor id and service id is a UUID.
-		// We need that to find placement resource providers for hypervisors.
-		// Since 2.61, the extra_specs are returned in the flavor details.
-		Microversion: "2.61",
-	}
+	api.client = client
 	return nil
 }
 
@@ -92,46 +71,11 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 		defer timer.ObserveDuration()
 	}
 
-	initialURL := api.sc.Endpoint + "servers/detail?all_tenants=true"
-	var nextURL = &initialURL
 	var allServers []Server
-
-	for nextURL != nil {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("X-Auth-Token", api.sc.Token())
-		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
-		resp, err := api.sc.HTTPClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-		var list struct {
-			Servers []Server `json:"servers"`
-			Links   []struct {
-				Rel  string `json:"rel"`
-				Href string `json:"href"`
-			} `json:"servers_links"`
-		}
-		err = json.NewDecoder(resp.Body).Decode(&list)
-		if err != nil {
-			return nil, err
-		}
-		allServers = append(allServers, list.Servers...)
-		nextURL = nil
-		for _, link := range list.Links {
-			if link.Rel == "next" {
-				nextURL = &link.Href
-				break
-			}
-		}
+	err := api.client.List(ctx, "servers/detail", url.Values{"all_tenants": []string{"true"}}, "servers", &allServers)
+	if err != nil {
+		return nil, err
 	}
-
 	slog.Info("fetched", "label", label, "count", len(allServers))
 	return allServers, nil
 }
@@ -144,7 +88,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 //   - This means historical server data is limited to 3 weeks
 func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
-	slog.Info("fetching nova data", "label", label, "changedSince", since)
+	slog.Info("fetching nova data", "label", label)
 
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
@@ -152,99 +96,34 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 		defer timer.ObserveDuration()
 	}
 
-	initialURL := api.sc.Endpoint + "servers/detail?status=DELETED&all_tenants=true&changes-since=" + url.QueryEscape(since.Format(time.RFC3339))
-	var nextURL = &initialURL
-	var deletedServers []DeletedServer
-
-	for nextURL != nil {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("X-Auth-Token", api.sc.Token())
-		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
-		resp, err := api.sc.HTTPClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-		var list struct {
-			Servers []DeletedServer `json:"servers"`
-			Links   []struct {
-				Rel  string `json:"rel"`
-				Href string `json:"href"`
-			} `json:"servers_links"`
-		}
-		err = json.NewDecoder(resp.Body).Decode(&list)
-		if err != nil {
-			return nil, err
-		}
-		deletedServers = append(deletedServers, list.Servers...)
-		nextURL = nil
-		for _, link := range list.Links {
-			if link.Rel == "next" {
-				nextURL = &link.Href
-				break
-			}
-		}
+	var allDeletedServers []DeletedServer
+	query := url.Values{
+		"status":        []string{"DELETED"},
+		"all_tenants":   []string{"true"},
+		"changes-since": []string{since.Format(time.RFC3339)},
 	}
-
-	slog.Info("fetched", "label", label, "count", len(deletedServers))
-	return deletedServers, nil
+	err := api.client.List(ctx, "servers/detail", query, "servers", &allDeletedServers)
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("fetched", "label", label, "count", len(allDeletedServers))
+	return allDeletedServers, nil
 }
 
 // Get all Nova hypervisors.
 func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	label := Hypervisor{}.TableName()
 	slog.Info("fetching nova data", "label", label)
-	// Note: currently we need to fetch this without gophercloud.
-	// Gophercloud will just assume the request is a single page even when
-	// the response is paginated, returning only the first page.
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
-	initialURL := api.sc.Endpoint + "os-hypervisors/detail"
-	var nextURL = &initialURL
+
 	var hypervisors []Hypervisor
-	for nextURL != nil {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("X-Auth-Token", api.sc.Token())
-		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
-		resp, err := api.sc.HTTPClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-		var list struct {
-			Hypervisors []Hypervisor `json:"hypervisors"`
-			Links       []struct {
-				Rel  string `json:"rel"`
-				Href string `json:"href"`
-			} `json:"hypervisors_links"`
-		}
-		err = json.NewDecoder(resp.Body).Decode(&list)
-		if err != nil {
-			return nil, err
-		}
-		hypervisors = append(hypervisors, list.Hypervisors...)
-		nextURL = nil
-		for _, link := range list.Links {
-			if link.Rel == "next" {
-				nextURL = &link.Href
-				break
-			}
-		}
+	err := api.client.List(ctx, "os-hypervisors/detail", url.Values{}, "hypervisors", &hypervisors)
+	if err != nil {
+		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(hypervisors))
 	return hypervisors, nil
@@ -254,28 +133,18 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	label := Flavor{}.TableName()
 	slog.Info("fetching nova data", "label", label)
-	// Fetch all pages.
-	pages, err := func() (pagination.Page, error) {
-		if api.mon.RequestTimer != nil {
-			hist := api.mon.RequestTimer.WithLabelValues(label)
-			timer := prometheus.NewTimer(hist)
-			defer timer.ObserveDuration()
-		}
-		lo := flavors.ListOpts{AccessType: flavors.AllAccess} // Also private flavors.
-		return flavors.ListDetail(api.sc, lo).AllPages(ctx)
-	}()
+
+	var flavors []Flavor
+	query := url.Values{
+		"all_tenants": []string{"true"},
+	}
+
+	err := api.client.List(ctx, "flavors/detail", query, "flavors", &flavors)
 	if err != nil {
 		return nil, err
 	}
-	// Parse the json data into our custom model.
-	var data = &struct {
-		Flavors []Flavor `json:"flavors"`
-	}{}
-	if err := pages.(flavors.FlavorPage).ExtractInto(data); err != nil {
-		return nil, err
-	}
-	slog.Info("fetched", "label", label, "count", len(data.Flavors))
-	return data.Flavors, nil
+	slog.Info("fetched", "label", label, "count", len(flavors))
+	return flavors, nil
 }
 
 // Get all Nova migrations from the OpenStack API.
@@ -298,81 +167,30 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 		timer := prometheus.NewTimer(hist)
 		defer timer.ObserveDuration()
 	}
-	initialURL := api.sc.Endpoint + "os-migrations"
-	var nextURL = &initialURL
+
 	var migrations []Migration
-	for nextURL != nil {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("X-Auth-Token", api.sc.Token())
-		// Needed for changes-since, user_id, and project_id.
-		req.Header.Set("X-OpenStack-Nova-API-Version", "2.80")
-		resp, err := api.sc.HTTPClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-		var list struct {
-			Migrations []Migration `json:"migrations"`
-			Links      []struct {
-				Rel  string `json:"rel"`
-				Href string `json:"href"`
-			} `json:"migrations_links"`
-		}
-		err = json.NewDecoder(resp.Body).Decode(&list)
-		if err != nil {
-			return nil, err
-		}
-		nextURL = nil
-		for _, link := range list.Links {
-			if link.Rel == "next" {
-				nextURL = &link.Href
-				break
-			}
-		}
-		migrations = append(migrations, list.Migrations...)
+	err := api.client.List(ctx, "os-migrations", url.Values{}, "migrations", &migrations)
+	if err != nil {
+		return nil, err
 	}
 	slog.Info("fetched", "label", label, "count", len(migrations))
 	return migrations, nil
 }
 
+// Get all Nova aggregates.
 func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	label := Aggregate{}.TableName()
 	slog.Info("fetching nova data", "label", label)
 
-	pages, err := func() (pagination.Page, error) {
-		if api.mon.RequestTimer != nil {
-			hist := api.mon.RequestTimer.WithLabelValues(label)
-			timer := prometheus.NewTimer(hist)
-			defer timer.ObserveDuration()
-		}
-		return aggregates.List(api.sc).AllPages(ctx)
-	}()
+	var rawAggregates []RawAggregate
+	err := api.client.List(ctx, "os-aggregates", url.Values{}, "aggregates", &rawAggregates)
 	if err != nil {
 		return nil, err
 	}
-
-	// Parse the json data into our custom model.
-	type AggregatesPage struct {
-		Aggregate []RawAggregate `json:"aggregates"`
-	}
-
-	data := &AggregatesPage{}
-	if err := pages.(aggregates.AggregatesPage).ExtractInto(data); err != nil {
-		return nil, err
-	}
-
-	slog.Info("fetched", "label", label, "count", len(data.Aggregate))
-
+	slog.Info("fetched", "label", label, "count", len(rawAggregates))
 	aggregates := []Aggregate{}
-
 	// Convert RawAggregate to Aggregate
-	for _, rawAggregate := range data.Aggregate {
+	for _, rawAggregate := range rawAggregates {
 		properties, err := json.Marshal(rawAggregate.Metadata)
 		if err != nil {
 			slog.Warn(
@@ -402,5 +220,6 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 			})
 		}
 	}
+	slog.Info("extracted after fetch", "label", label, "count", len(aggregates))
 	return aggregates, nil
 }
