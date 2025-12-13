@@ -145,7 +145,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
-	// Set the node name on the pod.
+	// Check if the pod is already assigned to a node.
 	pod := &corev1.Pod{}
 	if err := c.Get(ctx, client.ObjectKey{
 		Name:      decision.Spec.PodRef.Name,
@@ -154,10 +154,24 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		log.Error(err, "failed to fetch pod for decision")
 		return err
 	}
-	// Assign the first node returned by the pipeline.
-	pod.Spec.NodeName = *result.TargetHost
-	if err := c.Update(ctx, pod); err != nil {
-		log.V(1).Error(err, "failed to assign node to pod")
+	if pod.Spec.NodeName != "" {
+		log.Info("pod is already assigned to a node", "node", pod.Spec.NodeName)
+		return nil
+	}
+
+	// Assign the first node returned by the pipeline using a Binding.
+	binding := &corev1.Binding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      decision.Spec.PodRef.Name,
+			Namespace: decision.Spec.PodRef.Namespace,
+		},
+		Target: corev1.ObjectReference{
+			Kind: "Node",
+			Name: *result.TargetHost,
+		},
+	}
+	if err := c.Create(ctx, binding); err != nil {
+		log.V(1).Error(err, "failed to assign node to pod via binding")
 		return err
 	}
 	log.V(1).Info("assigned node to pod", "node", *result.TargetHost)
