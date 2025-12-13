@@ -23,6 +23,8 @@ const (
 	DecisionTypeManilaShare DecisionType = "manila-share"
 	// The decision was created by spawning an ironcore machine.
 	DecisionTypeIroncoreMachine DecisionType = "ironcore-machine"
+	// The decision was created for a pod.
+	DecisionTypePod DecisionType = "pod"
 )
 
 type DecisionSpec struct {
@@ -53,6 +55,9 @@ type DecisionSpec struct {
 	// If the type is "machine", this field contains the machine reference.
 	// +kubebuilder:validation:Optional
 	MachineRef *corev1.ObjectReference `json:"machineRef,omitempty"`
+	// If the type is "pod", this field contains the pod reference.
+	// +kubebuilder:validation:Optional
+	PodRef *corev1.ObjectReference `json:"podRef,omitempty"`
 }
 
 type StepResult struct {
