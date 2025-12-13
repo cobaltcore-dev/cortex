@@ -34,3 +34,7 @@ cortex:
       labels:
         github_org: cobaltcore-dev
         github_repo: cortex
+
+# Custom configuration for the cortex postgres chart.
+cortex-postgres:
+  fullnameOverride: cortex-pods-postgresql

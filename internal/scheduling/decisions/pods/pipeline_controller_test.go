@@ -500,23 +500,21 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 
 			// Check if node was assigned (if expected)
 			if tt.expectNodeAssigned {
-				var updatedPod corev1.Pod
+				var binding corev1.Binding
 				err := client.Get(context.Background(), types.NamespacedName{
 					Name:      tt.pod.Name,
 					Namespace: tt.pod.Namespace,
-				}, &updatedPod)
+				}, &binding)
 				if err != nil {
-					t.Errorf("Failed to get updated pod: %v", err)
+					t.Errorf("Failed to get binding: %v", err)
 					return
 				}
 
-				if updatedPod.Spec.NodeName == "" {
-					t.Error("expected node ref to be set")
-					return
+				if binding.Target.Kind != "Node" {
+					t.Errorf("expected binding target kind Node, got %q", binding.Target.Kind)
 				}
-
-				if updatedPod.Spec.NodeName != tt.expectTargetHost {
-					t.Errorf("expected node %q, got %q", tt.expectTargetHost, updatedPod.Spec.NodeName)
+				if binding.Target.Name != tt.expectTargetHost {
+					t.Errorf("expected binding target name %q, got %q", tt.expectTargetHost, binding.Target.Name)
 				}
 			}
 		})
