@@ -21,12 +21,12 @@ alerts:
 cortex:
   enabled: false
   # CRDs are deployed in the cortex-crds chart.
-  crd: {enable: false}
+  crd: { enable: false }
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-pods
   conf:
     # The operator will only touch CRs with this operator name.
-    operator: cortex-pods
+    operator: cortex
     enabledControllers:
       - pods-decisions-pipeline-controller
       - explanation-controller

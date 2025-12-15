@@ -244,7 +244,6 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 					// Skip pods that already have a node assigned.
 					return false
 				}
-				// FIXME: is this correct?
 				return pod.Spec.SchedulerName == c.Conf.Operator
 			}),
 		).
