@@ -137,7 +137,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 		"medium|zone2|project-2": {
 			FlavorName:       "medium",
 			AvailabilityZone: "zone2",
-			RunningVMs:       2,
+			RunningVMs:       1,
 			ProjectID:        "project-2",
 		},
 	}
