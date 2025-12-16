@@ -145,7 +145,6 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 	for key, expected := range expectedMetrics {
 		actual, ok := metrics[key]
 		if !ok {
-			t.Logf("%v", metrics)
 			t.Errorf("expected metric %q not found", key)
 			continue
 		}
