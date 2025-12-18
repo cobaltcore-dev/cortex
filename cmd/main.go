@@ -43,6 +43,7 @@ import (
 	decisionsmachines "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/machines"
 	decisionsmanila "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/manila"
 	decisionsnova "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/nova"
+	decisionpods "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods"
 	deschedulingnova "github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova"
 	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
@@ -361,6 +362,19 @@ func main() {
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{
+			Monitor: pipelineMonitor,
+			Conf:    config,
+		}
+		// Inferred through the base controller.
+		controller.Client = multiclusterClient
+		controller.OperatorName = config.Operator
+		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
+		controller := &decisionpods.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
