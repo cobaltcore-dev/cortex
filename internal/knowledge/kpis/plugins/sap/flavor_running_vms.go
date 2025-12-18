@@ -18,6 +18,7 @@ type FlavorRunningVMs struct {
 	FlavorName       string  `db:"flavor_name"`
 	AvailabilityZone string  `db:"availability_zone"`
 	RunningVMs       float64 `db:"running_vms"`
+	ProjectID        string  `db:"project_id"`
 }
 
 type FlavorRunningVMsKPI struct {
@@ -40,6 +41,7 @@ func (k *FlavorRunningVMsKPI) Init(db *db.DB, client client.Client, opts conf.Ra
 		[]string{
 			"flavor_name",
 			"availability_zone",
+			"project_id",
 		},
 		nil,
 	)
@@ -55,6 +57,7 @@ func (k *FlavorRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 
 	query := `
         SELECT
+			tenant_id AS project_id,
             flavor_name,
             COALESCE(os_ext_az_availability_zone, 'unknown') AS availability_zone,
             COUNT(*) AS running_vms
@@ -62,17 +65,17 @@ func (k *FlavorRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
         WHERE
             status != 'DELETED'
         GROUP BY
+			project_id,
             flavor_name,
             os_ext_az_availability_zone
         ORDER BY
-            flavor_name;
+            project_id;
     `
 
 	if _, err := k.DB.Select(&results, query); err != nil {
 		slog.Error("failed to select running vms per flavor", "err", err)
 		return
 	}
-	slog.Info("flavor running vms results", "results", results)
 	for _, r := range results {
 		ch <- prometheus.MustNewConstMetric(
 			k.flavorRunningVMs,
@@ -80,6 +83,7 @@ func (k *FlavorRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 			r.RunningVMs,
 			r.FlavorName,
 			r.AvailabilityZone,
+			r.ProjectID,
 		)
 	}
 }
