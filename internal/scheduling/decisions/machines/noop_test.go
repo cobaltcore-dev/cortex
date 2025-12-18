@@ -73,6 +73,7 @@ func TestNoopFilter_Run(t *testing.T) {
 
 			if result == nil {
 				t.Fatal("expected result to be non-nil")
+				return // For the linter
 			}
 
 			if len(result.Activations) != len(tt.expected) {

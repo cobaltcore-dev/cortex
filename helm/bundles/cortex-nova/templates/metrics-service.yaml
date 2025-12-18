@@ -55,6 +55,3 @@ subjects:
 - kind: ServiceAccount
   name: cortex-nova-scheduling-controller-manager
   namespace: default
-- kind: ServiceAccount
-  name: cortex-nova-reservations-controller-manager
-  namespace: default

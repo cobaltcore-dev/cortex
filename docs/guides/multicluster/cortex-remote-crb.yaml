@@ -11,9 +11,6 @@ subjects:
   name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-nova-scheduling-controller-manager"
 - kind: User
   apiGroup: rbac.authorization.k8s.io
-  name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-nova-reservations-controller-manager"
-- kind: User
-  apiGroup: rbac.authorization.k8s.io
   name: "https://host.docker.internal:8443#system:serviceaccount:default:cortex-ironcore-controller-manager"
 roleRef:
   kind: ClusterRole

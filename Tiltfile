@@ -118,7 +118,6 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
         port_forward(8001, 8080),
     ])
     k8s_resource('cortex-nova-knowledge-controller-manager', labels=['Cortex-Nova'])
-    k8s_resource('cortex-nova-reservations-controller-manager', labels=['Cortex-Nova'])
     local_resource(
         'Scheduler E2E Tests (Nova)',
         '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /manager e2e-nova"',
