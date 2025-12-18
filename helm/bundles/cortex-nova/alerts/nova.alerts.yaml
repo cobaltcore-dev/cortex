@@ -37,23 +37,6 @@ groups:
         The Cortex Knowledge service is down. This is no immediate problem,
         since cortex is still able to process requests,
         but the quality of the responses may be affected.
-  - alert: CortexNovaReservationsDown
-    expr: |
-      up{pod=~"cortex-nova-reservations-.*"} != 1 or
-      absent(up{pod=~"cortex-nova-reservations-.*"})
-    for: 5m
-    labels:
-      context: liveness
-      dashboard: cortex/cortex
-      service: cortex
-      severity: warning
-      support_group: workload-management
-      playbook: docs/support/playbook/cortex/down
-    annotations:
-      summary: "Cortex Reservations for Nova is down"
-      description: >
-        The Cortex Reservations service is down. Commitment requests for Nova resources
-        will not be processed.
   - alert: CortexNovaDeschedulerPipelineErroring
     expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{component="nova-scheduling", error="true"}[2m]) > 0
     for: 5m
