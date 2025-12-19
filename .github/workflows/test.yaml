@@ -52,7 +52,7 @@ jobs:
           go tool cover -func profile.cov > func_coverage.txt
 
       - name: Upload coverage files
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: pr-func-coverage
           path: |
@@ -80,7 +80,7 @@ jobs:
             }
       - name: Download coverage files (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: pr-func-coverage
           path: .
