@@ -10,5 +10,7 @@ spec:
   type: filter-weigher
   createDecisions: true
   steps:
+    - ref: { name: pods-gang }
+      mandatory: true
     - ref: { name: pods-noop }
       mandatory: false

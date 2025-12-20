@@ -14,4 +14,5 @@ type PodStep = lib.Step[pods.PodPipelineRequest]
 // The steps actually used by the scheduler are defined through the configuration file.
 var supportedSteps = map[string]func() PodStep{
 	"noop": func() PodStep { return &NoopFilter{} },
+	"gang": func() PodStep { return &GangFilter{} },
 }

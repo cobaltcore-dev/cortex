@@ -186,6 +186,8 @@ if 'pods' in ACTIVE_DEPLOYMENTS:
     # Deploy example resources
     k8s_yaml('samples/pods/node.yaml')
     k8s_yaml('samples/pods/pod.yaml')
+    k8s_yaml('samples/pods/gang-scheduling.yaml')
+    k8s_resource('gang-pod-1', labels=['Cortex-Pods'])
     k8s_resource('test-pod', labels=['Cortex-Pods'])
 
 ########### Dev Dependencies
