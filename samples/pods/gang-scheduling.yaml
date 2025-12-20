@@ -1,0 +1,26 @@
+apiVersion: scheduling.k8s.io/v1alpha1
+kind: Workload
+metadata:
+  name: test-workload
+  namespace: default
+spec:
+  podGroups:
+    - name: test-group
+      policy: gang
+      gang:
+        minCount: 2
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gang-pod
+  namespace: cortex-system
+spec:
+  schedulerName: cortex
+  workloadRef:
+    name: test-workload
+    kind: Workload
+    apiGroup: scheduling.k8s.io
+  containers:
+    - name: nginx
+      image: nginx:latest
