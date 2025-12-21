@@ -21,14 +21,17 @@ import (
 
 func TestGangFilter_Run(t *testing.T) {
 	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
+	err := corev1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatalf("failed to add corev1 to scheme: %v", err)
+	}
 
 	// Helper to create unstructured Pod with workloadRef
 	createPodWithWorkload := func(name, ns, workloadName string) *unstructured.Unstructured {
 		u := &unstructured.Unstructured{}
-		u.SetUnstructuredContent(map[string]interface{}{
-			"spec": map[string]interface{}{
-				"workloadRef": map[string]interface{}{
+		u.SetUnstructuredContent(map[string]any{
+			"spec": map[string]any{
+				"workloadRef": map[string]any{
 					"name": workloadName,
 				},
 			},
