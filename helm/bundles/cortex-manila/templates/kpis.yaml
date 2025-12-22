@@ -15,7 +15,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-manila-datasource-state-kpi
+  name: cortex-manila-datasource-state
 spec:
   operator: cortex-manila
   impl: datasource_state_kpi
@@ -27,7 +27,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-manila-knowledge-state-kpi
+  name: cortex-manila-knowledge-state
 spec:
   operator: cortex-manila
   impl: knowledge_state_kpi
@@ -39,7 +39,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-manila-decision-state-kpi
+  name: cortex-manila-decision-state
 spec:
   operator: cortex-manila
   impl: decision_state_kpi
@@ -47,3 +47,15 @@ spec:
     decisionOperator: cortex-manila
   description: |
     This aggregated KPI tracks the state of decision resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-kpi-state
+spec:
+  operator: cortex-manila
+  impl: kpi_state_kpi
+  opts:
+    kpiOperator: cortex-manila
+  description: |
+    This KPI tracks the state of kpi resources managed by cortex.

@@ -225,3 +225,21 @@ groups:
         This may indicate a backlog in processing or issues with the decision logic.
         It is recommended to investigate the decision logs and the state of the
         VMs being processed.
+
+  - alert: CortexManilaKPIUnready
+    expr: |
+      cortex_kpi_state{operator="cortex-manila",state!="ready"} != 0 or
+      absent(cortex_kpi_state{operator="cortex-manila"})
+    for: 60m
+    labels:
+      context: kpis
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "KPI `{{$labels.kpi}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the KPI
+        configuration. It is recommended to investigate the
+        KPI status and logs for more details.

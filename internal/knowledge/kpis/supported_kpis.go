@@ -28,4 +28,5 @@ var supportedKPIs = map[string]plugins.KPI{
 	"datasource_state_kpi": &deployment.DatasourceStateKPI{},
 	"knowledge_state_kpi":  &deployment.KnowledgeStateKPI{},
 	"decision_state_kpi":   &deployment.DecisionStateKPI{},
+	"kpi_state_kpi":        &deployment.KPIStateKPI{},
 }

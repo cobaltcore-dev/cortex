@@ -139,7 +139,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-nova-datasource-state-kpi
+  name: cortex-nova-datasource-state
 spec:
   operator: cortex-nova
   impl: datasource_state_kpi
@@ -151,7 +151,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-nova-knowledge-state-kpi
+  name: cortex-nova-knowledge-state
 spec:
   operator: cortex-nova
   impl: knowledge_state_kpi
@@ -163,7 +163,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-nova-decision-state-kpi
+  name: cortex-nova-decision-state
 spec:
   operator: cortex-nova
   impl: decision_state_kpi
@@ -171,3 +171,15 @@ spec:
     decisionOperator: cortex-nova
   description: |
     This aggregated KPI tracks the state of decision resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-nova-kpi-state
+spec:
+  operator: cortex-nova
+  impl: kpi_state_kpi
+  opts:
+    kpiOperator: cortex-nova
+  description: |
+    This KPI tracks the state of kpi resources managed by cortex.
