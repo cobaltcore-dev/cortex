@@ -49,6 +49,7 @@ const (
 )
 
 type KPIStatus struct {
+	// TODO: Either drop the conditions or use a Ready condition.
 	// If the kpi is ready to be executed.
 	Ready bool `json:"ready"`
 
