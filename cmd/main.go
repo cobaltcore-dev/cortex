@@ -456,9 +456,8 @@ func main() {
 	}
 	if slices.Contains(config.EnabledControllers, "kpis-controller") {
 		if err := (&kpis.Controller{
-			Client:              multiclusterClient,
-			SupportedKPIsByImpl: kpis.SupportedKPIsByImpl,
-			OperatorName:        config.Operator,
+			Client:       multiclusterClient,
+			OperatorName: config.Operator,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KPIController")
 			os.Exit(1)

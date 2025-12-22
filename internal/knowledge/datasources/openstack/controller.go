@@ -11,12 +11,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/cinder"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/manila"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
@@ -129,51 +123,13 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	var syncer Syncer
-	switch datasource.Spec.OpenStack.Type {
-	case v1alpha1.OpenStackDatasourceTypeNova:
-		syncer = &nova.NovaSyncer{
-			DB:   *authenticatedDB,
-			Mon:  r.Monitor,
-			Conf: datasource.Spec.OpenStack.Nova,
-			API:  nova.NewNovaAPI(r.Monitor, authenticatedKeystone, datasource.Spec.OpenStack.Nova),
-		}
-	case v1alpha1.OpenStackDatasourceTypeManila:
-		syncer = &manila.ManilaSyncer{
-			DB:   *authenticatedDB,
-			Mon:  r.Monitor,
-			Conf: datasource.Spec.OpenStack.Manila,
-			API:  manila.NewManilaAPI(r.Monitor, authenticatedKeystone, datasource.Spec.OpenStack.Manila),
-		}
-	case v1alpha1.OpenStackDatasourceTypePlacement:
-		syncer = &placement.PlacementSyncer{
-			DB:   *authenticatedDB,
-			Mon:  r.Monitor,
-			Conf: datasource.Spec.OpenStack.Placement,
-			API:  placement.NewPlacementAPI(r.Monitor, authenticatedKeystone, datasource.Spec.OpenStack.Placement),
-		}
-	case v1alpha1.OpenStackDatasourceTypeIdentity:
-		syncer = &identity.IdentitySyncer{
-			DB:   *authenticatedDB,
-			Mon:  r.Monitor,
-			Conf: datasource.Spec.OpenStack.Identity,
-			API:  identity.NewIdentityAPI(r.Monitor, authenticatedKeystone, datasource.Spec.OpenStack.Identity),
-		}
-	case v1alpha1.OpenStackDatasourceTypeLimes:
-		syncer = &limes.LimesSyncer{
-			DB:   *authenticatedDB,
-			Mon:  r.Monitor,
-			Conf: datasource.Spec.OpenStack.Limes,
-			API:  limes.NewLimesAPI(r.Monitor, authenticatedKeystone, datasource.Spec.OpenStack.Limes),
-		}
-	case v1alpha1.OpenStackDatasourceTypeCinder:
-		syncer = &cinder.CinderSyncer{
-			DB:   *authenticatedDB,
-			Mon:  r.Monitor,
-			Conf: datasource.Spec.OpenStack.Cinder,
-			API:  cinder.NewCinderAPI(r.Monitor, authenticatedKeystone, datasource.Spec.OpenStack.Cinder),
-		}
-	default:
+	syncer, err := getSupportedSyncer(
+		*datasource,
+		authenticatedDB,
+		authenticatedKeystone,
+		r.Monitor,
+	)
+	if err != nil {
 		log.Info("skipping datasource, unsupported openstack datasource type", "type", datasource.Spec.OpenStack.Type)
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DatasourceConditionError,

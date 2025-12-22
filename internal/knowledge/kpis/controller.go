@@ -10,11 +10,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/kvm"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/netapp"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/sap"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/shared"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/vmware"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -33,36 +28,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// Configuration of supported kpis.
-var SupportedKPIsByImpl = map[string]plugins.KPI{
-	// KVM kpis.
-	"kvm_host_capacity_kpi": &kvm.HostCapacityKPI{},
-	// VMware kpis.
-	"vmware_host_contention_kpi":   &vmware.VMwareHostContentionKPI{},
-	"vmware_project_noisiness_kpi": &vmware.VMwareProjectNoisinessKPI{},
-	// NetApp kpis.
-	"netapp_storage_pool_cpu_usage_kpi": &netapp.NetAppStoragePoolCPUUsageKPI{},
-	// Shared kpis.
-	"vm_migration_statistics_kpi": &shared.VMMigrationStatisticsKPI{},
-	"vm_life_span_kpi":            &shared.VMLifeSpanKPI{},
-	"vm_commitments_kpi":          &shared.VMCommitmentsKPI{},
-	// SAP kpis.
-	"sap_host_total_allocatable_capacity_kpi": &sap.HostTotalAllocatableCapacityKPI{},
-	"sap_host_capacity_kpi":                   &sap.HostAvailableCapacityKPI{},
-	"sap_host_running_vms_kpi":                &sap.HostRunningVMsKPI{},
-	"sap_flavor_running_vms_kpi":              &sap.FlavorRunningVMsKPI{},
-}
-
 // The kpi controller checks the status of kpi dependencies and populates
 // the kpi status accordingly.
 type Controller struct {
 	// Kubernetes client to manage/fetch resources.
 	client.Client
-	// The supported kpis to manage.
-	SupportedKPIsByImpl map[string]plugins.KPI
 	// The name of the operator to scope resources to.
 	OperatorName string
 
+	// The supported kpis to manage.
+	supportedKPIs map[string]plugins.KPI
 	// Registered kpis by name.
 	registeredKPIsByResourceName map[string]plugins.KPI
 }
@@ -92,7 +67,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// If this kpi is not supported, ignore it.
-	if _, ok := c.SupportedKPIsByImpl[kpi.Spec.Impl]; !ok {
+	if _, ok := c.supportedKPIs[kpi.Spec.Impl]; !ok {
 		log.Info("kpi: unsupported kpi, ignoring", "name", req.Name)
 		return ctrl.Result{}, nil
 	}
@@ -248,7 +223,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	if dependenciesReadyTotal == dependenciesTotal && !registered {
 		log.Info("kpi: registering new kpi", "name", obj.Name)
 		var ok bool
-		registeredKPI, ok = c.SupportedKPIsByImpl[obj.Spec.Impl]
+		registeredKPI, ok = c.supportedKPIs[obj.Spec.Impl]
 		if !ok {
 			return fmt.Errorf("kpi %s not supported", obj.Name)
 		}
@@ -422,6 +397,9 @@ func (c *Controller) handleKnowledgeDeleted(
 }
 
 func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+	if c.supportedKPIs == nil { // This can be overridden for tests.
+		c.supportedKPIs = supportedKPIs
+	}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllKPIs)); err != nil {
 		return err
 	}

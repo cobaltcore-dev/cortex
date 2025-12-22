@@ -13,16 +13,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins/kvm"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-// Configuration of steps supported by the descheduler.
-// The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]Step{
-	"avoid_high_steal_pct": &kvm.AvoidHighStealPctStep{},
-}
 
 type Pipeline struct {
 	// Kubernetes client to create descheduling resources.
