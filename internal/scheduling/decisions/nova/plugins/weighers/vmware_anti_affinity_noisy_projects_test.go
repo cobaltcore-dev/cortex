@@ -9,7 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -21,9 +21,9 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 	}
 
 	vropsProjectNoisiness, err := v1alpha1.BoxFeatureList([]any{
-		&vmware.VROpsProjectNoisiness{Project: "project1", ComputeHost: "host1", AvgCPUOfProject: 25.0},
-		&vmware.VROpsProjectNoisiness{Project: "project1", ComputeHost: "host2", AvgCPUOfProject: 30.0},
-		&vmware.VROpsProjectNoisiness{Project: "project2", ComputeHost: "host3", AvgCPUOfProject: 15.0},
+		&compute.VROpsProjectNoisiness{Project: "project1", ComputeHost: "host1", AvgCPUOfProject: 25.0},
+		&compute.VROpsProjectNoisiness{Project: "project1", ComputeHost: "host2", AvgCPUOfProject: 30.0},
+		&compute.VROpsProjectNoisiness{Project: "project2", ComputeHost: "host3", AvgCPUOfProject: 15.0},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

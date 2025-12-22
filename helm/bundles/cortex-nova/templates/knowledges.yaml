@@ -192,7 +192,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
-  name: sap-host-details
+  name: host-details
 spec:
   operator: cortex-nova
   extractor:

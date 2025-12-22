@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -28,7 +28,7 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 	tests := []struct {
 		name              string
 		threshold         float64
-		features          []kvm.LibvirtDomainCPUStealPct
+		features          []compute.LibvirtDomainCPUStealPct
 		expectedDecisions int
 		expectedVMs       []string
 		expectSkip        bool
@@ -36,20 +36,20 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 		{
 			name:       "skip when threshold is zero",
 			threshold:  0.0,
-			features:   []kvm.LibvirtDomainCPUStealPct{},
+			features:   []compute.LibvirtDomainCPUStealPct{},
 			expectSkip: true,
 		},
 		{
 			name:       "skip when threshold is negative",
 			threshold:  -5.0,
-			features:   []kvm.LibvirtDomainCPUStealPct{},
+			features:   []compute.LibvirtDomainCPUStealPct{},
 			expectSkip: true,
 		},
 		{
 			name:              "no VMs above threshold",
 			threshold:         80.0,
 			expectedDecisions: 0,
-			features: []kvm.LibvirtDomainCPUStealPct{
+			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 50.0},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.0},
 				{InstanceUUID: "vm-3", Host: "host1", MaxStealTimePct: 60.0},
@@ -60,7 +60,7 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			threshold:         70.0,
 			expectedDecisions: 2,
 			expectedVMs:       []string{"vm-2", "vm-4"},
-			features: []kvm.LibvirtDomainCPUStealPct{
+			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 50.0},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.0},
 				{InstanceUUID: "vm-3", Host: "host1", MaxStealTimePct: 60.0},
@@ -72,7 +72,7 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			threshold:         40.0,
 			expectedDecisions: 3,
 			expectedVMs:       []string{"vm-1", "vm-2", "vm-3"},
-			features: []kvm.LibvirtDomainCPUStealPct{
+			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 50.0},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.0},
 				{InstanceUUID: "vm-3", Host: "host1", MaxStealTimePct: 60.0},
@@ -83,7 +83,7 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			threshold:         75.0,
 			expectedDecisions: 1,
 			expectedVMs:       []string{"vm-3"},
-			features: []kvm.LibvirtDomainCPUStealPct{
+			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 50.0},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.0}, // exactly at threshold
 				{InstanceUUID: "vm-3", Host: "host1", MaxStealTimePct: 75.1}, // above threshold
@@ -93,14 +93,14 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			name:              "empty database",
 			threshold:         50.0,
 			expectedDecisions: 0,
-			features:          []kvm.LibvirtDomainCPUStealPct{},
+			features:          []compute.LibvirtDomainCPUStealPct{},
 		},
 		{
 			name:              "high precision values",
 			threshold:         75.555,
 			expectedDecisions: 1,
 			expectedVMs:       []string{"vm-2"},
-			features: []kvm.LibvirtDomainCPUStealPct{
+			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 75.554},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.556},
 			},
@@ -167,7 +167,7 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 				}
 
 				// Find the corresponding feature to validate reason
-				var matchingFeature *kvm.LibvirtDomainCPUStealPct
+				var matchingFeature *compute.LibvirtDomainCPUStealPct
 				for _, feature := range tt.features {
 					if feature.InstanceUUID == decision.VMID {
 						matchingFeature = &feature

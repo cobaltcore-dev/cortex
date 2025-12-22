@@ -9,7 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/netapp"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -21,10 +21,10 @@ func TestNetappCPUUsageBalancingStep_Run(t *testing.T) {
 	}
 
 	storagePoolCPUUsage, err := v1alpha1.BoxFeatureList([]any{
-		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool1", AvgCPUUsagePct: 0.0, MaxCPUUsagePct: 0.0},
-		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool2", AvgCPUUsagePct: 100.0, MaxCPUUsagePct: 0.0},
-		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool3", AvgCPUUsagePct: 0.0, MaxCPUUsagePct: 100.0},
-		&netapp.StoragePoolCPUUsage{StoragePoolName: "pool4", AvgCPUUsagePct: 100.0, MaxCPUUsagePct: 100.0},
+		&storage.StoragePoolCPUUsage{StoragePoolName: "pool1", AvgCPUUsagePct: 0.0, MaxCPUUsagePct: 0.0},
+		&storage.StoragePoolCPUUsage{StoragePoolName: "pool2", AvgCPUUsagePct: 100.0, MaxCPUUsagePct: 0.0},
+		&storage.StoragePoolCPUUsage{StoragePoolName: "pool3", AvgCPUUsagePct: 0.0, MaxCPUUsagePct: 100.0},
+		&storage.StoragePoolCPUUsage{StoragePoolName: "pool4", AvgCPUUsagePct: 100.0, MaxCPUUsagePct: 100.0},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

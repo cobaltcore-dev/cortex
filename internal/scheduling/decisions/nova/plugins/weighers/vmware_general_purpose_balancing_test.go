@@ -9,7 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -56,15 +56,15 @@ func TestVMwareGeneralPurposeBalancingStep_Run(t *testing.T) {
 
 	// Insert test data
 	hostUtilizations, err := v1alpha1.BoxFeatureList([]any{
-		&shared.HostUtilization{
+		&compute.HostUtilization{
 			ComputeHost:    "host1",
 			RAMUtilizedPct: 30.0,
 		},
-		&shared.HostUtilization{
+		&compute.HostUtilization{
 			ComputeHost:    "host2",
 			RAMUtilizedPct: 60.0,
 		},
-		&shared.HostUtilization{
+		&compute.HostUtilization{
 			ComputeHost:    "host3",
 			RAMUtilizedPct: 90.0,
 		},
@@ -74,19 +74,19 @@ func TestVMwareGeneralPurposeBalancingStep_Run(t *testing.T) {
 	}
 
 	hostCapabilities, err := v1alpha1.BoxFeatureList([]any{
-		&shared.HostCapabilities{
+		&compute.HostCapabilities{
 			ComputeHost: "host1",
 			Traits:      "CUSTOM_TRAIT_1",
 		},
-		&shared.HostCapabilities{
+		&compute.HostCapabilities{
 			ComputeHost: "host2",
 			Traits:      "CUSTOM_TRAIT_2",
 		},
-		&shared.HostCapabilities{
+		&compute.HostCapabilities{
 			ComputeHost: "host3",
 			Traits:      "HANA_EXCLUSIVE,OTHER_TRAIT",
 		},
-		&shared.HostCapabilities{
+		&compute.HostCapabilities{
 			ComputeHost: "host4",
 			Traits:      "GENERAL_PURPOSE",
 		},

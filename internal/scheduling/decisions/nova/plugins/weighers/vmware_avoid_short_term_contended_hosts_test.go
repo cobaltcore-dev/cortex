@@ -9,7 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -21,10 +21,10 @@ func TestVMwareAvoidShortTermContendedHostsStep_Run(t *testing.T) {
 	}
 
 	vropsHostsystemContentionShortTerm, err := v1alpha1.BoxFeatureList([]any{
-		&vmware.VROpsHostsystemContentionShortTerm{ComputeHost: "host1", AvgCPUContention: 0.0, MaxCPUContention: 0.0},
-		&vmware.VROpsHostsystemContentionShortTerm{ComputeHost: "host2", AvgCPUContention: 100.0, MaxCPUContention: 0.0},
-		&vmware.VROpsHostsystemContentionShortTerm{ComputeHost: "host3", AvgCPUContention: 0.0, MaxCPUContention: 100.0},
-		&vmware.VROpsHostsystemContentionShortTerm{ComputeHost: "host4", AvgCPUContention: 100.0, MaxCPUContention: 100.0},
+		&compute.VROpsHostsystemContentionShortTerm{ComputeHost: "host1", AvgCPUContention: 0.0, MaxCPUContention: 0.0},
+		&compute.VROpsHostsystemContentionShortTerm{ComputeHost: "host2", AvgCPUContention: 100.0, MaxCPUContention: 0.0},
+		&compute.VROpsHostsystemContentionShortTerm{ComputeHost: "host3", AvgCPUContention: 0.0, MaxCPUContention: 100.0},
+		&compute.VROpsHostsystemContentionShortTerm{ComputeHost: "host4", AvgCPUContention: 100.0, MaxCPUContention: 100.0},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

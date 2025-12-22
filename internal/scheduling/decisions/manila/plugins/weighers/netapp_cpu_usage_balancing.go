@@ -10,7 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/netapp"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -63,7 +63,7 @@ func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.Ext
 		return nil, err
 	}
 	usages, err := v1alpha1.
-		UnboxFeatureList[netapp.StoragePoolCPUUsage](knowledge.Status.Raw)
+		UnboxFeatureList[storage.StoragePoolCPUUsage](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}

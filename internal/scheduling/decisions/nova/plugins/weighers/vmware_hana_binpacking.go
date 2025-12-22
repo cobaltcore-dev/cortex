@@ -11,7 +11,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -65,11 +65,11 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 		return nil, err
 	}
 	hostCapabilities, err := v1alpha1.
-		UnboxFeatureList[shared.HostCapabilities](hostCapabilitiesKnowledge.Status.Raw)
+		UnboxFeatureList[compute.HostCapabilities](hostCapabilitiesKnowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}
-	capabilityByHost := make(map[string]shared.HostCapabilities, len(request.Hosts))
+	capabilityByHost := make(map[string]compute.HostCapabilities, len(request.Hosts))
 	for _, hostCapability := range hostCapabilities {
 		capabilityByHost[hostCapability.ComputeHost] = hostCapability
 	}
@@ -100,7 +100,7 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 		return nil, err
 	}
 	hostUtilizations, err := v1alpha1.
-		UnboxFeatureList[shared.HostUtilization](hostUtilizationKnowledge.Status.Raw)
+		UnboxFeatureList[compute.HostUtilization](hostUtilizationKnowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}

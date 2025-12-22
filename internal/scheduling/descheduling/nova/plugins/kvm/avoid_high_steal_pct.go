@@ -9,7 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/kvm"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -39,7 +39,7 @@ func (s *AvoidHighStealPctStep) Run() ([]plugins.Decision, error) {
 		return nil, err
 	}
 	features, err := v1alpha1.
-		UnboxFeatureList[kvm.LibvirtDomainCPUStealPct](knowledge.Status.Raw)
+		UnboxFeatureList[compute.LibvirtDomainCPUStealPct](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}

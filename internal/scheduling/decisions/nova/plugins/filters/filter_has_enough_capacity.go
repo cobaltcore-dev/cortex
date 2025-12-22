@@ -10,7 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -51,7 +51,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		return nil, err
 	}
 	hostUtilizations, err := v1alpha1.
-		UnboxFeatureList[shared.HostUtilization](knowledge.Status.Raw)
+		UnboxFeatureList[compute.HostUtilization](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}

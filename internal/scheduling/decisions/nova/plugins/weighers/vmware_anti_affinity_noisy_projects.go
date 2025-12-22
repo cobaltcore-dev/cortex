@@ -10,7 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -59,7 +59,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request
 		return nil, err
 	}
 	projectNoisinessOnHosts, err := v1alpha1.
-		UnboxFeatureList[vmware.VROpsProjectNoisiness](knowledge.Status.Raw)
+		UnboxFeatureList[compute.VROpsProjectNoisiness](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}

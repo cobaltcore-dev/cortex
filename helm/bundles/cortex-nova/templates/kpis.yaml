@@ -30,52 +30,52 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: sap-host-total-allocatable-capacity
+  name: host-total-allocatable-capacity
 spec:
   operator: cortex-nova
-  impl: sap_host_total_allocatable_capacity_kpi
+  impl: host_total_allocatable_capacity_kpi
   dependencies:
     knowledges:
-      - name: sap-host-details
+      - name: host-details
       - name: host-utilization
   description: |
-    This KPI tracks the total allocatable capacity of SAP hosts.
+    This KPI tracks the total allocatable capacity of hosts.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: sap-host-capacity
+  name: host-capacity
 spec:
   operator: cortex-nova
-  impl: sap_host_capacity_kpi
+  impl: host_capacity_kpi
   dependencies:
     knowledges:
-      - name: sap-host-details
+      - name: host-details
       - name: host-utilization
   description: |
-    This KPI tracks the total allocatable capacity of SAP hosts.
+    This KPI tracks the total allocatable capacity of hosts.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: sap-host-running-vms
+  name: host-running-vms
 spec:
   operator: cortex-nova
-  impl: sap_host_running_vms_kpi
+  impl: host_running_vms_kpi
   dependencies:
     knowledges:
-      - name: sap-host-details
+      - name: host-details
       - name: host-utilization
   description: |
-    This KPI tracks the total number of running VMs on SAP hosts.
+    This KPI tracks the total number of running VMs on hosts.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: sap-flavors-running-vms
+  name: flavors-running-vms
 spec:
   operator: cortex-nova
-  impl: sap_flavor_running_vms_kpi
+  impl: flavor_running_vms_kpi
   dependencies:
     datasources:
       - name: nova-servers
@@ -131,7 +131,7 @@ spec:
   impl: kvm_host_capacity_kpi
   dependencies:
     knowledges:
-      - name: sap-host-details
+      - name: host-details
       - name: host-utilization
   description: |
     This KPI tracks the total, utilized, reserved and failover capacity of KVM hosts.

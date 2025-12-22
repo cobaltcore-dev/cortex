@@ -10,7 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -35,7 +35,7 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 		return nil, err
 	}
 	hostAZs, err := v1alpha1.
-		UnboxFeatureList[shared.HostAZ](knowledge.Status.Raw)
+		UnboxFeatureList[compute.HostAZ](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}
