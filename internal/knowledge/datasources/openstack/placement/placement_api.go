@@ -35,7 +35,7 @@ type placementAPI struct {
 	// Monitor to track the api.
 	mon datasources.Monitor
 	// Keystone api to authenticate against.
-	keystoneAPI keystone.KeystoneAPI
+	keystoneClient keystone.KeystoneClient
 	// Placement configuration.
 	conf v1alpha1.PlacementDatasource
 	// Authenticated OpenStack service client to fetch the data.
@@ -45,20 +45,20 @@ type placementAPI struct {
 }
 
 // Create a new OpenStack placement api.
-func NewPlacementAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.PlacementDatasource) PlacementAPI {
-	return &placementAPI{mon: mon, keystoneAPI: k, conf: conf, sleepInterval: 50 * time.Millisecond}
+func NewPlacementAPI(mon datasources.Monitor, k keystone.KeystoneClient, conf v1alpha1.PlacementDatasource) PlacementAPI {
+	return &placementAPI{mon: mon, keystoneClient: k, conf: conf, sleepInterval: 50 * time.Millisecond}
 }
 
 // Init the placement API.
 func (api *placementAPI) Init(ctx context.Context) error {
-	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
+	if err := api.keystoneClient.Authenticate(ctx); err != nil {
 		return err
 	}
 	// Automatically fetch the placement endpoint from the keystone service catalog.
-	provider := api.keystoneAPI.Client()
+	provider := api.keystoneClient.Client()
 	serviceType := "placement"
-	sameAsKeystone := api.keystoneAPI.Availability()
-	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
+	sameAsKeystone := api.keystoneClient.Availability()
+	url, err := api.keystoneClient.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
 		return err
 	}

@@ -22,7 +22,7 @@ import (
 func getSupportedSyncer(
 	datasource v1alpha1.Datasource,
 	authenticatedDB *db.DB,
-	authenticatedKeystone keystone.KeystoneAPI,
+	authenticatedKeystone keystone.KeystoneClient,
 	monitor datasources.Monitor,
 ) (Syncer, error) {
 

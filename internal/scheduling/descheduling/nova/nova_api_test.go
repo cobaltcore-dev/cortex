@@ -13,9 +13,9 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 )
 
-func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
+func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneClient) {
 	server := httptest.NewServer(handler)
-	return server, &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
+	return server, &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 }
 
 func TestNewNovaAPI(t *testing.T) {

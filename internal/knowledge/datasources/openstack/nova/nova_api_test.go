@@ -16,14 +16,14 @@ import (
 	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"
 )
 
-func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
+func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneClient) {
 	server := httptest.NewServer(handler)
-	return server, &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
+	return server, &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 }
 
 func TestNewNovaAPI(t *testing.T) {
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.NovaDatasource{}
 
 	api := NewNovaAPI(mon, k, conf)

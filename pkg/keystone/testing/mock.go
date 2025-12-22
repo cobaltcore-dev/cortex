@@ -9,25 +9,25 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 )
 
-type MockKeystoneAPI struct {
+type MockKeystoneClient struct {
 	Url             string
 	EndpointLocator gophercloud.EndpointLocator
 }
 
-func (m *MockKeystoneAPI) Authenticate(ctx context.Context) error {
+func (m *MockKeystoneClient) Authenticate(ctx context.Context) error {
 	return nil
 }
 
-func (m *MockKeystoneAPI) Client() *gophercloud.ProviderClient {
+func (m *MockKeystoneClient) Client() *gophercloud.ProviderClient {
 	return &gophercloud.ProviderClient{
 		EndpointLocator: m.EndpointLocator,
 	}
 }
 
-func (m *MockKeystoneAPI) FindEndpoint(availability, serviceType string) (string, error) {
+func (m *MockKeystoneClient) FindEndpoint(availability, serviceType string) (string, error) {
 	return m.Url, nil
 }
 
-func (m *MockKeystoneAPI) Availability() string {
+func (m *MockKeystoneClient) Availability() string {
 	return "" // Mock does not have a specific availability
 }

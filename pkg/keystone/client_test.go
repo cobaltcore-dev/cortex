@@ -24,7 +24,7 @@ func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, conf.K
 	return server, conf
 }
 
-func TestNewKeystoneAPI(t *testing.T) {
+func TestNewKeystoneClient(t *testing.T) {
 	keystoneConf := conf.KeystoneConfig{
 		URL:                 "http://example.com",
 		OSUsername:          "testuser",
@@ -34,13 +34,13 @@ func TestNewKeystoneAPI(t *testing.T) {
 		OSProjectDomainName: "default",
 	}
 
-	api := NewKeystoneAPI(keystoneConf)
+	api := NewKeystoneClient(keystoneConf)
 	if api == nil {
 		t.Fatal("expected non-nil api")
 	}
 }
 
-func TestKeystoneAPI_Authenticate(t *testing.T) {
+func TestKeystoneClient_Authenticate(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
@@ -51,7 +51,7 @@ func TestKeystoneAPI_Authenticate(t *testing.T) {
 	server, keystoneConf := setupKeystoneMockServer(handler)
 	defer server.Close()
 
-	api := NewKeystoneAPI(keystoneConf).(*keystoneAPI)
+	api := NewKeystoneClient(keystoneConf).(*keystoneClient)
 
 	err := api.Authenticate(t.Context())
 	if err != nil {

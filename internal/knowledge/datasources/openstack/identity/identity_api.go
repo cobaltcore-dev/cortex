@@ -26,23 +26,23 @@ type IdentityAPI interface {
 }
 
 type identityAPI struct {
-	mon         datasources.Monitor
-	keystoneAPI keystone.KeystoneAPI
-	sc          *gophercloud.ServiceClient
-	conf        v1alpha1.IdentityDatasource
+	mon            datasources.Monitor
+	keystoneClient keystone.KeystoneClient
+	sc             *gophercloud.ServiceClient
+	conf           v1alpha1.IdentityDatasource
 }
 
-func NewIdentityAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.IdentityDatasource) IdentityAPI {
-	return &identityAPI{mon: mon, keystoneAPI: k, conf: conf}
+func NewIdentityAPI(mon datasources.Monitor, k keystone.KeystoneClient, conf v1alpha1.IdentityDatasource) IdentityAPI {
+	return &identityAPI{mon: mon, keystoneClient: k, conf: conf}
 }
 
 func (api *identityAPI) Init(ctx context.Context) error {
-	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
+	if err := api.keystoneClient.Authenticate(ctx); err != nil {
 		return err
 	}
-	provider := api.keystoneAPI.Client()
+	provider := api.keystoneClient.Client()
 	serviceType := "identity"
-	url, err := api.keystoneAPI.FindEndpoint("public", serviceType)
+	url, err := api.keystoneClient.FindEndpoint("public", serviceType)
 	if err != nil {
 		return err
 	}

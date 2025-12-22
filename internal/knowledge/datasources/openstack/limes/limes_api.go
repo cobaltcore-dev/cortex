@@ -32,7 +32,7 @@ type limesAPI struct {
 	// Monitor to track the api.
 	mon datasources.Monitor
 	// Keystone api to authenticate against.
-	keystoneAPI keystone.KeystoneAPI
+	keystoneClient keystone.KeystoneClient
 	// Limes configuration.
 	conf v1alpha1.LimesDatasource
 	// Authenticated OpenStack service client to fetch the data.
@@ -42,21 +42,21 @@ type limesAPI struct {
 }
 
 // Create a new OpenStack limes api.
-func NewLimesAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.LimesDatasource) LimesAPI {
-	return &limesAPI{mon: mon, keystoneAPI: k, conf: conf, sleepInterval: 50 * time.Millisecond}
+func NewLimesAPI(mon datasources.Monitor, k keystone.KeystoneClient, conf v1alpha1.LimesDatasource) LimesAPI {
+	return &limesAPI{mon: mon, keystoneClient: k, conf: conf, sleepInterval: 50 * time.Millisecond}
 }
 
 // Init the limes API.
 func (api *limesAPI) Init(ctx context.Context) error {
-	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
+	if err := api.keystoneClient.Authenticate(ctx); err != nil {
 		return err
 	}
 	// Automatically fetch the limes endpoint from the keystone service catalog.
 	// See: https://github.com/sapcc/limes/blob/5ea068b/docs/users/api-example.md?plain=1#L23
-	provider := api.keystoneAPI.Client()
+	provider := api.keystoneClient.Client()
 	serviceType := "resources"
-	sameAsKeystone := api.keystoneAPI.Availability()
-	url, err := api.keystoneAPI.FindEndpoint(sameAsKeystone, serviceType)
+	sameAsKeystone := api.keystoneClient.Availability()
+	url, err := api.keystoneClient.FindEndpoint(sameAsKeystone, serviceType)
 	if err != nil {
 		return err
 	}
