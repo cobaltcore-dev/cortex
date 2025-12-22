@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	hvv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,6 +22,13 @@ type FilterCorrectAZStep struct {
 
 // Only get hosts in the requested az.
 func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+	hvs := &hvv1.HypervisorList{}
+	if err := s.Client.List(context.Background(), hvs); err != nil {
+		return nil, err
+	}
+	traceLog.Info("available hypervisors", "count", len(hvs.Items))
+	// TODO do something with the hv crd
+
 	result := s.PrepareResult(request)
 	if request.Spec.Data.AvailabilityZone == "" {
 		traceLog.Debug("no availability zone requested, skipping filter_correct_az step")
