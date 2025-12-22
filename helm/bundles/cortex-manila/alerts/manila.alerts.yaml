@@ -259,3 +259,35 @@ groups:
         This may indicate issues with the pipeline
         configuration. It is recommended to investigate the
         pipeline status and logs for more details.
+
+  - alert: CortexManilaPipelineUnready
+    expr: cortex_pipeline_state{operator="cortex-manila",state!="ready"} != 0
+    for: 5m
+    labels:
+      context: pipelines
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Pipeline `{{$labels.pipeline}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the pipeline
+        configuration. It is recommended to investigate the
+        pipeline status and logs for more details.
+
+  - alert: CortexManilaStepUnready
+    expr: cortex_step_state{operator="cortex-manila",state!="ready"} != 0
+    for: 5m
+    labels:
+      context: pipelines
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Step `{{$labels.step}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the step
+        configuration. It is recommended to investigate the
+        step status and logs for more details.
