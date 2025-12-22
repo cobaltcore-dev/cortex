@@ -26,4 +26,5 @@ var supportedKPIs = map[string]plugins.KPI{
 	"netapp_storage_pool_cpu_usage_kpi": &storage.NetAppStoragePoolCPUUsageKPI{},
 
 	"datasource_state_kpi": &deployment.DatasourceStateKPI{},
+	"knowledge_state_kpi":  &deployment.KnowledgeStateKPI{},
 }

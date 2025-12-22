@@ -23,3 +23,15 @@ spec:
     datasourceOperator: cortex-manila
   description: |
     This KPI tracks the state of datasource resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-knowledge-state-kpi
+spec:
+  operator: cortex-manila
+  impl: knowledge_state_kpi
+  opts:
+    knowledgeOperator: cortex-manila
+  description: |
+    This KPI tracks the state of knowledge resources managed by cortex.

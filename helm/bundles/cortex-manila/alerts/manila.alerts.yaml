@@ -159,7 +159,7 @@ groups:
         service will have a less recent view of the datacenter.
 
   - alert: CortexManilaDatasourceUnready
-    expr: cortex_datasource_state{operator="cortex-manila",state=~"waiting|error|unknown"} != 0
+    expr: cortex_datasource_state{operator="cortex-manila",state!="ready"} != 0
     for: 60m
     labels:
       context: datasources
@@ -173,3 +173,19 @@ groups:
         This may indicate issues with the datasource
         connectivity or configuration. It is recommended to investigate the
         datasource status and logs for more details.
+
+  - alert: CortexManilaKnowledgeUnready
+    expr: cortex_knowledge_state{operator="cortex-manila",state!="ready"} != 0
+    for: 60m
+    labels:
+      context: knowledge
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Knowledge `{{$labels.knowledge}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the knowledge
+        configuration. It is recommended to investigate the
+        knowledge status and logs for more details.
