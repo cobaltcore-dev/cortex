@@ -183,3 +183,15 @@ spec:
     kpiOperator: cortex-nova
   description: |
     This KPI tracks the state of kpi resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-nova-pipeline-state
+spec:
+  operator: cortex-nova
+  impl: pipeline_state_kpi
+  opts:
+    pipelineOperator: cortex-nova
+  description: |
+    This KPI tracks the state of pipeline resources managed by cortex.

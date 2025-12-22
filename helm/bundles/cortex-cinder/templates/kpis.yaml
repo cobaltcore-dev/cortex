@@ -46,3 +46,15 @@ spec:
     kpiOperator: cortex-cinder
   description: |
     This KPI tracks the state of kpi resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-cinder-pipeline-state
+spec:
+  operator: cortex-cinder
+  impl: pipeline_state_kpi
+  opts:
+    pipelineOperator: cortex-cinder
+  description: |
+    This KPI tracks the state of pipeline resources managed by cortex.

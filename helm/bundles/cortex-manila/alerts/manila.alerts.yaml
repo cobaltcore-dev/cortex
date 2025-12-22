@@ -243,3 +243,19 @@ groups:
         This may indicate issues with the KPI
         configuration. It is recommended to investigate the
         KPI status and logs for more details.
+
+  - alert: CortexManilaPipelineUnready
+    expr: cortex_pipeline_state{operator="cortex-manila",state!="ready"} != 0
+    for: 5m
+    labels:
+      context: kpis
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Pipeline `{{$labels.pipeline}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the pipeline
+        configuration. It is recommended to investigate the
+        pipeline status and logs for more details.
