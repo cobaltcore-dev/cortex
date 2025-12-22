@@ -1,5 +1,5 @@
 <!--
-# SPDX-FileCopyrightText: Copyright 2024 SAP SE or an SAP affiliate company and cobaltcore-dev contributors
+# SPDX-FileCopyrightText: Copyright SAP SE or an SAP affiliate company and cobaltcore-dev contributors
 #
 # SPDX-License-Identifier: Apache-2.0
 -->

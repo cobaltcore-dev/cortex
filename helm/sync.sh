@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright 2025 SAP SE
+# Copyright SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
 # Pull missing chart.tgz dependencies into a chart directory.

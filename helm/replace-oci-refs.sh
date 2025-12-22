@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright 2025 SAP SE
+# Copyright SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
 # Replace oci references in Chart.yaml with local file references.
