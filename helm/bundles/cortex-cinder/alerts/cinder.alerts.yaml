@@ -189,3 +189,39 @@ groups:
         This may indicate issues with the knowledge
         configuration. It is recommended to investigate the
         knowledge status and logs for more details.
+
+  - alert: CortexCinderDecisionsWithErrors
+    expr: cortex_decision_state{operator="cortex-cinder",state="error"} > 0
+    for: 5m
+    labels:
+      context: decisions
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Some decisions are in error state for operator `{{$labels.operator}}`"
+      description: >
+        The cortex scheduling pipeline generated decisions that are in error state.
+        This may indicate issues with the decision logic or the underlying infrastructure.
+        It is recommended to investigate the decision logs and the state of the
+        VMs being processed.
+
+  - alert: CortexCinderTooManyDecisionsWaiting
+    expr: cortex_decision_state{operator="cortex-cinder",state="waiting"} > 10
+    for: 5m
+    labels:
+      context: decisions
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Too many decisions are in waiting state for operator `{{$labels.operator}}`"
+      description: >
+        The cortex scheduling pipeline has a high number of decisions for which
+        no target host has been assigned yet.
+
+        This may indicate a backlog in processing or issues with the decision logic.
+        It is recommended to investigate the decision logs and the state of the
+        VMs being processed.

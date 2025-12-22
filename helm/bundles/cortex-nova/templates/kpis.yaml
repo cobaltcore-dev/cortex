@@ -159,3 +159,15 @@ spec:
     knowledgeOperator: cortex-nova
   description: |
     This KPI tracks the state of knowledge resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-nova-decision-state-kpi
+spec:
+  operator: cortex-nova
+  impl: decision_state_kpi
+  opts:
+    decisionOperator: cortex-nova
+  description: |
+    This aggregated KPI tracks the state of decision resources managed by cortex.

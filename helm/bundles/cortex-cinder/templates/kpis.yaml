@@ -22,3 +22,15 @@ spec:
     knowledgeOperator: cortex-cinder
   description: |
     This KPI tracks the state of knowledge resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-cinder-decision-state-kpi
+spec:
+  operator: cortex-cinder
+  impl: decision_state_kpi
+  opts:
+    decisionOperator: cortex-cinder
+  description: |
+    This aggregated KPI tracks the state of decision resources managed by cortex.

@@ -56,26 +56,26 @@ func (k *KnowledgeStateKPI) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 	var knowledges []v1alpha1.Knowledge
-	for _, ds := range knowledgeList.Items {
-		if ds.Spec.Operator != k.Options.KnowledgeOperator {
+	for _, kn := range knowledgeList.Items {
+		if kn.Spec.Operator != k.Options.KnowledgeOperator {
 			continue
 		}
-		knowledges = append(knowledges, ds)
+		knowledges = append(knowledges, kn)
 	}
 	// For each knowledge, emit a metric with its state.
-	for _, ds := range knowledges {
+	for _, kn := range knowledges {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.KnowledgeConditionError):
+		case meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionError):
 			state = "error"
-		case ds.Status.IsReady():
+		case kn.Status.IsReady():
 			state = "ready"
 		default:
 			state = "unknown"
 		}
 		ch <- prometheus.MustNewConstMetric(
 			k.counter, prometheus.GaugeValue, 1,
-			k.Options.KnowledgeOperator, ds.Name, state,
+			k.Options.KnowledgeOperator, kn.Name, state,
 		)
 	}
 }
