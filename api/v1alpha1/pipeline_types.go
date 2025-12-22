@@ -87,8 +87,12 @@ type PipelineCondition struct {
 }
 
 type PipelineStatus struct {
+	// Filters ...
+	// +optional
 	Filters []FilterStatus `json:"filters,omitempty"`
 
+	// Weighers ...
+	// +optional
 	Weighers []WeigherStatus `json:"weighers,omitempty"`
 
 	// Conditions describe the status of the pipeline.
@@ -100,10 +104,8 @@ type PipelineStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
-// +kubebuilder:printcolumn:name="Steps",type="string",JSONPath=".status.stepsReadyFrac"
 
 // Pipeline is the Schema for the decisions API
 type Pipeline struct {

@@ -26,7 +26,7 @@ type DecisionSpec struct {
 	// The domain of the decision, indicating what has initiated this decision.
 	Domain SchedulingDomain `json:"type"`
 
-	// TODO: Avoid using RawExtension!
+	// TODO: Avoid using RawExtension. CRDs should be strongly typed.
 	// If the type is "nova", this field contains the raw nova decision request.
 	// +kubebuilder:validation:Optional
 	NovaRaw *runtime.RawExtension `json:"novaRaw,omitempty"`
@@ -41,9 +41,11 @@ type DecisionSpec struct {
 	MachineRef *corev1.ObjectReference `json:"machineRef,omitempty"`
 }
 
+// TODO: Cortex concepts relies on pipelines consisting of filters and weighers, not steps.
 type StepResult struct {
 	// object reference to the scheduler step.
 	StepRef corev1.ObjectReference `json:"stepRef"`
+	// TODO: This will likely explode the CRD size limit as each step would hold all hosts and their values.
 	// Activations of the step for each host.
 	Activations map[string]float64 `json:"activations"`
 }
@@ -71,11 +73,14 @@ type DecisionResult struct {
 }
 
 const (
+	// TODO: The canonical way is to define phrase this positivly and expose a Ready condition.
+	// TODO: Comments must start with the item name, e.g. DecisionConditionError ...
 	// Something went wrong during the calculation of the decision.
 	DecisionConditionError = "Error"
 )
 
 type DecisionStatus struct {
+	// TODO: This should be exposed as a Prometheus metric, such as a histogram, instead to make it meaningful and gain insight over time.
 	// The time it took to schedule.
 	// +kubebuilder:validation:Optional
 	Took metav1.Duration `json:"took"`
@@ -121,7 +126,7 @@ type Decision struct {
 
 	// metadata is a standard object metadata
 	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec defines the desired state of Decision
 	// +required
@@ -129,7 +134,7 @@ type Decision struct {
 
 	// status defines the observed state of Decision
 	// +optional
-	Status DecisionStatus `json:"status,omitempty,omitzero"`
+	Status DecisionStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

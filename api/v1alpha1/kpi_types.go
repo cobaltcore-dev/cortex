@@ -1,6 +1,8 @@
 // Copyright 2025 SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
+// TODO: This needs to reflect the refactoring.
+
 package v1alpha1
 
 import (
