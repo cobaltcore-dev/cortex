@@ -30,6 +30,10 @@ helm_repo(
     labels=['Repositories'],
 )
 
+########### Dependency CRDs
+url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/hypervisor-crd.yaml'
+local('curl ' + url + ' | kubectl apply -f -')
+
 ########### Cortex Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.',
     dockerfile='Dockerfile',
