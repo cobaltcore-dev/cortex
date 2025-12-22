@@ -172,6 +172,11 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
 
 if 'ironcore' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex IronCore bundle")
+    # Deploy CRDs
+    k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machines.yaml')
+    k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machinepools.yaml')
+    k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machineclasses.yaml')
+    # Deploy IronCore controller
     k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=tilt_values))
     k8s_resource('cortex-ironcore-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
