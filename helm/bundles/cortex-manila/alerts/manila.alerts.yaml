@@ -19,6 +19,7 @@ groups:
         The Cortex scheduling service is down. Scheduling requests from Manila will
         not be served. This is no immediate problem, since Manila will continue
         placing new VMs. However, the placement will be less desirable.
+
   - alert: CortexManilaKnowledgeDown
     expr: |
       up{pod=~"cortex-manila-knowledge-.*"} != 1 or
@@ -37,6 +38,7 @@ groups:
         The Cortex Knowledge service is down. This is no immediate problem,
         since cortex is still able to process requests,
         but the quality of the responses may be affected.
+
   - alert: CortexManilaHttpRequest400sTooHigh
     expr: rate(cortex_scheduler_api_request_duration_seconds_count{service="cortex-manila-metrics", status=~"4.+"}[5m]) > 0.1
     for: 5m
@@ -53,6 +55,7 @@ groups:
         errors. This is expected when the scheduling request cannot be served
         by Cortex. However, it could also indicate that the request format has
         changed and Cortex is unable to parse it.
+
   - alert: CortexManilaSchedulingHttpRequest500sTooHigh
     expr: rate(cortex_scheduler_api_request_duration_seconds_count{service="cortex-manila-metrics", status=~"5.+" }[5m]) > 0.1
     for: 5m
@@ -69,6 +72,7 @@ groups:
         This is not expected and indicates that Cortex is having some internal problem.
         Manila will continue to place new VMs, but the placement will be less desirable.
         Thus, no immediate action is needed.
+
   - alert: CortexManilaHighMemoryUsage
     expr: process_resident_memory_bytes{service="cortex-manila-metrics"} > 6000 * 1024 * 1024
     for: 5m
@@ -84,6 +88,7 @@ groups:
         `{{$labels.component}}` should not be using more than 6000 MiB of memory. Usually it
         should use much less, so there may be a memory leak or other changes
         that are causing the memory usage to increase significantly.
+
   - alert: CortexManilaHighCPUUsage
     expr: rate(process_cpu_seconds_total{service="cortex-manila-metrics"}[1m]) > 0.5
     for: 5m
@@ -99,6 +104,7 @@ groups:
         `{{$labels.component}}` should not be using more than 50% of a single CPU core. Usually
         it should use much less, so there may be a CPU leak or other changes
         that are causing the CPU usage to increase significantly.
+
   - alert: CortexManilaTooManyDBConnectionAttempts
     expr: rate(cortex_db_connection_attempts_total{service="cortex-manila-metrics"}[5m]) > 0.1
     for: 5m
@@ -113,6 +119,7 @@ groups:
       description: >
         `{{$labels.component}}` is trying to connect to the database too often. This may happen
         when the database is down or the connection parameters are misconfigured.
+
   - alert: CortexManilaSyncNotSuccessful
     expr: cortex_sync_request_processed_total{service="cortex-manila-metrics"} - cortex_sync_request_duration_seconds_count{service="cortex-manila-metrics"} > 0
     for: 5m
@@ -131,6 +138,7 @@ groups:
         the sync module will retry the sync operation and the currently synced
         data will be kept. However, when this problem persists for a longer
         time the service will have a less recent view of the datacenter.
+
   - alert: CortexManilaSyncObjectsDroppedToZero
     expr: cortex_sync_objects{service="cortex-manila-metrics"} == 0
     for: 60m
@@ -149,3 +157,19 @@ groups:
         module will retry the sync operation and the currently synced data will
         be kept. However, when this problem persists for a longer time the
         service will have a less recent view of the datacenter.
+
+  - alert: CortexManilaDatasourceUnready
+    expr: cortex_datasource_state{operator="cortex-manila",state=~"waiting|error|unknown"} != 0
+    for: 60m
+    labels:
+      context: datasources
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Datasource `{{$labels.datasource}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the datasource
+        connectivity or configuration. It is recommended to investigate the
+        datasource status and logs for more details.

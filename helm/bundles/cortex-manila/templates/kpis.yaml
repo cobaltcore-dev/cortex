@@ -11,3 +11,15 @@ spec:
       - name: netapp-storage-pool-cpu-usage-manila
   description: |
     This KPI tracks the CPU usage of Manila NetApp storage pools.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-datasource-state-kpi
+spec:
+  operator: cortex-manila
+  impl: datasource_state_kpi
+  opts:
+    datasourceOperator: cortex-manila
+  description: |
+    This KPI tracks the state of datasource resources managed by cortex.

@@ -135,3 +135,15 @@ spec:
       - name: host-utilization
   description: |
     This KPI tracks the total, utilized, reserved and failover capacity of KVM hosts.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-nova-datasource-state-kpi
+spec:
+  operator: cortex-nova
+  impl: datasource_state_kpi
+  opts:
+    datasourceOperator: cortex-nova
+  description: |
+    This KPI tracks the state of datasource resources managed by cortex.

@@ -1,1 +1,12 @@
 ---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-cinder-datasource-state-kpi
+spec:
+  operator: cortex-cinder
+  impl: datasource_state_kpi
+  opts:
+    datasourceOperator: cortex-cinder
+  description: |
+    This KPI tracks the state of datasource resources managed by cortex.
