@@ -48,12 +48,12 @@ import (
 	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
 	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
+	cinderexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/cinder"
+	manilaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/manila"
+	novaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/nova"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
-	cindershims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/cinder"
-	manilashims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/manila"
-	novashims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/nova"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
@@ -304,7 +304,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		novashims.NewAPI(config, decisionController).Init(mux)
+		novaexternal.NewAPI(config, decisionController).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
@@ -344,7 +344,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manilashims.NewAPI(config, controller).Init(mux)
+		manilaexternal.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &decisionscinder.DecisionPipelineController{
@@ -358,7 +358,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cindershims.NewAPI(config, controller).Init(mux)
+		cinderexternal.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{
