@@ -59,6 +59,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/task"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/must"
 	corev1 "k8s.io/api/core/v1"
@@ -76,6 +77,7 @@ func init() {
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(hv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

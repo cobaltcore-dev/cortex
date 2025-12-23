@@ -18,6 +18,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -194,6 +195,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 				return knowledge.Spec.Operator == c.Conf.Operator
 			}),
 		).
+		// Watch hypervisor changes so the cache gets updated.
+		WatchesMulticluster(&hv1.Hypervisor{}, handler.Funcs{}).
 		Named("cortex-nova-decisions").
 		For(
 			&v1alpha1.Decision{},

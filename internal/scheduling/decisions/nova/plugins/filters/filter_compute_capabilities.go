@@ -4,45 +4,18 @@
 package filters
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
-	"maps"
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterComputeCapabilitiesStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
-}
-
-// Convert a nested dictionary into a list of capabilities.
-//
-// The input is something like this:
-//
-//	{
-//	    "arch": "x86_64",
-//	    "maxphysaddr": {"bits": 46},
-//	    ...
-//	}
-//
-// Which then outputs a list of capabilities like:
-// {"arch": "x86_64", "maxphysaddr:bits": 46, ...}
-func convertToCapabilities(prefix string, obj map[string]any) map[string]any {
-	capabilities := make(map[string]any)
-	for key, value := range obj {
-		if subObj, ok := value.(map[string]any); ok {
-			// Nested object.
-			subCapabilities := convertToCapabilities(prefix+key+":", subObj)
-			maps.Copy(capabilities, subCapabilities)
-		} else {
-			// Flat value.
-			capabilities[prefix+key] = value
-		}
-	}
-	return capabilities
 }
 
 // Check the capabilities of each host and if they match the extra spec provided
@@ -50,60 +23,76 @@ func convertToCapabilities(prefix string, obj map[string]any) map[string]any {
 func (s *FilterComputeCapabilitiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	requestedCapabilities := request.Spec.Data.Flavor.Data.ExtraSpecs
-	// Note: currently advanced operators for the capabilities are not supported
-	// because they are not used by any of our flavors in production.
-	for key := range requestedCapabilities {
-		if !strings.HasPrefix(key, "capabilities:") {
-			delete(requestedCapabilities, key) // Remove non-capability keys.
-		}
-	}
 	if len(requestedCapabilities) == 0 {
 		traceLog.Debug("no flavor extra spec capabilities in request, skipping filter")
 		return result, nil
 	}
-	var hypervisors []nova.Hypervisor
-	if _, err := s.DB.SelectTimed(
-		"scheduler-nova", &hypervisors, "SELECT * FROM "+nova.Hypervisor{}.TableName(),
-	); err != nil {
-		return result, err
+
+	// Note: currently none of the advanced operators for capabilities are
+	// supported because they are not used by any of our flavors in production.
+	// Ops: https://github.com/sapcc/nova/blob/3ebf80/nova/scheduler/filters/extra_specs_ops.py#L23
+	unsupportedOps := []string{
+		"=", "<in>", "<all-in>", "==", "!=", ">=", "<=",
+		"s==", "s!=", "s<", "s<=", "s>", "s>=", "<or>", // or is special
 	}
-	// Serialize the hypervisor fields that are interesting for the filter.
-	providedCapabilities := make(map[string]map[string]any)
-	for _, h := range hypervisors {
-		// It is assumed that multiple hypervisors have the same capabilities
-		// when they are nested in the same compute host.
-		if _, ok := providedCapabilities[h.ServiceHost]; ok {
-			continue // Already processed this compute host.
+	for key, expr := range requestedCapabilities {
+		if !strings.HasPrefix(key, "capabilities:") {
+			delete(requestedCapabilities, key) // Remove non-capability keys.
 		}
-		// Uwrap the cpu capabilities.
-		var cpuInfo map[string]any
-		if h.CPUInfo != "" {
-			if err := json.Unmarshal([]byte(h.CPUInfo), &cpuInfo); err != nil {
-				traceLog.Warn("failed to unmarshal CPU info", "hv", h.ID, "error", err)
-				return result, err
+		for _, op := range unsupportedOps {
+			if strings.Contains(expr, op) {
+				traceLog.Warn(
+					"unsupported extra spec operator in capabilities filter, skipping filter",
+					"key", key, "expr", expr, "flavor", request.Spec.Data.Flavor,
+				)
+				return result, nil
 			}
-		} else {
-			cpuInfo = make(map[string]any)
 		}
-		// Note that Nova flavors directly map the cpu_info fields to extra
-		// specs, without a nested `capabilities:cpu_info` prefix.
-		cs := convertToCapabilities("capabilities:", cpuInfo)
-		cs["capabilities:hypervisor_type"] = h.HypervisorType
-		cs["capabilities:hypervisor_version"] = h.HypervisorVersion
-		providedCapabilities[h.ServiceHost] = cs
 	}
+
+	hvs := &hv1.HypervisorList{}
+	if err := s.Client.List(context.Background(), hvs); err != nil {
+		traceLog.Error("failed to list hypervisors", "error", err)
+		return nil, err
+	}
+
+	// We take the `capabilities` field from the hypervisor status and
+	// flatten it to a map[string]any where keys are prefixed with `capabilities:`.
+	// This allows us to directly compare with the requested extra specs.
+	providedCapabilities := make(map[string]map[string]any)
+	for _, hv := range hvs.Items {
+		marshalled, err := json.Marshal(hv.Status.Capabilities)
+		if err != nil {
+			traceLog.Error("failed to marshal hypervisor capabilities", "host", hv.Name, "error", err)
+			continue
+		}
+		cpuInfo := make(map[string]any)
+		if err := json.Unmarshal(marshalled, &cpuInfo); err != nil {
+			traceLog.Error("failed to unmarshal hypervisor capabilities", "host", hv.Name, "error", err)
+			continue
+		}
+		providedCapabilities[hv.Name] = make(map[string]any)
+		for key, value := range cpuInfo {
+			providedCapabilities[hv.Name]["capabilities:"+key] = value
+		}
+	}
+	traceLog.Info(
+		"provided capabilities from hypervisors",
+		"capabilities", providedCapabilities,
+	)
+
 	// Check which hosts match the requested capabilities.
 	for host := range result.Activations {
 		provided, ok := providedCapabilities[host]
 		if !ok {
 			delete(result.Activations, host)
-			traceLog.Debug("filtering host without provided capabilities", "host", host)
+			traceLog.Info("filtering host without provided capabilities", "host", host)
 			continue
 		}
 		// Check if the provided capabilities match the requested ones.
 		for keyRequested, valueRequested := range requestedCapabilities {
 			if providedValue, ok := provided[keyRequested]; !ok || providedValue != valueRequested {
-				traceLog.Debug(
+				traceLog.Info(
 					"filtering host with mismatched capabilities", "host", host,
 					"wantKey", keyRequested, "wantValue", valueRequested,
 					"haveKey?", ok, "haveValue", providedValue,

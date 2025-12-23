@@ -55,6 +55,10 @@ rbac:
     enable: false
   pods:
     enable: false
+  # Whether hypervisor operator/crd related roles should be deployed.
+  # See: https://github.com/cobaltcore-dev/openstack-hypervisor-operator
+  hypervisor:
+    enable: false
 
 # [CRDs]: To enable the CRDs
 crd:

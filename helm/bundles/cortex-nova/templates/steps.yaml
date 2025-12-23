@@ -165,11 +165,6 @@ metadata:
   name: filter-has-requested-traits
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_has_requested_traits
   description: |
@@ -177,11 +172,6 @@ spec:
     nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
     not have the specified trait. "trait:<trait>": "required" means the host
     must have the specified trait.
-  knowledges:
-    # TODO: Remove this dependency since this is a filter which should
-    # not depend on a potentially non-recent knowledge.
-    # This should be changed to use the hypervisor CRD.
-    - name: host-capabilities
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
@@ -189,19 +179,11 @@ metadata:
   name: filter-has-accelerators
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_has_accelerators
   description: |
     This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
     the nova flavor extra specs request accelerators via "accel:device_profile".
-  # TODO: This step currently depends on traits directly from the datasources.
-  # This should be changed to use the hypervisor CRD.
-  knowledges: []
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
@@ -209,42 +191,36 @@ metadata:
   name: filter-correct-az
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_correct_az
   description: |
     This step will filter out hosts whose aggregate information indicates they
     are not placed in the requested availability zone.
-  knowledges:
-    # TODO: Remove this dependency since this is a filter which should
-    # not depend on a potentially non-recent knowledge.
-    # This should be changed to use the hypervisor CRD.
-    - name: host-az
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
-  name: filter-disabled
+  name: filter-status-conditions
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
-  impl: filter_disabled
+  impl: filter_status_conditions
   description: |
-    This step will filter out hosts for which the hypervisor status is
-    `disabled`, the hypervisor state is `down`, or the trait
-    `COMPUTE_STATUS_DISABLED` is assigned.
-  # TODO: This step currently depends on traits directly from the datasources.
-  # This should be changed to use the hypervisor CRD.
-  knowledges: []
+    This step will filter out hosts for which the hypervisor status conditions
+    do not meet the expected values, for example, that the hypervisor is ready
+    and not disabled.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Step
+metadata:
+  name: filter-maintenance
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_maintenance
+  description: |
+    This step will filter out hosts that are currently in maintenance mode that
+    prevents scheduling, for example, manual maintenance or termination.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
@@ -252,11 +228,6 @@ metadata:
   name: filter-external-customer
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_external_customer
   description: |
@@ -264,9 +235,6 @@ spec:
     filters out hosts that are not intended for external customers. It considers
     the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
     `domain_name` scheduler hint from the nova request spec.
-  # TODO: This step currently depends on traits directly from the datasources.
-  # This should be changed to use the hypervisor CRD.
-  knowledges: []
   opts:
     domainNamePrefixes: ["iaas-"]
 ---
@@ -276,20 +244,12 @@ metadata:
   name: filter-packed-virtqueue
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_packed_virtqueue
   description: |
     If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
     image properties contain the `hw_virtio_packed_ring` key, this step will
     filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
-  # TODO: This step currently depends on traits directly from the datasources.
-  # This should be changed to use the hypervisor CRD.
-  knowledges: []
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
@@ -320,11 +280,6 @@ metadata:
   name: filter-compute-capabilities
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_compute_capabilities
   description: |
@@ -335,9 +290,6 @@ spec:
     Note: currently, advanced boolean/numeric operators for the capabilities
     like `>`, `!`, ... are not supported because they are not used by any of our
     flavors in production.
-  # TODO: This step currently depends on hypervisor capabilities directly from
-  # the datasources. This should be changed to use the hypervisor CRD.
-  knowledges: []
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
