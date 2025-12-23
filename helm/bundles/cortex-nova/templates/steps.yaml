@@ -165,11 +165,6 @@ metadata:
   name: filter-has-requested-traits
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_has_requested_traits
   description: |
@@ -177,11 +172,6 @@ spec:
     nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
     not have the specified trait. "trait:<trait>": "required" means the host
     must have the specified trait.
-  knowledges:
-    # TODO: Remove this dependency since this is a filter which should
-    # not depend on a potentially non-recent knowledge.
-    # This should be changed to use the hypervisor CRD.
-    - name: host-capabilities
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
