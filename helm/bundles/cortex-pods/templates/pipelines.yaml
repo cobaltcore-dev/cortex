@@ -12,3 +12,5 @@ spec:
   steps:
     - ref: { name: pods-noop }
       mandatory: false
+    - ref: { name: pods-gang }
+      mandatory: true

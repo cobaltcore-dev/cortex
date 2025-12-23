@@ -11,3 +11,16 @@ spec:
     This is only a passthrough step which lets all pod candidates through.
     It is used as a placeholder step in the pods scheduler pipeline.
   knowledges: []
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Step
+metadata:
+  name: pods-gang
+spec:
+  operator: cortex
+  type: filter
+  impl: gang
+  description: |
+    This filter ensures that pods belonging to a PodGroup are only scheduled
+    if the PodGroup resource exists.
+  knowledges: []
