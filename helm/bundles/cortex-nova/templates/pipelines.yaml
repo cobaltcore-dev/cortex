@@ -64,7 +64,8 @@ spec:
     - ref: {name: filter-has-requested-traits}
     - ref: {name: filter-has-accelerators}
     - ref: {name: filter-correct-az}
-    - ref: {name: filter-disabled}
+    - ref: {name: filter-status-conditions}
+    - ref: {name: filter-maintenance}
     - ref: {name: filter-external-customer}
     - ref: {name: filter-packed-virtqueue}
     - ref: {name: filter-project-aggregates}

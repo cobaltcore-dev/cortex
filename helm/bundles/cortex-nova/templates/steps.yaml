@@ -209,42 +209,36 @@ metadata:
   name: filter-correct-az
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_correct_az
   description: |
     This step will filter out hosts whose aggregate information indicates they
     are not placed in the requested availability zone.
-  knowledges:
-    # TODO: Remove this dependency since this is a filter which should
-    # not depend on a potentially non-recent knowledge.
-    # This should be changed to use the hypervisor CRD.
-    - name: host-az
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
-  name: filter-disabled
+  name: filter-status-conditions
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
-  impl: filter_disabled
+  impl: filter_status_conditions
   description: |
-    This step will filter out hosts for which the hypervisor status is
-    `disabled`, the hypervisor state is `down`, or the trait
-    `COMPUTE_STATUS_DISABLED` is assigned.
-  # TODO: This step currently depends on traits directly from the datasources.
-  # This should be changed to use the hypervisor CRD.
-  knowledges: []
+    This step will filter out hosts for which the hypervisor status conditions
+    do not meet the expected values, for example, that the hypervisor is ready
+    and not disabled.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Step
+metadata:
+  name: filter-maintenance
+spec:
+  operator: cortex-nova
+  type: filter
+  impl: filter_maintenance
+  description: |
+    This step will filter out hosts that are currently in maintenance mode that
+    prevents scheduling, for example, manual maintenance or termination.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
