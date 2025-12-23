@@ -314,11 +314,6 @@ metadata:
   name: filter-compute-capabilities
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_compute_capabilities
   description: |
@@ -329,9 +324,6 @@ spec:
     Note: currently, advanced boolean/numeric operators for the capabilities
     like `>`, `!`, ... are not supported because they are not used by any of our
     flavors in production.
-  # TODO: This step currently depends on hypervisor capabilities directly from
-  # the datasources. This should be changed to use the hypervisor CRD.
-  knowledges: []
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
