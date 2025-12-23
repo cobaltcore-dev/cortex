@@ -62,7 +62,9 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 	}
 	hvsWithTrait := make(map[string]struct{})
 	for _, hv := range hvs.Items {
-		if !slices.Contains(hv.Status.Traits, "CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED") {
+		traits := hv.Status.Traits
+		traits = append(traits, hv.Spec.CustomTraits...)
+		if !slices.Contains(traits, "CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED") {
 			continue
 		}
 		hvsWithTrait[hv.Name] = struct{}{}

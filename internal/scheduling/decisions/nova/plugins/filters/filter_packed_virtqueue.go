@@ -34,7 +34,9 @@ func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 	hvsWithTrait := make(map[string]struct{})
 	for _, hv := range hvs.Items {
-		if !slices.Contains(hv.Status.Traits, "COMPUTE_NET_VIRTIO_PACKED") {
+		traits := hv.Status.Traits
+		traits = append(traits, hv.Spec.CustomTraits...)
+		if !slices.Contains(traits, "COMPUTE_NET_VIRTIO_PACKED") {
 			continue
 		}
 		hvsWithTrait[hv.Name] = struct{}{}

@@ -50,15 +50,17 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 	hostsMatchingAllTraits := map[string]struct{}{}
 	for _, hv := range hvs.Items {
 		allRequiredPresent := true
+		traits := hv.Status.Traits
+		traits = append(traits, hv.Spec.CustomTraits...)
 		for _, required := range requiredTraits {
-			if !slices.Contains(hv.Status.Traits, required) {
+			if !slices.Contains(traits, required) {
 				allRequiredPresent = false
 				break
 			}
 		}
 		allForbiddenAbsent := true
 		for _, forbidden := range forbiddenTraits {
-			if slices.Contains(hv.Status.Traits, forbidden) {
+			if slices.Contains(traits, forbidden) {
 				allForbiddenAbsent = false
 				break
 			}
