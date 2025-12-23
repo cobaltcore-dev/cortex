@@ -244,20 +244,12 @@ metadata:
   name: filter-packed-virtqueue
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_packed_virtqueue
   description: |
     If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
     image properties contain the `hw_virtio_packed_ring` key, this step will
     filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
-  # TODO: This step currently depends on traits directly from the datasources.
-  # This should be changed to use the hypervisor CRD.
-  knowledges: []
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
