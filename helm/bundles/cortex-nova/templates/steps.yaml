@@ -189,19 +189,11 @@ metadata:
   name: filter-has-accelerators
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_has_accelerators
   description: |
     This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
     the nova flavor extra specs request accelerators via "accel:device_profile".
-  # TODO: This step currently depends on traits directly from the datasources.
-  # This should be changed to use the hypervisor CRD.
-  knowledges: []
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
