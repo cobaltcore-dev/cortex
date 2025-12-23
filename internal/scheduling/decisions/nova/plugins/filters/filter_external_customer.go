@@ -4,16 +4,15 @@
 package filters
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"slices"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/placement"
-
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterExternalCustomerStepOpts struct {
@@ -55,23 +54,27 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 		traceLog.Debug("domain does not match any external customer prefix", "domain", domainName)
 		return result, nil
 	}
-	var externalCustomerComputeHosts []string
-	if _, err := s.DB.SelectTimed("scheduler-nova", &externalCustomerComputeHosts, `
-        SELECT h.service_host
-        FROM `+nova.Hypervisor{}.TableName()+` h
-        JOIN `+placement.Trait{}.TableName()+` rpt
-        ON h.id = rpt.resource_provider_uuid
-        WHERE rpt.name = 'CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED'`,
-	); err != nil {
+
+	hvs := &hv1.HypervisorList{}
+	if err := s.Client.List(context.Background(), hvs); err != nil {
+		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}
-	lookupStr := strings.Join(externalCustomerComputeHosts, ",")
+	hvsWithTrait := make(map[string]struct{})
+	for _, hv := range hvs.Items {
+		if !slices.Contains(hv.Status.Traits, "CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED") {
+			continue
+		}
+		hvsWithTrait[hv.Name] = struct{}{}
+	}
+
+	traceLog.Info("hosts supporting external customers", "hosts", hvsWithTrait)
 	for host := range result.Activations {
-		if !strings.Contains(lookupStr, host) {
+		if _, ok := hvsWithTrait[host]; ok {
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Debug("filtering host not intended for external customers", "host", host)
+		traceLog.Info("filtering host not supporting external customers", "host", host)
 	}
 	return result, nil
 }

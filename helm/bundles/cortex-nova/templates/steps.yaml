@@ -246,11 +246,6 @@ metadata:
   name: filter-external-customer
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_external_customer
   description: |
@@ -258,9 +253,6 @@ spec:
     filters out hosts that are not intended for external customers. It considers
     the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
     `domain_name` scheduler hint from the nova request spec.
-  # TODO: This step currently depends on traits directly from the datasources.
-  # This should be changed to use the hypervisor CRD.
-  knowledges: []
   opts:
     domainNamePrefixes: ["iaas-"]
 ---
