@@ -47,8 +47,8 @@ jobs:
 
           echo "Running tests..."
           go test -v \
-            -coverpkg=./... \
-            -coverprofile=profile.cov ./...
+            -coverpkg=./internal/... \
+            -coverprofile=profile.cov ./internal/...
           go tool cover -func profile.cov > func_coverage.txt
 
       - name: Upload coverage files
