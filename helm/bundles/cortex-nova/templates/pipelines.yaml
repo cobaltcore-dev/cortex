@@ -69,7 +69,7 @@ spec:
     - ref: {name: filter-external-customer}
     - ref: {name: filter-packed-virtqueue}
     - ref: {name: filter-allowed-projects}
-    - ref: {name: filter-compute-capabilities}
+    - ref: {name: filter-capabilities}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline

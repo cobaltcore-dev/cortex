@@ -14,7 +14,126 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
+func TestHvToNovaCapabilities(t *testing.T) {
+	tests := []struct {
+		name        string
+		hv          hv1.Hypervisor
+		expected    map[string]string
+		expectError bool
+	}{
+		{
+			name: "CH hypervisor with x86_64 architecture",
+			hv: hv1.Hypervisor{
+				Status: hv1.HypervisorStatus{
+					DomainCapabilities: hv1.DomainCapabilities{
+						HypervisorType: "ch",
+					},
+					Capabilities: hv1.Capabilities{
+						HostCpuArch: "x86_64",
+					},
+				},
+			},
+			expected: map[string]string{
+				"capabilities:hypervisor_type": "CH",
+				"capabilities:cpu_arch":        "x86_64",
+			},
+			expectError: false,
+		},
+		{
+			name: "QEMU hypervisor with x86_64 architecture",
+			hv: hv1.Hypervisor{
+				Status: hv1.HypervisorStatus{
+					DomainCapabilities: hv1.DomainCapabilities{
+						HypervisorType: "qemu",
+					},
+					Capabilities: hv1.Capabilities{
+						HostCpuArch: "x86_64",
+					},
+				},
+			},
+			expected: map[string]string{
+				"capabilities:hypervisor_type": "QEMU",
+				"capabilities:cpu_arch":        "x86_64",
+			},
+			expectError: false,
+		},
+		{
+			name: "CH hypervisor with aarch64 architecture",
+			hv: hv1.Hypervisor{
+				Status: hv1.HypervisorStatus{
+					DomainCapabilities: hv1.DomainCapabilities{
+						HypervisorType: "ch",
+					},
+					Capabilities: hv1.Capabilities{
+						HostCpuArch: "aarch64",
+					},
+				},
+			},
+			expected: map[string]string{
+				"capabilities:hypervisor_type": "CH",
+				"capabilities:cpu_arch":        "aarch64",
+			},
+			expectError: false,
+		},
+		{
+			name: "Unknown hypervisor type",
+			hv: hv1.Hypervisor{
+				Status: hv1.HypervisorStatus{
+					DomainCapabilities: hv1.DomainCapabilities{
+						HypervisorType: "kvm",
+					},
+					Capabilities: hv1.Capabilities{
+						HostCpuArch: "x86_64",
+					},
+				},
+			},
+			expected:    nil,
+			expectError: true,
+		},
+		{
+			name: "Empty hypervisor type",
+			hv: hv1.Hypervisor{
+				Status: hv1.HypervisorStatus{
+					DomainCapabilities: hv1.DomainCapabilities{
+						HypervisorType: "",
+					},
+					Capabilities: hv1.Capabilities{
+						HostCpuArch: "x86_64",
+					},
+				},
+			},
+			expected:    nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := hvToNovaCapabilities(tt.hv)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d capabilities, got %d", len(tt.expected), len(result))
+			}
+			for key, expectedValue := range tt.expected {
+				if actualValue, ok := result[key]; !ok {
+					t.Errorf("expected key %s not found in result", key)
+				} else if actualValue != expectedValue {
+					t.Errorf("for key %s, expected %s, got %s", key, expectedValue, actualValue)
+				}
+			}
+		})
+	}
+}
+
+func TestFilterCapabilitiesStep_Run(t *testing.T) {
 	scheme, err := hv1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -26,6 +145,9 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host1",
 			},
 			Status: hv1.HypervisorStatus{
+				DomainCapabilities: hv1.DomainCapabilities{
+					HypervisorType: "ch",
+				},
 				Capabilities: hv1.Capabilities{
 					HostCpuArch: "x86_64",
 				},
@@ -36,6 +158,9 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host2",
 			},
 			Status: hv1.HypervisorStatus{
+				DomainCapabilities: hv1.DomainCapabilities{
+					HypervisorType: "qemu",
+				},
 				Capabilities: hv1.Capabilities{
 					HostCpuArch: "x86_64",
 				},
@@ -46,8 +171,11 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host3",
 			},
 			Status: hv1.HypervisorStatus{
+				DomainCapabilities: hv1.DomainCapabilities{
+					HypervisorType: "ch",
+				},
 				Capabilities: hv1.Capabilities{
-					HostCpuArch: "x86_64",
+					HostCpuArch: "aarch64",
 				},
 			},
 		},
@@ -56,17 +184,12 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host4",
 			},
 			Status: hv1.HypervisorStatus{
+				DomainCapabilities: hv1.DomainCapabilities{
+					HypervisorType: "qemu",
+				},
 				Capabilities: hv1.Capabilities{
 					HostCpuArch: "aarch64",
 				},
-			},
-		},
-		&hv1.Hypervisor{
-			ObjectMeta: v1.ObjectMeta{
-				Name: "host5",
-			},
-			Status: hv1.HypervisorStatus{
-				Capabilities: hv1.Capabilities{},
 			},
 		},
 	}
@@ -78,7 +201,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 		filteredHosts []string
 	}{
 		{
-			name: "No extra specs capabilities - all hosts pass",
+			name: "No extra specs in request - all hosts pass",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
@@ -99,14 +222,60 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 			filteredHosts: []string{},
 		},
 		{
-			name: "Filter by cpuArch capability - x86_64",
+			name: "Non-capability extra specs - all hosts pass",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "x86_64",
+									"hw:mem_page_size": "large",
+									"hw:cpu_policy":    "dedicated",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Match CH hypervisor type",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "CH",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{"host2"},
+		},
+		{
+			name: "Match QEMU hypervisor type",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "QEMU",
 								},
 							},
 						},
@@ -119,18 +288,92 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 					{ComputeHost: "host4"},
 				},
 			},
-			expectedHosts: []string{"host1", "host2", "host3"},
-			filteredHosts: []string{"host4"},
+			expectedHosts: []string{"host2", "host4"},
+			filteredHosts: []string{"host1", "host3"},
 		},
 		{
-			name: "Filter by cpuArch capability - aarch64",
+			name: "Match x86_64 CPU architecture",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "aarch64",
+									"capabilities:cpu_arch": "x86_64",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{"host3", "host4"},
+		},
+		{
+			name: "Match aarch64 CPU architecture",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:cpu_arch": "aarch64",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host3", "host4"},
+			filteredHosts: []string{"host1", "host2"},
+		},
+		{
+			name: "Match both hypervisor type and CPU architecture",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "CH",
+									"capabilities:cpu_arch":        "x86_64",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host2", "host3", "host4"},
+		},
+		{
+			name: "Match QEMU with aarch64",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "QEMU",
+									"capabilities:cpu_arch":        "aarch64",
 								},
 							},
 						},
@@ -147,37 +390,14 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 			filteredHosts: []string{"host1", "host2", "host3"},
 		},
 		{
-			name: "Filter with non-existent cpuArch value",
+			name: "No matching hosts",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "riscv64",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			},
-			expectedHosts: []string{},
-			filteredHosts: []string{"host1", "host2", "host3"},
-		},
-		{
-			name: "Filter with missing capability key on host",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:missing_key": "value",
+									"capabilities:hypervisor_type": "KVM",
 								},
 							},
 						},
@@ -192,16 +412,16 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 			filteredHosts: []string{"host1", "host2"},
 		},
 		{
-			name: "Non-capability extra specs are ignored",
+			name: "Mixed capability and non-capability extra specs",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"hw:cpu_policy":        "dedicated",
-									"quota:vif_inbound":    "100000",
-									"capabilities:cpuArch": "x86_64",
+									"capabilities:hypervisor_type": "CH",
+									"hw:mem_page_size":             "large",
+									"capabilities:cpu_arch":        "x86_64",
 								},
 							},
 						},
@@ -213,118 +433,8 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 					{ComputeHost: "host3"},
 				},
 			},
-			expectedHosts: []string{"host1", "host2", "host3"},
-			filteredHosts: []string{},
-		},
-		{
-			name: "Unsupported operator = should skip filter",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "= x86_64",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedHosts: []string{"host1", "host2"},
-			filteredHosts: []string{},
-		},
-		{
-			name: "Unsupported operator <in> should skip filter",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "<in> x86_64,aarch64",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedHosts: []string{"host1", "host2"},
-			filteredHosts: []string{},
-		},
-		{
-			name: "Unsupported operator >= should skip filter",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": ">= x86_64",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedHosts: []string{"host1", "host2"},
-			filteredHosts: []string{},
-		},
-		{
-			name: "Unsupported operator s== should skip filter",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "s== x86_64",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedHosts: []string{"host1", "host2"},
-			filteredHosts: []string{},
-		},
-		{
-			name: "Unsupported operator <or> should skip filter",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "<or> x86_64 aarch64",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedHosts: []string{"host1", "host2"},
-			filteredHosts: []string{},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host2", "host3"},
 		},
 		{
 			name: "Empty host list",
@@ -334,7 +444,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "x86_64",
+									"capabilities:hypervisor_type": "CH",
 								},
 							},
 						},
@@ -346,14 +456,14 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 			filteredHosts: []string{},
 		},
 		{
-			name: "Host not in database",
+			name: "Case sensitive capability matching",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "x86_64",
+									"capabilities:hypervisor_type": "ch", // lowercase should not match
 								},
 							},
 						},
@@ -361,43 +471,21 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
-					{ComputeHost: "host-unknown"},
+					{ComputeHost: "host2"},
 				},
 			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{"host-unknown"},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host1", "host2"},
 		},
 		{
-			name: "Host with empty capabilities",
+			name: "Unsupported operator in extra specs - skip filter",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "x86_64",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host5"},
-				},
-			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{"host5"},
-		},
-		{
-			name: "Mixed matching and non-matching hosts",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:cpuArch": "x86_64",
+									"capabilities:cpu_arch": "s>=x86_64",
 								},
 							},
 						},
@@ -407,18 +495,60 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
 				},
 			},
 			expectedHosts: []string{"host1", "host2", "host3"},
-			filteredHosts: []string{"host4", "host5"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Unsupported <in> operator - skip filter",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "<in> CH QEMU",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "All hosts match when no capabilities requested",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2", "host3", "host4"},
+			filteredHosts: []string{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &FilterComputeCapabilitiesStep{}
+			step := &FilterCapabilitiesStep{}
 			step.Client = fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(hvs...).

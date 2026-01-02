@@ -27,7 +27,7 @@ var supportedSteps = map[string]func() NovaStep{
 	"filter_packed_virtqueue":                 func() NovaStep { return &filters.FilterPackedVirtqueueStep{} },
 	"filter_external_customer":                func() NovaStep { return &filters.FilterExternalCustomerStep{} },
 	"filter_allowed_projects":                 func() NovaStep { return &filters.FilterAllowedProjectsStep{} },
-	"filter_compute_capabilities":             func() NovaStep { return &filters.FilterComputeCapabilitiesStep{} },
+	"filter_capabilities":                     func() NovaStep { return &filters.FilterCapabilitiesStep{} },
 	"filter_has_requested_traits":             func() NovaStep { return &filters.FilterHasRequestedTraits{} },
 	"filter_has_enough_capacity":              func() NovaStep { return &filters.FilterHasEnoughCapacity{} },
 	"filter_host_instructions":                func() NovaStep { return &filters.FilterHostInstructionsStep{} },

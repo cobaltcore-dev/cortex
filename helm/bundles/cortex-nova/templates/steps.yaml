@@ -268,11 +268,11 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
-  name: filter-compute-capabilities
+  name: filter-capabilities
 spec:
   operator: cortex-nova
   type: filter
-  impl: filter_compute_capabilities
+  impl: filter_capabilities
   description: |
     This step will filter out hosts that do not meet the compute capabilities
     requested by the nova flavor extra specs, like `{"arch": "x86_64",

@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -14,13 +14,37 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
-type FilterComputeCapabilitiesStep struct {
+type FilterCapabilitiesStep struct {
 	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+}
+
+// Get the provided capabilities of a hypervisor resource in the format Nova expects.
+// The resulting map has keys like "capabilities:key" to match flavor extra specs.
+// For example, if the hypervisor provides a cpu architecture "x86_64",
+// the resulting map will have an entry "capabilities:cpu_info": "x86_64".
+func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
+	caps := make(map[string]string)
+
+	// Nova example: capabilities:hypervisor_type='CH'
+	// Value provided by libvirt domain capabilities: 'ch'
+	switch hv.Status.DomainCapabilities.HypervisorType {
+	case "ch":
+		caps["capabilities:hypervisor_type"] = "CH"
+	case "qemu":
+		caps["capabilities:hypervisor_type"] = "QEMU"
+	default:
+		return nil, fmt.Errorf("unknown autodiscovered hypervisor type: %s", hv.Status.DomainCapabilities.HypervisorType)
+	}
+
+	// Nova example: capabilities:cpu_arch='x86_64'
+	caps["capabilities:cpu_arch"] = hv.Status.Capabilities.HostCpuArch
+
+	return caps, nil
 }
 
 // Check the capabilities of each host and if they match the extra spec provided
 // in the request spec flavor.
-func (s *FilterComputeCapabilitiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	requestedCapabilities := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if len(requestedCapabilities) == 0 {
@@ -56,34 +80,18 @@ func (s *FilterComputeCapabilitiesStep) Run(traceLog *slog.Logger, request api.E
 		return nil, err
 	}
 
-	// We take the `capabilities` field from the hypervisor status and
-	// flatten it to a map[string]any where keys are prefixed with `capabilities:`.
-	// This allows us to directly compare with the requested extra specs.
-	providedCapabilities := make(map[string]map[string]any)
+	hvCaps := make(map[string]map[string]string)
 	for _, hv := range hvs.Items {
-		marshalled, err := json.Marshal(hv.Status.Capabilities)
-		if err != nil {
-			traceLog.Error("failed to marshal hypervisor capabilities", "host", hv.Name, "error", err)
-			continue
-		}
-		cpuInfo := make(map[string]any)
-		if err := json.Unmarshal(marshalled, &cpuInfo); err != nil {
-			traceLog.Error("failed to unmarshal hypervisor capabilities", "host", hv.Name, "error", err)
-			continue
-		}
-		providedCapabilities[hv.Name] = make(map[string]any)
-		for key, value := range cpuInfo {
-			providedCapabilities[hv.Name]["capabilities:"+key] = value
+		var err error
+		if hvCaps[hv.Name], err = hvToNovaCapabilities(hv); err != nil {
+			traceLog.Error("failed to get nova capabilities from hypervisor", "host", hv.Name, "error", err)
+			return nil, err
 		}
 	}
-	traceLog.Info(
-		"provided capabilities from hypervisors",
-		"capabilities", providedCapabilities,
-	)
 
 	// Check which hosts match the requested capabilities.
 	for host := range result.Activations {
-		provided, ok := providedCapabilities[host]
+		provided, ok := hvCaps[host]
 		if !ok {
 			delete(result.Activations, host)
 			traceLog.Info("filtering host without provided capabilities", "host", host)
