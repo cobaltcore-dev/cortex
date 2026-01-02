@@ -799,6 +799,7 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			//nolint:gocritic
 			objects := append(tt.hypervisors, tt.reservations...)
 			step := &FilterHasEnoughCapacity{}
 			step.Client = fake.NewClientBuilder().

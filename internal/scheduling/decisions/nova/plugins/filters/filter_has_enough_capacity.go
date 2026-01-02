@@ -136,6 +136,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on cpu.
+		//nolint:gosec // We're checking for underflows above (< 0).
 		vcpuSlots := uint64(freeCPU.Value()) /
 			request.Spec.Data.Flavor.Data.VCPUs
 		if vcpuSlots < request.Spec.Data.NumInstances {
@@ -163,6 +164,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		// Calculate how many instances can fit on this host, based on memory.
 		// Note: according to the OpenStack docs, the memory is in MB, not MiB.
 		// See: https://docs.openstack.org/nova/latest/user/flavors.html
+		//nolint:gosec // We're checking for underflows above (< 0).
 		memorySlots := uint64(freeMemory.Value()/1_000_000 /* MB */) /
 			request.Spec.Data.Flavor.Data.MemoryMB
 		if memorySlots < request.Spec.Data.NumInstances {
