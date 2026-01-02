@@ -254,25 +254,16 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Step
 metadata:
-  name: filter-project-aggregates
+  name: filter-allowed-projects
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
-  impl: filter_project_aggregates
+  impl: filter_allowed_projects
   description: |
-    This step locks certain hosts for certain projects, based on the aggregate
-    metadata. Note that hosts without aggregate tenant filter are still
-    accessible and will not be filtered out.
-  knowledges:
-    # TODO: Remove this dependency since this is a filter which should
-    # not depend on a potentially non-recent knowledge.
-    # This should be changed to use the hypervisor CRD.
-    - name: host-pinned-projects
+    This step filters hosts based on allowed projects defined in the
+    hypervisor resource. Note that hosts allowing all projects are still
+    accessible and will not be filtered out. In this way some hypervisors
+    are made accessible to some projects only.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Step

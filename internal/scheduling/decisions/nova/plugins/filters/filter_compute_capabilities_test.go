@@ -26,7 +26,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host1",
 			},
 			Status: hv1.HypervisorStatus{
-				Capabilities: hv1.CapabilitiesStatus{
+				Capabilities: hv1.Capabilities{
 					HostCpuArch: "x86_64",
 				},
 			},
@@ -36,7 +36,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host2",
 			},
 			Status: hv1.HypervisorStatus{
-				Capabilities: hv1.CapabilitiesStatus{
+				Capabilities: hv1.Capabilities{
 					HostCpuArch: "x86_64",
 				},
 			},
@@ -46,7 +46,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host3",
 			},
 			Status: hv1.HypervisorStatus{
-				Capabilities: hv1.CapabilitiesStatus{
+				Capabilities: hv1.Capabilities{
 					HostCpuArch: "x86_64",
 				},
 			},
@@ -56,7 +56,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host4",
 			},
 			Status: hv1.HypervisorStatus{
-				Capabilities: hv1.CapabilitiesStatus{
+				Capabilities: hv1.Capabilities{
 					HostCpuArch: "aarch64",
 				},
 			},
@@ -66,7 +66,7 @@ func TestFilterComputeCapabilitiesStep_Run(t *testing.T) {
 				Name: "host5",
 			},
 			Status: hv1.HypervisorStatus{
-				Capabilities: hv1.CapabilitiesStatus{},
+				Capabilities: hv1.Capabilities{},
 			},
 		},
 	}

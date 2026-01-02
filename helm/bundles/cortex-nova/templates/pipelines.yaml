@@ -68,7 +68,7 @@ spec:
     - ref: {name: filter-maintenance}
     - ref: {name: filter-external-customer}
     - ref: {name: filter-packed-virtqueue}
-    - ref: {name: filter-project-aggregates}
+    - ref: {name: filter-allowed-projects}
     - ref: {name: filter-compute-capabilities}
 ---
 apiVersion: cortex.cloud/v1alpha1
