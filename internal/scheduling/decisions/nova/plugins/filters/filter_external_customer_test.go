@@ -7,64 +7,80 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/placement"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
-
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestFilterExternalCustomerStep_Run(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(nova.Hypervisor{}),
-		testDB.AddTable(placement.Trait{}),
-	)
+	scheme, err := hv1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock hypervisor data
-	hypervisors := []any{
-		&nova.Hypervisor{ID: "hv1", Hostname: "hypervisor1", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.1", ServiceID: "svc1", ServiceHost: "host1", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
-		&nova.Hypervisor{ID: "hv2", Hostname: "hypervisor2", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.2", ServiceID: "svc2", ServiceHost: "host2", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
-		&nova.Hypervisor{ID: "hv3", Hostname: "hypervisor3", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.3", ServiceID: "svc3", ServiceHost: "host3", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
-		&nova.Hypervisor{ID: "hv4", Hostname: "hypervisor4", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.4", ServiceID: "svc4", ServiceHost: "host4", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
-	}
-	if err := testDB.Insert(hypervisors...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Insert mock trait data - host1 and host3 support external customers
-	traits := []any{
-		&placement.Trait{ResourceProviderUUID: "hv1", Name: "CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED", ResourceProviderGeneration: 1},
-		&placement.Trait{ResourceProviderUUID: "hv2", Name: "COMPUTE_STATUS_ENABLED", ResourceProviderGeneration: 1},
-		&placement.Trait{ResourceProviderUUID: "hv3", Name: "CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED", ResourceProviderGeneration: 1},
-		&placement.Trait{ResourceProviderUUID: "hv4", Name: "COMPUTE_STATUS_ENABLED", ResourceProviderGeneration: 1},
-	}
-	if err := testDB.Insert(traits...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	hvs := []client.Object{
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host1",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host2",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED", "SOME_OTHER_TRAIT"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host3",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"SOME_OTHER_TRAIT"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host4",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host5",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED"},
+			},
+		},
 	}
 
 	tests := []struct {
 		name          string
-		request       api.ExternalSchedulerRequest
 		opts          FilterExternalCustomerStepOpts
+		request       api.ExternalSchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
+		expectError   bool
 	}{
 		{
-			name: "External customer domain - filter out external customer hosts",
+			name: "External customer domain matches prefix - filter to supported hosts",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						SchedulerHints: map[string]any{
-							"domain_name": "external-customer-corp.com",
+							"domain_name": "ext-customer1",
 						},
 					},
 				},
@@ -75,20 +91,19 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host4"},
 				},
 			},
-			opts: FilterExternalCustomerStepOpts{
-				CustomerDomainNamePrefixes: []string{"external-customer-"},
-				CustomerIgnoredDomainNames: []string{},
-			},
-			expectedHosts: []string{"host2", "host4"}, // Hosts without external customer support
-			filteredHosts: []string{"host1", "host3"}, // Hosts with external customer support are filtered out
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{"host3", "host4"},
 		},
 		{
-			name: "Internal domain - no filtering",
+			name: "Domain does not match external customer prefix - all hosts pass",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						SchedulerHints: map[string]any{
-							"domain_name": "internal.company.com",
+							"domain_name": "internal-customer",
 						},
 					},
 				},
@@ -98,21 +113,43 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
 				},
-			},
-			opts: FilterExternalCustomerStepOpts{
-				CustomerDomainNamePrefixes: []string{"external-customer-"},
-				CustomerIgnoredDomainNames: []string{},
 			},
 			expectedHosts: []string{"host1", "host2", "host3", "host4"},
 			filteredHosts: []string{},
 		},
 		{
-			name: "Ignored external customer domain - no filtering",
+			name: "Multiple domain prefixes - matches second prefix",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"external-", "ext-", "customer-"},
+			},
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						SchedulerHints: map[string]any{
-							"domain_name": "external-customer-ignored.com",
+							"domain_name": "customer-abc",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host3", "host4"},
+		},
+		{
+			name: "Domain in ignored list - all hosts pass",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+				CustomerIgnoredDomainNames: []string{"ext-special-domain"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"domain_name": "ext-special-domain",
 						},
 					},
 				},
@@ -120,66 +157,98 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
 				},
 			},
-			opts: FilterExternalCustomerStepOpts{
-				CustomerDomainNamePrefixes: []string{"external-customer-"},
-				CustomerIgnoredDomainNames: []string{"external-customer-ignored.com"},
-			},
-			expectedHosts: []string{"host1", "host2", "host3", "host4"},
+			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{},
 		},
 		{
-			name: "Multiple domain prefixes",
+			name: "Only hosts with trait should remain for external customer",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						SchedulerHints: map[string]any{
-							"domain_name": "partner-company.com",
+							"domain_name": "ext-customer2",
 						},
 					},
 				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
+					{ComputeHost: "host5"},
 				},
 			},
-			opts: FilterExternalCustomerStepOpts{
-				CustomerDomainNamePrefixes: []string{"external-customer-", "partner-"},
-				CustomerIgnoredDomainNames: []string{},
-			},
-			expectedHosts: []string{"host2", "host4"},
-			filteredHosts: []string{"host1", "host3"},
+			expectedHosts: []string{"host1", "host2", "host5"},
+			filteredHosts: []string{},
 		},
 		{
-			name: "Domain hint as array",
+			name: "No hosts with trait - all filtered",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						SchedulerHints: map[string]any{
-							"domain_name": []any{"external-customer-test.com"},
+							"domain_name": "ext-customer3",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host3", "host4"},
+		},
+		{
+			name: "Empty host list",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"domain_name": "ext-customer",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Domain name as list - uses first element",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"domain_name": []any{"ext-customer", "other"},
 						},
 					},
 				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
 				},
 			},
-			opts: FilterExternalCustomerStepOpts{
-				CustomerDomainNamePrefixes: []string{"external-customer-"},
-				CustomerIgnoredDomainNames: []string{},
-			},
-			expectedHosts: []string{"host2", "host4"},
-			filteredHosts: []string{"host1", "host3"},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host3"},
 		},
 		{
-			name: "No domain hint",
+			name: "Missing domain_name in scheduler hints - error",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
@@ -188,33 +257,110 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
 				},
 			},
+			expectError: true,
+		},
+		{
+			name: "Nil scheduler hints - error",
 			opts: FilterExternalCustomerStepOpts{
-				CustomerDomainNamePrefixes: []string{"external-customer-"},
-				CustomerIgnoredDomainNames: []string{},
+				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			expectedHosts: []string{}, // Should return error, but we expect empty result
-			filteredHosts: []string{"host1", "host2"},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: nil,
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "Case sensitive prefix matching",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"domain_name": "EXT-customer",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Exact prefix match",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"domain_name": "ext",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host3"},
+		},
+		{
+			name: "Multiple ignored domains",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+				CustomerIgnoredDomainNames: []string{"ext-test", "ext-dev", "ext-staging"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"domain_name": "ext-dev",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterExternalCustomerStep{}
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(hvs...).
+				Build()
 			step.Options = tt.opts
-			result, err := step.Run(slog.Default(), tt.request)
 
-			// For the "No domain hint" test case, we expect an error
-			if tt.name == "No domain hint" {
+			result, err := step.Run(slog.Default(), tt.request)
+			if tt.expectError {
 				if err == nil {
-					t.Errorf("expected error for missing domain hint, got nil")
+					t.Errorf("expected error but got none")
 				}
 				return
 			}
-
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -248,34 +394,38 @@ func TestFilterExternalCustomerStepOpts_Validate(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name: "Valid options",
+			name: "Valid options with single prefix",
 			opts: FilterExternalCustomerStepOpts{
-				CustomerDomainNamePrefixes: []string{"external-customer-"},
-				CustomerIgnoredDomainNames: []string{},
+				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
 			expectError: false,
 		},
 		{
-			name: "Multiple prefixes",
+			name: "Valid options with multiple prefixes",
 			opts: FilterExternalCustomerStepOpts{
-				CustomerDomainNamePrefixes: []string{"external-customer-", "partner-"},
-				CustomerIgnoredDomainNames: []string{"ignored.com"},
+				CustomerDomainNamePrefixes: []string{"ext-", "external-", "customer-"},
 			},
 			expectError: false,
 		},
 		{
-			name: "Empty prefixes",
+			name: "Valid options with prefixes and ignored domains",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+				CustomerIgnoredDomainNames: []string{"ext-test"},
+			},
+			expectError: false,
+		},
+		{
+			name: "Invalid - empty domain name prefixes",
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{},
-				CustomerIgnoredDomainNames: []string{},
 			},
 			expectError: true,
 		},
 		{
-			name: "Nil prefixes",
+			name: "Invalid - nil domain name prefixes",
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: nil,
-				CustomerIgnoredDomainNames: []string{},
 			},
 			expectError: true,
 		},
@@ -285,10 +435,10 @@ func TestFilterExternalCustomerStepOpts_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.opts.Validate()
 			if tt.expectError && err == nil {
-				t.Errorf("expected error, got nil")
+				t.Errorf("expected validation error but got none")
 			}
 			if !tt.expectError && err != nil {
-				t.Errorf("expected no error, got %v", err)
+				t.Errorf("expected no validation error but got: %v", err)
 			}
 		})
 	}

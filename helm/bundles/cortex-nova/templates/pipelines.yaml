@@ -45,7 +45,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-external-scheduler-kvm-reservations
+  name: nova-external-scheduler-kvm-all-filters-enabled
 spec:
   operator: cortex-nova
   description: |
@@ -64,11 +64,12 @@ spec:
     - ref: {name: filter-has-requested-traits}
     - ref: {name: filter-has-accelerators}
     - ref: {name: filter-correct-az}
-    - ref: {name: filter-disabled}
+    - ref: {name: filter-status-conditions}
+    - ref: {name: filter-maintenance}
     - ref: {name: filter-external-customer}
     - ref: {name: filter-packed-virtqueue}
-    - ref: {name: filter-project-aggregates}
-    - ref: {name: filter-compute-capabilities}
+    - ref: {name: filter-allowed-projects}
+    - ref: {name: filter-capabilities}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline

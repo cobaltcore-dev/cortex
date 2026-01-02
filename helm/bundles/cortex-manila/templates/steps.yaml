@@ -5,11 +5,6 @@ metadata:
   name: netapp-cpu-usage-balancing-manila
 spec:
   operator: cortex-manila
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-manila-postgres
-    namespace: {{ .Release.Namespace }}
   type: weigher
   impl: netapp_cpu_usage_balancing
   description: |
@@ -17,8 +12,6 @@ spec:
     to balance manila share placements across available storage pools.
     Its main purpose is to avoid cpu overutilization on a storage pool which
     may lead to performance degradation for shares placed on that pool.
-  knowledges:
-    - name: netapp-storage-pool-cpu-usage-manila
   opts:
     # Min-max scaling for gap-fitting based on CPU usage (pct)
     avgCPUUsageLowerBound: 0 # pct

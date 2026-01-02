@@ -7,48 +7,60 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/placement"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
-
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	err := testDB.CreateTable(
-		testDB.AddTable(nova.Hypervisor{}),
-		testDB.AddTable(placement.Trait{}),
-	)
+	scheme, err := hv1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock hypervisor data
-	hypervisors := []any{
-		&nova.Hypervisor{ID: "hv1", Hostname: "hypervisor1", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.1", ServiceID: "svc1", ServiceHost: "host1", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
-		&nova.Hypervisor{ID: "hv2", Hostname: "hypervisor2", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.2", ServiceID: "svc2", ServiceHost: "host2", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
-		&nova.Hypervisor{ID: "hv3", Hostname: "hypervisor3", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.3", ServiceID: "svc3", ServiceHost: "host3", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
-		&nova.Hypervisor{ID: "hv4", Hostname: "hypervisor4", State: "up", Status: "enabled", HypervisorType: "QEMU", HypervisorVersion: 2008000, HostIP: "192.168.1.4", ServiceID: "svc4", ServiceHost: "host4", VCPUs: 16, MemoryMB: 32768, LocalGB: 1000, VCPUsUsed: 4, MemoryMBUsed: 8192, LocalGBUsed: 100, FreeRAMMB: 24576, FreeDiskGB: 900, CurrentWorkload: 0, RunningVMs: 2, DiskAvailableLeast: &[]int{900}[0], CPUInfo: "{}"},
-	}
-	if err := testDB.Insert(hypervisors...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Insert mock trait data - host1 and host3 have accelerators
-	traits := []any{
-		&placement.Trait{ResourceProviderUUID: "hv1", Name: "COMPUTE_ACCELERATORS", ResourceProviderGeneration: 1},
-		&placement.Trait{ResourceProviderUUID: "hv2", Name: "COMPUTE_STATUS_ENABLED", ResourceProviderGeneration: 1},
-		&placement.Trait{ResourceProviderUUID: "hv3", Name: "COMPUTE_ACCELERATORS", ResourceProviderGeneration: 1},
-		&placement.Trait{ResourceProviderUUID: "hv4", Name: "COMPUTE_STATUS_ENABLED", ResourceProviderGeneration: 1},
-	}
-	if err := testDB.Insert(traits...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	hvs := []client.Object{
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host1",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"COMPUTE_ACCELERATORS"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host2",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"COMPUTE_ACCELERATORS", "SOME_OTHER_TRAIT"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host3",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"SOME_OTHER_TRAIT"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host4",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host5",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"COMPUTE_ACCELERATORS", "CUSTOM_GPU"},
+			},
+		},
 	}
 
 	tests := []struct {
@@ -58,80 +70,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		filteredHosts []string
 	}{
 		{
-			name: "No accelerators requested - no filtering",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"hw:cpu_policy": "dedicated",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-				},
-			},
-			expectedHosts: []string{"host1", "host2", "host3", "host4"},
-			filteredHosts: []string{},
-		},
-		{
-			name: "Accelerators requested - filter hosts without accelerators",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "gpu-profile",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-				},
-			},
-			expectedHosts: []string{"host1", "host3"}, // Only hosts with COMPUTE_ACCELERATORS trait
-			filteredHosts: []string{"host2", "host4"}, // Hosts without accelerators are filtered out
-		},
-		{
-			name: "Accelerators requested with specific device profile",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "nvidia-v100",
-									"hw:cpu_policy":        "dedicated",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-				},
-			},
-			expectedHosts: []string{"host1", "host3"},
-			filteredHosts: []string{"host2", "host4"},
-		},
-		{
-			name: "Empty extra specs - no filtering",
+			name: "No accelerators requested - all hosts pass",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
@@ -153,29 +92,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 			filteredHosts: []string{},
 		},
 		{
-			name: "All hosts without accelerators",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "gpu-profile",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host2"},
-					{ComputeHost: "host4"},
-				},
-			},
-			expectedHosts: []string{},
-			filteredHosts: []string{"host2", "host4"},
-		},
-		{
-			name: "All hosts with accelerators",
+			name: "Accelerators requested - filter to hosts with COMPUTE_ACCELERATORS trait",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
@@ -190,14 +107,216 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
 				},
 			},
-			expectedHosts: []string{"host1", "host3"},
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{"host3", "host4"},
+		},
+		{
+			name: "Accelerators requested with different device profile value",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"accel:device_profile": "fpga-profile",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host5"},
+				},
+			},
+			expectedHosts: []string{"host1", "host5"},
+			filteredHosts: []string{"host3"},
+		},
+		{
+			name: "Accelerators requested - all hosts have the trait",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"accel:device_profile": "gpu-profile",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host5"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2", "host5"},
 			filteredHosts: []string{},
 		},
 		{
-			name: "Host not in database",
+			name: "Accelerators requested - no hosts have the trait",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"accel:device_profile": "gpu-profile",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host3", "host4"},
+		},
+		{
+			name: "Other extra specs present but no accelerator request - all hosts pass",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"hw:cpu_policy":     "dedicated",
+									"quota:vif_inbound": "100000",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host1", "host3", "host4"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Accelerators requested with empty device profile value",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"accel:device_profile": "",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{"host3"},
+		},
+		{
+			name: "Empty host list with accelerators requested",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"accel:device_profile": "gpu-profile",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Empty host list without accelerators requested",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Mixed hosts with and without accelerators trait",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"accel:device_profile": "custom-accelerator",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+					{ComputeHost: "host5"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2", "host5"},
+			filteredHosts: []string{"host3", "host4"},
+		},
+		{
+			name: "Accelerators with additional extra specs",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"accel:device_profile": "gpu-profile",
+									"hw:cpu_policy":        "dedicated",
+									"hw:mem_page_size":     "large",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host3"},
+		},
+		{
+			name: "Host not in database with accelerators requested",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
@@ -223,7 +342,11 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterHasAcceleratorsStep{}
-			step.DB = &testDB
+			step.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(hvs...).
+				Build()
+
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
