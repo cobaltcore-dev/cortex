@@ -5,11 +5,6 @@ metadata:
   name: vmware-hana-binpacking
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: weigher
   impl: vmware_hana_binpacking
   description: |
@@ -31,11 +26,6 @@ metadata:
   name: vmware-general-purpose-balancing
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: weigher
   impl: vmware_general_purpose_balancing
   description: |
@@ -57,11 +47,6 @@ metadata:
   name: vmware-avoid-long-term-contended-hosts
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: weigher
   impl: vmware_avoid_long_term_contended_hosts
   description: |
@@ -87,11 +72,6 @@ metadata:
   name: vmware-avoid-short-term-contended-hosts
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: weigher
   impl: vmware_avoid_short_term_contended_hosts
   description: |
@@ -117,11 +97,6 @@ metadata:
   name: filter-host-instructions
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_host_instructions
   description: |
@@ -136,22 +111,12 @@ metadata:
   name: filter-has-enough-capacity
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: filter
   impl: filter_has_enough_capacity
   description: |
     This step will filter out hosts that do not have enough available capacity
     to host the requested flavor. If enabled, this step will subtract the
     current reservations residing on this host from the available capacity.
-  knowledges:
-    # TODO: Remove this dependency since this is a filter which should
-    # not depend on a potentially non-recent knowledge.
-    # This should be changed to use the hypervisor CRD.
-    - name: host-utilization
   opts:
     # If reserved space should be locked even for matching requests.
     # For the reservations pipeline, we don't want to unlock
@@ -288,11 +253,6 @@ metadata:
   name: avoid-high-steal-pct
 spec:
   operator: cortex-nova
-  # TODO: Remove this database reference once the scheduler
-  # step doesn't need it anymore.
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
   type: descheduler
   impl: avoid_high_steal_pct
   description: |
