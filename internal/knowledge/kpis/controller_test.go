@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package kpis
@@ -142,7 +142,7 @@ func (mc *mockController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// If this kpi is not supported, ignore it.
-	if _, ok := mc.SupportedKPIsByImpl[kpi.Spec.Impl]; !ok {
+	if _, ok := mc.supportedKPIs[kpi.Spec.Impl]; !ok {
 		log.Info("kpi: unsupported kpi, ignoring", "name", req.Name)
 		return ctrl.Result{}, nil
 	}
@@ -219,7 +219,7 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 	if dependenciesReadyTotal == dependenciesTotal && !registered {
 		log.Info("kpi: registering new kpi", "name", obj.Name)
 		var ok bool
-		registeredKPI, ok = mc.SupportedKPIsByImpl[obj.Spec.Impl]
+		registeredKPI, ok = mc.supportedKPIs[obj.Spec.Impl]
 		if !ok {
 			return fmt.Errorf("kpi %s not supported", obj.Name)
 		}
@@ -435,7 +435,7 @@ func TestController_Reconcile(t *testing.T) {
 			baseController := Controller{
 				Client:       fakeClient,
 				OperatorName: "test-operator",
-				SupportedKPIsByImpl: map[string]plugins.KPI{
+				supportedKPIs: map[string]plugins.KPI{
 					"test_kpi": mockKPIInstance,
 				},
 				registeredKPIsByResourceName: make(map[string]plugins.KPI),
@@ -510,7 +510,7 @@ func TestController_Reconcile_KPIDeleted(t *testing.T) {
 	controller := &Controller{
 		Client:       fakeClient,
 		OperatorName: "test-operator",
-		SupportedKPIsByImpl: map[string]plugins.KPI{
+		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},
 		registeredKPIsByResourceName: map[string]plugins.KPI{
@@ -687,7 +687,7 @@ func TestController_handleKPIChange(t *testing.T) {
 			mockKPIInstance := &mockKPI{name: "test_kpi", initError: tt.mockInitError}
 			baseController := Controller{
 				Client: fakeClient,
-				SupportedKPIsByImpl: map[string]plugins.KPI{
+				supportedKPIs: map[string]plugins.KPI{
 					"test_kpi": mockKPIInstance,
 				},
 				registeredKPIsByResourceName: make(map[string]plugins.KPI),
@@ -898,7 +898,7 @@ func TestController_InitAllKPIs(t *testing.T) {
 	baseController := Controller{
 		Client:       fakeClient,
 		OperatorName: "test-operator",
-		SupportedKPIsByImpl: map[string]plugins.KPI{
+		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},
 	}

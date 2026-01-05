@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -38,26 +38,28 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
-	"github.com/cobaltcore-dev/cortex/internal/reservations/commitments"
-	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/reservations/controller"
 	decisionscinder "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/explanation"
 	decisionsmachines "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/machines"
 	decisionsmanila "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/manila"
 	decisionsnova "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/nova"
+	decisionpods "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods"
 	deschedulingnova "github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova"
 	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
 	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
+	cinderexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/cinder"
+	manilaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/manila"
+	novaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/nova"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	cindershims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/cinder"
-	manilashims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/manila"
-	novashims "github.com/cobaltcore-dev/cortex/internal/scheduling/shims/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
+	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/task"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/must"
 	corev1 "k8s.io/api/core/v1"
@@ -75,6 +77,7 @@ func init() {
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(hv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -303,7 +306,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		novashims.NewAPI(config, decisionController).Init(mux)
+		novaexternal.NewAPI(config, decisionController).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
@@ -343,7 +346,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manilashims.NewAPI(config, controller).Init(mux)
+		manilaexternal.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &decisionscinder.DecisionPipelineController{
@@ -357,10 +360,23 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cindershims.NewAPI(config, controller).Init(mux)
+		cinderexternal.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.DecisionPipelineController{
+			Monitor: pipelineMonitor,
+			Conf:    config,
+		}
+		// Inferred through the base controller.
+		controller.Client = multiclusterClient
+		controller.OperatorName = config.Operator
+		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
+		controller := &decisionpods.DecisionPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -442,9 +458,8 @@ func main() {
 	}
 	if slices.Contains(config.EnabledControllers, "kpis-controller") {
 		if err := (&kpis.Controller{
-			Client:              multiclusterClient,
-			SupportedKPIsByImpl: kpis.SupportedKPIsByImpl,
-			OperatorName:        config.Operator,
+			Client:       multiclusterClient,
+			OperatorName: config.Operator,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KPIController")
 			os.Exit(1)

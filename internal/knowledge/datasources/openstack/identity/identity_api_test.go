@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package identity
@@ -16,9 +16,9 @@ import (
 	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"
 )
 
-func setupIdentityMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
+func setupIdentityMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneClient) {
 	server := httptest.NewServer(handler)
-	return server, &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
+	return server, &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 }
 
 func TestIdentityAPI_GetAllDomains(t *testing.T) {

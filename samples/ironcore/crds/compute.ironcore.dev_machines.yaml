@@ -1,0 +1,898 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.crd.ironcore.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: machines.compute.ironcore.dev
+spec:
+  group: compute.ironcore.dev
+  names:
+    kind: Machine
+    listKind: MachineList
+    plural: machines
+    singular: machine
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Machine is the Schema for the machines API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              Custom MachineSpec with fields needed by the cortex
+              scheduler that can be upstreamed later.
+            properties:
+              efiVars:
+                description: EFIVars are variables to pass to EFI while booting up.
+                items:
+                  description: EFIVar is a variable to pass to EFI while booting up.
+                  properties:
+                    name:
+                      description: Name is the name of the EFIVar.
+                      type: string
+                    uuid:
+                      description: UUID is the uuid of the EFIVar.
+                      type: string
+                    value:
+                      description: Value is the value of the EFIVar.
+                      type: string
+                  required:
+                  - name
+                  - uuid
+                  - value
+                  type: object
+                type: array
+              ignitionRef:
+                description: |-
+                  IgnitionRef is a reference to a secret containing the ignition YAML for the machine to boot up.
+                  If key is empty, DefaultIgnitionKey will be used as fallback.
+                properties:
+                  key:
+                    description: |-
+                      The key of the entry in the Secret resource's `data` field to be used.
+                      Some instances of this field may be defaulted, in others it may be
+                      required.
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              image:
+                description: Image is the optional URL providing the operating system
+                  image of the machine.
+                type: string
+              imagePullSecret:
+                description: ImagePullSecretRef is an optional secret for pulling
+                  the image of a machine.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              machineClassRef:
+                description: MachineClassRef is a reference to the machine class/flavor
+                  of the machine.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              machinePoolRef:
+                description: |-
+                  MachinePoolRef defines machine pool to run the machine in.
+                  If empty, a scheduler will figure out an appropriate pool to run the machine in.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              machinePoolSelector:
+                additionalProperties:
+                  type: string
+                description: MachinePoolSelector selects a suitable MachinePoolRef
+                  by the given labels.
+                type: object
+              networkInterfaces:
+                description: NetworkInterfaces define a list of network interfaces
+                  present on the machine
+                items:
+                  description: NetworkInterface is the definition of a single interface
+                  properties:
+                    ephemeral:
+                      description: |-
+                        Ephemeral instructs to create an ephemeral (i.e. coupled to the lifetime of the surrounding object)
+                        NetworkInterface to use.
+                      properties:
+                        networkInterfaceTemplate:
+                          description: NetworkInterfaceTemplate is the template definition
+                            of the networking.NetworkInterface.
+                          properties:
+                            metadata:
+                              type: object
+                            spec:
+                              description: NetworkInterfaceSpec defines the desired
+                                state of NetworkInterface
+                              properties:
+                                attributes:
+                                  additionalProperties:
+                                    type: string
+                                  description: Attributes are provider-specific attributes
+                                    for the network interface.
+                                  type: object
+                                ipFamilies:
+                                  description: IPFamilies defines which IPFamilies
+                                    this NetworkInterface is supporting
+                                  items:
+                                    description: |-
+                                      IPFamily represents the IP Family (IPv4 or IPv6). This type is used
+                                      to express the family of an IP expressed by a type (e.g. service.spec.ipFamilies).
+                                    type: string
+                                  type: array
+                                ips:
+                                  description: |-
+                                    IPs is the list of provided IPs or ephemeral IPs which should be assigned to
+                                    this NetworkInterface.
+                                  items:
+                                    description: IPSource is the definition of how
+                                      to obtain an IP.
+                                    properties:
+                                      ephemeral:
+                                        description: Ephemeral specifies an IP by
+                                          creating an ephemeral Prefix to allocate
+                                          the IP with.
+                                        properties:
+                                          prefixTemplate:
+                                            description: PrefixTemplate is the template
+                                              for the Prefix.
+                                            properties:
+                                              metadata:
+                                                type: object
+                                              spec:
+                                                description: PrefixSpec defines the
+                                                  desired state of Prefix
+                                                properties:
+                                                  ipFamily:
+                                                    description: |-
+                                                      IPFamily is the IPFamily of the prefix.
+                                                      If unset but Prefix is set, this can be inferred.
+                                                    type: string
+                                                  parentRef:
+                                                    description: |-
+                                                      ParentRef references the parent to allocate the Prefix from.
+                                                      If ParentRef and ParentSelector is empty, the Prefix is considered a root prefix and thus
+                                                      allocated by itself.
+                                                    properties:
+                                                      name:
+                                                        default: ""
+                                                        description: |-
+                                                          Name of the referent.
+                                                          This field is effectively required, but due to backwards compatibility is
+                                                          allowed to be empty. Instances of this type with an empty value here are
+                                                          almost certainly wrong.
+                                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                        type: string
+                                                    type: object
+                                                    x-kubernetes-map-type: atomic
+                                                  parentSelector:
+                                                    description: ParentSelector is
+                                                      the LabelSelector to use for
+                                                      determining the parent for this
+                                                      Prefix.
+                                                    properties:
+                                                      matchExpressions:
+                                                        description: matchExpressions
+                                                          is a list of label selector
+                                                          requirements. The requirements
+                                                          are ANDed.
+                                                        items:
+                                                          description: |-
+                                                            A label selector requirement is a selector that contains values, a key, and an operator that
+                                                            relates the key and values.
+                                                          properties:
+                                                            key:
+                                                              description: key is
+                                                                the label key that
+                                                                the selector applies
+                                                                to.
+                                                              type: string
+                                                            operator:
+                                                              description: |-
+                                                                operator represents a key's relationship to a set of values.
+                                                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                                                              type: string
+                                                            values:
+                                                              description: |-
+                                                                values is an array of string values. If the operator is In or NotIn,
+                                                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                                                the values array must be empty. This array is replaced during a strategic
+                                                                merge patch.
+                                                              items:
+                                                                type: string
+                                                              type: array
+                                                              x-kubernetes-list-type: atomic
+                                                          required:
+                                                          - key
+                                                          - operator
+                                                          type: object
+                                                        type: array
+                                                        x-kubernetes-list-type: atomic
+                                                      matchLabels:
+                                                        additionalProperties:
+                                                          type: string
+                                                        description: |-
+                                                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                                        type: object
+                                                    type: object
+                                                    x-kubernetes-map-type: atomic
+                                                  prefix:
+                                                    description: Prefix is the prefix
+                                                      to allocate for this Prefix.
+                                                    type: object
+                                                  prefixLength:
+                                                    description: PrefixLength is the
+                                                      length of prefix to allocate
+                                                      for this Prefix.
+                                                    format: int32
+                                                    type: integer
+                                                type: object
+                                            type: object
+                                        type: object
+                                      value:
+                                        description: Value specifies an IP by using
+                                          an IP literal.
+                                        type: object
+                                    type: object
+                                  type: array
+                                machineRef:
+                                  description: MachineRef is the Machine this NetworkInterface
+                                    is used by
+                                  properties:
+                                    name:
+                                      description: Name is the name of the referenced
+                                        entity.
+                                      type: string
+                                    uid:
+                                      description: UID is the UID of the referenced
+                                        entity.
+                                      type: string
+                                  required:
+                                  - name
+                                  - uid
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                networkRef:
+                                  description: NetworkRef is the Network this NetworkInterface
+                                    is connected to
+                                  properties:
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                prefixes:
+                                  description: |-
+                                    Prefixes is the list of provided prefixes or ephemeral prefixes which should be assigned to
+                                    this NetworkInterface.
+                                  items:
+                                    properties:
+                                      ephemeral:
+                                        description: Ephemeral specifies a prefix
+                                          by creating an ephemeral ipam.Prefix to
+                                          allocate the prefix with.
+                                        properties:
+                                          prefixTemplate:
+                                            description: PrefixTemplate is the template
+                                              for the Prefix.
+                                            properties:
+                                              metadata:
+                                                type: object
+                                              spec:
+                                                description: PrefixSpec defines the
+                                                  desired state of Prefix
+                                                properties:
+                                                  ipFamily:
+                                                    description: |-
+                                                      IPFamily is the IPFamily of the prefix.
+                                                      If unset but Prefix is set, this can be inferred.
+                                                    type: string
+                                                  parentRef:
+                                                    description: |-
+                                                      ParentRef references the parent to allocate the Prefix from.
+                                                      If ParentRef and ParentSelector is empty, the Prefix is considered a root prefix and thus
+                                                      allocated by itself.
+                                                    properties:
+                                                      name:
+                                                        default: ""
+                                                        description: |-
+                                                          Name of the referent.
+                                                          This field is effectively required, but due to backwards compatibility is
+                                                          allowed to be empty. Instances of this type with an empty value here are
+                                                          almost certainly wrong.
+                                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                        type: string
+                                                    type: object
+                                                    x-kubernetes-map-type: atomic
+                                                  parentSelector:
+                                                    description: ParentSelector is
+                                                      the LabelSelector to use for
+                                                      determining the parent for this
+                                                      Prefix.
+                                                    properties:
+                                                      matchExpressions:
+                                                        description: matchExpressions
+                                                          is a list of label selector
+                                                          requirements. The requirements
+                                                          are ANDed.
+                                                        items:
+                                                          description: |-
+                                                            A label selector requirement is a selector that contains values, a key, and an operator that
+                                                            relates the key and values.
+                                                          properties:
+                                                            key:
+                                                              description: key is
+                                                                the label key that
+                                                                the selector applies
+                                                                to.
+                                                              type: string
+                                                            operator:
+                                                              description: |-
+                                                                operator represents a key's relationship to a set of values.
+                                                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                                                              type: string
+                                                            values:
+                                                              description: |-
+                                                                values is an array of string values. If the operator is In or NotIn,
+                                                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                                                the values array must be empty. This array is replaced during a strategic
+                                                                merge patch.
+                                                              items:
+                                                                type: string
+                                                              type: array
+                                                              x-kubernetes-list-type: atomic
+                                                          required:
+                                                          - key
+                                                          - operator
+                                                          type: object
+                                                        type: array
+                                                        x-kubernetes-list-type: atomic
+                                                      matchLabels:
+                                                        additionalProperties:
+                                                          type: string
+                                                        description: |-
+                                                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                                        type: object
+                                                    type: object
+                                                    x-kubernetes-map-type: atomic
+                                                  prefix:
+                                                    description: Prefix is the prefix
+                                                      to allocate for this Prefix.
+                                                    type: object
+                                                  prefixLength:
+                                                    description: PrefixLength is the
+                                                      length of prefix to allocate
+                                                      for this Prefix.
+                                                    format: int32
+                                                    type: integer
+                                                type: object
+                                            type: object
+                                        type: object
+                                      value:
+                                        description: Value specifies a static prefix
+                                          to use.
+                                        type: object
+                                    type: object
+                                  type: array
+                                providerID:
+                                  description: ProviderID is the provider-internal
+                                    ID of the network interface.
+                                  type: string
+                                virtualIP:
+                                  description: VirtualIP specifies the virtual ip
+                                    that should be assigned to this NetworkInterface.
+                                  properties:
+                                    ephemeral:
+                                      description: |-
+                                        Ephemeral instructs to create an ephemeral (i.e. coupled to the lifetime of the surrounding object)
+                                        VirtualIP.
+                                      properties:
+                                        virtualIPTemplate:
+                                          description: VirtualIPTemplate is the template
+                                            for the VirtualIP.
+                                          properties:
+                                            metadata:
+                                              type: object
+                                            spec:
+                                              properties:
+                                                ipFamily:
+                                                  description: IPFamily is the ip
+                                                    family of the VirtualIP.
+                                                  type: string
+                                                reclaimPolicy:
+                                                  description: ReclaimPolicy is the
+                                                    ReclaimPolicyType of virtualIP
+                                                  type: string
+                                                targetRef:
+                                                  description: TargetRef references
+                                                    the target for this VirtualIP
+                                                    (currently only NetworkInterface).
+                                                  properties:
+                                                    name:
+                                                      description: Name is the name
+                                                        of the referenced entity.
+                                                      type: string
+                                                    uid:
+                                                      description: UID is the UID
+                                                        of the referenced entity.
+                                                      type: string
+                                                  required:
+                                                  - name
+                                                  - uid
+                                                  type: object
+                                                  x-kubernetes-map-type: atomic
+                                                type:
+                                                  description: Type is the type of
+                                                    VirtualIP.
+                                                  type: string
+                                              required:
+                                              - ipFamily
+                                              - type
+                                              type: object
+                                          type: object
+                                      type: object
+                                    virtualIPRef:
+                                      description: VirtualIPRef references a VirtualIP
+                                        to use.
+                                      properties:
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                  type: object
+                              required:
+                              - ipFamilies
+                              - ips
+                              - networkRef
+                              type: object
+                          type: object
+                      type: object
+                    name:
+                      description: Name is the name of the network interface.
+                      type: string
+                    networkInterfaceRef:
+                      description: NetworkInterfaceRef instructs to use the NetworkInterface
+                        at the target reference.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  required:
+                  - name
+                  type: object
+                type: array
+              power:
+                description: |-
+                  Power is the desired machine power state.
+                  Defaults to PowerOn.
+                type: string
+              scheduler:
+                description: |-
+                  The scheduler to use for this machine.
+
+                  If the scheduler is set to "cortex", the cortex scheduler
+                  will assign a machine pool if the machine pool ref is unset.
+                type: string
+              tolerations:
+                description: |-
+                  Tolerations define tolerations the Machine has. Only MachinePools whose taints
+                  covered by Tolerations will be considered to run the Machine.
+                items:
+                  description: |-
+                    Toleration is attached to tolerate any taint that matches the triple {key,value,effect} using
+                    the matching operator.
+                  properties:
+                    effect:
+                      description: |-
+                        Effect indicates the taint effect to match. Empty means match all taint effects.
+                        When specified, allowed values are NoSchedule.
+                      type: string
+                    key:
+                      description: |-
+                        Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                        If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                      type: string
+                    operator:
+                      description: |-
+                        Operator represents a key's relationship to the value.
+                        Valid operators are Exists and Equal. Defaults to Equal.
+                        Exists is equivalent to wildcard for value, so that a resource can
+                        tolerate all taints of a particular category.
+                      type: string
+                    value:
+                      description: |-
+                        Value is the taint value the toleration matches to.
+                        If the operator is Exists, the value should be empty, otherwise just a regular string.
+                      type: string
+                  type: object
+                type: array
+              volumes:
+                description: Volumes are volumes attached to this machine.
+                items:
+                  description: Volume defines a volume attachment of a machine
+                  properties:
+                    device:
+                      description: |-
+                        Device is the device name where the volume should be attached.
+                        Pointer to distinguish between explicit zero and not specified.
+                        If empty, an unused device name will be determined if possible.
+                      type: string
+                    emptyDisk:
+                      description: EmptyDisk instructs to use a Volume offered by
+                        the machine pool provider.
+                      properties:
+                        sizeLimit:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: |-
+                            SizeLimit is the total amount of local storage required for this EmptyDisk volume.
+                            The default is nil which means that the limit is undefined.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                      type: object
+                    ephemeral:
+                      description: |-
+                        Ephemeral instructs to create an ephemeral (i.e. coupled to the lifetime of the surrounding object)
+                        Volume to use.
+                      properties:
+                        volumeTemplate:
+                          description: VolumeTemplate is the template definition of
+                            the storage.Volume.
+                          properties:
+                            metadata:
+                              type: object
+                            spec:
+                              description: VolumeSpec defines the desired state of
+                                Volume
+                              properties:
+                                claimRef:
+                                  description: ClaimRef is the reference to the claiming
+                                    entity of the Volume.
+                                  properties:
+                                    name:
+                                      description: Name is the name of the referenced
+                                        entity.
+                                      type: string
+                                    uid:
+                                      description: UID is the UID of the referenced
+                                        entity.
+                                      type: string
+                                  required:
+                                  - name
+                                  - uid
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                encryption:
+                                  description: Encryption is an optional field which
+                                    provides attributes to encrypt Volume.
+                                  properties:
+                                    secretRef:
+                                      description: |-
+                                        SecretRef references the Secret containing the encryption key to encrypt a Volume.
+                                        This secret is created by user with encryptionKey as Key and base64 encoded 256-bit encryption key as Value.
+                                      properties:
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                  required:
+                                  - secretRef
+                                  type: object
+                                image:
+                                  description: Image is an optional image to bootstrap
+                                    the volume with.
+                                  type: string
+                                imagePullSecretRef:
+                                  description: ImagePullSecretRef is an optional secret
+                                    for pulling the image of a volume.
+                                  properties:
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                resources:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  description: Resources is a description of the volume's
+                                    resources and capacity.
+                                  type: object
+                                tolerations:
+                                  description: |-
+                                    Tolerations define tolerations the Volume has. Only any VolumePool whose taints
+                                    covered by Tolerations will be considered to host the Volume.
+                                  items:
+                                    description: |-
+                                      Toleration is attached to tolerate any taint that matches the triple {key,value,effect} using
+                                      the matching operator.
+                                    properties:
+                                      effect:
+                                        description: |-
+                                          Effect indicates the taint effect to match. Empty means match all taint effects.
+                                          When specified, allowed values are NoSchedule.
+                                        type: string
+                                      key:
+                                        description: |-
+                                          Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                          If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          Operator represents a key's relationship to the value.
+                                          Valid operators are Exists and Equal. Defaults to Equal.
+                                          Exists is equivalent to wildcard for value, so that a resource can
+                                          tolerate all taints of a particular category.
+                                        type: string
+                                      value:
+                                        description: |-
+                                          Value is the taint value the toleration matches to.
+                                          If the operator is Exists, the value should be empty, otherwise just a regular string.
+                                        type: string
+                                    type: object
+                                  type: array
+                                unclaimable:
+                                  description: Unclaimable marks the volume as unclaimable.
+                                  type: boolean
+                                volumeClassRef:
+                                  description: |-
+                                    VolumeClassRef is the VolumeClass of a volume
+                                    If empty, an external controller has to provision the volume.
+                                  properties:
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                volumePoolRef:
+                                  description: |-
+                                    VolumePoolRef indicates which VolumePool to use for a volume.
+                                    If unset, the scheduler will figure out a suitable VolumePoolRef.
+                                  properties:
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                volumePoolSelector:
+                                  additionalProperties:
+                                    type: string
+                                  description: VolumePoolSelector selects a suitable
+                                    VolumePoolRef by the given labels.
+                                  type: object
+                              type: object
+                          type: object
+                      type: object
+                    name:
+                      description: Name is the name of the Volume
+                      type: string
+                    volumeRef:
+                      description: VolumeRef instructs to use the specified Volume
+                        as source for the attachment.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  required:
+                  - name
+                  type: object
+                type: array
+            required:
+            - machineClassRef
+            type: object
+          status:
+            description: MachineStatus defines the observed state of Machine
+            properties:
+              machineID:
+                description: MachineID is the provider specific machine ID in the
+                  format 'TYPE://MACHINE_ID'.
+                type: string
+              networkInterfaces:
+                description: NetworkInterfaces is the list of network interface states
+                  for the machine.
+                items:
+                  description: NetworkInterfaceStatus reports the status of a NetworkInterfaceSource.
+                  properties:
+                    handle:
+                      description: Handle is the MachinePool internal handle of the
+                        NetworkInterface.
+                      type: string
+                    lastStateTransitionTime:
+                      description: LastStateTransitionTime is the last time the State
+                        transitioned.
+                      format: date-time
+                      type: string
+                    name:
+                      description: Name is the name of the NetworkInterface to whom
+                        the status belongs to.
+                      type: string
+                    networkInterfaceRef:
+                      description: networkInterfaceRef is the reference to the networkinterface
+                        attached to the machine
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    state:
+                      description: State represents the attachment state of a NetworkInterface.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration is the last generation the MachinePool
+                  observed of the Machine.
+                format: int64
+                type: integer
+              state:
+                description: State is the infrastructure state of the machine.
+                type: string
+              volumes:
+                description: Volumes is the list of volume states for the machine.
+                items:
+                  description: VolumeStatus is the status of a Volume.
+                  properties:
+                    handle:
+                      description: Handle is the MachinePool internal handle of the
+                        volume.
+                      type: string
+                    lastStateTransitionTime:
+                      description: LastStateTransitionTime is the last time the State
+                        transitioned.
+                      format: date-time
+                      type: string
+                    name:
+                      description: Name is the name of a volume attachment.
+                      type: string
+                    state:
+                      description: State represents the attachment state of a Volume.
+                      type: string
+                    volumeRef:
+                      description: VolumeRef reference to the claimed Volume
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  required:
+                  - name
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true

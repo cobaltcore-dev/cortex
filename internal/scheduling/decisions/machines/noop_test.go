@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package machines
@@ -73,6 +73,7 @@ func TestNoopFilter_Run(t *testing.T) {
 
 			if result == nil {
 				t.Fatal("expected result to be non-nil")
+				return // For the linter
 			}
 
 			if len(result.Activations) != len(tt.expected) {

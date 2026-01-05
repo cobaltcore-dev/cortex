@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package placement
@@ -14,14 +14,14 @@ import (
 	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"
 )
 
-func setupPlacementMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
+func setupPlacementMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneClient) {
 	server := httptest.NewServer(handler)
-	return server, &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
+	return server, &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 }
 
 func TestNewPlacementAPI(t *testing.T) {
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{}
 
 	api := NewPlacementAPI(mon, k, conf)
@@ -157,7 +157,7 @@ func TestPlacementAPI_GetAllInventoryUsages(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	conf := v1alpha1.PlacementDatasource{}
-	k := &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
+	k := &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 
 	api := NewPlacementAPI(mon, k, conf).(*placementAPI)
 	if err := api.Init(t.Context()); err != nil {

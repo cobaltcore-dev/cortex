@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package filters
@@ -8,29 +8,67 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestFilterHasRequestedTraits_Run(t *testing.T) {
-	scheme, err := v1alpha1.SchemeBuilder.Build()
+	scheme, err := hv1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_host_capabilities table
-	hostCapabilities, err := v1alpha1.BoxFeatureList([]any{
-		&shared.HostCapabilities{ComputeHost: "host1", Traits: "COMPUTE_ACCELERATORS,COMPUTE_NET_VIRTIO_PACKED,CUSTOM_GPU_NVIDIA", HypervisorType: "QEMU"},
-		&shared.HostCapabilities{ComputeHost: "host2", Traits: "COMPUTE_STATUS_ENABLED,COMPUTE_NET_VIRTIO", HypervisorType: "QEMU"},
-		&shared.HostCapabilities{ComputeHost: "host3", Traits: "COMPUTE_ACCELERATORS,COMPUTE_STATUS_ENABLED,CUSTOM_STORAGE_SSD", HypervisorType: "VMware"},
-		&shared.HostCapabilities{ComputeHost: "host4", Traits: "COMPUTE_NET_VIRTIO_PACKED,CUSTOM_CPU_AVX512", HypervisorType: "QEMU"},
-		&shared.HostCapabilities{ComputeHost: "host5", Traits: "", HypervisorType: "QEMU"},
-		&shared.HostCapabilities{ComputeHost: "host6", Traits: "COMPUTE_ACCELERATORS,CUSTOM_GPU_AMD,CUSTOM_STORAGE_NVME", HypervisorType: "QEMU"},
-	})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	hvs := []client.Object{
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host1",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"CUSTOM_TRAIT_A", "CUSTOM_TRAIT_B"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host2",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"CUSTOM_TRAIT_A", "CUSTOM_TRAIT_C"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host3",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"CUSTOM_TRAIT_B", "CUSTOM_TRAIT_C"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host4",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"CUSTOM_TRAIT_D"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host5",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host6",
+			},
+			Status: hv1.HypervisorStatus{
+				Traits: []string{"CUSTOM_TRAIT_A", "CUSTOM_TRAIT_B", "CUSTOM_TRAIT_C", "CUSTOM_TRAIT_D"},
+			},
+		},
 	}
 
 	tests := []struct {
@@ -40,15 +78,13 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		filteredHosts []string
 	}{
 		{
-			name: "No traits requested - no filtering",
+			name: "No traits requested - all hosts pass",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"hw:cpu_policy": "dedicated",
-								},
+								ExtraSpecs: map[string]string{},
 							},
 						},
 					},
@@ -57,23 +93,20 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
 				},
 			},
-			expectedHosts: []string{"host1", "host2", "host3", "host4", "host5", "host6"},
+			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{},
 		},
 		{
-			name: "Single required trait - filter hosts without it",
+			name: "Single required trait - filter hosts with trait",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS": "required",
+									"trait:CUSTOM_TRAIT_A": "required",
 								},
 							},
 						},
@@ -84,22 +117,21 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
 				},
 			},
-			expectedHosts: []string{"host1", "host3", "host6"}, // Only hosts with COMPUTE_ACCELERATORS
-			filteredHosts: []string{"host2", "host4", "host5"}, // Hosts without COMPUTE_ACCELERATORS
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{"host3", "host4"},
 		},
 		{
-			name: "Single forbidden trait - filter hosts with it",
+			name: "Multiple required traits - filter hosts with all traits",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS": "forbidden",
+									"trait:CUSTOM_TRAIT_A": "required",
+									"trait:CUSTOM_TRAIT_B": "required",
 								},
 							},
 						},
@@ -109,24 +141,21 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
 					{ComputeHost: "host6"},
 				},
 			},
-			expectedHosts: []string{"host2", "host4", "host5"}, // Hosts without COMPUTE_ACCELERATORS
-			filteredHosts: []string{"host1", "host3", "host6"}, // Hosts with COMPUTE_ACCELERATORS
+			expectedHosts: []string{"host1", "host6"},
+			filteredHosts: []string{"host2", "host3"},
 		},
 		{
-			name: "Multiple required traits - filter hosts missing any",
+			name: "Single forbidden trait - filter hosts without trait",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS":      "required",
-									"trait:COMPUTE_NET_VIRTIO_PACKED": "required",
+									"trait:CUSTOM_TRAIT_A": "forbidden",
 								},
 							},
 						},
@@ -138,22 +167,21 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
 					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
 				},
 			},
-			expectedHosts: []string{"host1"}, // Only host1 has both traits
-			filteredHosts: []string{"host2", "host3", "host4", "host5", "host6"},
+			expectedHosts: []string{"host3", "host4", "host5"},
+			filteredHosts: []string{"host1", "host2"},
 		},
 		{
-			name: "Multiple forbidden traits - filter hosts with any",
+			name: "Multiple forbidden traits - filter hosts without any of them",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS": "forbidden",
-									"trait:CUSTOM_CPU_AVX512":    "forbidden",
+									"trait:CUSTOM_TRAIT_A": "forbidden",
+									"trait:CUSTOM_TRAIT_B": "forbidden",
 								},
 							},
 						},
@@ -165,11 +193,10 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
 					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
 				},
 			},
-			expectedHosts: []string{"host2", "host5"}, // Hosts without any forbidden traits
-			filteredHosts: []string{"host1", "host3", "host4", "host6"},
+			expectedHosts: []string{"host4", "host5"},
+			filteredHosts: []string{"host1", "host2", "host3"},
 		},
 		{
 			name: "Mixed required and forbidden traits",
@@ -179,8 +206,32 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_STATUS_ENABLED": "required",
-									"trait:COMPUTE_ACCELERATORS":   "forbidden",
+									"trait:CUSTOM_TRAIT_A": "required",
+									"trait:CUSTOM_TRAIT_D": "forbidden",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host4"},
+					{ComputeHost: "host6"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{"host4", "host6"},
+		},
+		{
+			name: "Required trait that no host has",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"trait:CUSTOM_TRAIT_NONEXISTENT": "required",
 								},
 							},
 						},
@@ -190,173 +241,110 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
-				},
-			},
-			expectedHosts: []string{"host2"}, // Only host2 has required trait and not forbidden trait
-			filteredHosts: []string{"host1", "host3", "host4", "host5", "host6"},
-		},
-		{
-			name: "Custom traits - required",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"trait:CUSTOM_GPU_NVIDIA": "required",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
-				},
-			},
-			expectedHosts: []string{"host1"}, // Only host1 has CUSTOM_GPU_NVIDIA
-			filteredHosts: []string{"host2", "host3", "host4", "host5", "host6"},
-		},
-		{
-			name: "Custom traits - forbidden",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"trait:CUSTOM_STORAGE_SSD": "forbidden",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
-				},
-			},
-			expectedHosts: []string{"host1", "host2", "host4", "host5", "host6"}, // All except host3
-			filteredHosts: []string{"host3"},                                     // host3 has CUSTOM_STORAGE_SSD
-		},
-		{
-			name: "Invalid trait value - ignored",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS":   "invalid_value",
-									"trait:COMPUTE_STATUS_ENABLED": "required",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
-				},
-			},
-			expectedHosts: []string{"host2", "host3"}, // Only hosts with COMPUTE_STATUS_ENABLED (invalid value ignored)
-			filteredHosts: []string{"host1", "host4", "host5", "host6"},
-		},
-		{
-			name: "Non-trait extra specs - ignored",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"hw:cpu_policy":                "dedicated",
-									"accel:device_profile":         "gpu-profile",
-									"trait:COMPUTE_ACCELERATORS":   "required",
-									"capabilities:hypervisor_type": "QEMU",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
-				},
-			},
-			expectedHosts: []string{"host1", "host3", "host6"}, // Only trait: prefixed specs are processed
-			filteredHosts: []string{"host2", "host4", "host5"},
-		},
-		{
-			name: "Host with empty traits",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_STATUS_ENABLED": "required",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host5"}, // host5 has empty traits
 				},
 			},
 			expectedHosts: []string{},
-			filteredHosts: []string{"host5"},
+			filteredHosts: []string{"host1", "host2", "host3"},
 		},
 		{
-			name: "Host with empty traits - forbidden trait",
+			name: "Forbidden trait that no host has - all pass",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS": "forbidden",
+									"trait:CUSTOM_TRAIT_NONEXISTENT": "forbidden",
 								},
 							},
 						},
 					},
 				},
 				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host5"}, // host5 has empty traits
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
 				},
 			},
-			expectedHosts: []string{"host5"}, // Empty traits means no forbidden traits present
+			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{},
 		},
 		{
-			name: "No matching hosts",
+			name: "Host with no traits - required trait filters it out",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:NONEXISTENT_TRAIT": "required",
+									"trait:CUSTOM_TRAIT_A": "required",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host5"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host5"},
+		},
+		{
+			name: "Host with no traits - forbidden trait lets it pass",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"trait:CUSTOM_TRAIT_A": "forbidden",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host5"},
+				},
+			},
+			expectedHosts: []string{"host5"},
+			filteredHosts: []string{"host1"},
+		},
+		{
+			name: "Non-trait extra specs are ignored",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"hw:cpu_policy":        "dedicated",
+									"trait:CUSTOM_TRAIT_A": "required",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host3"},
+		},
+		{
+			name: "Invalid trait value (not required or forbidden) - ignored",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"trait:CUSTOM_TRAIT_A": "invalid",
 								},
 							},
 						},
@@ -366,35 +354,10 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-					{ComputeHost: "host5"},
-					{ComputeHost: "host6"},
 				},
 			},
-			expectedHosts: []string{},
-			filteredHosts: []string{"host1", "host2", "host3", "host4", "host5", "host6"},
-		},
-		{
-			name: "Host not in database",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS": "required",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host-unknown"},
-				},
-			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{"host-unknown"}, // Host not in database gets filtered out
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{},
 		},
 		{
 			name: "Empty host list",
@@ -404,7 +367,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS": "required",
+									"trait:CUSTOM_TRAIT_A": "required",
 								},
 							},
 						},
@@ -416,17 +379,38 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 			filteredHosts: []string{},
 		},
 		{
-			name: "Complex scenario with multiple requirements and restrictions",
+			name: "Host not in database",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"trait:COMPUTE_ACCELERATORS":      "required",
-									"trait:CUSTOM_GPU_AMD":            "forbidden",
-									"trait:COMPUTE_NET_VIRTIO_PACKED": "forbidden",
-									"hw:cpu_policy":                   "dedicated", // Should be ignored
+									"trait:CUSTOM_TRAIT_A": "required",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host-unknown"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host-unknown"},
+		},
+		{
+			name: "Complex scenario with many traits",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"trait:CUSTOM_TRAIT_A": "required",
+									"trait:CUSTOM_TRAIT_B": "required",
+									"trait:CUSTOM_TRAIT_D": "forbidden",
 								},
 							},
 						},
@@ -441,134 +425,20 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 					{ComputeHost: "host6"},
 				},
 			},
-			expectedHosts: []string{"host3"}, // Only host3 has COMPUTE_ACCELERATORS but not the forbidden traits
-			filteredHosts: []string{"host1", "host2", "host4", "host5", "host6"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			step := &FilterHasRequestedTraits{}
-			step.Client = fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(
-					&v1alpha1.Knowledge{
-						ObjectMeta: metav1.ObjectMeta{Name: "host-capabilities"},
-						Status:     v1alpha1.KnowledgeStatus{Raw: hostCapabilities},
-					},
-				).
-				Build()
-			result, err := step.Run(slog.Default(), tt.request)
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
-			// Check expected hosts are present
-			for _, host := range tt.expectedHosts {
-				if _, ok := result.Activations[host]; !ok {
-					t.Errorf("expected host %s to be present in activations", host)
-				}
-			}
-
-			// Check filtered hosts are not present
-			for _, host := range tt.filteredHosts {
-				if _, ok := result.Activations[host]; ok {
-					t.Errorf("expected host %s to be filtered out", host)
-				}
-			}
-
-			// Check total count
-			if len(result.Activations) != len(tt.expectedHosts) {
-				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result.Activations))
-			}
-		})
-	}
-}
-
-func TestFilterHasRequestedTraits_TraitParsing(t *testing.T) {
-	// Set log level debug
-	slog.SetLogLoggerLevel(slog.LevelDebug)
-
-	scheme, err := v1alpha1.SchemeBuilder.Build()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Insert test data with edge cases in trait names
-	hostCapabilitiesEdgeCases, err := v1alpha1.BoxFeatureList([]any{
-		&shared.HostCapabilities{ComputeHost: "host1", Traits: "TRAIT_WITH_UNDERSCORES,TRAIT-WITH-DASHES,TRAIT.WITH.DOTS", HypervisorType: "QEMU"},
-		&shared.HostCapabilities{ComputeHost: "host2", Traits: "VERY_LONG_TRAIT_NAME_WITH_MANY_CHARACTERS_AND_NUMBERS_123", HypervisorType: "QEMU"},
-		&shared.HostCapabilities{ComputeHost: "host3", Traits: "SHORT,A,B,C", HypervisorType: "QEMU"},
-	})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	tests := []struct {
-		name          string
-		extraSpecs    map[string]string
-		expectedHosts []string
-		filteredHosts []string
-	}{
-		{
-			name: "Trait with underscores",
-			extraSpecs: map[string]string{
-				"trait:TRAIT_WITH_UNDERSCORES": "required",
-			},
 			expectedHosts: []string{"host1"},
-			filteredHosts: []string{"host2", "host3"},
+			filteredHosts: []string{"host2", "host3", "host4", "host5", "host6"},
 		},
 		{
-			name: "Trait with dashes",
-			extraSpecs: map[string]string{
-				"trait:TRAIT-WITH-DASHES": "required",
-			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{"host2", "host3"},
-		},
-		{
-			name: "Trait with dots",
-			extraSpecs: map[string]string{
-				"trait:TRAIT.WITH.DOTS": "required",
-			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{"host2", "host3"},
-		},
-		{
-			name: "Very long trait name",
-			extraSpecs: map[string]string{
-				"trait:VERY_LONG_TRAIT_NAME_WITH_MANY_CHARACTERS_AND_NUMBERS_123": "required",
-			},
-			expectedHosts: []string{"host2"},
-			filteredHosts: []string{"host1", "host3"},
-		},
-		{
-			name: "Short trait names",
-			extraSpecs: map[string]string{
-				"trait:A": "required",
-				"trait:B": "required",
-			},
-			expectedHosts: []string{"host2", "host3"}, // host2's long trait contains both "A" and "B", host3 has both traits
-			filteredHosts: []string{"host1"},          // host1 doesn't have "A" or "B" in its traits
-		},
-		{
-			name: "Case sensitivity test",
-			extraSpecs: map[string]string{
-				"trait:short": "required", // lowercase, should not match "SHORT"
-			},
-			expectedHosts: []string{},
-			filteredHosts: []string{"host1", "host2", "host3"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			request := api.ExternalSchedulerRequest{
+			name: "All hosts match required and forbidden traits",
+			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
-								ExtraSpecs: tt.extraSpecs,
+								ExtraSpecs: map[string]string{
+									"trait:CUSTOM_TRAIT_A": "required",
+									"trait:CUSTOM_TRAIT_E": "forbidden",
+								},
 							},
 						},
 					},
@@ -576,21 +446,22 @@ func TestFilterHasRequestedTraits_TraitParsing(t *testing.T) {
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
 				},
-			}
+			},
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{},
+		},
+	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterHasRequestedTraits{}
 			step.Client = fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithRuntimeObjects(
-					&v1alpha1.Knowledge{
-						ObjectMeta: metav1.ObjectMeta{Name: "host-capabilities"},
-						Status:     v1alpha1.KnowledgeStatus{Raw: hostCapabilitiesEdgeCases},
-					},
-				).
+				WithObjects(hvs...).
 				Build()
-			result, err := step.Run(slog.Default(), request)
+
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

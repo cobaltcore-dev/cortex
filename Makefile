@@ -22,10 +22,6 @@ dekustomize:
 	if [ -d "dist/chart/templates/metrics" ]; then \
 		cp -r dist/chart/templates/metrics "$$TEMP_DIR/metrics"; \
 	fi; \
-	if [ -n "$$(ls dist/chart/templates/crd/compute*.yaml 2>/dev/null)" ]; then \
-		mkdir -p "$$TEMP_DIR/crd"; \
-		cp dist/chart/templates/crd/compute*.yaml "$$TEMP_DIR/crd/"; \
-	fi; \
 	if [ -d ".github" ]; then \
 		cp -r .github "$$TEMP_DIR/github"; \
 	fi; \
@@ -43,9 +39,6 @@ dekustomize:
 	if [ -d "$$TEMP_DIR/metrics" ]; then \
 		rm -rf dist/chart/templates/metrics; \
 		cp -r "$$TEMP_DIR/metrics" dist/chart/templates/metrics; \
-	fi; \
-	if [ -d "$$TEMP_DIR/crd" ]; then \
-		cp "$$TEMP_DIR/crd"/compute*.yaml dist/chart/templates/crd/; \
 	fi; \
 	if [ -d "$$TEMP_DIR/github" ]; then \
 		rm -rf .github; \

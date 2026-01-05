@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package weighers
@@ -10,7 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/vmware"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -69,7 +69,7 @@ func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, reque
 		return nil, err
 	}
 	highlyContendedHosts, err := v1alpha1.
-		UnboxFeatureList[vmware.VROpsHostsystemContentionLongTerm](knowledge.Status.Raw)
+		UnboxFeatureList[compute.VROpsHostsystemContentionLongTerm](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}

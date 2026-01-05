@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package nova
@@ -18,6 +18,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -44,6 +45,11 @@ type DecisionPipelineController struct {
 	Monitor lib.PipelineMonitor
 	// Config for the scheduling operator.
 	Conf conf.Config
+}
+
+// The type of pipeline this controller manages.
+func (c *DecisionPipelineController) PipelineType() v1alpha1.PipelineType {
+	return v1alpha1.PipelineTypeFilterWeigher
 }
 
 // Callback executed when kubernetes asks to reconcile a decision resource.
@@ -149,7 +155,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
+				return pipeline.Spec.Type == c.PipelineType()
 			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on
@@ -189,6 +195,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 				return knowledge.Spec.Operator == c.Conf.Operator
 			}),
 		).
+		// Watch hypervisor changes so the cache gets updated.
+		WatchesMulticluster(&hv1.Hypervisor{}, handler.Funcs{}).
 		Named("cortex-nova-decisions").
 		For(
 			&v1alpha1.Decision{},

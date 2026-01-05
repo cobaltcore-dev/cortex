@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package machines
@@ -48,6 +48,11 @@ type DecisionPipelineController struct {
 	Conf conf.Config
 	// Monitor to pass down to all pipelines.
 	Monitor lib.PipelineMonitor
+}
+
+// The type of pipeline this controller manages.
+func (c *DecisionPipelineController) PipelineType() v1alpha1.PipelineType {
+	return v1alpha1.PipelineTypeFilterWeigher
 }
 
 func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -247,7 +252,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
+				return pipeline.Spec.Type == c.PipelineType()
 			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on

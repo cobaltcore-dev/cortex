@@ -1,7 +1,8 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 // +kubebuilder:object:generate=true
+// +kubebuilder:skip
 // +groupName=compute.ironcore.dev
 package v1alpha1
 

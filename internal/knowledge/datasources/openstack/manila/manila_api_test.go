@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package manila
@@ -16,12 +16,12 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 )
 
-func setupManilaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
+func setupManilaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneClient) {
 	server := httptest.NewServer(handler)
 	endpointLocator := func(gophercloud.EndpointOpts) (string, error) {
 		return server.URL + "/", nil
 	}
-	return server, &testlibKeystone.MockKeystoneAPI{
+	return server, &testlibKeystone.MockKeystoneClient{
 		Url:             server.URL + "/",
 		EndpointLocator: endpointLocator,
 	}
@@ -29,7 +29,7 @@ func setupManilaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone
 
 func TestNewManilaAPI(t *testing.T) {
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.ManilaDatasource{}
 
 	api := NewManilaAPI(mon, k, conf)

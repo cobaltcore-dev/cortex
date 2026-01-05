@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package lib
@@ -35,6 +35,10 @@ type mockInitializer struct {
 	initPipeline func(steps []v1alpha1.Step) (mockPipeline, error)
 }
 
+func (m *mockInitializer) PipelineType() v1alpha1.PipelineType {
+	return ""
+}
+
 func (m *mockInitializer) InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (mockPipeline, error) {
 	if m.shouldFail {
 		return mockPipeline{}, errors.New("mock initializer error")
@@ -65,7 +69,7 @@ func createTestPipeline(steps []v1alpha1.StepInPipeline) *v1alpha1.Pipeline {
 		},
 		Spec: v1alpha1.PipelineSpec{
 			Operator: "test",
-			Type:     v1alpha1.PipelineTypeFilterWeigher,
+			Type:     "",
 			Steps:    steps,
 		},
 	}

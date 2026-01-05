@@ -53,6 +53,12 @@ rbac:
   # Whether the ironcore roles should be deployed as well.
   ironcore:
     enable: false
+  pods:
+    enable: false
+  # Whether hypervisor operator/crd related roles should be deployed.
+  # See: https://github.com/cobaltcore-dev/openstack-hypervisor-operator
+  hypervisor:
+    enable: false
 
 # [CRDs]: To enable the CRDs
 crd:
@@ -61,6 +67,8 @@ crd:
   enable: true
   # Whether the ironcore crds should be deployed as well.
   ironcore:
+    enable: false
+  pods:
     enable: false
 
   # Enabling this option adds the "helm.sh/resource-policy": keep

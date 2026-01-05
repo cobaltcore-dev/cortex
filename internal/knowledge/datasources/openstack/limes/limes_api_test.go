@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package limes
@@ -15,14 +15,14 @@ import (
 	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"
 )
 
-func setupLimesMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneAPI) {
+func setupLimesMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.KeystoneClient) {
 	server := httptest.NewServer(handler)
-	return server, &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
+	return server, &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 }
 
 func TestNewLimesAPI(t *testing.T) {
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.LimesDatasource{}
 
 	api := NewLimesAPI(mon, k, conf)
@@ -151,7 +151,7 @@ func TestLimesAPI_GetAllCommitments_MultipleProjects(t *testing.T) {
 
 	mon := datasources.Monitor{}
 	conf := v1alpha1.LimesDatasource{}
-	k := &testlibKeystone.MockKeystoneAPI{Url: server.URL + "/"}
+	k := &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 
 	api := NewLimesAPI(mon, k, conf).(*limesAPI)
 	if err := api.Init(t.Context()); err != nil {

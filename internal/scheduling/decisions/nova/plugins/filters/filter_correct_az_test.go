@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package filters
@@ -8,30 +8,49 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 func TestFilterCorrectAZStep_Run(t *testing.T) {
-	scheme, err := v1alpha1.SchemeBuilder.Build()
+	scheme, err := hv1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the feature_host_az table
-	hostAZs, err := v1alpha1.BoxFeatureList([]any{
-		&shared.HostAZ{ComputeHost: "host1", AvailabilityZone: testlib.Ptr("az-1")},
-		&shared.HostAZ{ComputeHost: "host2", AvailabilityZone: testlib.Ptr("az-1")},
-		&shared.HostAZ{ComputeHost: "host3", AvailabilityZone: testlib.Ptr("az-2")},
-		&shared.HostAZ{ComputeHost: "host4", AvailabilityZone: testlib.Ptr("az-3")},
-		&shared.HostAZ{ComputeHost: "host5", AvailabilityZone: nil},
-	})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	hvs := []client.Object{
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name:   "host1",
+				Labels: map[string]string{"topology.kubernetes.io/zone": "az-1"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name:   "host2",
+				Labels: map[string]string{"topology.kubernetes.io/zone": "az-1"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name:   "host3",
+				Labels: map[string]string{"topology.kubernetes.io/zone": "az-2"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name:   "host4",
+				Labels: map[string]string{"topology.kubernetes.io/zone": "az-3"},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name:   "host5",
+				Labels: map[string]string{},
+			},
+		},
 	}
 
 	tests := []struct {
@@ -148,10 +167,7 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 			step := &FilterCorrectAZStep{}
 			step.Client = fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(&v1alpha1.Knowledge{
-					ObjectMeta: v1.ObjectMeta{Name: "host-az"},
-					Status:     v1alpha1.KnowledgeStatus{Raw: hostAZs},
-				}).
+				WithObjects(hvs...).
 				Build()
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {

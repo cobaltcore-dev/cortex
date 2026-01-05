@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package limes
@@ -49,7 +49,7 @@ func TestLimesSyncer_Init(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
@@ -83,7 +83,7 @@ func TestLimesSyncer_Sync(t *testing.T) {
 	}
 
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
@@ -125,7 +125,7 @@ func TestLimesSyncer_SyncCommitments(t *testing.T) {
 	}
 
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
@@ -157,7 +157,7 @@ func TestLimesSyncer_SyncCommitments_NoProjects(t *testing.T) {
 	}
 
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneAPI{}
+	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{

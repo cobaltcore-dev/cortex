@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package nova
@@ -285,11 +285,11 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			steps: []v1alpha1.Step{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "filter_disabled",
+						Name: "filter_status_conditions",
 					},
 					Spec: v1alpha1.StepSpec{
 						Type: v1alpha1.StepTypeFilter,
-						Impl: "filter_disabled",
+						Impl: "filter_status_conditions",
 					},
 				},
 			},
@@ -319,7 +319,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					},
 					Spec: v1alpha1.StepSpec{
 						Type: v1alpha1.StepTypeFilter,
-						Impl: "filter_disabled",
+						Impl: "filter_status_conditions",
 						Opts: runtime.RawExtension{
 							Raw: []byte(`{"scope":{"host_capabilities":{"any_of_trait_infixes":["TEST_TRAIT"]}}}`),
 						},
@@ -337,7 +337,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					},
 					Spec: v1alpha1.StepSpec{
 						Type: v1alpha1.StepTypeFilter,
-						Impl: "filter_disabled",
+						Impl: "filter_status_conditions",
 						Opts: runtime.RawExtension{
 							Raw: []byte(`invalid json`),
 						},

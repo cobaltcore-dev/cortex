@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package nova
@@ -290,9 +290,10 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 		panic(err)
 	}
 	// Check if the flavor is for vmware.
-	vmware := false
+	vmware, kvm := false, false
 	if val, ok := extraSpecs["capabilities:hypervisor_type"]; ok {
 		vmware = strings.EqualFold(val, "VMware vCenter Server")
+		kvm = strings.EqualFold(val, "qemu") || strings.EqualFold(val, "ch")
 	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
 	request := api.ExternalSchedulerRequest{
@@ -314,6 +315,10 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 		Hosts:   hosts,
 		Weights: weights,
 		VMware:  vmware,
+	}
+	// Force to use the pipeline with all filters enabled for kvm flavors.
+	if kvm {
+		request.Pipeline = "nova-external-scheduler-kvm-all-filters-enabled"
 	}
 	return request
 }

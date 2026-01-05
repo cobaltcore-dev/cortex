@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package weighers
@@ -9,7 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -55,17 +55,17 @@ func TestVMwareHanaBinpackingStep_Run(t *testing.T) {
 	}
 
 	hostUtilizations, err := v1alpha1.BoxFeatureList([]any{
-		&shared.HostUtilization{
+		&compute.HostUtilization{
 			ComputeHost:           "host1",
 			RAMUtilizedPct:        50.0,
 			TotalRAMAllocatableMB: 65536.0,
 		},
-		&shared.HostUtilization{
+		&compute.HostUtilization{
 			ComputeHost:           "host2",
 			RAMUtilizedPct:        70.0,
 			TotalRAMAllocatableMB: 131072.0,
 		},
-		&shared.HostUtilization{
+		&compute.HostUtilization{
 			ComputeHost:           "host3",
 			RAMUtilizedPct:        30.0,
 			TotalRAMAllocatableMB: 32768.0,
@@ -75,15 +75,15 @@ func TestVMwareHanaBinpackingStep_Run(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	hostCapabilities, err := v1alpha1.BoxFeatureList([]any{
-		&shared.HostCapabilities{
+		&compute.HostCapabilities{
 			ComputeHost: "host1",
 			Traits:      "HANA_EXCLUSIVE,CUSTOM_TRAIT_1",
 		},
-		&shared.HostCapabilities{
+		&compute.HostCapabilities{
 			ComputeHost: "host2",
 			Traits:      "HANA_EXCLUSIVE,CUSTOM_TRAIT_2",
 		},
-		&shared.HostCapabilities{
+		&compute.HostCapabilities{
 			ComputeHost: "host3",
 			Traits:      "CUSTOM_TRAIT_3",
 		},

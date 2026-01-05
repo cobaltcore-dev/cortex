@@ -1,4 +1,4 @@
-# Copyright 2025 SAP SE
+# Copyright SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v2
@@ -16,18 +16,13 @@ dependencies:
   # from: file://../../../dist/chart
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.4
+    version: 0.0.5
     alias: cortex-knowledge-controllers
   # from: file://../../../dist/chart
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.4
+    version: 0.0.5
     alias: cortex-scheduling-controllers
-  # from: file://../../../dist/chart
-  - name: cortex
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.4
-    alias: cortex-reservations-controllers
 
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case

@@ -1,4 +1,4 @@
-# Copyright 2025 SAP SE
+# Copyright SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
 # For Pylance to not complain around:
@@ -7,7 +7,7 @@
 analytics_settings(False)
 
 # Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
-ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore')
+ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore,pods')
 if ACTIVE_DEPLOYMENTS_ENV == "":
     ACTIVE_DEPLOYMENTS = [] # Catch "".split(",") = [""]
 else:
@@ -30,6 +30,10 @@ helm_repo(
     labels=['Repositories'],
 )
 
+########### Dependency CRDs
+url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/hypervisor-crd.yaml'
+local('curl ' + url + ' | kubectl apply -f -')
+
 ########### Cortex Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.',
     dockerfile='Dockerfile',
@@ -49,6 +53,7 @@ bundle_charts = [
     ('helm/bundles/cortex-manila', 'cortex-manila'),
     ('helm/bundles/cortex-cinder', 'cortex-cinder'),
     ('helm/bundles/cortex-ironcore', 'cortex-ironcore'),
+    ('helm/bundles/cortex-pods', 'cortex-pods'),
 ]
 dep_charts = {
     'cortex-crds': [
@@ -67,6 +72,10 @@ dep_charts = {
         ('dist/chart', 'cortex'),
     ],
     'cortex-ironcore': [
+        ('helm/library/cortex-postgres', 'cortex-postgres'),
+        ('dist/chart', 'cortex'),
+    ],
+    'cortex-pods': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('dist/chart', 'cortex'),
     ],
@@ -106,6 +115,10 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=[
     'cortex.rbac.ironcore.enable=true',
     # Tilt is weird and thus we need to set this here even when its provided in the values.
     'cortex.namePrefix=cortex-ironcore',
+
+    'cortex.crd.pods.enable=true',
+    'cortex.rbac.pods.enable=true',
+    'cortex.namePrefix=cortex-pods',
 ]))
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
@@ -118,7 +131,6 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
         port_forward(8001, 8080),
     ])
     k8s_resource('cortex-nova-knowledge-controller-manager', labels=['Cortex-Nova'])
-    k8s_resource('cortex-nova-reservations-controller-manager', labels=['Cortex-Nova'])
     local_resource(
         'Scheduler E2E Tests (Nova)',
         '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /manager e2e-nova"',
@@ -164,12 +176,26 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
 
 if 'ironcore' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex IronCore bundle")
+    # Deploy CRDs
+    k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machines.yaml')
+    k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machinepools.yaml')
+    k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machineclasses.yaml')
+    # Deploy IronCore controller
     k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=tilt_values))
     k8s_resource('cortex-ironcore-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
     k8s_yaml('samples/ironcore/machinepool.yaml')
     k8s_yaml('samples/ironcore/machineclass.yaml')
     k8s_yaml('samples/ironcore/machine.yaml')
+
+if 'pods' in ACTIVE_DEPLOYMENTS:
+    print("Activating Cortex Pods bundle")
+    k8s_yaml(helm('./helm/bundles/cortex-pods', name='cortex-pods', values=tilt_values),)
+    k8s_resource('cortex-pods-controller-manager', labels=['Cortex-Pods'])
+    # Deploy example resources
+    k8s_yaml('samples/pods/node.yaml')
+    k8s_yaml('samples/pods/pod.yaml')
+    k8s_resource('test-pod', labels=['Cortex-Pods'])
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')

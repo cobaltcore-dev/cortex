@@ -1,5 +1,5 @@
 <!--
-# SPDX-FileCopyrightText: Copyright 2024 SAP SE or an SAP affiliate company and cobaltcore-dev contributors
+# SPDX-FileCopyrightText: Copyright SAP SE or an SAP affiliate company and cobaltcore-dev contributors
 #
 # SPDX-License-Identifier: Apache-2.0
 -->
@@ -9,28 +9,28 @@ Cortex
 [![REUSE status](https://api.reuse.software/badge/github.com/cobaltcore-dev/cortex)](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex)
 <a href="https://github.com/cobaltcore-dev/cortex"><img align="left" width="190" height="190" src="./docs/assets/Cortex_Logo_black_space_square_bg_rd@2x.png"></a>
 
-Cortex is a modular and extensible service for initial placement and scheduling in cloud-native environments covering workloads such as compute, storage, network, and other scheduling domains.  
+Cortex is a modular and extensible service for initial placement and scheduling in cloud-native environments covering workloads such as compute, storage, network, and other scheduling domains.
 It improves resource utilization and operational performance by making smart placement decisions based on the current state of the environment and defined constraints and objectives.
 
-As part of the CobaltCore project, it complements the platform with advanced placement and scheduling capabilities.  
+As part of the CobaltCore project, it complements the platform with advanced placement and scheduling capabilities.
 
 Learn more about [CobaltCore](https://cobaltcore-dev.github.io/docs/) and the broader [Apeiro Reference Architecture](https://apeirora.eu) ecosystem.
 
 ## Features
 
-- **Modular and extensible design**  
-  Cortex consists of a minimal core framework that can be extended with various plugins to support different data sources and scheduling algorithms. 
+- **Modular and extensible design**
+  Cortex consists of a minimal core framework that can be extended with various plugins to support different data sources and scheduling algorithms.
   This provides flexibility and enables adapting Cortex to various environments and requirements.
 
 - **Centralized knowledge database**
   Cortex provides a holistic knowledge database that stores enriched data from various sources.
   This enables efficient and consistent access to the infrastructure state for placement and scheduling decisions.
 
-- **Integrated placement and scheduling**  
+- **Integrated placement and scheduling**
   Cortex combines initial placement and continuous scheduling into a single service.
 
-- **Cross-domain support**  
-  Cortex supports a wide range of workloads from various scheduling domains, including compute, storage, network, and Kubernetes. 
+- **Cross-domain support**
+  Cortex supports a wide range of workloads from various scheduling domains, including compute, storage, network, and Kubernetes.
   The architecture allows handling the domains either independently or through coordinated multi-domain decisions.
 
 - **Performance and scalability**

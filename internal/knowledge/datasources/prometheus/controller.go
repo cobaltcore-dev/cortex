@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package prometheus
@@ -58,21 +58,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{RequeueAfter: time.Until(datasource.Status.NextSyncTime.Time)}, nil
 	}
 
-	newSyncerFunc, ok := map[string]func(
-		ds v1alpha1.Datasource,
-		authenticatedDB *db.DB,
-		authenticatedHTTP *http.Client,
-		prometheusURL string,
-		monitor datasources.Monitor,
-	) typedSyncer{
-		"vrops_host_metric":                     newTypedSyncer[VROpsHostMetric],
-		"vrops_vm_metric":                       newTypedSyncer[VROpsVMMetric],
-		"node_exporter_metric":                  newTypedSyncer[NodeExporterMetric],
-		"netapp_aggregate_labels_metric":        newTypedSyncer[NetAppAggregateLabelsMetric],
-		"netapp_node_metric":                    newTypedSyncer[NetAppNodeMetric],
-		"netapp_volume_aggregate_labels_metric": newTypedSyncer[NetAppVolumeAggrLabelsMetric],
-		"kvm_libvirt_domain_metric":             newTypedSyncer[KVMDomainMetric],
-	}[datasource.Spec.Prometheus.Type]
+	newSyncerFunc, ok := supportedMetricSyncers[datasource.Spec.Prometheus.Type]
 	if !ok {
 		log.Info("skipping datasource, unsupported metric type", "metricType", datasource.Spec.Prometheus.Type)
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{

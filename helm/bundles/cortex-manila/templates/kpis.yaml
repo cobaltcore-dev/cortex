@@ -11,3 +11,75 @@ spec:
       - name: netapp-storage-pool-cpu-usage-manila
   description: |
     This KPI tracks the CPU usage of Manila NetApp storage pools.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-datasource-state
+spec:
+  operator: cortex-manila
+  impl: datasource_state_kpi
+  opts:
+    datasourceOperator: cortex-manila
+  description: |
+    This KPI tracks the state of datasource resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-knowledge-state
+spec:
+  operator: cortex-manila
+  impl: knowledge_state_kpi
+  opts:
+    knowledgeOperator: cortex-manila
+  description: |
+    This KPI tracks the state of knowledge resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-decision-state
+spec:
+  operator: cortex-manila
+  impl: decision_state_kpi
+  opts:
+    decisionOperator: cortex-manila
+  description: |
+    This aggregated KPI tracks the state of decision resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-kpi-state
+spec:
+  operator: cortex-manila
+  impl: kpi_state_kpi
+  opts:
+    kpiOperator: cortex-manila
+  description: |
+    This KPI tracks the state of kpi resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-pipeline-state
+spec:
+  operator: cortex-manila
+  impl: pipeline_state_kpi
+  opts:
+    pipelineOperator: cortex-manila
+  description: |
+    This KPI tracks the state of pipeline resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: cortex-manila-step-state
+spec:
+  operator: cortex-manila
+  impl: step_state_kpi
+  opts:
+    stepOperator: cortex-manila
+  description: |
+    This KPI tracks the state of step resources managed by cortex.

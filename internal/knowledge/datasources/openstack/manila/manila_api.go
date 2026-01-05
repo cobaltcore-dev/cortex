@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package manila
@@ -30,7 +30,7 @@ type manilaAPI struct {
 	// Monitor to track the api.
 	mon datasources.Monitor
 	// Keystone api to authenticate against.
-	keystoneAPI keystone.KeystoneAPI
+	keystoneClient keystone.KeystoneClient
 	// Manila configuration.
 	conf v1alpha1.ManilaDatasource
 	// Authenticated OpenStack service client to fetch the data.
@@ -38,21 +38,21 @@ type manilaAPI struct {
 }
 
 // Create a new OpenStack Manila api.
-func NewManilaAPI(mon datasources.Monitor, k keystone.KeystoneAPI, conf v1alpha1.ManilaDatasource) ManilaAPI {
-	return &manilaAPI{mon: mon, keystoneAPI: k, conf: conf}
+func NewManilaAPI(mon datasources.Monitor, k keystone.KeystoneClient, conf v1alpha1.ManilaDatasource) ManilaAPI {
+	return &manilaAPI{mon: mon, keystoneClient: k, conf: conf}
 }
 
 // Init the manila API.
 func (api *manilaAPI) Init(ctx context.Context) error {
-	if err := api.keystoneAPI.Authenticate(ctx); err != nil {
+	if err := api.keystoneClient.Authenticate(ctx); err != nil {
 		return err
 	}
 	// Automatically fetch the manila endpoint from the keystone service catalog.
-	provider := api.keystoneAPI.Client()
+	provider := api.keystoneClient.Client()
 	// Workaround to find the v2 service of
 	// See: https://github.com/gophercloud/gophercloud/issues/3347
 	gophercloud.ServiceTypeAliases["shared-file-system"] = []string{"sharev2"}
-	sameAsKeystone := api.keystoneAPI.Availability()
+	sameAsKeystone := api.keystoneClient.Availability()
 	sc, err := openstack.NewSharedFileSystemV2(provider, gophercloud.EndpointOpts{
 		Type:         "sharev2",
 		Availability: gophercloud.Availability(sameAsKeystone),

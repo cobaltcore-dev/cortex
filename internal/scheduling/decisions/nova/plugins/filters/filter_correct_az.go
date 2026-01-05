@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package filters
@@ -6,13 +6,10 @@ package filters
 import (
 	"context"
 	"log/slog"
-	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/shared"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterCorrectAZStep struct {
@@ -23,39 +20,42 @@ type FilterCorrectAZStep struct {
 func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	if request.Spec.Data.AvailabilityZone == "" {
-		traceLog.Debug("no availability zone requested, skipping filter_correct_az step")
+		traceLog.Info("no availability zone requested, skipping filter_correct_az step")
 		return result, nil
 	}
-	knowledge := &v1alpha1.Knowledge{}
-	if err := s.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "host-az"},
-		knowledge,
-	); err != nil {
+
+	hvs := &hv1.HypervisorList{}
+	if err := s.Client.List(context.Background(), hvs); err != nil {
+		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}
-	hostAZs, err := v1alpha1.
-		UnboxFeatureList[shared.HostAZ](knowledge.Status.Raw)
-	if err != nil {
-		return nil, err
-	}
-	var computeHostsInAZ []string
-	for _, hostAZ := range hostAZs {
-		if hostAZ.AvailabilityZone == nil {
-			traceLog.Warn("host az knowledge has nil availability zone", "host", hostAZ.ComputeHost)
+	// The availability zone is provided by the label
+	// "topology.kubernetes.io/zone" on the hv crd.
+	var computeHostsInAZ = make(map[string]struct{})
+	for _, hv := range hvs.Items {
+		az, ok := hv.Labels["topology.kubernetes.io/zone"]
+		if !ok {
+			traceLog.Warn("hypervisor missing topology.kubernetes.io/zone label", "host", hv.Name)
 			continue
 		}
-		if *hostAZ.AvailabilityZone == request.Spec.Data.AvailabilityZone {
-			computeHostsInAZ = append(computeHostsInAZ, hostAZ.ComputeHost)
+		if az == request.Spec.Data.AvailabilityZone {
+			// We always assume the name of the resource corresponds
+			// to the compute host name.
+			computeHostsInAZ[hv.Name] = struct{}{}
 		}
 	}
-	lookupStr := strings.Join(computeHostsInAZ, ",")
+
+	traceLog.Info(
+		"hosts inside requested az",
+		"availabilityZone", request.Spec.Data.AvailabilityZone,
+		"hosts", computeHostsInAZ,
+	)
 	for host := range result.Activations {
-		if strings.Contains(lookupStr, host) {
+		if _, ok := computeHostsInAZ[host]; ok {
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Debug("filtering host outside requested az", "host", host)
+		traceLog.Info("filtering host outside requested az", "host", host)
 	}
 	return result, nil
 }

@@ -1,4 +1,4 @@
-# Copyright 2025 SAP SE
+# Copyright SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
 owner-info:
@@ -90,6 +90,9 @@ cortex: &cortex
 cortex-scheduling-controllers:
   <<: *cortex
   namePrefix: cortex-nova-scheduling
+  rbac:
+    # The cortex nova scheduling controllers need hypervisor crd access.
+    hypervisor: {enable: true}
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-scheduling
@@ -118,18 +121,6 @@ cortex-knowledge-controllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
-
-cortex-reservations-controllers:
-  <<: *cortex
-  namePrefix: cortex-nova-reservations
-  conf:
-    <<: *cortexConf
-    leaderElectionID: cortex-nova-reservations
-    monitoring:
-      labels:
-        <<: *cortexMonitoringLabels
-        component: nova-reservations
-    enabledControllers:
       - reservations-controller
     enabledTasks:
       - commitments-sync-task

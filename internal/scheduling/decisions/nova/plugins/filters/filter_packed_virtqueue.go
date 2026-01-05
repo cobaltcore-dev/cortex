@@ -1,16 +1,16 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package filters
 
 import (
+	"context"
 	"log/slog"
-	"strings"
+	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterPackedVirtqueueStep struct {
@@ -26,24 +26,29 @@ func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.Exter
 	if !reqInSpecs && !reqInProps {
 		return result, nil // No packed virtqueue requested, nothing to filter.
 	}
-	var computeHostsWithPackedVirtqueues []string
-	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsWithPackedVirtqueues, `
-	    SELECT h.service_host
-		FROM `+placement.Trait{}.TableName()+` rpt
-		JOIN `+nova.Hypervisor{}.TableName()+` h
-		ON h.id = rpt.resource_provider_uuid
-		WHERE name = 'COMPUTE_NET_VIRTIO_PACKED'`,
-		map[string]any{"az": request.Spec.Data.AvailabilityZone},
-	); err != nil {
+
+	hvs := &hv1.HypervisorList{}
+	if err := s.Client.List(context.Background(), hvs); err != nil {
+		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}
-	lookupStr := strings.Join(computeHostsWithPackedVirtqueues, ",")
+	hvsWithTrait := make(map[string]struct{})
+	for _, hv := range hvs.Items {
+		traits := hv.Status.Traits
+		traits = append(traits, hv.Spec.CustomTraits...)
+		if !slices.Contains(traits, "COMPUTE_NET_VIRTIO_PACKED") {
+			continue
+		}
+		hvsWithTrait[hv.Name] = struct{}{}
+	}
+
+	traceLog.Info("hosts with packed virtqueues", "hosts", hvsWithTrait)
 	for host := range result.Activations {
-		if strings.Contains(lookupStr, host) {
+		if _, ok := hvsWithTrait[host]; ok {
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Debug("filtering host which has no packed virtqueues", "host", host)
+		traceLog.Info("filtering host without packed virtqueues", "host", host)
 	}
 	return result, nil
 }

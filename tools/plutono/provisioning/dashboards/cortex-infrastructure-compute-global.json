@@ -114,7 +114,7 @@
             "targets": [
                 {
                     "exemplar": true,
-                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
+                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_available_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)\n",
                     "interval": "",
                     "legendFormat": "Available CPU",
                     "queryType": "randomWalk",
@@ -122,7 +122,7 @@
                 },
                 {
                     "exemplar": true,
-                    "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "expr": "sum(\n  max by (compute_host) (\n    cortex_total_allocatable_capacity_per_host{\n      resource=\"cpu\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
                     "hide": false,
                     "interval": "",
                     "legendFormat": "Total CPU",
@@ -130,7 +130,7 @@
                 },
                 {
                     "exemplar": true,
-                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_available_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
                     "hide": false,
                     "interval": "",
                     "legendFormat": "Available RAM",
@@ -138,7 +138,7 @@
                 },
                 {
                     "exemplar": true,
-                    "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "expr": "sum(\n  max by (compute_host) (\n    cortex_total_allocatable_capacity_per_host{\n      resource=\"ram\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
                     "hide": false,
                     "interval": "",
                     "legendFormat": "Total RAM",
@@ -146,7 +146,7 @@
                 },
                 {
                     "exemplar": true,
-                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_sap_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "expr": "sum(\n  max by (compute_host, resource) (\n    cortex_available_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
                     "hide": false,
                     "interval": "",
                     "legendFormat": "Available Disk",
@@ -154,7 +154,7 @@
                 },
                 {
                     "exemplar": true,
-                    "expr": "sum(\n  max by (compute_host) (\n    cortex_sap_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
+                    "expr": "sum(\n  max by (compute_host) (\n    cortex_total_allocatable_capacity_per_host{\n      resource=\"disk\",\n      availability_zone=~\"$availability_zone\",\n      hypervisor_family=~\"$hypervisor_family\",\n      workload_type=~\"$workload_type\",\n      cpu_architecture=~\"$cpu_architecture\",\n      enabled=~\"$enabled\"\n    }\n  )\n)",
                     "hide": false,
                     "interval": "",
                     "legendFormat": "Total Disk",
@@ -297,7 +297,7 @@
                     ]
                 },
                 "datasource": "metrics-global",
-                "definition": "label_values(cortex_sap_available_capacity_per_host, availability_zone)",
+                "definition": "label_values(cortex_available_capacity_per_host, availability_zone)",
                 "description": null,
                 "error": null,
                 "hide": 0,
@@ -307,7 +307,7 @@
                 "name": "availability_zone",
                 "options": [],
                 "query": {
-                    "query": "label_values(cortex_sap_available_capacity_per_host, availability_zone)",
+                    "query": "label_values(cortex_available_capacity_per_host, availability_zone)",
                     "refId": "metrics-global-availability_zone-Variable-Query"
                 },
                 "refresh": 1,
@@ -332,7 +332,7 @@
                     ]
                 },
                 "datasource": "metrics-global",
-                "definition": "label_values(cortex_sap_available_capacity_per_host, hypervisor_family)",
+                "definition": "label_values(cortex_available_capacity_per_host, hypervisor_family)",
                 "description": null,
                 "error": null,
                 "hide": 0,
@@ -342,7 +342,7 @@
                 "name": "hypervisor_family",
                 "options": [],
                 "query": {
-                    "query": "label_values(cortex_sap_available_capacity_per_host, hypervisor_family)",
+                    "query": "label_values(cortex_available_capacity_per_host, hypervisor_family)",
                     "refId": "metrics-global-hypervisor_family-Variable-Query"
                 },
                 "refresh": 1,
@@ -363,7 +363,7 @@
                     "value": "$__all"
                 },
                 "datasource": "metrics-global",
-                "definition": "label_values(cortex_sap_available_capacity_per_host, enabled)",
+                "definition": "label_values(cortex_available_capacity_per_host, enabled)",
                 "description": null,
                 "error": null,
                 "hide": 0,
@@ -373,7 +373,7 @@
                 "name": "enabled",
                 "options": [],
                 "query": {
-                    "query": "label_values(cortex_sap_available_capacity_per_host, enabled)",
+                    "query": "label_values(cortex_available_capacity_per_host, enabled)",
                     "refId": "metrics-global-enabled-Variable-Query"
                 },
                 "refresh": 1,
@@ -398,7 +398,7 @@
                     ]
                 },
                 "datasource": "metrics-global",
-                "definition": "label_values(cortex_sap_available_capacity_per_host, workload_type)",
+                "definition": "label_values(cortex_available_capacity_per_host, workload_type)",
                 "description": null,
                 "error": null,
                 "hide": 0,
@@ -408,7 +408,7 @@
                 "name": "workload_type",
                 "options": [],
                 "query": {
-                    "query": "label_values(cortex_sap_available_capacity_per_host, workload_type)",
+                    "query": "label_values(cortex_available_capacity_per_host, workload_type)",
                     "refId": "metrics-global-workload_type-Variable-Query"
                 },
                 "refresh": 1,
@@ -433,7 +433,7 @@
                     ]
                 },
                 "datasource": "metrics-global",
-                "definition": "label_values(cortex_sap_available_capacity_per_host, cpu_architecture)",
+                "definition": "label_values(cortex_available_capacity_per_host, cpu_architecture)",
                 "description": null,
                 "error": null,
                 "hide": 0,
@@ -443,7 +443,7 @@
                 "name": "cpu_architecture",
                 "options": [],
                 "query": {
-                    "query": "label_values(cortex_sap_available_capacity_per_host, cpu_architecture)",
+                    "query": "label_values(cortex_available_capacity_per_host, cpu_architecture)",
                     "refId": "metrics-global-cpu_architecture-Variable-Query"
                 },
                 "refresh": 1,

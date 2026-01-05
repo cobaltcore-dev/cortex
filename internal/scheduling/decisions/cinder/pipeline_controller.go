@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package cinder
@@ -44,6 +44,11 @@ type DecisionPipelineController struct {
 	Monitor lib.PipelineMonitor
 	// Config for the scheduling operator.
 	Conf conf.Config
+}
+
+// The type of pipeline this controller manages.
+func (c *DecisionPipelineController) PipelineType() v1alpha1.PipelineType {
+	return v1alpha1.PipelineTypeFilterWeigher
 }
 
 // Callback executed when kubernetes asks to reconcile a decision resource.
@@ -149,7 +154,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
+				return pipeline.Spec.Type == c.PipelineType()
 			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on

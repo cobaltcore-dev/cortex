@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package placement
@@ -35,7 +35,7 @@ func TestPlacementSyncer_Init(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
@@ -55,7 +55,7 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
@@ -78,7 +78,7 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
@@ -104,7 +104,7 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderTraits}
 
 	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}
@@ -140,7 +140,7 @@ func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneAPI{}
+	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderInventoryUsages}
 
 	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}

@@ -19,6 +19,7 @@ groups:
         The Cortex scheduling service is down. Scheduling requests from Nova will
         not be served. This is no immediate problem, since Nova will continue
         placing new VMs. However, the placement will be less desirable.
+
   - alert: CortexNovaKnowledgeDown
     expr: |
       up{pod=~"cortex-nova-knowledge-.*"} != 1 or
@@ -37,23 +38,7 @@ groups:
         The Cortex Knowledge service is down. This is no immediate problem,
         since cortex is still able to process requests,
         but the quality of the responses may be affected.
-  - alert: CortexNovaReservationsDown
-    expr: |
-      up{pod=~"cortex-nova-reservations-.*"} != 1 or
-      absent(up{pod=~"cortex-nova-reservations-.*"})
-    for: 5m
-    labels:
-      context: liveness
-      dashboard: cortex/cortex
-      service: cortex
-      severity: warning
-      support_group: workload-management
-      playbook: docs/support/playbook/cortex/down
-    annotations:
-      summary: "Cortex Reservations for Nova is down"
-      description: >
-        The Cortex Reservations service is down. Commitment requests for Nova resources
-        will not be processed.
+
   - alert: CortexNovaDeschedulerPipelineErroring
     expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{component="nova-scheduling", error="true"}[2m]) > 0
     for: 5m
@@ -69,6 +54,7 @@ groups:
         The Cortex descheduler pipeline is encountering errors during its execution.
         This may indicate issues with the descheduling logic or the underlying infrastructure.
         It is recommended to investigate the descheduler logs and the state of the VMs being processed.
+
   - alert: CortexNovaHttpRequest400sTooHigh
     expr: rate(cortex_scheduler_api_request_duration_seconds_count{service="cortex-nova-metrics", status=~"4.+"}[5m]) > 0.1
     for: 5m
@@ -85,6 +71,7 @@ groups:
         errors. This is expected when the scheduling request cannot be served
         by Cortex. However, it could also indicate that the request format has
         changed and Cortex is unable to parse it.
+
   - alert: CortexNovaSchedulingHttpRequest500sTooHigh
     expr: rate(cortex_scheduler_api_request_duration_seconds_count{service="cortex-nova-metrics", status=~"5.+" }[5m]) > 0.1
     for: 5m
@@ -101,6 +88,7 @@ groups:
         This is not expected and indicates that Cortex is having some internal problem.
         Nova will continue to place new VMs, but the placement will be less desirable.
         Thus, no immediate action is needed.
+
   - alert: CortexNovaHighMemoryUsage
     expr: process_resident_memory_bytes{service="cortex-nova-metrics"} > 6000 * 1024 * 1024
     for: 5m
@@ -116,6 +104,7 @@ groups:
         `{{$labels.component}}` should not be using more than 6000 MiB of memory. Usually it
         should use much less, so there may be a memory leak or other changes
         that are causing the memory usage to increase significantly.
+
   - alert: CortexNovaHighCPUUsage
     expr: rate(process_cpu_seconds_total{service="cortex-nova-metrics"}[1m]) > 0.5
     for: 5m
@@ -131,6 +120,7 @@ groups:
         `{{$labels.component}}` should not be using more than 50% of a single CPU core. Usually
         it should use much less, so there may be a CPU leak or other changes
         that are causing the CPU usage to increase significantly.
+
   - alert: CortexNovaTooManyDBConnectionAttempts
     expr: rate(cortex_db_connection_attempts_total{service="cortex-nova-metrics"}[5m]) > 0.1
     for: 5m
@@ -145,3 +135,159 @@ groups:
       description: >
         `{{$labels.component}}` is trying to connect to the database too often. This may happen
         when the database is down or the connection parameters are misconfigured.
+
+  - alert: CortexNovaSyncNotSuccessful
+    expr: cortex_sync_request_processed_total{service="cortex-nova-metrics"} - cortex_sync_request_duration_seconds_count{service="cortex-nova-metrics"} > 0
+    for: 5m
+    labels:
+      context: syncstatus
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` Sync not successful"
+      description: >
+        `{{$labels.component}}` experienced an issue syncing data from the datasource `{{$labels.datasource}}`. This may
+        happen when the datasource (OpenStack, Prometheus, etc.) is down or
+        the sync module is misconfigured. No immediate action is needed, since
+        the sync module will retry the sync operation and the currently synced
+        data will be kept. However, when this problem persists for a longer
+        time the service will have a less recent view of the datacenter.
+
+  - alert: CortexNovaSyncObjectsDroppedToZero
+    expr: cortex_sync_objects{service="cortex-nova-metrics", datasource!="openstack_migrations"} == 0
+    for: 60m
+    labels:
+      context: syncobjects
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "`{{$labels.component}}` is not syncing any new data from `{{$labels.datasource}}`"
+      description: >
+        `{{$labels.component}}` is not syncing any objects from the datasource `{{$labels.datasource}}`. This may happen
+        when the datasource (OpenStack, Prometheus, etc.) is down or the sync
+        module is misconfigured. No immediate action is needed, since the sync
+        module will retry the sync operation and the currently synced data will
+        be kept. However, when this problem persists for a longer time the
+        service will have a less recent view of the datacenter.
+
+  - alert: CortexNovaDatasourceUnready
+    expr: cortex_datasource_state{operator="cortex-nova",state!="ready"} != 0
+    for: 60m
+    labels:
+      context: datasources
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Datasource `{{$labels.datasource}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the datasource
+        connectivity or configuration. It is recommended to investigate the
+        datasource status and logs for more details.
+
+  - alert: CortexNovaKnowledgeUnready
+    expr: cortex_knowledge_state{operator="cortex-nova",state!="ready"} != 0
+    for: 60m
+    labels:
+      context: knowledge
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Knowledge `{{$labels.knowledge}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the knowledge
+        configuration. It is recommended to investigate the
+        knowledge status and logs for more details.
+
+  - alert: CortexNovaDecisionsWithErrors
+    expr: cortex_decision_state{operator="cortex-nova",state="error"} > 0
+    for: 5m
+    labels:
+      context: decisions
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Some decisions are in error state for operator `{{$labels.operator}}`"
+      description: >
+        The cortex scheduling pipeline generated decisions that are in error state.
+        This may indicate issues with the decision logic or the underlying infrastructure.
+        It is recommended to investigate the decision logs and the state of the
+        VMs being processed.
+
+  - alert: CortexNovaTooManyDecisionsWaiting
+    expr: cortex_decision_state{operator="cortex-nova",state="waiting"} > 10
+    for: 5m
+    labels:
+      context: decisions
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Too many decisions are in waiting state for operator `{{$labels.operator}}`"
+      description: >
+        The cortex scheduling pipeline has a high number of decisions for which
+        no target host has been assigned yet.
+
+        This may indicate a backlog in processing or issues with the decision logic.
+        It is recommended to investigate the decision logs and the state of the
+        VMs being processed.
+
+  - alert: CortexNovaKPIUnready
+    expr: |
+      cortex_kpi_state{operator="cortex-nova",state!="ready"} != 0 or
+      absent(cortex_kpi_state{operator="cortex-nova"})
+    for: 60m
+    labels:
+      context: kpis
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "KPI `{{$labels.kpi}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the KPI
+        configuration. It is recommended to investigate the
+        KPI status and logs for more details.
+
+  - alert: CortexNovaPipelineUnready
+    expr: cortex_pipeline_state{operator="cortex-nova",state!="ready"} != 0
+    for: 5m
+    labels:
+      context: pipelines
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Pipeline `{{$labels.pipeline}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the pipeline
+        configuration. It is recommended to investigate the
+        pipeline status and logs for more details.
+
+  - alert: CortexNovaStepUnready
+    expr: cortex_step_state{operator="cortex-nova",state!="ready"} != 0
+    for: 5m
+    labels:
+      context: pipelines
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Step `{{$labels.step}}` is in `{{$labels.state}}` state"
+      description: >
+        This may indicate issues with the step
+        configuration. It is recommended to investigate the
+        step status and logs for more details.

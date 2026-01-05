@@ -1,4 +1,4 @@
-// Copyright 2025 SAP SE
+// Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
 package nova
@@ -39,6 +39,11 @@ type DeschedulingsPipelineController struct {
 	Conf conf.Config
 	// Cycle detector to avoid descheduling loops.
 	CycleDetector CycleDetector
+}
+
+// The type of pipeline this controller manages.
+func (c *DeschedulingsPipelineController) PipelineType() v1alpha1.PipelineType {
+	return v1alpha1.PipelineTypeDescheduler
 }
 
 // The base controller will delegate the pipeline creation down to this method.
@@ -105,7 +110,7 @@ func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager, mcl
 				if pipeline.Spec.Operator != c.Conf.Operator {
 					return false
 				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeDescheduler
+				return pipeline.Spec.Type == c.PipelineType()
 			}),
 		).
 		// Watch step changes so that we can turn on/off pipelines depending on
