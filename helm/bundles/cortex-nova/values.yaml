@@ -90,6 +90,9 @@ cortex: &cortex
 cortex-scheduling-controllers:
   <<: *cortex
   namePrefix: cortex-nova-scheduling
+  rbac:
+    # The cortex nova scheduling controllers need hypervisor crd access.
+    hypervisor: {enable: true}
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-scheduling

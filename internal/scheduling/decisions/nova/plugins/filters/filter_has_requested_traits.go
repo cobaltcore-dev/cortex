@@ -6,13 +6,12 @@ package filters
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterHasRequestedTraits struct {
@@ -41,55 +40,43 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 		traceLog.Debug("no traits requested, skipping filter")
 		return result, nil
 	}
-	knowledge := &v1alpha1.Knowledge{}
-	if err := s.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "host-capabilities"},
-		knowledge,
-	); err != nil {
+
+	hvs := &hv1.HypervisorList{}
+	if err := s.Client.List(context.Background(), hvs); err != nil {
+		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}
-	hostCapabilities, err := v1alpha1.
-		UnboxFeatureList[compute.HostCapabilities](knowledge.Status.Raw)
-	if err != nil {
-		return nil, err
-	}
-	hostsEncountered := map[string]struct{}{}
-	for _, cap := range hostCapabilities {
-		hostsEncountered[cap.ComputeHost] = struct{}{}
-		providedTraits := cap.Traits // Comma-separated list.
+
+	hostsMatchingAllTraits := map[string]struct{}{}
+	for _, hv := range hvs.Items {
 		allRequiredPresent := true
+		traits := hv.Status.Traits
+		traits = append(traits, hv.Spec.CustomTraits...)
 		for _, required := range requiredTraits {
-			if !strings.Contains(providedTraits, required) {
+			if !slices.Contains(traits, required) {
 				allRequiredPresent = false
 				break
 			}
 		}
 		allForbiddenAbsent := true
 		for _, forbidden := range forbiddenTraits {
-			if strings.Contains(providedTraits, forbidden) {
+			if slices.Contains(traits, forbidden) {
 				allForbiddenAbsent = false
 				break
 			}
 		}
-		if !allRequiredPresent || !allForbiddenAbsent {
-			delete(result.Activations, cap.ComputeHost)
-			traceLog.Debug(
-				"filtering host which does not match trait check",
-				"host", cap.ComputeHost, "want", requiredTraits,
-				"forbid", forbiddenTraits, "have", providedTraits,
-			)
+		if allRequiredPresent && allForbiddenAbsent {
+			hostsMatchingAllTraits[hv.Name] = struct{}{}
 		}
 	}
-	// Remove all hosts that weren't encountered.
+
+	traceLog.Info("hosts matching requested traits", "hosts", hostsMatchingAllTraits)
 	for host := range result.Activations {
-		if _, ok := hostsEncountered[host]; !ok {
-			delete(result.Activations, host)
-			traceLog.Debug(
-				"removing host with unknown capabilities",
-				"host", host,
-			)
+		if _, ok := hostsMatchingAllTraits[host]; ok {
+			continue
 		}
+		delete(result.Activations, host)
+		traceLog.Info("filtering host not matching requested traits", "host", host)
 	}
 	return result, nil
 }
