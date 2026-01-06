@@ -68,9 +68,9 @@ func createTestPipeline(steps []v1alpha1.StepInPipeline) *v1alpha1.Pipeline {
 			Name: "test-pipeline",
 		},
 		Spec: v1alpha1.PipelineSpec{
-			Operator: "test",
-			Type:     "",
-			Steps:    steps,
+			SchedulingDomain: "test",
+			Type:             "",
+			Steps:            steps,
 		},
 	}
 }
@@ -82,10 +82,10 @@ func createTestStep(ready bool, knowledges []corev1.ObjectReference) *v1alpha1.S
 			Namespace: "default",
 		},
 		Spec: v1alpha1.StepSpec{
-			Operator:   "test",
-			Type:       v1alpha1.StepTypeFilter,
-			Impl:       "test-impl",
-			Knowledges: knowledges,
+			SchedulingDomain: "test",
+			Type:             v1alpha1.StepTypeFilter,
+			Impl:             "test-impl",
+			Knowledges:       knowledges,
 		},
 		Status: v1alpha1.StepStatus{
 			Ready:               ready,
@@ -103,7 +103,7 @@ func createTestKnowledge(name string, hasError bool, rawLength int) *v1alpha1.Kn
 			Namespace: "default",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test",
+			SchedulingDomain: "test",
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			RawLength: rawLength,
@@ -195,9 +195,9 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 
 			initializer := &mockInitializer{shouldFail: tt.initializerFails}
 			controller := &BasePipelineController[mockPipeline]{
-				Initializer:  initializer,
-				Client:       client,
-				OperatorName: "test",
+				Initializer:      initializer,
+				Client:           client,
+				SchedulingDomain: "test",
 			}
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -315,10 +315,10 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 
 			initializer := &mockInitializer{shouldFail: tt.initializerFails}
 			controller := &BasePipelineController[mockPipeline]{
-				Pipelines:    make(map[string]mockPipeline),
-				Initializer:  initializer,
-				Client:       client,
-				OperatorName: "test",
+				Pipelines:        make(map[string]mockPipeline),
+				Initializer:      initializer,
+				Client:           client,
+				SchedulingDomain: "test",
 			}
 			controller.Pipelines = make(map[string]mockPipeline)
 			controller.PipelineConfigs = make(map[string]v1alpha1.Pipeline)
@@ -371,9 +371,9 @@ func TestBasePipelineController_HandlePipelineDeleted(t *testing.T) {
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Initializer:  initializer,
-		Client:       client,
-		OperatorName: "test",
+		Initializer:      initializer,
+		Client:           client,
+		SchedulingDomain: "test",
 	}
 
 	ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -463,11 +463,11 @@ func TestBasePipelineController_HandleStepCreated(t *testing.T) {
 
 			initializer := &mockInitializer{}
 			controller := &BasePipelineController[mockPipeline]{
-				Pipelines:       make(map[string]mockPipeline),
-				PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-				Initializer:     initializer,
-				Client:          client,
-				OperatorName:    "test",
+				Pipelines:        make(map[string]mockPipeline),
+				PipelineConfigs:  make(map[string]v1alpha1.Pipeline),
+				Initializer:      initializer,
+				Client:           client,
+				SchedulingDomain: "test",
 			}
 
 			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
@@ -549,10 +549,10 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 
 			initializer := &mockInitializer{}
 			controller := &BasePipelineController[mockPipeline]{
-				Pipelines:    make(map[string]mockPipeline),
-				Initializer:  initializer,
-				Client:       client,
-				OperatorName: "test",
+				Pipelines:        make(map[string]mockPipeline),
+				Initializer:      initializer,
+				Client:           client,
+				SchedulingDomain: "test",
 			}
 			controller.Pipelines = make(map[string]mockPipeline)
 			controller.PipelineConfigs = make(map[string]v1alpha1.Pipeline)
@@ -670,9 +670,9 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Initializer:  initializer,
-		Client:       client,
-		OperatorName: "test",
+		Initializer:      initializer,
+		Client:           client,
+		SchedulingDomain: "test",
 	}
 
 	ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)

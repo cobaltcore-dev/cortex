@@ -47,9 +47,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-decision",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Operator:   "test-operator",
-					Type:       v1alpha1.DecisionTypeIroncoreMachine,
-					ResourceID: "test-machine",
+					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
+					ResourceID:       "test-machine",
 					PipelineRef: corev1.ObjectReference{
 						Name: "machines-scheduler",
 					},
@@ -88,9 +87,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-decision-no-pools",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Operator:   "test-operator",
-					Type:       v1alpha1.DecisionTypeIroncoreMachine,
-					ResourceID: "test-machine",
+					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
+					ResourceID:       "test-machine",
 					PipelineRef: corev1.ObjectReference{
 						Name: "machines-scheduler",
 					},
@@ -129,7 +127,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					},
 				},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 				},
 				Monitor: lib.PipelineMonitor{},
 			}
@@ -316,10 +314,10 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Name: "machines-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:           true,
@@ -349,10 +347,10 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Name: "machines-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: false,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
+					CreateDecisions:  false,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:           false,
@@ -395,10 +393,10 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Name: "machines-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:           true,
@@ -430,7 +428,7 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
 				},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 				},
 				Monitor: lib.PipelineMonitor{},
 			}
@@ -470,11 +468,8 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 						found = true
 
 						// Verify decision properties
-						if decision.Spec.Operator != "test-operator" {
-							t.Errorf("expected operator %q, got %q", "test-operator", decision.Spec.Operator)
-						}
-						if decision.Spec.Type != v1alpha1.DecisionTypeIroncoreMachine {
-							t.Errorf("expected type %q, got %q", v1alpha1.DecisionTypeIroncoreMachine, decision.Spec.Type)
+						if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
+							t.Errorf("expected scheduling domain %q, got %q", v1alpha1.SchedulingDomainMachines, decision.Spec.SchedulingDomain)
 						}
 						if decision.Spec.ResourceID != tt.machine.Name {
 							t.Errorf("expected resource ID %q, got %q", tt.machine.Name, decision.Spec.ResourceID)

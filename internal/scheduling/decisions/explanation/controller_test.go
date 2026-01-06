@@ -18,7 +18,7 @@ import (
 
 func TestController_shouldReconcileDecision(t *testing.T) {
 	controller := &Controller{
-		OperatorName: "test-operator",
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
 	}
 
 	tests := []struct {
@@ -30,8 +30,7 @@ func TestController_shouldReconcileDecision(t *testing.T) {
 			name: "should reconcile nova decision without explanation",
 			decision: &v1alpha1.Decision{
 				Spec: v1alpha1.DecisionSpec{
-					Operator: "test-operator",
-					Type:     v1alpha1.DecisionTypeNovaServer,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Explanation: "",
@@ -46,8 +45,7 @@ func TestController_shouldReconcileDecision(t *testing.T) {
 			name: "should not reconcile decision from different operator",
 			decision: &v1alpha1.Decision{
 				Spec: v1alpha1.DecisionSpec{
-					Operator: "different-operator",
-					Type:     v1alpha1.DecisionTypeNovaServer,
+					SchedulingDomain: "different-operator",
 				},
 				Status: v1alpha1.DecisionStatus{
 					Explanation: "",
@@ -59,8 +57,7 @@ func TestController_shouldReconcileDecision(t *testing.T) {
 			name: "should not reconcile decision with existing explanation",
 			decision: &v1alpha1.Decision{
 				Spec: v1alpha1.DecisionSpec{
-					Operator: "test-operator",
-					Type:     v1alpha1.DecisionTypeNovaServer,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Explanation: "Already has explanation",
@@ -72,8 +69,7 @@ func TestController_shouldReconcileDecision(t *testing.T) {
 			name: "should not reconcile non-nova decision",
 			decision: &v1alpha1.Decision{
 				Spec: v1alpha1.DecisionSpec{
-					Operator: "test-operator",
-					Type:     v1alpha1.DecisionTypeCinderVolume,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Explanation: "",
@@ -126,9 +122,8 @@ func TestController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Operator:   "test-operator",
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource-1",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-resource-1",
 				},
 				Status: v1alpha1.DecisionStatus{},
 			},
@@ -144,9 +139,8 @@ func TestController_Reconcile(t *testing.T) {
 					CreationTimestamp: metav1.Time{Time: time.Now().Add(time.Hour)},
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Operator:   "test-operator",
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource-2",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-resource-2",
 				},
 				Status: v1alpha1.DecisionStatus{},
 			},
@@ -158,9 +152,8 @@ func TestController_Reconcile(t *testing.T) {
 						CreationTimestamp: metav1.Time{Time: time.Now()},
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "test-resource-2",
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						ResourceID:       "test-resource-2",
 					},
 					Status: v1alpha1.DecisionStatus{
 						Result: &v1alpha1.DecisionResult{
@@ -190,9 +183,9 @@ func TestController_Reconcile(t *testing.T) {
 				Build()
 
 			controller := &Controller{
-				Client:          client,
-				OperatorName:    "test-operator",
-				SkipIndexFields: true, // Skip field indexing for testing
+				Client:           client,
+				SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				SkipIndexFields:  true, // Skip field indexing for testing
 			}
 
 			req := ctrl.Request{
@@ -418,9 +411,9 @@ func TestController_reconcileHistory(t *testing.T) {
 				Build()
 
 			controller := &Controller{
-				Client:          client,
-				OperatorName:    "test-operator",
-				SkipIndexFields: true, // Skip field indexing for testing
+				Client:           client,
+				SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				SkipIndexFields:  true, // Skip field indexing for testing
 			}
 
 			err := controller.reconcileHistory(context.Background(), tt.decision)
@@ -457,8 +450,8 @@ func TestController_reconcileExplanation(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Type:       v1alpha1.DecisionTypeNovaServer,
-			ResourceID: "test-resource",
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			ResourceID:       "test-resource",
 		},
 		Status: v1alpha1.DecisionStatus{
 			History: nil,
@@ -472,8 +465,8 @@ func TestController_reconcileExplanation(t *testing.T) {
 		Build()
 
 	controller := &Controller{
-		Client:       client,
-		OperatorName: "test-operator",
+		Client:           client,
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
 	}
 
 	err := controller.reconcileExplanation(context.Background(), decision)
@@ -503,9 +496,8 @@ func TestController_StartupCallback(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator:   "test-operator",
-			Type:       v1alpha1.DecisionTypeNovaServer,
-			ResourceID: "test-resource-1",
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			ResourceID:       "test-resource-1",
 		},
 		Status: v1alpha1.DecisionStatus{
 			Explanation: "", // Empty explanation means it should be reconciled
@@ -522,9 +514,8 @@ func TestController_StartupCallback(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator:   "test-operator",
-			Type:       v1alpha1.DecisionTypeNovaServer,
-			ResourceID: "test-resource-2",
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			ResourceID:       "test-resource-2",
 		},
 		Status: v1alpha1.DecisionStatus{
 			Explanation: "Already has explanation",
@@ -538,9 +529,8 @@ func TestController_StartupCallback(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator:   "different-operator",
-			Type:       v1alpha1.DecisionTypeNovaServer,
-			ResourceID: "test-resource-3",
+			SchedulingDomain: "different-operator",
+			ResourceID:       "test-resource-3",
 		},
 		Status: v1alpha1.DecisionStatus{
 			Explanation: "",
@@ -554,9 +544,9 @@ func TestController_StartupCallback(t *testing.T) {
 		Build()
 
 	controller := &Controller{
-		Client:          client,
-		OperatorName:    "test-operator",
-		SkipIndexFields: true, // Skip field indexing for testing
+		Client:           client,
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		SkipIndexFields:  true, // Skip field indexing for testing
 	}
 
 	err := controller.StartupCallback(context.Background())

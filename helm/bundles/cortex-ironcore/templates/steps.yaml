@@ -4,7 +4,7 @@ kind: Step
 metadata:
   name: machinepools-noop
 spec:
-  operator: cortex-ironcore
+  schedulingDomain: machines
   type: weigher
   impl: noop
   description: |

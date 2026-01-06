@@ -35,8 +35,9 @@ type KnowledgeExtractorSpec struct {
 }
 
 type KnowledgeSpec struct {
-	// The operator by which this knowledge should be extracted.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this knowledge
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// The feature extractor to use for extracting this knowledge.
 	Extractor KnowledgeExtractorSpec `json:"extractor,omitempty"`

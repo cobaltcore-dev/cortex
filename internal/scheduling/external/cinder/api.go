@@ -146,12 +146,11 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 			GenerateName: "cinder-",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator: httpAPI.config.Operator,
+			SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 			PipelineRef: corev1.ObjectReference{
 				Name: requestData.Pipeline,
 			},
 			ResourceID: "", // TODO
-			Type:       v1alpha1.DecisionTypeCinderVolume,
 			CinderRaw:  &raw,
 		},
 	}

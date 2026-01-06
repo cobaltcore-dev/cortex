@@ -4,7 +4,7 @@ kind: KPI
 metadata:
   name: netapp-storage-pool-cpu-usage-manila
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   impl: netapp_storage_pool_cpu_usage_kpi
   dependencies:
     knowledges:
@@ -17,7 +17,7 @@ kind: KPI
 metadata:
   name: cortex-manila-datasource-state
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   impl: datasource_state_kpi
   opts:
     datasourceOperator: cortex-manila
@@ -29,7 +29,7 @@ kind: KPI
 metadata:
   name: cortex-manila-knowledge-state
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   impl: knowledge_state_kpi
   opts:
     knowledgeOperator: cortex-manila
@@ -41,7 +41,7 @@ kind: KPI
 metadata:
   name: cortex-manila-decision-state
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   impl: decision_state_kpi
   opts:
     decisionOperator: cortex-manila
@@ -53,7 +53,7 @@ kind: KPI
 metadata:
   name: cortex-manila-kpi-state
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   impl: kpi_state_kpi
   opts:
     kpiOperator: cortex-manila
@@ -65,7 +65,7 @@ kind: KPI
 metadata:
   name: cortex-manila-pipeline-state
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   impl: pipeline_state_kpi
   opts:
     pipelineOperator: cortex-manila
@@ -77,7 +77,7 @@ kind: KPI
 metadata:
   name: cortex-manila-step-state
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   impl: step_state_kpi
   opts:
     stepOperator: cortex-manila

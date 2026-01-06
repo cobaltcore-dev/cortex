@@ -15,7 +15,7 @@ import (
 
 func TestStepStateKPI_Init(t *testing.T) {
 	kpi := &StepStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"stepOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"stepSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -45,7 +45,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 			steps: []v1alpha1.Step{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "step1"},
-					Spec:       v1alpha1.StepSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.StepSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.StepStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -61,7 +61,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 			steps: []v1alpha1.Step{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "step2"},
-					Spec:       v1alpha1.StepSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.StepSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.StepStatus{
 						Ready: false,
 						Conditions: []v1.Condition{
@@ -82,7 +82,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 			steps: []v1alpha1.Step{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "step-ready"},
-					Spec:       v1alpha1.StepSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.StepSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.StepStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -90,7 +90,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "step-error"},
-					Spec:       v1alpha1.StepSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.StepSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.StepStatus{
 						Ready: false,
 						Conditions: []v1.Condition{
@@ -111,7 +111,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 			steps: []v1alpha1.Step{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "step-correct-operator"},
-					Spec:       v1alpha1.StepSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.StepSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.StepStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -119,7 +119,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "step-wrong-operator"},
-					Spec:       v1alpha1.StepSpec{Operator: "other-operator"},
+					Spec:       v1alpha1.StepSpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.StepStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -135,7 +135,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 			steps: []v1alpha1.Step{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "step-unknown"},
-					Spec:       v1alpha1.StepSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.StepSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.StepStatus{
 						Ready:      false,
 						Conditions: []v1.Condition{},
@@ -151,7 +151,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 			steps: []v1alpha1.Step{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "step-error-priority"},
-					Spec:       v1alpha1.StepSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.StepSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.StepStatus{
 						Ready: true,
 						Conditions: []v1.Condition{
@@ -181,7 +181,7 @@ func TestStepStateKPI_Collect(t *testing.T) {
 			client := clientBuilder.Build()
 
 			kpi := &StepStateKPI{}
-			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"stepOperator": "`+tt.operator+`"}`)); err != nil {
+			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"stepSchedulingDomain": "`+tt.operator+`"}`)); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
@@ -211,7 +211,7 @@ func TestStepStateKPI_GetName(t *testing.T) {
 
 func TestStepStateKPI_Describe(t *testing.T) {
 	kpi := &StepStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"stepOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"stepSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

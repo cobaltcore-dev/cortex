@@ -217,7 +217,7 @@ func (r *OpenStackDatasourceReconciler) SetupWithManager(mgr manager.Manager, mc
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only react to datasources matching the operator.
 				ds := obj.(*v1alpha1.Datasource)
-				if ds.Spec.Operator != r.Conf.Operator {
+				if ds.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
 					return false
 				}
 				// Only react to openstack datasources.

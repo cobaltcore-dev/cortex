@@ -193,8 +193,9 @@ const (
 )
 
 type DatasourceSpec struct {
-	// The operator by which this datasource should be synced.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this datasource
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// If given, configures a Prometheus datasource to fetch.
 	// Type must be set to "prometheus" if this is used.

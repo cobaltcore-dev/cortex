@@ -110,10 +110,7 @@ func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 	}
 	for _, decision := range decisionList.Items {
 		// Skip non-manila decisions.
-		if decision.Spec.Operator != conf.Operator {
-			continue
-		}
-		if decision.Spec.Type != v1alpha1.DecisionTypeManilaShare {
+		if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainManila {
 			continue
 		}
 		// Skip decisions for which the share still exists.

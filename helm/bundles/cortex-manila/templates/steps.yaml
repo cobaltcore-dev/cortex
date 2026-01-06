@@ -4,7 +4,7 @@ kind: Step
 metadata:
   name: netapp-cpu-usage-balancing-manila
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   type: weigher
   impl: netapp_cpu_usage_balancing
   description: |

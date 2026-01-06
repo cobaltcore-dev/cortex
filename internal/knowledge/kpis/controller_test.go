@@ -294,8 +294,8 @@ func TestController_Reconcile(t *testing.T) {
 					Name: "test-kpi",
 				},
 				Spec: v1alpha1.KPISpec{
-					Operator: "test-operator",
-					Impl:     "test_kpi",
+					SchedulingDomain: "test-operator",
+					Impl:             "test_kpi",
 					Dependencies: v1alpha1.KPIDependenciesSpec{
 						Datasources: []corev1.ObjectReference{
 							{Name: "test-datasource", Namespace: "default"},
@@ -310,7 +310,7 @@ func TestController_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: v1alpha1.DatasourceSpec{
-						Operator: "test-operator",
+						SchedulingDomain: "test-operator",
 						DatabaseSecretRef: corev1.SecretReference{
 							Name:      "db-secret",
 							Namespace: "default",
@@ -347,8 +347,8 @@ func TestController_Reconcile(t *testing.T) {
 					Name: "test-kpi-unready",
 				},
 				Spec: v1alpha1.KPISpec{
-					Operator: "test-operator",
-					Impl:     "test_kpi",
+					SchedulingDomain: "test-operator",
+					Impl:             "test_kpi",
 					Dependencies: v1alpha1.KPIDependenciesSpec{
 						Datasources: []corev1.ObjectReference{
 							{Name: "unready-datasource", Namespace: "default"},
@@ -363,7 +363,7 @@ func TestController_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: v1alpha1.DatasourceSpec{
-						Operator: "test-operator",
+						SchedulingDomain: "test-operator",
 						DatabaseSecretRef: corev1.SecretReference{
 							Name:      "db-secret",
 							Namespace: "default",
@@ -385,8 +385,8 @@ func TestController_Reconcile(t *testing.T) {
 					Name: "unsupported-kpi",
 				},
 				Spec: v1alpha1.KPISpec{
-					Operator: "test-operator",
-					Impl:     "unsupported_kpi",
+					SchedulingDomain: "test-operator",
+					Impl:             "unsupported_kpi",
 				},
 			},
 			expectedReady:  false,
@@ -400,8 +400,8 @@ func TestController_Reconcile(t *testing.T) {
 					Name: "no-deps-kpi",
 				},
 				Spec: v1alpha1.KPISpec{
-					Operator: "test-operator",
-					Impl:     "test_kpi",
+					SchedulingDomain: "test-operator",
+					Impl:             "test_kpi",
 				},
 			},
 			expectedReady:  true,
@@ -433,8 +433,8 @@ func TestController_Reconcile(t *testing.T) {
 
 			mockKPIInstance := &mockKPI{name: "test_kpi"}
 			baseController := Controller{
-				Client:       fakeClient,
-				OperatorName: "test-operator",
+				Client:           fakeClient,
+				SchedulingDomain: "test-operator",
 				supportedKPIs: map[string]plugins.KPI{
 					"test_kpi": mockKPIInstance,
 				},
@@ -508,8 +508,8 @@ func TestController_Reconcile_KPIDeleted(t *testing.T) {
 
 	mockKPIInstance := &mockKPI{name: "test_kpi"}
 	controller := &Controller{
-		Client:       fakeClient,
-		OperatorName: "test-operator",
+		Client:           fakeClient,
+		SchedulingDomain: "test-operator",
 		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},
@@ -870,15 +870,15 @@ func TestController_InitAllKPIs(t *testing.T) {
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "kpi1"},
 			Spec: v1alpha1.KPISpec{
-				Operator: "test-operator",
-				Impl:     "test_kpi",
+				SchedulingDomain: "test-operator",
+				Impl:             "test_kpi",
 			},
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "kpi2"},
 			Spec: v1alpha1.KPISpec{
-				Operator: "other-operator",
-				Impl:     "test_kpi",
+				SchedulingDomain: "other-operator",
+				Impl:             "test_kpi",
 			},
 		},
 	}
@@ -896,8 +896,8 @@ func TestController_InitAllKPIs(t *testing.T) {
 
 	mockKPIInstance := &mockKPI{name: "test_kpi"}
 	baseController := Controller{
-		Client:       fakeClient,
-		OperatorName: "test-operator",
+		Client:           fakeClient,
+		SchedulingDomain: "test-operator",
 		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},

@@ -4,7 +4,7 @@ kind: Pipeline
 metadata:
   name: machines-scheduler
 spec:
-  operator: cortex-ironcore
+  schedulingDomain: machines
   description: |
     This pipeline is used to schedule ironcore machines onto machinepools.
   type: filter-weigher

@@ -69,7 +69,7 @@ cortex: &cortex
   metrics: {enable: false}
   prometheus: {enable: false}
   conf: &cortexConf
-    operator: cortex-manila
+    schedulingDomain: manila
     keystoneSecretRef:
       name: cortex-manila-openstack-keystone
       namespace: default
