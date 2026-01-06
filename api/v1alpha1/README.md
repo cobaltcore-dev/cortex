@@ -2,6 +2,11 @@ This document specifies Cortex CRDs.
 
 ## Pipeline
 
+This example pipeline should be everything needed to configure Cortex.  
+
+Weighers, Filters are well-documented.
+Basic requirements, such as the Prometheus URL, are flags and immutable during runtime.
+
 ```yaml
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline

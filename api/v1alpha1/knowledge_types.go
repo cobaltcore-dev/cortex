@@ -14,13 +14,13 @@ type KnowledgeSpec struct{}
 type KnowledgeEntityKind string
 
 const (
-	KnowledgeEntityKindVM      KnowledgeEntityKind = "VM"
-	KnowledgeEntityKindHost    KnowledgeEntityKind = "Host"
-	KnowledgeEntityKindProject KnowledgeEntityKind = "Project"
+	KnowledgeEntityKindVM      KnowledgeEntityKind = "vm"
+	KnowledgeEntityKindHost    KnowledgeEntityKind = "host"
+	KnowledgeEntityKindProject KnowledgeEntityKind = "project"
 )
 
 type Entity struct {
-	// +kubebuilder:validation:Enum=VM;Host;Project
+	// +kubebuilder:validation:Enum=vm;host;project
 	Kind   KnowledgeEntityKind `json:"kind"`
 	ID     string              `json:"id"`
 	Domain string              `json:"domain"`
