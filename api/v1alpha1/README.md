@@ -14,7 +14,7 @@ spec:
   filters:
     - name: filter1
       description: Short, human-readable description.
-      # Optional parameters to configure the filter.
+      # Optional parameters to configure the filter. Early iteration to be refined later.
       params:
         key: value
   # Ordered weighers should be completed successfully in order to ensure optimal placement and scheduling.
@@ -22,7 +22,7 @@ spec:
   weighers:
     - name: weigher1
       description: Short, human-readable description.
-      # Optional parameters to configure the weigher.
+      # Optional parameters to configure the weigher. Early iteration to be refined later.
       params:
         key: value
 status:
