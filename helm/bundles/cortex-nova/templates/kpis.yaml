@@ -30,30 +30,16 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: host-total-allocatable-capacity
+  name: vmware-host-capacity
 spec:
   operator: cortex-nova
-  impl: host_total_allocatable_capacity_kpi
+  impl: vmware_host_capacity_kpi
   dependencies:
     knowledges:
       - name: host-details
       - name: host-utilization
   description: |
-    This KPI tracks the total allocatable capacity of hosts.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
-  name: host-capacity
-spec:
-  operator: cortex-nova
-  impl: host_capacity_kpi
-  dependencies:
-    knowledges:
-      - name: host-details
-      - name: host-utilization
-  description: |
-    This KPI tracks the total allocatable capacity of hosts.
+    This KPI tracks the total, utilized, reserved and failover capacity of VMware hosts.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI

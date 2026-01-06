@@ -27,25 +27,25 @@ func getBuildingBlock(hostName string) string {
 	return "unknown"
 }
 
-type HostCapacityKPI struct {
+type KVMResourceCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
-	plugins.BaseKPI[struct{}]   // No options passed through yaml config
-	hostUtilizedCapacityPerHost *prometheus.Desc
-	hostPAYGCapacityPerHost     *prometheus.Desc
-	hostFailoverCapacityPerHost *prometheus.Desc
-	hostReservedCapacityPerHost *prometheus.Desc
-	hostTotalCapacityPerHost    *prometheus.Desc
+	plugins.BaseKPI[struct{}] // No options passed through yaml config
+	utilizedCapacityPerHost   *prometheus.Desc
+	paygCapacityPerHost       *prometheus.Desc
+	failoverCapacityPerHost   *prometheus.Desc
+	reservedCapacityPerHost   *prometheus.Desc
+	totalCapacityPerHost      *prometheus.Desc
 }
 
-func (HostCapacityKPI) GetName() string {
-	return "cortex_kvm_host_capacity_kpi"
+func (KVMResourceCapacityKPI) GetName() string {
+	return "kvm_host_capacity_kpi"
 }
 
-func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+func (k *KVMResourceCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
 	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
-	k.hostUtilizedCapacityPerHost = prometheus.NewDesc(
+	k.utilizedCapacityPerHost = prometheus.NewDesc(
 		"cortex_kvm_host_capacity_utilized",
 		"Utilized resources on the KVM hosts (individually by host).",
 		[]string{
@@ -61,7 +61,7 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 		},
 		nil,
 	)
-	k.hostPAYGCapacityPerHost = prometheus.NewDesc(
+	k.paygCapacityPerHost = prometheus.NewDesc(
 		"cortex_kvm_host_capacity_payg",
 		"PAYG resources available on the KVM hosts (individually by host).",
 		[]string{
@@ -77,7 +77,7 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 		},
 		nil,
 	)
-	k.hostReservedCapacityPerHost = prometheus.NewDesc(
+	k.reservedCapacityPerHost = prometheus.NewDesc(
 		"cortex_kvm_host_capacity_reserved",
 		"Reserved resources on the KVM hosts (individually by host).",
 		[]string{
@@ -93,7 +93,7 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 		},
 		nil,
 	)
-	k.hostFailoverCapacityPerHost = prometheus.NewDesc(
+	k.failoverCapacityPerHost = prometheus.NewDesc(
 		"cortex_kvm_host_capacity_failover",
 		"Failover resources on the KVM hosts (individually by host).",
 		[]string{
@@ -109,7 +109,7 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 		},
 		nil,
 	)
-	k.hostTotalCapacityPerHost = prometheus.NewDesc(
+	k.totalCapacityPerHost = prometheus.NewDesc(
 		"cortex_kvm_host_capacity_total",
 		"Total resources on the KVM hosts (individually by host).",
 		[]string{
@@ -128,15 +128,15 @@ func (k *HostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpt
 	return nil
 }
 
-func (k *HostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
-	ch <- k.hostUtilizedCapacityPerHost
-	ch <- k.hostPAYGCapacityPerHost
-	ch <- k.hostReservedCapacityPerHost
-	ch <- k.hostFailoverCapacityPerHost
-	ch <- k.hostTotalCapacityPerHost
+func (k *KVMResourceCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
+	ch <- k.utilizedCapacityPerHost
+	ch <- k.paygCapacityPerHost
+	ch <- k.reservedCapacityPerHost
+	ch <- k.failoverCapacityPerHost
+	ch <- k.totalCapacityPerHost
 }
 
-func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
+func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	// TODO use hypervisor CRD as data source
 	hostDetailsKnowledge := &v1alpha1.Knowledge{}
 	if err := k.Client.Get(
@@ -197,9 +197,9 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ramUsed := utilization.RAMUsedMB
 		diskUsed := utilization.DiskUsedGB
 
-		export(ch, k.hostUtilizedCapacityPerHost, "cpu", cpuUsed, host)
-		export(ch, k.hostUtilizedCapacityPerHost, "ram", ramUsed, host)
-		export(ch, k.hostUtilizedCapacityPerHost, "disk", diskUsed, host)
+		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "cpu", cpuUsed, host)
+		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "ram", ramUsed, host)
+		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "disk", diskUsed, host)
 
 		// WARNING: Using dummy data for now.
 		// TODO Replace with actual data from reservations capacity CRDs
@@ -207,9 +207,9 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ramReserved := 1024.0
 		diskReserved := 64.0
 
-		export(ch, k.hostReservedCapacityPerHost, "cpu", cpuReserved, host)
-		export(ch, k.hostReservedCapacityPerHost, "ram", ramReserved, host)
-		export(ch, k.hostReservedCapacityPerHost, "disk", diskReserved, host)
+		exportCapacityMetricKVM(ch, k.reservedCapacityPerHost, "cpu", cpuReserved, host)
+		exportCapacityMetricKVM(ch, k.reservedCapacityPerHost, "ram", ramReserved, host)
+		exportCapacityMetricKVM(ch, k.reservedCapacityPerHost, "disk", diskReserved, host)
 
 		// WARNING: Using dummy data for now.
 		// TODO Replace with actual data from failover capacity CRDs
@@ -217,29 +217,29 @@ func (k *HostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ramFailover := 1024.0
 		diskFailover := 128.0
 
-		export(ch, k.hostFailoverCapacityPerHost, "cpu", cpuFailover, host)
-		export(ch, k.hostFailoverCapacityPerHost, "ram", ramFailover, host)
-		export(ch, k.hostFailoverCapacityPerHost, "disk", diskFailover, host)
+		exportCapacityMetricKVM(ch, k.failoverCapacityPerHost, "cpu", cpuFailover, host)
+		exportCapacityMetricKVM(ch, k.failoverCapacityPerHost, "ram", ramFailover, host)
+		exportCapacityMetricKVM(ch, k.failoverCapacityPerHost, "disk", diskFailover, host)
 
 		totalCPU := utilization.TotalVCPUsAllocatable
 		totalRAM := utilization.TotalRAMAllocatableMB
 		totalDisk := utilization.TotalDiskAllocatableGB
 
-		export(ch, k.hostTotalCapacityPerHost, "cpu", totalCPU, host)
-		export(ch, k.hostTotalCapacityPerHost, "ram", totalRAM, host)
-		export(ch, k.hostTotalCapacityPerHost, "disk", totalDisk, host)
+		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "cpu", totalCPU, host)
+		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "ram", totalRAM, host)
+		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "disk", totalDisk, host)
 
 		paygCPU := totalCPU - cpuUsed - cpuReserved - cpuFailover
 		paygRAM := totalRAM - ramUsed - ramReserved - ramFailover
 		paygDisk := totalDisk - diskUsed - diskReserved - diskFailover
 
-		export(ch, k.hostPAYGCapacityPerHost, "cpu", paygCPU, host)
-		export(ch, k.hostPAYGCapacityPerHost, "ram", paygRAM, host)
-		export(ch, k.hostPAYGCapacityPerHost, "disk", paygDisk, host)
+		exportCapacityMetricKVM(ch, k.paygCapacityPerHost, "cpu", paygCPU, host)
+		exportCapacityMetricKVM(ch, k.paygCapacityPerHost, "ram", paygRAM, host)
+		exportCapacityMetricKVM(ch, k.paygCapacityPerHost, "disk", paygDisk, host)
 	}
 }
 
-func export(ch chan<- prometheus.Metric, metric *prometheus.Desc, resource string, value float64, host compute.HostDetails) {
+func exportCapacityMetricKVM(ch chan<- prometheus.Metric, metric *prometheus.Desc, resource string, value float64, host compute.HostDetails) {
 	bb := getBuildingBlock(host.ComputeHost)
 
 	enabled := strconv.FormatBool(host.Enabled)

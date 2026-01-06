@@ -19,24 +19,26 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type HostAvailableCapacityKPI struct {
+type VMwareResourceCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}] // No options passed through yaml config
 
-	hostResourcesAvailableCapacityPerHost    *prometheus.Desc
-	hostResourcesAvailableCapacityPerHostPct *prometheus.Desc
-	hostResourcesAvailableCapacityHist       *prometheus.Desc
+	availableCapacityPerHost    *prometheus.Desc
+	availableCapacityPerHostPct *prometheus.Desc
+	availableCapacityHist       *prometheus.Desc
+
+	totalCapacityPerHost *prometheus.Desc
 }
 
-func (HostAvailableCapacityKPI) GetName() string {
-	return "host_capacity_kpi"
+func (VMwareResourceCapacityKPI) GetName() string {
+	return "vmware_host_capacity_kpi"
 }
 
-func (k *HostAvailableCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
 	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
-	k.hostResourcesAvailableCapacityPerHost = prometheus.NewDesc(
+	k.availableCapacityPerHost = prometheus.NewDesc(
 		"cortex_available_capacity_per_host",
 		"Available capacity per resource on the hosts currently (individually by host).",
 		[]string{
@@ -54,7 +56,7 @@ func (k *HostAvailableCapacityKPI) Init(db *db.DB, client client.Client, opts co
 		},
 		nil,
 	)
-	k.hostResourcesAvailableCapacityPerHostPct = prometheus.NewDesc(
+	k.availableCapacityPerHostPct = prometheus.NewDesc(
 		"cortex_available_capacity_per_host_pct",
 		"Available capacity (%) per resource on the hosts currently (individually by host).",
 		[]string{
@@ -72,22 +74,39 @@ func (k *HostAvailableCapacityKPI) Init(db *db.DB, client client.Client, opts co
 		},
 		nil,
 	)
-	k.hostResourcesAvailableCapacityHist = prometheus.NewDesc(
+	k.availableCapacityHist = prometheus.NewDesc(
 		"cortex_available_capacity_pct",
 		"Available resource capacity on the hosts currently (aggregated as a histogram).",
 		[]string{"resource"},
 		nil,
 	)
+	k.totalCapacityPerHost = prometheus.NewDesc(
+		"cortex_total_allocatable_capacity_per_host",
+		"Total resources available on the hosts currently (individually by host).",
+		[]string{
+			"compute_host",
+			"resource",
+			"availability_zone",
+			"cpu_architecture",
+			"workload_type",
+			"hypervisor_family",
+			"enabled",
+			"decommissioned",
+			"external_customer",
+			"pinned_projects",
+		},
+		nil,
+	)
 	return nil
 }
 
-func (k *HostAvailableCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
-	ch <- k.hostResourcesAvailableCapacityPerHost
-	ch <- k.hostResourcesAvailableCapacityHist
-	ch <- k.hostResourcesAvailableCapacityPerHostPct
+func (k *VMwareResourceCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
+	ch <- k.availableCapacityPerHost
+	ch <- k.availableCapacityHist
+	ch <- k.availableCapacityPerHostPct
 }
 
-func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
+func (k *VMwareResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	hostDetailsKnowledge := &v1alpha1.Knowledge{}
 	if err := k.Client.Get(
 		context.Background(),
@@ -134,6 +153,10 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			continue // Ironic hosts do not run VMs/instances
 		}
 
+		if detail.HypervisorFamily != "vmware" {
+			continue
+		}
+
 		if utilization.TotalRAMAllocatableMB == 0 || utilization.TotalVCPUsAllocatable == 0 || utilization.TotalDiskAllocatableGB == 0 {
 			slog.Info(
 				"Skipping host since placement is reporting zero allocatable resources",
@@ -146,114 +169,13 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 
-		enabled := strconv.FormatBool(detail.Enabled)
-		decommissioned := strconv.FormatBool(detail.Decommissioned)
-		externalCustomer := strconv.FormatBool(detail.ExternalCustomer)
-		pinnedProjects := ""
-		if detail.PinnedProjects != nil {
-			pinnedProjects = *detail.PinnedProjects
-		}
-		disabledReason := "-"
-		if detail.DisabledReason != nil {
-			disabledReason = *detail.DisabledReason
-		}
+		availableCPUs := float64(utilization.TotalVCPUsAllocatable - utilization.VCPUsUsed)
+		availableRAMMB := float64(utilization.TotalRAMAllocatableMB - utilization.RAMUsedMB)
+		availableDiskGB := float64(utilization.TotalDiskAllocatableGB - utilization.DiskUsedGB)
 
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesAvailableCapacityPerHost,
-			prometheus.GaugeValue,
-			utilization.TotalRAMAllocatableMB-utilization.RAMUsedMB,
-			utilization.ComputeHost,
-			"ram",
-			detail.AvailabilityZone,
-			detail.CPUArchitecture,
-			detail.WorkloadType,
-			detail.HypervisorFamily,
-			enabled,
-			decommissioned,
-			externalCustomer,
-			disabledReason,
-			pinnedProjects,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesAvailableCapacityPerHostPct,
-			prometheus.GaugeValue,
-			(utilization.TotalRAMAllocatableMB-utilization.RAMUsedMB)/utilization.TotalRAMAllocatableMB*100,
-			utilization.ComputeHost,
-			"ram",
-			detail.AvailabilityZone,
-			detail.CPUArchitecture,
-			detail.WorkloadType,
-			detail.HypervisorFamily,
-			enabled,
-			decommissioned,
-			externalCustomer,
-			disabledReason,
-			pinnedProjects,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesAvailableCapacityPerHost,
-			prometheus.GaugeValue,
-			utilization.TotalVCPUsAllocatable-utilization.VCPUsUsed,
-			utilization.ComputeHost,
-			"cpu",
-			detail.AvailabilityZone,
-			detail.CPUArchitecture,
-			detail.WorkloadType,
-			detail.HypervisorFamily,
-			enabled,
-			decommissioned,
-			externalCustomer,
-			disabledReason,
-			pinnedProjects,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesAvailableCapacityPerHostPct,
-			prometheus.GaugeValue,
-			(utilization.TotalVCPUsAllocatable-utilization.VCPUsUsed)/utilization.TotalVCPUsAllocatable*100,
-			utilization.ComputeHost,
-			"cpu",
-			detail.AvailabilityZone,
-			detail.CPUArchitecture,
-			detail.WorkloadType,
-			detail.HypervisorFamily,
-			enabled,
-			decommissioned,
-			externalCustomer,
-			disabledReason,
-			pinnedProjects,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesAvailableCapacityPerHost,
-			prometheus.GaugeValue,
-			utilization.TotalDiskAllocatableGB-utilization.DiskUsedGB,
-			utilization.ComputeHost,
-			"disk",
-			detail.AvailabilityZone,
-			detail.CPUArchitecture,
-			detail.WorkloadType,
-			detail.HypervisorFamily,
-			enabled,
-			decommissioned,
-			externalCustomer,
-			disabledReason,
-			pinnedProjects,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			k.hostResourcesAvailableCapacityPerHostPct,
-			prometheus.GaugeValue,
-			(utilization.TotalDiskAllocatableGB-utilization.DiskUsedGB)/utilization.TotalDiskAllocatableGB*100,
-			utilization.ComputeHost,
-			"disk",
-			detail.AvailabilityZone,
-			detail.CPUArchitecture,
-			detail.WorkloadType,
-			detail.HypervisorFamily,
-			enabled,
-			decommissioned,
-			externalCustomer,
-			disabledReason,
-			pinnedProjects,
-		)
+		k.exportCapacityMetricVMware(ch, "cpu", availableCPUs, utilization.TotalVCPUsAllocatable, detail)
+		k.exportCapacityMetricVMware(ch, "ram", availableRAMMB, utilization.TotalRAMAllocatableMB, detail)
+		k.exportCapacityMetricVMware(ch, "disk", availableDiskGB, utilization.TotalDiskAllocatableGB, detail)
 	}
 
 	buckets := prometheus.LinearBuckets(0, 5, 20)
@@ -264,7 +186,7 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	hists, counts, sums := tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+		ch <- prometheus.MustNewConstHistogram(k.availableCapacityHist, counts[key], sums[key], hist, key)
 	}
 	// Histogram for RAM
 	keysFunc = func(hs compute.HostUtilization) []string { return []string{"ram"} }
@@ -273,7 +195,7 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+		ch <- prometheus.MustNewConstHistogram(k.availableCapacityHist, counts[key], sums[key], hist, key)
 	}
 	// Histogram for Disk
 	keysFunc = func(hs compute.HostUtilization) []string { return []string{"disk"} }
@@ -282,6 +204,71 @@ func (k *HostAvailableCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.hostResourcesAvailableCapacityHist, counts[key], sums[key], hist, key)
+		ch <- prometheus.MustNewConstHistogram(k.availableCapacityHist, counts[key], sums[key], hist, key)
 	}
+}
+
+func (k *VMwareResourceCapacityKPI) exportCapacityMetricVMware(ch chan<- prometheus.Metric, resource string, available float64, total float64, host compute.HostDetails) {
+	enabled := strconv.FormatBool(host.Enabled)
+	decommissioned := strconv.FormatBool(host.Decommissioned)
+	externalCustomer := strconv.FormatBool(host.ExternalCustomer)
+	pinnedProjects := ""
+	if host.PinnedProjects != nil {
+		pinnedProjects = *host.PinnedProjects
+	}
+
+	disabledReason := "-"
+	if host.DisabledReason != nil {
+		disabledReason = *host.DisabledReason
+	}
+
+	ch <- prometheus.MustNewConstMetric(
+		k.availableCapacityPerHost,
+		prometheus.GaugeValue,
+		available,
+		host.ComputeHost,
+		resource,
+		host.AvailabilityZone,
+		host.CPUArchitecture,
+		host.WorkloadType,
+		host.HypervisorFamily,
+		enabled,
+		decommissioned,
+		externalCustomer,
+		disabledReason,
+		pinnedProjects,
+	)
+
+	ch <- prometheus.MustNewConstMetric(
+		k.availableCapacityPerHostPct,
+		prometheus.GaugeValue,
+		available/total*100,
+		host.ComputeHost,
+		resource,
+		host.AvailabilityZone,
+		host.CPUArchitecture,
+		host.WorkloadType,
+		host.HypervisorFamily,
+		enabled,
+		decommissioned,
+		externalCustomer,
+		disabledReason,
+		pinnedProjects,
+	)
+
+	ch <- prometheus.MustNewConstMetric(
+		k.totalCapacityPerHost,
+		prometheus.GaugeValue,
+		total,
+		host.ComputeHost,
+		resource,
+		host.AvailabilityZone,
+		host.CPUArchitecture,
+		host.WorkloadType,
+		host.HypervisorFamily,
+		enabled,
+		decommissioned,
+		externalCustomer,
+		pinnedProjects,
+	)
 }
