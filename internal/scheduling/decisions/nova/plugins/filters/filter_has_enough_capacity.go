@@ -56,34 +56,20 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	}
 	for _, hv := range hvs.Items {
 		// Start with the total capacity.
-		freeResourcesByHost[hv.Name] = map[string]resource.Quantity{
-			"cpu":    hv.Status.Capabilities.HostCpus,
-			"memory": hv.Status.Capabilities.HostMemory,
-		}
+		freeResourcesByHost[hv.Name] = hv.Status.Capacity
 
-		// Subtract allocated resources by VMs.
-		for _, dom := range hv.Status.DomainInfos {
-			if cpuAlloc, ok := dom.Allocation["cpu"]; ok {
-				freeCPU := freeResourcesByHost[hv.Name]["cpu"]
-				freeCPU.Sub(cpuAlloc)
-				freeResourcesByHost[hv.Name]["cpu"] = freeCPU
-			} else {
+		// Subtract allocated resources.
+		for resourceName, allocated := range hv.Status.Allocation {
+			free, ok := freeResourcesByHost[hv.Name][resourceName]
+			if !ok {
 				traceLog.Error(
-					"libvirt domain without cpu allocation info",
-					"host", hv.Name, "domain", dom.Name,
+					"hypervisor with allocation for unknown resource",
+					"host", hv.Name, "resource", resourceName,
 				)
+				continue
 			}
-
-			if memoryAlloc, ok := dom.Allocation["memory"]; ok {
-				freeMemory := freeResourcesByHost[hv.Name]["memory"]
-				freeMemory.Sub(memoryAlloc)
-				freeResourcesByHost[hv.Name]["memory"] = freeMemory
-			} else {
-				traceLog.Error(
-					"libvirt domain without memory allocation info",
-					"host", hv.Name, "domain", dom.Name,
-				)
-			}
+			free.Sub(allocated)
+			freeResourcesByHost[hv.Name][resourceName] = free
 		}
 	}
 
