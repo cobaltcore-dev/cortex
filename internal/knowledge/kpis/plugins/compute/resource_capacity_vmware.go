@@ -39,7 +39,7 @@ func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts c
 		return err
 	}
 	k.availableCapacityPerHost = prometheus.NewDesc(
-		"cortex_available_capacity_per_host",
+		"cortex_vmware_host_capacity_available",
 		"Available capacity per resource on the hosts currently (individually by host).",
 		[]string{
 			"compute_host",
@@ -57,7 +57,7 @@ func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts c
 		nil,
 	)
 	k.availableCapacityPerHostPct = prometheus.NewDesc(
-		"cortex_available_capacity_per_host_pct",
+		"cortex_vmware_host_capacity_available_pct",
 		"Available capacity (%) per resource on the hosts currently (individually by host).",
 		[]string{
 			"compute_host",
@@ -75,13 +75,13 @@ func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts c
 		nil,
 	)
 	k.availableCapacityHist = prometheus.NewDesc(
-		"cortex_available_capacity_pct",
+		"cortex_vmware_host_capacity_available_hist",
 		"Available resource capacity on the hosts currently (aggregated as a histogram).",
 		[]string{"resource"},
 		nil,
 	)
 	k.totalCapacityPerHost = prometheus.NewDesc(
-		"cortex_total_allocatable_capacity_per_host",
+		"cortex_vmware_host_capacity_total",
 		"Total resources available on the hosts currently (individually by host).",
 		[]string{
 			"compute_host",
