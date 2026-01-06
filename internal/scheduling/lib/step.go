@@ -10,7 +10,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -51,8 +50,6 @@ type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 	ActivationFunction
 	// The kubernetes client to use.
 	Client client.Client
-	// Initialized database connection, if configured through the step spec.
-	DB *db.DB
 }
 
 // Init the step with the database and options.
@@ -63,15 +60,6 @@ func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Cl
 	}
 	if err := s.Options.Validate(); err != nil {
 		return err
-	}
-
-	if step.Spec.DatabaseSecretRef != nil {
-		authenticatedDB, err := db.Connector{Client: client}.
-			FromSecretRef(ctx, *step.Spec.DatabaseSecretRef)
-		if err != nil {
-			return err
-		}
-		s.DB = authenticatedDB
 	}
 
 	s.Client = client

@@ -89,7 +89,7 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	switch strings.ToLower(hvType) {
 	case "qemu", "ch":
 		if requestData.Reservation {
-			return "nova-external-scheduler-kvm-reservations", nil
+			return "nova-external-scheduler-kvm-all-filters-enabled", nil
 		} else {
 			return "nova-external-scheduler-kvm", nil
 		}

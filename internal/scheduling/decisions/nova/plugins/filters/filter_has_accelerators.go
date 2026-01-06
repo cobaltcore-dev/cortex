@@ -4,14 +4,13 @@
 package filters
 
 import (
+	"context"
 	"log/slog"
-	"strings"
-
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/placement"
+	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterHasAcceleratorsStep struct {
@@ -26,24 +25,29 @@ func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.Exter
 		traceLog.Debug("no accelerators requested")
 		return result, nil
 	}
-	var computeHostsWithAccelerators []string
-	if _, err := s.DB.SelectTimed("scheduler-nova", &computeHostsWithAccelerators, `
-	    SELECT h.service_host
-		FROM `+placement.Trait{}.TableName()+` rpt
-		JOIN `+nova.Hypervisor{}.TableName()+` h
-		ON h.id = rpt.resource_provider_uuid
-		WHERE name = 'COMPUTE_ACCELERATORS'`,
-		map[string]any{"az": request.Spec.Data.AvailabilityZone},
-	); err != nil {
+
+	hvs := &hv1.HypervisorList{}
+	if err := s.Client.List(context.Background(), hvs); err != nil {
+		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}
-	lookupStr := strings.Join(computeHostsWithAccelerators, ",")
+	hvsWithTrait := make(map[string]struct{})
+	for _, hv := range hvs.Items {
+		traits := hv.Status.Traits
+		traits = append(traits, hv.Spec.CustomTraits...)
+		if !slices.Contains(traits, "COMPUTE_ACCELERATORS") {
+			continue
+		}
+		hvsWithTrait[hv.Name] = struct{}{}
+	}
+
+	traceLog.Info("hosts with accelerators", "hosts", hvsWithTrait)
 	for host := range result.Activations {
-		if strings.Contains(lookupStr, host) {
+		if _, ok := hvsWithTrait[host]; ok {
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Debug("filtering host which has no accelerators", "host", host)
+		traceLog.Info("filtering host without accelerators", "host", host)
 	}
 	return result, nil
 }

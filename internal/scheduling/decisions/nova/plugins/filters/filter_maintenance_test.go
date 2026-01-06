@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestFilterCorrectAZStep_Run(t *testing.T) {
+func TestFilterMaintenanceStep_Run(t *testing.T) {
 	scheme, err := hv1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -23,32 +23,50 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 	hvs := []client.Object{
 		&hv1.Hypervisor{
 			ObjectMeta: v1.ObjectMeta{
-				Name:   "host1",
-				Labels: map[string]string{"topology.kubernetes.io/zone": "az-1"},
+				Name: "host1",
+			},
+			Spec: hv1.HypervisorSpec{
+				Maintenance: hv1.MaintenanceUnset,
 			},
 		},
 		&hv1.Hypervisor{
 			ObjectMeta: v1.ObjectMeta{
-				Name:   "host2",
-				Labels: map[string]string{"topology.kubernetes.io/zone": "az-1"},
+				Name: "host2",
+			},
+			Spec: hv1.HypervisorSpec{
+				Maintenance: hv1.MaintenanceAuto,
 			},
 		},
 		&hv1.Hypervisor{
 			ObjectMeta: v1.ObjectMeta{
-				Name:   "host3",
-				Labels: map[string]string{"topology.kubernetes.io/zone": "az-2"},
+				Name: "host3",
+			},
+			Spec: hv1.HypervisorSpec{
+				Maintenance: hv1.MaintenanceManual,
 			},
 		},
 		&hv1.Hypervisor{
 			ObjectMeta: v1.ObjectMeta{
-				Name:   "host4",
-				Labels: map[string]string{"topology.kubernetes.io/zone": "az-3"},
+				Name: "host4",
+			},
+			Spec: hv1.HypervisorSpec{
+				Maintenance: hv1.MaintenanceHA,
 			},
 		},
 		&hv1.Hypervisor{
 			ObjectMeta: v1.ObjectMeta{
-				Name:   "host5",
-				Labels: map[string]string{},
+				Name: "host5",
+			},
+			Spec: hv1.HypervisorSpec{
+				Maintenance: hv1.MaintenanceTermination,
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host6",
+			},
+			Spec: hv1.HypervisorSpec{
+				Maintenance: "unknown-flag",
 			},
 		},
 	}
@@ -60,13 +78,8 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		filteredHosts []string
 	}{
 		{
-			name: "Filter hosts in az-1",
+			name: "Filter hosts with maintenance preventing scheduling",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						AvailabilityZone: "az-1",
-					},
-				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -75,70 +88,63 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 					{ComputeHost: "host5"},
 				},
 			},
-			expectedHosts: []string{"host1", "host2"},
-			filteredHosts: []string{"host3", "host4", "host5"},
+			expectedHosts: []string{"host1", "host2", "host4"},
+			filteredHosts: []string{"host3", "host5"},
 		},
 		{
-			name: "Filter hosts in az-2",
+			name: "Only unset maintenance hosts",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						AvailabilityZone: "az-2",
-					},
-				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
 				},
 			},
-			expectedHosts: []string{"host3"},
-			filteredHosts: []string{"host1", "host2", "host4"},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{},
 		},
 		{
-			name: "Filter hosts in az-3",
+			name: "Only manual maintenance hosts",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						AvailabilityZone: "az-3",
-					},
-				},
 				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-					{ComputeHost: "host4"},
-				},
-			},
-			expectedHosts: []string{"host4"},
-			filteredHosts: []string{"host1", "host2", "host3"},
-		},
-		{
-			name: "No hosts in requested AZ",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						AvailabilityZone: "az-nonexistent",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
 				},
 			},
 			expectedHosts: []string{},
-			filteredHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{"host3"},
+		},
+		{
+			name: "Only termination maintenance hosts",
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host5"},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host5"},
+		},
+		{
+			name: "Auto and HA maintenance hosts should pass",
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host2"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host2", "host4"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Unknown maintenance flag should be filtered",
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host6"},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host6"},
 		},
 		{
 			name: "Empty host list",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						AvailabilityZone: "az-1",
-					},
-				},
 				Hosts: []api.ExternalSchedulerHost{},
 			},
 			expectedHosts: []string{},
@@ -147,11 +153,6 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		{
 			name: "Host not in database",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						AvailabilityZone: "az-1",
-					},
-				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
@@ -160,11 +161,26 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 			expectedHosts: []string{"host1"},
 			filteredHosts: []string{"host-unknown"},
 		},
+		{
+			name: "Mixed maintenance states",
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+					{ComputeHost: "host5"},
+					{ComputeHost: "host6"},
+				},
+			},
+			expectedHosts: []string{"host1", "host2", "host4"},
+			filteredHosts: []string{"host3", "host5", "host6"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &FilterCorrectAZStep{}
+			step := &FilterMaintenanceStep{}
 			step.Client = fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(hvs...).
