@@ -60,7 +60,7 @@ type ReservationStatus struct {
 	Phase ReservationStatusPhase `json:"phase,omitempty"`
 	// The current status conditions of the reservation.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	// The name of the compute host that was allocated.
 	Host string `json:"host"`
 }
