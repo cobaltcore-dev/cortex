@@ -179,17 +179,20 @@ spec:
                     description: The name of the extractor.
                     type: string
                 type: object
-              operator:
-                description: The operator by which this knowledge should be extracted.
-                type: string
               recency:
                 default: 60s
                 description: |-
                   The desired recency of this knowledge, i.e. how old it can be until
                   it needs to be re-extracted.
                 type: string
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this knowledge
+                  is used (e.g., nova, cinder, manila).
+                type: string
             required:
             - recency
+            - schedulingDomain
             type: object
           status:
             description: status defines the observed state of Knowledge

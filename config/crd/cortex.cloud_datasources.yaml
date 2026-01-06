@@ -191,9 +191,6 @@ spec:
                 - syncInterval
                 - type
                 type: object
-              operator:
-                description: The operator by which this datasource should be synced.
-                type: string
               prometheus:
                 description: |-
                   If given, configures a Prometheus datasource to fetch.
@@ -250,6 +247,11 @@ spec:
                 - timeRange
                 - type
                 type: object
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this datasource
+                  is used (e.g., nova, cinder, manila).
+                type: string
               ssoSecretRef:
                 description: |-
                   Kubernetes secret ref for an optional sso certificate to access the host.
@@ -270,6 +272,7 @@ spec:
                 type: string
             required:
             - databaseSecretRef
+            - schedulingDomain
             - type
             type: object
           status:

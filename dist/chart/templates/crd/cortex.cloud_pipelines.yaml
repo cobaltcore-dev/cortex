@@ -70,8 +70,10 @@ spec:
               description:
                 description: An optional description of the pipeline.
                 type: string
-              operator:
-                description: The operator by which this pipeline should be handled.
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this pipeline
+                  is used (e.g., nova, cinder, manila).
                 type: string
               steps:
                 description: The ordered list of steps that make up this pipeline.
@@ -134,6 +136,7 @@ spec:
                 description: The type of the pipeline.
                 type: string
             required:
+            - schedulingDomain
             - type
             type: object
           status:

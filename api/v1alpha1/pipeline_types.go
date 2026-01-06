@@ -28,8 +28,9 @@ const (
 )
 
 type PipelineSpec struct {
-	// The operator by which this pipeline should be handled.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this pipeline
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 	// An optional description of the pipeline.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`

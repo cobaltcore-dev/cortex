@@ -44,8 +44,8 @@ type BasePipelineController[PipelineType any] struct {
 	Initializer PipelineInitializer[PipelineType]
 	// Kubernetes client to manage/fetch resources.
 	client.Client
-	// The name of the operator to scope resources to.
-	OperatorName string
+	// The scheduling domain to scope resources to.
+	SchedulingDomain v1alpha1.SchedulingDomain
 }
 
 // Handle the startup of the manager by initializing the pipeline map.
@@ -60,7 +60,7 @@ func (c *BasePipelineController[PipelineType]) InitAllPipelines(ctx context.Cont
 		return fmt.Errorf("failed to list existing pipelines: %w", err)
 	}
 	for _, pipelineConf := range pipelines.Items {
-		if pipelineConf.Spec.Operator != c.OperatorName {
+		if pipelineConf.Spec.SchedulingDomain != c.SchedulingDomain {
 			continue
 		}
 		if pipelineConf.Spec.Type != c.Initializer.PipelineType() {
@@ -80,7 +80,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	_ workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 
-	if obj.Spec.Operator != c.OperatorName {
+	if obj.Spec.SchedulingDomain != c.SchedulingDomain {
 		delete(c.Pipelines, obj.Name) // Just to be sure.
 		delete(c.PipelineConfigs, obj.Name)
 		return
@@ -203,7 +203,7 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 
-	if obj.Spec.Operator != c.OperatorName {
+	if obj.Spec.SchedulingDomain != c.SchedulingDomain {
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
@@ -307,7 +307,7 @@ func (c *BasePipelineController[PipelineType]) HandleStepDeleted(
 ) {
 
 	stepConf := evt.Object.(*v1alpha1.Step)
-	if stepConf.Spec.Operator != c.OperatorName {
+	if stepConf.Spec.SchedulingDomain != c.SchedulingDomain {
 		return
 	}
 	// When a step is deleted, we need to re-evaluate all pipelines depending on it.
@@ -338,7 +338,7 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 
-	if obj.Spec.Operator != c.OperatorName {
+	if obj.Spec.SchedulingDomain != c.SchedulingDomain {
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)

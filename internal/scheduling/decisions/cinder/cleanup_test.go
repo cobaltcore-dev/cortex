@@ -74,9 +74,8 @@ func TestCleanupCinder(t *testing.T) {
 						Name: "decision-existing-volume",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeCinderVolume,
-						ResourceID: "volume-exists",
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "volume-exists",
 					},
 				},
 				{
@@ -84,9 +83,8 @@ func TestCleanupCinder(t *testing.T) {
 						Name: "decision-deleted-volume",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeCinderVolume,
-						ResourceID: "volume-deleted",
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "volume-deleted",
 					},
 				},
 			},
@@ -104,9 +102,8 @@ func TestCleanupCinder(t *testing.T) {
 						Name: "decision-volume-1",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeCinderVolume,
-						ResourceID: "volume-1",
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "volume-1",
 					},
 				},
 				{
@@ -114,9 +111,8 @@ func TestCleanupCinder(t *testing.T) {
 						Name: "decision-volume-2",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeCinderVolume,
-						ResourceID: "volume-2",
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "volume-2",
 					},
 				},
 			},
@@ -287,7 +283,7 @@ func TestCleanupCinder(t *testing.T) {
 				WithObjects(objects...).
 				Build()
 			config := conf.Config{
-				Operator: "test-operator",
+				SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 				KeystoneSecretRef: corev1.SecretReference{
 					Name:      "keystone-secret",
 					Namespace: "default",
@@ -370,7 +366,7 @@ func TestCleanupCinderDecisionsCancel(t *testing.T) {
 		Build()
 
 	config := conf.Config{
-		Operator: "test-operator",
+		SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 		KeystoneSecretRef: corev1.SecretReference{
 			Name:      "keystone-secret",
 			Namespace: "default",

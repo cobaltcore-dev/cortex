@@ -30,10 +30,10 @@ import (
 type Controller struct {
 	// The kubernetes client to use for processing decisions.
 	client.Client
-	// The controller will scope to objects using this operator name.
-	// This allows multiple operators to coexist in the same cluster without
+	// The controller will scope to objects using this scheduling domain name.
+	// This allows multiple controllers to coexist in the same cluster without
 	// interfering with each other's decisions.
-	OperatorName string
+	SchedulingDomain v1alpha1.SchedulingDomain
 	// If the field indexing should be skipped (useful for testing).
 	SkipIndexFields bool
 }
@@ -41,7 +41,7 @@ type Controller struct {
 // Check if a decision should be processed by this controller.
 func (c *Controller) shouldReconcileDecision(decision *v1alpha1.Decision) bool {
 	// Ignore decisions not created by this operator.
-	if decision.Spec.Operator != c.OperatorName {
+	if decision.Spec.SchedulingDomain != c.SchedulingDomain {
 		return false
 	}
 	// Ignore decisions that already have an explanation.
@@ -52,8 +52,7 @@ func (c *Controller) shouldReconcileDecision(decision *v1alpha1.Decision) bool {
 	if decision.Status.Result == nil {
 		return false
 	}
-	// Only handle nova decisions.
-	return decision.Spec.Type == v1alpha1.DecisionTypeNovaServer
+	return true
 }
 
 // This loop will be called by the controller-runtime for each decision

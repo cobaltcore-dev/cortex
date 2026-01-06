@@ -74,7 +74,7 @@ cortex: &cortex
   prometheus: {enable: false}
   namePrefix: cortex-nova
   conf: &cortexConf
-    operator: cortex-nova
+    schedulingDomain: nova
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
       namespace: default

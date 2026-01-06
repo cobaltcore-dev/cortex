@@ -15,7 +15,7 @@ import (
 
 func TestPipelineStateKPI_Init(t *testing.T) {
 	kpi := &PipelineStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"pipelineOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"pipelineSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -45,7 +45,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 			pipelines: []v1alpha1.Pipeline{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline1"},
-					Spec:       v1alpha1.PipelineSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -61,7 +61,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 			pipelines: []v1alpha1.Pipeline{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline2"},
-					Spec:       v1alpha1.PipelineSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
 						Ready: false,
 						Conditions: []v1.Condition{
@@ -82,7 +82,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 			pipelines: []v1alpha1.Pipeline{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-ready"},
-					Spec:       v1alpha1.PipelineSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -90,7 +90,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-error"},
-					Spec:       v1alpha1.PipelineSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
 						Ready: false,
 						Conditions: []v1.Condition{
@@ -111,7 +111,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 			pipelines: []v1alpha1.Pipeline{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-correct-operator"},
-					Spec:       v1alpha1.PipelineSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -119,7 +119,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-wrong-operator"},
-					Spec:       v1alpha1.PipelineSpec{Operator: "other-operator"},
+					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.PipelineStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -135,7 +135,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 			pipelines: []v1alpha1.Pipeline{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-unknown"},
-					Spec:       v1alpha1.PipelineSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
 						Ready:      false,
 						Conditions: []v1.Condition{},
@@ -151,7 +151,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 			pipelines: []v1alpha1.Pipeline{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-error-priority"},
-					Spec:       v1alpha1.PipelineSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
 						Ready: true,
 						Conditions: []v1.Condition{
@@ -181,7 +181,7 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 			client := clientBuilder.Build()
 
 			kpi := &PipelineStateKPI{}
-			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"pipelineOperator": "`+tt.operator+`"}`)); err != nil {
+			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"pipelineSchedulingDomain": "`+tt.operator+`"}`)); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
@@ -211,7 +211,7 @@ func TestPipelineStateKPI_GetName(t *testing.T) {
 
 func TestPipelineStateKPI_Describe(t *testing.T) {
 	kpi := &PipelineStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"pipelineOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"pipelineSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

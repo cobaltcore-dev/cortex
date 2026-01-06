@@ -4,7 +4,7 @@ kind: Knowledge
 metadata:
   name: vmware-resolved-hostsystems
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: vrops_hostsystem_resolver
   description: |
@@ -24,7 +24,7 @@ kind: Knowledge
 metadata:
   name: vmware-project-noisiness
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: vrops_project_noisiness_extractor
   description: |
@@ -42,7 +42,7 @@ kind: Knowledge
 metadata:
   name: vmware-long-term-contended-hosts
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: vrops_hostsystem_contention_long_term_extractor
   description: |
@@ -59,7 +59,7 @@ kind: Knowledge
 metadata:
   name: vmware-short-term-contended-hosts
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: vrops_hostsystem_contention_short_term_extractor
   description: |
@@ -76,7 +76,7 @@ kind: Knowledge
 metadata:
   name: kvm-libvirt-domain-cpu-steal-pct
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: kvm_libvirt_domain_cpu_steal_pct_extractor
   description: |
@@ -92,7 +92,7 @@ kind: Knowledge
 metadata:
   name: host-pinned-projects
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: host_pinned_projects_extractor
   description: |
@@ -109,7 +109,7 @@ kind: Knowledge
 metadata:
   name: host-utilization
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: host_utilization_extractor
   description: |
@@ -126,7 +126,7 @@ kind: Knowledge
 metadata:
   name: host-capabilities
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: host_capabilities_extractor
   description: |
@@ -142,7 +142,7 @@ kind: Knowledge
 metadata:
   name: vm-host-residency
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: vm_host_residency_extractor
   description: |
@@ -160,7 +160,7 @@ kind: Knowledge
 metadata:
   name: vm-life-span
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: vm_life_span_histogram_extractor
   description: |
@@ -178,7 +178,7 @@ kind: Knowledge
 metadata:
   name: host-az
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: host_az_extractor
   description: |
@@ -194,7 +194,7 @@ kind: Knowledge
 metadata:
   name: host-details
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   extractor:
     name: sap_host_details_extractor
   description: |

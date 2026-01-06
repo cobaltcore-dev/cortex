@@ -32,22 +32,22 @@ func TestExplainer_Explain(t *testing.T) {
 		},
 		{
 			name:             "initial cinder volume placement",
-			decision:         WithDecisionType(WithResourceID(NewTestDecision("test-decision"), "test-resource-2"), v1alpha1.DecisionTypeCinderVolume),
+			decision:         WithSchedulingDomain(WithResourceID(NewTestDecision("test-decision"), "test-resource-2"), v1alpha1.SchedulingDomainCinder),
 			expectedContains: []string{"Initial placement of the cinder volume"},
 		},
 		{
 			name:             "initial manila share placement",
-			decision:         WithDecisionType(WithResourceID(NewTestDecision("test-decision"), "test-resource-3"), v1alpha1.DecisionTypeManilaShare),
+			decision:         WithSchedulingDomain(WithResourceID(NewTestDecision("test-decision"), "test-resource-3"), v1alpha1.SchedulingDomainManila),
 			expectedContains: []string{"Initial placement of the manila share"},
 		},
 		{
 			name:             "initial ironcore machine placement",
-			decision:         WithDecisionType(WithResourceID(NewTestDecision("test-decision"), "test-resource-4"), v1alpha1.DecisionTypeIroncoreMachine),
+			decision:         WithSchedulingDomain(WithResourceID(NewTestDecision("test-decision"), "test-resource-4"), v1alpha1.SchedulingDomainMachines),
 			expectedContains: []string{"Initial placement of the ironcore machine"},
 		},
 		{
 			name:             "unknown resource type falls back to generic",
-			decision:         WithDecisionType(WithResourceID(NewTestDecision("test-decision"), "test-resource-5"), "unknown-type"),
+			decision:         WithSchedulingDomain(WithResourceID(NewTestDecision("test-decision"), "test-resource-5"), "unknown-type"),
 			expectedContains: []string{"Initial placement of the resource"},
 		},
 		{
@@ -191,8 +191,8 @@ func NewTestDecision(name string) *v1alpha1.Decision {
 			Namespace: "default", // Sensible default
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Type:       v1alpha1.DecisionTypeNovaServer, // Most common
-			ResourceID: "test-resource",                 // Generic default
+			SchedulingDomain: v1alpha1.SchedulingDomainNova, // Most common
+			ResourceID:       "test-resource",               // Generic default
 		},
 		Status: v1alpha1.DecisionStatus{},
 	}
@@ -241,8 +241,8 @@ func WithSteps(decision *v1alpha1.Decision, steps ...v1alpha1.StepResult) *v1alp
 	return decision
 }
 
-func WithDecisionType(decision *v1alpha1.Decision, decisionType v1alpha1.DecisionType) *v1alpha1.Decision {
-	decision.Spec.Type = decisionType
+func WithSchedulingDomain(decision *v1alpha1.Decision, schedulingDomain v1alpha1.SchedulingDomain) *v1alpha1.Decision {
+	decision.Spec.SchedulingDomain = schedulingDomain
 	return decision
 }
 
@@ -303,8 +303,8 @@ func NewDecision(name string) *DecisionBuilder {
 				Namespace: "default",
 			},
 			Spec: v1alpha1.DecisionSpec{
-				Type:       v1alpha1.DecisionTypeNovaServer,
-				ResourceID: "test-resource",
+				SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				ResourceID:       "test-resource",
 			},
 			Status: v1alpha1.DecisionStatus{},
 		},
@@ -316,8 +316,8 @@ func (b *DecisionBuilder) WithResourceID(resourceID string) *DecisionBuilder {
 	return b
 }
 
-func (b *DecisionBuilder) WithType(decisionType v1alpha1.DecisionType) *DecisionBuilder {
-	b.decision.Spec.Type = decisionType
+func (b *DecisionBuilder) WithSchedulingDomain(schedulingDomain v1alpha1.SchedulingDomain) *DecisionBuilder {
+	b.decision.Spec.SchedulingDomain = schedulingDomain
 	return b
 }
 
@@ -899,8 +899,8 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 					CreationTimestamp: time3,
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-resource",
 				},
 				Status: v1alpha1.DecisionStatus{
 					History: &[]corev1.ObjectReference{
@@ -953,8 +953,8 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 					CreationTimestamp: time3,
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-resource",
 				},
 				Status: v1alpha1.DecisionStatus{
 					History: &[]corev1.ObjectReference{
@@ -1007,8 +1007,8 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 					CreationTimestamp: time3,
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-resource",
 				},
 				Status: v1alpha1.DecisionStatus{
 					History: &[]corev1.ObjectReference{
@@ -1075,8 +1075,8 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 					CreationTimestamp: metav1.Time{Time: baseTime.Time},
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-resource",
 				},
 				Status: v1alpha1.DecisionStatus{
 					History: &[]corev1.ObjectReference{
@@ -1114,8 +1114,8 @@ func TestExplainer_GlobalChainAnalysis(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:       v1alpha1.DecisionTypeNovaServer,
-					ResourceID: "test-resource",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-resource",
 				},
 				Status: v1alpha1.DecisionStatus{
 					History: nil, // No history
@@ -1316,8 +1316,8 @@ func TestExplainer_RawVsNormalizedComparison(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Type:       v1alpha1.DecisionTypeNovaServer,
-			ResourceID: "test-resource",
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			ResourceID:       "test-resource",
 		},
 		Status: v1alpha1.DecisionStatus{
 			Result: &v1alpha1.DecisionResult{

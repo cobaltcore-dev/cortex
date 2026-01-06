@@ -69,7 +69,7 @@ cortex: &cortex
   metrics: {enable: false}
   prometheus: {enable: false}
   conf: &cortexConf
-    operator: cortex-cinder
+    schedulingDomain: cinder
     keystoneSecretRef:
       name: cortex-cinder-openstack-keystone
       namespace: default

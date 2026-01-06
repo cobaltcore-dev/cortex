@@ -24,8 +24,9 @@ type KPIDependenciesSpec struct {
 }
 
 type KPISpec struct {
-	// The operator by which this kpi should be executed.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this kpi
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// The name of the kpi in the cortex implementation.
 	Impl string `json:"impl"`

@@ -39,8 +39,9 @@ type WeigherSpec struct {
 }
 
 type StepSpec struct {
-	// The operator by which this step should be executed.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this step
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// The type of the scheduler step.
 	Type StepType `json:"type"`

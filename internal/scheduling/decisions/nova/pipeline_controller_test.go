@@ -77,8 +77,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -92,9 +91,9 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:     v1alpha1.PipelineTypeFilterWeigher,
-					Operator: "test-operator",
-					Steps:    []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			expectError:    false,
@@ -109,8 +108,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -122,9 +120,9 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:     v1alpha1.PipelineTypeFilterWeigher,
-					Operator: "test-operator",
-					Steps:    []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			expectError:    true,
@@ -139,8 +137,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "nonexistent-pipeline",
 					},
@@ -162,8 +159,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -177,9 +173,9 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:     v1alpha1.PipelineTypeFilterWeigher,
-					Operator: "test-operator",
-					Steps:    []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			expectError:    true,
@@ -208,7 +204,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				},
 				Monitor: lib.PipelineMonitor{},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 				},
 			}
 
@@ -424,8 +420,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -439,10 +434,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			pipelineConf: &v1alpha1.Pipeline{
@@ -450,10 +445,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			setupPipelineConfigs:  true,
@@ -472,8 +467,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline-no-create",
 					},
@@ -487,10 +481,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline-no-create",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: false,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					CreateDecisions:  false,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			pipelineConf: &v1alpha1.Pipeline{
@@ -498,10 +492,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline-no-create",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: false,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					CreateDecisions:  false,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			setupPipelineConfigs:  true,
@@ -520,8 +514,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "nonexistent-pipeline",
 					},
@@ -548,8 +541,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -561,10 +553,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			pipelineConf: &v1alpha1.Pipeline{
@@ -572,10 +564,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			setupPipelineConfigs:  true,
@@ -595,8 +587,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -611,10 +602,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			setupPipelineConfigs:  true,
@@ -634,8 +625,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeNovaServer,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					PipelineRef: corev1.ObjectReference{
 						Name: "missing-runtime-pipeline",
 					},
@@ -650,10 +640,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "missing-runtime-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			setupPipelineConfigs:  true,
@@ -688,7 +678,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 				},
 				Monitor: lib.PipelineMonitor{},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 				},
 			}
 

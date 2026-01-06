@@ -43,15 +43,15 @@ func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (s
 }
 
 // getResourceType returns a human-readable resource type.
-func (e *Explainer) getResourceType(decisionType v1alpha1.DecisionType) string {
-	switch decisionType {
-	case v1alpha1.DecisionTypeNovaServer:
+func (e *Explainer) getResourceType(schedulingDomain v1alpha1.SchedulingDomain) string {
+	switch schedulingDomain {
+	case v1alpha1.SchedulingDomainNova:
 		return "nova server"
-	case v1alpha1.DecisionTypeManilaShare:
+	case v1alpha1.SchedulingDomainManila:
 		return "manila share"
-	case v1alpha1.DecisionTypeCinderVolume:
+	case v1alpha1.SchedulingDomainCinder:
 		return "cinder volume"
-	case v1alpha1.DecisionTypeIroncoreMachine:
+	case v1alpha1.SchedulingDomainMachines:
 		return "ironcore machine"
 	default:
 		return "resource"
@@ -395,7 +395,7 @@ func (e *Explainer) calculateStepImpacts(inputWeights map[string]float64, stepRe
 
 // buildContextData creates context data for template rendering.
 func (e *Explainer) buildContextData(decision *v1alpha1.Decision) ContextData {
-	resourceType := e.getResourceType(decision.Spec.Type)
+	resourceType := e.getResourceType(decision.Spec.SchedulingDomain)
 
 	history := decision.Status.History
 	isInitial := history == nil || len(*history) == 0

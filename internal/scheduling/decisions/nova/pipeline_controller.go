@@ -137,6 +137,7 @@ func (c *DecisionPipelineController) InitPipeline(
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
+	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
@@ -151,8 +152,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the operator.
-				if pipeline.Spec.Operator != c.Conf.Operator {
+				// Only react to pipelines matching the scheduling domain.
+				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 					return false
 				}
 				return pipeline.Spec.Type == c.PipelineType()
@@ -169,8 +170,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				step := obj.(*v1alpha1.Step)
-				// Only react to steps matching the operator.
-				if step.Spec.Operator != c.Conf.Operator {
+				// Only react to steps matching the scheduling domain.
+				if step.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 					return false
 				}
 				// Only react to filter and weigher steps.
@@ -191,8 +192,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
-				// Only react to knowledge matching the operator.
-				return knowledge.Spec.Operator == c.Conf.Operator
+				// Only react to knowledge matching the scheduling domain.
+				return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova
 			}),
 		).
 		// Watch hypervisor changes so the cache gets updated.
@@ -202,15 +203,14 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.Operator != c.Conf.Operator {
+				if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 					return false
 				}
 				// Ignore already decided schedulings.
 				if decision.Status.Result != nil {
 					return false
 				}
-				// Only handle nova decisions.
-				return decision.Spec.Type == v1alpha1.DecisionTypeNovaServer
+				return true
 			})),
 		).
 		Complete(c)

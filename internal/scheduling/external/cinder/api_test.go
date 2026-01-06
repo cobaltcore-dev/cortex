@@ -32,7 +32,7 @@ func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, dec
 }
 
 func TestNewAPI(t *testing.T) {
-	config := conf.Config{Operator: "test-operator"}
+	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
 
 	api := NewAPI(config, delegate)
@@ -46,8 +46,8 @@ func TestNewAPI(t *testing.T) {
 		t.Fatal("NewAPI did not return httpAPI type")
 	}
 
-	if httpAPI.config.Operator != "test-operator" {
-		t.Errorf("Expected operator 'test-operator', got %s", httpAPI.config.Operator)
+	if httpAPI.config.SchedulingDomain != "test-operator" {
+		t.Errorf("Expected scheduling domain 'test-operator', got %s", httpAPI.config.SchedulingDomain)
 	}
 
 	if httpAPI.delegate != delegate {
@@ -60,7 +60,7 @@ func TestNewAPI(t *testing.T) {
 }
 
 func TestHTTPAPI_Init(t *testing.T) {
-	config := conf.Config{Operator: "test-operator"}
+	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
 	api := NewAPI(config, delegate)
 
@@ -79,7 +79,7 @@ func TestHTTPAPI_Init(t *testing.T) {
 }
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
-	config := conf.Config{Operator: "test-operator"}
+	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
 	api := NewAPI(config, delegate).(*httpAPI)
 
@@ -256,7 +256,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := conf.Config{Operator: "test-operator"}
+			config := conf.Config{SchedulingDomain: "test-operator"}
 			delegate := &mockHTTPAPIDelegate{
 				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
 					if tt.processDecisionErr != nil {
@@ -309,7 +309,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 }
 
 func TestHTTPAPI_CinderExternalScheduler_DecisionCreation(t *testing.T) {
-	config := conf.Config{Operator: "test-operator"}
+	config := conf.Config{SchedulingDomain: v1alpha1.SchedulingDomainCinder}
 
 	var capturedDecision *v1alpha1.Decision
 	delegate := &mockHTTPAPIDelegate{
@@ -353,16 +353,12 @@ func TestHTTPAPI_CinderExternalScheduler_DecisionCreation(t *testing.T) {
 	}
 
 	// Verify decision fields
-	if capturedDecision.Spec.Operator != "test-operator" {
-		t.Errorf("Expected operator 'test-operator', got %s", capturedDecision.Spec.Operator)
+	if capturedDecision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
+		t.Errorf("Expected scheduling domain %s, got %s", v1alpha1.SchedulingDomainCinder, capturedDecision.Spec.SchedulingDomain)
 	}
 
 	if capturedDecision.Spec.PipelineRef.Name != "test-pipeline" {
 		t.Errorf("Expected pipeline 'test-pipeline', got %s", capturedDecision.Spec.PipelineRef.Name)
-	}
-
-	if capturedDecision.Spec.Type != v1alpha1.DecisionTypeCinderVolume {
-		t.Errorf("Expected type %s, got %s", v1alpha1.DecisionTypeCinderVolume, capturedDecision.Spec.Type)
 	}
 
 	if capturedDecision.GenerateName != "cinder-" {
