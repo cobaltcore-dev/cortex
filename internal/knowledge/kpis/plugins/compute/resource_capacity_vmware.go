@@ -10,7 +10,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	"github.com/cobaltcore-dev/cortex/pkg/tools"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
@@ -23,11 +22,8 @@ type VMwareResourceCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}] // No options passed through yaml config
 
-	availableCapacityPerHost    *prometheus.Desc
-	availableCapacityPerHostPct *prometheus.Desc
-	availableCapacityHist       *prometheus.Desc
-
-	totalCapacityPerHost *prometheus.Desc
+	availableCapacityPerHost *prometheus.Desc
+	totalCapacityPerHost     *prometheus.Desc
 }
 
 func (VMwareResourceCapacityKPI) GetName() string {
@@ -55,12 +51,6 @@ func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts c
 		},
 		nil,
 	)
-	k.availableCapacityHist = prometheus.NewDesc(
-		"cortex_vmware_host_capacity_available_hist",
-		"Available resource capacity on the hosts currently (aggregated as a histogram).",
-		[]string{"resource"},
-		nil,
-	)
 	k.totalCapacityPerHost = prometheus.NewDesc(
 		"cortex_vmware_host_capacity_total",
 		"Total resources available on the hosts currently (individually by host).",
@@ -82,8 +72,7 @@ func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts c
 
 func (k *VMwareResourceCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.availableCapacityPerHost
-	ch <- k.availableCapacityHist
-	ch <- k.availableCapacityPerHostPct
+	ch <- k.totalCapacityPerHost
 }
 
 func (k *VMwareResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
@@ -156,35 +145,6 @@ func (k *VMwareResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		k.exportCapacityMetricVMware(ch, "cpu", availableCPUs, utilization.TotalVCPUsAllocatable, detail)
 		k.exportCapacityMetricVMware(ch, "ram", availableRAMMB, utilization.TotalRAMAllocatableMB, detail)
 		k.exportCapacityMetricVMware(ch, "disk", availableDiskGB, utilization.TotalDiskAllocatableGB, detail)
-	}
-
-	buckets := prometheus.LinearBuckets(0, 5, 20)
-	// Histogram for CPU
-	keysFunc := func(hs compute.HostUtilization) []string { return []string{"cpu"} }
-	valueFunc := func(hs compute.HostUtilization) float64 {
-		return (hs.TotalVCPUsAllocatable - hs.VCPUsUsed) / hs.TotalVCPUsAllocatable * 100
-	}
-	hists, counts, sums := tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
-	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.availableCapacityHist, counts[key], sums[key], hist, key)
-	}
-	// Histogram for RAM
-	keysFunc = func(hs compute.HostUtilization) []string { return []string{"ram"} }
-	valueFunc = func(hs compute.HostUtilization) float64 {
-		return (hs.TotalRAMAllocatableMB - hs.RAMUsedMB) / hs.TotalRAMAllocatableMB * 100
-	}
-	hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
-	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.availableCapacityHist, counts[key], sums[key], hist, key)
-	}
-	// Histogram for Disk
-	keysFunc = func(hs compute.HostUtilization) []string { return []string{"disk"} }
-	valueFunc = func(hs compute.HostUtilization) float64 {
-		return (hs.TotalDiskAllocatableGB - hs.DiskUsedGB) / hs.TotalDiskAllocatableGB * 100
-	}
-	hists, counts, sums = tools.Histogram(hostUtilizations, buckets, keysFunc, valueFunc)
-	for key, hist := range hists {
-		ch <- prometheus.MustNewConstHistogram(k.availableCapacityHist, counts[key], sums[key], hist, key)
 	}
 }
 
