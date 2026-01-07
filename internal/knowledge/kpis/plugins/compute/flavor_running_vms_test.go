@@ -40,21 +40,31 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 			ID:                    "id-1",
 			FlavorName:            "small",
 			OSEXTAvailabilityZone: "zone1",
+			TenantID:              "project-1",
 		},
 		&nova.Server{
 			ID:                    "id-2",
 			FlavorName:            "medium",
 			OSEXTAvailabilityZone: "zone1",
+			TenantID:              "project-1",
 		},
 		&nova.Server{
 			ID:                    "id-3",
 			FlavorName:            "medium",
 			OSEXTAvailabilityZone: "zone2",
+			TenantID:              "project-1",
 		},
 		&nova.Server{
 			ID:                    "id-4",
 			FlavorName:            "medium",
 			OSEXTAvailabilityZone: "zone2",
+			TenantID:              "project-1",
+		},
+		&nova.Server{
+			ID:                    "id-5",
+			FlavorName:            "medium",
+			OSEXTAvailabilityZone: "zone2",
+			TenantID:              "project-2",
 		},
 	}
 
@@ -75,6 +85,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 		FlavorName       string
 		AvailabilityZone string
 		RunningVMs       float64
+		ProjectID        string
 	}
 
 	metrics := make(map[string]FlavorRunningVMsMetric, 0)
@@ -92,38 +103,48 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 
 		flavor := labels["flavor_name"]
 		availabilityZone := labels["availability_zone"]
+		projectID := labels["project_id"]
 
-		key := flavor + "|" + availabilityZone
+		key := flavor + "|" + availabilityZone + "|" + projectID
 
 		metrics[key] = FlavorRunningVMsMetric{
 			FlavorName:       flavor,
 			AvailabilityZone: availabilityZone,
+			ProjectID:        projectID,
 			RunningVMs:       m.GetGauge().GetValue(),
 		}
 	}
 
 	expectedMetrics := map[string]FlavorRunningVMsMetric{
-		"small|zone1": {
+		"small|zone1|project-1": {
 			FlavorName:       "small",
 			AvailabilityZone: "zone1",
+			ProjectID:        "project-1",
 			RunningVMs:       1,
 		},
-		"medium|zone1": {
+		"medium|zone1|project-1": {
 			FlavorName:       "medium",
 			AvailabilityZone: "zone1",
+			ProjectID:        "project-1",
 			RunningVMs:       1,
 		},
-		"medium|zone2": {
+		"medium|zone2|project-1": {
 			FlavorName:       "medium",
 			AvailabilityZone: "zone2",
+			ProjectID:        "project-1",
 			RunningVMs:       2,
+		},
+		"medium|zone2|project-2": {
+			FlavorName:       "medium",
+			AvailabilityZone: "zone2",
+			RunningVMs:       1,
+			ProjectID:        "project-2",
 		},
 	}
 
 	for key, expected := range expectedMetrics {
 		actual, ok := metrics[key]
 		if !ok {
-			t.Logf("%v", metrics)
 			t.Errorf("expected metric %q not found", key)
 			continue
 		}
