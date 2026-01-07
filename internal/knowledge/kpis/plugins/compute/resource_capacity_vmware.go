@@ -55,23 +55,6 @@ func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts c
 		},
 		nil,
 	)
-	k.availableCapacityPerHostPct = prometheus.NewDesc(
-		"cortex_vmware_host_capacity_available_pct",
-		"Available capacity (%) per resource on the hosts currently (individually by host).",
-		[]string{
-			"compute_host",
-			"resource",
-			"availability_zone",
-			"cpu_architecture",
-			"workload_type",
-			"enabled",
-			"decommissioned",
-			"external_customer",
-			"disabled_reason",
-			"pinned_projects",
-		},
-		nil,
-	)
 	k.availableCapacityHist = prometheus.NewDesc(
 		"cortex_vmware_host_capacity_available_hist",
 		"Available resource capacity on the hosts currently (aggregated as a histogram).",
@@ -223,22 +206,6 @@ func (k *VMwareResourceCapacityKPI) exportCapacityMetricVMware(ch chan<- prometh
 		k.availableCapacityPerHost,
 		prometheus.GaugeValue,
 		available,
-		host.ComputeHost,
-		resource,
-		host.AvailabilityZone,
-		host.CPUArchitecture,
-		host.WorkloadType,
-		enabled,
-		decommissioned,
-		externalCustomer,
-		disabledReason,
-		pinnedProjects,
-	)
-
-	ch <- prometheus.MustNewConstMetric(
-		k.availableCapacityPerHostPct,
-		prometheus.GaugeValue,
-		available/total,
 		host.ComputeHost,
 		resource,
 		host.AvailabilityZone,
