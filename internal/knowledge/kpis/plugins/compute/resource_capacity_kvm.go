@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// Assuming hypervisor names are in the format nodeXXX-bbYY
 func getBuildingBlock(hostName string) string {
 	parts := strings.Split(hostName, "-")
 	if len(parts) > 1 {
@@ -58,6 +59,7 @@ func (k *KVMResourceCapacityKPI) Init(db *db.DB, client client.Client, opts conf
 			"enabled",
 			"decommissioned",
 			"external_customer",
+			"maintenance",
 		},
 		nil,
 	)
@@ -74,6 +76,7 @@ func (k *KVMResourceCapacityKPI) Init(db *db.DB, client client.Client, opts conf
 			"enabled",
 			"decommissioned",
 			"external_customer",
+			"maintenance",
 		},
 		nil,
 	)
@@ -90,6 +93,7 @@ func (k *KVMResourceCapacityKPI) Init(db *db.DB, client client.Client, opts conf
 			"enabled",
 			"decommissioned",
 			"external_customer",
+			"maintenance",
 		},
 		nil,
 	)
@@ -106,6 +110,7 @@ func (k *KVMResourceCapacityKPI) Init(db *db.DB, client client.Client, opts conf
 			"enabled",
 			"decommissioned",
 			"external_customer",
+			"maintenance",
 		},
 		nil,
 	)
@@ -122,6 +127,7 @@ func (k *KVMResourceCapacityKPI) Init(db *db.DB, client client.Client, opts conf
 			"enabled",
 			"decommissioned",
 			"external_customer",
+			"maintenance",
 		},
 		nil,
 	)
@@ -245,6 +251,7 @@ func exportCapacityMetricKVM(ch chan<- prometheus.Metric, metric *prometheus.Des
 	enabled := strconv.FormatBool(host.Enabled)
 	decommissioned := strconv.FormatBool(host.Decommissioned)
 	externalCustomer := strconv.FormatBool(host.ExternalCustomer)
+	maintenance := "false"
 
 	ch <- prometheus.MustNewConstMetric(
 		metric,
@@ -259,5 +266,6 @@ func exportCapacityMetricKVM(ch chan<- prometheus.Metric, metric *prometheus.Des
 		enabled,
 		decommissioned,
 		externalCustomer,
+		maintenance,
 	)
 }
