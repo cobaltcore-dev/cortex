@@ -4,7 +4,7 @@ kind: Pipeline
 metadata:
   name: cinder-external-scheduler
 spec:
-  operator: cortex-cinder
+  schedulingDomain: cinder
   description: |
     Cinder provides block storage volume placement on storage hosts for OpenStack.
     After applying its own filtering and weighing logic, it delegates to cortex

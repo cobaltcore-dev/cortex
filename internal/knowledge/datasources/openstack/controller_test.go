@@ -32,7 +32,7 @@ func TestOpenStackDatasourceReconciler_Creation(t *testing.T) {
 		Client:  client,
 		Scheme:  scheme,
 		Monitor: datasources.Monitor{},
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	if reconciler.Client == nil {
@@ -43,8 +43,8 @@ func TestOpenStackDatasourceReconciler_Creation(t *testing.T) {
 		t.Error("Scheme should not be nil")
 	}
 
-	if reconciler.Conf.Operator != "test-operator" {
-		t.Errorf("Expected operator 'test-operator', got %s", reconciler.Conf.Operator)
+	if reconciler.Conf.SchedulingDomain != "test-operator" {
+		t.Errorf("Expected scheduling domain 'test-operator', got %s", reconciler.Conf.SchedulingDomain)
 	}
 }
 

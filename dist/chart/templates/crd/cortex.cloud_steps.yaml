@@ -116,14 +116,16 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              operator:
-                description: The operator by which this step should be executed.
-                type: string
               opts:
                 description: Additional configuration for the extractor that can be
                   used
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this step
+                  is used (e.g., nova, cinder, manila).
+                type: string
               type:
                 description: The type of the scheduler step.
                 type: string
@@ -152,6 +154,7 @@ spec:
                 type: object
             required:
             - impl
+            - schedulingDomain
             - type
             type: object
           status:

@@ -145,11 +145,10 @@ spec:
       nova-compute-bb83: 100.61753491786814
       nova-compute-bb84: 0.562147416492215
       nova-compute-bb97: -147
-  operator: cortex-nova
+  schedulingDomain: nova
   pipelineRef:
     name: nova-external-scheduler
   resourceID: abc12345-6789-0123-4567-89abcdef0123
-  type: nova-server
 status:
   history: []
   precedence: 0

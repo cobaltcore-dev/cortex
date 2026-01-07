@@ -9,27 +9,10 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// The type of decision.
-type DecisionType string
-
-const (
-	// The decision was created by the nova external scheduler call.
-	// Usually we refer to this as nova initial placement, it also includes
-	// migrations or resizes.
-	DecisionTypeNovaServer DecisionType = "nova-server"
-	// The decision was created by the cinder external scheduler call.
-	DecisionTypeCinderVolume DecisionType = "cinder-volume"
-	// The decision was created by the manila external scheduler call.
-	DecisionTypeManilaShare DecisionType = "manila-share"
-	// The decision was created by spawning an ironcore machine.
-	DecisionTypeIroncoreMachine DecisionType = "ironcore-machine"
-	// The decision was created for a pod.
-	DecisionTypePod DecisionType = "pod"
-)
-
 type DecisionSpec struct {
-	// The operator by which this decision should be extracted.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this decision
+	// was or is processed (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// A reference to the pipeline that should be used for this decision.
 	// This reference can be used to look up the pipeline definition and its
@@ -41,8 +24,6 @@ type DecisionSpec struct {
 	// This can be used to correlate multiple decisions for the same resource.
 	ResourceID string `json:"resourceID"`
 
-	// The type of decision, indicating what has initiated this decision.
-	Type DecisionType `json:"type"`
 	// If the type is "nova", this field contains the raw nova decision request.
 	// +kubebuilder:validation:Optional
 	NovaRaw *runtime.RawExtension `json:"novaRaw,omitempty"`
@@ -118,7 +99,7 @@ type DecisionStatus struct {
 
 	// The current status conditions of the decision.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true

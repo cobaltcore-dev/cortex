@@ -15,7 +15,7 @@ import (
 
 func TestKPIStateKPI_Init(t *testing.T) {
 	kpi := &KPIStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"kpiOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"kpiSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -45,7 +45,7 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 			kpis: []v1alpha1.KPI{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn1"},
-					Spec:       v1alpha1.KPISpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -61,7 +61,7 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 			kpis: []v1alpha1.KPI{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn2"},
-					Spec:       v1alpha1.KPISpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
 						Conditions: []v1.Condition{
 							{
@@ -81,7 +81,7 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 			kpis: []v1alpha1.KPI{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-ready"},
-					Spec:       v1alpha1.KPISpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -89,7 +89,7 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-error"},
-					Spec:       v1alpha1.KPISpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
 						Conditions: []v1.Condition{
 							{
@@ -109,7 +109,7 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 			kpis: []v1alpha1.KPI{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-correct-operator"},
-					Spec:       v1alpha1.KPISpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -117,7 +117,7 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-wrong-operator"},
-					Spec:       v1alpha1.KPISpec{Operator: "other-operator"},
+					Spec:       v1alpha1.KPISpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.KPIStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -133,7 +133,7 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 			kpis: []v1alpha1.KPI{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-unknown"},
-					Spec:       v1alpha1.KPISpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
 						Ready:      true,
 						Conditions: []v1.Condition{},
@@ -158,7 +158,7 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 			client := clientBuilder.Build()
 
 			kpi := &KPIStateKPI{}
-			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"kpiOperator": "`+tt.operator+`"}`)); err != nil {
+			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"kpiSchedulingDomain": "`+tt.operator+`"}`)); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
@@ -188,7 +188,7 @@ func TestKPIStateKPI_GetName(t *testing.T) {
 
 func TestKPIStateKPI_Describe(t *testing.T) {
 	kpi := &KPIStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"kpiOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"kpiSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

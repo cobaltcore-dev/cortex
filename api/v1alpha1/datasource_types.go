@@ -193,8 +193,9 @@ const (
 )
 
 type DatasourceSpec struct {
-	// The operator by which this datasource should be synced.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this datasource
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// If given, configures a Prometheus datasource to fetch.
 	// Type must be set to "prometheus" if this is used.
@@ -242,7 +243,7 @@ type DatasourceStatus struct {
 
 	// The current status conditions of the datasource.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // Helper function to check if the datasource is ready.

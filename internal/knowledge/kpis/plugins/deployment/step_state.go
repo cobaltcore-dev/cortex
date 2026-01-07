@@ -16,8 +16,8 @@ import (
 )
 
 type StepStateKPIOpts struct {
-	// The operator to filter steps by.
-	StepOperator string `yaml:"stepOperator"`
+	// The scheduling domain to filter steps by.
+	StepSchedulingDomain v1alpha1.SchedulingDomain `json:"stepSchedulingDomain"`
 }
 
 // KPI observing the state of step resources managed by cortex.
@@ -57,7 +57,7 @@ func (k *StepStateKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	var steps []v1alpha1.Step
 	for _, step := range stepList.Items {
-		if step.Spec.Operator != k.Options.StepOperator {
+		if step.Spec.SchedulingDomain != k.Options.StepSchedulingDomain {
 			continue
 		}
 		steps = append(steps, step)
@@ -75,7 +75,7 @@ func (k *StepStateKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 		ch <- prometheus.MustNewConstMetric(
 			k.counter, prometheus.GaugeValue, 1,
-			k.Options.StepOperator, step.Name, state,
+			string(k.Options.StepSchedulingDomain), step.Name, state,
 		)
 	}
 }

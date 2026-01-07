@@ -146,12 +146,11 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 			GenerateName: "manila-",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator: httpAPI.config.Operator,
+			SchedulingDomain: v1alpha1.SchedulingDomainManila,
 			PipelineRef: corev1.ObjectReference{
 				Name: requestData.Pipeline,
 			},
 			ResourceID: "", // TODO model out the spec.
-			Type:       v1alpha1.DecisionTypeManilaShare,
 			ManilaRaw:  &raw,
 		},
 	}

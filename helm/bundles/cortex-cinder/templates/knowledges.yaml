@@ -4,7 +4,7 @@ kind: Knowledge
 metadata:
   name: netapp-storage-pool-cpu-usage-cinder
 spec:
-  operator: cortex-cinder
+  schedulingDomain: cinder
   extractor:
     name: netapp_storage_pool_cpu_usage_extractor
   description: |

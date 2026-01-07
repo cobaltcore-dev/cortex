@@ -82,9 +82,8 @@ func (c *DecisionPipelineController) ProcessNewPod(ctx context.Context, pod *cor
 			GenerateName: "pod-",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator:   c.Conf.Operator,
-			Type:       v1alpha1.DecisionTypePod,
-			ResourceID: pod.Name,
+			SchedulingDomain: v1alpha1.SchedulingDomainPods,
+			ResourceID:       pod.Name,
 			PipelineRef: corev1.ObjectReference{
 				Name: "pods-scheduler",
 			},
@@ -230,6 +229,7 @@ func (c *DecisionPipelineController) handlePod() handler.EventHandler {
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
+	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 					// Skip pods that already have a node assigned.
 					return false
 				}
-				return pod.Spec.SchedulerName == c.Conf.Operator
+				return pod.Spec.SchedulerName == string(v1alpha1.SchedulingDomainPods)
 			}),
 		).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
@@ -257,8 +257,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the operator.
-				if pipeline.Spec.Operator != c.Conf.Operator {
+				// Only react to pipelines matching the scheduling domain.
+				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
 					return false
 				}
 				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
@@ -275,8 +275,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				step := obj.(*v1alpha1.Step)
-				// Only react to steps matching the operator.
-				if step.Spec.Operator != c.Conf.Operator {
+				// Only react to steps matching the scheduling domain.
+				if step.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
 					return false
 				}
 				// Only react to filter and weigher steps.
@@ -292,15 +292,14 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.Operator != c.Conf.Operator {
+				if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
 					return false
 				}
 				// Ignore already decided schedulings.
 				if decision.Status.Result != nil {
 					return false
 				}
-				// Only handle pod decisions.
-				return decision.Spec.Type == v1alpha1.DecisionTypePod
+				return true
 			})),
 		).
 		Complete(c)

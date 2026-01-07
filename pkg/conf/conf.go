@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -76,8 +77,8 @@ type EndpointsConfig struct {
 }
 
 type Config struct {
-	// The operator will only touch CRs with this operator name.
-	Operator string `json:"operator"`
+	// The controller will only touch resources with this scheduling domain.
+	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
 
 	// ID used to identify leader election participants.
 	LeaderElectionID string `json:"leaderElectionID,omitempty"`

@@ -200,7 +200,7 @@ func (r *KnowledgeReconciler) SetupWithManager(mgr manager.Manager, mcl *multicl
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only react to datasources matching the operator.
 				ds := obj.(*v1alpha1.Knowledge)
-				return ds.Spec.Operator == r.Conf.Operator
+				return ds.Spec.SchedulingDomain == r.Conf.SchedulingDomain
 			})),
 		).
 		Complete(r)

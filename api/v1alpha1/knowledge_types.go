@@ -35,8 +35,9 @@ type KnowledgeExtractorSpec struct {
 }
 
 type KnowledgeSpec struct {
-	// The operator by which this knowledge should be extracted.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this knowledge
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// The feature extractor to use for extracting this knowledge.
 	Extractor KnowledgeExtractorSpec `json:"extractor,omitempty"`
@@ -105,7 +106,7 @@ type KnowledgeStatus struct {
 
 	// The current status conditions of the knowledge.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // Helper function to check if the knowledge is ready.

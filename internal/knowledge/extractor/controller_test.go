@@ -37,7 +37,7 @@ func TestKnowledgeReconciler_Reconcile_NonExistentResource(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -68,7 +68,7 @@ func TestKnowledgeReconciler_Reconcile_SkipRecentExtraction(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	// Create knowledge that was extracted recently
@@ -76,8 +76,8 @@ func TestKnowledgeReconciler_Reconcile_SkipRecentExtraction(t *testing.T) {
 	knowledge := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "recent-knowledge"},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 			Extractor: v1alpha1.KnowledgeExtractorSpec{
 				Name: "host_utilization_extractor",
 			},
@@ -117,8 +117,8 @@ func TestKnowledgeReconciler_Reconcile_UnsupportedExtractor(t *testing.T) {
 	knowledge := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "unsupported-extractor"},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 			Extractor: v1alpha1.KnowledgeExtractorSpec{
 				Name: "unsupported_extractor",
 			},
@@ -133,7 +133,7 @@ func TestKnowledgeReconciler_Reconcile_UnsupportedExtractor(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -172,8 +172,8 @@ func TestKnowledgeReconciler_Reconcile_MissingDatasource(t *testing.T) {
 	knowledge := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "missing-datasource"},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 			Extractor: v1alpha1.KnowledgeExtractorSpec{
 				Name: "host_utilization_extractor",
 			},
@@ -193,7 +193,7 @@ func TestKnowledgeReconciler_Reconcile_MissingDatasource(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -233,7 +233,7 @@ func TestKnowledgeReconciler_Reconcile_DifferentDatabaseSecrets(t *testing.T) {
 	datasource1 := &v1alpha1.Datasource{
 		ObjectMeta: metav1.ObjectMeta{Name: "datasource-1"},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator:          "test-operator",
+			SchedulingDomain:  "test-operator",
 			Type:              v1alpha1.DatasourceTypePrometheus,
 			DatabaseSecretRef: corev1.SecretReference{Name: "db-secret-1"},
 		},
@@ -242,7 +242,7 @@ func TestKnowledgeReconciler_Reconcile_DifferentDatabaseSecrets(t *testing.T) {
 	datasource2 := &v1alpha1.Datasource{
 		ObjectMeta: metav1.ObjectMeta{Name: "datasource-2"},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator:          "test-operator",
+			SchedulingDomain:  "test-operator",
 			Type:              v1alpha1.DatasourceTypePrometheus,
 			DatabaseSecretRef: corev1.SecretReference{Name: "db-secret-2"},
 		},
@@ -251,8 +251,8 @@ func TestKnowledgeReconciler_Reconcile_DifferentDatabaseSecrets(t *testing.T) {
 	knowledge := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "different-db-secrets"},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 			Extractor: v1alpha1.KnowledgeExtractorSpec{
 				Name: "host_utilization_extractor",
 			},
@@ -273,7 +273,7 @@ func TestKnowledgeReconciler_Reconcile_DifferentDatabaseSecrets(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -310,7 +310,7 @@ func TestKnowledgeReconciler_Reconcile_SameDatabaseSecrets(t *testing.T) {
 	datasource1 := &v1alpha1.Datasource{
 		ObjectMeta: metav1.ObjectMeta{Name: "datasource-1"},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator:          "test-operator",
+			SchedulingDomain:  "test-operator",
 			Type:              v1alpha1.DatasourceTypePrometheus,
 			DatabaseSecretRef: corev1.SecretReference{Name: "shared-db-secret"},
 		},
@@ -319,7 +319,7 @@ func TestKnowledgeReconciler_Reconcile_SameDatabaseSecrets(t *testing.T) {
 	datasource2 := &v1alpha1.Datasource{
 		ObjectMeta: metav1.ObjectMeta{Name: "datasource-2"},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator:          "test-operator",
+			SchedulingDomain:  "test-operator",
 			Type:              v1alpha1.DatasourceTypePrometheus,
 			DatabaseSecretRef: corev1.SecretReference{Name: "shared-db-secret"},
 		},
@@ -328,8 +328,8 @@ func TestKnowledgeReconciler_Reconcile_SameDatabaseSecrets(t *testing.T) {
 	knowledge := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "same-db-secrets"},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 			Extractor: v1alpha1.KnowledgeExtractorSpec{
 				Name: "host_utilization_extractor",
 			},
@@ -350,7 +350,7 @@ func TestKnowledgeReconciler_Reconcile_SameDatabaseSecrets(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -394,8 +394,8 @@ func TestKnowledgeReconciler_Reconcile_NoDatasources(t *testing.T) {
 	knowledge := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "no-datasources"},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 			Extractor: v1alpha1.KnowledgeExtractorSpec{
 				Name: "host_utilization_extractor",
 			},
@@ -410,7 +410,7 @@ func TestKnowledgeReconciler_Reconcile_NoDatasources(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -467,8 +467,8 @@ func TestKnowledgeReconciler_Reconcile_SupportedExtractors(t *testing.T) {
 			knowledge := &v1alpha1.Knowledge{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-" + extractorName},
 				Spec: v1alpha1.KnowledgeSpec{
-					Operator: "test-operator",
-					Recency:  metav1.Duration{Duration: time.Minute},
+					SchedulingDomain: "test-operator",
+					Recency:          metav1.Duration{Duration: time.Minute},
 					Extractor: v1alpha1.KnowledgeExtractorSpec{
 						Name: extractorName,
 					},
@@ -483,7 +483,7 @@ func TestKnowledgeReconciler_Reconcile_SupportedExtractors(t *testing.T) {
 				Client:  fakeClient,
 				Scheme:  scheme,
 				Monitor: NewMonitor(),
-				Conf:    conf.Config{Operator: "test-operator"},
+				Conf:    conf.Config{SchedulingDomain: "test-operator"},
 			}
 
 			req := ctrl.Request{
@@ -516,26 +516,26 @@ func TestKnowledgeReconciler_Reconcile_SupportedExtractors(t *testing.T) {
 
 func TestKnowledgeReconciler_OperatorFiltering(t *testing.T) {
 	reconciler := &KnowledgeReconciler{
-		Conf: conf.Config{Operator: "test-operator"},
+		Conf: conf.Config{SchedulingDomain: "test-operator"},
 	}
 
 	// Test the predicate function logic
 	predicateFunc := func(obj client.Object) bool {
 		k := obj.(*v1alpha1.Knowledge)
-		return k.Spec.Operator == reconciler.Conf.Operator
+		return k.Spec.SchedulingDomain == reconciler.Conf.SchedulingDomain
 	}
 
 	knowledge1 := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "our-operator-knowledge"},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator", // Our operator
+			SchedulingDomain: "test-operator", // Our operator
 		},
 	}
 
 	knowledge2 := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "other-operator-knowledge"},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "other-operator", // Different operator
+			SchedulingDomain: "other-operator", // Different operator
 		},
 	}
 

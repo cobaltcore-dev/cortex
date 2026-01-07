@@ -33,8 +33,8 @@ import (
 type Controller struct {
 	// Kubernetes client to manage/fetch resources.
 	client.Client
-	// The name of the operator to scope resources to.
-	OperatorName string
+	// The scheduling domain to scope resources to.
+	SchedulingDomain v1alpha1.SchedulingDomain
 
 	// The supported kpis to manage.
 	supportedKPIs map[string]plugins.KPI
@@ -101,7 +101,7 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 		return fmt.Errorf("failed to list existing kpis: %w", err)
 	}
 	for _, kpi := range kpis.Items {
-		if kpi.Spec.Operator != c.OperatorName {
+		if kpi.Spec.SchedulingDomain != c.SchedulingDomain {
 			continue
 		}
 		err := c.handleKPIChange(ctx, &kpi)
@@ -413,9 +413,9 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 				DeleteFunc: c.handleDatasourceDeleted,
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the operator.
+				// Only react to datasources matching the scheduling domain.
 				ds := obj.(*v1alpha1.Datasource)
-				return ds.Spec.Operator == c.OperatorName
+				return ds.Spec.SchedulingDomain == c.SchedulingDomain
 			}),
 		).
 		// Watch knowledge changes so that we can reconfigure kpis as needed.
@@ -427,18 +427,18 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 				DeleteFunc: c.handleKnowledgeDeleted,
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to knowledges matching the operator.
+				// Only react to knowledges matching the scheduling domain.
 				kn := obj.(*v1alpha1.Knowledge)
-				return kn.Spec.Operator == c.OperatorName
+				return kn.Spec.SchedulingDomain == c.SchedulingDomain
 			}),
 		).
 		Named("cortex-kpis").
 		For(
 			&v1alpha1.KPI{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the operator.
+				// Only react to datasources matching the scheduling domain.
 				ds := obj.(*v1alpha1.KPI)
-				return ds.Spec.Operator == c.OperatorName
+				return ds.Spec.SchedulingDomain == c.SchedulingDomain
 			})),
 		).
 		Complete(c)

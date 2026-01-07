@@ -129,9 +129,6 @@ spec:
                   decision request.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
-              operator:
-                description: The operator by which this decision should be extracted.
-                type: string
               pipelineRef:
                 description: |-
                   A reference to the pipeline that should be used for this decision.
@@ -227,14 +224,15 @@ spec:
                   For example, this can be the UUID of a nova instance or cinder volume.
                   This can be used to correlate multiple decisions for the same resource.
                 type: string
-              type:
-                description: The type of decision, indicating what has initiated this
-                  decision.
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this decision
+                  was or is processed (e.g., nova, cinder, manila).
                 type: string
             required:
             - pipelineRef
             - resourceID
-            - type
+            - schedulingDomain
             type: object
           status:
             description: status defines the observed state of Decision

@@ -158,16 +158,19 @@ spec:
               impl:
                 description: The name of the kpi in the cortex implementation.
                 type: string
-              operator:
-                description: The operator by which this kpi should be executed.
-                type: string
               opts:
                 description: Additional configuration for the extractor that can be
                   used
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this kpi
+                  is used (e.g., nova, cinder, manila).
+                type: string
             required:
             - impl
+            - schedulingDomain
             type: object
           status:
             description: status defines the observed state of KPI

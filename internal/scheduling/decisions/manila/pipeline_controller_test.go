@@ -69,8 +69,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -84,9 +83,9 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:     v1alpha1.PipelineTypeFilterWeigher,
-					Operator: "test-operator",
-					Steps:    []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			expectError:    false,
@@ -101,8 +100,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -114,9 +112,9 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:     v1alpha1.PipelineTypeFilterWeigher,
-					Operator: "test-operator",
-					Steps:    []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			expectError:    true,
@@ -131,8 +129,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "nonexistent-pipeline",
 					},
@@ -168,7 +165,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				},
 				Monitor: lib.PipelineMonitor{},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 				},
 			}
 
@@ -270,8 +267,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace:    "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -285,10 +281,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:       true,
@@ -305,8 +301,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -320,10 +315,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: false,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					CreateDecisions:  false,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:       false,
@@ -340,8 +335,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "nonexistent-pipeline",
 					},
@@ -364,8 +358,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -377,10 +370,10 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:       true,
@@ -412,7 +405,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 				},
 				Monitor: lib.PipelineMonitor{},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 				},
 			}
 
@@ -445,8 +438,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 
 				found := false
 				for _, decision := range decisions.Items {
-					if decision.Spec.Type == v1alpha1.DecisionTypeManilaShare &&
-						decision.Spec.Operator == "test-operator" {
+					if decision.Spec.SchedulingDomain == v1alpha1.SchedulingDomainManila {
 						found = true
 
 						// Verify decision properties

@@ -45,9 +45,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-decision",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Operator:   "test-operator",
-					Type:       v1alpha1.DecisionTypePod,
-					ResourceID: "test-pod",
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					ResourceID:       "test-pod",
 					PipelineRef: corev1.ObjectReference{
 						Name: "pods-scheduler",
 					},
@@ -85,9 +84,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-decision-no-nodes",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Operator:   "test-operator",
-					Type:       v1alpha1.DecisionTypePod,
-					ResourceID: "test-pod",
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					ResourceID:       "test-pod",
 					PipelineRef: corev1.ObjectReference{
 						Name: "pods-scheduler",
 					},
@@ -126,7 +124,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					},
 				},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 				},
 				Monitor: lib.PipelineMonitor{},
 			}
@@ -291,10 +289,10 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Name: "pods-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:       true,
@@ -324,10 +322,10 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Name: "pods-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: false,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					CreateDecisions:  false,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:       false,
@@ -370,10 +368,10 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Name: "pods-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepInPipeline{},
 				},
 			},
 			createDecisions:       true,
@@ -405,7 +403,7 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
 				},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 				},
 				Monitor: lib.PipelineMonitor{},
 			}
@@ -445,11 +443,8 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 						found = true
 
 						// Verify decision properties
-						if decision.Spec.Operator != "test-operator" {
-							t.Errorf("expected operator %q, got %q", "test-operator", decision.Spec.Operator)
-						}
-						if decision.Spec.Type != v1alpha1.DecisionTypePod {
-							t.Errorf("expected type %q, got %q", v1alpha1.DecisionTypePod, decision.Spec.Type)
+						if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
+							t.Errorf("expected scheduling domain %q, got %q", v1alpha1.SchedulingDomainPods, decision.Spec.SchedulingDomain)
 						}
 						if decision.Spec.ResourceID != tt.pod.Name {
 							t.Errorf("expected resource ID %q, got %q", tt.pod.Name, decision.Spec.ResourceID)

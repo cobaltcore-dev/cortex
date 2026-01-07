@@ -25,8 +25,8 @@ cortex:
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-pods
   conf:
-    # The operator will only touch CRs with this operator name.
-    operator: cortex
+    # The operator will only touch CRs with this scheduling domain name.
+    schedulingDomain: pods
     enabledControllers:
       - pods-decisions-pipeline-controller
       - explanation-controller

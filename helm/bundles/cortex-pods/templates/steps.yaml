@@ -4,7 +4,7 @@ kind: Step
 metadata:
   name: pods-noop
 spec:
-  operator: cortex
+  schedulingDomain: pods
   type: filter
   impl: noop
   description: |

@@ -15,7 +15,7 @@ import (
 
 func TestKnowledgeStateKPI_Init(t *testing.T) {
 	kpi := &KnowledgeStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"knowledgeOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"knowledgeSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -45,7 +45,7 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 			knowledges: []v1alpha1.Knowledge{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn1"},
-					Spec:       v1alpha1.KnowledgeSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KnowledgeSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KnowledgeStatus{
 						RawLength:  10,
 						Conditions: []v1.Condition{},
@@ -61,7 +61,7 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 			knowledges: []v1alpha1.Knowledge{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn2"},
-					Spec:       v1alpha1.KnowledgeSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KnowledgeSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KnowledgeStatus{
 						Conditions: []v1.Condition{
 							{
@@ -81,7 +81,7 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 			knowledges: []v1alpha1.Knowledge{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn-ready"},
-					Spec:       v1alpha1.KnowledgeSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KnowledgeSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KnowledgeStatus{
 						RawLength:  10,
 						Conditions: []v1.Condition{},
@@ -89,7 +89,7 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn-error"},
-					Spec:       v1alpha1.KnowledgeSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KnowledgeSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KnowledgeStatus{
 						Conditions: []v1.Condition{
 							{
@@ -109,7 +109,7 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 			knowledges: []v1alpha1.Knowledge{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn-correct-operator"},
-					Spec:       v1alpha1.KnowledgeSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KnowledgeSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KnowledgeStatus{
 						RawLength:  10,
 						Conditions: []v1.Condition{},
@@ -117,7 +117,7 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn-wrong-operator"},
-					Spec:       v1alpha1.KnowledgeSpec{Operator: "other-operator"},
+					Spec:       v1alpha1.KnowledgeSpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.KnowledgeStatus{
 						RawLength:  10,
 						Conditions: []v1.Condition{},
@@ -133,7 +133,7 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 			knowledges: []v1alpha1.Knowledge{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kn-unknown"},
-					Spec:       v1alpha1.KnowledgeSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.KnowledgeSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KnowledgeStatus{
 						RawLength:  0,
 						Conditions: []v1.Condition{},
@@ -158,7 +158,7 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 			client := clientBuilder.Build()
 
 			kpi := &KnowledgeStateKPI{}
-			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"knowledgeOperator": "`+tt.operator+`"}`)); err != nil {
+			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"knowledgeSchedulingDomain": "`+tt.operator+`"}`)); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
@@ -188,7 +188,7 @@ func TestKnowledgeStateKPI_GetName(t *testing.T) {
 
 func TestKnowledgeStateKPI_Describe(t *testing.T) {
 	kpi := &KnowledgeStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"knowledgeOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"knowledgeSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

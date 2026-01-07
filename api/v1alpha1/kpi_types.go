@@ -24,8 +24,9 @@ type KPIDependenciesSpec struct {
 }
 
 type KPISpec struct {
-	// The operator by which this kpi should be executed.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this kpi
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// The name of the kpi in the cortex implementation.
 	Impl string `json:"impl"`
@@ -60,7 +61,7 @@ type KPIStatus struct {
 
 	// The current status conditions of the kpi.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true

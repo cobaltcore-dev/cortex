@@ -28,8 +28,9 @@ const (
 )
 
 type PipelineSpec struct {
-	// The operator by which this pipeline should be handled.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this pipeline
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 	// An optional description of the pipeline.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
@@ -60,7 +61,7 @@ type PipelineStatus struct {
 	StepsReadyFrac string `json:"stepsReadyFrac,omitempty"`
 	// The current status conditions of the pipeline.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true
