@@ -205,7 +205,7 @@ func (k *VMwareResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func (k *VMwareResourceCapacityKPI) exportCapacityMetricVMware(ch chan<- prometheus.Metric, resource string, available float64, total float64, host compute.HostDetails) {
+func (k *VMwareResourceCapacityKPI) exportCapacityMetricVMware(ch chan<- prometheus.Metric, resource string, available, total float64, host compute.HostDetails) {
 	enabled := strconv.FormatBool(host.Enabled)
 	decommissioned := strconv.FormatBool(host.Decommissioned)
 	externalCustomer := strconv.FormatBool(host.ExternalCustomer)
