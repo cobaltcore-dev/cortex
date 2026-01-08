@@ -32,7 +32,7 @@ kind: KPI
 metadata:
   name: vmware-host-capacity
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: vmware_host_capacity_kpi
   dependencies:
     knowledges:
