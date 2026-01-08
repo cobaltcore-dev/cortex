@@ -113,6 +113,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
 	if err != nil {
 		log.Error(err, "pipeline not ready due to step issues", "pipelineName", obj.Name)
+		old := obj.DeepCopy()
 		obj.Status.Ready = false
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.StepConditionError,
@@ -120,7 +121,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			Reason:  "StepNotReady",
 			Message: err.Error(),
 		})
-		patch := client.MergeFrom(obj.DeepCopy())
+		patch := client.MergeFrom(old)
 		if err := c.Status().Patch(ctx, obj, patch); err != nil {
 			log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		}
@@ -132,6 +133,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	c.PipelineConfigs[obj.Name] = *obj
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
+		old := obj.DeepCopy()
 		obj.Status.Ready = false
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.PipelineConditionError,
@@ -139,7 +141,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			Reason:  "PipelineInitFailed",
 			Message: err.Error(),
 		})
-		patch := client.MergeFrom(obj.DeepCopy())
+		patch := client.MergeFrom(old)
 		if err := c.Status().Patch(ctx, obj, patch); err != nil {
 			log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		}
@@ -148,9 +150,10 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		return
 	}
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
+	old := obj.DeepCopy()
 	obj.Status.Ready = true
 	meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.PipelineConditionError)
-	patch := client.MergeFrom(obj.DeepCopy())
+	patch := client.MergeFrom(old)
 	if err := c.Status().Patch(ctx, obj, patch); err != nil {
 		log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		return
@@ -234,6 +237,7 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 		obj.Status.ReadyKnowledges++
 	}
 	obj.Status.KnowledgesReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadyKnowledges, obj.Status.TotalKnowledges)
+	old := obj.DeepCopy()
 	if obj.Status.ReadyKnowledges != obj.Status.TotalKnowledges {
 		obj.Status.Ready = false
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
@@ -248,7 +252,7 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 		meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.StepConditionError)
 		log.Info("step is ready", "stepName", obj.Name)
 	}
-	patch := client.MergeFrom(obj.DeepCopy())
+	patch := client.MergeFrom(old)
 	if err := c.Status().Patch(ctx, obj, patch); err != nil {
 		log.Error(err, "failed to patch step status", "stepName", obj.Name)
 		return

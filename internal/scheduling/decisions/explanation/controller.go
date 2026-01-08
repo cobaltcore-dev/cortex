@@ -125,10 +125,11 @@ func (c *Controller) reconcileHistory(ctx context.Context, decision *v1alpha1.De
 			UID:       prevDecision.UID,
 		})
 	}
+	old := decision.DeepCopy()
 	decision.Status.History = &history
 	precedence := len(history)
 	decision.Status.Precedence = &precedence
-	patch := client.MergeFrom(decision.DeepCopy())
+	patch := client.MergeFrom(old)
 	if err := c.Status().Patch(ctx, decision, patch); err != nil {
 		log.Error(err, "failed to patch decision status with history", "name", decision.Name)
 		return err
@@ -150,8 +151,9 @@ func (c *Controller) reconcileExplanation(ctx context.Context, decision *v1alpha
 		log.Error(err, "failed to explain decision", "name", decision.Name)
 		return err
 	}
+	old := decision.DeepCopy()
 	decision.Status.Explanation = explanationText
-	patch := client.MergeFrom(decision.DeepCopy())
+	patch := client.MergeFrom(old)
 	if err := c.Status().Patch(ctx, decision, patch); err != nil {
 		log.Error(err, "failed to patch decision status with explanation", "name", decision.Name)
 		return err

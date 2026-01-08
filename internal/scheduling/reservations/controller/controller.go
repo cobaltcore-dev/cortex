@@ -58,6 +58,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Currently we can only reconcile cortex-nova reservations.
 	if res.Spec.Scheduler.CortexNova == nil {
 		log.Info("reservation is not a cortex-nova reservation, skipping", "reservation", req.Name)
+		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionError,
 			Status:  metav1.ConditionTrue,
@@ -65,7 +66,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			Message: "reservation is not a cortex-nova reservation",
 		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
-		patch := client.MergeFrom(res.DeepCopy())
+		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			log.Error(err, "failed to patch reservation status")
 			return ctrl.Result{}, err
@@ -155,6 +156,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	if len(externalSchedulerResponse.Hosts) == 0 {
 		log.Info("no hosts found for reservation", "reservation", req.Name)
+		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionError,
 			Status:  metav1.ConditionTrue,
@@ -162,7 +164,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			Message: "no hosts found for reservation",
 		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
-		patch := client.MergeFrom(res.DeepCopy())
+		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			log.Error(err, "failed to patch reservation status")
 			return ctrl.Result{}, err
@@ -172,10 +174,11 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Update the reservation with the found host (idx 0)
 	host := externalSchedulerResponse.Hosts[0]
 	log.Info("found host for reservation", "reservation", req.Name, "host", host)
+	old := res.DeepCopy()
 	meta.RemoveStatusCondition(&res.Status.Conditions, v1alpha1.ReservationConditionError)
 	res.Status.Phase = v1alpha1.ReservationStatusPhaseActive
 	res.Status.Host = host
-	patch := client.MergeFrom(res.DeepCopy())
+	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, &res, patch); err != nil {
 		log.Error(err, "failed to patch reservation status")
 		return ctrl.Result{}, err

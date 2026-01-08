@@ -236,8 +236,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 			continue
 		}
 		// Reservation exists, update it.
-		patch := client.MergeFrom(existing.DeepCopy())
+		old := existing.DeepCopy()
 		existing.Spec = res.Spec
+		patch := client.MergeFrom(old)
 		if err := s.Patch(ctx, &existing, patch); err != nil {
 			syncLog.Error(err, "failed to patch reservation", "name", nn.Name)
 			return err
