@@ -173,14 +173,16 @@ func (r *TriggerReconciler) enqueueKnowledgeReconciliation(ctx context.Context, 
 
 	// The controller-runtime framework will automatically handle the delayed reconciliation
 	// We update the knowledge annotation to trigger reconciliation by the main KnowledgeReconciler
+	old := knowledge.DeepCopy()
 	if knowledge.Annotations == nil {
 		knowledge.Annotations = make(map[string]string)
 	}
 
 	// Add a trigger annotation with current timestamp to force reconciliation
 	knowledge.Annotations["cortex.knowledge/trigger-reconciliation"] = time.Now().Format(time.RFC3339)
-	if err := r.Update(ctx, &knowledge); err != nil {
-		log.Error(err, "failed to update knowledge to trigger reconciliation", "knowledge", knowledge.Name)
+	patch := client.MergeFrom(old)
+	if err := r.Patch(ctx, &knowledge, patch); err != nil {
+		log.Error(err, "failed to patch knowledge to trigger reconciliation", "knowledge", knowledge.Name)
 		return err
 	}
 	log.Info(

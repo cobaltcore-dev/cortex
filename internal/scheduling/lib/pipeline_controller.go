@@ -86,6 +86,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
+	old := obj.DeepCopy()
 	// Get all configured steps for the pipeline.
 	var steps []v1alpha1.Step
 	obj.Status.TotalSteps, obj.Status.ReadySteps = len(obj.Spec.Steps), 0
@@ -120,8 +121,9 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			Reason:  "StepNotReady",
 			Message: err.Error(),
 		})
-		if err := c.Status().Update(ctx, obj); err != nil {
-			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
+		patch := client.MergeFrom(old)
+		if err := c.Status().Patch(ctx, obj, patch); err != nil {
+			log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		}
 		delete(c.Pipelines, obj.Name)
 		delete(c.PipelineConfigs, obj.Name)
@@ -138,8 +140,9 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			Reason:  "PipelineInitFailed",
 			Message: err.Error(),
 		})
-		if err := c.Status().Update(ctx, obj); err != nil {
-			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
+		patch := client.MergeFrom(old)
+		if err := c.Status().Patch(ctx, obj, patch); err != nil {
+			log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		}
 		delete(c.Pipelines, obj.Name)
 		delete(c.PipelineConfigs, obj.Name)
@@ -148,8 +151,9 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
 	obj.Status.Ready = true
 	meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.PipelineConditionError)
-	if err := c.Status().Update(ctx, obj); err != nil {
-		log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
+	patch := client.MergeFrom(old)
+	if err := c.Status().Patch(ctx, obj, patch); err != nil {
+		log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		return
 	}
 }
@@ -208,6 +212,7 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 	}
 	log := ctrl.LoggerFrom(ctx)
 	// Check the status of all knowledges depending on this step.
+	old := obj.DeepCopy()
 	obj.Status.ReadyKnowledges = 0
 	obj.Status.TotalKnowledges = len(obj.Spec.Knowledges)
 	for _, knowledgeRef := range obj.Spec.Knowledges {
@@ -245,8 +250,9 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 		meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.StepConditionError)
 		log.Info("step is ready", "stepName", obj.Name)
 	}
-	if err := c.Status().Update(ctx, obj); err != nil {
-		log.Error(err, "failed to update step status", "stepName", obj.Name)
+	patch := client.MergeFrom(old)
+	if err := c.Status().Patch(ctx, obj, patch); err != nil {
+		log.Error(err, "failed to patch step status", "stepName", obj.Name)
 		return
 	}
 	// Find all pipelines depending on this step and re-evaluate them.

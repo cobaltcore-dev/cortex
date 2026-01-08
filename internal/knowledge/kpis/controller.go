@@ -73,6 +73,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// Reconcile the kpi.
+	old := kpi.DeepCopy()
 	err := c.handleKPIChange(ctx, kpi)
 	if err != nil {
 		meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
@@ -84,8 +85,9 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	} else {
 		meta.RemoveStatusCondition(&kpi.Status.Conditions, v1alpha1.KPIConditionError)
 	}
-	if err := c.Status().Update(ctx, kpi); err != nil {
-		log.Error(err, "failed to update kpi status after reconciliation error", "name", kpi.Name)
+	patch := client.MergeFrom(old)
+	if err := c.Status().Patch(ctx, kpi, patch); err != nil {
+		log.Error(err, "failed to patch kpi status after reconciliation error", "name", kpi.Name)
 	}
 	return ctrl.Result{}, nil
 }
@@ -104,6 +106,7 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 		if kpi.Spec.SchedulingDomain != c.SchedulingDomain {
 			continue
 		}
+		old := kpi.DeepCopy()
 		err := c.handleKPIChange(ctx, &kpi)
 		if err != nil {
 			meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
@@ -115,8 +118,9 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 		} else {
 			meta.RemoveStatusCondition(&kpi.Status.Conditions, v1alpha1.KPIConditionError)
 		}
-		if err := c.Status().Update(ctx, &kpi); err != nil {
-			log.Error(err, "failed to update kpi status after reconciliation error", "name", kpi.Name)
+		patch := client.MergeFrom(old)
+		if err := c.Status().Patch(ctx, &kpi, patch); err != nil {
+			log.Error(err, "failed to patch kpi status after reconciliation error", "name", kpi.Name)
 		}
 	}
 	return nil
