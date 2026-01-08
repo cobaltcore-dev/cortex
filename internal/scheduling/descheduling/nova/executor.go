@@ -58,8 +58,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 			Reason:  "UnsupportedRefType",
 			Message: "unsupported refType: " + string(descheduling.Spec.RefType),
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -75,8 +75,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 			Reason:  "UnsupportedPrevHostType",
 			Message: "unsupported prevHostType: " + string(descheduling.Spec.PrevHostType),
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -92,8 +92,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 			Reason:  "MissingRef",
 			Message: "missing ref",
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -127,8 +127,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 			Reason:  "VMNotOnExpectedHost",
 			Message: "VM not on expected host, expected: " + descheduling.Spec.PrevHost + ", actual: " + server.ComputeHost,
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -144,8 +144,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 			Reason:  "VMNotActive",
 			Message: "VM not active, current status: " + server.Status,
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -170,8 +170,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 			Reason:  "LiveMigrationFailed",
 			Message: "failed to live-migrate VM: " + err.Error(),
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -190,8 +190,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 				Reason:  "GetVMStatusFailed",
 				Message: "failed to get VM status: " + err.Error(),
 			})
-			if err := e.Status().Update(ctx, descheduling); err != nil {
-				log.Error(err, "failed to update descheduling status")
+			if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+				log.Error(err, "failed to patch descheduling status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -212,8 +212,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 				Reason:  "LiveMigrationFailed",
 				Message: "live-migration failed for VM: " + vmId,
 			})
-			if err := e.Status().Update(ctx, descheduling); err != nil {
-				log.Error(err, "failed to update descheduling status")
+			if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+				log.Error(err, "failed to patch descheduling status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -229,8 +229,8 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	meta.RemoveStatusCondition(&descheduling.Status.Conditions, v1alpha1.DeschedulingConditionError)
 	descheduling.Status.NewHost = server.ComputeHost
 	descheduling.Status.NewHostType = v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName
-	if err := e.Status().Update(ctx, descheduling); err != nil {
-		log.Error(err, "failed to update descheduling status")
+	if err := e.Status().Patch(ctx, descheduling, client.MergeFrom(descheduling.DeepCopy())); err != nil {
+		log.Error(err, "failed to patch descheduling status")
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil

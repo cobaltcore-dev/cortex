@@ -64,7 +64,8 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 	if err := c.process(ctx, decision); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := c.Status().Update(ctx, decision); err != nil {
+	patch := client.MergeFrom(decision.DeepCopy())
+	if err := c.Status().Patch(ctx, decision, patch); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -88,7 +89,8 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 		return err
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Status().Update(ctx, decision); err != nil {
+		patch := client.MergeFrom(decision.DeepCopy())
+		if err := c.Status().Patch(ctx, decision, patch); err != nil {
 			return err
 		}
 	}

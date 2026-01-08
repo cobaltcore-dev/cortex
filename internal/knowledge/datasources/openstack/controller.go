@@ -77,8 +77,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 			Reason:  "DatabaseAuthenticationFailed",
 			Message: "failed to authenticate with database: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -97,8 +98,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 				Reason:  "SSOAuthenticationFailed",
 				Message: "failed to authenticate with SSO: " + err.Error(),
 			})
-			if err := r.Status().Update(ctx, datasource); err != nil {
-				log.Error(err, "failed to update datasource status", "name", datasource.Name)
+			patch := client.MergeFrom(datasource.DeepCopy())
+			if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+				log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, err
@@ -116,8 +118,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 			Reason:  "KeystoneAuthenticationFailed",
 			Message: "failed to authenticate with keystone: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -137,8 +140,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 			Reason:  "UnsupportedOpenStackDatasourceType",
 			Message: "unsupported openstack datasource type: " + string(datasource.Spec.OpenStack.Type),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -153,8 +157,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 			Reason:  "OpenStackDatasourceInitFailed",
 			Message: "failed to init openstack datasource: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -169,8 +174,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 			Reason:  "WaitingForDependencyDatasource",
 			Message: "waiting for dependency datasource",
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		// Requeue after a short delay to check again.
@@ -185,8 +191,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 			Reason:  "OpenStackDatasourceSyncFailed",
 			Message: "failed to sync openstack datasource: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -200,8 +207,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	datasource.Status.NextSyncTime = metav1.NewTime(nextTime)
 	datasource.Status.NumberOfObjects = nResults
 	datasource.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	if err := r.Status().Update(ctx, datasource); err != nil {
-		log.Error(err, "failed to update datasource status", "name", datasource.Name)
+	patch := client.MergeFrom(datasource.DeepCopy())
+	if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+		log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 		return ctrl.Result{}, err
 	}
 

@@ -159,8 +159,8 @@ func (mc *mockController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	} else {
 		meta.RemoveStatusCondition(&kpi.Status.Conditions, v1alpha1.KPIConditionError)
 	}
-	if err := mc.Status().Update(ctx, kpi); err != nil {
-		log.Error(err, "failed to update kpi status after reconciliation error", "name", kpi.Name)
+	if err := mc.Status().Patch(ctx, kpi, client.MergeFrom(kpi.DeepCopy())); err != nil {
+		log.Error(err, "failed to patch kpi status after reconciliation error", "name", kpi.Name)
 	}
 	return ctrl.Result{}, nil
 }

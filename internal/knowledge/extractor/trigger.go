@@ -179,8 +179,8 @@ func (r *TriggerReconciler) enqueueKnowledgeReconciliation(ctx context.Context, 
 
 	// Add a trigger annotation with current timestamp to force reconciliation
 	knowledge.Annotations["cortex.knowledge/trigger-reconciliation"] = time.Now().Format(time.RFC3339)
-	if err := r.Update(ctx, &knowledge); err != nil {
-		log.Error(err, "failed to update knowledge to trigger reconciliation", "knowledge", knowledge.Name)
+	if err := r.Patch(ctx, &knowledge, client.MergeFrom(knowledge.DeepCopy())); err != nil {
+		log.Error(err, "failed to patch knowledge to trigger reconciliation", "knowledge", knowledge.Name)
 		return err
 	}
 	log.Info(

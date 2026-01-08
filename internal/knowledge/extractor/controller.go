@@ -62,8 +62,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			Reason:  "UnsupportedExtractor",
 			Message: "unsupported extractor name: " + knowledge.Spec.Extractor.Name,
 		})
-		if err := r.Status().Update(ctx, knowledge); err != nil {
-			log.Error(err, "failed to update knowledge status")
+		patch := client.MergeFrom(knowledge.DeepCopy())
+		if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
+			log.Error(err, "failed to patch knowledge status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -84,8 +85,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				Reason:  "DatasourceFetchFailed",
 				Message: "failed to get datasource: " + err.Error(),
 			})
-			if err := r.Status().Update(ctx, knowledge); err != nil {
-				log.Error(err, "failed to update knowledge status")
+			patch := client.MergeFrom(knowledge.DeepCopy())
+			if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
+				log.Error(err, "failed to patch knowledge status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, err
@@ -101,8 +103,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				Reason:  "InconsistentDatabaseSecretRefs",
 				Message: "datasources have differing database secret refs",
 			})
-			if err := r.Status().Update(ctx, knowledge); err != nil {
-				log.Error(err, "failed to update knowledge status")
+			patch := client.MergeFrom(knowledge.DeepCopy())
+			if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
+				log.Error(err, "failed to patch knowledge status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -122,8 +125,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				Reason:  "DatabaseAuthenticationFailed",
 				Message: "failed to authenticate with database: " + err.Error(),
 			})
-			if err := r.Status().Update(ctx, knowledge); err != nil {
-				log.Error(err, "failed to update knowledge status")
+			patch := client.MergeFrom(knowledge.DeepCopy())
+			if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
+				log.Error(err, "failed to patch knowledge status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, err
@@ -140,8 +144,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			Reason:  "FeatureExtractorInitializationFailed",
 			Message: "failed to initialize feature extractor: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, knowledge); err != nil {
-			log.Error(err, "failed to update knowledge status")
+		patch := client.MergeFrom(knowledge.DeepCopy())
+		if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
+			log.Error(err, "failed to patch knowledge status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -156,8 +161,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			Reason:  "FeatureExtractionFailed",
 			Message: "failed to extract features: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, knowledge); err != nil {
-			log.Error(err, "failed to update knowledge status")
+		patch := client.MergeFrom(knowledge.DeepCopy())
+		if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
+			log.Error(err, "failed to patch knowledge status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -174,8 +180,9 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			Reason:  "FeatureMarshalingFailed",
 			Message: "failed to marshal extracted features: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, knowledge); err != nil {
-			log.Error(err, "failed to update knowledge status")
+		patch := client.MergeFrom(knowledge.DeepCopy())
+		if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
+			log.Error(err, "failed to patch knowledge status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -184,8 +191,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	knowledge.Status.LastExtracted = metav1.NewTime(time.Now())
 	knowledge.Status.RawLength = len(features)
 	knowledge.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	if err := r.Status().Update(ctx, knowledge); err != nil {
-		log.Error(err, "failed to update knowledge status")
+	if err := r.Status().Patch(ctx, knowledge, client.MergeFrom(knowledge.DeepCopy())); err != nil {
+		log.Error(err, "failed to patch knowledge status")
 		return ctrl.Result{}, err
 	}
 	log.Info("successfully extracted knowledge", "name", knowledge.Name, "took", knowledge.Status.Took.Duration)

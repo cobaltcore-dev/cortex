@@ -120,8 +120,9 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			Reason:  "StepNotReady",
 			Message: err.Error(),
 		})
-		if err := c.Status().Update(ctx, obj); err != nil {
-			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
+		patch := client.MergeFrom(obj.DeepCopy())
+		if err := c.Status().Patch(ctx, obj, patch); err != nil {
+			log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		}
 		delete(c.Pipelines, obj.Name)
 		delete(c.PipelineConfigs, obj.Name)
@@ -138,8 +139,9 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			Reason:  "PipelineInitFailed",
 			Message: err.Error(),
 		})
-		if err := c.Status().Update(ctx, obj); err != nil {
-			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
+		patch := client.MergeFrom(obj.DeepCopy())
+		if err := c.Status().Patch(ctx, obj, patch); err != nil {
+			log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		}
 		delete(c.Pipelines, obj.Name)
 		delete(c.PipelineConfigs, obj.Name)
@@ -148,8 +150,9 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
 	obj.Status.Ready = true
 	meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.PipelineConditionError)
-	if err := c.Status().Update(ctx, obj); err != nil {
-		log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
+	patch := client.MergeFrom(obj.DeepCopy())
+	if err := c.Status().Patch(ctx, obj, patch); err != nil {
+		log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		return
 	}
 }
@@ -245,8 +248,9 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 		meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.StepConditionError)
 		log.Info("step is ready", "stepName", obj.Name)
 	}
-	if err := c.Status().Update(ctx, obj); err != nil {
-		log.Error(err, "failed to update step status", "stepName", obj.Name)
+	patch := client.MergeFrom(obj.DeepCopy())
+	if err := c.Status().Patch(ctx, obj, patch); err != nil {
+		log.Error(err, "failed to patch step status", "stepName", obj.Name)
 		return
 	}
 	// Find all pipelines depending on this step and re-evaluate them.

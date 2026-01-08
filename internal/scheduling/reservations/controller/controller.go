@@ -65,8 +65,9 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			Message: "reservation is not a cortex-nova reservation",
 		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
-		if err := r.Client.Status().Update(ctx, &res); err != nil {
-			log.Error(err, "failed to update reservation status")
+		patch := client.MergeFrom(res.DeepCopy())
+		if err := r.Status().Patch(ctx, &res, patch); err != nil {
+			log.Error(err, "failed to patch reservation status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil // Don't need to requeue.
@@ -161,8 +162,9 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			Message: "no hosts found for reservation",
 		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
-		if err := r.Status().Update(ctx, &res); err != nil {
-			log.Error(err, "failed to update reservation status")
+		patch := client.MergeFrom(res.DeepCopy())
+		if err := r.Status().Patch(ctx, &res, patch); err != nil {
+			log.Error(err, "failed to patch reservation status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil // No need to requeue, we didn't find a host.
@@ -173,8 +175,9 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	meta.RemoveStatusCondition(&res.Status.Conditions, v1alpha1.ReservationConditionError)
 	res.Status.Phase = v1alpha1.ReservationStatusPhaseActive
 	res.Status.Host = host
-	if err := r.Status().Update(ctx, &res); err != nil {
-		log.Error(err, "failed to update reservation status")
+	patch := client.MergeFrom(res.DeepCopy())
+	if err := r.Status().Patch(ctx, &res, patch); err != nil {
+		log.Error(err, "failed to patch reservation status")
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil // No need to requeue, the reservation is now active.

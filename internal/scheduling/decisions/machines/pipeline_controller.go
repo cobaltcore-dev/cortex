@@ -67,7 +67,8 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 	if err := c.process(ctx, decision); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := c.Status().Update(ctx, decision); err != nil {
+	patch := client.MergeFrom(decision.DeepCopy())
+	if err := c.Status().Patch(ctx, decision, patch); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -108,7 +109,8 @@ func (c *DecisionPipelineController) ProcessNewMachine(ctx context.Context, mach
 		return err
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Status().Update(ctx, decision); err != nil {
+		patch := client.MergeFrom(decision.DeepCopy())
+		if err := c.Status().Patch(ctx, decision, patch); err != nil {
 			return err
 		}
 	}
@@ -156,7 +158,8 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 	}
 	// Assign the first machine pool returned by the pipeline.
 	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: *result.TargetHost}
-	if err := c.Update(ctx, machine); err != nil {
+	patch := client.MergeFrom(machine.DeepCopy())
+	if err := c.Status().Patch(ctx, machine, patch); err != nil {
 		log.V(1).Error(err, "failed to assign machine pool to instance")
 		return err
 	}

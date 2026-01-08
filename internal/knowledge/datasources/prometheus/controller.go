@@ -67,8 +67,9 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 			Reason:  "UnsupportedPrometheusMetricType",
 			Message: "unsupported metric type: " + datasource.Spec.Prometheus.Type,
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -85,8 +86,9 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 			Reason:  "DatabaseAuthenticationFailed",
 			Message: "failed to authenticate with database: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -105,8 +107,9 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 				Reason:  "SSOAuthenticationFailed",
 				Message: "failed to authenticate with SSO: " + err.Error(),
 			})
-			if err := r.Status().Update(ctx, datasource); err != nil {
-				log.Error(err, "failed to update datasource status", "name", datasource.Name)
+			patch := client.MergeFrom(datasource.DeepCopy())
+			if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+				log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, err
@@ -130,8 +133,9 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 			Reason:  "MissingPrometheusURL",
 			Message: "missing 'url' in prometheus secret",
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -153,8 +157,9 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 			Reason:  "PrometheusDatasourceSyncFailed",
 			Message: "failed to sync prometheus datasource: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(datasource.DeepCopy())
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -166,8 +171,9 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	datasource.Status.NextSyncTime = metav1.NewTime(nextSync)
 	datasource.Status.NumberOfObjects = nResults
 	datasource.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	if err := r.Status().Update(ctx, datasource); err != nil {
-		log.Error(err, "failed to update datasource status", "name", datasource.Name)
+	patch := client.MergeFrom(datasource.DeepCopy())
+	if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+		log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 		return ctrl.Result{}, err
 	}
 
