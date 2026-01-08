@@ -86,6 +86,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
+	old := obj.DeepCopy()
 	// Get all configured steps for the pipeline.
 	var steps []v1alpha1.Step
 	obj.Status.TotalSteps, obj.Status.ReadySteps = len(obj.Spec.Steps), 0
@@ -113,7 +114,6 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
 	if err != nil {
 		log.Error(err, "pipeline not ready due to step issues", "pipelineName", obj.Name)
-		old := obj.DeepCopy()
 		obj.Status.Ready = false
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.StepConditionError,
@@ -133,7 +133,6 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	c.PipelineConfigs[obj.Name] = *obj
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
-		old := obj.DeepCopy()
 		obj.Status.Ready = false
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.PipelineConditionError,
@@ -150,7 +149,6 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		return
 	}
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
-	old := obj.DeepCopy()
 	obj.Status.Ready = true
 	meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.PipelineConditionError)
 	patch := client.MergeFrom(old)
@@ -214,6 +212,7 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 	}
 	log := ctrl.LoggerFrom(ctx)
 	// Check the status of all knowledges depending on this step.
+	old := obj.DeepCopy()
 	obj.Status.ReadyKnowledges = 0
 	obj.Status.TotalKnowledges = len(obj.Spec.Knowledges)
 	for _, knowledgeRef := range obj.Spec.Knowledges {
@@ -237,7 +236,6 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 		obj.Status.ReadyKnowledges++
 	}
 	obj.Status.KnowledgesReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadyKnowledges, obj.Status.TotalKnowledges)
-	old := obj.DeepCopy()
 	if obj.Status.ReadyKnowledges != obj.Status.TotalKnowledges {
 		obj.Status.Ready = false
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
