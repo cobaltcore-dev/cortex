@@ -162,7 +162,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 	old := machine.DeepCopy()
 	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: *result.TargetHost}
 	patch := client.MergeFrom(old)
-	if err := c.Status().Patch(ctx, machine, patch); err != nil {
+	if err := c.Patch(ctx, machine, patch); err != nil {
 		log.V(1).Error(err, "failed to assign machine pool to instance")
 		return err
 	}
