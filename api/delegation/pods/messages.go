@@ -12,6 +12,8 @@ import (
 type PodPipelineRequest struct {
 	// The available nodes.
 	Nodes []corev1.Node `json:"nodes"`
+	// The pod to schedule.
+	Pod *corev1.Pod `json:"pod"`
 }
 
 func (r PodPipelineRequest) GetSubjects() []string {
