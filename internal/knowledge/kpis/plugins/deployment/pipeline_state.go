@@ -66,9 +66,7 @@ func (k *PipelineStateKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, pipeline := range pipelines {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(pipeline.Status.Conditions, v1alpha1.PipelineConditionError):
-			state = "error"
-		case pipeline.Status.Ready:
+		case meta.IsStatusConditionTrue(pipeline.Status.Conditions, v1alpha1.PipelineConditionReady):
 			state = "ready"
 		default:
 			state = "unknown"

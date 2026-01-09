@@ -92,13 +92,11 @@ type PipelineSpec struct {
 }
 
 const (
-	// Something went wrong during the pipeline reconciliation.
-	PipelineConditionError = "Error"
+	// The pipeline is ready to be used.
+	PipelineConditionReady = "Ready"
 )
 
 type PipelineStatus struct {
-	// Whether the pipeline is ready to be used.
-	Ready bool `json:"ready"`
 	// The total number of steps configured in the pipeline.
 	TotalSteps int `json:"totalSteps"`
 	// The number of steps that are ready.
@@ -117,8 +115,8 @@ type PipelineStatus struct {
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
-// +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
 // +kubebuilder:printcolumn:name="Steps",type="string",JSONPath=".status.stepsReadyFrac"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // Pipeline is the Schema for the decisions API
 type Pipeline struct {

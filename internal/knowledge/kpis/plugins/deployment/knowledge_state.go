@@ -66,9 +66,7 @@ func (k *KnowledgeStateKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, kn := range knowledges {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionError):
-			state = "error"
-		case kn.Status.IsReady():
+		case meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionReady):
 			state = "ready"
 		default:
 			state = "unknown"

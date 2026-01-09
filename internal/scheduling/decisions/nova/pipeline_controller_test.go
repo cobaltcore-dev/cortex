@@ -62,12 +62,11 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		decision       *v1alpha1.Decision
-		pipeline       *v1alpha1.Pipeline
-		expectError    bool
-		expectResult   bool
-		expectDuration bool
+		name         string
+		decision     *v1alpha1.Decision
+		pipeline     *v1alpha1.Pipeline
+		expectError  bool
+		expectResult bool
 	}{
 		{
 			name: "successful nova decision processing",
@@ -96,9 +95,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
-			expectError:    false,
-			expectResult:   true,
-			expectDuration: true,
+			expectError:  false,
+			expectResult: true,
 		},
 		{
 			name: "decision without novaRaw spec",
@@ -125,9 +123,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
-			expectError:    true,
-			expectResult:   false,
-			expectDuration: false,
+			expectError:  true,
+			expectResult: false,
 		},
 		{
 			name: "pipeline not found",
@@ -146,10 +143,9 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			pipeline:       nil,
-			expectError:    true,
-			expectResult:   false,
-			expectDuration: false,
+			pipeline:     nil,
+			expectError:  true,
+			expectResult: false,
 		},
 		{
 			name: "invalid novaRaw JSON",
@@ -178,9 +174,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
-			expectError:    true,
-			expectResult:   false,
-			expectDuration: false,
+			expectError:  true,
+			expectResult: false,
 		},
 	}
 
@@ -254,13 +249,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 			}
 			if !tt.expectResult && updatedDecision.Status.Result != nil {
 				t.Error("Expected result to be nil but was set")
-			}
-
-			if tt.expectDuration && updatedDecision.Status.Took.Duration == 0 {
-				t.Error("Expected duration to be set but was zero")
-			}
-			if !tt.expectDuration && updatedDecision.Status.Took.Duration != 0 {
-				t.Error("Expected duration to be zero but was set")
 			}
 		})
 	}
@@ -399,7 +387,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 		createDecisions       bool
 		expectError           bool
 		expectResult          bool
-		expectDuration        bool
 		expectCreatedDecision bool
 		expectUpdatedStatus   bool
 		errorContains         string
@@ -447,7 +434,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			createDecisions:       true,
 			expectError:           false,
 			expectResult:          true,
-			expectDuration:        true,
 			expectCreatedDecision: true,
 			expectUpdatedStatus:   true,
 		},
@@ -494,7 +480,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			createDecisions:       false,
 			expectError:           false,
 			expectResult:          true,
-			expectDuration:        true,
 			expectCreatedDecision: false,
 			expectUpdatedStatus:   false,
 		},
@@ -520,7 +505,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			setupPipelineConfigs:  false,
 			expectError:           true,
 			expectResult:          false,
-			expectDuration:        false,
 			expectCreatedDecision: false,
 			expectUpdatedStatus:   false,
 			errorContains:         "pipeline nonexistent-pipeline not configured",
@@ -566,7 +550,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			createDecisions:       true,
 			expectError:           true,
 			expectResult:          false,
-			expectDuration:        false,
 			expectCreatedDecision: true,
 			expectUpdatedStatus:   false,
 			errorContains:         "no novaRaw spec defined",
@@ -604,7 +587,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			createDecisions:       true,
 			expectError:           true,
 			expectResult:          false,
-			expectDuration:        false,
 			expectCreatedDecision: true,
 			expectUpdatedStatus:   false,
 			errorContains:         "pipeline not found or not ready",
@@ -642,7 +624,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			createDecisions:       true,
 			expectError:           true,
 			expectResult:          false,
-			expectDuration:        false,
 			expectCreatedDecision: true,
 			expectUpdatedStatus:   false,
 			errorContains:         "pipeline not found or not ready",
@@ -730,13 +711,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			}
 			if !tt.expectResult && tt.decision.Status.Result != nil {
 				t.Error("Expected result to be nil but was set")
-			}
-
-			if tt.expectDuration && tt.decision.Status.Took.Duration == 0 {
-				t.Error("Expected duration to be set but was zero")
-			}
-			if !tt.expectDuration && tt.decision.Status.Took.Duration != 0 {
-				t.Error("Expected duration to be zero but was set")
 			}
 		})
 	}

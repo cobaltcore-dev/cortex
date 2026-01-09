@@ -15,9 +15,6 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.phase
-      name: Phase
-      type: string
     - jsonPath: .spec.prevHost
       name: Previous Host
       type: string
@@ -29,6 +26,9 @@ spec:
       type: date
     - jsonPath: .spec.reason
       name: Reason(s)
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
       type: string
     name: v1alpha1
     schema:
@@ -140,11 +140,6 @@ spec:
               newHostType:
                 description: The type of host where the VM was rescheduled to.
                 type: string
-              phase:
-                description: The current phase of the descheduling.
-                type: string
-            required:
-            - phase
             type: object
         required:
         - spec

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -106,8 +107,21 @@ func (c *DecisionPipelineController) ProcessNewMachine(ctx context.Context, mach
 		}
 	}
 	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
-		return err
+	err := c.process(ctx, decision)
+	if err != nil {
+		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DecisionConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "PipelineRunFailed",
+			Message: "pipeline run failed: " + err.Error(),
+		})
+	} else {
+		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DecisionConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "PipelineRunSucceeded",
+			Message: "pipeline run succeeded",
+		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
 		patch := client.MergeFrom(old)
@@ -115,7 +129,7 @@ func (c *DecisionPipelineController) ProcessNewMachine(ctx context.Context, mach
 			return err
 		}
 	}
-	return nil
+	return err
 }
 
 func (c *DecisionPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
@@ -145,7 +159,6 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		return errors.New("failed to run scheduler pipeline")
 	}
 	decision.Status.Result = &result
-	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
 	// Set the machine pool ref on the machine.

@@ -178,10 +178,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					t.Errorf("expected target host %q, got %q", tt.expectTargetHost, *updatedDecision.Status.Result.TargetHost)
 				}
 
-				if updatedDecision.Status.Took.Duration <= 0 {
-					t.Error("expected took duration to be positive")
-				}
-
 				// Verify machine was updated with machine pool ref
 				if tt.machine != nil {
 					var updatedMachine ironcorev1alpha1.Machine

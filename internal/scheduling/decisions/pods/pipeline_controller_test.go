@@ -174,10 +174,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				if *updatedDecision.Status.Result.TargetHost != tt.expectTargetHost {
 					t.Errorf("expected target host %q, got %q", tt.expectTargetHost, *updatedDecision.Status.Result.TargetHost)
 				}
-
-				if updatedDecision.Status.Took.Duration <= 0 {
-					t.Error("expected took duration to be positive")
-				}
 			}
 		})
 	}

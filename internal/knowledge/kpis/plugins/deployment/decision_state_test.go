@@ -57,8 +57,8 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -120,8 +120,8 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -161,8 +161,8 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -173,8 +173,8 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -196,8 +196,8 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -208,8 +208,8 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -250,8 +250,8 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 						},
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},

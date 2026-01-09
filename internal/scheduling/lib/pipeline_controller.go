@@ -98,10 +98,9 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			continue
 		}
 		if step.Mandatory {
-			obj.Status.Ready = false
 			meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.PipelineConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.PipelineConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "MandatoryStepNotReady",
 				Message: fmt.Sprintf("mandatory step %s not ready: %s", step.Impl, err.Error()),
 			})
@@ -121,10 +120,9 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	c.PipelineConfigs[obj.Name] = *obj
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
-		obj.Status.Ready = false
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.PipelineConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.PipelineConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "PipelineInitFailed",
 			Message: err.Error(),
 		})
@@ -137,8 +135,12 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		return
 	}
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
-	obj.Status.Ready = true
-	meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.PipelineConditionError)
+	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.PipelineConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "PipelineReady",
+		Message: "pipeline is ready",
+	})
 	patch := client.MergeFrom(old)
 	if err := c.Status().Patch(ctx, obj, patch); err != nil {
 		log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
@@ -208,7 +210,7 @@ func (c *BasePipelineController[PipelineType]) checkStepReady(
 			continue
 		}
 		// Check if the knowledge status conditions indicate an error.
-		if meta.IsStatusConditionTrue(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionError) {
+		if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
 			log.Info("knowledge not ready due to error condition", "knowledgeName", knowledgeRef.Name)
 			continue
 		}
@@ -286,8 +288,8 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
 
 	before := evt.ObjectOld.(*v1alpha1.Knowledge)
 	after := evt.ObjectNew.(*v1alpha1.Knowledge)
-	errorBefore := meta.IsStatusConditionTrue(before.Status.Conditions, v1alpha1.KnowledgeConditionError)
-	errorAfter := meta.IsStatusConditionTrue(after.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	errorBefore := meta.IsStatusConditionFalse(before.Status.Conditions, v1alpha1.KnowledgeConditionReady)
+	errorAfter := meta.IsStatusConditionFalse(after.Status.Conditions, v1alpha1.KnowledgeConditionReady)
 	errorChanged := errorBefore != errorAfter
 	dataBecameAvailable := before.Status.RawLength == 0 && after.Status.RawLength > 0
 	if !errorChanged && !dataBecameAvailable {

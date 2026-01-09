@@ -160,7 +160,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.
-	if meta.IsStatusConditionTrue(decision.Status.Conditions, v1alpha1.DecisionConditionError) {
+	if meta.IsStatusConditionFalse(decision.Status.Conditions, v1alpha1.DecisionConditionReady) {
 		c.Respond(http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
 		return
 	}

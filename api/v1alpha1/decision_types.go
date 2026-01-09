@@ -71,15 +71,11 @@ type DecisionResult struct {
 }
 
 const (
-	// Something went wrong during the calculation of the decision.
-	DecisionConditionError = "Error"
+	// The decision was successfully processed.
+	DecisionConditionReady = "Ready"
 )
 
 type DecisionStatus struct {
-	// The time it took to schedule.
-	// +kubebuilder:validation:Optional
-	Took metav1.Duration `json:"took"`
-
 	// The result of this decision.
 	// +kubebuilder:validation:Optional
 	Result *DecisionResult `json:"result,omitempty"`
@@ -113,6 +109,7 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
 // +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:selectablefield:JSONPath=".spec.resourceID"
 
 // Decision is the Schema for the decisions API

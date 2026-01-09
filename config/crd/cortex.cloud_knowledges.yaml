@@ -24,15 +24,15 @@ spec:
     - jsonPath: .status.lastExtracted
       name: Extracted
       type: date
-    - jsonPath: .status.took
-      name: Took
-      type: string
     - jsonPath: .spec.recency
       name: Recency
       type: string
     - jsonPath: .status.rawLength
       name: Features
       type: integer
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -261,9 +261,6 @@ spec:
                 description: The number of features extracted, or 1 if the knowledge
                   is not a list.
                 type: integer
-              took:
-                description: The time it took to perform the last extraction.
-                type: string
             type: object
         required:
         - spec

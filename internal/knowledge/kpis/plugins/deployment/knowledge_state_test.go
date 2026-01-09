@@ -65,8 +65,8 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.KnowledgeStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.KnowledgeConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.KnowledgeConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -93,8 +93,8 @@ func TestKnowledgeStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.KnowledgeStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.KnowledgeConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.KnowledgeConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},

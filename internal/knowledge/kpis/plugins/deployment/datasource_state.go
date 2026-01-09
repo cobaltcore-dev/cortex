@@ -66,11 +66,7 @@ func (k *DatasourceStateKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, ds := range datasources {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionWaiting):
-			state = "waiting"
-		case meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionError):
-			state = "error"
-		case ds.Status.IsReady():
+		case meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionReady):
 			state = "ready"
 		default:
 			state = "unknown"

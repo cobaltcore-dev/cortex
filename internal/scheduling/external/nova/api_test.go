@@ -258,8 +258,8 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				Status: v1alpha1.DecisionStatus{
 					Conditions: []metav1.Condition{
 						{
-							Type:   v1alpha1.DecisionConditionError,
-							Status: metav1.ConditionTrue,
+							Type:   v1alpha1.DecisionConditionReady,
+							Status: metav1.ConditionFalse,
 							Reason: "SchedulingError",
 						},
 					},

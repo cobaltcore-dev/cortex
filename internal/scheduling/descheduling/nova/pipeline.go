@@ -176,7 +176,6 @@ func (p *Pipeline) createDeschedulings(ctx context.Context) error {
 		descheduling.Spec.PrevHostType = v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName
 		descheduling.Spec.PrevHost = decision.Host
 		descheduling.Spec.Reason = decision.Reason
-		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseQueued
 		if err := p.Create(ctx, descheduling); err != nil {
 			return err
 		}

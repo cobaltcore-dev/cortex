@@ -86,13 +86,14 @@ func TestExecutor_Reconcile(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		descheduling   *v1alpha1.Descheduling
-		novaAPI        *mockExecutorNovaAPI
-		config         conf.Config
-		expectedPhase  v1alpha1.DeschedulingStatusPhase
-		expectedError  string
-		expectDeletion bool
+		name               string
+		descheduling       *v1alpha1.Descheduling
+		novaAPI            *mockExecutorNovaAPI
+		config             conf.Config
+		expectedReady      bool
+		expectedInProgress bool
+		expectedError      string
+		expectDeletion     bool
 	}{
 		{
 			name: "successful migration",
@@ -107,9 +108,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 					PrevHostType: v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
 					PrevHost:     "old-host",
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
 			novaAPI: &mockExecutorNovaAPI{
 				servers: map[string]server{
@@ -119,7 +118,8 @@ func TestExecutor_Reconcile(t *testing.T) {
 			config: conf.Config{
 				DisableDeschedulerDryRun: true,
 			},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseCompleted,
+			expectedReady:      true,
+			expectedInProgress: false,
 		},
 		{
 			name: "dry run mode",
@@ -133,9 +133,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 					Ref:          "vm-123",
 					PrevHostType: v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
 			novaAPI: &mockExecutorNovaAPI{
 				servers: map[string]server{
@@ -145,7 +143,8 @@ func TestExecutor_Reconcile(t *testing.T) {
 			config: conf.Config{
 				DisableDeschedulerDryRun: false,
 			},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseQueued,
+			expectedReady:      false,
+			expectedInProgress: false,
 		},
 		{
 			name: "unsupported ref type",
@@ -158,13 +157,12 @@ func TestExecutor_Reconcile(t *testing.T) {
 					RefType: "unsupported-type",
 					Ref:     "vm-123",
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI:       &mockExecutorNovaAPI{},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseFailed,
-			expectedError: "unsupported refType: unsupported-type",
+			novaAPI:            &mockExecutorNovaAPI{},
+			expectedReady:      false,
+			expectedInProgress: false,
+			expectedError:      "unsupported refType: unsupported-type",
 		},
 		{
 			name: "unsupported host type",
@@ -178,13 +176,12 @@ func TestExecutor_Reconcile(t *testing.T) {
 					Ref:          "vm-123",
 					PrevHostType: "unsupported-host-type",
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI:       &mockExecutorNovaAPI{},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseFailed,
-			expectedError: "unsupported prevHostType: unsupported-host-type",
+			novaAPI:            &mockExecutorNovaAPI{},
+			expectedReady:      false,
+			expectedInProgress: false,
+			expectedError:      "unsupported prevHostType: unsupported-host-type",
 		},
 		{
 			name: "missing ref",
@@ -198,13 +195,12 @@ func TestExecutor_Reconcile(t *testing.T) {
 					Ref:          "",
 					PrevHostType: v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI:       &mockExecutorNovaAPI{},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseFailed,
-			expectedError: "missing ref",
+			novaAPI:            &mockExecutorNovaAPI{},
+			expectedReady:      false,
+			expectedInProgress: false,
+			expectedError:      "missing ref",
 		},
 		{
 			name: "vm not found - should delete descheduling",
@@ -218,9 +214,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 					Ref:          "vm-not-found",
 					PrevHostType: v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
 			novaAPI:        &mockExecutorNovaAPI{servers: map[string]server{}},
 			expectDeletion: true,
@@ -238,17 +232,16 @@ func TestExecutor_Reconcile(t *testing.T) {
 					PrevHostType: v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
 					PrevHost:     "expected-host",
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
 			novaAPI: &mockExecutorNovaAPI{
 				servers: map[string]server{
 					"vm-123": {ID: "vm-123", Status: "ACTIVE", ComputeHost: "different-host"},
 				},
 			},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseFailed,
-			expectedError: "VM not on expected host, expected: expected-host, actual: different-host",
+			expectedReady:      false,
+			expectedInProgress: false,
+			expectedError:      "VM not on expected host, expected: expected-host, actual: different-host",
 		},
 		{
 			name: "vm not active",
@@ -262,17 +255,16 @@ func TestExecutor_Reconcile(t *testing.T) {
 					Ref:          "vm-123",
 					PrevHostType: v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
 			novaAPI: &mockExecutorNovaAPI{
 				servers: map[string]server{
 					"vm-123": {ID: "vm-123", Status: "SHUTOFF", ComputeHost: "host1"},
 				},
 			},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseFailed,
-			expectedError: "VM not active, current status: SHUTOFF",
+			expectedReady:      false,
+			expectedInProgress: false,
+			expectedError:      "VM not active, current status: SHUTOFF",
 		},
 		{
 			name: "migration fails",
@@ -286,9 +278,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 					Ref:          "vm-123",
 					PrevHostType: v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
 				},
-				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
-				},
+				Status: v1alpha1.DeschedulingStatus{},
 			},
 			novaAPI: &mockExecutorNovaAPI{
 				servers: map[string]server{
@@ -299,8 +289,9 @@ func TestExecutor_Reconcile(t *testing.T) {
 			config: conf.Config{
 				DisableDeschedulerDryRun: true,
 			},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseFailed,
-			expectedError: "failed to live-migrate VM: migration failed",
+			expectedReady:      false,
+			expectedInProgress: false,
+			expectedError:      "failed to live-migrate VM: migration failed",
 		},
 		{
 			name: "skip already in progress",
@@ -315,11 +306,19 @@ func TestExecutor_Reconcile(t *testing.T) {
 					PrevHostType: v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
 				},
 				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseInProgress,
+					Conditions: []metav1.Condition{
+						{
+							Type:   v1alpha1.DeschedulingConditionInProgress,
+							Status: metav1.ConditionTrue,
+							Reason: "MigrationInProgress",
+						},
+					},
 				},
 			},
-			novaAPI:       &mockExecutorNovaAPI{},
-			expectedPhase: v1alpha1.DeschedulingStatusPhaseInProgress,
+			novaAPI:            &mockExecutorNovaAPI{},
+			expectDeletion:     false,
+			expectedReady:      false,
+			expectedInProgress: true,
 		},
 	}
 
@@ -372,22 +371,32 @@ func TestExecutor_Reconcile(t *testing.T) {
 				t.Fatalf("failed to get updated descheduling: %v", err)
 			}
 
-			if updated.Status.Phase != tt.expectedPhase {
-				t.Errorf("expected phase %s, got %s", tt.expectedPhase, updated.Status.Phase)
-			}
+			readyCond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.DeschedulingConditionReady)
+			inProgressCond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.DeschedulingConditionInProgress)
 
-			if tt.expectedError != "" && meta.IsStatusConditionFalse(updated.Status.Conditions, v1alpha1.DeschedulingConditionError) {
-				t.Error("expected error condition to be true")
-			}
-
-			if tt.expectedPhase == v1alpha1.DeschedulingStatusPhaseCompleted {
-				if updated.Status.NewHost == "" {
-					t.Error("expected NewHost to be set after successful migration")
+			if tt.expectedReady {
+				if readyCond == nil || readyCond.Status != metav1.ConditionTrue {
+					t.Errorf("expected descheduling to be ready, but it's not")
 				}
-				if updated.Status.NewHostType != v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName {
-					t.Errorf("expected NewHostType to be %s, got %s",
-						v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName,
-						updated.Status.NewHostType)
+			} else {
+				if tt.expectedError != "" {
+					if readyCond == nil || readyCond.Status != metav1.ConditionFalse || readyCond.Message != tt.expectedError {
+						t.Errorf("expected descheduling error '%s', got '%v'", tt.expectedError, readyCond)
+					}
+				} else {
+					if readyCond != nil && readyCond.Status == metav1.ConditionTrue {
+						t.Errorf("expected descheduling not to be ready, but it is")
+					}
+				}
+			}
+
+			if tt.expectedInProgress {
+				if inProgressCond == nil || inProgressCond.Status != metav1.ConditionTrue {
+					t.Errorf("expected descheduling to be in progress, but it's not")
+				}
+			} else {
+				if inProgressCond != nil && inProgressCond.Status == metav1.ConditionTrue {
+					t.Errorf("expected descheduling not to be in progress, but it is")
 				}
 			}
 		})

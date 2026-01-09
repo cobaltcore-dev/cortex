@@ -57,26 +57,6 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 			description:   "should collect metric for ready datasource",
 		},
 		{
-			name: "datasource in waiting state",
-			datasources: []v1alpha1.Datasource{
-				{
-					ObjectMeta: v1.ObjectMeta{Name: "ds2"},
-					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
-					Status: v1alpha1.DatasourceStatus{
-						Conditions: []v1.Condition{
-							{
-								Type:   v1alpha1.DatasourceConditionWaiting,
-								Status: v1.ConditionTrue,
-							},
-						},
-					},
-				},
-			},
-			operator:      "test-operator",
-			expectedCount: 1,
-			description:   "should collect metric for waiting datasource",
-		},
-		{
 			name: "datasource in error state",
 			datasources: []v1alpha1.Datasource{
 				{
@@ -85,8 +65,10 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DatasourceStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DatasourceConditionError,
-								Status: v1.ConditionTrue,
+								Type:    v1alpha1.DatasourceConditionReady,
+								Status:  v1.ConditionFalse,
+								Reason:  "SomeError",
+								Message: "An error occurred",
 							},
 						},
 					},
@@ -113,7 +95,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DatasourceStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DatasourceConditionWaiting,
+								Type:   v1alpha1.DatasourceConditionReady,
 								Status: v1.ConditionTrue,
 							},
 						},
@@ -125,8 +107,8 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.DatasourceStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DatasourceConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DatasourceConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},

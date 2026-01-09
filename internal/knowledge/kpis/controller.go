@@ -77,13 +77,18 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	err := c.handleKPIChange(ctx, kpi)
 	if err != nil {
 		meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KPIConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "ReconciliationFailed",
 			Message: err.Error(),
 		})
 	} else {
-		meta.RemoveStatusCondition(&kpi.Status.Conditions, v1alpha1.KPIConditionError)
+		meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "ReconciliationSucceeded",
+			Message: "kpi reconciled successfully",
+		})
 	}
 	patch := client.MergeFrom(old)
 	if err := c.Status().Patch(ctx, kpi, patch); err != nil {
@@ -110,13 +115,18 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 		err := c.handleKPIChange(ctx, &kpi)
 		if err != nil {
 			meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.KPIConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.KPIConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "ReconciliationFailed",
 				Message: err.Error(),
 			})
 		} else {
-			meta.RemoveStatusCondition(&kpi.Status.Conditions, v1alpha1.KPIConditionError)
+			meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.KPIConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "ReconciliationSucceeded",
+				Message: "kpi reconciled successfully",
+			})
 		}
 		patch := client.MergeFrom(old)
 		if err := c.Status().Patch(ctx, &kpi, patch); err != nil {
@@ -187,7 +197,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			return err
 		}
 		// Check if datasource is ready
-		if ds.Status.IsReady() {
+		if meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionReady) {
 			datasourcesReady++
 		}
 
@@ -212,7 +222,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			return err
 		}
 		// Check if knowledge is ready
-		if kn.Status.IsReady() {
+		if meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
 			knowledgesReady++
 		}
 	}
@@ -262,7 +272,22 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	}
 
 	// Update the status to ready and populate the ready dependencies.
-	obj.Status.Ready = dependenciesReadyTotal == dependenciesTotal
+	if dependenciesReadyTotal == dependenciesTotal {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllDependenciesReady",
+			Message: "all kpi dependencies are ready",
+		})
+	} else {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:   v1alpha1.KPIConditionReady,
+			Status: metav1.ConditionFalse,
+			Reason: "UnreadyDependencies",
+			Message: fmt.Sprintf("%d out of %d kpi dependencies are ready",
+				dependenciesReadyTotal, dependenciesTotal),
+		})
+	}
 	obj.Status.ReadyDependencies = dependenciesReadyTotal
 	obj.Status.TotalDependencies = dependenciesTotal
 	obj.Status.DependenciesReadyFrac = "ready"
@@ -320,7 +345,9 @@ func (c *Controller) handleDatasourceUpdated(
 	dsBefore := evt.ObjectNew.(*v1alpha1.Datasource)
 	dsAfter := evt.ObjectOld.(*v1alpha1.Datasource)
 	// Only react to changes affecting the readiness.
-	if dsBefore.Status.IsReady() == dsAfter.Status.IsReady() {
+	dsBeforeReady := meta.IsStatusConditionTrue(dsBefore.Status.Conditions, v1alpha1.DatasourceConditionReady)
+	dsAfterReady := meta.IsStatusConditionTrue(dsAfter.Status.Conditions, v1alpha1.DatasourceConditionReady)
+	if dsBeforeReady == dsAfterReady {
 		return
 	}
 	// Handle the change.
@@ -383,7 +410,9 @@ func (c *Controller) handleKnowledgeUpdated(
 	knBefore := evt.ObjectNew.(*v1alpha1.Knowledge)
 	knAfter := evt.ObjectOld.(*v1alpha1.Knowledge)
 	// Only react to changes affecting the readiness.
-	if knBefore.Status.IsReady() == knAfter.Status.IsReady() {
+	knBeforeReady := meta.IsStatusConditionTrue(knBefore.Status.Conditions, v1alpha1.KnowledgeConditionReady)
+	knAfterReady := meta.IsStatusConditionTrue(knAfter.Status.Conditions, v1alpha1.KnowledgeConditionReady)
+	if knBeforeReady == knAfterReady {
 		return
 	}
 	// Handle the change.

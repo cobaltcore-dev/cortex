@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -85,17 +84,14 @@ func BoxFeatureList[T any](features []T) (runtime.RawExtension, error) {
 }
 
 const (
-	// Something went wrong during the extraction of the knowledge.
-	KnowledgeConditionError = "Error"
+	// The knowledge is ready to be used.
+	KnowledgeConditionReady = "Ready"
 )
 
 type KnowledgeStatus struct {
 	// When the knowledge was last successfully extracted.
 	// +kubebuilder:validation:Optional
 	LastExtracted metav1.Time `json:"lastExtracted"`
-	// The time it took to perform the last extraction.
-	// +kubebuilder:validation:Optional
-	Took metav1.Duration `json:"took"`
 
 	// The raw data behind the extracted knowledge, e.g. a list of features.
 	// +kubebuilder:validation:Optional
@@ -109,23 +105,15 @@ type KnowledgeStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
-// Helper function to check if the knowledge is ready.
-func (s *KnowledgeStatus) IsReady() bool {
-	if meta.IsStatusConditionTrue(s.Conditions, KnowledgeConditionError) {
-		return false
-	}
-	return s.RawLength > 0
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Extracted",type="date",JSONPath=".status.lastExtracted"
-// +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Recency",type="string",JSONPath=".spec.recency"
 // +kubebuilder:printcolumn:name="Features",type="integer",JSONPath=".status.rawLength"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // Knowledge is the Schema for the knowledges API
 type Knowledge struct {

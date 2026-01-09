@@ -33,6 +33,9 @@ spec:
     - jsonPath: .status.dependenciesReadyFrac
       name: Dependencies
       type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -243,9 +246,6 @@ spec:
                   "ReadyDependencies / TotalDependencies ready" as a human-readable string
                   or "ready" if there are no dependencies configured.
                 type: string
-              ready:
-                description: If the kpi is ready to be executed.
-                type: boolean
               readyDependencies:
                 description: How many dependencies have been reconciled.
                 type: integer
@@ -253,7 +253,6 @@ spec:
                 description: Total number of dependencies configured.
                 type: integer
             required:
-            - ready
             - readyDependencies
             - totalDependencies
             type: object

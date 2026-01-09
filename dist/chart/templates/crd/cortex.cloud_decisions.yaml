@@ -45,6 +45,9 @@ spec:
     - jsonPath: .status.result.targetHost
       name: TargetHost
       type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -398,9 +401,6 @@ spec:
                       the target host.
                     type: string
                 type: object
-              took:
-                description: The time it took to schedule.
-                type: string
             type: object
         required:
         - spec

@@ -187,7 +187,6 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 		initPipelineError bool
 		expectReady       bool
 		expectInMap       bool
-		expectCondition   string
 	}{
 		{
 			name: "pipeline with all steps ready",
@@ -253,7 +252,6 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			schedulingDomain: v1alpha1.SchedulingDomainNova,
 			expectReady:      false,
 			expectInMap:      false,
-			expectCondition:  v1alpha1.PipelineConditionError,
 		},
 		{
 			name: "pipeline with optional step not ready",
@@ -298,7 +296,6 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			initPipelineError: true,
 			expectReady:       false,
 			expectInMap:       false,
-			expectCondition:   v1alpha1.PipelineConditionError,
 		},
 		{
 			name: "pipeline with different scheduling domain",
@@ -351,8 +348,8 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 						RawLength: 10,
 						Conditions: []metav1.Condition{
 							{
-								Type:   v1alpha1.KnowledgeConditionError,
-								Status: metav1.ConditionTrue,
+								Type:   v1alpha1.KnowledgeConditionReady,
+								Status: metav1.ConditionFalse,
 							},
 						},
 					},
@@ -361,7 +358,6 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			schedulingDomain: v1alpha1.SchedulingDomainNova,
 			expectReady:      false,
 			expectInMap:      false,
-			expectCondition:  v1alpha1.PipelineConditionError,
 		},
 	}
 
@@ -412,16 +408,9 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			}
 
 			// Check ready status
-			if updatedPipeline.Status.Ready != tt.expectReady {
-				t.Errorf("Expected ready status: %v, got: %v", tt.expectReady, updatedPipeline.Status.Ready)
-			}
-
-			// Check condition if specified
-			if tt.expectCondition != "" {
-				hasCondition := meta.IsStatusConditionTrue(updatedPipeline.Status.Conditions, tt.expectCondition)
-				if !hasCondition {
-					t.Errorf("Expected condition %s to be true", tt.expectCondition)
-				}
+			ready := meta.IsStatusConditionTrue(updatedPipeline.Status.Conditions, v1alpha1.PipelineConditionReady)
+			if ready != tt.expectReady {
+				t.Errorf("Expected ready status: %v, got: %v", tt.expectReady, ready)
 			}
 		})
 	}
@@ -620,8 +609,8 @@ func TestBasePipelineController_checkStepReady(t *testing.T) {
 					Status: v1alpha1.KnowledgeStatus{
 						Conditions: []metav1.Condition{
 							{
-								Type:   v1alpha1.KnowledgeConditionError,
-								Status: metav1.ConditionTrue,
+								Type:   v1alpha1.KnowledgeConditionReady,
+								Status: metav1.ConditionFalse,
 							},
 						},
 					},
@@ -987,8 +976,8 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 				Status: v1alpha1.KnowledgeStatus{
 					Conditions: []metav1.Condition{
 						{
-							Type:   v1alpha1.KnowledgeConditionError,
-							Status: metav1.ConditionTrue,
+							Type:   v1alpha1.KnowledgeConditionReady,
+							Status: metav1.ConditionFalse,
 						},
 					},
 				},

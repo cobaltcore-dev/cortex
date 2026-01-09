@@ -38,7 +38,6 @@ type KnowledgeReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	startedAt := time.Now() // So we can measure sync duration.
 	log := logf.FromContext(ctx)
 	knowledge := &v1alpha1.Knowledge{}
 	if err := r.Get(ctx, req.NamespacedName, knowledge); err != nil {
@@ -58,8 +57,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Info("skipping knowledge extraction, unsupported extractor", "name", knowledge.Spec.Extractor.Name)
 		old := knowledge.DeepCopy()
 		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KnowledgeConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.KnowledgeConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "UnsupportedExtractor",
 			Message: "unsupported extractor name: " + knowledge.Spec.Extractor.Name,
 		})
@@ -82,8 +81,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			log.Error(err, "failed to get datasource", "name", dsRef.Name)
 			old := knowledge.DeepCopy()
 			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.KnowledgeConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.KnowledgeConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "DatasourceFetchFailed",
 				Message: "failed to get datasource: " + err.Error(),
 			})
@@ -101,8 +100,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			log.Error(nil, "datasources have differing database secret refs")
 			old := knowledge.DeepCopy()
 			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.KnowledgeConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.KnowledgeConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "InconsistentDatabaseSecretRefs",
 				Message: "datasources have differing database secret refs",
 			})
@@ -124,8 +123,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			log.Error(err, "failed to authenticate with database", "secretRef", *databaseSecretRef)
 			old := knowledge.DeepCopy()
 			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.KnowledgeConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.KnowledgeConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "DatabaseAuthenticationFailed",
 				Message: "failed to authenticate with database: " + err.Error(),
 			})
@@ -144,8 +143,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Error(err, "failed to initialize feature extractor", "name", knowledge.Spec)
 		old := knowledge.DeepCopy()
 		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KnowledgeConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.KnowledgeConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "FeatureExtractorInitializationFailed",
 			Message: "failed to initialize feature extractor: " + err.Error(),
 		})
@@ -162,8 +161,8 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Error(err, "failed to extract features", "name", knowledge.Spec.Extractor.Name)
 		old := knowledge.DeepCopy()
 		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KnowledgeConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.KnowledgeConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "FeatureExtractionFailed",
 			Message: "failed to extract features: " + err.Error(),
 		})
@@ -177,13 +176,12 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Update the knowledge status.
 	old := knowledge.DeepCopy()
-	meta.RemoveStatusCondition(&knowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
 	raw, err := v1alpha1.BoxFeatureList(features)
 	if err != nil {
 		log.Error(err, "failed to marshal extracted features", "name", knowledge.Spec.Extractor.Name)
 		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KnowledgeConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.KnowledgeConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "FeatureMarshalingFailed",
 			Message: "failed to marshal extracted features: " + err.Error(),
 		})
@@ -194,16 +192,21 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		return ctrl.Result{}, err
 	}
+	meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.KnowledgeConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "KnowledgeExtracted",
+		Message: "knowledge extracted successfully",
+	})
 	knowledge.Status.Raw = raw
 	knowledge.Status.LastExtracted = metav1.NewTime(time.Now())
 	knowledge.Status.RawLength = len(features)
-	knowledge.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
 		log.Error(err, "failed to patch knowledge status")
 		return ctrl.Result{}, err
 	}
-	log.Info("successfully extracted knowledge", "name", knowledge.Name, "took", knowledge.Status.Took.Duration)
+	log.Info("successfully extracted knowledge", "name", knowledge.Name)
 	return ctrl.Result{}, nil
 }
 

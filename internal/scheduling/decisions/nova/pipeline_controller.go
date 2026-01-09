@@ -13,12 +13,13 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -86,8 +87,21 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 		}
 	}
 	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
-		return err
+	err := c.process(ctx, decision)
+	if err != nil {
+		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DecisionConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "PipelineRunFailed",
+			Message: "pipeline run failed: " + err.Error(),
+		})
+	} else {
+		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DecisionConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "PipelineRunSucceeded",
+			Message: "pipeline run succeeded",
+		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
 		patch := client.MergeFrom(old)
@@ -95,7 +109,7 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 			return err
 		}
 	}
-	return nil
+	return err
 }
 
 func (c *DecisionPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
@@ -123,7 +137,12 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		return err
 	}
 	decision.Status.Result = &result
-	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
+	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.DecisionConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "PipelineRunSucceeded",
+		Message: "pipeline run succeeded",
+	})
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 	return nil
 }

@@ -54,12 +54,11 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		decision       *v1alpha1.Decision
-		pipeline       *v1alpha1.Pipeline
-		expectError    bool
-		expectResult   bool
-		expectDuration bool
+		name         string
+		decision     *v1alpha1.Decision
+		pipeline     *v1alpha1.Pipeline
+		expectError  bool
+		expectResult bool
 	}{
 		{
 			name: "successful manila decision processing",
@@ -88,9 +87,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
-			expectError:    false,
-			expectResult:   true,
-			expectDuration: true,
+			expectError:  false,
+			expectResult: true,
 		},
 		{
 			name: "decision without manilaRaw spec",
@@ -117,9 +115,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
-			expectError:    true,
-			expectResult:   false,
-			expectDuration: false,
+			expectError:  true,
+			expectResult: false,
 		},
 		{
 			name: "pipeline not found",
@@ -138,10 +135,9 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			pipeline:       nil,
-			expectError:    true,
-			expectResult:   false,
-			expectDuration: false,
+			pipeline:     nil,
+			expectError:  true,
+			expectResult: false,
 		},
 	}
 
@@ -213,13 +209,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 			if !tt.expectResult && updatedDecision.Status.Result != nil {
 				t.Error("Expected result to be nil but was set")
 			}
-
-			if tt.expectDuration && updatedDecision.Status.Took.Duration == 0 {
-				t.Error("Expected duration to be set but was zero")
-			}
-			if !tt.expectDuration && updatedDecision.Status.Took.Duration != 0 {
-				t.Error("Expected duration to be zero but was set")
-			}
 		})
 	}
 }
@@ -262,7 +251,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 		expectError           bool
 		expectDecisionCreated bool
 		expectResult          bool
-		expectDuration        bool
 	}{
 		{
 			name: "successful decision processing with creation",
@@ -296,7 +284,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			expectError:           false,
 			expectDecisionCreated: true,
 			expectResult:          true,
-			expectDuration:        true,
 		},
 		{
 			name: "successful decision processing without creation",
@@ -330,7 +317,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			expectError:           false,
 			expectDecisionCreated: false,
 			expectResult:          true,
-			expectDuration:        true,
 		},
 		{
 			name: "pipeline not configured",
@@ -353,7 +339,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			expectError:           true,
 			expectDecisionCreated: false,
 			expectResult:          false,
-			expectDuration:        false,
 		},
 		{
 			name: "decision without manilaRaw spec",
@@ -385,7 +370,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			expectError:           true,
 			expectDecisionCreated: false,
 			expectResult:          false,
-			expectDuration:        false,
 		},
 	}
 
@@ -456,9 +440,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 							if decision.Status.Result == nil {
 								t.Error("expected decision result to be set")
 								return
-							}
-							if tt.expectDuration && decision.Status.Took.Duration <= 0 {
-								t.Error("expected duration to be positive")
 							}
 						}
 						break
