@@ -3,7 +3,7 @@ module github.com/cobaltcore-dev/cortex
 go 1.25.0
 
 require (
-	github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260106084856-c363806903b4
+	github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260108131529-dc9b6de20f03
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/ironcore-dev/ironcore v0.2.4
