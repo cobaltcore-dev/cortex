@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,43 +33,34 @@ type mockControllerStep struct{}
 func (m *mockControllerStep) Run() ([]plugins.Decision, error) {
 	return nil, nil
 }
-func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return nil
 }
 
 func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	tests := []struct {
 		name          string
-		steps         []v1alpha1.Step
+		steps         []v1alpha1.StepSpec
 		expectError   bool
 		expectedError string
 	}{
 		{
 			name: "successful pipeline initialization",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-step",
-					},
-					Spec: v1alpha1.StepSpec{
-						Type: v1alpha1.StepTypeDescheduler,
-						Impl: "mock-step",
-					},
+					Type: v1alpha1.StepTypeDescheduler,
+					Impl: "mock-step",
 				},
 			},
 			expectError: false,
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "unsupported-step",
-					},
-					Spec: v1alpha1.StepSpec{
-						Type: v1alpha1.StepTypeDescheduler,
-						Impl: "unsupported",
-					},
+
+					Type: v1alpha1.StepTypeDescheduler,
+					Impl: "unsupported",
 				},
 			},
 			expectError:   true,
@@ -78,7 +68,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name:        "empty steps",
-			steps:       []v1alpha1.Step{},
+			steps:       []v1alpha1.StepSpec{},
 			expectError: false,
 		},
 	}

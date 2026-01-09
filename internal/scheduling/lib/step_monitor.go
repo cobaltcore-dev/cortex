@@ -44,7 +44,7 @@ type StepMonitor[RequestType PipelineRequest] struct {
 }
 
 // Initialize the wrapped step with the database and options.
-func (s *StepMonitor[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+func (s *StepMonitor[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return s.Step.Init(ctx, client, step)
 }
 
@@ -52,12 +52,12 @@ func (s *StepMonitor[RequestType]) Init(ctx context.Context, client client.Clien
 func monitorStep[RequestType PipelineRequest](
 	_ context.Context,
 	_ client.Client,
-	step v1alpha1.Step,
+	step v1alpha1.StepSpec,
 	impl Step[RequestType],
 	m PipelineMonitor,
 ) *StepMonitor[RequestType] {
 
-	stepName := step.Namespace + "/" + step.Name
+	stepName := step.Impl
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
 		runTimer = m.stepRunTimer.

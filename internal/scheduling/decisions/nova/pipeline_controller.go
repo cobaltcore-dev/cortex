@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -132,11 +131,10 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 // The base controller will delegate the pipeline creation down to this method.
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
-	name string,
-	steps []v1alpha1.Step,
+	p v1alpha1.Pipeline,
 ) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
-	return lib.NewPipeline(ctx, c.Client, name, supportedSteps, steps, c.Monitor)
+	return lib.NewPipeline(ctx, c.Client, p.Name, supportedSteps, p.Spec.Steps, c.Monitor)
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
@@ -161,29 +159,6 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 					return false
 				}
 				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		// Watch step changes so that we can turn on/off pipelines depending on
-		// unready steps.
-		WatchesMulticluster(
-			&v1alpha1.Step{},
-			handler.Funcs{
-				CreateFunc: c.HandleStepCreated,
-				UpdateFunc: c.HandleStepUpdated,
-				DeleteFunc: c.HandleStepDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				step := obj.(*v1alpha1.Step)
-				// Only react to steps matching the scheduling domain.
-				if step.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-					return false
-				}
-				// Only react to filter and weigher steps.
-				supportedTypes := []v1alpha1.StepType{
-					v1alpha1.StepTypeFilter,
-					v1alpha1.StepTypeWeigher,
-				}
-				return slices.Contains(supportedTypes, step.Spec.Type)
 			}),
 		).
 		// Watch knowledge changes so that we can reconfigure pipelines as needed.

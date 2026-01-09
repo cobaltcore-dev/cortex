@@ -11,7 +11,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -31,7 +30,7 @@ func (m *mockPipelineStep) Run() ([]plugins.Decision, error) {
 	return m.decisions, nil
 }
 
-func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	if m.initError != nil {
 		return m.initError
 	}
@@ -43,7 +42,7 @@ func TestPipeline_Init(t *testing.T) {
 	tests := []struct {
 		name           string
 		supportedSteps map[string]Step
-		confedSteps    []v1alpha1.Step
+		confedSteps    []v1alpha1.StepSpec
 		expectedSteps  int
 		expectedError  bool
 	}{
@@ -52,12 +51,10 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Step{
 				"test-step": &mockPipelineStep{},
 			},
-			confedSteps: []v1alpha1.Step{
-				{ObjectMeta: v1.ObjectMeta{Name: "step1"}, Spec: v1alpha1.StepSpec{
-					Impl: "test-step",
-					Type: v1alpha1.StepTypeDescheduler,
-				}},
-			},
+			confedSteps: []v1alpha1.StepSpec{{
+				Impl: "test-step",
+				Type: v1alpha1.StepTypeDescheduler,
+			}},
 			expectedSteps: 1,
 		},
 		{
@@ -65,12 +62,10 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Step{
 				"test-step": &mockPipelineStep{},
 			},
-			confedSteps: []v1alpha1.Step{
-				{ObjectMeta: v1.ObjectMeta{Name: "step2"}, Spec: v1alpha1.StepSpec{
-					Impl: "unsupported-step",
-					Type: v1alpha1.StepTypeDescheduler,
-				}},
-			},
+			confedSteps: []v1alpha1.StepSpec{{
+				Impl: "unsupported-step",
+				Type: v1alpha1.StepTypeDescheduler,
+			}},
 			expectedError: true,
 		},
 		{
@@ -78,12 +73,10 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Step{
 				"failing-step": &mockPipelineStep{initError: errors.New("init failed")},
 			},
-			confedSteps: []v1alpha1.Step{
-				{ObjectMeta: v1.ObjectMeta{Name: "step3"}, Spec: v1alpha1.StepSpec{
-					Impl: "failing-step",
-					Type: v1alpha1.StepTypeDescheduler,
-				}},
-			},
+			confedSteps: []v1alpha1.StepSpec{{
+				Impl: "failing-step",
+				Type: v1alpha1.StepTypeDescheduler,
+			}},
 			expectedError: true,
 		},
 		{
@@ -92,15 +85,15 @@ func TestPipeline_Init(t *testing.T) {
 				"step1": &mockPipelineStep{},
 				"step2": &mockPipelineStep{},
 			},
-			confedSteps: []v1alpha1.Step{
-				{ObjectMeta: v1.ObjectMeta{Name: "step1"}, Spec: v1alpha1.StepSpec{
+			confedSteps: []v1alpha1.StepSpec{
+				{
 					Impl: "step1",
 					Type: v1alpha1.StepTypeDescheduler,
-				}},
-				{ObjectMeta: v1.ObjectMeta{Name: "step2"}, Spec: v1alpha1.StepSpec{
+				},
+				{
 					Impl: "step2",
 					Type: v1alpha1.StepTypeDescheduler,
-				}},
+				},
 			},
 			expectedSteps: 2,
 		},

@@ -278,7 +278,7 @@ func WithHistoryRef(decision, historyDecision *v1alpha1.Decision) *v1alpha1.Deci
 // Generic step creator
 func Step(name string, activations map[string]float64) v1alpha1.StepResult {
 	return v1alpha1.StepResult{
-		StepRef:     corev1.ObjectReference{Name: name},
+		StepName:    name,
 		Activations: activations,
 	}
 }
@@ -446,28 +446,28 @@ func DecisionWithHistory(name, winner string) *DecisionBuilder {
 // Step result builders for common pipeline steps
 func ResourceWeigherStep(activations map[string]float64) v1alpha1.StepResult {
 	return v1alpha1.StepResult{
-		StepRef:     corev1.ObjectReference{Name: "resource-weigher"},
+		StepName:    "resource-weigher",
 		Activations: activations,
 	}
 }
 
 func AvailabilityFilterStep(activations map[string]float64) v1alpha1.StepResult {
 	return v1alpha1.StepResult{
-		StepRef:     corev1.ObjectReference{Name: "availability-filter"},
+		StepName:    "availability-filter",
 		Activations: activations,
 	}
 }
 
 func PlacementPolicyStep(activations map[string]float64) v1alpha1.StepResult {
 	return v1alpha1.StepResult{
-		StepRef:     corev1.ObjectReference{Name: "placement-policy"},
+		StepName:    "placement-policy",
 		Activations: activations,
 	}
 }
 
 func WeigherStep(name string, activations map[string]float64) v1alpha1.StepResult {
 	return v1alpha1.StepResult{
-		StepRef:     corev1.ObjectReference{Name: name},
+		StepName:    name,
 		Activations: activations,
 	}
 }
