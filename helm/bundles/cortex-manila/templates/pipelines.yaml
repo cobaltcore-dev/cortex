@@ -12,5 +12,21 @@ spec:
     Cortex returns a ranked list of hosts back to manila for final selection.
   type: filter-weigher
   steps:
-    - ref: {name: netapp-cpu-usage-balancing-manila}
+    - type: weigher
+      impl: netapp_cpu_usage_balancing
+      description: |
+        This step uses netapp storage pool cpu metrics condensed into a feature
+        to balance manila share placements across available storage pools.
+        Its main purpose is to avoid cpu overutilization on a storage pool which
+        may lead to performance degradation for shares placed on that pool.
+      opts:
+        # Min-max scaling for gap-fitting based on CPU usage (pct)
+        avgCPUUsageLowerBound: 0 # pct
+        avgCPUUsageUpperBound: 10 # pct
+        avgCPUUsageActivationLowerBound: 0.0
+        avgCPUUsageActivationUpperBound: -0.75
+        maxCPUUsageLowerBound: 0 # pct
+        maxCPUUsageUpperBound: 10 # pct
+        maxCPUUsageActivationLowerBound: 0.0
+        maxCPUUsageActivationUpperBound: -0.25
       mandatory: false

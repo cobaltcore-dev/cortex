@@ -85,7 +85,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Steps:            []v1alpha1.StepInPipeline{},
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			expectError:    false,
@@ -114,7 +114,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Steps:            []v1alpha1.StepInPipeline{},
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			expectError:    true,
@@ -170,7 +170,16 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 			}
 
 			if tt.pipeline != nil {
-				pipeline, err := controller.InitPipeline(t.Context(), tt.pipeline.Name, []v1alpha1.Step{})
+				pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-pipeline",
+					},
+					Spec: v1alpha1.PipelineSpec{
+						Type:             v1alpha1.PipelineTypeFilterWeigher,
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						Steps:            []v1alpha1.StepSpec{},
+					},
+				})
 				if err != nil {
 					t.Fatalf("Failed to init pipeline: %v", err)
 				}
@@ -284,7 +293,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 					CreateDecisions:  true,
-					Steps:            []v1alpha1.StepInPipeline{},
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       true,
@@ -318,7 +327,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 					CreateDecisions:  false,
-					Steps:            []v1alpha1.StepInPipeline{},
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       false,
@@ -373,7 +382,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 					CreateDecisions:  true,
-					Steps:            []v1alpha1.StepInPipeline{},
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       true,
@@ -411,7 +420,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 
 			if tt.pipelineConfig != nil {
 				controller.PipelineConfigs[tt.pipelineConfig.Name] = *tt.pipelineConfig
-				pipeline, err := controller.InitPipeline(t.Context(), tt.pipelineConfig.Name, []v1alpha1.Step{})
+				pipeline, err := controller.InitPipeline(t.Context(), *tt.pipelineConfig)
 				if err != nil {
 					t.Fatalf("Failed to init pipeline: %v", err)
 				}
@@ -480,25 +489,20 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		steps       []v1alpha1.Step
+		steps       []v1alpha1.StepSpec
 		expectError bool
 	}{
 		{
 			name:        "empty steps",
-			steps:       []v1alpha1.Step{},
+			steps:       []v1alpha1.StepSpec{},
 			expectError: false,
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-step",
-					},
-					Spec: v1alpha1.StepSpec{
-						Type: v1alpha1.StepTypeFilter,
-						Impl: "test-plugin",
-					},
+					Type: v1alpha1.StepTypeFilter,
+					Impl: "test-plugin",
 				},
 			},
 			expectError: true, // Expected because test-plugin is not in supportedSteps
@@ -507,7 +511,16 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(t.Context(), "test", tt.steps)
+			pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+					Steps:            tt.steps,
+				},
+			})
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")

@@ -231,7 +231,7 @@ func (e *Explainer) calculateScoresFromSteps(inputWeights map[string]float64, st
 		for hostName := range currentScores {
 			if _, exists := stepResult.Activations[hostName]; !exists {
 				// Host not in this step's activations - will be deleted
-				deletedHosts[hostName] = append(deletedHosts[hostName], stepResult.StepRef.Name)
+				deletedHosts[hostName] = append(deletedHosts[hostName], stepResult.StepName)
 			}
 		}
 
@@ -305,7 +305,7 @@ func (e *Explainer) findCriticalSteps(decision *v1alpha1.Decision) []string {
 
 		// If removing this step changes the winner, it's critical
 		if reducedWinner != baselineWinner {
-			criticalSteps = append(criticalSteps, stepResult.StepRef.Name)
+			criticalSteps = append(criticalSteps, stepResult.StepName)
 		}
 	}
 
@@ -374,7 +374,7 @@ func (e *Explainer) calculateStepImpacts(inputWeights map[string]float64, stepRe
 		promotedToFirst := !wasFirst && isFirstAfter
 
 		impacts = append(impacts, StepImpact{
-			Step:               stepResult.StepRef.Name,
+			Step:               stepResult.StepName,
 			ScoreBefore:        scoreBefore,
 			ScoreAfter:         scoreAfter,
 			ScoreDelta:         scoreAfter - scoreBefore,

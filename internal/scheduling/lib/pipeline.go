@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -39,7 +38,7 @@ type pipeline[RequestType PipelineRequest] struct {
 type StepWrapper[RequestType PipelineRequest] func(
 	ctx context.Context,
 	client client.Client,
-	step v1alpha1.Step,
+	step v1alpha1.StepSpec,
 	impl Step[RequestType],
 ) (Step[RequestType], error)
 
@@ -49,7 +48,7 @@ func NewPipeline[RequestType PipelineRequest](
 	client client.Client,
 	name string,
 	supportedSteps map[string]func() Step[RequestType],
-	confedSteps []v1alpha1.Step,
+	confedSteps []v1alpha1.StepSpec,
 	monitor PipelineMonitor,
 ) (Pipeline[RequestType], error) {
 
@@ -60,26 +59,25 @@ func NewPipeline[RequestType PipelineRequest](
 	pipelineMonitor := monitor.SubPipeline(name)
 
 	for _, stepConfig := range confedSteps {
-		slog.Info("scheduler: configuring step", "name", stepConfig.Name, "impl", stepConfig.Spec.Impl)
+		slog.Info("scheduler: configuring step", "name", stepConfig.Impl)
 		slog.Info("supported:", "steps", maps.Keys(supportedSteps))
-		makeStep, ok := supportedSteps[stepConfig.Spec.Impl]
+		makeStep, ok := supportedSteps[stepConfig.Impl]
 		if !ok {
-			return nil, errors.New("unsupported scheduler step impl: " + stepConfig.Spec.Impl)
+			return nil, errors.New("unsupported scheduler step impl: " + stepConfig.Impl)
 		}
 		step := makeStep()
-		if stepConfig.Spec.Type == v1alpha1.StepTypeWeigher && stepConfig.Spec.Weigher != nil {
-			step = validateStep(step, stepConfig.Spec.Weigher.DisabledValidations)
+		if stepConfig.Type == v1alpha1.StepTypeWeigher && stepConfig.Weigher != nil {
+			step = validateStep(step, stepConfig.Weigher.DisabledValidations)
 		}
 		step = monitorStep(ctx, client, stepConfig, step, pipelineMonitor)
 		if err := step.Init(ctx, client, stepConfig); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
-		stepsByName[stepConfig.Name] = step
-		order = append(order, stepConfig.Name)
+		stepsByName[stepConfig.Impl] = step
+		order = append(order, stepConfig.Impl)
 		slog.Info(
 			"scheduler: added step",
-			"name", stepConfig.Name,
-			"impl", stepConfig.Spec.Impl,
+			"name", stepConfig.Impl,
 		)
 	}
 	return &pipeline[RequestType]{
@@ -205,7 +203,7 @@ func (p *pipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResul
 	for _, stepName := range p.order {
 		if activations, ok := stepWeights[stepName]; ok {
 			result.StepResults = append(result.StepResults, v1alpha1.StepResult{
-				StepRef:     corev1.ObjectReference{Name: stepName},
+				StepName:    stepName,
 				Activations: activations,
 			})
 		}

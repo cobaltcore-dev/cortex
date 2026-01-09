@@ -83,8 +83,8 @@ type StepMonitor struct {
 }
 
 // Monitor a step by wrapping it with a StepMonitor.
-func monitorStep(step Step, conf v1alpha1.Step, monitor Monitor) StepMonitor {
-	name := conf.Namespace + "/" + conf.Name
+func monitorStep(step Step, conf v1alpha1.StepSpec, monitor Monitor) StepMonitor {
+	name := conf.Impl
 	var runTimer prometheus.Observer
 	if monitor.stepRunTimer != nil {
 		runTimer = monitor.stepRunTimer.WithLabelValues(name)
@@ -102,7 +102,7 @@ func monitorStep(step Step, conf v1alpha1.Step, monitor Monitor) StepMonitor {
 }
 
 // Initialize the step with the database and options.
-func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return m.step.Init(ctx, client, step)
 }
 

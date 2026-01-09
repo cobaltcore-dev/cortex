@@ -43,7 +43,7 @@ type DecisionSpec struct {
 
 type StepResult struct {
 	// object reference to the scheduler step.
-	StepRef corev1.ObjectReference `json:"stepRef"`
+	StepName string `json:"stepName"`
 	// Activations of the step for each host.
 	Activations map[string]float64 `json:"activations"`
 }
