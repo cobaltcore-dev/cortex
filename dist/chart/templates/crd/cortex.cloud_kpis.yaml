@@ -24,8 +24,8 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
-    - jsonPath: .spec.operator
-      name: Operator
+    - jsonPath: .spec.schedulingDomain
+      name: Domain
       type: string
     - jsonPath: .status.ready
       name: Ready

@@ -21,8 +21,8 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.operator
-      name: Operator
+    - jsonPath: .spec.schedulingDomain
+      name: Domain
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
