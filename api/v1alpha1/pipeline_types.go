@@ -72,6 +72,8 @@ const (
 	// Pipeline containing descheduler steps for generating descheduling
 	// recommendations.
 	PipelineTypeDescheduler PipelineType = "descheduler"
+	// Pipeline containing gang scheduling logic.
+	PipelineTypeGang PipelineType = "gang"
 )
 
 type PipelineSpec struct {

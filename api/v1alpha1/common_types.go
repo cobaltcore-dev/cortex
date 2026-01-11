@@ -25,4 +25,7 @@ const (
 	// SchedulingDomainPods indicates scheduling related to Kubernetes pods,
 	// which are the smallest deployable units in a Kubernetes cluster.
 	SchedulingDomainPods SchedulingDomain = "pods"
+	// SchedulingDomainPodGroupSets indicates scheduling related to PodGroupSets,
+	// which allows for gang scheduling of multiple pods.
+	SchedulingDomainPodGroupSets SchedulingDomain = "podgroupsets"
 )
