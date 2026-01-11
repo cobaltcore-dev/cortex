@@ -7,7 +7,7 @@
 analytics_settings(False)
 
 # Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
-ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore,pods, podgroupsets')
+ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore,pods,podgroupsets')
 if ACTIVE_DEPLOYMENTS_ENV == "":
     ACTIVE_DEPLOYMENTS = [] # Catch "".split(",") = [""]
 else:
