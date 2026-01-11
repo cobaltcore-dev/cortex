@@ -212,7 +212,7 @@ if 'podgroupsets' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-podgroupsets', name='cortex-podgroupsets', values=tilt_values),)
     k8s_resource('cortex-podgroupsets-controller-manager', labels=['Cortex-PodGroupSets'])
     # Deploy example resources
-    k8s_yaml('samples/podgroupsets/example.yaml')
+    k8s_yaml('samples/podgroupsets/podgroupset.yaml')
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
