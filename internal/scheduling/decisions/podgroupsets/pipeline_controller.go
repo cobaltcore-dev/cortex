@@ -171,7 +171,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 	// Spawn Pods
 	if decision.Status.Result != nil && decision.Status.Result.TargetPlacements != nil {
 		for _, group := range podGroupSet.Spec.PodGroups {
-			for i := 0; i < int(group.Spec.Replicas); i++ {
+			for i := range int(group.Spec.Replicas) {
 				podKey := fmt.Sprintf("%s-%d", group.Name, i)
 				nodeName, ok := decision.Status.Result.TargetPlacements[podKey]
 				if !ok {
@@ -220,6 +220,7 @@ func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
 ) (lib.Pipeline[podgroupsets.PodGroupSetPipelineRequest], error) {
+
 	return lib.NewPipeline(ctx, c.Client, p.Name, supportedSteps, p.Spec.Steps, c.Monitor)
 }
 
@@ -252,7 +253,7 @@ func (c *DecisionPipelineController) handlePodGroupSet() handler.EventHandler {
 					decision.Spec.PodGroupSetRef.Name == podgroupset.Name &&
 					decision.Spec.PodGroupSetRef.Namespace == podgroupset.Namespace {
 					if err := c.Delete(ctx, &decision); err != nil {
-						// log error
+						log.Error(err, "failed to delete decision for deleted podgroupset", "decision", decision.Name)
 					}
 				}
 			}

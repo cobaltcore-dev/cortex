@@ -25,7 +25,7 @@ func (p *PodGroupSetPipeline) Run(request podgroupsets.PodGroupSetPipelineReques
 
 	// Iterate over all pod groups
 	for _, group := range request.PodGroupSet.Spec.PodGroups {
-		for i := 0; i < int(group.Spec.Replicas); i++ {
+		for i := range int(group.Spec.Replicas) {
 			// We construct a pod name to identify it in the placements.
 			// The actual pod creation will need to match this or we map by index/key.
 			// Using "GroupName-Index" as key relative to the set.

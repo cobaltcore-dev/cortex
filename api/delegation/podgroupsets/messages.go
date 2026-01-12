@@ -28,7 +28,7 @@ func (r PodGroupSetPipelineRequest) GetWeights() map[string]float64 {
 	for _, node := range r.Nodes {
 		weights[node.Name] = 0.0
 	}
-    return weights
+	return weights
 }
 
 func (r PodGroupSetPipelineRequest) GetTraceLogArgs() []slog.Attr {
