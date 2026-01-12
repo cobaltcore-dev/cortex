@@ -66,7 +66,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 			},
 			podGroupSet: &v1alpha1.PodGroupSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pgs",
+					Name:      "test-podGroupSet",
 					Namespace: "default",
 				},
 				Spec: v1alpha1.PodGroupSetSpec{
