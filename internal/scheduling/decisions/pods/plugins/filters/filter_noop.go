@@ -1,4 +1,4 @@
-package pods
+package filters
 
 import (
 	"context"
