@@ -41,7 +41,6 @@ type PrometheusDatasourceReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	startedAt := time.Now() // So we can measure sync duration.
 	log := logf.FromContext(ctx)
 	datasource := &v1alpha1.Datasource{}
 	if err := r.Get(ctx, req.NamespacedName, datasource); err != nil {
@@ -61,14 +60,16 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	newSyncerFunc, ok := supportedMetricSyncers[datasource.Spec.Prometheus.Type]
 	if !ok {
 		log.Info("skipping datasource, unsupported metric type", "metricType", datasource.Spec.Prometheus.Type)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "UnsupportedPrometheusMetricType",
 			Message: "unsupported metric type: " + datasource.Spec.Prometheus.Type,
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -79,14 +80,16 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		FromSecretRef(ctx, datasource.Spec.DatabaseSecretRef)
 	if err != nil {
 		log.Error(err, "failed to authenticate with database", "secretRef", datasource.Spec.DatabaseSecretRef)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "DatabaseAuthenticationFailed",
 			Message: "failed to authenticate with database: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -99,14 +102,16 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 			FromSecretRef(ctx, *datasource.Spec.SSOSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with SSO", "secretRef", datasource.Spec.SSOSecretRef)
+			old := datasource.DeepCopy()
 			meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.DatasourceConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.DatasourceConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "SSOAuthenticationFailed",
 				Message: "failed to authenticate with SSO: " + err.Error(),
 			})
-			if err := r.Status().Update(ctx, datasource); err != nil {
-				log.Error(err, "failed to update datasource status", "name", datasource.Name)
+			patch := client.MergeFrom(old)
+			if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+				log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, err
@@ -124,14 +129,16 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	prometheusURL, ok := secret.Data["url"]
 	if !ok {
 		log.Error(err, "missing 'url' in prometheus secret", "secretRef", datasource.Spec.Prometheus.SecretRef)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "MissingPrometheusURL",
 			Message: "missing 'url' in prometheus secret",
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -147,27 +154,35 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	nResults, nextSync, err := syncer.Sync(ctx)
 	if err != nil {
 		log.Error(err, "failed to sync prometheus datasource", "name", datasource.Name)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "PrometheusDatasourceSyncFailed",
 			Message: "failed to sync prometheus datasource: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
 	}
 
 	// Update the datasource status to reflect successful sync.
-	meta.RemoveStatusCondition(&datasource.Status.Conditions, v1alpha1.DatasourceConditionError)
+	old := datasource.DeepCopy()
+	meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.DatasourceConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "PrometheusDatasourceSynced",
+		Message: "prometheus datasource synced successfully",
+	})
 	datasource.Status.LastSynced = metav1.NewTime(time.Now())
 	datasource.Status.NextSyncTime = metav1.NewTime(nextSync)
 	datasource.Status.NumberOfObjects = nResults
-	datasource.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	if err := r.Status().Update(ctx, datasource); err != nil {
-		log.Error(err, "failed to update datasource status", "name", datasource.Name)
+	patch := client.MergeFrom(old)
+	if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+		log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 		return ctrl.Result{}, err
 	}
 

@@ -66,9 +66,7 @@ func (k *KPIStateKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, kpi := range kpis {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(kpi.Status.Conditions, v1alpha1.KPIConditionError):
-			state = "error"
-		case kpi.Status.Ready:
+		case meta.IsStatusConditionTrue(kpi.Status.Conditions, v1alpha1.KPIConditionReady):
 			state = "ready"
 		default:
 			state = "unknown"

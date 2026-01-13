@@ -32,7 +32,7 @@ func (EmptyStepOpts) Validate() error { return nil }
 // Interface for a scheduler step.
 type Step[RequestType PipelineRequest] interface {
 	// Configure the step and initialize things like a database connection.
-	Init(ctx context.Context, client client.Client, step v1alpha1.Step) error
+	Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error
 	// Run this step of the scheduling pipeline.
 	// Return a map of keys to activation values. Important: keys that are
 	// not in the map are considered as filtered out.
@@ -53,8 +53,8 @@ type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 }
 
 // Init the step with the database and options.
-func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
-	opts := conf.NewRawOptsBytes(step.Spec.Opts.Raw)
+func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+	opts := conf.NewRawOptsBytes(step.Opts.Raw)
 	if err := s.Load(opts); err != nil {
 		return err
 	}

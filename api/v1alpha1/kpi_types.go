@@ -43,14 +43,11 @@ type KPISpec struct {
 }
 
 const (
-	// Something went wrong during the kpi reconciliation.
-	KPIConditionError = "Error"
+	// If the kpi was successfully processed.
+	KPIConditionReady = "Ready"
 )
 
 type KPIStatus struct {
-	// If the kpi is ready to be executed.
-	Ready bool `json:"ready"`
-
 	// How many dependencies have been reconciled.
 	ReadyDependencies int `json:"readyDependencies"`
 	// Total number of dependencies configured.
@@ -68,9 +65,10 @@ type KPIStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
+// +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
 // +kubebuilder:printcolumn:name="Dependencies",type="string",JSONPath=".status.dependenciesReadyFrac"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // KPI is the Schema for the deschedulings API
 type KPI struct {

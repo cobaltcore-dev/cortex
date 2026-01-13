@@ -276,7 +276,56 @@
           },
           "unit": "none"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "rgb(71, 71, 71)",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "rgb(71, 71, 71)",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -284,12 +333,12 @@
         "x": 12,
         "y": 9
       },
-      "id": 53,
+      "id": 55,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -298,33 +347,42 @@
           "values": true
         },
         "text": {},
-        "textMode": "name"
+        "textMode": "value_and_name"
       },
       "pluginVersion": "7.5.37",
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by(step) (cortex_step_state{state!=\"ready\"}) * 0",
+          "expr": "cortex_decision_state{state=\"success\"}",
           "format": "time_series",
           "hide": false,
           "instant": true,
           "interval": "",
-          "legendFormat": "{{step}}",
+          "legendFormat": "{{state}}",
           "refId": "A"
         },
         {
           "exemplar": true,
-          "expr": "max by(step) (cortex_step_state{state=\"ready\"}) * 1",
+          "expr": "cortex_decision_state{state!=\"success\",state!=\"waiting\"}",
           "hide": false,
           "instant": true,
           "interval": "",
-          "legendFormat": "{{step}}",
+          "legendFormat": "{{state}}",
           "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "cortex_decision_state{state!=\"success\",state=\"waiting\"}",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{state}}",
+          "refId": "C"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Step status",
+      "title": "Decision status",
       "type": "stat"
     },
     {
@@ -399,138 +457,6 @@
       "timeFrom": null,
       "timeShift": null,
       "title": "KPI status",
-      "type": "stat"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "rgb(66, 66, 66)",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "rgb(71, 71, 71)",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 1
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
-            },
-            "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "rgb(71, 71, 71)",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 10
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 17
-      },
-      "id": 55,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": true
-        },
-        "text": {},
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "7.5.37",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "cortex_decision_state{state=\"success\"}",
-          "format": "time_series",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{state}}",
-          "refId": "A"
-        },
-        {
-          "exemplar": true,
-          "expr": "cortex_decision_state{state!=\"success\",state!=\"waiting\"}",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{state}}",
-          "refId": "B"
-        },
-        {
-          "exemplar": true,
-          "expr": "cortex_decision_state{state!=\"success\",state=\"waiting\"}",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{state}}",
-          "refId": "C"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Decision status",
       "type": "stat"
     },
     {

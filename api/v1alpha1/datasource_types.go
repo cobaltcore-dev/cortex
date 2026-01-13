@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -225,10 +224,8 @@ type DatasourceSpec struct {
 }
 
 const (
-	// Something went wrong during the syncing of the datasource.
-	DatasourceConditionError = "Error"
-	// The datasource is waiting for a dependency datasource to become available.
-	DatasourceConditionWaiting = "Waiting"
+	// The datasource is ready to be used.
+	DatasourceConditionReady = "Ready"
 )
 
 type DatasourceStatus struct {
@@ -236,8 +233,6 @@ type DatasourceStatus struct {
 	LastSynced metav1.Time `json:"lastSynced,omitempty"`
 	// The number of objects currently stored for this datasource.
 	NumberOfObjects int64 `json:"numberOfObjects,omitempty"`
-	// The time it took to perform the last sync.
-	Took metav1.Duration `json:"took"`
 	// Planned time for the next sync.
 	NextSyncTime metav1.Time `json:"nextSyncTime,omitempty"`
 
@@ -246,27 +241,16 @@ type DatasourceStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
-// Helper function to check if the datasource is ready.
-func (s *DatasourceStatus) IsReady() bool {
-	if meta.IsStatusConditionTrue(s.Conditions, DatasourceConditionError) {
-		return false
-	}
-	if meta.IsStatusConditionTrue(s.Conditions, DatasourceConditionWaiting) {
-		return false
-	}
-	return s.NumberOfObjects > 0
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
-// +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
+// +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Synced",type="date",JSONPath=".status.lastSynced"
-// +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Next",type="string",JSONPath=".status.nextSyncTime"
 // +kubebuilder:printcolumn:name="Objects",type="integer",JSONPath=".status.numberOfObjects"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // Datasource is the Schema for the datasources API
 type Datasource struct {

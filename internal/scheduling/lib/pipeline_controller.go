@@ -26,7 +26,7 @@ type PipelineInitializer[PipelineType any] interface {
 	// This method is delegated to the parent controller, when a pipeline needs
 	// to be newly initialized or re-initialized to update it in the pipeline
 	// map.
-	InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (PipelineType, error)
+	InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (PipelineType, error)
 	// Get the accepted pipeline type for this controller.
 	//
 	// This is used to filter pipelines when listing existing pipelines on
@@ -86,70 +86,64 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
-	// Get all configured steps for the pipeline.
-	var steps []v1alpha1.Step
-	obj.Status.TotalSteps, obj.Status.ReadySteps = len(obj.Spec.Steps), 0
-	var err error
+	old := obj.DeepCopy()
+
+	// Check if all steps are ready. If not, check if the step is mandatory.
+	obj.Status.TotalSteps = len(obj.Spec.Steps)
+	obj.Status.ReadySteps = 0
 	for _, step := range obj.Spec.Steps {
-		stepConf := &v1alpha1.Step{}
-		log.Info("checking step for pipeline", "pipelineName", obj.Name, "stepName", step.Ref.Name)
-		if err = c.Get(ctx, client.ObjectKey{
-			Name:      step.Ref.Name,
-			Namespace: step.Ref.Namespace,
-		}, stepConf); err != nil {
-			err = fmt.Errorf("failed to get step %s: %w", step.Ref.Name, err)
+		err := c.checkStepReady(ctx, &step)
+		if err == nil {
+			obj.Status.ReadySteps++
 			continue
 		}
-		if !stepConf.Status.Ready {
-			if step.Mandatory {
-				err = fmt.Errorf("mandatory step %s not ready", step.Ref.Name)
+		if step.Mandatory {
+			meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.PipelineConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "MandatoryStepNotReady",
+				Message: fmt.Sprintf("mandatory step %s not ready: %s", step.Impl, err.Error()),
+			})
+			patch := client.MergeFrom(old)
+			if err := c.Status().Patch(ctx, obj, patch); err != nil {
+				log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 			}
-			log.Info("step not ready", "pipelineName", obj.Name, "stepName", step.Ref.Name)
-			continue
+			delete(c.Pipelines, obj.Name)
+			delete(c.PipelineConfigs, obj.Name)
+			return
 		}
-		obj.Status.ReadySteps++
-		steps = append(steps, *stepConf)
 	}
 	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
-	if err != nil {
-		log.Error(err, "pipeline not ready due to step issues", "pipelineName", obj.Name)
-		obj.Status.Ready = false
-		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.StepConditionError,
-			Status:  metav1.ConditionTrue,
-			Reason:  "StepNotReady",
-			Message: err.Error(),
-		})
-		if err := c.Status().Update(ctx, obj); err != nil {
-			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
-		}
-		delete(c.Pipelines, obj.Name)
-		delete(c.PipelineConfigs, obj.Name)
-		return
-	}
-	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, obj.Name, steps)
+
+	var err error
+	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, *obj)
 	c.PipelineConfigs[obj.Name] = *obj
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
-		obj.Status.Ready = false
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.PipelineConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.PipelineConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "PipelineInitFailed",
 			Message: err.Error(),
 		})
-		if err := c.Status().Update(ctx, obj); err != nil {
-			log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
+		patch := client.MergeFrom(old)
+		if err := c.Status().Patch(ctx, obj, patch); err != nil {
+			log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		}
 		delete(c.Pipelines, obj.Name)
 		delete(c.PipelineConfigs, obj.Name)
 		return
 	}
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
-	obj.Status.Ready = true
-	meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.PipelineConditionError)
-	if err := c.Status().Update(ctx, obj); err != nil {
-		log.Error(err, "failed to update pipeline status", "pipelineName", obj.Name)
+	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.PipelineConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "PipelineReady",
+		Message: "pipeline is ready",
+	})
+	patch := client.MergeFrom(old)
+	if err := c.Status().Patch(ctx, obj, patch); err != nil {
+		log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		return
 	}
 }
@@ -196,21 +190,17 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	delete(c.PipelineConfigs, pipelineConf.Name)
 }
 
-// Handle a step creation or update event from watching step resources.
-func (c *BasePipelineController[PipelineType]) handleStepChange(
+// Check if a step is ready, and if not, return an error indicating why not.
+func (c *BasePipelineController[PipelineType]) checkStepReady(
 	ctx context.Context,
-	obj *v1alpha1.Step,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
+	obj *v1alpha1.StepSpec,
+) error {
 
-	if obj.Spec.SchedulingDomain != c.SchedulingDomain {
-		return
-	}
 	log := ctrl.LoggerFrom(ctx)
 	// Check the status of all knowledges depending on this step.
-	obj.Status.ReadyKnowledges = 0
-	obj.Status.TotalKnowledges = len(obj.Spec.Knowledges)
-	for _, knowledgeRef := range obj.Spec.Knowledges {
+	readyKnowledges := 0
+	totalKnowledges := len(obj.Knowledges)
+	for _, knowledgeRef := range obj.Knowledges {
 		knowledge := &v1alpha1.Knowledge{}
 		if err := c.Get(ctx, client.ObjectKey{
 			Name:      knowledgeRef.Name,
@@ -220,7 +210,7 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 			continue
 		}
 		// Check if the knowledge status conditions indicate an error.
-		if meta.IsStatusConditionTrue(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionError) {
+		if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
 			log.Info("knowledge not ready due to error condition", "knowledgeName", knowledgeRef.Name)
 			continue
 		}
@@ -228,107 +218,15 @@ func (c *BasePipelineController[PipelineType]) handleStepChange(
 			log.Info("knowledge not ready, no data available", "knowledgeName", knowledgeRef.Name)
 			continue
 		}
-		obj.Status.ReadyKnowledges++
+		readyKnowledges++
 	}
-	obj.Status.KnowledgesReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadyKnowledges, obj.Status.TotalKnowledges)
-	if obj.Status.ReadyKnowledges != obj.Status.TotalKnowledges {
-		obj.Status.Ready = false
-		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.StepConditionError,
-			Status:  metav1.ConditionTrue,
-			Reason:  "KnowledgesNotReady",
-			Message: "not all knowledges are ready",
-		})
-		log.Info("step not ready, not all knowledges are ready", "stepName", obj.Name)
-	} else {
-		obj.Status.Ready = true
-		meta.RemoveStatusCondition(&obj.Status.Conditions, v1alpha1.StepConditionError)
-		log.Info("step is ready", "stepName", obj.Name)
+	if readyKnowledges != totalKnowledges {
+		return fmt.Errorf(
+			"%d/%d knowledges ready",
+			readyKnowledges, totalKnowledges,
+		)
 	}
-	if err := c.Status().Update(ctx, obj); err != nil {
-		log.Error(err, "failed to update step status", "stepName", obj.Name)
-		return
-	}
-	// Find all pipelines depending on this step and re-evaluate them.
-	var pipelines v1alpha1.PipelineList
-	if err := c.List(ctx, &pipelines); err != nil {
-		log.Error(err, "failed to list pipelines for step", "stepName", obj.Name)
-		return
-	}
-	for _, pipeline := range pipelines.Items {
-		needsUpdate := false
-		for _, step := range pipeline.Spec.Steps {
-			if step.Ref.Name == obj.Name && step.Ref.Namespace == obj.Namespace {
-				needsUpdate = true
-				break
-			}
-		}
-		if needsUpdate {
-			c.handlePipelineChange(ctx, &pipeline, queue)
-		}
-	}
-}
-
-// Handler bound to a step watch to handle created steps.
-//
-// This handler will look at the underlying resources of the step and check
-// if they are ready. It will then re-evaluate all pipelines depending on the step.
-func (c *BasePipelineController[PipelineType]) HandleStepCreated(
-	ctx context.Context,
-	evt event.CreateEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	stepConf := evt.Object.(*v1alpha1.Step)
-	c.handleStepChange(ctx, stepConf, queue)
-}
-
-// Handler bound to a step watch to handle updated steps.
-//
-// This handler will look at the underlying resources of the step and check
-// if they are ready. It will then re-evaluate all pipelines depending on the step.
-func (c *BasePipelineController[PipelineType]) HandleStepUpdated(
-	ctx context.Context,
-	evt event.UpdateEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	stepConf := evt.ObjectNew.(*v1alpha1.Step)
-	c.handleStepChange(ctx, stepConf, queue)
-}
-
-// Handler bound to a step watch to handle deleted steps.
-//
-// This handler will re-evaluate all pipelines depending on the step.
-func (c *BasePipelineController[PipelineType]) HandleStepDeleted(
-	ctx context.Context,
-	evt event.DeleteEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	stepConf := evt.Object.(*v1alpha1.Step)
-	if stepConf.Spec.SchedulingDomain != c.SchedulingDomain {
-		return
-	}
-	// When a step is deleted, we need to re-evaluate all pipelines depending on it.
-	var pipelines v1alpha1.PipelineList
-	log := ctrl.LoggerFrom(ctx)
-	if err := c.List(ctx, &pipelines); err != nil {
-		log.Error(err, "failed to list pipelines for deleted step", "stepName", stepConf.Name)
-		return
-	}
-	for _, pipeline := range pipelines.Items {
-		needsUpdate := false
-		for _, step := range pipeline.Spec.Steps {
-			if step.Ref.Name == stepConf.Name && step.Ref.Namespace == stepConf.Namespace {
-				needsUpdate = true
-				break
-			}
-		}
-		if needsUpdate {
-			c.handlePipelineChange(ctx, &pipeline, queue)
-		}
-	}
+	return nil
 }
 
 // Handle a knowledge creation, update, or delete event from watching knowledge resources.
@@ -342,30 +240,33 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
-	log.Info("knowledge changed, re-evaluating dependent steps", "knowledgeName", obj.Name)
-	// Find all steps depending on this knowledge and re-evaluate them.
-	var steps v1alpha1.StepList
-	if err := c.List(ctx, &steps); err != nil {
-		log.Error(err, "failed to list steps for knowledge", "knowledgeName", obj.Name)
+	log.Info("knowledge changed, re-evaluating dependent pipelines", "knowledgeName", obj.Name)
+	// Find all pipelines depending on this knowledge and re-evaluate them.
+	var pipelines v1alpha1.PipelineList
+	if err := c.List(ctx, &pipelines); err != nil {
+		log.Error(err, "failed to list pipelines for knowledge", "knowledgeName", obj.Name)
 		return
 	}
-	for _, step := range steps.Items {
+	for _, pipeline := range pipelines.Items {
 		needsUpdate := false
-		for _, knowledgeRef := range step.Spec.Knowledges {
-			if knowledgeRef.Name == obj.Name && knowledgeRef.Namespace == obj.Namespace {
-				needsUpdate = true
-				break
+		for _, step := range pipeline.Spec.Steps {
+			for _, knowledgeRef := range step.Knowledges {
+				if knowledgeRef.Name == obj.Name && knowledgeRef.Namespace == obj.Namespace {
+					needsUpdate = true
+					break
+				}
 			}
 		}
 		if needsUpdate {
-			c.handleStepChange(ctx, &step, queue)
+			log.Info("re-evaluating pipeline due to knowledge change", "pipelineName", pipeline.Name)
+			c.handlePipelineChange(ctx, &pipeline, queue)
 		}
 	}
 }
 
 // Handler bound to a knowledge watch to handle created knowledges.
 //
-// This handler will re-evaluate all steps depending on the knowledge.
+// This handler will re-evaluate all pipelines depending on the knowledge.
 func (c *BasePipelineController[PipelineType]) HandleKnowledgeCreated(
 	ctx context.Context,
 	evt event.CreateEvent,
@@ -378,7 +279,7 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeCreated(
 
 // Handler bound to a knowledge watch to handle updated knowledges.
 //
-// This handler will re-evaluate all steps depending on the knowledge.
+// This handler will re-evaluate all pipelines depending on the knowledge.
 func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
 	ctx context.Context,
 	evt event.UpdateEvent,
@@ -387,8 +288,8 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
 
 	before := evt.ObjectOld.(*v1alpha1.Knowledge)
 	after := evt.ObjectNew.(*v1alpha1.Knowledge)
-	errorBefore := meta.IsStatusConditionTrue(before.Status.Conditions, v1alpha1.KnowledgeConditionError)
-	errorAfter := meta.IsStatusConditionTrue(after.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	errorBefore := meta.IsStatusConditionFalse(before.Status.Conditions, v1alpha1.KnowledgeConditionReady)
+	errorAfter := meta.IsStatusConditionFalse(after.Status.Conditions, v1alpha1.KnowledgeConditionReady)
 	errorChanged := errorBefore != errorAfter
 	dataBecameAvailable := before.Status.RawLength == 0 && after.Status.RawLength > 0
 	if !errorChanged && !dataBecameAvailable {
@@ -400,7 +301,7 @@ func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
 
 // Handler bound to a knowledge watch to handle deleted knowledges.
 //
-// This handler will re-evaluate all steps depending on the knowledge.
+// This handler will re-evaluate all pipelines depending on the knowledge.
 func (c *BasePipelineController[PipelineType]) HandleKnowledgeDeleted(
 	ctx context.Context,
 	evt event.DeleteEvent,

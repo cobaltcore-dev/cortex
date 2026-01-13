@@ -178,10 +178,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					t.Errorf("expected target host %q, got %q", tt.expectTargetHost, *updatedDecision.Status.Result.TargetHost)
 				}
 
-				if updatedDecision.Status.Took.Duration <= 0 {
-					t.Error("expected took duration to be positive")
-				}
-
 				// Verify machine was updated with machine pool ref
 				if tt.machine != nil {
 					var updatedMachine ironcorev1alpha1.Machine
@@ -215,34 +211,30 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		steps       []v1alpha1.Step
+		steps       []v1alpha1.StepSpec
 		expectError bool
 	}{
 		{
 			name:        "empty steps",
-			steps:       []v1alpha1.Step{},
+			steps:       []v1alpha1.StepSpec{},
 			expectError: false,
 		},
 		{
 			name: "noop step",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					Spec: v1alpha1.StepSpec{
-						Impl: "noop",
-						Type: v1alpha1.StepTypeFilter,
-					},
+					Impl: "noop",
+					Type: v1alpha1.StepTypeFilter,
 				},
 			},
 			expectError: false,
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					Spec: v1alpha1.StepSpec{
-						Impl: "unsupported",
-						Type: v1alpha1.StepTypeFilter,
-					},
+					Impl: "unsupported",
+					Type: v1alpha1.StepTypeFilter,
 				},
 			},
 			expectError: true,
@@ -251,7 +243,16 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(t.Context(), "test", tt.steps)
+			pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
+					Steps:            tt.steps,
+				},
+			})
 
 			if tt.expectError && err == nil {
 				t.Error("expected error but got none")
@@ -317,7 +318,7 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 					CreateDecisions:  true,
-					Steps:            []v1alpha1.StepInPipeline{},
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:           true,
@@ -350,7 +351,7 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 					CreateDecisions:  false,
-					Steps:            []v1alpha1.StepInPipeline{},
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:           false,
@@ -396,7 +397,7 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 					CreateDecisions:  true,
-					Steps:            []v1alpha1.StepInPipeline{},
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:           true,

@@ -31,6 +31,7 @@ helm_repo(
 )
 
 ########### Dependency CRDs
+# Make sure the local cluster is running if you are running into startup issues here.
 url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/hypervisor-crd.yaml'
 local('curl ' + url + ' | kubectl apply -f -')
 

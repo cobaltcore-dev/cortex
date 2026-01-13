@@ -47,8 +47,12 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "kn1"},
 					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.KPIConditionReady,
+								Status: v1.ConditionTrue,
+							},
+						},
 					},
 				},
 			},
@@ -65,8 +69,8 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.KPIStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.KPIConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.KPIConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -83,8 +87,12 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-ready"},
 					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.KPIConditionReady,
+								Status: v1.ConditionTrue,
+							},
+						},
 					},
 				},
 				{
@@ -93,8 +101,8 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 					Status: v1alpha1.KPIStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.KPIConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.KPIConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -111,16 +119,24 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-correct-operator"},
 					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.KPIConditionReady,
+								Status: v1.ConditionTrue,
+							},
+						},
 					},
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-wrong-operator"},
 					Spec:       v1alpha1.KPISpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.KPIStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.KPIConditionReady,
+								Status: v1.ConditionTrue,
+							},
+						},
 					},
 				},
 			},
@@ -135,8 +151,12 @@ func TestKPIStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "kpi-unknown"},
 					Spec:       v1alpha1.KPISpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.KPIStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.KPIConditionReady,
+								Status: v1.ConditionUnknown,
+							},
+						},
 					},
 				},
 			},

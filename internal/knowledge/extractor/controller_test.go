@@ -153,7 +153,7 @@ func TestKnowledgeReconciler_Reconcile_UnsupportedExtractor(t *testing.T) {
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "unsupported-extractor"}, &updatedKnowledge); err != nil {
 		t.Fatal(err)
 	}
-	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady)
 	if condition == nil || !strings.Contains(condition.Message, "unsupported extractor name") {
 		t.Errorf("Expected error to contain 'unsupported extractor name', got: %s", condition.Message)
 	}
@@ -213,7 +213,7 @@ func TestKnowledgeReconciler_Reconcile_MissingDatasource(t *testing.T) {
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "missing-datasource"}, &updatedKnowledge); err != nil {
 		t.Fatal(err)
 	}
-	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady)
 	if condition == nil || !strings.Contains(condition.Message, "failed to get datasource") {
 		t.Errorf("Expected error to contain 'failed to get datasource', got: %s", condition.Message)
 	}
@@ -290,7 +290,7 @@ func TestKnowledgeReconciler_Reconcile_DifferentDatabaseSecrets(t *testing.T) {
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "different-db-secrets"}, &updatedKnowledge); err != nil {
 		t.Fatal(err)
 	}
-	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady)
 	if condition == nil || !strings.Contains(condition.Message, "datasources have differing database secret refs") {
 		t.Errorf("Expected error to contain 'datasources have differing database secret refs', got: %s", condition.Message)
 	}
@@ -370,7 +370,7 @@ func TestKnowledgeReconciler_Reconcile_SameDatabaseSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Should not have the "differing database secret refs" error
-	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady)
 	if condition == nil || strings.Contains(condition.Message, "datasources have differing database secret refs") {
 		t.Errorf("Should not have 'differing database secret refs' error, got: %s", condition.Message)
 	}
@@ -429,7 +429,7 @@ func TestKnowledgeReconciler_Reconcile_NoDatasources(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Should have an error related to feature extraction, not datasource validation
-	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+	condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady)
 	if condition == nil || !strings.Contains(condition.Message, "failed to initialize feature extractor") &&
 		!strings.Contains(condition.Message, "database connection is not initialized") {
 		t.Errorf("Expected error to contain 'failed to initialize feature extractor' or 'database connection is not initialized', got: %s", condition.Message)
@@ -501,7 +501,7 @@ func TestKnowledgeReconciler_Reconcile_SupportedExtractors(t *testing.T) {
 			if err := fakeClient.Get(ctx, types.NamespacedName{Name: "test-" + extractorName}, &updatedKnowledge); err != nil {
 				t.Fatal(err)
 			}
-			condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionError)
+			condition := meta.FindStatusCondition(updatedKnowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady)
 			if condition == nil || strings.Contains(condition.Message, "unsupported extractor name") {
 				t.Errorf("Should not have 'unsupported extractor name' error, got: %s", condition.Message)
 			}

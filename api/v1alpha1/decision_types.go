@@ -43,7 +43,7 @@ type DecisionSpec struct {
 
 type StepResult struct {
 	// object reference to the scheduler step.
-	StepRef corev1.ObjectReference `json:"stepRef"`
+	StepName string `json:"stepName"`
 	// Activations of the step for each host.
 	Activations map[string]float64 `json:"activations"`
 }
@@ -71,15 +71,11 @@ type DecisionResult struct {
 }
 
 const (
-	// Something went wrong during the calculation of the decision.
-	DecisionConditionError = "Error"
+	// The decision was successfully processed.
+	DecisionConditionReady = "Ready"
 )
 
 type DecisionStatus struct {
-	// The time it took to schedule.
-	// +kubebuilder:validation:Optional
-	Took metav1.Duration `json:"took"`
-
 	// The result of this decision.
 	// +kubebuilder:validation:Optional
 	Result *DecisionResult `json:"result,omitempty"`
@@ -105,7 +101,7 @@ type DecisionStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
+// +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Resource ID",type="string",JSONPath=".spec.resourceID"
 // +kubebuilder:printcolumn:name="#",type="string",JSONPath=".status.precedence"
@@ -113,6 +109,7 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
 // +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:selectablefield:JSONPath=".spec.resourceID"
 
 // Decision is the Schema for the decisions API

@@ -49,7 +49,6 @@ type OpenStackDatasourceReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	startedAt := time.Now() // So we can measure sync duration.
 	log := logf.FromContext(ctx)
 	datasource := &v1alpha1.Datasource{}
 	if err := r.Get(ctx, req.NamespacedName, datasource); err != nil {
@@ -71,14 +70,16 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		FromSecretRef(ctx, datasource.Spec.DatabaseSecretRef)
 	if err != nil {
 		log.Error(err, "failed to authenticate with database", "secretRef", datasource.Spec.DatabaseSecretRef)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "DatabaseAuthenticationFailed",
 			Message: "failed to authenticate with database: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -91,14 +92,16 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 			FromSecretRef(ctx, *datasource.Spec.SSOSecretRef)
 		if err != nil {
 			log.Error(err, "failed to authenticate with SSO", "secretRef", datasource.Spec.SSOSecretRef)
+			old := datasource.DeepCopy()
 			meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.DatasourceConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.DatasourceConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "SSOAuthenticationFailed",
 				Message: "failed to authenticate with SSO: " + err.Error(),
 			})
-			if err := r.Status().Update(ctx, datasource); err != nil {
-				log.Error(err, "failed to update datasource status", "name", datasource.Name)
+			patch := client.MergeFrom(old)
+			if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+				log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, err
@@ -110,14 +113,16 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		FromSecretRef(ctx, datasource.Spec.OpenStack.SecretRef)
 	if err != nil {
 		log.Error(err, "failed to authenticate with keystone", "secretRef", datasource.Spec.OpenStack.SecretRef)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "KeystoneAuthenticationFailed",
 			Message: "failed to authenticate with keystone: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -131,14 +136,16 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	)
 	if err != nil {
 		log.Info("skipping datasource, unsupported openstack datasource type", "type", datasource.Spec.OpenStack.Type)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "UnsupportedOpenStackDatasourceType",
 			Message: "unsupported openstack datasource type: " + string(datasource.Spec.OpenStack.Type),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -147,14 +154,16 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	// Initialize the syncer before syncing.
 	if err := syncer.Init(ctx); err != nil {
 		log.Error(err, "failed to init openstack datasource", "name", datasource.Name)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "OpenStackDatasourceInitFailed",
 			Message: "failed to init openstack datasource: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -163,14 +172,16 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	nResults, err := syncer.Sync(ctx)
 	if errors.Is(err, v1alpha1.ErrWaitingForDependencyDatasource) {
 		log.Info("datasource sync waiting for dependency datasource", "name", datasource.Name)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionWaiting,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "WaitingForDependencyDatasource",
 			Message: "waiting for dependency datasource",
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		// Requeue after a short delay to check again.
@@ -179,29 +190,36 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	// Other error
 	if err != nil {
 		log.Error(err, "failed to sync openstack datasource", "name", datasource.Name)
+		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DatasourceConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DatasourceConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "OpenStackDatasourceSyncFailed",
 			Message: "failed to sync openstack datasource: " + err.Error(),
 		})
-		if err := r.Status().Update(ctx, datasource); err != nil {
-			log.Error(err, "failed to update datasource status", "name", datasource.Name)
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+			log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
 	}
 
 	// Update the datasource status to reflect successful sync.
-	meta.RemoveStatusCondition(&datasource.Status.Conditions, v1alpha1.DatasourceConditionError)
-	meta.RemoveStatusCondition(&datasource.Status.Conditions, v1alpha1.DatasourceConditionWaiting)
+	old := datasource.DeepCopy()
+	meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.DatasourceConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "OpenStackDatasourceSynced",
+		Message: "openstack datasource synced successfully",
+	})
 	datasource.Status.LastSynced = metav1.NewTime(time.Now())
 	nextTime := time.Now().Add(datasource.Spec.OpenStack.SyncInterval.Duration)
 	datasource.Status.NextSyncTime = metav1.NewTime(nextTime)
 	datasource.Status.NumberOfObjects = nResults
-	datasource.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	if err := r.Status().Update(ctx, datasource); err != nil {
-		log.Error(err, "failed to update datasource status", "name", datasource.Name)
+	patch := client.MergeFrom(old)
+	if err := r.Status().Patch(ctx, datasource, patch); err != nil {
+		log.Error(err, "failed to patch datasource status", "name", datasource.Name)
 		return ctrl.Result{}, err
 	}
 

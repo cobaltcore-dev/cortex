@@ -47,8 +47,12 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline1"},
 					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.PipelineConditionReady,
+								Status: v1.ConditionTrue,
+							},
+						},
 					},
 				},
 			},
@@ -63,11 +67,10 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline2"},
 					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
-						Ready: false,
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.PipelineConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.PipelineConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -84,19 +87,22 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-ready"},
 					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.PipelineConditionReady,
+								Status: v1.ConditionTrue,
+							},
+						},
 					},
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-error"},
 					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
-						Ready: false,
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.PipelineConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.PipelineConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -113,16 +119,24 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-correct-operator"},
 					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.PipelineConditionReady,
+								Status: v1.ConditionTrue,
+							},
+						},
 					},
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-wrong-operator"},
 					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.PipelineStatus{
-						Ready:      true,
-						Conditions: []v1.Condition{},
+						Conditions: []v1.Condition{
+							{
+								Type:   v1alpha1.PipelineConditionReady,
+								Status: v1.ConditionTrue,
+							},
+						},
 					},
 				},
 			},
@@ -131,33 +145,16 @@ func TestPipelineStateKPI_Collect(t *testing.T) {
 			description:   "should only collect metrics for pipelines with matching operator",
 		},
 		{
-			name: "pipeline with unknown state",
-			pipelines: []v1alpha1.Pipeline{
-				{
-					ObjectMeta: v1.ObjectMeta{Name: "pipeline-unknown"},
-					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
-					Status: v1alpha1.PipelineStatus{
-						Ready:      false,
-						Conditions: []v1.Condition{},
-					},
-				},
-			},
-			operator:      "test-operator",
-			expectedCount: 1,
-			description:   "should collect metric with unknown state for pipeline without ready status or error condition",
-		},
-		{
 			name: "error condition takes precedence over ready status",
 			pipelines: []v1alpha1.Pipeline{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "pipeline-error-priority"},
 					Spec:       v1alpha1.PipelineSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.PipelineStatus{
-						Ready: true,
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.PipelineConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.PipelineConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},

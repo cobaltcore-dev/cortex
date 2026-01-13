@@ -10,5 +10,10 @@ spec:
   type: filter-weigher
   createDecisions: true
   steps:
-    - ref: { name: pods-noop }
+    - type: filter
+      impl: noop
+      description: |
+        This is only a passthrough step which lets all pod candidates through.
+        It is used as a placeholder step in the pods scheduler pipeline.
+      knowledges: []
       mandatory: false

@@ -45,7 +45,14 @@ func TestCleanup_Reconcile(t *testing.T) {
 					CreationTimestamp: twentyFiveHoursAgo,
 				},
 				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseCompleted,
+					Conditions: []metav1.Condition{
+						{
+							Type:    v1alpha1.DeschedulingConditionReady,
+							Status:  metav1.ConditionTrue,
+							Reason:  "MigrationCompleted",
+							Message: "migration completed successfully",
+						},
+					},
 				},
 			},
 			expectDelete:  true,
@@ -60,11 +67,10 @@ func TestCleanup_Reconcile(t *testing.T) {
 					CreationTimestamp: twoDaysAgo,
 				},
 				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseFailed,
 					Conditions: []metav1.Condition{
 						{
-							Type:    v1alpha1.DeschedulingConditionError,
-							Status:  metav1.ConditionTrue,
+							Type:    v1alpha1.DeschedulingConditionReady,
+							Status:  metav1.ConditionFalse,
 							Reason:  "MigrationFailed",
 							Message: "migration failed",
 						},
@@ -83,7 +89,14 @@ func TestCleanup_Reconcile(t *testing.T) {
 					CreationTimestamp: twentyFiveHoursAgo,
 				},
 				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseInProgress,
+					Conditions: []metav1.Condition{
+						{
+							Type:    v1alpha1.DeschedulingConditionReady,
+							Status:  metav1.ConditionFalse,
+							Reason:  "MigrationInProgress",
+							Message: "migration is in progress",
+						},
+					},
 				},
 			},
 			expectDelete:  true,
@@ -98,7 +111,14 @@ func TestCleanup_Reconcile(t *testing.T) {
 					CreationTimestamp: oneHourAgo,
 				},
 				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseCompleted,
+					Conditions: []metav1.Condition{
+						{
+							Type:    v1alpha1.DeschedulingConditionReady,
+							Status:  metav1.ConditionFalse,
+							Reason:  "MigrationInProgress",
+							Message: "migration is in progress",
+						},
+					},
 				},
 			},
 			expectDelete:       false,
@@ -114,7 +134,14 @@ func TestCleanup_Reconcile(t *testing.T) {
 					CreationTimestamp: twentyThreeHoursAgo,
 				},
 				Status: v1alpha1.DeschedulingStatus{
-					Phase: v1alpha1.DeschedulingStatusPhaseQueued,
+					Conditions: []metav1.Condition{
+						{
+							Type:    v1alpha1.DeschedulingConditionReady,
+							Status:  metav1.ConditionFalse,
+							Reason:  "MigrationInProgress",
+							Message: "migration is in progress",
+						},
+					},
 				},
 			},
 			expectDelete:       false,
@@ -236,7 +263,14 @@ func TestCleanupOnStartup_Start(t *testing.T) {
 				CreationTimestamp: twentyFiveHoursAgo,
 			},
 			Status: v1alpha1.DeschedulingStatus{
-				Phase: v1alpha1.DeschedulingStatusPhaseCompleted,
+				Conditions: []metav1.Condition{
+					{
+						Type:    v1alpha1.DeschedulingConditionReady,
+						Status:  metav1.ConditionFalse,
+						Reason:  "MigrationInProgress",
+						Message: "migration is in progress",
+					},
+				},
 			},
 		},
 		{
@@ -246,7 +280,14 @@ func TestCleanupOnStartup_Start(t *testing.T) {
 				CreationTimestamp: oneHourAgo,
 			},
 			Status: v1alpha1.DeschedulingStatus{
-				Phase: v1alpha1.DeschedulingStatusPhaseCompleted,
+				Conditions: []metav1.Condition{
+					{
+						Type:    v1alpha1.DeschedulingConditionReady,
+						Status:  metav1.ConditionFalse,
+						Reason:  "MigrationInProgress",
+						Message: "migration is in progress",
+					},
+				},
 			},
 		},
 	}
