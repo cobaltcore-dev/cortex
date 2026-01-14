@@ -29,7 +29,7 @@ func (NodeAffinityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineReq
 
 	for _, node := range request.Nodes {
 		if matchesNodeAffinity(node, request.Pod) {
-			activations[node.Name] = 1.0
+			activations[node.Name] = 0.0
 		}
 	}
 

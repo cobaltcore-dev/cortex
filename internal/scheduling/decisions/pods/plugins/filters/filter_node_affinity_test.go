@@ -32,8 +32,8 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 				Pod: corev1.Pod{},
 			},
 			expected: map[string]float64{
-				"node1": 1.0,
-				"node2": 1.0,
+				"node1": 0.0,
+				"node2": 0.0,
 			},
 		},
 		{
@@ -88,8 +88,8 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 				},
 			},
 			expected: map[string]float64{
-				"node1": 1.0,
-				"node2": 1.0,
+				"node1": 0.0,
+				"node2": 0.0,
 			},
 		},
 		{
@@ -139,8 +139,8 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 				},
 			},
 			expected: map[string]float64{
-				"node1": 1.0,
-				"node3": 1.0,
+				"node1": 0.0,
+				"node3": 0.0,
 			},
 		},
 		{
@@ -181,7 +181,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 				},
 			},
 			expected: map[string]float64{
-				"node1": 1.0,
+				"node1": 0.0,
 			},
 		},
 		{
@@ -222,7 +222,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 				},
 			},
 			expected: map[string]float64{
-				"node2": 1.0,
+				"node2": 0.0,
 			},
 		},
 		{
@@ -276,7 +276,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 				},
 			},
 			expected: map[string]float64{
-				"node1": 1.0,
+				"node1": 0.0,
 			},
 		},
 		{
@@ -335,8 +335,8 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 				},
 			},
 			expected: map[string]float64{
-				"node1": 1.0,
-				"node2": 1.0,
+				"node1": 0.0,
+				"node2": 0.0,
 			},
 		},
 		{

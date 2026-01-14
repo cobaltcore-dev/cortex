@@ -28,7 +28,7 @@ func (TaintFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (
 
 	for _, node := range request.Nodes {
 		if canScheduleOnNode(node, request.Pod) {
-			activations[node.Name] = 1.0
+			activations[node.Name] = 0.0
 		}
 	}
 
