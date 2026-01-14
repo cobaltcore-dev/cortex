@@ -9,14 +9,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
+
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 // Assuming hypervisor names are in the format nodeXXX-bbYY
@@ -143,129 +144,120 @@ func (k *KVMResourceCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
-	// TODO use hypervisor CRD as data source
-	hostDetailsKnowledge := &v1alpha1.Knowledge{}
-	if err := k.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "host-details"},
-		hostDetailsKnowledge,
-	); err != nil {
-		slog.Error("failed to get knowledge host-details", "err", err)
-		return
-	}
-	hostDetails, err := v1alpha1.
-		UnboxFeatureList[compute.HostDetails](hostDetailsKnowledge.Status.Raw)
-	if err != nil {
-		slog.Error("failed to unbox storage pool cpu usage", "err", err)
-		return
-	}
-	detailsByComputeHost := make(map[string]compute.HostDetails)
-	for _, detail := range hostDetails {
-		detailsByComputeHost[detail.ComputeHost] = detail
-	}
 
-	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
-	if err := k.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "host-utilization"},
-		hostUtilizationKnowledge,
-	); err != nil {
-		slog.Error("failed to get knowledge host-utilization", "err", err)
-		return
-	}
-	hostUtilizations, err := v1alpha1.
-		UnboxFeatureList[compute.HostUtilization](hostUtilizationKnowledge.Status.Raw)
-	if err != nil {
-		slog.Error("failed to unbox host utilization", "err", err)
-		return
-	}
+	freeResourcesByHost := make(map[string]map[string]resource.Quantity)
 
-	// TODO get all reservations and failover capacity crds
-	for _, utilization := range hostUtilizations {
-		host, exists := detailsByComputeHost[utilization.ComputeHost]
-		if !exists {
-			slog.Warn("no host details found for compute host", "compute_host", utilization.ComputeHost)
-			continue
+	// The hypervisor resource auto-discovers its current utilization.
+	// We can use the hypervisor status to calculate the total capacity
+	// and then subtract the actual resource allocation from virtual machines.
+	hvs := &hv1.HypervisorList{}
+	if err := k.Client.List(context.Background(), hvs); err != nil {
+		slog.Error("failed to list hypervisors", "error", err)
+		return
+	}
+	for _, hv := range hvs.Items {
+		// Start with the total capacity.
+		freeResourcesByHost[hv.Name] = hv.Status.Capacity
+
+		// Subtract allocated resources.
+		for resourceName, allocated := range hv.Status.Allocation {
+			free, ok := freeResourcesByHost[hv.Name][resourceName]
+			if !ok {
+				slog.Error(
+					"hypervisor with allocation for unknown resource",
+					"host", hv.Name, "resource", resourceName,
+				)
+				continue
+			}
+			free.Sub(allocated)
+			freeResourcesByHost[hv.Name][resourceName] = free
 		}
+	}
 
-		if host.HypervisorType == "ironic" || host.HypervisorFamily != "kvm" {
-			continue
-		}
+	for _, hypervisor := range hvs.Items {
+		cpuTotal := hypervisor.Status.Capacity["cpu"]
+		ramTotal := hypervisor.Status.Capacity["memory"]
 
-		// TODO check if there is a flag for this in the hypervisor CRD
-		if utilization.TotalRAMAllocatableMB == 0 || utilization.TotalVCPUsAllocatable == 0 || utilization.TotalDiskAllocatableGB == 0 {
-			// Skip hosts with no capacity information
-			slog.Warn("skipping host with zero total allocatable capacity", "compute_host", utilization.ComputeHost)
-			continue
-		}
+		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "cpu", cpuTotal.AsApproximateFloat64(), hypervisor)
+		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "ram", ramTotal.AsApproximateFloat64(), hypervisor)
 
-		cpuUsed := utilization.VCPUsUsed
-		ramUsed := utilization.RAMUsedMB
-		diskUsed := utilization.DiskUsedGB
+		cpuUsed := freeResourcesByHost[hypervisor.Name]["cpu"]
+		ramUsed := freeResourcesByHost[hypervisor.Name]["memory"]
 
-		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "cpu", cpuUsed, host)
-		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "ram", ramUsed, host)
-		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "disk", diskUsed, host)
+		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "cpu", cpuUsed.AsApproximateFloat64(), hypervisor)
+		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "ram", ramUsed.AsApproximateFloat64(), hypervisor)
 
 		// WARNING: Using dummy data for now.
 		// TODO Replace with actual data from reservations capacity CRDs
-		cpuReserved := 100.0
-		ramReserved := 1024.0
-		diskReserved := 64.0
+		cpuReserved := resource.MustParse("100")
+		ramReserved := resource.MustParse("1Gi")
 
-		exportCapacityMetricKVM(ch, k.reservedCapacityPerHost, "cpu", cpuReserved, host)
-		exportCapacityMetricKVM(ch, k.reservedCapacityPerHost, "ram", ramReserved, host)
-		exportCapacityMetricKVM(ch, k.reservedCapacityPerHost, "disk", diskReserved, host)
+		exportCapacityMetricKVM(ch, k.reservedCapacityPerHost, "cpu", cpuReserved.AsApproximateFloat64(), hypervisor)
+		exportCapacityMetricKVM(ch, k.reservedCapacityPerHost, "ram", ramReserved.AsApproximateFloat64(), hypervisor)
 
 		// WARNING: Using dummy data for now.
 		// TODO Replace with actual data from failover capacity CRDs
-		cpuFailover := 100.0
-		ramFailover := 1024.0
-		diskFailover := 128.0
+		cpuFailover := resource.MustParse("100")
+		ramFailover := resource.MustParse("1Gi")
 
-		exportCapacityMetricKVM(ch, k.failoverCapacityPerHost, "cpu", cpuFailover, host)
-		exportCapacityMetricKVM(ch, k.failoverCapacityPerHost, "ram", ramFailover, host)
-		exportCapacityMetricKVM(ch, k.failoverCapacityPerHost, "disk", diskFailover, host)
+		exportCapacityMetricKVM(ch, k.failoverCapacityPerHost, "cpu", cpuFailover.AsApproximateFloat64(), hypervisor)
+		exportCapacityMetricKVM(ch, k.failoverCapacityPerHost, "ram", ramFailover.AsApproximateFloat64(), hypervisor)
 
-		totalCPU := utilization.TotalVCPUsAllocatable
-		totalRAM := utilization.TotalRAMAllocatableMB
-		totalDisk := utilization.TotalDiskAllocatableGB
+		// Calculate PAYG capacity
+		paygCPU := cpuTotal.DeepCopy()
+		paygCPU.Sub(cpuUsed)
+		paygCPU.Sub(cpuReserved)
+		paygCPU.Sub(cpuFailover)
 
-		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "cpu", totalCPU, host)
-		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "ram", totalRAM, host)
-		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "disk", totalDisk, host)
+		paygRAM := ramTotal.DeepCopy()
+		paygRAM.Sub(ramUsed)
+		paygRAM.Sub(ramReserved)
+		paygRAM.Sub(ramFailover)
 
-		paygCPU := totalCPU - cpuUsed - cpuReserved - cpuFailover
-		paygRAM := totalRAM - ramUsed - ramReserved - ramFailover
-		paygDisk := totalDisk - diskUsed - diskReserved - diskFailover
-
-		exportCapacityMetricKVM(ch, k.paygCapacityPerHost, "cpu", paygCPU, host)
-		exportCapacityMetricKVM(ch, k.paygCapacityPerHost, "ram", paygRAM, host)
-		exportCapacityMetricKVM(ch, k.paygCapacityPerHost, "disk", paygDisk, host)
+		exportCapacityMetricKVM(ch, k.paygCapacityPerHost, "cpu", paygCPU.AsApproximateFloat64(), hypervisor)
+		exportCapacityMetricKVM(ch, k.paygCapacityPerHost, "ram", paygRAM.AsApproximateFloat64(), hypervisor)
 	}
 }
 
-func exportCapacityMetricKVM(ch chan<- prometheus.Metric, metric *prometheus.Desc, resource string, value float64, host compute.HostDetails) {
-	bb := getBuildingBlock(host.ComputeHost)
+func exportCapacityMetricKVM(ch chan<- prometheus.Metric, metric *prometheus.Desc, resource string, value float64, hypervisor hv1.Hypervisor) {
+	bb := getBuildingBlock(hypervisor.Name)
 
-	enabled := strconv.FormatBool(host.Enabled)
-	decommissioned := strconv.FormatBool(host.Decommissioned)
-	externalCustomer := strconv.FormatBool(host.ExternalCustomer)
-	maintenance := "false"
+	availabilityZone := hypervisor.Labels["topology.kubernetes.io/zone"]
+
+	enabled := true
+	decommissioned := false
+	externalCustomer := false
+	maintenance := false
+
+	workloadType := "general-purpose"
+	cpuArchitecture := "cascade-lake"
+
+	for _, trait := range hypervisor.Status.Traits {
+		switch trait {
+		case "CUSTOM_HW_SAPPHIRE_RAPIDS":
+			cpuArchitecture = "sapphire-rapids"
+		case "CUSTOM_HANA_EXCLUSIVE_HOST":
+			workloadType = "hana"
+		case "CUSTOM_DECOMMISSIONING":
+			decommissioned = true
+		case "CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED":
+			externalCustomer = true
+		}
+	}
 
 	ch <- prometheus.MustNewConstMetric(
 		metric,
 		prometheus.GaugeValue,
 		value,
-		host.ComputeHost,
+		hypervisor.Name,
 		resource,
-		host.AvailabilityZone,
+		availabilityZone,
 		bb,
-		host.CPUArchitecture,
-		host.WorkloadType,
-		enabled,
-		decommissioned,
-		externalCustomer,
-		maintenance,
+		cpuArchitecture,
+		workloadType,
+		strconv.FormatBool(enabled),
+		strconv.FormatBool(decommissioned),
+		strconv.FormatBool(externalCustomer),
+		strconv.FormatBool(maintenance),
 	)
 }
