@@ -144,9 +144,6 @@ func (k *KVMResourceCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
-
-	freeResourcesByHost := make(map[string]map[string]resource.Quantity)
-
 	// The hypervisor resource auto-discovers its current utilization.
 	// We can use the hypervisor status to calculate the total capacity
 	// and then subtract the actual resource allocation from virtual machines.
@@ -155,34 +152,16 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		slog.Error("failed to list hypervisors", "error", err)
 		return
 	}
-	for _, hv := range hvs.Items {
-		// Start with the total capacity.
-		freeResourcesByHost[hv.Name] = hv.Status.Capacity
-
-		// Subtract allocated resources.
-		for resourceName, allocated := range hv.Status.Allocation {
-			free, ok := freeResourcesByHost[hv.Name][resourceName]
-			if !ok {
-				slog.Error(
-					"hypervisor with allocation for unknown resource",
-					"host", hv.Name, "resource", resourceName,
-				)
-				continue
-			}
-			free.Sub(allocated)
-			freeResourcesByHost[hv.Name][resourceName] = free
-		}
-	}
 
 	for _, hypervisor := range hvs.Items {
 		cpuTotal := hypervisor.Status.Capacity["cpu"]
 		ramTotal := hypervisor.Status.Capacity["memory"]
 
+		cpuUsed := hypervisor.Status.Allocation["cpu"]
+		ramUsed := hypervisor.Status.Allocation["memory"]
+
 		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "cpu", cpuTotal.AsApproximateFloat64(), hypervisor)
 		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "ram", ramTotal.AsApproximateFloat64(), hypervisor)
-
-		cpuUsed := freeResourcesByHost[hypervisor.Name]["cpu"]
-		ramUsed := freeResourcesByHost[hypervisor.Name]["memory"]
 
 		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "cpu", cpuUsed.AsApproximateFloat64(), hypervisor)
 		exportCapacityMetricKVM(ch, k.utilizedCapacityPerHost, "ram", ramUsed.AsApproximateFloat64(), hypervisor)

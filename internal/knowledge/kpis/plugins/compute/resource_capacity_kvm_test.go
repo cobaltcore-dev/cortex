@@ -4,16 +4,15 @@
 package compute
 
 import (
-	"reflect"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -24,454 +23,402 @@ func TestKVMResourceCapacityKPI_Init(t *testing.T) {
 	}
 }
 
-func TestKVMResourceCapacityKPI_Collect_TotalMetric(t *testing.T) {
-	scheme, err := v1alpha1.SchemeBuilder.Build()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	hostDetails, err := v1alpha1.BoxFeatureList([]any{
-		&compute.HostDetails{
-			ComputeHost:      "kvm-host",
-			AvailabilityZone: "az2",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "qemu",
-			HypervisorFamily: "kvm",
-			WorkloadType:     "hana",
-			Enabled:          false,
-			Decommissioned:   false,
-			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("test"),
-			PinnedProjects:   testlib.Ptr("project1,project2"),
-		},
-		// Skip this because it's not a KVM host
-		&compute.HostDetails{
-			ComputeHost:      "vmware-host",
-			AvailabilityZone: "az1",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "vcenter",
-			HypervisorFamily: "vmware",
-			WorkloadType:     "general-purpose",
-			Enabled:          true,
-			Decommissioned:   true,
-			ExternalCustomer: true,
-			DisabledReason:   nil,
-			PinnedProjects:   nil,
-		},
-		// Skip this because placement doesn't report any capacity for this host
-		&compute.HostDetails{
-			ComputeHost:      "kvm-host-2",
-			AvailabilityZone: "az2",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "qemu",
-			HypervisorFamily: "kvm",
-			WorkloadType:     "hana",
-			Enabled:          false,
-			Decommissioned:   false,
-			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("test"),
-			PinnedProjects:   testlib.Ptr("project1,project2"),
-		},
-		// Skip this because it's a ironic host
-		&compute.HostDetails{
-			ComputeHost:      "ironic-host",
-			AvailabilityZone: "az2",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "ironic",
-			HypervisorFamily: "vmware",
-			WorkloadType:     "hana",
-			Enabled:          false,
-			Decommissioned:   false,
-			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("test"),
-			PinnedProjects:   testlib.Ptr("project1"),
-		},
-	})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	hostUtilizations, err := v1alpha1.BoxFeatureList([]any{
-		&compute.HostUtilization{
-			ComputeHost:            "vmware-host",
-			TotalVCPUsAllocatable:  100,
-			TotalRAMAllocatableMB:  200,
-			TotalDiskAllocatableGB: 300,
-			VCPUsUsed:              40,
-			RAMUsedMB:              100,
-			DiskUsedGB:             30,
-		},
-		&compute.HostUtilization{
-			ComputeHost:            "kvm-host",
-			TotalVCPUsAllocatable:  100,
-			TotalRAMAllocatableMB:  100,
-			TotalDiskAllocatableGB: 100,
-			VCPUsUsed:              75,
-			RAMUsedMB:              80,
-			DiskUsedGB:             85,
-		},
-		&compute.HostUtilization{
-			ComputeHost:            "ironic-host",
-			TotalVCPUsAllocatable:  0,
-			TotalRAMAllocatableMB:  0,
-			TotalDiskAllocatableGB: 0,
-			VCPUsUsed:              0,
-			RAMUsedMB:              0,
-			DiskUsedGB:             0,
-		},
-		// No Capacity reported for host kvm-host-2
-	})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	kpi := &KVMResourceCapacityKPI{}
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithRuntimeObjects(&v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: "host-details"},
-			Status:     v1alpha1.KnowledgeStatus{Raw: hostDetails},
-		}, &v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: "host-utilization"},
-			Status:     v1alpha1.KnowledgeStatus{Raw: hostUtilizations},
-		}).
-		Build()
-	if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	ch := make(chan prometheus.Metric, 100)
-	kpi.Collect(ch)
-	close(ch)
-
-	type HostResourceMetric struct {
-		ComputeHost      string
-		Resource         string
-		AvailabilityZone string
-		Enabled          string
-		Decommissioned   string
-		ExternalCustomer string
-		CPUArchitecture  string
-		WorkloadType     string
-		Maintenance      string
-		Value            float64
-	}
-
-	actualMetrics := make(map[string]HostResourceMetric, 0)
-
-	for metric := range ch {
-		desc := metric.Desc().String()
-		metricName := getMetricName(desc)
-
-		// Only consider cortex_kvm_host_capacity_total metric in this test
-		if metricName != "cortex_kvm_host_capacity_total" {
-			continue
-		}
-
-		var m prometheusgo.Metric
-		if err := metric.Write(&m); err != nil {
-			t.Fatalf("failed to write metric: %v", err)
-		}
-
-		labels := make(map[string]string)
-		for _, label := range m.Label {
-			labels[label.GetName()] = label.GetValue()
-		}
-
-		key := labels["compute_host"] + "-" + labels["resource"]
-
-		actualMetrics[key] = HostResourceMetric{
-			ComputeHost:      labels["compute_host"],
-			Resource:         labels["resource"],
-			AvailabilityZone: labels["availability_zone"],
-			Enabled:          labels["enabled"],
-			Decommissioned:   labels["decommissioned"],
-			ExternalCustomer: labels["external_customer"],
-			CPUArchitecture:  labels["cpu_architecture"],
-			WorkloadType:     labels["workload_type"],
-			Maintenance:      labels["maintenance"],
-			Value:            m.GetGauge().GetValue(),
-		}
-	}
-
-	expectedMetrics := map[string]HostResourceMetric{
-		"kvm-host-cpu": {
-			ComputeHost:      "kvm-host",
-			Resource:         "cpu",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			Maintenance:      "false",
-			Value:            100,
-		},
-		"kvm-host-ram": {
-			ComputeHost:      "kvm-host",
-			Resource:         "ram",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			Maintenance:      "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			Value:            100,
-		},
-		"kvm-host-disk": {
-			ComputeHost:      "kvm-host",
-			Resource:         "disk",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			Maintenance:      "false",
-			Value:            100,
-		},
-	}
-
-	if len(expectedMetrics) != len(actualMetrics) {
-		t.Errorf("expected %d metrics, got %d", len(expectedMetrics), len(actualMetrics))
-	}
-
-	for key, expected := range expectedMetrics {
-		actual, ok := actualMetrics[key]
-		if !ok {
-			t.Errorf("expected metric %q not found", key)
-			continue
-		}
-
-		if !reflect.DeepEqual(expected, actual) {
-			t.Errorf("metric %q: expected %+v, got %+v", key, expected, actual)
-		}
-	}
+type metricLabels struct {
+	ComputeHost      string
+	Resource         string
+	AvailabilityZone string
+	BuildingBlock    string
+	CPUArchitecture  string
+	WorkloadType     string
+	Enabled          string
+	Decommissioned   string
+	ExternalCustomer string
+	Maintenance      string
 }
 
-func TestKVMResourceCapacityKPI_Collect_UtilizedMetric(t *testing.T) {
-	scheme, err := v1alpha1.SchemeBuilder.Build()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+type expectedMetric struct {
+	Labels metricLabels
+	Value  float64
+}
+
+func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
+	tests := []struct {
+		name            string
+		hypervisors     []hv1.Hypervisor
+		expectedMetrics map[string][]expectedMetric // metric_name -> []expectedMetric
+	}{
+		{
+			name: "single hypervisor with default traits",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-de-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						Capacity: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("128"),
+							"memory": resource.MustParse("512Gi"),
+						},
+						Allocation: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("64"),
+							"memory": resource.MustParse("256Gi"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			expectedMetrics: map[string][]expectedMetric{
+				"cortex_kvm_host_capacity_total": {
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node001-bb088",
+							Resource:         "cpu",
+							AvailabilityZone: "qa-de-1a",
+							BuildingBlock:    "bb088",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 128,
+					},
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node001-bb088",
+							Resource:         "ram",
+							AvailabilityZone: "qa-de-1a",
+							BuildingBlock:    "bb088",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 549755813888, // 512Gi in bytes
+					},
+				},
+				"cortex_kvm_host_capacity_utilized": {
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node001-bb088",
+							Resource:         "cpu",
+							AvailabilityZone: "qa-de-1a",
+							BuildingBlock:    "bb088",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 64,
+					},
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node001-bb088",
+							Resource:         "ram",
+							AvailabilityZone: "qa-de-1a",
+							BuildingBlock:    "bb088",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 274877906944, // 256Gi in bytes
+					},
+				},
+			},
+		},
+		{
+			name: "hypervisor with sapphire rapids and hana traits",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node002-bb089",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-de-1b",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						Capacity: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("256"),
+							"memory": resource.MustParse("1Ti"),
+						},
+						Allocation: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("128"),
+							"memory": resource.MustParse("512Gi"),
+						},
+						Traits: []string{
+							"CUSTOM_HW_SAPPHIRE_RAPIDS",
+							"CUSTOM_HANA_EXCLUSIVE_HOST",
+						},
+					},
+				},
+			},
+			expectedMetrics: map[string][]expectedMetric{
+				"cortex_kvm_host_capacity_total": {
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node002-bb089",
+							Resource:         "cpu",
+							AvailabilityZone: "qa-de-1b",
+							BuildingBlock:    "bb089",
+							CPUArchitecture:  "sapphire-rapids",
+							WorkloadType:     "hana",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 256,
+					},
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node002-bb089",
+							Resource:         "ram",
+							AvailabilityZone: "qa-de-1b",
+							BuildingBlock:    "bb089",
+							CPUArchitecture:  "sapphire-rapids",
+							WorkloadType:     "hana",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 1099511627776, // 1Ti in bytes
+					},
+				},
+			},
+		},
+		{
+			name: "hypervisor with decommissioned and external customer traits",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node003-bb090",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-de-1c",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						Capacity: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("64"),
+							"memory": resource.MustParse("256Gi"),
+						},
+						Allocation: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("32"),
+							"memory": resource.MustParse("128Gi"),
+						},
+						Traits: []string{
+							"CUSTOM_DECOMMISSIONING",
+							"CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED",
+						},
+					},
+				},
+			},
+			expectedMetrics: map[string][]expectedMetric{
+				"cortex_kvm_host_capacity_total": {
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node003-bb090",
+							Resource:         "cpu",
+							AvailabilityZone: "qa-de-1c",
+							BuildingBlock:    "bb090",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "true",
+							ExternalCustomer: "true",
+							Maintenance:      "false",
+						},
+						Value: 64,
+					},
+				},
+			},
+		},
+		{
+			name: "multiple hypervisors",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node010-bb100",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-de-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						Capacity: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("100"),
+							"memory": resource.MustParse("200Gi"),
+						},
+						Allocation: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("50"),
+							"memory": resource.MustParse("100Gi"),
+						},
+						Traits: []string{},
+					},
+				},
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node020-bb200",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-de-1b",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						Capacity: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("200"),
+							"memory": resource.MustParse("400Gi"),
+						},
+						Allocation: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("150"),
+							"memory": resource.MustParse("300Gi"),
+						},
+						Traits: []string{"CUSTOM_HW_SAPPHIRE_RAPIDS"},
+					},
+				},
+			},
+			expectedMetrics: map[string][]expectedMetric{
+				"cortex_kvm_host_capacity_total": {
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node010-bb100",
+							Resource:         "cpu",
+							AvailabilityZone: "qa-de-1a",
+							BuildingBlock:    "bb100",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 100,
+					},
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node020-bb200",
+							Resource:         "cpu",
+							AvailabilityZone: "qa-de-1b",
+							BuildingBlock:    "bb200",
+							CPUArchitecture:  "sapphire-rapids",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 200,
+					},
+				},
+			},
+		},
 	}
 
-	hostDetails, err := v1alpha1.BoxFeatureList([]any{
-		&compute.HostDetails{
-			ComputeHost:      "kvm-host",
-			AvailabilityZone: "az2",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "qemu",
-			HypervisorFamily: "kvm",
-			WorkloadType:     "hana",
-			Enabled:          false,
-			Decommissioned:   false,
-			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("test"),
-			PinnedProjects:   testlib.Ptr("project1,project2"),
-		},
-		// Skip this because it's not a KVM host
-		&compute.HostDetails{
-			ComputeHost:      "vmware-host",
-			AvailabilityZone: "az1",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "vcenter",
-			HypervisorFamily: "vmware",
-			WorkloadType:     "general-purpose",
-			Enabled:          true,
-			Decommissioned:   true,
-			ExternalCustomer: true,
-			DisabledReason:   nil,
-			PinnedProjects:   nil,
-		},
-		// Skip this because placement doesn't report any capacity for this host
-		&compute.HostDetails{
-			ComputeHost:      "kvm-host-2",
-			AvailabilityZone: "az2",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "qemu",
-			HypervisorFamily: "kvm",
-			WorkloadType:     "hana",
-			Enabled:          false,
-			Decommissioned:   false,
-			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("test"),
-			PinnedProjects:   testlib.Ptr("project1,project2"),
-		},
-		// Skip this because it's a ironic host
-		&compute.HostDetails{
-			ComputeHost:      "ironic-host",
-			AvailabilityZone: "az2",
-			CPUArchitecture:  "cascade-lake",
-			HypervisorType:   "ironic",
-			HypervisorFamily: "vmware",
-			WorkloadType:     "hana",
-			Enabled:          false,
-			Decommissioned:   false,
-			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("test"),
-			PinnedProjects:   testlib.Ptr("project1"),
-		},
-	})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := hv1.AddToScheme(scheme); err != nil {
+				t.Fatalf("failed to add hypervisor scheme: %v", err)
+			}
 
-	hostUtilizations, err := v1alpha1.BoxFeatureList([]any{
-		&compute.HostUtilization{
-			ComputeHost:            "vmware-host",
-			TotalVCPUsAllocatable:  100,
-			TotalRAMAllocatableMB:  200,
-			TotalDiskAllocatableGB: 300,
-			VCPUsUsed:              40,
-			RAMUsedMB:              100,
-			DiskUsedGB:             30,
-		},
-		&compute.HostUtilization{
-			ComputeHost:            "kvm-host",
-			TotalVCPUsAllocatable:  100,
-			TotalRAMAllocatableMB:  100,
-			TotalDiskAllocatableGB: 100,
-			VCPUsUsed:              75,
-			RAMUsedMB:              80,
-			DiskUsedGB:             85,
-		},
-		&compute.HostUtilization{
-			ComputeHost:            "ironic-host",
-			TotalVCPUsAllocatable:  0,
-			TotalRAMAllocatableMB:  0,
-			TotalDiskAllocatableGB: 0,
-			VCPUsUsed:              0,
-			RAMUsedMB:              0,
-			DiskUsedGB:             0,
-		},
-		// No Capacity reported for host kvm-host-2
-	})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+			objects := make([]runtime.Object, len(tt.hypervisors))
+			for i := range tt.hypervisors {
+				objects[i] = &tt.hypervisors[i]
+			}
 
-	kpi := &KVMResourceCapacityKPI{}
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithRuntimeObjects(&v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: "host-details"},
-			Status:     v1alpha1.KnowledgeStatus{Raw: hostDetails},
-		}, &v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: "host-utilization"},
-			Status:     v1alpha1.KnowledgeStatus{Raw: hostUtilizations},
-		}).
-		Build()
-	if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(objects...).
+				Build()
 
-	ch := make(chan prometheus.Metric, 100)
-	kpi.Collect(ch)
-	close(ch)
+			kpi := &KVMResourceCapacityKPI{}
+			if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
+				t.Fatalf("failed to init KPI: %v", err)
+			}
 
-	type HostResourceMetric struct {
-		ComputeHost      string
-		Resource         string
-		AvailabilityZone string
-		Enabled          string
-		Decommissioned   string
-		ExternalCustomer string
-		CPUArchitecture  string
-		WorkloadType     string
-		Maintenance      string
-		Value            float64
-	}
+			ch := make(chan prometheus.Metric, 1000)
+			kpi.Collect(ch)
+			close(ch)
 
-	actualMetrics := make(map[string]HostResourceMetric, 0)
+			actualMetrics := make(map[string][]expectedMetric)
+			for metric := range ch {
+				var m prometheusgo.Metric
+				if err := metric.Write(&m); err != nil {
+					t.Fatalf("failed to write metric: %v", err)
+				}
 
-	for metric := range ch {
-		desc := metric.Desc().String()
-		metricName := getMetricName(desc)
+				// Extract metric name from description
+				desc := metric.Desc().String()
+				metricName := getMetricName(desc)
 
-		// Only consider cortex_kvm_host_capacity_utilized metric in this test
-		if metricName != "cortex_kvm_host_capacity_utilized" {
-			continue
-		}
+				// Extract labels
+				labels := metricLabels{}
+				for _, label := range m.Label {
+					switch label.GetName() {
+					case "compute_host":
+						labels.ComputeHost = label.GetValue()
+					case "resource":
+						labels.Resource = label.GetValue()
+					case "availability_zone":
+						labels.AvailabilityZone = label.GetValue()
+					case "building_block":
+						labels.BuildingBlock = label.GetValue()
+					case "cpu_architecture":
+						labels.CPUArchitecture = label.GetValue()
+					case "workload_type":
+						labels.WorkloadType = label.GetValue()
+					case "enabled":
+						labels.Enabled = label.GetValue()
+					case "decommissioned":
+						labels.Decommissioned = label.GetValue()
+					case "external_customer":
+						labels.ExternalCustomer = label.GetValue()
+					case "maintenance":
+						labels.Maintenance = label.GetValue()
+					}
+				}
 
-		var m prometheusgo.Metric
-		if err := metric.Write(&m); err != nil {
-			t.Fatalf("failed to write metric: %v", err)
-		}
+				actualMetrics[metricName] = append(actualMetrics[metricName], expectedMetric{
+					Labels: labels,
+					Value:  m.GetGauge().GetValue(),
+				})
+			}
 
-		labels := make(map[string]string)
-		for _, label := range m.Label {
-			labels[label.GetName()] = label.GetValue()
-		}
+			// Verify expected metrics
+			for metricName, expectedList := range tt.expectedMetrics {
+				actualList, ok := actualMetrics[metricName]
+				if !ok {
+					t.Errorf("metric %q not found in actual metrics", metricName)
+					continue
+				}
 
-		key := labels["compute_host"] + "-" + labels["resource"]
-
-		actualMetrics[key] = HostResourceMetric{
-			ComputeHost:      labels["compute_host"],
-			Resource:         labels["resource"],
-			AvailabilityZone: labels["availability_zone"],
-			Enabled:          labels["enabled"],
-			Decommissioned:   labels["decommissioned"],
-			ExternalCustomer: labels["external_customer"],
-			CPUArchitecture:  labels["cpu_architecture"],
-			WorkloadType:     labels["workload_type"],
-			Maintenance:      labels["maintenance"],
-			Value:            m.GetGauge().GetValue(),
-		}
-	}
-
-	expectedMetrics := map[string]HostResourceMetric{
-		"kvm-host-cpu": {
-			ComputeHost:      "kvm-host",
-			Resource:         "cpu",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			Maintenance:      "false",
-			Value:            75,
-		},
-		"kvm-host-ram": {
-			ComputeHost:      "kvm-host",
-			Resource:         "ram",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			Maintenance:      "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			Value:            80,
-		},
-		"kvm-host-disk": {
-			ComputeHost:      "kvm-host",
-			Resource:         "disk",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			Maintenance:      "false",
-			Value:            85,
-		},
-	}
-
-	if len(expectedMetrics) != len(actualMetrics) {
-		t.Errorf("expected %d metrics, got %d", len(expectedMetrics), len(actualMetrics))
-	}
-
-	for key, expected := range expectedMetrics {
-		actual, ok := actualMetrics[key]
-		if !ok {
-			t.Errorf("expected metric %q not found", key)
-			continue
-		}
-
-		if !reflect.DeepEqual(expected, actual) {
-			t.Errorf("metric %q: expected %+v, got %+v", key, expected, actual)
-		}
+				for _, expected := range expectedList {
+					found := false
+					for _, actual := range actualList {
+						if actual.Labels == expected.Labels {
+							found = true
+							if actual.Value != expected.Value {
+								t.Errorf("metric %q with labels %+v: expected value %f, got %f",
+									metricName, expected.Labels, expected.Value, actual.Value)
+							}
+							break
+						}
+					}
+					if !found {
+						t.Errorf("metric %q with labels %+v not found in actual metrics",
+							metricName, expected.Labels)
+					}
+				}
+			}
+		})
 	}
 }
