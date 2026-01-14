@@ -154,11 +154,23 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, hypervisor := range hvs.Items {
-		cpuTotal := hypervisor.Status.Capacity["cpu"]
-		ramTotal := hypervisor.Status.Capacity["memory"]
+		cpuTotal, hasCPUTotal := hypervisor.Status.Capacity["cpu"]
+		ramTotal, hasRAMTotal := hypervisor.Status.Capacity["memory"]
 
-		cpuUsed := hypervisor.Status.Allocation["cpu"]
-		ramUsed := hypervisor.Status.Allocation["memory"]
+		if !hasCPUTotal || !hasRAMTotal {
+			slog.Error("hypervisor missing cpu or ram total capacity", "hypervisor", hypervisor.Name)
+			continue
+		}
+
+		cpuUsed, hasCPUUtilized := hypervisor.Status.Allocation["cpu"]
+		if !hasCPUUtilized {
+			cpuUsed = resource.MustParse("0")
+		}
+
+		ramUsed, hasRAMUtilized := hypervisor.Status.Allocation["memory"]
+		if !hasRAMUtilized {
+			ramUsed = resource.MustParse("0")
+		}
 
 		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "cpu", cpuTotal.AsApproximateFloat64(), hypervisor)
 		exportCapacityMetricKVM(ch, k.totalCapacityPerHost, "ram", ramTotal.AsApproximateFloat64(), hypervisor)

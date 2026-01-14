@@ -321,6 +321,94 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "hypervisor with missing allocation data",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node004-bb091",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-de-1d",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						Capacity: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("96"),
+							"memory": resource.MustParse("384Gi"),
+						},
+						// No Allocation field - simulating missing data
+						Allocation: nil,
+						Traits:     []string{},
+					},
+				},
+			},
+			expectedMetrics: map[string][]expectedMetric{
+				"cortex_kvm_host_capacity_total": {
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node004-bb091",
+							Resource:         "cpu",
+							AvailabilityZone: "qa-de-1d",
+							BuildingBlock:    "bb091",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 96,
+					},
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node004-bb091",
+							Resource:         "ram",
+							AvailabilityZone: "qa-de-1d",
+							BuildingBlock:    "bb091",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 412316860416, // 384Gi in bytes
+					},
+				},
+				"cortex_kvm_host_capacity_utilized": {
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node004-bb091",
+							Resource:         "cpu",
+							AvailabilityZone: "qa-de-1d",
+							BuildingBlock:    "bb091",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 0, // Should be 0 when allocation is missing
+					},
+					{
+						Labels: metricLabels{
+							ComputeHost:      "node004-bb091",
+							Resource:         "ram",
+							AvailabilityZone: "qa-de-1d",
+							BuildingBlock:    "bb091",
+							CPUArchitecture:  "cascade-lake",
+							WorkloadType:     "general-purpose",
+							Enabled:          "true",
+							Decommissioned:   "false",
+							ExternalCustomer: "false",
+							Maintenance:      "false",
+						},
+						Value: 0, // Should be 0 when allocation is missing
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
