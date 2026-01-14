@@ -54,7 +54,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name: "node001-bb088",
 						Labels: map[string]string{
-							"topology.kubernetes.io/zone": "qa-de-1a",
+							"topology.kubernetes.io/zone": "qa-1a",
 						},
 					},
 					Status: hv1.HypervisorStatus{
@@ -76,7 +76,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node001-bb088",
 							Resource:         "cpu",
-							AvailabilityZone: "qa-de-1a",
+							AvailabilityZone: "qa-1a",
 							BuildingBlock:    "bb088",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -91,7 +91,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node001-bb088",
 							Resource:         "ram",
-							AvailabilityZone: "qa-de-1a",
+							AvailabilityZone: "qa-1a",
 							BuildingBlock:    "bb088",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -108,7 +108,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node001-bb088",
 							Resource:         "cpu",
-							AvailabilityZone: "qa-de-1a",
+							AvailabilityZone: "qa-1a",
 							BuildingBlock:    "bb088",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -123,7 +123,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node001-bb088",
 							Resource:         "ram",
-							AvailabilityZone: "qa-de-1a",
+							AvailabilityZone: "qa-1a",
 							BuildingBlock:    "bb088",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -144,7 +144,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name: "node002-bb089",
 						Labels: map[string]string{
-							"topology.kubernetes.io/zone": "qa-de-1b",
+							"topology.kubernetes.io/zone": "qa-1b",
 						},
 					},
 					Status: hv1.HypervisorStatus{
@@ -169,7 +169,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node002-bb089",
 							Resource:         "cpu",
-							AvailabilityZone: "qa-de-1b",
+							AvailabilityZone: "qa-1b",
 							BuildingBlock:    "bb089",
 							CPUArchitecture:  "sapphire-rapids",
 							WorkloadType:     "hana",
@@ -184,7 +184,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node002-bb089",
 							Resource:         "ram",
-							AvailabilityZone: "qa-de-1b",
+							AvailabilityZone: "qa-1b",
 							BuildingBlock:    "bb089",
 							CPUArchitecture:  "sapphire-rapids",
 							WorkloadType:     "hana",
@@ -205,7 +205,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name: "node003-bb090",
 						Labels: map[string]string{
-							"topology.kubernetes.io/zone": "qa-de-1c",
+							"topology.kubernetes.io/zone": "qa-1c",
 						},
 					},
 					Status: hv1.HypervisorStatus{
@@ -230,7 +230,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node003-bb090",
 							Resource:         "cpu",
-							AvailabilityZone: "qa-de-1c",
+							AvailabilityZone: "qa-1c",
 							BuildingBlock:    "bb090",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -251,7 +251,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name: "node010-bb100",
 						Labels: map[string]string{
-							"topology.kubernetes.io/zone": "qa-de-1a",
+							"topology.kubernetes.io/zone": "qa-1a",
 						},
 					},
 					Status: hv1.HypervisorStatus{
@@ -270,7 +270,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name: "node020-bb200",
 						Labels: map[string]string{
-							"topology.kubernetes.io/zone": "qa-de-1b",
+							"topology.kubernetes.io/zone": "qa-1b",
 						},
 					},
 					Status: hv1.HypervisorStatus{
@@ -292,7 +292,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node010-bb100",
 							Resource:         "cpu",
-							AvailabilityZone: "qa-de-1a",
+							AvailabilityZone: "qa-1a",
 							BuildingBlock:    "bb100",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -307,7 +307,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node020-bb200",
 							Resource:         "cpu",
-							AvailabilityZone: "qa-de-1b",
+							AvailabilityZone: "qa-1b",
 							BuildingBlock:    "bb200",
 							CPUArchitecture:  "sapphire-rapids",
 							WorkloadType:     "general-purpose",
@@ -328,7 +328,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name: "node004-bb091",
 						Labels: map[string]string{
-							"topology.kubernetes.io/zone": "qa-de-1d",
+							"topology.kubernetes.io/zone": "qa-1d",
 						},
 					},
 					Status: hv1.HypervisorStatus{
@@ -348,7 +348,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node004-bb091",
 							Resource:         "cpu",
-							AvailabilityZone: "qa-de-1d",
+							AvailabilityZone: "qa-1d",
 							BuildingBlock:    "bb091",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -363,7 +363,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node004-bb091",
 							Resource:         "ram",
-							AvailabilityZone: "qa-de-1d",
+							AvailabilityZone: "qa-1d",
 							BuildingBlock:    "bb091",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -380,7 +380,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node004-bb091",
 							Resource:         "cpu",
-							AvailabilityZone: "qa-de-1d",
+							AvailabilityZone: "qa-1d",
 							BuildingBlock:    "bb091",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
@@ -395,7 +395,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Labels: metricLabels{
 							ComputeHost:      "node004-bb091",
 							Resource:         "ram",
-							AvailabilityZone: "qa-de-1d",
+							AvailabilityZone: "qa-1d",
 							BuildingBlock:    "bb091",
 							CPUArchitecture:  "cascade-lake",
 							WorkloadType:     "general-purpose",
