@@ -6,6 +6,7 @@ package filters
 import (
 	"context"
 	"log/slog"
+	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -92,9 +93,25 @@ func matchesNodeSelectorRequirement(node corev1.Node, req corev1.NodeSelectorReq
 	case corev1.NodeSelectorOpDoesNotExist:
 		return !exists
 	case corev1.NodeSelectorOpGt:
-		return exists && nodeValue > req.Values[0]
+		if !exists || len(req.Values) == 0 {
+			return false
+		}
+		nodeInt, err1 := strconv.Atoi(nodeValue)
+		reqInt, err2 := strconv.Atoi(req.Values[0])
+		if err1 != nil || err2 != nil {
+			return false
+		}
+		return nodeInt > reqInt
 	case corev1.NodeSelectorOpLt:
-		return exists && nodeValue < req.Values[0]
+		if !exists || len(req.Values) == 0 {
+			return false
+		}
+		nodeInt, err1 := strconv.Atoi(nodeValue)
+		reqInt, err2 := strconv.Atoi(req.Values[0])
+		if err1 != nil || err2 != nil {
+			return false
+		}
+		return nodeInt < reqInt
 	default:
 		return false
 	}

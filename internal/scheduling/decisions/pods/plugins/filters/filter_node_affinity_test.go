@@ -634,6 +634,96 @@ func TestMatchesNodeSelectorRequirement(t *testing.T) {
 			},
 			expected: false,
 		},
+		{
+			name: "Gt operator - greater value",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"cpu-cores": "8",
+					},
+				},
+			},
+			requirement: corev1.NodeSelectorRequirement{
+				Key:      "cpu-cores",
+				Operator: corev1.NodeSelectorOpGt,
+				Values:   []string{"4"},
+			},
+			expected: true,
+		},
+		{
+			name: "Gt operator - equal value",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"cpu-cores": "4",
+					},
+				},
+			},
+			requirement: corev1.NodeSelectorRequirement{
+				Key:      "cpu-cores",
+				Operator: corev1.NodeSelectorOpGt,
+				Values:   []string{"4"},
+			},
+			expected: false,
+		},
+		{
+			name: "Gt operator - non-integer value",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"cpu-cores": "invalid",
+					},
+				},
+			},
+			requirement: corev1.NodeSelectorRequirement{
+				Key:      "cpu-cores",
+				Operator: corev1.NodeSelectorOpGt,
+				Values:   []string{"4"},
+			},
+			expected: false,
+		},
+		{
+			name: "Lt operator - smaller value",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"memory-gb": "16",
+					},
+				},
+			},
+			requirement: corev1.NodeSelectorRequirement{
+				Key:      "memory-gb",
+				Operator: corev1.NodeSelectorOpLt,
+				Values:   []string{"32"},
+			},
+			expected: true,
+		},
+		{
+			name: "Lt operator - equal value",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"memory-gb": "32",
+					},
+				},
+			},
+			requirement: corev1.NodeSelectorRequirement{
+				Key:      "memory-gb",
+				Operator: corev1.NodeSelectorOpLt,
+				Values:   []string{"32"},
+			},
+			expected: false,
+		},
+		{
+			name: "Lt operator - missing label",
+			node: corev1.Node{},
+			requirement: corev1.NodeSelectorRequirement{
+				Key:      "memory-gb",
+				Operator: corev1.NodeSelectorOpLt,
+				Values:   []string{"32"},
+			},
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
