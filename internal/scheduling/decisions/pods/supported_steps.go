@@ -17,4 +17,5 @@ var supportedSteps = map[string]func() PodStep{
 	"noop":         func() PodStep { return &filters.NoopFilter{} },
 	"taint":        func() PodStep { return &filters.TaintFilter{} },
 	"nodeaffinity": func() PodStep { return &filters.NodeAffinityFilter{} },
+	"nodecapacity": func() PodStep { return &filters.NodeCapacityFilter{} },
 }
