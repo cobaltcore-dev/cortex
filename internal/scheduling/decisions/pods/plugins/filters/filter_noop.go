@@ -1,4 +1,7 @@
-package pods
+// Copyright SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package filters
 
 import (
 	"context"
@@ -29,7 +32,7 @@ func (NoopFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*
 	stats := make(map[string]lib.StepStatistics)
 	// Usually you would do some filtering here, or adjust the weights.
 	for _, node := range request.Nodes {
-		activations[node.Name] = 1.0
+		activations[node.Name] = 0.0
 	}
 	return &lib.StepResult{Activations: activations, Statistics: stats}, nil
 }

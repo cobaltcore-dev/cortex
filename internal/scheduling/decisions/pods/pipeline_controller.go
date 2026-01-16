@@ -141,25 +141,6 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		return errors.New("pipeline not found or not ready")
 	}
 
-	// Find all available nodes.
-	nodes := &corev1.NodeList{}
-	if err := c.List(ctx, nodes); err != nil {
-		return err
-	}
-	if len(nodes.Items) == 0 {
-		return errors.New("no nodes available for scheduling")
-	}
-
-	// Execute the scheduling pipeline.
-	request := pods.PodPipelineRequest{Nodes: nodes.Items}
-	result, err := pipeline.Run(request)
-	if err != nil {
-		log.V(1).Error(err, "failed to run scheduler pipeline")
-		return errors.New("failed to run scheduler pipeline")
-	}
-	decision.Status.Result = &result
-	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-
 	// Check if the pod is already assigned to a node.
 	pod := &corev1.Pod{}
 	if err := c.Get(ctx, client.ObjectKey{
@@ -173,6 +154,25 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		log.Info("pod is already assigned to a node", "node", pod.Spec.NodeName)
 		return nil
 	}
+
+	// Find all available nodes.
+	nodes := &corev1.NodeList{}
+	if err := c.List(ctx, nodes); err != nil {
+		return err
+	}
+	if len(nodes.Items) == 0 {
+		return errors.New("no nodes available for scheduling")
+	}
+
+	// Execute the scheduling pipeline.
+	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
+	result, err := pipeline.Run(request)
+	if err != nil {
+		log.V(1).Error(err, "failed to run scheduler pipeline")
+		return errors.New("failed to run scheduler pipeline")
+	}
+	decision.Status.Result = &result
+	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
 	// Assign the first node returned by the pipeline using a Binding.
 	binding := &corev1.Binding{
