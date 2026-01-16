@@ -18,8 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestHostAvailableCapacityKPI_Init(t *testing.T) {
-	kpi := &HostAvailableCapacityKPI{}
+func TestVMwareResourceCapacityKPI_Init(t *testing.T) {
+	kpi := &VMwareResourceCapacityKPI{}
 	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -35,7 +35,7 @@ func getMetricName(desc string) string {
 	return ""
 }
 
-func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
+func TestVMwareResourceCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -55,6 +55,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			DisabledReason:   nil,
 			PinnedProjects:   nil,
 		},
+		// Skip this because it's not a VMware host
 		&compute.HostDetails{
 			ComputeHost:      "kvm-host",
 			AvailabilityZone: "az2",
@@ -70,11 +71,11 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 		},
 		// Skip this because placement doesn't report any capacity for this host
 		&compute.HostDetails{
-			ComputeHost:      "kvm-host-2",
+			ComputeHost:      "vmware-host-2",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "qemu",
-			HypervisorFamily: "kvm",
+			HypervisorFamily: "vmware",
 			WorkloadType:     "hana",
 			Enabled:          false,
 			Decommissioned:   false,
@@ -82,12 +83,13 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			DisabledReason:   testlib.Ptr("test"),
 			PinnedProjects:   testlib.Ptr("project1,project2"),
 		},
+		// Skip this because it's a ironic host
 		&compute.HostDetails{
 			ComputeHost:      "ironic-host",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "ironic",
-			HypervisorFamily: "kvm",
+			HypervisorFamily: "vmware",
 			WorkloadType:     "hana",
 			Enabled:          false,
 			Decommissioned:   false,
@@ -134,7 +136,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	kpi := &HostAvailableCapacityKPI{}
+	kpi := &VMwareResourceCapacityKPI{}
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithRuntimeObjects(&v1alpha1.Knowledge{
@@ -162,7 +164,6 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 		ExternalCustomer string
 		CPUArchitecture  string
 		WorkloadType     string
-		HypervisorFamily string
 		DisabledReason   string
 		PinnedProjects   string
 		Value            float64
@@ -174,8 +175,8 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 		desc := metric.Desc().String()
 		metricName := getMetricName(desc)
 
-		// Only consider cortex_available_capacity_per_host metric in this test
-		if metricName != "cortex_available_capacity_per_host" {
+		// Only consider cortex_vmware_host_capacity_available metric in this test
+		if metricName != "cortex_vmware_host_capacity_available" {
 			continue
 		}
 
@@ -200,7 +201,6 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			ExternalCustomer: labels["external_customer"],
 			CPUArchitecture:  labels["cpu_architecture"],
 			WorkloadType:     labels["workload_type"],
-			HypervisorFamily: labels["hypervisor_family"],
 			DisabledReason:   labels["disabled_reason"],
 			PinnedProjects:   labels["pinned_projects"],
 			Value:            m.GetGauge().GetValue(),
@@ -217,7 +217,6 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			HypervisorFamily: "vmware",
 			DisabledReason:   "-",
 			PinnedProjects:   "",
 			Value:            60, // 100 - 40
@@ -231,7 +230,6 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			HypervisorFamily: "vmware",
 			DisabledReason:   "-",
 			PinnedProjects:   "",
 			Value:            160, // 200 - 40
@@ -245,52 +243,9 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			HypervisorFamily: "vmware",
 			DisabledReason:   "-",
 			PinnedProjects:   "",
 			Value:            260, // 300 - 40
-		},
-		"kvm-host-cpu": {
-			ComputeHost:      "kvm-host",
-			Resource:         "cpu",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			HypervisorFamily: "kvm",
-			DisabledReason:   "test",
-			PinnedProjects:   "project1,project2",
-			Value:            25, // 100 - 75
-		},
-		"kvm-host-ram": {
-			ComputeHost:      "kvm-host",
-			Resource:         "ram",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			HypervisorFamily: "kvm",
-			DisabledReason:   "test",
-			PinnedProjects:   "project1,project2",
-			Value:            20, // 100 - 80
-		},
-		"kvm-host-disk": {
-			ComputeHost:      "kvm-host",
-			Resource:         "disk",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			HypervisorFamily: "kvm",
-			DisabledReason:   "test",
-			PinnedProjects:   "project1,project2",
-			Value:            15, // 100 - 85
 		},
 	}
 
@@ -311,7 +266,7 @@ func TestHostAvailableCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 	}
 }
 
-func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
+func TestVMwareResourceCapacityKPI_Collect_TotalMetric(t *testing.T) {
 	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -331,6 +286,7 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			DisabledReason:   nil,
 			PinnedProjects:   nil,
 		},
+		// Skip this because it's not a VMware host
 		&compute.HostDetails{
 			ComputeHost:      "kvm-host",
 			AvailabilityZone: "az2",
@@ -341,35 +297,36 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			Enabled:          false,
 			Decommissioned:   false,
 			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("external customer"),
+			DisabledReason:   testlib.Ptr("test"),
 			PinnedProjects:   testlib.Ptr("project1,project2"),
 		},
 		// Skip this because placement doesn't report any capacity for this host
 		&compute.HostDetails{
-			ComputeHost:      "kvm-host-2",
+			ComputeHost:      "vmware-host-2",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "qemu",
-			HypervisorFamily: "kvm",
+			HypervisorFamily: "vmware",
 			WorkloadType:     "hana",
 			Enabled:          false,
 			Decommissioned:   false,
 			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("external customer"),
+			DisabledReason:   testlib.Ptr("test"),
 			PinnedProjects:   testlib.Ptr("project1,project2"),
 		},
+		// Skip this because it's a ironic host
 		&compute.HostDetails{
 			ComputeHost:      "ironic-host",
 			AvailabilityZone: "az2",
 			CPUArchitecture:  "cascade-lake",
 			HypervisorType:   "ironic",
-			HypervisorFamily: "kvm",
+			HypervisorFamily: "vmware",
 			WorkloadType:     "hana",
 			Enabled:          false,
 			Decommissioned:   false,
 			ExternalCustomer: false,
+			DisabledReason:   testlib.Ptr("test"),
 			PinnedProjects:   testlib.Ptr("project1"),
-			DisabledReason:   testlib.Ptr("external customer"),
 		},
 	})
 	if err != nil {
@@ -383,8 +340,8 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			TotalRAMAllocatableMB:  200,
 			TotalDiskAllocatableGB: 300,
 			VCPUsUsed:              40,
-			RAMUsedMB:              100,
-			DiskUsedGB:             150,
+			RAMUsedMB:              40,
+			DiskUsedGB:             40,
 		},
 		&compute.HostUtilization{
 			ComputeHost:            "kvm-host",
@@ -410,7 +367,7 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	kpi := &HostAvailableCapacityKPI{}
+	kpi := &VMwareResourceCapacityKPI{}
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithRuntimeObjects(&v1alpha1.Knowledge{
@@ -438,8 +395,7 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 		ExternalCustomer string
 		CPUArchitecture  string
 		WorkloadType     string
-		HypervisorFamily string
-		DisabledReason   string
+		PinnedProjects   string
 		Value            float64
 	}
 
@@ -449,8 +405,8 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 		desc := metric.Desc().String()
 		metricName := getMetricName(desc)
 
-		// Only consider cortex_available_capacity_per_host_pct metric in this test
-		if metricName != "cortex_available_capacity_per_host_pct" {
+		// Only consider cortex_vmware_host_capacity_total metric in this test
+		if metricName != "cortex_vmware_host_capacity_total" {
 			continue
 		}
 
@@ -475,8 +431,7 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			ExternalCustomer: labels["external_customer"],
 			CPUArchitecture:  labels["cpu_architecture"],
 			WorkloadType:     labels["workload_type"],
-			HypervisorFamily: labels["hypervisor_family"],
-			DisabledReason:   labels["disabled_reason"],
+			PinnedProjects:   labels["pinned_projects"],
 			Value:            m.GetGauge().GetValue(),
 		}
 	}
@@ -491,9 +446,8 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			HypervisorFamily: "vmware",
-			DisabledReason:   "-",
-			Value:            60, // (100 - 40) / 100 * 100
+			PinnedProjects:   "",
+			Value:            100,
 		},
 		"vmware-host-ram": {
 			ComputeHost:      "vmware-host",
@@ -504,9 +458,8 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			HypervisorFamily: "vmware",
-			DisabledReason:   "-",
-			Value:            50, // (200 - 100) / 200 * 100
+			PinnedProjects:   "",
+			Value:            200,
 		},
 		"vmware-host-disk": {
 			ComputeHost:      "vmware-host",
@@ -517,48 +470,8 @@ func TestHostAvailableCapacityKPI_Collect_PctMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			HypervisorFamily: "vmware",
-			DisabledReason:   "-",
-			Value:            50, // (300 - 150) / 300 * 100
-		},
-		"kvm-host-cpu": {
-			ComputeHost:      "kvm-host",
-			Resource:         "cpu",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			HypervisorFamily: "kvm",
-			DisabledReason:   "external customer",
-			Value:            25, // (100 - 75) / 100 * 100
-		},
-		"kvm-host-ram": {
-			ComputeHost:      "kvm-host",
-			Resource:         "ram",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			HypervisorFamily: "kvm",
-			DisabledReason:   "external customer",
-			Value:            20, // (100 - 80) / 100 * 100
-		},
-		"kvm-host-disk": {
-			ComputeHost:      "kvm-host",
-			Resource:         "disk",
-			AvailabilityZone: "az2",
-			Enabled:          "false",
-			Decommissioned:   "false",
-			ExternalCustomer: "false",
-			CPUArchitecture:  "cascade-lake",
-			WorkloadType:     "hana",
-			HypervisorFamily: "kvm",
-			DisabledReason:   "external customer",
-			Value:            15, // (100 - 85) / 100 * 100
+			PinnedProjects:   "",
+			Value:            300,
 		},
 	}
 

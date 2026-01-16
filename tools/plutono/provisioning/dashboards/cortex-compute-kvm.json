@@ -1,0 +1,2429 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "-- Plutono --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 0,
+    "iteration": 1767868544196,
+    "links": [],
+    "panels": [
+        {
+            "aliasColors": {},
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percentunit"
+                },
+                "overrides": []
+            },
+            "fill": 0,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 12,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "hiddenSeries": false,
+            "id": 308,
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": false
+            },
+            "lines": true,
+            "linewidth": 2,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.45",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [],
+            "spaceLength": 10,
+            "stack": false,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_payg{resource=\"cpu\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "interval": "",
+                    "legendFormat": "Available CPU",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_payg{resource=\"ram\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available RAM",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_payg{resource=\"disk\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available Disk",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_total{resource=\"cpu\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total CPU",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_total{resource=\"ram\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total RAM",
+                    "refId": "E"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_total{resource=\"disk\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total Disk",
+                    "refId": "F"
+                }
+            ],
+            "thresholds": [
+                {
+                    "$$hashKey": "object:3290",
+                    "colorMode": "critical",
+                    "fill": true,
+                    "line": true,
+                    "op": "lt",
+                    "value": 0.2,
+                    "yaxis": "left"
+                }
+            ],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "Capacity over time",
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "transformations": [
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available CPU (%)",
+                        "binary": {
+                            "left": "Available CPU",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total CPU"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "include": [
+                                "cortex_kvm_host_capacity_payg{availability_zone=\"qa-de-1b\", building_block=\"bb086\", component=\"nova-knowledge\", compute_host=\"node006-bb086\", container=\"manager\", cpu_architecture=\"sapphire-rapids\", decommissioned=\"false\", enabled=\"false\", endpoint=\"metrics\", external_customer=\"false\", github_org=\"cobaltcore-dev\", github_repo=\"cortex\", instance=\"10.1.51.29:2112\", job=\"cortex-nova-metrics\", namespace=\"default\", pod=\"cortex-nova-knowledge-controller-manager-686b8b5cd9-4g2hf\", resource=\"cpu\", service=\"cortex-nova-metrics\", workload_type=\"hana\"}"
+                            ],
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available RAM (%)",
+                        "binary": {
+                            "left": "Available RAM",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total RAM"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available Disk (%)",
+                        "binary": {
+                            "left": "Available Disk",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total Disk"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Available CPU": true,
+                            "Available Disk": true,
+                            "Available RAM": true,
+                            "Total CPU": true,
+                            "Total Disk": true,
+                            "Total RAM": true
+                        },
+                        "indexByName": {},
+                        "renameByName": {}
+                    }
+                }
+            ],
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+            },
+            "yaxes": [
+                {
+                    "$$hashKey": "object:3187",
+                    "format": "percentunit",
+                    "label": null,
+                    "logBase": 1,
+                    "max": "1",
+                    "min": "0",
+                    "show": true
+                },
+                {
+                    "$$hashKey": "object:3188",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
+            "datasource": null,
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 2,
+                "w": 8,
+                "x": 0,
+                "y": 12
+            },
+            "id": 294,
+            "options": {
+                "content": "<h1 style=\"text-align:center; font-size: 3rem\">CPU</h1>",
+                "mode": "markdown"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "type": "text"
+        },
+        {
+            "datasource": null,
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 2,
+                "w": 8,
+                "x": 8,
+                "y": 12
+            },
+            "id": 295,
+            "options": {
+                "content": "<h1 style=\"text-align:center; font-size: 3rem\">RAM</h1>",
+                "mode": "markdown"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "type": "text"
+        },
+        {
+            "datasource": null,
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 2,
+                "w": 8,
+                "x": 16,
+                "y": 12
+            },
+            "id": 293,
+            "options": {
+                "content": "<h1 style=\"text-align:center; font-size: 3rem\">Disk</h1>",
+                "mode": "markdown"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "type": "text"
+        },
+        {
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "rgba(115, 191, 105, 0)",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Available (%)"
+                        },
+                        "properties": [
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "yellow",
+                                            "value": 0.2
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 0.3
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 14
+            },
+            "id": 302,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {},
+                "textMode": "auto"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_utilized{resource=\"cpu\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_failover{resource=\"cpu\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_payg{resource=\"cpu\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_total{resource=\"cpu\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_reserved{resource=\"cpu\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reserved",
+                    "refId": "E"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "transformations": [
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available (%)",
+                        "binary": {
+                            "left": "Available",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true
+                        },
+                        "indexByName": {
+                            "Available": 1,
+                            "Available (%)": 0,
+                            "Failover": 5,
+                            "Reserved": 6,
+                            "Time": 3,
+                            "Total": 2,
+                            "Workload": 4
+                        },
+                        "renameByName": {}
+                    }
+                }
+            ],
+            "type": "stat"
+        },
+        {
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "rgba(115, 191, 105, 0)",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "mbytes"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Available (%)"
+                        },
+                        "properties": [
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "yellow",
+                                            "value": 0.2
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 0.3
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 14
+            },
+            "id": 309,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {},
+                "textMode": "auto"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_utilized{resource=\"ram\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_failover{resource=\"ram\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_payg{resource=\"ram\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_total{resource=\"ram\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_reserved{resource=\"ram\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reserved",
+                    "refId": "E"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "transformations": [
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available (%)",
+                        "binary": {
+                            "left": "Available",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true
+                        },
+                        "indexByName": {
+                            "Available": 1,
+                            "Available (%)": 0,
+                            "Failover": 5,
+                            "Reserved": 6,
+                            "Time": 3,
+                            "Total": 2,
+                            "Workload": 4
+                        },
+                        "renameByName": {}
+                    }
+                }
+            ],
+            "type": "stat"
+        },
+        {
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "rgba(115, 191, 105, 0)",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "gbytes"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Available (%)"
+                        },
+                        "properties": [
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "yellow",
+                                            "value": 0.2
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 0.3
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 14
+            },
+            "id": 310,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {},
+                "textMode": "auto"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_utilized{resource=\"disk\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_failover{resource=\"disk\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_payg{resource=\"disk\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_total{resource=\"disk\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(max(cortex_kvm_host_capacity_reserved{resource=\"disk\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host))",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reserved",
+                    "refId": "E"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "transformations": [
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available (%)",
+                        "binary": {
+                            "left": "Available",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true
+                        },
+                        "indexByName": {
+                            "Available": 1,
+                            "Available (%)": 0,
+                            "Failover": 5,
+                            "Reserved": 6,
+                            "Time": 3,
+                            "Total": 2,
+                            "Workload": 4
+                        },
+                        "renameByName": {}
+                    }
+                }
+            ],
+            "type": "stat"
+        },
+        {
+            "aliasColors": {},
+            "bars": true,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 22
+            },
+            "hiddenSeries": false,
+            "id": 281,
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": false,
+                "total": false,
+                "values": false
+            },
+            "lines": false,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.45",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [
+                {
+                    "$$hashKey": "object:1091",
+                    "alias": "/.*/",
+                    "color": "#73BF69"
+                }
+            ],
+            "spaceLength": 10,
+            "stack": true,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "max(cortex_kvm_host_capacity_payg{resource=\"cpu\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host)",
+                    "instant": true,
+                    "interval": "",
+                    "legendFormat": "{{compute_host}}",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "",
+                    "hide": false,
+                    "instant": true,
+                    "interval": "",
+                    "legendFormat": "",
+                    "refId": "B"
+                }
+            ],
+            "thresholds": [],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "Available per Host",
+            "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "series",
+                "name": null,
+                "show": false,
+                "values": [
+                    "total"
+                ]
+            },
+            "yaxes": [
+                {
+                    "$$hashKey": "object:636",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": "-10",
+                    "show": true
+                },
+                {
+                    "$$hashKey": "object:637",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
+            "aliasColors": {},
+            "bars": true,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "mbytes"
+                },
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 22
+            },
+            "hiddenSeries": false,
+            "id": 305,
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": false,
+                "total": false,
+                "values": false
+            },
+            "lines": false,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.45",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [
+                {
+                    "$$hashKey": "object:1091",
+                    "alias": "/.*/",
+                    "color": "#73BF69"
+                }
+            ],
+            "spaceLength": 10,
+            "stack": true,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "max(cortex_kvm_host_capacity_payg{resource=\"ram\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host)",
+                    "instant": true,
+                    "interval": "",
+                    "legendFormat": "{{compute_host}}",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "",
+                    "hide": false,
+                    "instant": true,
+                    "interval": "",
+                    "legendFormat": "",
+                    "refId": "B"
+                }
+            ],
+            "thresholds": [
+                {
+                    "$$hashKey": "object:83",
+                    "colorMode": "custom",
+                    "fill": false,
+                    "fillColor": "rgba(51, 162, 229, 0.2)",
+                    "line": true,
+                    "lineColor": "#8AB8FF",
+                    "op": "lt",
+                    "value": 2097152,
+                    "yaxis": "left"
+                },
+                {
+                    "$$hashKey": "object:91",
+                    "colorMode": "custom",
+                    "fill": false,
+                    "fillColor": "rgba(51, 162, 229, 0.2)",
+                    "line": true,
+                    "lineColor": "#3274D9",
+                    "op": "lt",
+                    "value": 3145728,
+                    "yaxis": "left"
+                },
+                {
+                    "$$hashKey": "object:98",
+                    "colorMode": "custom",
+                    "fill": false,
+                    "fillColor": "rgba(51, 162, 229, 0.2)",
+                    "line": true,
+                    "lineColor": "#C0D8FF",
+                    "op": "lt",
+                    "value": 1048576,
+                    "yaxis": "left"
+                },
+                {
+                    "$$hashKey": "object:106",
+                    "colorMode": "custom",
+                    "fill": false,
+                    "fillColor": "rgba(51, 162, 229, 0.2)",
+                    "line": true,
+                    "lineColor": "rgba(31, 96, 196, 0.6)",
+                    "op": "lt",
+                    "value": 4194304,
+                    "yaxis": "left"
+                },
+                {
+                    "$$hashKey": "object:201",
+                    "colorMode": "custom",
+                    "fill": false,
+                    "fillColor": "rgba(51, 162, 229, 0.2)",
+                    "line": true,
+                    "lineColor": "#E02F44",
+                    "op": "lt",
+                    "value": 6291456,
+                    "yaxis": "left"
+                },
+                {
+                    "$$hashKey": "object:212",
+                    "colorMode": "custom",
+                    "fill": false,
+                    "fillColor": "rgba(51, 162, 229, 0.2)",
+                    "line": true,
+                    "lineColor": "#C4162A",
+                    "op": "lt",
+                    "value": 8388608,
+                    "yaxis": "left"
+                }
+            ],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "Available per Host",
+            "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "series",
+                "name": null,
+                "show": false,
+                "values": [
+                    "total"
+                ]
+            },
+            "yaxes": [
+                {
+                    "$$hashKey": "object:636",
+                    "format": "mbytes",
+                    "label": null,
+                    "logBase": 1,
+                    "max": "12582912",
+                    "min": "-10",
+                    "show": true
+                },
+                {
+                    "$$hashKey": "object:637",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
+            "aliasColors": {},
+            "bars": true,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "prometheus-openstack",
+            "description": "",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "gbytes"
+                },
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 22
+            },
+            "hiddenSeries": false,
+            "id": 306,
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": false,
+                "total": false,
+                "values": false
+            },
+            "lines": false,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.45",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [
+                {
+                    "$$hashKey": "object:1091",
+                    "alias": "/.*/",
+                    "color": "#73BF69"
+                }
+            ],
+            "spaceLength": 10,
+            "stack": true,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "max(cortex_kvm_host_capacity_payg{resource=\"disk\",building_block=~\"$building_block\",enabled=~\"$enabled\",compute_host=~\"$nodes\"}) by (compute_host)",
+                    "instant": true,
+                    "interval": "",
+                    "legendFormat": "{{compute_host}}",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "",
+                    "hide": false,
+                    "instant": true,
+                    "interval": "",
+                    "legendFormat": "",
+                    "refId": "B"
+                }
+            ],
+            "thresholds": [],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "Available per Host",
+            "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "series",
+                "name": null,
+                "show": false,
+                "values": [
+                    "total"
+                ]
+            },
+            "yaxes": [
+                {
+                    "$$hashKey": "object:636",
+                    "format": "gbytes",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": "-10",
+                    "show": true
+                },
+                {
+                    "$$hashKey": "object:637",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
+            "collapsed": true,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 30
+            },
+            "id": 291,
+            "panels": [],
+            "repeat": "nodes",
+            "title": "$nodes",
+            "type": "row"
+        },
+        {
+            "datasource": null,
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 2,
+                "w": 8,
+                "x": 0,
+                "y": 31
+            },
+            "id": 289,
+            "options": {
+                "content": "<h1 style=\"text-align:center; font-size: 3rem\">CPU</h1>",
+                "mode": "markdown"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "type": "text"
+        },
+        {
+            "datasource": null,
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 2,
+                "w": 8,
+                "x": 8,
+                "y": 31
+            },
+            "id": 292,
+            "options": {
+                "content": "<h1 style=\"text-align:center; font-size: 3rem\">RAM</h1>",
+                "mode": "markdown"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "type": "text"
+        },
+        {
+            "datasource": null,
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 2,
+                "w": 8,
+                "x": 16,
+                "y": 31
+            },
+            "id": 296,
+            "options": {
+                "content": "<h1 style=\"text-align:center; font-size: 3rem\">Disk</h1>",
+                "mode": "markdown"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "type": "text"
+        },
+        {
+            "aliasColors": {},
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "fill": 10,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 9,
+                "w": 4,
+                "x": 0,
+                "y": 33
+            },
+            "hiddenSeries": false,
+            "id": 2,
+            "interval": "5m",
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": false
+            },
+            "lines": true,
+            "linewidth": 1,
+            "maxDataPoints": null,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.45",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [
+                {
+                    "$$hashKey": "object:172",
+                    "alias": "PAYG",
+                    "color": "rgba(115, 191, 105, 0.46)"
+                },
+                {
+                    "$$hashKey": "object:305",
+                    "alias": "Workload",
+                    "color": "#8F3BB8"
+                },
+                {
+                    "$$hashKey": "object:313",
+                    "alias": "Failover",
+                    "color": "#FF7383"
+                },
+                {
+                    "$$hashKey": "object:321",
+                    "alias": "Reservations",
+                    "color": "#5794F2"
+                },
+                {
+                    "$$hashKey": "object:355",
+                    "alias": "Total",
+                    "dashes": true,
+                    "fill": 0,
+                    "lines": true,
+                    "linewidth": 3,
+                    "stack": false
+                }
+            ],
+            "spaceLength": 10,
+            "stack": true,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reservations",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "PAYG",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_total{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "E"
+                }
+            ],
+            "thresholds": [],
+            "timeFrom": "1h",
+            "timeRegions": [],
+            "timeShift": null,
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": false,
+                "values": []
+            },
+            "yaxes": [
+                {
+                    "$$hashKey": "object:83",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": "0",
+                    "show": true
+                },
+                {
+                    "$$hashKey": "object:84",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "rgba(115, 191, 105, 0)",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Available (%)"
+                        },
+                        "properties": [
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "yellow",
+                                            "value": 0.2
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 0.3
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 9,
+                "w": 4,
+                "x": 4,
+                "y": 33
+            },
+            "id": 287,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {},
+                "textMode": "auto"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_total{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"cpu\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reserved",
+                    "refId": "E"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "transformations": [
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available (%)",
+                        "binary": {
+                            "left": "Available",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true
+                        },
+                        "indexByName": {
+                            "Available": 1,
+                            "Available (%)": 0,
+                            "Failover": 5,
+                            "Reserved": 6,
+                            "Time": 3,
+                            "Total": 2,
+                            "Workload": 4
+                        },
+                        "renameByName": {}
+                    }
+                }
+            ],
+            "type": "stat"
+        },
+        {
+            "aliasColors": {},
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "mbytes"
+                },
+                "overrides": []
+            },
+            "fill": 10,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 9,
+                "w": 4,
+                "x": 8,
+                "y": 33
+            },
+            "hiddenSeries": false,
+            "id": 298,
+            "interval": "5m",
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": false
+            },
+            "lines": true,
+            "linewidth": 1,
+            "maxDataPoints": null,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.45",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [
+                {
+                    "$$hashKey": "object:172",
+                    "alias": "PAYG",
+                    "color": "rgba(115, 191, 105, 0.46)"
+                },
+                {
+                    "$$hashKey": "object:305",
+                    "alias": "Workload",
+                    "color": "#8F3BB8"
+                },
+                {
+                    "$$hashKey": "object:313",
+                    "alias": "Failover",
+                    "color": "#FF7383"
+                },
+                {
+                    "$$hashKey": "object:321",
+                    "alias": "Reservations",
+                    "color": "#5794F2"
+                },
+                {
+                    "$$hashKey": "object:355",
+                    "alias": "Total",
+                    "dashes": true,
+                    "fill": 0,
+                    "lines": true,
+                    "linewidth": 3,
+                    "stack": false
+                }
+            ],
+            "spaceLength": 10,
+            "stack": true,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reservations",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "PAYG",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_total{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "E"
+                }
+            ],
+            "thresholds": [],
+            "timeFrom": "1h",
+            "timeRegions": [],
+            "timeShift": null,
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": false,
+                "values": []
+            },
+            "yaxes": [
+                {
+                    "$$hashKey": "object:83",
+                    "format": "mbytes",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": "0",
+                    "show": true
+                },
+                {
+                    "$$hashKey": "object:84",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "rgba(115, 191, 105, 0)",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "mbytes"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Available (%)"
+                        },
+                        "properties": [
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "yellow",
+                                            "value": 0.2
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 0.3
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 9,
+                "w": 4,
+                "x": 12,
+                "y": 33
+            },
+            "id": 297,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {},
+                "textMode": "auto"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_total{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"ram\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reserved",
+                    "refId": "E"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "transformations": [
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available (%)",
+                        "binary": {
+                            "left": "Available",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true
+                        },
+                        "indexByName": {
+                            "Available": 1,
+                            "Available (%)": 0,
+                            "Failover": 5,
+                            "Reserved": 6,
+                            "Time": 3,
+                            "Total": 2,
+                            "Workload": 4
+                        },
+                        "renameByName": {}
+                    }
+                }
+            ],
+            "type": "stat"
+        },
+        {
+            "aliasColors": {},
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "gbytes"
+                },
+                "overrides": []
+            },
+            "fill": 10,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 9,
+                "w": 4,
+                "x": 16,
+                "y": 33
+            },
+            "hiddenSeries": false,
+            "id": 300,
+            "interval": "5m",
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": false
+            },
+            "lines": true,
+            "linewidth": 1,
+            "maxDataPoints": null,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.45",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [
+                {
+                    "$$hashKey": "object:172",
+                    "alias": "PAYG",
+                    "color": "rgba(115, 191, 105, 0.46)"
+                },
+                {
+                    "$$hashKey": "object:305",
+                    "alias": "Workload",
+                    "color": "#8F3BB8"
+                },
+                {
+                    "$$hashKey": "object:313",
+                    "alias": "Failover",
+                    "color": "#FF7383"
+                },
+                {
+                    "$$hashKey": "object:321",
+                    "alias": "Reservations",
+                    "color": "#5794F2"
+                },
+                {
+                    "$$hashKey": "object:355",
+                    "alias": "Total",
+                    "dashes": true,
+                    "fill": 0,
+                    "lines": true,
+                    "linewidth": 3,
+                    "stack": false
+                }
+            ],
+            "spaceLength": 10,
+            "stack": true,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reservations",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "PAYG",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_total{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "E"
+                }
+            ],
+            "thresholds": [],
+            "timeFrom": "1h",
+            "timeRegions": [],
+            "timeShift": null,
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": false,
+                "values": []
+            },
+            "yaxes": [
+                {
+                    "$$hashKey": "object:83",
+                    "format": "gbytes",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": "0",
+                    "show": true
+                },
+                {
+                    "$$hashKey": "object:84",
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
+            "datasource": "prometheus-openstack",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "rgba(115, 191, 105, 0)",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "gbytes"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Available (%)"
+                        },
+                        "properties": [
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "yellow",
+                                            "value": 0.2
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 0.3
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "unit",
+                                "value": "percentunit"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 9,
+                "w": 4,
+                "x": 20,
+                "y": 33
+            },
+            "id": 299,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {},
+                "textMode": "auto"
+            },
+            "pluginVersion": "7.5.45",
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_utilized{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "interval": "",
+                    "legendFormat": "Workload",
+                    "queryType": "randomWalk",
+                    "refId": "A"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_failover{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Failover",
+                    "refId": "B"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_payg{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Available",
+                    "refId": "C"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_total{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Total",
+                    "refId": "D"
+                },
+                {
+                    "exemplar": true,
+                    "expr": "sum(cortex_kvm_host_capacity_reserved{resource=\"disk\",compute_host=\"$nodes\"})",
+                    "hide": false,
+                    "interval": "",
+                    "legendFormat": "Reserved",
+                    "refId": "E"
+                }
+            ],
+            "timeFrom": null,
+            "timeShift": null,
+            "transformations": [
+                {
+                    "id": "calculateField",
+                    "options": {
+                        "alias": "Available (%)",
+                        "binary": {
+                            "left": "Available",
+                            "operator": "/",
+                            "reducer": "sum",
+                            "right": "Total"
+                        },
+                        "mode": "binary",
+                        "reduce": {
+                            "reducer": "sum"
+                        }
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true
+                        },
+                        "indexByName": {
+                            "Available": 1,
+                            "Available (%)": 0,
+                            "Failover": 5,
+                            "Reserved": 6,
+                            "Time": 3,
+                            "Total": 2,
+                            "Workload": 4
+                        },
+                        "renameByName": {}
+                    }
+                }
+            ],
+            "type": "stat"
+        }
+    ],
+    "schemaVersion": 27,
+    "style": "dark",
+    "tags": [],
+    "templating": {
+        "list": [
+            {
+                "allValue": null,
+                "current": {
+                    "selected": true,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
+                },
+                "datasource": "prometheus-openstack",
+                "definition": "label_values(cortex_kvm_host_capacity_utilized, availability_zone)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "Availability Zone",
+                "multi": true,
+                "name": "availability_zone",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_kvm_host_capacity_utilized, availability_zone)",
+                    "refId": "prometheus-openstack-availability_zone-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": null,
+                "current": {
+                    "selected": true,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
+                },
+                "datasource": "prometheus-openstack",
+                "definition": "label_values(cortex_kvm_host_capacity_utilized, building_block)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "Building Block",
+                "multi": true,
+                "name": "building_block",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_kvm_host_capacity_utilized, building_block)",
+                    "refId": "prometheus-openstack-building_block-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": null,
+                "current": {
+                    "selected": false,
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "datasource": "prometheus-openstack",
+                "definition": "label_values(cortex_kvm_host_capacity_utilized, enabled)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "Enabled",
+                "multi": false,
+                "name": "enabled",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_kvm_host_capacity_utilized, enabled)",
+                    "refId": "prometheus-openstack-enabled-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": null,
+                "current": {
+                    "selected": true,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
+                },
+                "datasource": "prometheus-openstack",
+                "definition": "label_values(cortex_kvm_host_capacity_utilized, compute_host)",
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": true,
+                "label": "Nodes",
+                "multi": true,
+                "name": "nodes",
+                "options": [],
+                "query": {
+                    "query": "label_values(cortex_kvm_host_capacity_utilized{building_block=~\"$building_block\",enabled=~\"$enabled\"}, compute_host)",
+                    "refId": "prometheus-openstack-nodes-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            }
+        ]
+    },
+    "time": {
+        "from": "now-14d",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "Cortex KVM Infrastructure - Compute",
+    "uid": "cortex-compute-kvm",
+    "version": 1
+}
