@@ -198,6 +198,17 @@ spec:
         Note: currently, advanced boolean/numeric operators for the capabilities
         like `>`, `!`, ... are not supported because they are not used by any of our
         flavors in production.
+    - type: filter
+      impl: filter_instance_group_affinity
+      description: |
+        This step selects hosts in the instance group specified in the nova
+        scheduler request spec.
+    - type: filter
+      impl: filter_instance_group_anti_affinity
+      description: |
+        This step selects hosts not in the instance group specified in the nova
+        scheduler request spec, but only until the max_server_per_host limit is
+        reached (default = 1).
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
