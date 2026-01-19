@@ -243,6 +243,7 @@ func TestTaintFilter_Run(t *testing.T) {
 
 			if result == nil {
 				t.Fatal("expected result to be non-nil")
+				return
 			}
 
 			if len(result.Activations) != len(tt.expected) {
