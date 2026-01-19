@@ -215,6 +215,12 @@ spec:
         This step ensures that the target host of a live migration can accept
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
+    - type: filter
+      impl: filter_requested_destination
+      description: |
+        This step filters hosts based on the `requested_destination` instruction
+        from the nova scheduler request spec. It supports filtering by host and
+        by aggregates.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
