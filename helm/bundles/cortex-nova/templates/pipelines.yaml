@@ -209,6 +209,12 @@ spec:
         This step selects hosts not in the instance group specified in the nova
         scheduler request spec, but only until the max_server_per_host limit is
         reached (default = 1).
+    - type: filter
+      impl: filter_live_migratable
+      description: |
+        This step ensures that the target host of a live migration can accept
+        the migrating VM, by checking cpu architecture, cpu features, emulated
+        devices, and cpu modes.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
