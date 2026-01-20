@@ -39,6 +39,9 @@ type DecisionSpec struct {
 	// If the type is "pod", this field contains the pod reference.
 	// +kubebuilder:validation:Optional
 	PodRef *corev1.ObjectReference `json:"podRef,omitempty"`
+	// If the type is "podgroupset", this field contains the pod group set reference.
+	// +kubebuilder:validation:Optional
+	PodGroupSetRef *corev1.ObjectReference `json:"podGroupSetRef,omitempty"`
 }
 
 type StepResult struct {
@@ -68,6 +71,10 @@ type DecisionResult struct {
 	// The first element of the ordered hosts is considered the target host.
 	// +kubebuilder:validation:Optional
 	TargetHost *string `json:"targetHost,omitempty"`
+	// TargetPlacements contains the mapping of resource names to target hosts.
+	// This is used for bulk scheduling decisions like PodGroupSets.
+	// +kubebuilder:validation:Optional
+	TargetPlacements map[string]string `json:"targetPlacements,omitempty"`
 }
 
 const (

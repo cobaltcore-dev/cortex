@@ -1,0 +1,19 @@
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: podgroupsets-scheduler
+spec:
+  schedulingDomain: podgroupsets
+  description: |
+    This pipeline is used to schedule PodGroupSets (Gang Scheduling).
+  type: gang
+  createDecisions: true
+  steps:
+    - type: filter
+      impl: noop
+      description: |
+        This is only a passthrough step which lets all pod candidates through.
+        It is used as a placeholder step in the podgroupsets scheduler pipeline.
+      knowledges: []
+      mandatory: false

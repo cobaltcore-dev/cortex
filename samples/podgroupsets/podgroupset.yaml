@@ -1,0 +1,25 @@
+apiVersion: cortex.cloud/v1alpha1
+kind: PodGroupSet
+metadata:
+  name: podgroupset-example
+spec:
+  podGroups:
+    - name: foo
+      spec:
+        replicas: 1
+        podSpec:
+          containers:
+            - name: nginx
+              image: nginx:latest
+    - name: bar
+      spec:
+        replicas: 4
+        podSpec:
+          containers:
+            - name: busybox
+              image: busybox:latest
+              command: ["sleep", "3600"]
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "250m"
