@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -63,10 +63,12 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	old := decision.DeepCopy()
 	if err := c.process(ctx, decision); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := c.Status().Update(ctx, decision); err != nil {
+	patch := client.MergeFrom(old)
+	if err := c.Status().Patch(ctx, decision, patch); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -82,9 +84,8 @@ func (c *DecisionPipelineController) ProcessNewPod(ctx context.Context, pod *cor
 			GenerateName: "pod-",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator:   c.Conf.Operator,
-			Type:       v1alpha1.DecisionTypePod,
-			ResourceID: pod.Name,
+			SchedulingDomain: v1alpha1.SchedulingDomainPods,
+			ResourceID:       pod.Name,
 			PipelineRef: corev1.ObjectReference{
 				Name: "pods-scheduler",
 			},
@@ -104,15 +105,30 @@ func (c *DecisionPipelineController) ProcessNewPod(ctx context.Context, pod *cor
 			return err
 		}
 	}
-	if err := c.process(ctx, decision); err != nil {
-		return err
+	old := decision.DeepCopy()
+	err := c.process(ctx, decision)
+	if err != nil {
+		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DecisionConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "PipelineRunFailed",
+			Message: "pipeline run failed: " + err.Error(),
+		})
+	} else {
+		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DecisionConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "PipelineRunSucceeded",
+			Message: "pipeline run succeeded",
+		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Status().Update(ctx, decision); err != nil {
+		patch := client.MergeFrom(old)
+		if err := c.Status().Patch(ctx, decision, patch); err != nil {
 			return err
 		}
 	}
-	return nil
+	return err
 }
 
 func (c *DecisionPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
@@ -124,26 +140,6 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
 		return errors.New("pipeline not found or not ready")
 	}
-
-	// Find all available nodes.
-	nodes := &corev1.NodeList{}
-	if err := c.List(ctx, nodes); err != nil {
-		return err
-	}
-	if len(nodes.Items) == 0 {
-		return errors.New("no nodes available for scheduling")
-	}
-
-	// Execute the scheduling pipeline.
-	request := pods.PodPipelineRequest{Nodes: nodes.Items}
-	result, err := pipeline.Run(request)
-	if err != nil {
-		log.V(1).Error(err, "failed to run scheduler pipeline")
-		return errors.New("failed to run scheduler pipeline")
-	}
-	decision.Status.Result = &result
-	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
-	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
 	// Check if the pod is already assigned to a node.
 	pod := &corev1.Pod{}
@@ -158,6 +154,25 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		log.Info("pod is already assigned to a node", "node", pod.Spec.NodeName)
 		return nil
 	}
+
+	// Find all available nodes.
+	nodes := &corev1.NodeList{}
+	if err := c.List(ctx, nodes); err != nil {
+		return err
+	}
+	if len(nodes.Items) == 0 {
+		return errors.New("no nodes available for scheduling")
+	}
+
+	// Execute the scheduling pipeline.
+	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
+	result, err := pipeline.Run(request)
+	if err != nil {
+		log.V(1).Error(err, "failed to run scheduler pipeline")
+		return errors.New("failed to run scheduler pipeline")
+	}
+	decision.Status.Result = &result
+	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
 	// Assign the first node returned by the pipeline using a Binding.
 	binding := &corev1.Binding{
@@ -181,11 +196,10 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 // The base controller will delegate the pipeline creation down to this method.
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
-	name string,
-	steps []v1alpha1.Step,
+	p v1alpha1.Pipeline,
 ) (lib.Pipeline[pods.PodPipelineRequest], error) {
 
-	return lib.NewPipeline(ctx, c.Client, name, supportedSteps, steps, c.Monitor)
+	return lib.NewPipeline(ctx, c.Client, p.Name, supportedSteps, p.Spec.Steps, c.Monitor)
 }
 
 func (c *DecisionPipelineController) handlePod() handler.EventHandler {
@@ -230,6 +244,7 @@ func (c *DecisionPipelineController) handlePod() handler.EventHandler {
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
+	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
@@ -244,7 +259,7 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 					// Skip pods that already have a node assigned.
 					return false
 				}
-				return pod.Spec.SchedulerName == c.Conf.Operator
+				return pod.Spec.SchedulerName == string(v1alpha1.SchedulingDomainPods)
 			}),
 		).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
@@ -257,34 +272,11 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the operator.
-				if pipeline.Spec.Operator != c.Conf.Operator {
+				// Only react to pipelines matching the scheduling domain.
+				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
 					return false
 				}
 				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
-			}),
-		).
-		// Watch step changes so that we can turn on/off pipelines depending on
-		// unready steps.
-		WatchesMulticluster(
-			&v1alpha1.Step{},
-			handler.Funcs{
-				CreateFunc: c.HandleStepCreated,
-				UpdateFunc: c.HandleStepUpdated,
-				DeleteFunc: c.HandleStepDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				step := obj.(*v1alpha1.Step)
-				// Only react to steps matching the operator.
-				if step.Spec.Operator != c.Conf.Operator {
-					return false
-				}
-				// Only react to filter and weigher steps.
-				supportedTypes := []v1alpha1.StepType{
-					v1alpha1.StepTypeFilter,
-					v1alpha1.StepTypeWeigher,
-				}
-				return slices.Contains(supportedTypes, step.Spec.Type)
 			}),
 		).
 		Named("cortex-pod-scheduler").
@@ -292,15 +284,14 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.Operator != c.Conf.Operator {
+				if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
 					return false
 				}
 				// Ignore already decided schedulings.
 				if decision.Status.Result != nil {
 					return false
 				}
-				// Only handle pod decisions.
-				return decision.Spec.Type == v1alpha1.DecisionTypePod
+				return true
 			})),
 		).
 		Complete(c)

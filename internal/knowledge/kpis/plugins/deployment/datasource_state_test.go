@@ -15,7 +15,7 @@ import (
 
 func TestDatasourceStateKPI_Init(t *testing.T) {
 	kpi := &DatasourceStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"datasourceOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"datasourceSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -45,7 +45,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 			datasources: []v1alpha1.Datasource{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "ds1"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
 						NumberOfObjects: 10,
 						Conditions:      []v1.Condition{},
@@ -57,36 +57,18 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 			description:   "should collect metric for ready datasource",
 		},
 		{
-			name: "datasource in waiting state",
-			datasources: []v1alpha1.Datasource{
-				{
-					ObjectMeta: v1.ObjectMeta{Name: "ds2"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "test-operator"},
-					Status: v1alpha1.DatasourceStatus{
-						Conditions: []v1.Condition{
-							{
-								Type:   v1alpha1.DatasourceConditionWaiting,
-								Status: v1.ConditionTrue,
-							},
-						},
-					},
-				},
-			},
-			operator:      "test-operator",
-			expectedCount: 1,
-			description:   "should collect metric for waiting datasource",
-		},
-		{
 			name: "datasource in error state",
 			datasources: []v1alpha1.Datasource{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "ds3"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DatasourceConditionError,
-								Status: v1.ConditionTrue,
+								Type:    v1alpha1.DatasourceConditionReady,
+								Status:  v1.ConditionFalse,
+								Reason:  "SomeError",
+								Message: "An error occurred",
 							},
 						},
 					},
@@ -101,7 +83,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 			datasources: []v1alpha1.Datasource{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "ds-ready"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
 						NumberOfObjects: 10,
 						Conditions:      []v1.Condition{},
@@ -109,11 +91,11 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "ds-waiting"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DatasourceConditionWaiting,
+								Type:   v1alpha1.DatasourceConditionReady,
 								Status: v1.ConditionTrue,
 							},
 						},
@@ -121,12 +103,12 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "ds-error"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DatasourceConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DatasourceConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -141,7 +123,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 			datasources: []v1alpha1.Datasource{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "ds-correct-operator"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
 						NumberOfObjects: 10,
 						Conditions:      []v1.Condition{},
@@ -149,7 +131,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "ds-wrong-operator"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "other-operator"},
+					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.DatasourceStatus{
 						NumberOfObjects: 10,
 						Conditions:      []v1.Condition{},
@@ -165,7 +147,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 			datasources: []v1alpha1.Datasource{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "ds-unknown"},
-					Spec:       v1alpha1.DatasourceSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
 						NumberOfObjects: 0,
 						Conditions:      []v1.Condition{},
@@ -190,7 +172,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 			client := clientBuilder.Build()
 
 			kpi := &DatasourceStateKPI{}
-			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"datasourceOperator": "`+tt.operator+`"}`)); err != nil {
+			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"datasourceSchedulingDomain": "`+tt.operator+`"}`)); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
@@ -220,7 +202,7 @@ func TestDatasourceStateKPI_GetName(t *testing.T) {
 
 func TestDatasourceStateKPI_Describe(t *testing.T) {
 	kpi := &DatasourceStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"datasourceOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"datasourceSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

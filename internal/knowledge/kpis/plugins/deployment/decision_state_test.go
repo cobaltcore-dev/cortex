@@ -15,7 +15,7 @@ import (
 
 func TestDecisionStateKPI_Init(t *testing.T) {
 	kpi := &DecisionStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"decisionOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"decisionSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -53,12 +53,12 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			decisions: []v1alpha1.Decision{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec1"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -76,7 +76,7 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			decisions: []v1alpha1.Decision{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec2"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Result: &v1alpha1.DecisionResult{
 							TargetHost: &targetHost,
@@ -96,7 +96,7 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			decisions: []v1alpha1.Decision{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec3"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Result: &v1alpha1.DecisionResult{
 							OrderedHosts: []string{"host1", "host2"},
@@ -116,19 +116,19 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			decisions: []v1alpha1.Decision{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-error"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-waiting"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Result: &v1alpha1.DecisionResult{
 							TargetHost: &targetHost,
@@ -137,7 +137,7 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-success"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Result: &v1alpha1.DecisionResult{
 							OrderedHosts: []string{"host1"},
@@ -157,24 +157,24 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			decisions: []v1alpha1.Decision{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-correct-operator"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-wrong-operator"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "other-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -192,24 +192,24 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			decisions: []v1alpha1.Decision{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-error-1"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
 				},
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-error-2"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -227,7 +227,7 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			decisions: []v1alpha1.Decision{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-no-result"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status:     v1alpha1.DecisionStatus{},
 				},
 			},
@@ -243,15 +243,15 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			decisions: []v1alpha1.Decision{
 				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-error-with-target"},
-					Spec:       v1alpha1.DecisionSpec{Operator: "test-operator"},
+					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
 						Result: &v1alpha1.DecisionResult{
 							TargetHost: &targetHost,
 						},
 						Conditions: []v1.Condition{
 							{
-								Type:   v1alpha1.DecisionConditionError,
-								Status: v1.ConditionTrue,
+								Type:   v1alpha1.DecisionConditionReady,
+								Status: v1.ConditionFalse,
 							},
 						},
 					},
@@ -278,7 +278,7 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			client := clientBuilder.Build()
 
 			kpi := &DecisionStateKPI{}
-			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"decisionOperator": "`+tt.operator+`"}`)); err != nil {
+			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"decisionSchedulingDomain": "`+tt.operator+`"}`)); err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
@@ -308,7 +308,7 @@ func TestDecisionStateKPI_GetName(t *testing.T) {
 
 func TestDecisionStateKPI_Describe(t *testing.T) {
 	kpi := &DecisionStateKPI{}
-	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"decisionOperator": "test-operator"}`)); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts(`{"decisionSchedulingDomain": "test-operator"}`)); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

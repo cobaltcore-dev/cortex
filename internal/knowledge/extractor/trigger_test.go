@@ -31,7 +31,7 @@ func setupTestReconciler(t *testing.T) (*TriggerReconciler, client.Client, conte
 	}
 
 	testConf := conf.Config{
-		Operator: "test-operator",
+		SchedulingDomain: "test-operator",
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -56,8 +56,8 @@ func TestFindDependentKnowledge_DatasourceDependency(t *testing.T) {
 			Name: "test-datasource",
 		},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator: "test-operator",
-			Type:     v1alpha1.DatasourceTypePrometheus,
+			SchedulingDomain: "test-operator",
+			Type:             v1alpha1.DatasourceTypePrometheus,
 		},
 	}
 
@@ -67,7 +67,7 @@ func TestFindDependentKnowledge_DatasourceDependency(t *testing.T) {
 			Name: "dependent-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
+			SchedulingDomain: "test-operator",
 			Dependencies: v1alpha1.KnowledgeDependenciesSpec{
 				Datasources: []corev1.ObjectReference{
 					{Name: "test-datasource"},
@@ -83,8 +83,8 @@ func TestFindDependentKnowledge_DatasourceDependency(t *testing.T) {
 			Name: "independent-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 		},
 	}
 
@@ -120,8 +120,8 @@ func TestFindDependentKnowledge_KnowledgeDependency(t *testing.T) {
 			Name: "source-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 		},
 	}
 
@@ -131,7 +131,7 @@ func TestFindDependentKnowledge_KnowledgeDependency(t *testing.T) {
 			Name: "dependent-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
+			SchedulingDomain: "test-operator",
 			Dependencies: v1alpha1.KnowledgeDependenciesSpec{
 				Knowledges: []corev1.ObjectReference{
 					{Name: "source-knowledge"},
@@ -170,8 +170,8 @@ func TestFindDependentKnowledge_OperatorFiltering(t *testing.T) {
 			Name: "test-datasource",
 		},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator: "test-operator",
-			Type:     v1alpha1.DatasourceTypePrometheus,
+			SchedulingDomain: "test-operator",
+			Type:             v1alpha1.DatasourceTypePrometheus,
 		},
 	}
 
@@ -181,7 +181,7 @@ func TestFindDependentKnowledge_OperatorFiltering(t *testing.T) {
 			Name: "our-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
+			SchedulingDomain: "test-operator",
 			Dependencies: v1alpha1.KnowledgeDependenciesSpec{
 				Datasources: []corev1.ObjectReference{
 					{Name: "test-datasource"},
@@ -197,7 +197,7 @@ func TestFindDependentKnowledge_OperatorFiltering(t *testing.T) {
 			Name: "other-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "other-operator",
+			SchedulingDomain: "other-operator",
 			Dependencies: v1alpha1.KnowledgeDependenciesSpec{
 				Datasources: []corev1.ObjectReference{
 					{Name: "test-datasource"},
@@ -240,8 +240,8 @@ func TestTriggerKnowledgeReconciliation_ImmediateTrigger(t *testing.T) {
 			Name: "test-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			LastExtracted: metav1.NewTime(pastTime),
@@ -281,8 +281,8 @@ func TestTriggerKnowledgeReconciliation_ScheduledTrigger(t *testing.T) {
 			Name: "test-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			LastExtracted: metav1.NewTime(recentTime),
@@ -321,8 +321,8 @@ func TestReconcile_DatasourceChanges(t *testing.T) {
 			Name: "test-datasource",
 		},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator: "test-operator",
-			Type:     v1alpha1.DatasourceTypePrometheus,
+			SchedulingDomain: "test-operator",
+			Type:             v1alpha1.DatasourceTypePrometheus,
 		},
 	}
 
@@ -333,7 +333,7 @@ func TestReconcile_DatasourceChanges(t *testing.T) {
 			Name: "dependent-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
+			SchedulingDomain: "test-operator",
 			Dependencies: v1alpha1.KnowledgeDependenciesSpec{
 				Datasources: []corev1.ObjectReference{
 					{Name: "test-datasource"},
@@ -391,8 +391,8 @@ func TestReconcile_KnowledgeChanges(t *testing.T) {
 			Name: "source-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 		},
 	}
 
@@ -403,7 +403,7 @@ func TestReconcile_KnowledgeChanges(t *testing.T) {
 			Name: "dependent-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
+			SchedulingDomain: "test-operator",
 			Dependencies: v1alpha1.KnowledgeDependenciesSpec{
 				Knowledges: []corev1.ObjectReference{
 					{Name: "source-knowledge"},
@@ -503,8 +503,8 @@ func TestMapDatasourceToKnowledge_CorrectOperator(t *testing.T) {
 			Name: "test-datasource",
 		},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator: "test-operator",
-			Type:     v1alpha1.DatasourceTypePrometheus,
+			SchedulingDomain: "test-operator",
+			Type:             v1alpha1.DatasourceTypePrometheus,
 		},
 	}
 
@@ -525,8 +525,8 @@ func TestMapDatasourceToKnowledge_DifferentOperator(t *testing.T) {
 			Name: "test-datasource",
 		},
 		Spec: v1alpha1.DatasourceSpec{
-			Operator: "other-operator",
-			Type:     v1alpha1.DatasourceTypePrometheus,
+			SchedulingDomain: "other-operator",
+			Type:             v1alpha1.DatasourceTypePrometheus,
 		},
 	}
 
@@ -554,8 +554,8 @@ func TestMapKnowledgeToKnowledge_CorrectOperator(t *testing.T) {
 			Name: "test-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "test-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 		},
 	}
 
@@ -576,8 +576,8 @@ func TestMapKnowledgeToKnowledge_DifferentOperator(t *testing.T) {
 			Name: "test-knowledge",
 		},
 		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "other-operator",
-			Recency:  metav1.Duration{Duration: time.Minute},
+			SchedulingDomain: "other-operator",
+			Recency:          metav1.Duration{Duration: time.Minute},
 		},
 	}
 

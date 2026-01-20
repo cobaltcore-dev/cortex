@@ -33,8 +33,8 @@ import (
 type Controller struct {
 	// Kubernetes client to manage/fetch resources.
 	client.Client
-	// The name of the operator to scope resources to.
-	OperatorName string
+	// The scheduling domain to scope resources to.
+	SchedulingDomain v1alpha1.SchedulingDomain
 
 	// The supported kpis to manage.
 	supportedKPIs map[string]plugins.KPI
@@ -73,19 +73,26 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// Reconcile the kpi.
+	old := kpi.DeepCopy()
 	err := c.handleKPIChange(ctx, kpi)
 	if err != nil {
 		meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KPIConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "ReconciliationFailed",
 			Message: err.Error(),
 		})
 	} else {
-		meta.RemoveStatusCondition(&kpi.Status.Conditions, v1alpha1.KPIConditionError)
+		meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "ReconciliationSucceeded",
+			Message: "kpi reconciled successfully",
+		})
 	}
-	if err := c.Status().Update(ctx, kpi); err != nil {
-		log.Error(err, "failed to update kpi status after reconciliation error", "name", kpi.Name)
+	patch := client.MergeFrom(old)
+	if err := c.Status().Patch(ctx, kpi, patch); err != nil {
+		log.Error(err, "failed to patch kpi status after reconciliation error", "name", kpi.Name)
 	}
 	return ctrl.Result{}, nil
 }
@@ -101,22 +108,29 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 		return fmt.Errorf("failed to list existing kpis: %w", err)
 	}
 	for _, kpi := range kpis.Items {
-		if kpi.Spec.Operator != c.OperatorName {
+		if kpi.Spec.SchedulingDomain != c.SchedulingDomain {
 			continue
 		}
+		old := kpi.DeepCopy()
 		err := c.handleKPIChange(ctx, &kpi)
 		if err != nil {
 			meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.KPIConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.KPIConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "ReconciliationFailed",
 				Message: err.Error(),
 			})
 		} else {
-			meta.RemoveStatusCondition(&kpi.Status.Conditions, v1alpha1.KPIConditionError)
+			meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.KPIConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "ReconciliationSucceeded",
+				Message: "kpi reconciled successfully",
+			})
 		}
-		if err := c.Status().Update(ctx, &kpi); err != nil {
-			log.Error(err, "failed to update kpi status after reconciliation error", "name", kpi.Name)
+		patch := client.MergeFrom(old)
+		if err := c.Status().Patch(ctx, &kpi, patch); err != nil {
+			log.Error(err, "failed to patch kpi status after reconciliation error", "name", kpi.Name)
 		}
 	}
 	return nil
@@ -183,7 +197,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			return err
 		}
 		// Check if datasource is ready
-		if ds.Status.IsReady() {
+		if meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionReady) {
 			datasourcesReady++
 		}
 
@@ -208,7 +222,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			return err
 		}
 		// Check if knowledge is ready
-		if kn.Status.IsReady() {
+		if meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
 			knowledgesReady++
 		}
 	}
@@ -258,7 +272,22 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	}
 
 	// Update the status to ready and populate the ready dependencies.
-	obj.Status.Ready = dependenciesReadyTotal == dependenciesTotal
+	if dependenciesReadyTotal == dependenciesTotal {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllDependenciesReady",
+			Message: "all kpi dependencies are ready",
+		})
+	} else {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:   v1alpha1.KPIConditionReady,
+			Status: metav1.ConditionFalse,
+			Reason: "UnreadyDependencies",
+			Message: fmt.Sprintf("%d out of %d kpi dependencies are ready",
+				dependenciesReadyTotal, dependenciesTotal),
+		})
+	}
 	obj.Status.ReadyDependencies = dependenciesReadyTotal
 	obj.Status.TotalDependencies = dependenciesTotal
 	obj.Status.DependenciesReadyFrac = "ready"
@@ -316,7 +345,9 @@ func (c *Controller) handleDatasourceUpdated(
 	dsBefore := evt.ObjectNew.(*v1alpha1.Datasource)
 	dsAfter := evt.ObjectOld.(*v1alpha1.Datasource)
 	// Only react to changes affecting the readiness.
-	if dsBefore.Status.IsReady() == dsAfter.Status.IsReady() {
+	dsBeforeReady := meta.IsStatusConditionTrue(dsBefore.Status.Conditions, v1alpha1.DatasourceConditionReady)
+	dsAfterReady := meta.IsStatusConditionTrue(dsAfter.Status.Conditions, v1alpha1.DatasourceConditionReady)
+	if dsBeforeReady == dsAfterReady {
 		return
 	}
 	// Handle the change.
@@ -379,7 +410,9 @@ func (c *Controller) handleKnowledgeUpdated(
 	knBefore := evt.ObjectNew.(*v1alpha1.Knowledge)
 	knAfter := evt.ObjectOld.(*v1alpha1.Knowledge)
 	// Only react to changes affecting the readiness.
-	if knBefore.Status.IsReady() == knAfter.Status.IsReady() {
+	knBeforeReady := meta.IsStatusConditionTrue(knBefore.Status.Conditions, v1alpha1.KnowledgeConditionReady)
+	knAfterReady := meta.IsStatusConditionTrue(knAfter.Status.Conditions, v1alpha1.KnowledgeConditionReady)
+	if knBeforeReady == knAfterReady {
 		return
 	}
 	// Handle the change.
@@ -413,9 +446,9 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 				DeleteFunc: c.handleDatasourceDeleted,
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the operator.
+				// Only react to datasources matching the scheduling domain.
 				ds := obj.(*v1alpha1.Datasource)
-				return ds.Spec.Operator == c.OperatorName
+				return ds.Spec.SchedulingDomain == c.SchedulingDomain
 			}),
 		).
 		// Watch knowledge changes so that we can reconfigure kpis as needed.
@@ -427,18 +460,18 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 				DeleteFunc: c.handleKnowledgeDeleted,
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to knowledges matching the operator.
+				// Only react to knowledges matching the scheduling domain.
 				kn := obj.(*v1alpha1.Knowledge)
-				return kn.Spec.Operator == c.OperatorName
+				return kn.Spec.SchedulingDomain == c.SchedulingDomain
 			}),
 		).
 		Named("cortex-kpis").
 		For(
 			&v1alpha1.KPI{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the operator.
+				// Only react to datasources matching the scheduling domain.
 				ds := obj.(*v1alpha1.KPI)
-				return ds.Spec.Operator == c.OperatorName
+				return ds.Spec.SchedulingDomain == c.SchedulingDomain
 			})),
 		).
 		Complete(c)

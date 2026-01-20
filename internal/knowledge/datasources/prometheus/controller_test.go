@@ -32,7 +32,7 @@ func TestPrometheusDatasourceReconciler_Creation(t *testing.T) {
 	reconciler := &PrometheusDatasourceReconciler{
 		Client:  client,
 		Scheme:  scheme,
-		Conf:    conf.Config{Operator: "test-operator"},
+		Conf:    conf.Config{SchedulingDomain: "test-operator"},
 		Monitor: datasources.Monitor{},
 	}
 
@@ -44,8 +44,8 @@ func TestPrometheusDatasourceReconciler_Creation(t *testing.T) {
 		t.Error("Scheme should not be nil")
 	}
 
-	if reconciler.Conf.Operator != "test-operator" {
-		t.Errorf("Expected operator 'test-operator', got %s", reconciler.Conf.Operator)
+	if reconciler.Conf.SchedulingDomain != "test-operator" {
+		t.Errorf("Expected scheduling domain 'test-operator', got %s", reconciler.Conf.SchedulingDomain)
 	}
 }
 
@@ -111,8 +111,8 @@ func TestDatasourceTypeConstants(t *testing.T) {
 func TestDatasourceSpec(t *testing.T) {
 	// Test creating a complete datasource spec
 	spec := v1alpha1.DatasourceSpec{
-		Operator: "test-operator",
-		Type:     v1alpha1.DatasourceTypePrometheus,
+		SchedulingDomain: "test-operator",
+		Type:             v1alpha1.DatasourceTypePrometheus,
 		Prometheus: v1alpha1.PrometheusDatasource{
 			Query:      "node_cpu_seconds_total",
 			Alias:      "node_exporter_host_cpu_usage",
@@ -135,8 +135,8 @@ func TestDatasourceSpec(t *testing.T) {
 		},
 	}
 
-	if spec.Operator != "test-operator" {
-		t.Errorf("Expected operator 'test-operator', got %s", spec.Operator)
+	if spec.SchedulingDomain != "test-operator" {
+		t.Errorf("Expected scheduling domain 'test-operator', got %s", spec.SchedulingDomain)
 	}
 
 	if spec.Type != v1alpha1.DatasourceTypePrometheus {

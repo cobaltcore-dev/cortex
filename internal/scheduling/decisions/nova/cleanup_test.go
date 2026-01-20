@@ -76,9 +76,8 @@ func TestCleanupNova(t *testing.T) {
 						Name: "decision-existing-server",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "server-exists",
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						ResourceID:       "server-exists",
 					},
 				},
 				{
@@ -86,9 +85,8 @@ func TestCleanupNova(t *testing.T) {
 						Name: "decision-deleted-server",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "server-deleted",
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						ResourceID:       "server-deleted",
 					},
 				},
 			},
@@ -106,9 +104,8 @@ func TestCleanupNova(t *testing.T) {
 						Name: "decision-server-1",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "server-1",
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						ResourceID:       "server-1",
 					},
 				},
 				{
@@ -116,9 +113,8 @@ func TestCleanupNova(t *testing.T) {
 						Name: "decision-server-2",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "server-2",
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						ResourceID:       "server-2",
 					},
 				},
 			},
@@ -137,9 +133,8 @@ func TestCleanupNova(t *testing.T) {
 						Name: "decision-reserved-server",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "server-reserved",
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						ResourceID:       "server-reserved",
 					},
 				},
 				{
@@ -147,9 +142,8 @@ func TestCleanupNova(t *testing.T) {
 						Name: "decision-unreserved-server",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "server-unreserved",
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						ResourceID:       "server-unreserved",
 					},
 				},
 			},
@@ -172,9 +166,8 @@ func TestCleanupNova(t *testing.T) {
 						Name: "decision-cinder",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeCinderVolume,
-						ResourceID: "volume-1",
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "volume-1",
 					},
 				},
 				{
@@ -182,9 +175,8 @@ func TestCleanupNova(t *testing.T) {
 						Name: "decision-wrong-operator",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "other-operator",
-						Type:       v1alpha1.DecisionTypeNovaServer,
-						ResourceID: "server-1",
+						SchedulingDomain: "other-operator",
+						ResourceID:       "server-1",
 					},
 				},
 			},
@@ -344,7 +336,7 @@ func TestCleanupNova(t *testing.T) {
 				WithObjects(objects...).
 				Build()
 			config := conf.Config{
-				Operator: "test-operator",
+				SchedulingDomain: v1alpha1.SchedulingDomainNova,
 				KeystoneSecretRef: corev1.SecretReference{
 					Name:      "keystone-secret",
 					Namespace: "default",
@@ -426,7 +418,7 @@ func TestCleanupNovaDecisionsCancel(t *testing.T) {
 		Build()
 
 	config := conf.Config{
-		Operator: "test-operator",
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
 		KeystoneSecretRef: corev1.SecretReference{
 			Name:      "keystone-secret",
 			Namespace: "default",

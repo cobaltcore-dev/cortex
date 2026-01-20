@@ -9,27 +9,10 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// The type of decision.
-type DecisionType string
-
-const (
-	// The decision was created by the nova external scheduler call.
-	// Usually we refer to this as nova initial placement, it also includes
-	// migrations or resizes.
-	DecisionTypeNovaServer DecisionType = "nova-server"
-	// The decision was created by the cinder external scheduler call.
-	DecisionTypeCinderVolume DecisionType = "cinder-volume"
-	// The decision was created by the manila external scheduler call.
-	DecisionTypeManilaShare DecisionType = "manila-share"
-	// The decision was created by spawning an ironcore machine.
-	DecisionTypeIroncoreMachine DecisionType = "ironcore-machine"
-	// The decision was created for a pod.
-	DecisionTypePod DecisionType = "pod"
-)
-
 type DecisionSpec struct {
-	// The operator by which this decision should be extracted.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this decision
+	// was or is processed (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// A reference to the pipeline that should be used for this decision.
 	// This reference can be used to look up the pipeline definition and its
@@ -41,8 +24,6 @@ type DecisionSpec struct {
 	// This can be used to correlate multiple decisions for the same resource.
 	ResourceID string `json:"resourceID"`
 
-	// The type of decision, indicating what has initiated this decision.
-	Type DecisionType `json:"type"`
 	// If the type is "nova", this field contains the raw nova decision request.
 	// +kubebuilder:validation:Optional
 	NovaRaw *runtime.RawExtension `json:"novaRaw,omitempty"`
@@ -62,7 +43,7 @@ type DecisionSpec struct {
 
 type StepResult struct {
 	// object reference to the scheduler step.
-	StepRef corev1.ObjectReference `json:"stepRef"`
+	StepName string `json:"stepName"`
 	// Activations of the step for each host.
 	Activations map[string]float64 `json:"activations"`
 }
@@ -90,15 +71,11 @@ type DecisionResult struct {
 }
 
 const (
-	// Something went wrong during the calculation of the decision.
-	DecisionConditionError = "Error"
+	// The decision was successfully processed.
+	DecisionConditionReady = "Ready"
 )
 
 type DecisionStatus struct {
-	// The time it took to schedule.
-	// +kubebuilder:validation:Optional
-	Took metav1.Duration `json:"took"`
-
 	// The result of this decision.
 	// +kubebuilder:validation:Optional
 	Result *DecisionResult `json:"result,omitempty"`
@@ -118,13 +95,13 @@ type DecisionStatus struct {
 
 	// The current status conditions of the decision.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
+// +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Resource ID",type="string",JSONPath=".spec.resourceID"
 // +kubebuilder:printcolumn:name="#",type="string",JSONPath=".status.precedence"
@@ -132,6 +109,7 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
 // +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:selectablefield:JSONPath=".spec.resourceID"
 
 // Decision is the Schema for the decisions API

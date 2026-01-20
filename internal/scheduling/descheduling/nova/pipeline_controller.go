@@ -6,7 +6,6 @@ package nova
 import (
 	"context"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -47,13 +46,13 @@ func (c *DeschedulingsPipelineController) PipelineType() v1alpha1.PipelineType {
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (*Pipeline, error) {
+func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (*Pipeline, error) {
 	pipeline := &Pipeline{
 		Client:        c.Client,
 		CycleDetector: c.CycleDetector,
-		Monitor:       c.Monitor.SubPipeline(name),
+		Monitor:       c.Monitor.SubPipeline(p.Name),
 	}
-	err := pipeline.Init(ctx, steps, supportedSteps)
+	err := pipeline.Init(ctx, p.Spec.Steps, supportedSteps)
 	return pipeline, err
 }
 
@@ -86,6 +85,7 @@ func (c *DeschedulingsPipelineController) Reconcile(ctx context.Context, req ctr
 
 func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
+	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		// Initialize the cycle detector.
 		return c.CycleDetector.Init(ctx, mgr.GetClient(), c.Conf)
@@ -106,33 +106,11 @@ func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager, mcl
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the operator.
-				if pipeline.Spec.Operator != c.Conf.Operator {
+				// Only react to pipelines matching the scheduling domain.
+				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 					return false
 				}
 				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		// Watch step changes so that we can turn on/off pipelines depending on
-		// unready steps.
-		WatchesMulticluster(
-			&v1alpha1.Step{},
-			handler.Funcs{
-				CreateFunc: c.HandleStepCreated,
-				UpdateFunc: c.HandleStepUpdated,
-				DeleteFunc: c.HandleStepDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				step := obj.(*v1alpha1.Step)
-				// Only react to steps matching the operator.
-				if step.Spec.Operator != c.Conf.Operator {
-					return false
-				}
-				// Only react to filter and weigher steps.
-				supportedTypes := []v1alpha1.StepType{
-					v1alpha1.StepTypeDescheduler,
-				}
-				return slices.Contains(supportedTypes, step.Spec.Type)
 			}),
 		).
 		// Watch knowledge changes so that we can reconfigure pipelines as needed.
@@ -145,8 +123,8 @@ func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager, mcl
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
-				// Only react to knowledge matching the operator.
-				return knowledge.Spec.Operator == c.Conf.Operator
+				// Only react to knowledge matching the scheduling domain.
+				return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova
 			}),
 		).
 		Named("cortex-nova-deschedulings").

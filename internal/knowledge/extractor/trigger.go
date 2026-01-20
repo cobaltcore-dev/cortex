@@ -100,8 +100,8 @@ func (r *TriggerReconciler) findDependentKnowledge(ctx context.Context, changedR
 	changedResourceName := changedResource.GetName()
 	changedResourceType := getResourceType(changedResource)
 	for _, knowledge := range knowledgeList.Items {
-		// Only process knowledge for our operator
-		if knowledge.Spec.Operator != r.Conf.Operator {
+		// Only process knowledge for our scheduling domain.
+		if knowledge.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
 			continue
 		}
 
@@ -173,14 +173,16 @@ func (r *TriggerReconciler) enqueueKnowledgeReconciliation(ctx context.Context, 
 
 	// The controller-runtime framework will automatically handle the delayed reconciliation
 	// We update the knowledge annotation to trigger reconciliation by the main KnowledgeReconciler
+	old := knowledge.DeepCopy()
 	if knowledge.Annotations == nil {
 		knowledge.Annotations = make(map[string]string)
 	}
 
 	// Add a trigger annotation with current timestamp to force reconciliation
 	knowledge.Annotations["cortex.knowledge/trigger-reconciliation"] = time.Now().Format(time.RFC3339)
-	if err := r.Update(ctx, &knowledge); err != nil {
-		log.Error(err, "failed to update knowledge to trigger reconciliation", "knowledge", knowledge.Name)
+	patch := client.MergeFrom(old)
+	if err := r.Patch(ctx, &knowledge, patch); err != nil {
+		log.Error(err, "failed to patch knowledge to trigger reconciliation", "knowledge", knowledge.Name)
 		return err
 	}
 	log.Info(
@@ -209,8 +211,8 @@ func (r *TriggerReconciler) mapDatasourceToKnowledge(ctx context.Context, obj cl
 	if !ok {
 		return nil
 	}
-	// Only process datasources for our operator
-	if datasource.Spec.Operator != r.Conf.Operator {
+	// Only process datasources for our scheduling domain
+	if datasource.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
 		return nil
 	}
 	// Return a request that will trigger our reconciler to find dependents
@@ -230,8 +232,8 @@ func (r *TriggerReconciler) mapKnowledgeToKnowledge(ctx context.Context, obj cli
 	if !ok {
 		return nil
 	}
-	// Only process knowledge for our operator
-	if knowledge.Spec.Operator != r.Conf.Operator {
+	// Only process knowledge for our scheduling domain
+	if knowledge.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
 		return nil
 	}
 	// Return a request that will trigger our reconciler to find dependents
@@ -254,7 +256,7 @@ func (r *TriggerReconciler) SetupWithManager(mgr manager.Manager, mcl *multiclus
 			handler.EnqueueRequestsFromMapFunc(r.mapDatasourceToKnowledge),
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				ds := obj.(*v1alpha1.Datasource)
-				return ds.Spec.Operator == r.Conf.Operator
+				return ds.Spec.SchedulingDomain == r.Conf.SchedulingDomain
 			}),
 		).
 		// Watch knowledge changes and map them to trigger reconciliation
@@ -263,7 +265,7 @@ func (r *TriggerReconciler) SetupWithManager(mgr manager.Manager, mcl *multiclus
 			handler.EnqueueRequestsFromMapFunc(r.mapKnowledgeToKnowledge),
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				k := obj.(*v1alpha1.Knowledge)
-				return k.Spec.Operator == r.Conf.Operator
+				return k.Spec.SchedulingDomain == r.Conf.SchedulingDomain
 			}),
 		).
 		Named("cortex-knowledge-trigger").

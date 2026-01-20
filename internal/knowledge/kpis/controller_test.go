@@ -148,19 +148,21 @@ func (mc *mockController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Reconcile the kpi using mock method.
+	old := kpi.DeepCopy()
 	err := mc.handleKPIChange(ctx, kpi)
 	if err != nil {
 		meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KPIConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "ReconciliationFailed",
 			Message: err.Error(),
 		})
-	} else {
-		meta.RemoveStatusCondition(&kpi.Status.Conditions, v1alpha1.KPIConditionError)
 	}
-	if err := mc.Status().Update(ctx, kpi); err != nil {
-		log.Error(err, "failed to update kpi status after reconciliation error", "name", kpi.Name)
+	// Note: handleKPIChange already sets the Ready condition based on dependencies,
+	// so we don't override it here when err is nil
+	patch := client.MergeFrom(old)
+	if err := mc.Status().Patch(ctx, kpi, patch); err != nil {
+		log.Error(err, "failed to patch kpi status after reconciliation error", "name", kpi.Name)
 	}
 	return ctrl.Result{}, nil
 }
@@ -184,7 +186,7 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 			return err
 		}
 		// Check if datasource is ready
-		if ds.Status.IsReady() {
+		if meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionReady) {
 			datasourcesReady++
 		}
 	}
@@ -204,7 +206,7 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 			return err
 		}
 		// Check if knowledge is ready
-		if kn.Status.IsReady() {
+		if meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
 			knowledgesReady++
 		}
 	}
@@ -256,7 +258,21 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 	}
 
 	// Update the status to ready and populate the ready dependencies.
-	obj.Status.Ready = dependenciesReadyTotal == dependenciesTotal
+	if dependenciesReadyTotal == dependenciesTotal {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllDependenciesReady",
+			Message: "all dependencies are ready",
+		})
+	} else {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KPIConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "DependenciesNotReady",
+			Message: "not all dependencies are ready",
+		})
+	}
 	obj.Status.ReadyDependencies = dependenciesReadyTotal
 	obj.Status.TotalDependencies = dependenciesTotal
 	obj.Status.DependenciesReadyFrac = "ready"
@@ -294,8 +310,8 @@ func TestController_Reconcile(t *testing.T) {
 					Name: "test-kpi",
 				},
 				Spec: v1alpha1.KPISpec{
-					Operator: "test-operator",
-					Impl:     "test_kpi",
+					SchedulingDomain: "test-operator",
+					Impl:             "test_kpi",
 					Dependencies: v1alpha1.KPIDependenciesSpec{
 						Datasources: []corev1.ObjectReference{
 							{Name: "test-datasource", Namespace: "default"},
@@ -310,7 +326,7 @@ func TestController_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: v1alpha1.DatasourceSpec{
-						Operator: "test-operator",
+						SchedulingDomain: "test-operator",
 						DatabaseSecretRef: corev1.SecretReference{
 							Name:      "db-secret",
 							Namespace: "default",
@@ -318,6 +334,13 @@ func TestController_Reconcile(t *testing.T) {
 					},
 					Status: v1alpha1.DatasourceStatus{
 						NumberOfObjects: 1,
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.DatasourceConditionReady,
+								Status: metav1.ConditionTrue,
+								Reason: "DatasourceSynced",
+							},
+						},
 					},
 				},
 			},
@@ -347,8 +370,8 @@ func TestController_Reconcile(t *testing.T) {
 					Name: "test-kpi-unready",
 				},
 				Spec: v1alpha1.KPISpec{
-					Operator: "test-operator",
-					Impl:     "test_kpi",
+					SchedulingDomain: "test-operator",
+					Impl:             "test_kpi",
 					Dependencies: v1alpha1.KPIDependenciesSpec{
 						Datasources: []corev1.ObjectReference{
 							{Name: "unready-datasource", Namespace: "default"},
@@ -363,7 +386,7 @@ func TestController_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: v1alpha1.DatasourceSpec{
-						Operator: "test-operator",
+						SchedulingDomain: "test-operator",
 						DatabaseSecretRef: corev1.SecretReference{
 							Name:      "db-secret",
 							Namespace: "default",
@@ -371,6 +394,13 @@ func TestController_Reconcile(t *testing.T) {
 					},
 					Status: v1alpha1.DatasourceStatus{
 						NumberOfObjects: 0,
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.DatasourceConditionReady,
+								Status: metav1.ConditionFalse,
+								Reason: "DatasourceNotSynced",
+							},
+						},
 					},
 				},
 			},
@@ -385,8 +415,8 @@ func TestController_Reconcile(t *testing.T) {
 					Name: "unsupported-kpi",
 				},
 				Spec: v1alpha1.KPISpec{
-					Operator: "test-operator",
-					Impl:     "unsupported_kpi",
+					SchedulingDomain: "test-operator",
+					Impl:             "unsupported_kpi",
 				},
 			},
 			expectedReady:  false,
@@ -400,8 +430,8 @@ func TestController_Reconcile(t *testing.T) {
 					Name: "no-deps-kpi",
 				},
 				Spec: v1alpha1.KPISpec{
-					Operator: "test-operator",
-					Impl:     "test_kpi",
+					SchedulingDomain: "test-operator",
+					Impl:             "test_kpi",
 				},
 			},
 			expectedReady:  true,
@@ -433,8 +463,8 @@ func TestController_Reconcile(t *testing.T) {
 
 			mockKPIInstance := &mockKPI{name: "test_kpi"}
 			baseController := Controller{
-				Client:       fakeClient,
-				OperatorName: "test-operator",
+				Client:           fakeClient,
+				SchedulingDomain: "test-operator",
 				supportedKPIs: map[string]plugins.KPI{
 					"test_kpi": mockKPIInstance,
 				},
@@ -470,13 +500,18 @@ func TestController_Reconcile(t *testing.T) {
 				return
 			}
 
-			if updatedKPI.Status.Ready != tt.expectedReady {
-				t.Errorf("Expected ready status %v, got %v", tt.expectedReady, updatedKPI.Status.Ready)
+			statusReady := meta.IsStatusConditionTrue(updatedKPI.Status.Conditions, v1alpha1.KPIConditionReady)
+			if statusReady != tt.expectedReady {
+				t.Errorf("Expected status ready %v, got %v", tt.expectedReady, statusReady)
 			}
 
-			hasError := meta.IsStatusConditionTrue(updatedKPI.Status.Conditions, v1alpha1.KPIConditionError)
-			if hasError != tt.expectedError {
-				t.Errorf("Expected error condition %v, got %v", tt.expectedError, hasError)
+			// expectedError means the reconciliation had an error (ReconciliationFailed reason),
+			// not just that the Ready condition is False
+			if tt.expectedError {
+				cond := meta.FindStatusCondition(updatedKPI.Status.Conditions, v1alpha1.KPIConditionReady)
+				if cond == nil || cond.Reason != "ReconciliationFailed" {
+					t.Errorf("Expected ReconciliationFailed error condition, got: %v", cond)
+				}
 			}
 
 			// Verify registration status
@@ -508,8 +543,8 @@ func TestController_Reconcile_KPIDeleted(t *testing.T) {
 
 	mockKPIInstance := &mockKPI{name: "test_kpi"}
 	controller := &Controller{
-		Client:       fakeClient,
-		OperatorName: "test-operator",
+		Client:           fakeClient,
+		SchedulingDomain: "test-operator",
 		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},
@@ -586,21 +621,48 @@ func TestController_handleKPIChange(t *testing.T) {
 					Spec: v1alpha1.DatasourceSpec{
 						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
 					},
-					Status: v1alpha1.DatasourceStatus{NumberOfObjects: 1},
+					Status: v1alpha1.DatasourceStatus{
+						NumberOfObjects: 1,
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.DatasourceConditionReady,
+								Status: metav1.ConditionTrue,
+								Reason: "DatasourceSynced",
+							},
+						},
+					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "unready-ds", Namespace: "default"},
 					Spec: v1alpha1.DatasourceSpec{
 						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
 					},
-					Status: v1alpha1.DatasourceStatus{NumberOfObjects: 0},
+					Status: v1alpha1.DatasourceStatus{
+						NumberOfObjects: 0,
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.DatasourceConditionReady,
+								Status: metav1.ConditionFalse,
+								Reason: "DatasourceNotSynced",
+							},
+						},
+					},
 				},
 			},
 			knowledges: []v1alpha1.Knowledge{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "ready-kn", Namespace: "default"},
 					Spec:       v1alpha1.KnowledgeSpec{},
-					Status:     v1alpha1.KnowledgeStatus{RawLength: 1},
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 1,
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.KnowledgeConditionReady,
+								Status: metav1.ConditionTrue,
+								Reason: "KnowledgeReady",
+							},
+						},
+					},
 				},
 			},
 			secrets: []corev1.Secret{
@@ -640,7 +702,16 @@ func TestController_handleKPIChange(t *testing.T) {
 					Spec: v1alpha1.DatasourceSpec{
 						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
 					},
-					Status: v1alpha1.DatasourceStatus{NumberOfObjects: 1},
+					Status: v1alpha1.DatasourceStatus{
+						NumberOfObjects: 1,
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.DatasourceConditionReady,
+								Status: metav1.ConditionTrue,
+								Reason: "DatasourceSynced",
+							},
+						},
+					},
 				},
 			},
 			secrets: []corev1.Secret{
@@ -705,8 +776,9 @@ func TestController_handleKPIChange(t *testing.T) {
 				t.Errorf("Expected error %v, got %v (error: %v)", tt.expectedError, hasError, err)
 			}
 
-			if tt.kpi.Status.Ready != tt.expectedReady {
-				t.Errorf("Expected ready %v, got %v", tt.expectedReady, tt.kpi.Status.Ready)
+			ready := meta.IsStatusConditionTrue(tt.kpi.Status.Conditions, v1alpha1.KPIConditionReady)
+			if ready != tt.expectedReady {
+				t.Errorf("Expected ready %v, got %v", tt.expectedReady, ready)
 			}
 
 			if tt.kpi.Status.ReadyDependencies != tt.expectedReadyCount {
@@ -870,15 +942,15 @@ func TestController_InitAllKPIs(t *testing.T) {
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "kpi1"},
 			Spec: v1alpha1.KPISpec{
-				Operator: "test-operator",
-				Impl:     "test_kpi",
+				SchedulingDomain: "test-operator",
+				Impl:             "test_kpi",
 			},
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "kpi2"},
 			Spec: v1alpha1.KPISpec{
-				Operator: "other-operator",
-				Impl:     "test_kpi",
+				SchedulingDomain: "other-operator",
+				Impl:             "test_kpi",
 			},
 		},
 	}
@@ -896,8 +968,8 @@ func TestController_InitAllKPIs(t *testing.T) {
 
 	mockKPIInstance := &mockKPI{name: "test_kpi"}
 	baseController := Controller{
-		Client:       fakeClient,
-		OperatorName: "test-operator",
+		Client:           fakeClient,
+		SchedulingDomain: "test-operator",
 		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},

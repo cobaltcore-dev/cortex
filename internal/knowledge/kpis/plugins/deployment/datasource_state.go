@@ -16,8 +16,8 @@ import (
 )
 
 type DatasourceStateKPIOpts struct {
-	// The operator to filter datasources by.
-	DatasourceOperator string `yaml:"datasourceOperator"`
+	// The scheduling domain to filter datasources by.
+	DatasourceSchedulingDomain v1alpha1.SchedulingDomain `json:"datasourceSchedulingDomain"`
 }
 
 // KPI observing the state of datasource resources managed by cortex.
@@ -57,7 +57,7 @@ func (k *DatasourceStateKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	var datasources []v1alpha1.Datasource
 	for _, ds := range datasourceList.Items {
-		if ds.Spec.Operator != k.Options.DatasourceOperator {
+		if ds.Spec.SchedulingDomain != k.Options.DatasourceSchedulingDomain {
 			continue
 		}
 		datasources = append(datasources, ds)
@@ -66,18 +66,14 @@ func (k *DatasourceStateKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, ds := range datasources {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionWaiting):
-			state = "waiting"
-		case meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionError):
-			state = "error"
-		case ds.Status.IsReady():
+		case meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionReady):
 			state = "ready"
 		default:
 			state = "unknown"
 		}
 		ch <- prometheus.MustNewConstMetric(
 			k.counter, prometheus.GaugeValue, 1,
-			k.Options.DatasourceOperator, ds.Name, state,
+			string(k.Options.DatasourceSchedulingDomain), ds.Name, state,
 		)
 	}
 }

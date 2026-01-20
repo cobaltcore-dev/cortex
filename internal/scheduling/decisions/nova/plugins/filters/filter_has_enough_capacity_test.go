@@ -12,267 +12,118 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestFilterHasEnoughCapacity_Run(t *testing.T) {
-	// Build schemes for both Hypervisor and Reservation types
-	scheme := runtime.NewScheme()
-	if err := hv1.SchemeBuilder.AddToScheme(scheme); err != nil {
-		t.Fatalf("failed to add hypervisor scheme: %v", err)
+	scheme, err := hv1.SchemeBuilder.Build()
+	if err != nil {
+		t.Fatalf("expected no error building hypervisor scheme, got %v", err)
 	}
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("failed to add cortex scheme: %v", err)
+		t.Fatalf("expected no error adding v1alpha1 to scheme, got %v", err)
+	}
+
+	// Define hypervisors with various capacity configurations
+	hvs := []client.Object{
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host1",
+			},
+			Status: hv1.HypervisorStatus{
+				Capacity: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("32"),   // 32 vCPUs
+					"memory": resource.MustParse("64Gi"), // 64 GiB = 68719476736 bytes
+				},
+				Allocation: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("8"),    // 8 vCPUs used
+					"memory": resource.MustParse("16Gi"), // 16 GiB used
+				},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host2",
+			},
+			Status: hv1.HypervisorStatus{
+				Capacity: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("16"),
+					"memory": resource.MustParse("32Gi"),
+				},
+				Allocation: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("14"),
+					"memory": resource.MustParse("28Gi"),
+				},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host3",
+			},
+			Status: hv1.HypervisorStatus{
+				Capacity: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("64"),
+					"memory": resource.MustParse("128Gi"),
+				},
+				Allocation: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("0"),
+					"memory": resource.MustParse("0"),
+				},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host4",
+			},
+			Status: hv1.HypervisorStatus{
+				Capacity: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("8"),
+					"memory": resource.MustParse("16Gi"),
+				},
+				Allocation: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("4"),
+					"memory": resource.MustParse("12Gi"),
+				},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host5",
+			},
+			Status: hv1.HypervisorStatus{
+				Capacity: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("48"),
+					"memory": resource.MustParse("96Gi"),
+				},
+				Allocation: map[string]resource.Quantity{
+					"cpu":    resource.MustParse("40"),
+					"memory": resource.MustParse("80Gi"),
+				},
+			},
+		},
 	}
 
 	tests := []struct {
 		name          string
-		hypervisors   []client.Object
-		reservations  []client.Object
 		request       api.ExternalSchedulerRequest
-		options       FilterHasEnoughCapacityOpts
+		reservations  []client.Object
+		opts          FilterHasEnoughCapacityOpts
 		expectedHosts []string
 		filteredHosts []string
 		expectError   bool
 	}{
 		{
-			name: "Single instance with sufficient capacity",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{
-							{
-								Name: "instance-1",
-								Allocation: map[string]resource.Quantity{
-									"cpu":    resource.MustParse("4"),
-									"memory": resource.MustParse("8Gi"),
-								},
-							},
-						},
-					},
-				},
-			},
+			name: "Single instance with sufficient capacity on all hosts",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
-								VCPUs:    4,
-								MemoryMB: 4000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{},
-			expectError:   false,
-		},
-		{
-			name: "Single instance with insufficient CPU",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{
-							{
-								Name: "instance-1",
-								Allocation: map[string]resource.Quantity{
-									"cpu":    resource.MustParse("12"),
-									"memory": resource.MustParse("8Gi"),
-								},
-							},
-						},
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								VCPUs:    8,
-								MemoryMB: 4000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			expectedHosts: []string{},
-			filteredHosts: []string{"host1"},
-			expectError:   false,
-		},
-		{
-			name: "Single instance with insufficient memory",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{
-							{
-								Name: "instance-1",
-								Allocation: map[string]resource.Quantity{
-									"cpu":    resource.MustParse("4"),
-									"memory": resource.MustParse("28Gi"),
-								},
-							},
-						},
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								VCPUs:    4,
-								MemoryMB: 8000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			expectedHosts: []string{},
-			filteredHosts: []string{"host1"},
-			expectError:   false,
-		},
-		{
-			name: "Multiple instances on single host - sufficient capacity",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 4,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								VCPUs:    4,
-								MemoryMB: 8000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{},
-			expectError:   false,
-		},
-		{
-			name: "Multiple instances - insufficient capacity for all",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 5,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								VCPUs:    4,
-								MemoryMB: 8000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			expectedHosts: []string{},
-			filteredHosts: []string{"host1"},
-			expectError:   false,
-		},
-		{
-			name: "Multiple hosts - mixed capacity",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host2"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("8"),
-							HostMemory: resource.MustParse("16Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host3"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("32"),
-							HostMemory: resource.MustParse("64Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								VCPUs:    12,
-								MemoryMB: 24000,
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048, // 2 GB
 							},
 						},
 					},
@@ -281,316 +132,24 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+					{ComputeHost: "host5"},
 				},
 			},
-			expectedHosts: []string{"host1", "host3"},
-			filteredHosts: []string{"host2"},
-			expectError:   false,
-		},
-		{
-			name: "Active reservation - subtract reserved resources",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			reservations: []client.Object{
-				&v1alpha1.Reservation{
-					ObjectMeta: v1.ObjectMeta{Name: "reservation-1"},
-					Spec: v1alpha1.ReservationSpec{
-						Scheduler: v1alpha1.ReservationSchedulerSpec{
-							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-								ProjectID:  "different-project",
-								FlavorName: "different-flavor",
-							},
-						},
-						Requests: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("8"),
-							"memory": resource.MustParse("16Gi"),
-						},
-					},
-					Status: v1alpha1.ReservationStatus{
-						Phase: v1alpha1.ReservationStatusPhaseActive,
-						Host:  "host1",
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						ProjectID:    "test-project",
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "test-flavor",
-								VCPUs:    8,
-								MemoryMB: 16000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			expectedHosts: []string{"host1"},
+			expectedHosts: []string{"host1", "host2", "host3", "host4", "host5"},
 			filteredHosts: []string{},
-			expectError:   false,
 		},
 		{
-			name: "Matching reservation - unlock reserved resources",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			reservations: []client.Object{
-				&v1alpha1.Reservation{
-					ObjectMeta: v1.ObjectMeta{Name: "reservation-1"},
-					Spec: v1alpha1.ReservationSpec{
-						Scheduler: v1alpha1.ReservationSchedulerSpec{
-							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-								ProjectID:  "test-project",
-								FlavorName: "test-flavor",
-							},
-						},
-						Requests: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("8"),
-							"memory": resource.MustParse("16Gi"),
-						},
-					},
-					Status: v1alpha1.ReservationStatus{
-						Phase: v1alpha1.ReservationStatusPhaseActive,
-						Host:  "host1",
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						ProjectID:    "test-project",
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "test-flavor",
-								VCPUs:    8,
-								MemoryMB: 16000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			options:       FilterHasEnoughCapacityOpts{LockReserved: false},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{},
-			expectError:   false,
-		},
-		{
-			name: "Matching reservation with LockReserved option",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			reservations: []client.Object{
-				&v1alpha1.Reservation{
-					ObjectMeta: v1.ObjectMeta{Name: "reservation-1"},
-					Spec: v1alpha1.ReservationSpec{
-						Scheduler: v1alpha1.ReservationSchedulerSpec{
-							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-								ProjectID:  "test-project",
-								FlavorName: "test-flavor",
-							},
-						},
-						Requests: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("8"),
-							"memory": resource.MustParse("16Gi"),
-						},
-					},
-					Status: v1alpha1.ReservationStatus{
-						Phase: v1alpha1.ReservationStatusPhaseActive,
-						Host:  "host1",
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						ProjectID:    "test-project",
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "test-flavor",
-								VCPUs:    8,
-								MemoryMB: 16000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			options:       FilterHasEnoughCapacityOpts{LockReserved: true},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{},
-			expectError:   false,
-		},
-		{
-			name: "Inactive reservation - do not subtract",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			reservations: []client.Object{
-				&v1alpha1.Reservation{
-					ObjectMeta: v1.ObjectMeta{Name: "reservation-1"},
-					Spec: v1alpha1.ReservationSpec{
-						Scheduler: v1alpha1.ReservationSchedulerSpec{
-							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-								ProjectID:  "test-project",
-								FlavorName: "test-flavor",
-							},
-						},
-						Requests: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("8"),
-							"memory": resource.MustParse("16Gi"),
-						},
-					},
-					Status: v1alpha1.ReservationStatus{
-						Phase: v1alpha1.ReservationStatusPhaseFailed,
-						Host:  "host1",
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						ProjectID:    "test-project",
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "test-flavor",
-								VCPUs:    8,
-								MemoryMB: 16000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{},
-			expectError:   false,
-		},
-		{
-			name: "Reservation for different scheduler - do not consider",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			reservations: []client.Object{
-				&v1alpha1.Reservation{
-					ObjectMeta: v1.ObjectMeta{Name: "reservation-1"},
-					Spec: v1alpha1.ReservationSpec{
-						Scheduler: v1alpha1.ReservationSchedulerSpec{
-							CortexNova: nil,
-						},
-						Requests: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("8"),
-							"memory": resource.MustParse("16Gi"),
-						},
-					},
-					Status: v1alpha1.ReservationStatus{
-						Phase: v1alpha1.ReservationStatusPhaseActive,
-						Host:  "host1",
-					},
-				},
-			},
+			name: "Single instance - filter host with insufficient CPU",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
-								VCPUs:    8,
-								MemoryMB: 16000,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-				},
-			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{},
-			expectError:   false,
-		},
-		{
-			name: "Host not in hypervisor list - filtered out",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
+								Name:     "m1.large",
 								VCPUs:    4,
-								MemoryMB: 8000,
+								MemoryMB: 4096,
 							},
 						},
 					},
@@ -598,34 +157,393 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
+					{ComputeHost: "host4"},
 				},
 			},
-			expectedHosts: []string{"host1"},
+			expectedHosts: []string{"host1", "host4"},
 			filteredHosts: []string{"host2"},
-			expectError:   false,
 		},
 		{
-			name: "Empty host list",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
+			name: "Single instance - filter host with insufficient memory",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
+								Name:     "m1.xlarge",
+								VCPUs:    2,
+								MemoryMB: 20480, // 20 GB
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host5"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host2", "host5"},
+		},
+		{
+			name: "Multiple instances - require capacity for all on same host",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 3,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.medium",
 								VCPUs:    4,
-								MemoryMB: 8000,
+								MemoryMB: 8192, // 8 GB
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host5"},
+				},
+			},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{"host5"},
+		},
+		{
+			name: "No hosts have sufficient capacity",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.huge",
+								VCPUs:    32,
+								MemoryMB: 65536, // 64 GB
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host1", "host2", "host4"},
+		},
+		{
+			name: "Active reservation locks resources - filter host",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID:    "project-1",
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host4"},
+				},
+			},
+			reservations: []client.Object{
+				&v1alpha1.Reservation{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-1",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
+								ProjectID:  "project-2",
+								FlavorName: "m1.medium",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("2"),
+							"memory": resource.MustParse("2Gi"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
+						Host:  "host4",
+					},
+				},
+			},
+			expectedHosts: []string{"host4"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Matching reservation unlocks resources - host passes",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID:    "project-1",
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host4"},
+				},
+			},
+			reservations: []client.Object{
+				&v1alpha1.Reservation{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-matching",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
+								ProjectID:  "project-1",
+								FlavorName: "m1.small",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("2"),
+							"memory": resource.MustParse("2Gi"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
+						Host:  "host4",
+					},
+				},
+			},
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host4"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "LockReserved option - matching reservation still locks resources",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID:    "project-1",
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host4"},
+				},
+			},
+			reservations: []client.Object{
+				&v1alpha1.Reservation{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-locked",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
+								ProjectID:  "project-1",
+								FlavorName: "m1.small",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("2"),
+							"memory": resource.MustParse("2Gi"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
+						Host:  "host4",
+					},
+				},
+			},
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: true},
+			expectedHosts: []string{"host4"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Inactive reservation does not affect capacity",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID:    "project-1",
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host4"},
+				},
+			},
+			reservations: []client.Object{
+				&v1alpha1.Reservation{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-inactive",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
+								ProjectID:  "project-2",
+								FlavorName: "m1.medium",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("2"),
+							"memory": resource.MustParse("2Gi"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseFailed,
+						Host:  "host4",
+					},
+				},
+			},
+			expectedHosts: []string{"host4"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Reservation without CortexNova scheduler is ignored",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID:    "project-1",
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host4"},
+				},
+			},
+			reservations: []client.Object{
+				&v1alpha1.Reservation{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-other-scheduler",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: nil,
+						},
+						Requests: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("2"),
+							"memory": resource.MustParse("2Gi"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
+						Host:  "host4",
+					},
+				},
+			},
+			expectedHosts: []string{"host4"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Multiple reservations on different hosts",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID:    "project-1",
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host2"},
+					{ComputeHost: "host4"},
+					{ComputeHost: "host5"},
+				},
+			},
+			reservations: []client.Object{
+				&v1alpha1.Reservation{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-host2",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
+								ProjectID:  "project-2",
+								FlavorName: "m1.medium",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("2"),
+							"memory": resource.MustParse("4Gi"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
+						Host:  "host2",
+					},
+				},
+				&v1alpha1.Reservation{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-host5",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
+								ProjectID:  "project-3",
+								FlavorName: "m1.large",
+							},
+						},
+						Requests: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("4"),
+							"memory": resource.MustParse("8Gi"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
+						Host:  "host5",
+					},
+				},
+			},
+			expectedHosts: []string{"host4", "host5"},
+			filteredHosts: []string{"host2"},
+		},
+		{
+			name: "Empty host list",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048,
 							},
 						},
 					},
@@ -634,30 +552,64 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
-			expectError:   false,
 		},
 		{
-			name: "Flavor with zero vCPUs - error",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
+			name: "Host not in database is filtered out",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
+								Name:     "m1.small",
+								VCPUs:    2,
+								MemoryMB: 2048,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host-unknown"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host-unknown"},
+		},
+		{
+			name: "Large number of instances - edge case",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 10,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.tiny",
+								VCPUs:    1,
+								MemoryMB: 512,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Flavor with zero VCPUs - error case",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "invalid-flavor",
 								VCPUs:    0,
-								MemoryMB: 8000,
+								MemoryMB: 2048,
 							},
 						},
 					},
@@ -666,31 +618,18 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 				},
 			},
-			expectedHosts: []string{},
-			filteredHosts: []string{},
-			expectError:   true,
+			expectError: true,
 		},
 		{
-			name: "Flavor with zero memory - error",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("16"),
-							HostMemory: resource.MustParse("32Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{},
-					},
-				},
-			},
+			name: "Flavor with zero memory - error case",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						NumInstances: 1,
 						Flavor: api.NovaObject[api.NovaFlavor]{
 							Data: api.NovaFlavor{
-								VCPUs:    4,
+								Name:     "invalid-flavor",
+								VCPUs:    2,
 								MemoryMB: 0,
 							},
 						},
@@ -700,65 +639,84 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 					{ComputeHost: "host1"},
 				},
 			},
-			expectedHosts: []string{},
-			filteredHosts: []string{},
-			expectError:   true,
+			expectError: true,
 		},
 		{
-			name: "Complex scenario - multiple hosts, VMs, and reservations",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host1"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("32"),
-							HostMemory: resource.MustParse("64Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{
-							{
-								Name: "instance-1",
-								Allocation: map[string]resource.Quantity{
-									"cpu":    resource.MustParse("8"),
-									"memory": resource.MustParse("16Gi"),
-								},
-							},
-							{
-								Name: "instance-2",
-								Allocation: map[string]resource.Quantity{
-									"cpu":    resource.MustParse("4"),
-									"memory": resource.MustParse("8Gi"),
-								},
+			name: "Memory boundary - exactly enough memory",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.exact",
+								VCPUs:    2,
+								MemoryMB: 4096, // Exactly 4 GB
 							},
 						},
 					},
 				},
-				&hv1.Hypervisor{
-					ObjectMeta: v1.ObjectMeta{Name: "host2"},
-					Status: hv1.HypervisorStatus{
-						Capabilities: hv1.Capabilities{
-							HostCpus:   resource.MustParse("32"),
-							HostMemory: resource.MustParse("64Gi"),
-						},
-						DomainInfos: []hv1.DomainInfo{
-							{
-								Name: "instance-3",
-								Allocation: map[string]resource.Quantity{
-									"cpu":    resource.MustParse("16"),
-									"memory": resource.MustParse("32Gi"),
-								},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host4"}, // Has 4 GB free (16-12)
+				},
+			},
+			expectedHosts: []string{"host4"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "CPU boundary - exactly enough CPU",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.exact-cpu",
+								VCPUs:    2, // Exactly 2 vCPUs
+								MemoryMB: 1024,
 							},
 						},
 					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host2"}, // Has 2 vCPUs free (16-14)
+				},
+			},
+			expectedHosts: []string{"host2"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Complex scenario with multiple hosts and reservations",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID:    "project-test",
+						NumInstances: 2,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								Name:     "m1.test",
+								VCPUs:    4,
+								MemoryMB: 8192,
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host5"},
 				},
 			},
 			reservations: []client.Object{
 				&v1alpha1.Reservation{
-					ObjectMeta: v1.ObjectMeta{Name: "reservation-1"},
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-host1-matching",
+					},
 					Spec: v1alpha1.ReservationSpec{
 						Scheduler: v1alpha1.ReservationSchedulerSpec{
 							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-								ProjectID:  "other-project",
-								FlavorName: "other-flavor",
+								ProjectID:  "project-test",
+								FlavorName: "m1.test",
 							},
 						},
 						Requests: map[string]resource.Quantity{
@@ -771,42 +729,47 @@ func TestFilterHasEnoughCapacity_Run(t *testing.T) {
 						Host:  "host1",
 					},
 				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						ProjectID:    "test-project",
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "test-flavor",
-								VCPUs:    8,
-								MemoryMB: 16000,
+				&v1alpha1.Reservation{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "reservation-host5-nonmatching",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Scheduler: v1alpha1.ReservationSchedulerSpec{
+							CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
+								ProjectID:  "project-other",
+								FlavorName: "m1.other",
 							},
 						},
+						Requests: map[string]resource.Quantity{
+							"cpu":    resource.MustParse("4"),
+							"memory": resource.MustParse("8Gi"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Phase: v1alpha1.ReservationStatusPhaseActive,
+						Host:  "host5",
 					},
 				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
 			},
-			expectedHosts: []string{"host1", "host2"},
-			filteredHosts: []string{},
-			expectError:   false,
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{"host5"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			//nolint:gocritic
-			objects := append(tt.hypervisors, tt.reservations...)
+			// Build the fake client with hypervisors and reservations
+			objects := make([]client.Object, 0, len(hvs)+len(tt.reservations))
+			objects = append(objects, hvs...)
+			objects = append(objects, tt.reservations...)
+
 			step := &FilterHasEnoughCapacity{}
+			step.Options = tt.opts
 			step.Client = fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
 				Build()
-			step.Options = tt.options
 
 			result, err := step.Run(slog.Default(), tt.request)
 

@@ -18,7 +18,7 @@ type mockPipelineStep struct {
 	name string
 }
 
-func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return nil
 }
 

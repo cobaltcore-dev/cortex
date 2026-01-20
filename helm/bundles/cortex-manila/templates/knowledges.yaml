@@ -4,7 +4,7 @@ kind: Knowledge
 metadata:
   name: netapp-storage-pool-cpu-usage-manila
 spec:
-  operator: cortex-manila
+  schedulingDomain: manila
   extractor:
     name: netapp_storage_pool_cpu_usage_extractor
   description: |

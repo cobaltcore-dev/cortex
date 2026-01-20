@@ -15,8 +15,8 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.operator
-      name: Operator
+    - jsonPath: .spec.schedulingDomain
+      name: Domain
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
@@ -24,15 +24,15 @@ spec:
     - jsonPath: .status.lastExtracted
       name: Extracted
       type: date
-    - jsonPath: .status.took
-      name: Took
-      type: string
     - jsonPath: .spec.recency
       name: Recency
       type: string
     - jsonPath: .status.rawLength
       name: Features
       type: integer
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -173,17 +173,20 @@ spec:
                     description: The name of the extractor.
                     type: string
                 type: object
-              operator:
-                description: The operator by which this knowledge should be extracted.
-                type: string
               recency:
                 default: 60s
                 description: |-
                   The desired recency of this knowledge, i.e. how old it can be until
                   it needs to be re-extracted.
                 type: string
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this knowledge
+                  is used (e.g., nova, cinder, manila).
+                type: string
             required:
             - recency
+            - schedulingDomain
             type: object
           status:
             description: status defines the observed state of Knowledge
@@ -258,9 +261,6 @@ spec:
                 description: The number of features extracted, or 1 if the knowledge
                   is not a list.
                 type: integer
-              took:
-                description: The time it took to perform the last extraction.
-                type: string
             type: object
         required:
         - spec

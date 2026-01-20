@@ -5,7 +5,7 @@ kind: Pipeline
 metadata:
   name: nova-external-scheduler-vmware
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   description: |
     Nova provides virtual machine placement on compute hosts for OpenStack.
     After applying its own filtering and weighing logic, it delegates to cortex
@@ -15,13 +15,73 @@ spec:
   type: filter-weigher
   createDecisions: false
   steps:
-    - ref: {name: vmware-hana-binpacking}
+    - type: weigher
+      impl: vmware_hana_binpacking
+      description: |
+        This step pulls HANA VMs onto the smallest possible gaps on HANA-exclusive
+        VMware hosts. In this way hosts with much free space are held free for
+        larger HANA VMs, improving overall packing efficiency for HANA workloads.
+      knowledges:
+        - name: host-utilization
+        - name: host-capabilities
+      opts:
+        ramUtilizedAfterLowerBoundPct: 0
+        ramUtilizedAfterUpperBoundPct: 100
+        ramUtilizedAfterActivationLowerBound: 0.0
+        ramUtilizedAfterActivationUpperBound: 1.0
       mandatory: false
-    - ref: {name: vmware-general-purpose-balancing}
+    - type: weigher
+      impl: vmware_general_purpose_balancing
+      description: |
+        This step balances non-HANA VMs across non-HANA exclusive VMware hosts. It
+        pulls vms onto the freeest hosts possible to ensure an even distribution of
+        workloads across the available infrastructure.
+      knowledges:
+        - name: host-utilization
+        - name: host-capabilities
+      opts:
+        ramUtilizedLowerBoundPct: 0
+        ramUtilizedUpperBoundPct: 100
+        ramUtilizedActivationLowerBound: 1.0
+        ramUtilizedActivationUpperBound: 0.0
       mandatory: false
-    - ref: {name: vmware-avoid-long-term-contended-hosts}
+    - type: weigher
+      impl: vmware_avoid_long_term_contended_hosts
+      description: |
+        This step avoids placing vms on vmware hosts with a high CPU contention over
+        a longer period of time, based on vrops contention metrics. In particular,
+        this step looks at a longer time window of 4 weeks to identify hosts that
+        are consistently contended.
+      knowledges:
+        - name: vmware-long-term-contended-hosts
+      opts:
+        avgCPUContentionLowerBound: 0 # pct
+        avgCPUContentionUpperBound: 10 # pct
+        avgCPUContentionActivationLowerBound: 0.0
+        avgCPUContentionActivationUpperBound: -0.75
+        maxCPUContentionLowerBound: 0 # pct
+        maxCPUContentionUpperBound: 10 # pct
+        maxCPUContentionActivationLowerBound: 0.0
+        maxCPUContentionActivationUpperBound: -0.25
       mandatory: false
-    - ref: {name: vmware-avoid-short-term-contended-hosts}
+    - type: weigher
+      impl: vmware_avoid_short_term_contended_hosts
+      description: |
+        This step avoids placing vms on vmware hosts with a high CPU contention over
+        a shorter period of time, based on vrops contention metrics. In particular,
+        this step looks at a shorter time window of 20 minutes to identify hosts that
+        are currently contended.
+      knowledges:
+        - name: vmware-short-term-contended-hosts
+      opts:
+        avgCPUContentionLowerBound: 0 # pct
+        avgCPUContentionUpperBound: 10 # pct
+        avgCPUContentionActivationLowerBound: 0.0
+        avgCPUContentionActivationUpperBound: -0.75
+        maxCPUContentionLowerBound: 0 # pct
+        maxCPUContentionUpperBound: 10 # pct
+        maxCPUContentionActivationLowerBound: 0.0
+        maxCPUContentionActivationUpperBound: -0.25
       mandatory: false
 ---
 apiVersion: cortex.cloud/v1alpha1
@@ -29,7 +89,7 @@ kind: Pipeline
 metadata:
   name: nova-external-scheduler-kvm
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   description: |
     Nova provides virtual machine placement on compute hosts for OpenStack.
     After applying its own filtering and weighing logic, it delegates to cortex
@@ -47,7 +107,7 @@ kind: Pipeline
 metadata:
   name: nova-external-scheduler-kvm-all-filters-enabled
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   description: |
     This pipeline can be used to place reservations the same way nova would place
     its virtual machines. It uses the same filtering steps as implemented in the
@@ -59,24 +119,115 @@ spec:
   createDecisions: true
   {{- end }}
   steps:
-    - ref: {name: filter-host-instructions}
-    - ref: {name: filter-has-enough-capacity}
-    - ref: {name: filter-has-requested-traits}
-    - ref: {name: filter-has-accelerators}
-    - ref: {name: filter-correct-az}
-    - ref: {name: filter-status-conditions}
-    - ref: {name: filter-maintenance}
-    - ref: {name: filter-external-customer}
-    - ref: {name: filter-packed-virtqueue}
-    - ref: {name: filter-allowed-projects}
-    - ref: {name: filter-capabilities}
+    - type: filter
+      impl: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
+      knowledges: []
+    - type: filter
+      impl: filter_has_enough_capacity
+      description: |
+        This step will filter out hosts that do not have enough available capacity
+        to host the requested flavor. If enabled, this step will subtract the
+        current reservations residing on this host from the available capacity.
+      opts:
+        # If reserved space should be locked even for matching requests.
+        # For the reservations pipeline, we don't want to unlock
+        # reserved space, to avoid reservations for the same project
+        # and flavor to overlap.
+        lockReserved: true
+    - type: filter
+      impl: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
+    - type: filter
+      impl: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
+    - type: filter
+      impl: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
+    - type: filter
+      impl: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
+    - type: filter
+      impl: filter_maintenance
+      description: |
+        This step will filter out hosts that are currently in maintenance mode that
+        prevents scheduling, for example, manual maintenance or termination.
+    - type: filter
+      impl: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      opts:
+        domainNamePrefixes: ["iaas-"]
+    - type: filter
+      impl: filter_packed_virtqueue
+      description: |
+        If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
+        image properties contain the `hw_virtio_packed_ring` key, this step will
+        filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
+    - type: filter
+      impl: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
+    - type: filter
+      impl: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+
+        Note: currently, advanced boolean/numeric operators for the capabilities
+        like `>`, `!`, ... are not supported because they are not used by any of our
+        flavors in production.
+    - type: filter
+      impl: filter_instance_group_affinity
+      description: |
+        This step selects hosts in the instance group specified in the nova
+        scheduler request spec.
+    - type: filter
+      impl: filter_instance_group_anti_affinity
+      description: |
+        This step selects hosts not in the instance group specified in the nova
+        scheduler request spec, but only until the max_server_per_host limit is
+        reached (default = 1).
+    - type: filter
+      impl: filter_live_migratable
+      description: |
+        This step ensures that the target host of a live migration can accept
+        the migrating VM, by checking cpu architecture, cpu features, emulated
+        devices, and cpu modes.
+    - type: filter
+      impl: filter_requested_destination
+      description: |
+        This step filters hosts based on the `requested_destination` instruction
+        from the nova scheduler request spec. It supports filtering by host and
+        by aggregates.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: nova-descheduler-kvm
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   description:
     This pipeline runs steps that select virtual machines to deschedule from
     compute hosts in order to optimize resource usage and performance.
@@ -86,5 +237,13 @@ spec:
   createDecisions: true
   {{- end }}
   steps:
-    - ref: {name: avoid-high-steal-pct}
+    - type: descheduler
+      impl: avoid_high_steal_pct
+      description: |
+        This step will deschedule VMs once they reach this CPU steal percentage over
+        the observed time span.
+      knowledges:
+        - name: kvm-libvirt-domain-cpu-steal-pct
+      opts:
+        maxStealPctOverObservedTimeSpan: 20.0
       mandatory: false

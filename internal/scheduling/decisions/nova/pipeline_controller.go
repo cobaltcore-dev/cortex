@@ -8,18 +8,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,10 +61,12 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	old := decision.DeepCopy()
 	if err := c.process(ctx, decision); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := c.Status().Update(ctx, decision); err != nil {
+	patch := client.MergeFrom(old)
+	if err := c.Status().Patch(ctx, decision, patch); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -84,15 +86,30 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 			return err
 		}
 	}
-	if err := c.process(ctx, decision); err != nil {
-		return err
+	old := decision.DeepCopy()
+	err := c.process(ctx, decision)
+	if err != nil {
+		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DecisionConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "PipelineRunFailed",
+			Message: "pipeline run failed: " + err.Error(),
+		})
+	} else {
+		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.DecisionConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "PipelineRunSucceeded",
+			Message: "pipeline run succeeded",
+		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Status().Update(ctx, decision); err != nil {
+		patch := client.MergeFrom(old)
+		if err := c.Status().Patch(ctx, decision, patch); err != nil {
 			return err
 		}
 	}
-	return nil
+	return err
 }
 
 func (c *DecisionPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
@@ -120,7 +137,12 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 		return err
 	}
 	decision.Status.Result = &result
-	decision.Status.Took = metav1.Duration{Duration: time.Since(startedAt)}
+	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.DecisionConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "PipelineRunSucceeded",
+		Message: "pipeline run succeeded",
+	})
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 	return nil
 }
@@ -128,15 +150,15 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 // The base controller will delegate the pipeline creation down to this method.
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
-	name string,
-	steps []v1alpha1.Step,
+	p v1alpha1.Pipeline,
 ) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
-	return lib.NewPipeline(ctx, c.Client, name, supportedSteps, steps, c.Monitor)
+	return lib.NewPipeline(ctx, c.Client, p.Name, supportedSteps, p.Spec.Steps, c.Monitor)
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
+	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
@@ -151,34 +173,11 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the operator.
-				if pipeline.Spec.Operator != c.Conf.Operator {
+				// Only react to pipelines matching the scheduling domain.
+				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 					return false
 				}
 				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		// Watch step changes so that we can turn on/off pipelines depending on
-		// unready steps.
-		WatchesMulticluster(
-			&v1alpha1.Step{},
-			handler.Funcs{
-				CreateFunc: c.HandleStepCreated,
-				UpdateFunc: c.HandleStepUpdated,
-				DeleteFunc: c.HandleStepDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				step := obj.(*v1alpha1.Step)
-				// Only react to steps matching the operator.
-				if step.Spec.Operator != c.Conf.Operator {
-					return false
-				}
-				// Only react to filter and weigher steps.
-				supportedTypes := []v1alpha1.StepType{
-					v1alpha1.StepTypeFilter,
-					v1alpha1.StepTypeWeigher,
-				}
-				return slices.Contains(supportedTypes, step.Spec.Type)
 			}),
 		).
 		// Watch knowledge changes so that we can reconfigure pipelines as needed.
@@ -191,8 +190,8 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
-				// Only react to knowledge matching the operator.
-				return knowledge.Spec.Operator == c.Conf.Operator
+				// Only react to knowledge matching the scheduling domain.
+				return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova
 			}),
 		).
 		// Watch hypervisor changes so the cache gets updated.
@@ -202,15 +201,14 @@ func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.Operator != c.Conf.Operator {
+				if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 					return false
 				}
 				// Ignore already decided schedulings.
 				if decision.Status.Result != nil {
 					return false
 				}
-				// Only handle nova decisions.
-				return decision.Spec.Type == v1alpha1.DecisionTypeNovaServer
+				return true
 			})),
 		).
 		Complete(c)

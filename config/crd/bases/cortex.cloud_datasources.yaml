@@ -18,8 +18,8 @@ spec:
     - jsonPath: .spec.type
       name: Type
       type: string
-    - jsonPath: .spec.operator
-      name: Operator
+    - jsonPath: .spec.schedulingDomain
+      name: Domain
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
@@ -27,15 +27,15 @@ spec:
     - jsonPath: .status.lastSynced
       name: Synced
       type: date
-    - jsonPath: .status.took
-      name: Took
-      type: string
     - jsonPath: .status.nextSyncTime
       name: Next
       type: string
     - jsonPath: .status.numberOfObjects
       name: Objects
       type: integer
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -191,9 +191,6 @@ spec:
                 - syncInterval
                 - type
                 type: object
-              operator:
-                description: The operator by which this datasource should be synced.
-                type: string
               prometheus:
                 description: |-
                   If given, configures a Prometheus datasource to fetch.
@@ -250,6 +247,11 @@ spec:
                 - timeRange
                 - type
                 type: object
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this datasource
+                  is used (e.g., nova, cinder, manila).
+                type: string
               ssoSecretRef:
                 description: |-
                   Kubernetes secret ref for an optional sso certificate to access the host.
@@ -270,6 +272,7 @@ spec:
                 type: string
             required:
             - databaseSecretRef
+            - schedulingDomain
             - type
             type: object
           status:
@@ -344,11 +347,6 @@ spec:
                 description: The number of objects currently stored for this datasource.
                 format: int64
                 type: integer
-              took:
-                description: The time it took to perform the last sync.
-                type: string
-            required:
-            - took
             type: object
         required:
         - spec

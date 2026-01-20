@@ -21,8 +21,8 @@ type BaseStep[Opts any] struct {
 }
 
 // Init the step with the database and options.
-func (s *BaseStep[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
-	opts := conf.NewRawOptsBytes(step.Spec.Opts.Raw)
+func (s *BaseStep[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+	opts := conf.NewRawOptsBytes(step.Opts.Raw)
 	if err := s.Load(opts); err != nil {
 		return err
 	}

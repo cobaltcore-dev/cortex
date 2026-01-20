@@ -24,8 +24,9 @@ type KPIDependenciesSpec struct {
 }
 
 type KPISpec struct {
-	// The operator by which this kpi should be executed.
-	Operator string `json:"operator,omitempty"`
+	// SchedulingDomain defines in which scheduling domain this kpi
+	// is used (e.g., nova, cinder, manila).
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// The name of the kpi in the cortex implementation.
 	Impl string `json:"impl"`
@@ -42,14 +43,11 @@ type KPISpec struct {
 }
 
 const (
-	// Something went wrong during the kpi reconciliation.
-	KPIConditionError = "Error"
+	// If the kpi was successfully processed.
+	KPIConditionReady = "Ready"
 )
 
 type KPIStatus struct {
-	// If the kpi is ready to be executed.
-	Ready bool `json:"ready"`
-
 	// How many dependencies have been reconciled.
 	ReadyDependencies int `json:"readyDependencies"`
 	// Total number of dependencies configured.
@@ -60,16 +58,17 @@ type KPIStatus struct {
 
 	// The current status conditions of the kpi.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="Operator",type="string",JSONPath=".spec.operator"
+// +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
 // +kubebuilder:printcolumn:name="Dependencies",type="string",JSONPath=".status.dependenciesReadyFrac"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // KPI is the Schema for the deschedulings API
 type KPI struct {

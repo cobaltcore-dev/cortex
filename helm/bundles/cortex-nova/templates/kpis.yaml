@@ -4,7 +4,7 @@ kind: KPI
 metadata:
   name: vmware-host-contention
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: vmware_host_contention_kpi
   dependencies:
     knowledges:
@@ -18,7 +18,7 @@ kind: KPI
 metadata:
   name: vmware-project-noisiness
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: vmware_project_noisiness_kpi
   dependencies:
     knowledges:
@@ -30,37 +30,23 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: host-total-allocatable-capacity
+  name: vmware-host-capacity
 spec:
-  operator: cortex-nova
-  impl: host_total_allocatable_capacity_kpi
+  schedulingDomain: nova
+  impl: vmware_host_capacity_kpi
   dependencies:
     knowledges:
       - name: host-details
       - name: host-utilization
   description: |
-    This KPI tracks the total allocatable capacity of hosts.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
-  name: host-capacity
-spec:
-  operator: cortex-nova
-  impl: host_capacity_kpi
-  dependencies:
-    knowledges:
-      - name: host-details
-      - name: host-utilization
-  description: |
-    This KPI tracks the total allocatable capacity of hosts.
+    This KPI tracks the total, utilized, reserved and failover capacity of VMware hosts.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
   name: host-running-vms
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: host_running_vms_kpi
   dependencies:
     knowledges:
@@ -74,7 +60,7 @@ kind: KPI
 metadata:
   name: flavors-running-vms
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: flavor_running_vms_kpi
   dependencies:
     datasources:
@@ -87,7 +73,7 @@ kind: KPI
 metadata:
   name: vm-migration-statistics
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: vm_migration_statistics_kpi
   dependencies:
     knowledges:
@@ -100,7 +86,7 @@ kind: KPI
 metadata:
   name: vm-life-span
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: vm_life_span_kpi
   dependencies:
     knowledges:
@@ -113,7 +99,7 @@ kind: KPI
 metadata:
   name: vm-commitments
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: vm_commitments_kpi
   dependencies:
     datasources:
@@ -127,7 +113,7 @@ kind: KPI
 metadata:
   name: kvm-host-capacity
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: kvm_host_capacity_kpi
   dependencies:
     knowledges:
@@ -141,7 +127,7 @@ kind: KPI
 metadata:
   name: cortex-nova-datasource-state
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: datasource_state_kpi
   opts:
     datasourceOperator: cortex-nova
@@ -153,7 +139,7 @@ kind: KPI
 metadata:
   name: cortex-nova-knowledge-state
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: knowledge_state_kpi
   opts:
     knowledgeOperator: cortex-nova
@@ -165,7 +151,7 @@ kind: KPI
 metadata:
   name: cortex-nova-decision-state
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: decision_state_kpi
   opts:
     decisionOperator: cortex-nova
@@ -177,7 +163,7 @@ kind: KPI
 metadata:
   name: cortex-nova-kpi-state
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: kpi_state_kpi
   opts:
     kpiOperator: cortex-nova
@@ -189,21 +175,9 @@ kind: KPI
 metadata:
   name: cortex-nova-pipeline-state
 spec:
-  operator: cortex-nova
+  schedulingDomain: nova
   impl: pipeline_state_kpi
   opts:
     pipelineOperator: cortex-nova
   description: |
     This KPI tracks the state of pipeline resources managed by cortex.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
-  name: cortex-nova-step-state
-spec:
-  operator: cortex-nova
-  impl: step_state_kpi
-  opts:
-    stepOperator: cortex-nova
-  description: |
-    This KPI tracks the state of step resources managed by cortex.

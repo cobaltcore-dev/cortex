@@ -33,7 +33,7 @@ type Pipeline struct {
 
 func (p *Pipeline) Init(
 	ctx context.Context,
-	confedSteps []v1alpha1.Step,
+	confedSteps []v1alpha1.StepSpec,
 	supportedSteps map[string]Step,
 ) error {
 
@@ -41,18 +41,17 @@ func (p *Pipeline) Init(
 	// Load all steps from the configuration.
 	p.steps = make(map[string]Step, len(confedSteps))
 	for _, stepConf := range confedSteps {
-		step, ok := supportedSteps[stepConf.Spec.Impl]
+		step, ok := supportedSteps[stepConf.Impl]
 		if !ok {
-			return errors.New("descheduler: unsupported step: " + stepConf.Spec.Impl)
+			return errors.New("descheduler: unsupported step: " + stepConf.Impl)
 		}
 		step = monitorStep(step, stepConf, p.Monitor)
 		if err := step.Init(ctx, p.Client, stepConf); err != nil {
 			return err
 		}
-		namespacedName := stepConf.Namespace + "/" + stepConf.Name
-		p.steps[namespacedName] = step
-		p.order = append(p.order, namespacedName)
-		slog.Info("descheduler: added step", "name", namespacedName)
+		p.steps[stepConf.Impl] = step
+		p.order = append(p.order, stepConf.Impl)
+		slog.Info("descheduler: added step", "name", stepConf.Impl)
 	}
 	return nil
 }
@@ -67,7 +66,7 @@ func (p *Pipeline) run() map[string][]plugins.Decision {
 	var lock sync.Mutex
 	decisionsByStep := map[string][]plugins.Decision{}
 	var wg sync.WaitGroup
-	for namespacedName, step := range p.steps {
+	for stepName, step := range p.steps {
 		wg.Go(func() {
 			slog.Info("descheduler: running step")
 			decisions, err := step.Run()
@@ -82,7 +81,7 @@ func (p *Pipeline) run() map[string][]plugins.Decision {
 			slog.Info("descheduler: finished step")
 			lock.Lock()
 			defer lock.Unlock()
-			decisionsByStep[namespacedName] = decisions
+			decisionsByStep[stepName] = decisions
 		})
 	}
 	wg.Wait()
@@ -177,7 +176,6 @@ func (p *Pipeline) createDeschedulings(ctx context.Context) error {
 		descheduling.Spec.PrevHostType = v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName
 		descheduling.Spec.PrevHost = decision.Host
 		descheduling.Spec.Reason = decision.Reason
-		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseQueued
 		if err := p.Create(ctx, descheduling); err != nil {
 			return err
 		}

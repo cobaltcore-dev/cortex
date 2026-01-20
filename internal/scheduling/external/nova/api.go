@@ -167,12 +167,11 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			GenerateName: "nova-",
 		},
 		Spec: v1alpha1.DecisionSpec{
-			Operator: httpAPI.config.Operator,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			PipelineRef: corev1.ObjectReference{
 				Name: requestData.Pipeline,
 			},
 			ResourceID: requestData.Spec.Data.InstanceUUID,
-			Type:       v1alpha1.DecisionTypeNovaServer,
 			NovaRaw:    &raw,
 		},
 	}
@@ -182,7 +181,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.
-	if meta.IsStatusConditionTrue(decision.Status.Conditions, v1alpha1.DecisionConditionError) {
+	if meta.IsStatusConditionFalse(decision.Status.Conditions, v1alpha1.DecisionConditionReady) {
 		c.Respond(http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
 		return
 	}

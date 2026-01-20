@@ -45,9 +45,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-decision",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Operator:   "test-operator",
-					Type:       v1alpha1.DecisionTypePod,
-					ResourceID: "test-pod",
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					ResourceID:       "test-pod",
 					PipelineRef: corev1.ObjectReference{
 						Name: "pods-scheduler",
 					},
@@ -85,9 +84,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-decision-no-nodes",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Operator:   "test-operator",
-					Type:       v1alpha1.DecisionTypePod,
-					ResourceID: "test-pod",
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					ResourceID:       "test-pod",
 					PipelineRef: corev1.ObjectReference{
 						Name: "pods-scheduler",
 					},
@@ -126,7 +124,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					},
 				},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 				},
 				Monitor: lib.PipelineMonitor{},
 			}
@@ -176,10 +174,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				if *updatedDecision.Status.Result.TargetHost != tt.expectTargetHost {
 					t.Errorf("expected target host %q, got %q", tt.expectTargetHost, *updatedDecision.Status.Result.TargetHost)
 				}
-
-				if updatedDecision.Status.Took.Duration <= 0 {
-					t.Error("expected took duration to be positive")
-				}
 			}
 		})
 	}
@@ -192,34 +186,30 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		steps       []v1alpha1.Step
+		steps       []v1alpha1.StepSpec
 		expectError bool
 	}{
 		{
 			name:        "empty steps",
-			steps:       []v1alpha1.Step{},
+			steps:       []v1alpha1.StepSpec{},
 			expectError: false,
 		},
 		{
 			name: "noop step",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					Spec: v1alpha1.StepSpec{
-						Impl: "noop",
-						Type: v1alpha1.StepTypeFilter,
-					},
+					Impl: "noop",
+					Type: v1alpha1.StepTypeFilter,
 				},
 			},
 			expectError: false,
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					Spec: v1alpha1.StepSpec{
-						Impl: "unsupported",
-						Type: v1alpha1.StepTypeFilter,
-					},
+					Impl: "unsupported",
+					Type: v1alpha1.StepTypeFilter,
 				},
 			},
 			expectError: true,
@@ -228,7 +218,14 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(t.Context(), "test", tt.steps)
+			pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Steps: tt.steps,
+				},
+			})
 
 			if tt.expectError && err == nil {
 				t.Error("expected error but got none")
@@ -291,10 +288,10 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Name: "pods-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       true,
@@ -324,10 +321,10 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Name: "pods-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: false,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					CreateDecisions:  false,
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       false,
@@ -370,10 +367,10 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Name: "pods-scheduler",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       true,
@@ -405,7 +402,7 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
 				},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 				},
 				Monitor: lib.PipelineMonitor{},
 			}
@@ -445,11 +442,8 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 						found = true
 
 						// Verify decision properties
-						if decision.Spec.Operator != "test-operator" {
-							t.Errorf("expected operator %q, got %q", "test-operator", decision.Spec.Operator)
-						}
-						if decision.Spec.Type != v1alpha1.DecisionTypePod {
-							t.Errorf("expected type %q, got %q", v1alpha1.DecisionTypePod, decision.Spec.Type)
+						if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
+							t.Errorf("expected scheduling domain %q, got %q", v1alpha1.SchedulingDomainPods, decision.Spec.SchedulingDomain)
 						}
 						if decision.Spec.ResourceID != tt.pod.Name {
 							t.Errorf("expected resource ID %q, got %q", tt.pod.Name, decision.Spec.ResourceID)

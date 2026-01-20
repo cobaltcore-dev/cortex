@@ -106,10 +106,7 @@ func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error 
 	}
 	for _, decision := range decisionList.Items {
 		// Skip non-cinder decisions.
-		if decision.Spec.Operator != conf.Operator {
-			continue
-		}
-		if decision.Spec.Type != v1alpha1.DecisionTypeCinderVolume {
+		if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
 			continue
 		}
 		// Skip decisions for which the volume still exists.

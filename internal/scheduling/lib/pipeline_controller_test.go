@@ -5,203 +5,155 @@ package lib
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 // Mock pipeline type for testing
 type mockPipeline struct {
-	name  string
-	steps []v1alpha1.Step
+	name string
 }
 
-// Mock initializer implementation
-type mockInitializer struct {
-	shouldFail   bool
-	initPipeline func(steps []v1alpha1.Step) (mockPipeline, error)
+// Mock PipelineInitializer for testing
+type mockPipelineInitializer struct {
+	pipelineType     v1alpha1.PipelineType
+	initPipelineFunc func(ctx context.Context, p v1alpha1.Pipeline) (mockPipeline, error)
 }
 
-func (m *mockInitializer) PipelineType() v1alpha1.PipelineType {
-	return ""
+func (m *mockPipelineInitializer) InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (mockPipeline, error) {
+	if m.initPipelineFunc != nil {
+		return m.initPipelineFunc(ctx, p)
+	}
+	return mockPipeline{name: p.Name}, nil
 }
 
-func (m *mockInitializer) InitPipeline(ctx context.Context, name string, steps []v1alpha1.Step) (mockPipeline, error) {
-	if m.shouldFail {
-		return mockPipeline{}, errors.New("mock initializer error")
-	}
-	if m.initPipeline != nil {
-		return m.initPipeline(steps)
-	}
-	return mockPipeline{name: name, steps: steps}, nil
-}
-
-func setupTestScheme() *runtime.Scheme {
-	scheme := runtime.NewScheme()
-	err := v1alpha1.AddToScheme(scheme)
-	if err != nil {
-		return nil
-	}
-	err = v1alpha1.AddToScheme(scheme)
-	if err != nil {
-		return nil
-	}
-	return scheme
-}
-
-func createTestPipeline(steps []v1alpha1.StepInPipeline) *v1alpha1.Pipeline {
-	return &v1alpha1.Pipeline{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-pipeline",
-		},
-		Spec: v1alpha1.PipelineSpec{
-			Operator: "test",
-			Type:     "",
-			Steps:    steps,
-		},
-	}
-}
-
-func createTestStep(ready bool, knowledges []corev1.ObjectReference) *v1alpha1.Step {
-	return &v1alpha1.Step{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-step",
-			Namespace: "default",
-		},
-		Spec: v1alpha1.StepSpec{
-			Operator:   "test",
-			Type:       v1alpha1.StepTypeFilter,
-			Impl:       "test-impl",
-			Knowledges: knowledges,
-		},
-		Status: v1alpha1.StepStatus{
-			Ready:               ready,
-			ReadyKnowledges:     len(knowledges),
-			TotalKnowledges:     len(knowledges),
-			KnowledgesReadyFrac: "ready",
-		},
-	}
-}
-
-func createTestKnowledge(name string, hasError bool, rawLength int) *v1alpha1.Knowledge {
-	knowledge := &v1alpha1.Knowledge{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-		},
-		Spec: v1alpha1.KnowledgeSpec{
-			Operator: "test",
-		},
-		Status: v1alpha1.KnowledgeStatus{
-			RawLength: rawLength,
-		},
-	}
-	if hasError {
-		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KnowledgeConditionError,
-			Status:  metav1.ConditionTrue,
-			Reason:  "TestError",
-			Message: "This is a test error",
-		})
-	}
-	return knowledge
+func (m *mockPipelineInitializer) PipelineType() v1alpha1.PipelineType {
+	return m.pipelineType
 }
 
 func TestBasePipelineController_InitAllPipelines(t *testing.T) {
-	scheme := setupTestScheme()
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	tests := []struct {
 		name              string
 		existingPipelines []v1alpha1.Pipeline
-		existingSteps     []v1alpha1.Step
-		initializerFails  bool
-		expectedPipelines int
+		schedulingDomain  v1alpha1.SchedulingDomain
+		pipelineType      v1alpha1.PipelineType
+		expectedCount     int
 		expectError       bool
 	}{
 		{
 			name:              "no existing pipelines",
 			existingPipelines: []v1alpha1.Pipeline{},
-			expectedPipelines: 0,
+			schedulingDomain:  v1alpha1.SchedulingDomainNova,
+			pipelineType:      v1alpha1.PipelineTypeFilterWeigher,
+			expectedCount:     0,
 			expectError:       false,
 		},
 		{
-			name: "single pipeline with ready step",
+			name: "one matching pipeline",
 			existingPipelines: []v1alpha1.Pipeline{
-				*createTestPipeline([]v1alpha1.StepInPipeline{
-					{
-						Ref: corev1.ObjectReference{
-							Name:      "test-step",
-							Namespace: "default",
-						},
-						Mandatory: true,
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-pipeline",
 					},
-				}),
+					Spec: v1alpha1.PipelineSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Type:             v1alpha1.PipelineTypeFilterWeigher,
+						Steps:            []v1alpha1.StepSpec{},
+					},
+				},
 			},
-			existingSteps: []v1alpha1.Step{
-				*createTestStep(true, nil),
-			},
-			expectedPipelines: 1,
-			expectError:       false,
+			schedulingDomain: v1alpha1.SchedulingDomainNova,
+			pipelineType:     v1alpha1.PipelineTypeFilterWeigher,
+			expectedCount:    1,
+			expectError:      false,
 		},
 		{
-			name: "pipeline with non-ready mandatory step",
+			name: "multiple pipelines, only some matching",
 			existingPipelines: []v1alpha1.Pipeline{
-				*createTestPipeline([]v1alpha1.StepInPipeline{
-					{
-						Ref: corev1.ObjectReference{
-							Name:      "test-step",
-							Namespace: "default",
-						},
-						Mandatory: true,
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "matching-pipeline-1",
 					},
-				}),
+					Spec: v1alpha1.PipelineSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Type:             v1alpha1.PipelineTypeFilterWeigher,
+						Steps:            []v1alpha1.StepSpec{},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "different-domain-pipeline",
+					},
+					Spec: v1alpha1.PipelineSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						Type:             v1alpha1.PipelineTypeFilterWeigher,
+						Steps:            []v1alpha1.StepSpec{},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "different-type-pipeline",
+					},
+					Spec: v1alpha1.PipelineSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Type:             v1alpha1.PipelineTypeDescheduler,
+						Steps:            []v1alpha1.StepSpec{},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "matching-pipeline-2",
+					},
+					Spec: v1alpha1.PipelineSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Type:             v1alpha1.PipelineTypeFilterWeigher,
+						Steps:            []v1alpha1.StepSpec{},
+					},
+				},
 			},
-			existingSteps: []v1alpha1.Step{
-				*createTestStep(false, nil),
-			},
-			expectedPipelines: 0,
-			expectError:       false,
+			schedulingDomain: v1alpha1.SchedulingDomainNova,
+			pipelineType:     v1alpha1.PipelineTypeFilterWeigher,
+			expectedCount:    2,
+			expectError:      false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, 0)
+			objects := make([]client.Object, len(tt.existingPipelines))
 			for i := range tt.existingPipelines {
-				objects = append(objects, &tt.existingPipelines[i])
-			}
-			for i := range tt.existingSteps {
-				objects = append(objects, &tt.existingSteps[i])
+				objects[i] = &tt.existingPipelines[i]
 			}
 
-			client := fake.NewClientBuilder().
+			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}).
+				WithStatusSubresource(&v1alpha1.Pipeline{}).
 				Build()
 
-			initializer := &mockInitializer{shouldFail: tt.initializerFails}
 			controller := &BasePipelineController[mockPipeline]{
-				Initializer:  initializer,
-				Client:       client,
-				OperatorName: "test",
+				Client:           fakeClient,
+				SchedulingDomain: tt.schedulingDomain,
+				Initializer: &mockPipelineInitializer{
+					pipelineType: tt.pipelineType,
+				},
 			}
 
-			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
-			err := controller.InitAllPipelines(ctx)
+			err := controller.InitAllPipelines(context.Background())
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -210,485 +162,1017 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 				t.Errorf("Expected no error but got: %v", err)
 			}
 
-			if len(controller.Pipelines) != tt.expectedPipelines {
-				t.Errorf("Expected %d pipelines, got %d", tt.expectedPipelines, len(controller.Pipelines))
+			if len(controller.Pipelines) != tt.expectedCount {
+				t.Errorf("Expected %d pipelines, got %d", tt.expectedCount, len(controller.Pipelines))
+			}
+
+			if len(controller.PipelineConfigs) != tt.expectedCount {
+				t.Errorf("Expected %d pipeline configs, got %d", tt.expectedCount, len(controller.PipelineConfigs))
+			}
+		})
+	}
+}
+
+func TestBasePipelineController_handlePipelineChange(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
+
+	tests := []struct {
+		name              string
+		pipeline          *v1alpha1.Pipeline
+		knowledges        []v1alpha1.Knowledge
+		schedulingDomain  v1alpha1.SchedulingDomain
+		initPipelineError bool
+		expectReady       bool
+		expectInMap       bool
+	}{
+		{
+			name: "pipeline with all steps ready",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Steps: []v1alpha1.StepSpec{
+						{
+							Type:      v1alpha1.StepTypeFilter,
+							Impl:      "test-filter",
+							Mandatory: true,
+							Knowledges: []corev1.ObjectReference{
+								{Name: "knowledge-1", Namespace: "default"},
+							},
+						},
+					},
+				},
+			},
+			knowledges: []v1alpha1.Knowledge{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "knowledge-1",
+						Namespace: "default",
+					},
+					Spec: v1alpha1.KnowledgeSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 10,
+					},
+				},
+			},
+			schedulingDomain: v1alpha1.SchedulingDomainNova,
+			expectReady:      true,
+			expectInMap:      true,
+		},
+		{
+			name: "pipeline with mandatory step not ready",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-not-ready",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Steps: []v1alpha1.StepSpec{
+						{
+							Type:      v1alpha1.StepTypeFilter,
+							Impl:      "test-filter",
+							Mandatory: true,
+							Knowledges: []corev1.ObjectReference{
+								{Name: "missing-knowledge", Namespace: "default"},
+							},
+						},
+					},
+				},
+			},
+			knowledges:       []v1alpha1.Knowledge{},
+			schedulingDomain: v1alpha1.SchedulingDomainNova,
+			expectReady:      false,
+			expectInMap:      false,
+		},
+		{
+			name: "pipeline with optional step not ready",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-optional",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Steps: []v1alpha1.StepSpec{
+						{
+							Type:      v1alpha1.StepTypeFilter,
+							Impl:      "test-filter",
+							Mandatory: false,
+							Knowledges: []corev1.ObjectReference{
+								{Name: "missing-knowledge", Namespace: "default"},
+							},
+						},
+					},
+				},
+			},
+			knowledges:       []v1alpha1.Knowledge{},
+			schedulingDomain: v1alpha1.SchedulingDomainNova,
+			expectReady:      true,
+			expectInMap:      true,
+		},
+		{
+			name: "pipeline init fails",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-init-fail",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Steps:            []v1alpha1.StepSpec{},
+				},
+			},
+			knowledges:        []v1alpha1.Knowledge{},
+			schedulingDomain:  v1alpha1.SchedulingDomainNova,
+			initPipelineError: true,
+			expectReady:       false,
+			expectInMap:       false,
+		},
+		{
+			name: "pipeline with different scheduling domain",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-different-domain",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Steps:            []v1alpha1.StepSpec{},
+				},
+			},
+			knowledges:       []v1alpha1.Knowledge{},
+			schedulingDomain: v1alpha1.SchedulingDomainNova,
+			expectReady:      false,
+			expectInMap:      false,
+		},
+		{
+			name: "pipeline with knowledge in error state",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-knowledge-error",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Steps: []v1alpha1.StepSpec{
+						{
+							Type:      v1alpha1.StepTypeFilter,
+							Impl:      "test-filter",
+							Mandatory: true,
+							Knowledges: []corev1.ObjectReference{
+								{Name: "error-knowledge", Namespace: "default"},
+							},
+						},
+					},
+				},
+			},
+			knowledges: []v1alpha1.Knowledge{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "error-knowledge",
+						Namespace: "default",
+					},
+					Spec: v1alpha1.KnowledgeSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 10,
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.KnowledgeConditionReady,
+								Status: metav1.ConditionFalse,
+							},
+						},
+					},
+				},
+			},
+			schedulingDomain: v1alpha1.SchedulingDomainNova,
+			expectReady:      false,
+			expectInMap:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []client.Object{tt.pipeline}
+			for i := range tt.knowledges {
+				objects = append(objects, &tt.knowledges[i])
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Knowledge{}).
+				Build()
+
+			initializer := &mockPipelineInitializer{
+				pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+			}
+
+			if tt.initPipelineError {
+				initializer.initPipelineFunc = func(ctx context.Context, p v1alpha1.Pipeline) (mockPipeline, error) {
+					return mockPipeline{}, context.Canceled
+				}
+			}
+
+			controller := &BasePipelineController[mockPipeline]{
+				Client:           fakeClient,
+				SchedulingDomain: tt.schedulingDomain,
+				Initializer:      initializer,
+				Pipelines:        make(map[string]mockPipeline),
+				PipelineConfigs:  make(map[string]v1alpha1.Pipeline),
+			}
+
+			controller.handlePipelineChange(context.Background(), tt.pipeline, nil)
+
+			// Check if pipeline is in map
+			_, inMap := controller.Pipelines[tt.pipeline.Name]
+			if inMap != tt.expectInMap {
+				t.Errorf("Expected pipeline in map: %v, got: %v", tt.expectInMap, inMap)
+			}
+
+			// Get updated pipeline status
+			var updatedPipeline v1alpha1.Pipeline
+			err := fakeClient.Get(context.Background(), client.ObjectKey{Name: tt.pipeline.Name}, &updatedPipeline)
+			if err != nil {
+				t.Fatalf("Failed to get updated pipeline: %v", err)
+			}
+
+			// Check ready status
+			ready := meta.IsStatusConditionTrue(updatedPipeline.Status.Conditions, v1alpha1.PipelineConditionReady)
+			if ready != tt.expectReady {
+				t.Errorf("Expected ready status: %v, got: %v", tt.expectReady, ready)
 			}
 		})
 	}
 }
 
 func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
-	scheme := setupTestScheme()
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
-	tests := []struct {
-		name             string
-		pipeline         *v1alpha1.Pipeline
-		existingSteps    []v1alpha1.Step
-		initializerFails bool
-		expectReady      bool
-		expectError      bool
-	}{
-		{
-			name: "pipeline with ready steps",
-			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
-				{
-					Ref: corev1.ObjectReference{
-						Name:      "test-step",
-						Namespace: "default",
-					},
-					Mandatory: true,
-				},
-			}),
-			existingSteps: []v1alpha1.Step{
-				*createTestStep(true, nil),
-			},
-			expectReady: true,
-			expectError: false,
+	pipeline := &v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-pipeline",
 		},
-		{
-			name: "pipeline with non-ready mandatory step",
-			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
-				{
-					Ref: corev1.ObjectReference{
-						Name:      "test-step",
-						Namespace: "default",
-					},
-					Mandatory: true,
-				},
-			}),
-			existingSteps: []v1alpha1.Step{
-				*createTestStep(false, nil),
-			},
-			expectReady: false,
-			expectError: true,
-		},
-		{
-			name: "pipeline with non-ready optional step",
-			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
-				{
-					Ref: corev1.ObjectReference{
-						Name:      "test-step",
-						Namespace: "default",
-					},
-					Mandatory: false,
-				},
-			}),
-			existingSteps: []v1alpha1.Step{
-				*createTestStep(false, nil),
-			},
-			expectReady: true,
-			expectError: false,
-		},
-		{
-			name: "initializer fails to initialize pipeline",
-			pipeline: createTestPipeline([]v1alpha1.StepInPipeline{
-				{
-					Ref: corev1.ObjectReference{
-						Name:      "test-step",
-						Namespace: "default",
-					},
-					Mandatory: true,
-				},
-			}),
-			existingSteps: []v1alpha1.Step{
-				*createTestStep(true, nil),
-			},
-			initializerFails: true,
-			expectReady:      false,
-			expectError:      true,
+		Spec: v1alpha1.PipelineSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Type:             v1alpha1.PipelineTypeFilterWeigher,
+			Steps:            []v1alpha1.StepSpec{},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, 0)
-			objects = append(objects, tt.pipeline)
-			for i := range tt.existingSteps {
-				objects = append(objects, &tt.existingSteps[i])
-			}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(pipeline).
+		WithStatusSubresource(&v1alpha1.Pipeline{}).
+		Build()
 
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}).
-				Build()
+	controller := &BasePipelineController[mockPipeline]{
+		Client:           fakeClient,
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		Initializer: &mockPipelineInitializer{
+			pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+		},
+		Pipelines:       make(map[string]mockPipeline),
+		PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+	}
 
-			initializer := &mockInitializer{shouldFail: tt.initializerFails}
-			controller := &BasePipelineController[mockPipeline]{
-				Pipelines:    make(map[string]mockPipeline),
-				Initializer:  initializer,
-				Client:       client,
-				OperatorName: "test",
-			}
-			controller.Pipelines = make(map[string]mockPipeline)
-			controller.PipelineConfigs = make(map[string]v1alpha1.Pipeline)
+	evt := event.CreateEvent{
+		Object: pipeline,
+	}
 
-			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
-			evt := event.CreateEvent{Object: tt.pipeline}
-			queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+	controller.HandlePipelineCreated(context.Background(), evt, nil)
 
-			controller.HandlePipelineCreated(ctx, evt, queue)
+	if _, exists := controller.Pipelines[pipeline.Name]; !exists {
+		t.Error("Expected pipeline to be in map after creation")
+	}
+}
 
-			// Check if pipeline was added to map
-			_, pipelineExists := controller.Pipelines[tt.pipeline.Name]
-			if tt.expectReady && !pipelineExists {
-				t.Error("Expected pipeline to be in map but it wasn't")
-			}
-			if !tt.expectReady && pipelineExists {
-				t.Error("Expected pipeline not to be in map but it was")
-			}
+func TestBasePipelineController_HandlePipelineUpdated(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
-			// Verify pipeline status was updated
-			var updatedPipeline v1alpha1.Pipeline
-			err := client.Get(ctx, types.NamespacedName{Name: tt.pipeline.Name}, &updatedPipeline)
-			if err != nil {
-				t.Fatalf("Failed to get updated pipeline: %v", err)
-			}
+	oldPipeline := &v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-pipeline",
+		},
+		Spec: v1alpha1.PipelineSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Type:             v1alpha1.PipelineTypeFilterWeigher,
+			Steps:            []v1alpha1.StepSpec{},
+		},
+	}
 
-			if updatedPipeline.Status.Ready != tt.expectReady {
-				t.Errorf("Expected Ready=%v, got %v", tt.expectReady, updatedPipeline.Status.Ready)
-			}
+	newPipeline := oldPipeline.DeepCopy()
+	newPipeline.Spec.Description = "Updated description"
 
-			hasError := meta.IsStatusConditionTrue(updatedPipeline.Status.Conditions, v1alpha1.PipelineConditionError)
-			if hasError != tt.expectError {
-				t.Errorf("Expected Error condition=%v, got %v", tt.expectError, hasError)
-			}
-		})
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(newPipeline).
+		WithStatusSubresource(&v1alpha1.Pipeline{}).
+		Build()
+
+	controller := &BasePipelineController[mockPipeline]{
+		Client:           fakeClient,
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		Initializer: &mockPipelineInitializer{
+			pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+		},
+		Pipelines:       make(map[string]mockPipeline),
+		PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+	}
+
+	evt := event.UpdateEvent{
+		ObjectOld: oldPipeline,
+		ObjectNew: newPipeline,
+	}
+
+	controller.HandlePipelineUpdated(context.Background(), evt, nil)
+
+	if _, exists := controller.Pipelines[newPipeline.Name]; !exists {
+		t.Error("Expected pipeline to be in map after update")
 	}
 }
 
 func TestBasePipelineController_HandlePipelineDeleted(t *testing.T) {
-	scheme := setupTestScheme()
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
-	pipeline := createTestPipeline(nil)
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(pipeline).
-		Build()
+	pipeline := &v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-pipeline",
+		},
+		Spec: v1alpha1.PipelineSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Type:             v1alpha1.PipelineTypeFilterWeigher,
+		},
+	}
 
-	initializer := &mockInitializer{}
 	controller := &BasePipelineController[mockPipeline]{
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Initializer:  initializer,
-		Client:       client,
-		OperatorName: "test",
+		PipelineConfigs: map[string]v1alpha1.Pipeline{
+			"test-pipeline": *pipeline,
+		},
 	}
 
-	ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
-	evt := event.DeleteEvent{Object: pipeline}
-	queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+	evt := event.DeleteEvent{
+		Object: pipeline,
+	}
 
-	controller.HandlePipelineDeleted(ctx, evt, queue)
+	controller.HandlePipelineDeleted(context.Background(), evt, nil)
 
-	if _, exists := controller.Pipelines["test-pipeline"]; exists {
-		t.Error("Expected pipeline to be removed from map")
+	if _, exists := controller.Pipelines[pipeline.Name]; exists {
+		t.Error("Expected pipeline to be removed from map after deletion")
+	}
+	if _, exists := controller.PipelineConfigs[pipeline.Name]; exists {
+		t.Error("Expected pipeline config to be removed from map after deletion")
 	}
 }
 
-func TestBasePipelineController_HandleStepCreated(t *testing.T) {
-	scheme := setupTestScheme()
+func TestBasePipelineController_checkStepReady(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	tests := []struct {
-		name              string
-		step              *v1alpha1.Step
-		knowledges        []v1alpha1.Knowledge
-		pipelines         []v1alpha1.Pipeline
-		expectedReady     bool
-		expectedPipelines int
+		name        string
+		step        v1alpha1.StepSpec
+		knowledges  []v1alpha1.Knowledge
+		expectError bool
 	}{
 		{
-			name: "step with ready knowledges",
-			step: createTestStep(false, []corev1.ObjectReference{
-				{Name: "knowledge1", Namespace: "default"},
-			}),
-			knowledges: []v1alpha1.Knowledge{
-				*createTestKnowledge("knowledge1", false, 10),
+			name: "step with no knowledge dependencies",
+			step: v1alpha1.StepSpec{
+				Type:       v1alpha1.StepTypeFilter,
+				Impl:       "test-filter",
+				Knowledges: []corev1.ObjectReference{},
 			},
-			pipelines: []v1alpha1.Pipeline{
-				*createTestPipeline([]v1alpha1.StepInPipeline{
-					{
-						Ref: corev1.ObjectReference{
-							Name:      "test-step",
-							Namespace: "default",
-						},
-						Mandatory: true,
-					},
-				}),
-			},
-			expectedReady:     true,
-			expectedPipelines: 1,
+			knowledges:  []v1alpha1.Knowledge{},
+			expectError: false,
 		},
 		{
-			name: "step with knowledge error",
-			step: createTestStep(false, []corev1.ObjectReference{
-				{Name: "knowledge1", Namespace: "default"},
-			}),
+			name: "step with ready knowledge",
+			step: v1alpha1.StepSpec{
+				Type: v1alpha1.StepTypeFilter,
+				Impl: "test-filter",
+				Knowledges: []corev1.ObjectReference{
+					{Name: "ready-knowledge", Namespace: "default"},
+				},
+			},
 			knowledges: []v1alpha1.Knowledge{
-				*createTestKnowledge("knowledge1", true, 0),
-			},
-			pipelines: []v1alpha1.Pipeline{
-				*createTestPipeline([]v1alpha1.StepInPipeline{
-					{
-						Ref: corev1.ObjectReference{
-							Name:      "test-step",
-							Namespace: "default",
-						},
-						Mandatory: true,
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "ready-knowledge",
+						Namespace: "default",
 					},
-				}),
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 10,
+					},
+				},
 			},
-			expectedReady:     false,
-			expectedPipelines: 0,
+			expectError: false,
+		},
+		{
+			name: "step with knowledge in error state",
+			step: v1alpha1.StepSpec{
+				Type: v1alpha1.StepTypeFilter,
+				Impl: "test-filter",
+				Knowledges: []corev1.ObjectReference{
+					{Name: "error-knowledge", Namespace: "default"},
+				},
+			},
+			knowledges: []v1alpha1.Knowledge{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "error-knowledge",
+						Namespace: "default",
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.KnowledgeConditionReady,
+								Status: metav1.ConditionFalse,
+							},
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "step with knowledge with no data",
+			step: v1alpha1.StepSpec{
+				Type: v1alpha1.StepTypeFilter,
+				Impl: "test-filter",
+				Knowledges: []corev1.ObjectReference{
+					{Name: "no-data-knowledge", Namespace: "default"},
+				},
+			},
+			knowledges: []v1alpha1.Knowledge{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "no-data-knowledge",
+						Namespace: "default",
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 0,
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "step with missing knowledge",
+			step: v1alpha1.StepSpec{
+				Type: v1alpha1.StepTypeFilter,
+				Impl: "test-filter",
+				Knowledges: []corev1.ObjectReference{
+					{Name: "missing-knowledge", Namespace: "default"},
+				},
+			},
+			knowledges:  []v1alpha1.Knowledge{},
+			expectError: true,
+		},
+		{
+			name: "step with multiple knowledges, all ready",
+			step: v1alpha1.StepSpec{
+				Type: v1alpha1.StepTypeFilter,
+				Impl: "test-filter",
+				Knowledges: []corev1.ObjectReference{
+					{Name: "knowledge-1", Namespace: "default"},
+					{Name: "knowledge-2", Namespace: "default"},
+				},
+			},
+			knowledges: []v1alpha1.Knowledge{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "knowledge-1",
+						Namespace: "default",
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 10,
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "knowledge-2",
+						Namespace: "default",
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 5,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "step with multiple knowledges, some not ready",
+			step: v1alpha1.StepSpec{
+				Type: v1alpha1.StepTypeFilter,
+				Impl: "test-filter",
+				Knowledges: []corev1.ObjectReference{
+					{Name: "ready-knowledge", Namespace: "default"},
+					{Name: "not-ready-knowledge", Namespace: "default"},
+				},
+			},
+			knowledges: []v1alpha1.Knowledge{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "ready-knowledge",
+						Namespace: "default",
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 10,
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "not-ready-knowledge",
+						Namespace: "default",
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						RawLength: 0,
+					},
+				},
+			},
+			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, 0)
-			objects = append(objects, tt.step)
+			objects := make([]client.Object, len(tt.knowledges))
 			for i := range tt.knowledges {
-				objects = append(objects, &tt.knowledges[i])
+				objects[i] = &tt.knowledges[i]
 			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				Build()
+
+			controller := &BasePipelineController[mockPipeline]{
+				Client: fakeClient,
+			}
+
+			err := controller.checkStepReady(context.Background(), &tt.step)
+
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+		})
+	}
+}
+
+func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
+
+	tests := []struct {
+		name              string
+		knowledge         *v1alpha1.Knowledge
+		pipelines         []v1alpha1.Pipeline
+		schedulingDomain  v1alpha1.SchedulingDomain
+		expectReEvaluated []string
+	}{
+		{
+			name: "knowledge change triggers dependent pipeline re-evaluation",
+			knowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-knowledge",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.KnowledgeSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+				Status: v1alpha1.KnowledgeStatus{
+					RawLength: 10,
+				},
+			},
+			pipelines: []v1alpha1.Pipeline{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dependent-pipeline",
+					},
+					Spec: v1alpha1.PipelineSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Type:             v1alpha1.PipelineTypeFilterWeigher,
+						Steps: []v1alpha1.StepSpec{
+							{
+								Type: v1alpha1.StepTypeFilter,
+								Impl: "test-filter",
+								Knowledges: []corev1.ObjectReference{
+									{Name: "test-knowledge", Namespace: "default"},
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "independent-pipeline",
+					},
+					Spec: v1alpha1.PipelineSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Type:             v1alpha1.PipelineTypeFilterWeigher,
+						Steps: []v1alpha1.StepSpec{
+							{
+								Type: v1alpha1.StepTypeFilter,
+								Impl: "test-filter",
+								Knowledges: []corev1.ObjectReference{
+									{Name: "other-knowledge", Namespace: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			schedulingDomain:  v1alpha1.SchedulingDomainNova,
+			expectReEvaluated: []string{"dependent-pipeline"},
+		},
+		{
+			name: "knowledge change in different scheduling domain",
+			knowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-knowledge",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.KnowledgeSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+				},
+			},
+			pipelines: []v1alpha1.Pipeline{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "nova-pipeline",
+					},
+					Spec: v1alpha1.PipelineSpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Type:             v1alpha1.PipelineTypeFilterWeigher,
+						Steps: []v1alpha1.StepSpec{
+							{
+								Type: v1alpha1.StepTypeFilter,
+								Impl: "test-filter",
+								Knowledges: []corev1.ObjectReference{
+									{Name: "test-knowledge", Namespace: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			schedulingDomain:  v1alpha1.SchedulingDomainNova,
+			expectReEvaluated: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []client.Object{tt.knowledge}
 			for i := range tt.pipelines {
 				objects = append(objects, &tt.pipelines[i])
 			}
 
-			client := fake.NewClientBuilder().
+			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}, &v1alpha1.Knowledge{}).
+				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Knowledge{}).
 				Build()
 
-			initializer := &mockInitializer{}
 			controller := &BasePipelineController[mockPipeline]{
+				Client:           fakeClient,
+				SchedulingDomain: tt.schedulingDomain,
+				Initializer: &mockPipelineInitializer{
+					pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+				},
 				Pipelines:       make(map[string]mockPipeline),
 				PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-				Initializer:     initializer,
-				Client:          client,
-				OperatorName:    "test",
 			}
 
-			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
-			evt := event.CreateEvent{Object: tt.step}
-			queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+			controller.handleKnowledgeChange(context.Background(), tt.knowledge, nil)
 
-			controller.HandleStepCreated(ctx, evt, queue)
-
-			// Verify step status was updated
-			var updatedStep v1alpha1.Step
-			err := client.Get(ctx, types.NamespacedName{Name: tt.step.Name, Namespace: tt.step.Namespace}, &updatedStep)
-			if err != nil {
-				t.Fatalf("Failed to get updated step: %v", err)
-			}
-
-			if updatedStep.Status.Ready != tt.expectedReady {
-				t.Errorf("Expected step Ready=%v, got %v", tt.expectedReady, updatedStep.Status.Ready)
-			}
-
-			// Check if pipelines were updated correctly
-			if len(controller.Pipelines) != tt.expectedPipelines {
-				t.Errorf("Expected %d pipelines in map, got %d", tt.expectedPipelines, len(controller.Pipelines))
+			// Verify expected pipelines were re-evaluated by checking if they're in the map
+			for _, expectedName := range tt.expectReEvaluated {
+				if _, exists := controller.Pipelines[expectedName]; !exists {
+					t.Errorf("Expected pipeline %s to be re-evaluated", expectedName)
+				}
 			}
 		})
 	}
 }
 
+func TestBasePipelineController_HandleKnowledgeCreated(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
+
+	knowledge := &v1alpha1.Knowledge{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-knowledge",
+			Namespace: "default",
+		},
+		Spec: v1alpha1.KnowledgeSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		},
+		Status: v1alpha1.KnowledgeStatus{
+			RawLength: 10,
+		},
+	}
+
+	pipeline := &v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-pipeline",
+		},
+		Spec: v1alpha1.PipelineSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Type:             v1alpha1.PipelineTypeFilterWeigher,
+			Steps: []v1alpha1.StepSpec{
+				{
+					Type: v1alpha1.StepTypeFilter,
+					Impl: "test-filter",
+					Knowledges: []corev1.ObjectReference{
+						{Name: "test-knowledge", Namespace: "default"},
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(knowledge, pipeline).
+		WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Knowledge{}).
+		Build()
+
+	controller := &BasePipelineController[mockPipeline]{
+		Client:           fakeClient,
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		Initializer: &mockPipelineInitializer{
+			pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+		},
+		Pipelines:       make(map[string]mockPipeline),
+		PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+	}
+
+	evt := event.CreateEvent{
+		Object: knowledge,
+	}
+
+	controller.HandleKnowledgeCreated(context.Background(), evt, nil)
+
+	// Pipeline should be re-evaluated and added to map
+	if _, exists := controller.Pipelines[pipeline.Name]; !exists {
+		t.Error("Expected pipeline to be re-evaluated after knowledge creation")
+	}
+}
+
 func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
-	scheme := setupTestScheme()
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
 	tests := []struct {
-		name          string
-		oldKnowledge  *v1alpha1.Knowledge
-		newKnowledge  *v1alpha1.Knowledge
-		shouldTrigger bool
+		name             string
+		oldKnowledge     *v1alpha1.Knowledge
+		newKnowledge     *v1alpha1.Knowledge
+		expectReEvaluate bool
 	}{
 		{
-			name:          "error status changed",
-			oldKnowledge:  createTestKnowledge("test-knowledge", false, 10),
-			newKnowledge:  createTestKnowledge("test-knowledge", true, 10),
-			shouldTrigger: true,
+			name: "error state changed",
+			oldKnowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-knowledge",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.KnowledgeSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+				Status: v1alpha1.KnowledgeStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   v1alpha1.KnowledgeConditionReady,
+							Status: metav1.ConditionFalse,
+						},
+					},
+				},
+			},
+			newKnowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-knowledge",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.KnowledgeSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+				Status: v1alpha1.KnowledgeStatus{
+					RawLength: 10,
+				},
+			},
+			expectReEvaluate: true,
 		},
 		{
-			name:          "data became available",
-			oldKnowledge:  createTestKnowledge("test-knowledge", false, 0),
-			newKnowledge:  createTestKnowledge("test-knowledge", false, 10),
-			shouldTrigger: true,
+			name: "data became available",
+			oldKnowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-knowledge",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.KnowledgeSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+				Status: v1alpha1.KnowledgeStatus{
+					RawLength: 0,
+				},
+			},
+			newKnowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-knowledge",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.KnowledgeSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+				Status: v1alpha1.KnowledgeStatus{
+					RawLength: 10,
+				},
+			},
+			expectReEvaluate: true,
 		},
 		{
-			name:          "no relevant change",
-			oldKnowledge:  createTestKnowledge("test-knowledge", false, 10),
-			newKnowledge:  createTestKnowledge("test-knowledge", false, 15),
-			shouldTrigger: false,
+			name: "no relevant change",
+			oldKnowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-knowledge",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.KnowledgeSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+				Status: v1alpha1.KnowledgeStatus{
+					RawLength: 10,
+				},
+			},
+			newKnowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-knowledge",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.KnowledgeSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+				Status: v1alpha1.KnowledgeStatus{
+					RawLength: 15,
+				},
+			},
+			expectReEvaluate: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := createTestStep(false, []corev1.ObjectReference{
-				{Name: "test-knowledge", Namespace: "default"},
-			})
-			pipeline := createTestPipeline([]v1alpha1.StepInPipeline{
-				{
-					Ref: corev1.ObjectReference{
-						Name:      "test-step",
-						Namespace: "default",
-					},
-					Mandatory: true,
+			pipeline := &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
 				},
-			})
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Steps: []v1alpha1.StepSpec{
+						{
+							Type: v1alpha1.StepTypeFilter,
+							Impl: "test-filter",
+							Knowledges: []corev1.ObjectReference{
+								{Name: "test-knowledge", Namespace: "default"},
+							},
+						},
+					},
+				},
+			}
 
-			objects := []client.Object{tt.newKnowledge, step, pipeline}
-
-			client := fake.NewClientBuilder().
+			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}, &v1alpha1.Knowledge{}).
+				WithObjects(tt.newKnowledge, pipeline).
+				WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Knowledge{}).
 				Build()
 
-			initializer := &mockInitializer{}
 			controller := &BasePipelineController[mockPipeline]{
-				Pipelines:    make(map[string]mockPipeline),
-				Initializer:  initializer,
-				Client:       client,
-				OperatorName: "test",
+				Client:           fakeClient,
+				SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				Initializer: &mockPipelineInitializer{
+					pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+				},
+				Pipelines:       make(map[string]mockPipeline),
+				PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 			}
-			controller.Pipelines = make(map[string]mockPipeline)
-			controller.PipelineConfigs = make(map[string]v1alpha1.Pipeline)
 
-			ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
 			evt := event.UpdateEvent{
 				ObjectOld: tt.oldKnowledge,
 				ObjectNew: tt.newKnowledge,
 			}
-			queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
 
-			controller.HandleKnowledgeUpdated(ctx, evt, queue)
+			controller.HandleKnowledgeUpdated(context.Background(), evt, nil)
 
-			// If should trigger, verify step status was updated
-			if tt.shouldTrigger {
-				var updatedStep v1alpha1.Step
-				err := client.Get(ctx, types.NamespacedName{Name: step.Name, Namespace: step.Namespace}, &updatedStep)
-				if err != nil {
-					t.Fatalf("Failed to get updated step: %v", err)
-				}
-				// Status should have been recalculated
+			_, exists := controller.Pipelines[pipeline.Name]
+			if tt.expectReEvaluate && !exists {
+				t.Error("Expected pipeline to be re-evaluated")
+			}
+			if !tt.expectReEvaluate && exists {
+				t.Error("Expected pipeline not to be re-evaluated")
 			}
 		})
 	}
 }
 
-func TestBasePipelineController_HandleStepDeleted(t *testing.T) {
-	scheme := setupTestScheme()
+func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
 
-	step := createTestStep(true, nil)
-	pipeline := createTestPipeline([]v1alpha1.StepInPipeline{
-		{
-			Ref: corev1.ObjectReference{
-				Name:      "test-step",
-				Namespace: "default",
-			},
-			Mandatory: true,
+	knowledge := &v1alpha1.Knowledge{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-knowledge",
+			Namespace: "default",
 		},
-	})
+		Spec: v1alpha1.KnowledgeSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		},
+	}
 
-	// Only include the pipeline in the fake client, not the step (simulating step deletion)
-	objects := []client.Object{pipeline}
+	pipeline := &v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-pipeline",
+		},
+		Spec: v1alpha1.PipelineSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Type:             v1alpha1.PipelineTypeFilterWeigher,
+			Steps: []v1alpha1.StepSpec{
+				{
+					Type:      v1alpha1.StepTypeFilter,
+					Impl:      "test-filter",
+					Mandatory: true,
+					Knowledges: []corev1.ObjectReference{
+						{Name: "test-knowledge", Namespace: "default"},
+					},
+				},
+			},
+		},
+	}
 
-	client := fake.NewClientBuilder().
+	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(objects...).
+		WithObjects(pipeline).
 		WithStatusSubresource(&v1alpha1.Pipeline{}).
 		Build()
 
-	initializer := &mockInitializer{}
 	controller := &BasePipelineController[mockPipeline]{
+		Client:           fakeClient,
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		Initializer: &mockPipelineInitializer{
+			pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+		},
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},
 		},
-		Initializer: initializer,
-		Client:      client,
+		PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 	}
 
-	ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
-	evt := event.DeleteEvent{Object: step}
-	queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
-
-	// Initially pipeline should be in map
-	if _, exists := controller.Pipelines["test-pipeline"]; !exists {
-		t.Fatal("Expected pipeline to be in map initially")
+	evt := event.DeleteEvent{
+		Object: knowledge,
 	}
 
-	controller.HandleStepDeleted(ctx, evt, queue)
+	controller.HandleKnowledgeDeleted(context.Background(), evt, nil)
 
-	// The main requirement is that HandleStepDeleted successfully processes the event
-	// without crashing. The exact behavior depends on implementation details, but
-	// it should handle the case where a dependent step is deleted gracefully.
-
-	// The pipeline may or may not be removed from map depending on the implementation
-	// but the method should not panic or error
-
-	// Get the pipeline status to verify it was processed
-	var updatedPipeline v1alpha1.Pipeline
-	err := client.Get(ctx, types.NamespacedName{Name: pipeline.Name}, &updatedPipeline)
-	if err != nil {
-		t.Errorf("Failed to get pipeline after step deletion: %v", err)
-	}
-
-	// The status should reflect the current state - either ready with no steps, or not ready with error
-	// Both are valid depending on how the implementation handles missing mandatory steps
-}
-
-func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
-	scheme := setupTestScheme()
-
-	knowledge := createTestKnowledge("test-knowledge", false, 10)
-	step := createTestStep(true, []corev1.ObjectReference{
-		{Name: "test-knowledge", Namespace: "default"},
-	})
-	pipeline := createTestPipeline([]v1alpha1.StepInPipeline{
-		{
-			Ref: corev1.ObjectReference{
-				Name:      "test-step",
-				Namespace: "default",
-			},
-			Mandatory: true,
-		},
-	})
-
-	objects := []client.Object{step, pipeline}
-
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(objects...).
-		WithStatusSubresource(&v1alpha1.Pipeline{}, &v1alpha1.Step{}).
-		Build()
-
-	initializer := &mockInitializer{}
-	controller := &BasePipelineController[mockPipeline]{
-		Pipelines: map[string]mockPipeline{
-			"test-pipeline": {name: "test-pipeline"},
-		},
-		Initializer:  initializer,
-		Client:       client,
-		OperatorName: "test",
-	}
-
-	ctx := ctrl.LoggerInto(context.Background(), ctrl.Log)
-	evt := event.DeleteEvent{Object: knowledge}
-	queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
-
-	controller.HandleKnowledgeDeleted(ctx, evt, queue)
-
-	// Verify step status was updated (should now be not ready due to missing knowledge)
-	var updatedStep v1alpha1.Step
-	err := client.Get(ctx, types.NamespacedName{Name: step.Name, Namespace: step.Namespace}, &updatedStep)
-	if err != nil {
-		t.Fatalf("Failed to get updated step: %v", err)
-	}
-
-	if updatedStep.Status.Ready {
-		t.Error("Expected step to be not ready after knowledge deletion")
+	// When knowledge is deleted, the pipeline is re-evaluated.
+	// Since the knowledge is now missing and the step is mandatory,
+	// the pipeline should be removed from the map.
+	if _, exists := controller.Pipelines[pipeline.Name]; exists {
+		t.Error("Expected pipeline to be removed after knowledge deletion due to mandatory step")
 	}
 }

@@ -16,8 +16,8 @@ import (
 )
 
 type KnowledgeStateKPIOpts struct {
-	// The operator to filter knowledges by.
-	KnowledgeOperator string `yaml:"knowledgeOperator"`
+	// The scheduling domain to filter knowledges by.
+	KnowledgeSchedulingDomain v1alpha1.SchedulingDomain `json:"knowledgeSchedulingDomain"`
 }
 
 // KPI observing the state of knowledge resources managed by cortex.
@@ -57,7 +57,7 @@ func (k *KnowledgeStateKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	var knowledges []v1alpha1.Knowledge
 	for _, kn := range knowledgeList.Items {
-		if kn.Spec.Operator != k.Options.KnowledgeOperator {
+		if kn.Spec.SchedulingDomain != k.Options.KnowledgeSchedulingDomain {
 			continue
 		}
 		knowledges = append(knowledges, kn)
@@ -66,16 +66,14 @@ func (k *KnowledgeStateKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, kn := range knowledges {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionError):
-			state = "error"
-		case kn.Status.IsReady():
+		case meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionReady):
 			state = "ready"
 		default:
 			state = "unknown"
 		}
 		ch <- prometheus.MustNewConstMetric(
 			k.counter, prometheus.GaugeValue, 1,
-			k.Options.KnowledgeOperator, kn.Name, state,
+			string(k.Options.KnowledgeSchedulingDomain), kn.Name, state,
 		)
 	}
 }

@@ -75,9 +75,8 @@ func TestCleanupManila(t *testing.T) {
 						Name: "decision-existing-share",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeManilaShare,
-						ResourceID: "share-exists",
+						SchedulingDomain: v1alpha1.SchedulingDomainManila,
+						ResourceID:       "share-exists",
 					},
 				},
 				{
@@ -85,9 +84,8 @@ func TestCleanupManila(t *testing.T) {
 						Name: "decision-deleted-share",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeManilaShare,
-						ResourceID: "share-deleted",
+						SchedulingDomain: v1alpha1.SchedulingDomainManila,
+						ResourceID:       "share-deleted",
 					},
 				},
 			},
@@ -105,9 +103,8 @@ func TestCleanupManila(t *testing.T) {
 						Name: "decision-share-1",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeManilaShare,
-						ResourceID: "share-1",
+						SchedulingDomain: v1alpha1.SchedulingDomainManila,
+						ResourceID:       "share-1",
 					},
 				},
 				{
@@ -115,9 +112,8 @@ func TestCleanupManila(t *testing.T) {
 						Name: "decision-share-2",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeManilaShare,
-						ResourceID: "share-2",
+						SchedulingDomain: v1alpha1.SchedulingDomainManila,
+						ResourceID:       "share-2",
 					},
 				},
 			},
@@ -136,9 +132,8 @@ func TestCleanupManila(t *testing.T) {
 						Name: "decision-other-type",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "test-operator",
-						Type:       v1alpha1.DecisionTypeCinderVolume,
-						ResourceID: "some-resource",
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "some-resource",
 					},
 				},
 				{
@@ -146,9 +141,8 @@ func TestCleanupManila(t *testing.T) {
 						Name: "decision-other-operator",
 					},
 					Spec: v1alpha1.DecisionSpec{
-						Operator:   "other-operator",
-						Type:       v1alpha1.DecisionTypeManilaShare,
-						ResourceID: "share-1",
+						SchedulingDomain: "other-operator",
+						ResourceID:       "share-1",
 					},
 				},
 			},
@@ -339,7 +333,7 @@ func TestCleanupManila(t *testing.T) {
 				WithObjects(objects...).
 				Build()
 			config := conf.Config{
-				Operator: "test-operator",
+				SchedulingDomain: v1alpha1.SchedulingDomainManila,
 				KeystoneSecretRef: corev1.SecretReference{
 					Name:      "keystone-secret",
 					Namespace: "default",
@@ -422,7 +416,7 @@ func TestCleanupManilaDecisionsCancel(t *testing.T) {
 		Build()
 
 	config := conf.Config{
-		Operator: "test-operator",
+		SchedulingDomain: v1alpha1.SchedulingDomainManila,
 		KeystoneSecretRef: corev1.SecretReference{
 			Name:      "keystone-secret",
 			Namespace: "default",

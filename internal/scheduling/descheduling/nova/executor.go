@@ -51,15 +51,16 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	// Currently we only know how to handle deschedulings for nova VMs.
 	if descheduling.Spec.RefType != v1alpha1.DeschedulingSpecVMReferenceNovaServerUUID {
 		log.Info("skipping descheduling, unsupported refType", "refType", descheduling.Spec.RefType)
-		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseFailed
+		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DeschedulingConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DeschedulingConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "UnsupportedRefType",
 			Message: "unsupported refType: " + string(descheduling.Spec.RefType),
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		patch := client.MergeFrom(old)
+		if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -68,15 +69,16 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	// Currently we only know how to handle deschedulings for nova compute hosts.
 	if descheduling.Spec.PrevHostType != v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName {
 		log.Info("skipping descheduling, unsupported prevHostType", "prevHostType", descheduling.Spec.PrevHostType)
-		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseFailed
+		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DeschedulingConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DeschedulingConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "UnsupportedPrevHostType",
 			Message: "unsupported prevHostType: " + string(descheduling.Spec.PrevHostType),
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		patch := client.MergeFrom(old)
+		if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -85,22 +87,23 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	// We need a server uuid to proceed.
 	if descheduling.Spec.Ref == "" {
 		log.Info("skipping descheduling, missing ref")
-		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseFailed
+		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DeschedulingConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DeschedulingConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "MissingRef",
 			Message: "missing ref",
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		patch := client.MergeFrom(old)
+		if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
 	// Don't touch processing deschedulings.
-	if descheduling.Status.Phase == v1alpha1.DeschedulingStatusPhaseInProgress {
+	if meta.IsStatusConditionTrue(descheduling.Status.Conditions, v1alpha1.DeschedulingConditionInProgress) {
 		log.Info("skipping descheduling, already in progress")
 		return ctrl.Result{}, nil
 	}
@@ -120,15 +123,16 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	// Don't touch servers which don't match the provided previous host.
 	if descheduling.Spec.PrevHost != "" && server.ComputeHost != descheduling.Spec.PrevHost {
 		log.Error(errors.New("VM not on expected host"), "skipping descheduling, VM not on expected host", "vmId", vmId, "expectedHost", descheduling.Spec.PrevHost, "actualHost", server.ComputeHost)
-		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseFailed
+		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DeschedulingConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DeschedulingConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "VMNotOnExpectedHost",
 			Message: "VM not on expected host, expected: " + descheduling.Spec.PrevHost + ", actual: " + server.ComputeHost,
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		patch := client.MergeFrom(old)
+		if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -137,15 +141,16 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	// Don't touch servers that are turned off or are in an error state.
 	if server.Status != "ACTIVE" {
 		log.Error(errors.New("VM not active"), "skipping descheduling, VM not active", "vmId", vmId)
-		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseFailed
+		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DeschedulingConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DeschedulingConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "VMNotActive",
 			Message: "VM not active, current status: " + server.Status,
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		patch := client.MergeFrom(old)
+		if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -163,15 +168,16 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	log.Info("descheduler: executing migration for VM", "vmId", vmId)
 	if err := e.NovaAPI.LiveMigrate(ctx, vmId); err != nil {
 		log.Error(err, "descheduler: failed to live-migrate VM", "vmId", vmId, "error", err)
-		descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseFailed
+		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DeschedulingConditionError,
-			Status:  metav1.ConditionTrue,
+			Type:    v1alpha1.DeschedulingConditionReady,
+			Status:  metav1.ConditionFalse,
 			Reason:  "LiveMigrationFailed",
 			Message: "failed to live-migrate VM: " + err.Error(),
 		})
-		if err := e.Status().Update(ctx, descheduling); err != nil {
-			log.Error(err, "failed to update descheduling status")
+		patch := client.MergeFrom(old)
+		if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+			log.Error(err, "failed to patch descheduling status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -183,15 +189,16 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 		if err != nil {
 			log.Error(err, "descheduler: failed to get VM status", "vmId", vmId)
 			// Consider migration as failed
-			descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseFailed
+			old := descheduling.DeepCopy()
 			meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.DeschedulingConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.DeschedulingConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "GetVMStatusFailed",
 				Message: "failed to get VM status: " + err.Error(),
 			})
-			if err := e.Status().Update(ctx, descheduling); err != nil {
-				log.Error(err, "failed to update descheduling status")
+			patch := client.MergeFrom(old)
+			if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+				log.Error(err, "failed to patch descheduling status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -205,15 +212,16 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 		}
 		if server.Status == "ERROR" {
 			log.Error(errors.New("live-migration failed for VM "+vmId), "descheduler: live-migration failed", "vmId", vmId)
-			descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseFailed
+			old := descheduling.DeepCopy()
 			meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.DeschedulingConditionError,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.DeschedulingConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "LiveMigrationFailed",
 				Message: "live-migration failed for VM: " + vmId,
 			})
-			if err := e.Status().Update(ctx, descheduling); err != nil {
-				log.Error(err, "failed to update descheduling status")
+			patch := client.MergeFrom(old)
+			if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+				log.Error(err, "failed to patch descheduling status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -225,12 +233,19 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 		time.Sleep(jobloop.DefaultJitter(time.Second))
 	}
 
-	descheduling.Status.Phase = v1alpha1.DeschedulingStatusPhaseCompleted
-	meta.RemoveStatusCondition(&descheduling.Status.Conditions, v1alpha1.DeschedulingConditionError)
+	old := descheduling.DeepCopy()
+	meta.RemoveStatusCondition(&descheduling.Status.Conditions, v1alpha1.DeschedulingConditionInProgress)
+	meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.DeschedulingConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "DeschedulingSucceeded",
+		Message: "descheduling succeeded",
+	})
 	descheduling.Status.NewHost = server.ComputeHost
 	descheduling.Status.NewHostType = v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName
-	if err := e.Status().Update(ctx, descheduling); err != nil {
-		log.Error(err, "failed to update descheduling status")
+	patch := client.MergeFrom(old)
+	if err := e.Status().Patch(ctx, descheduling, patch); err != nil {
+		log.Error(err, "failed to patch descheduling status")
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -245,11 +260,11 @@ func (s *Executor) SetupWithManager(mgr manager.Manager, mcl *multicluster.Clien
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				deschedulings := obj.(*v1alpha1.Descheduling)
 				// We only care about deschedulings that are not completed yet.
-				if deschedulings.Status.Phase == v1alpha1.DeschedulingStatusPhaseCompleted {
+				if meta.IsStatusConditionTrue(deschedulings.Status.Conditions, v1alpha1.DeschedulingConditionInProgress) {
 					return false
 				}
 				// We don't care about deschedulings that failed.
-				if deschedulings.Status.Phase == v1alpha1.DeschedulingStatusPhaseFailed {
+				if meta.IsStatusConditionFalse(deschedulings.Status.Conditions, v1alpha1.DeschedulingConditionReady) {
 					return false
 				}
 				return true

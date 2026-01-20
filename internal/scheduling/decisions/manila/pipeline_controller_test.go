@@ -54,12 +54,11 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		decision       *v1alpha1.Decision
-		pipeline       *v1alpha1.Pipeline
-		expectError    bool
-		expectResult   bool
-		expectDuration bool
+		name         string
+		decision     *v1alpha1.Decision
+		pipeline     *v1alpha1.Pipeline
+		expectError  bool
+		expectResult bool
 	}{
 		{
 			name: "successful manila decision processing",
@@ -69,8 +68,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -84,14 +82,13 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:     v1alpha1.PipelineTypeFilterWeigher,
-					Operator: "test-operator",
-					Steps:    []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
-			expectError:    false,
-			expectResult:   true,
-			expectDuration: true,
+			expectError:  false,
+			expectResult: true,
 		},
 		{
 			name: "decision without manilaRaw spec",
@@ -101,8 +98,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -114,14 +110,13 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:     v1alpha1.PipelineTypeFilterWeigher,
-					Operator: "test-operator",
-					Steps:    []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
-			expectError:    true,
-			expectResult:   false,
-			expectDuration: false,
+			expectError:  true,
+			expectResult: false,
 		},
 		{
 			name: "pipeline not found",
@@ -131,8 +126,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "nonexistent-pipeline",
 					},
@@ -141,10 +135,9 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			pipeline:       nil,
-			expectError:    true,
-			expectResult:   false,
-			expectDuration: false,
+			pipeline:     nil,
+			expectError:  true,
+			expectResult: false,
 		},
 	}
 
@@ -168,12 +161,17 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				},
 				Monitor: lib.PipelineMonitor{},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 				},
 			}
 
 			if tt.pipeline != nil {
-				pipeline, err := controller.InitPipeline(t.Context(), tt.pipeline.Name, []v1alpha1.Step{})
+				pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: tt.pipeline.Name,
+					},
+					Spec: tt.pipeline.Spec,
+				})
 				if err != nil {
 					t.Fatalf("Failed to init pipeline: %v", err)
 				}
@@ -210,13 +208,6 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 			}
 			if !tt.expectResult && updatedDecision.Status.Result != nil {
 				t.Error("Expected result to be nil but was set")
-			}
-
-			if tt.expectDuration && updatedDecision.Status.Took.Duration == 0 {
-				t.Error("Expected duration to be set but was zero")
-			}
-			if !tt.expectDuration && updatedDecision.Status.Took.Duration != 0 {
-				t.Error("Expected duration to be zero but was set")
 			}
 		})
 	}
@@ -260,7 +251,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 		expectError           bool
 		expectDecisionCreated bool
 		expectResult          bool
-		expectDuration        bool
 	}{
 		{
 			name: "successful decision processing with creation",
@@ -270,8 +260,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace:    "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -285,17 +274,16 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       true,
 			expectError:           false,
 			expectDecisionCreated: true,
 			expectResult:          true,
-			expectDuration:        true,
 		},
 		{
 			name: "successful decision processing without creation",
@@ -305,8 +293,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -320,17 +307,16 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: false,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					CreateDecisions:  false,
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       false,
 			expectError:           false,
 			expectDecisionCreated: false,
 			expectResult:          true,
-			expectDuration:        true,
 		},
 		{
 			name: "pipeline not configured",
@@ -340,8 +326,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "nonexistent-pipeline",
 					},
@@ -354,7 +339,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 			expectError:           true,
 			expectDecisionCreated: false,
 			expectResult:          false,
-			expectDuration:        false,
 		},
 		{
 			name: "decision without manilaRaw spec",
@@ -364,8 +348,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1alpha1.DecisionSpec{
-					Type:     v1alpha1.DecisionTypeManilaShare,
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -377,17 +360,16 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:            v1alpha1.PipelineTypeFilterWeigher,
-					Operator:        "test-operator",
-					CreateDecisions: true,
-					Steps:           []v1alpha1.StepInPipeline{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					CreateDecisions:  true,
+					Steps:            []v1alpha1.StepSpec{},
 				},
 			},
 			createDecisions:       true,
 			expectError:           true,
 			expectDecisionCreated: false,
 			expectResult:          false,
-			expectDuration:        false,
 		},
 	}
 
@@ -412,13 +394,13 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 				},
 				Monitor: lib.PipelineMonitor{},
 				Conf: conf.Config{
-					Operator: "test-operator",
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 				},
 			}
 
 			if tt.pipelineConfig != nil {
 				controller.PipelineConfigs[tt.pipelineConfig.Name] = *tt.pipelineConfig
-				pipeline, err := controller.InitPipeline(t.Context(), tt.pipelineConfig.Name, []v1alpha1.Step{})
+				pipeline, err := controller.InitPipeline(t.Context(), *tt.pipelineConfig)
 				if err != nil {
 					t.Fatalf("Failed to init pipeline: %v", err)
 				}
@@ -445,8 +427,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 
 				found := false
 				for _, decision := range decisions.Items {
-					if decision.Spec.Type == v1alpha1.DecisionTypeManilaShare &&
-						decision.Spec.Operator == "test-operator" {
+					if decision.Spec.SchedulingDomain == v1alpha1.SchedulingDomainManila {
 						found = true
 
 						// Verify decision properties
@@ -459,9 +440,6 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 							if decision.Status.Result == nil {
 								t.Error("expected decision result to be set")
 								return
-							}
-							if tt.expectDuration && decision.Status.Took.Duration <= 0 {
-								t.Error("expected duration to be positive")
 							}
 						}
 						break
@@ -488,27 +466,22 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		steps       []v1alpha1.Step
+		steps       []v1alpha1.StepSpec
 		expectError bool
 	}{
 		{
 			name:        "empty steps",
-			steps:       []v1alpha1.Step{},
+			steps:       []v1alpha1.StepSpec{},
 			expectError: false,
 		},
 		{
 			name: "supported netapp step",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-step",
-					},
-					Spec: v1alpha1.StepSpec{
-						Type: v1alpha1.StepTypeWeigher,
-						Impl: "netapp_cpu_usage_balancing",
-						Opts: runtime.RawExtension{
-							Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
-						},
+					Type: v1alpha1.StepTypeWeigher,
+					Impl: "netapp_cpu_usage_balancing",
+					Opts: runtime.RawExtension{
+						Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
 					},
 				},
 			},
@@ -516,15 +489,10 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.Step{
+			steps: []v1alpha1.StepSpec{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-step",
-					},
-					Spec: v1alpha1.StepSpec{
-						Type: v1alpha1.StepTypeFilter,
-						Impl: "unsupported-plugin",
-					},
+					Type: v1alpha1.StepTypeFilter,
+					Impl: "unsupported-plugin",
 				},
 			},
 			expectError: true,
@@ -533,7 +501,16 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(t.Context(), "test", tt.steps)
+			pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainManila,
+					Steps:            tt.steps,
+				},
+			})
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")

@@ -16,8 +16,8 @@ import (
 )
 
 type DecisionStateKPIOpts struct {
-	// The operator to filter decisions by.
-	DecisionOperator string `yaml:"decisionOperator"`
+	// The scheduling domain to filter decisions by.
+	DecisionSchedulingDomain v1alpha1.SchedulingDomain `json:"decisionSchedulingDomain"`
 }
 
 // KPI observing the state of decision resources managed by cortex.
@@ -57,33 +57,37 @@ func (k *DecisionStateKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	var decisions []v1alpha1.Decision
 	for _, d := range decisionList.Items {
-		if d.Spec.Operator != k.Options.DecisionOperator {
+		if d.Spec.SchedulingDomain != k.Options.DecisionSchedulingDomain {
 			continue
 		}
 		decisions = append(decisions, d)
 	}
-	// For each decision, emit a metric with its state.
+	// For each decision, categorize by state: error, waiting, or success
 	var errorCount, waitingCount, successCount float64
 	for _, d := range decisions {
 		switch {
-		case meta.IsStatusConditionTrue(d.Status.Conditions, v1alpha1.DecisionConditionError):
+		// Error state: decision has a false Ready condition
+		case meta.IsStatusConditionFalse(d.Status.Conditions, v1alpha1.DecisionConditionReady):
 			errorCount++
-		case d.Status.Result == nil || d.Status.Result.TargetHost == nil:
+		// Waiting state: decision has a target host set (waiting for migration/placement)
+		case d.Status.Result != nil && d.Status.Result.TargetHost != nil:
 			waitingCount++
+		// Success state: decision is complete (has result with ordered hosts or no result needed)
 		default:
 			successCount++
 		}
 	}
+	// Emit metrics for all three states
 	ch <- prometheus.MustNewConstMetric(
 		k.counter, prometheus.GaugeValue, errorCount,
-		k.Options.DecisionOperator, "error",
+		string(k.Options.DecisionSchedulingDomain), "error",
 	)
 	ch <- prometheus.MustNewConstMetric(
 		k.counter, prometheus.GaugeValue, waitingCount,
-		k.Options.DecisionOperator, "waiting",
+		string(k.Options.DecisionSchedulingDomain), "waiting",
 	)
 	ch <- prometheus.MustNewConstMetric(
 		k.counter, prometheus.GaugeValue, successCount,
-		k.Options.DecisionOperator, "success",
+		string(k.Options.DecisionSchedulingDomain), "success",
 	)
 }

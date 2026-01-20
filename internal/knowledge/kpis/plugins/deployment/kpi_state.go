@@ -16,8 +16,8 @@ import (
 )
 
 type KPIStateKPIOpts struct {
-	// The operator to filter kpis by.
-	KPIOperator string `yaml:"kpiOperator"`
+	// The scheduling domain to filter kpis by.
+	KPISchedulingDomain v1alpha1.SchedulingDomain `json:"kpiSchedulingDomain"`
 }
 
 // KPI observing the state of kpi resources managed by cortex.
@@ -57,7 +57,7 @@ func (k *KPIStateKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	var kpis []v1alpha1.KPI
 	for _, kpi := range kpiList.Items {
-		if kpi.Spec.Operator != k.Options.KPIOperator {
+		if kpi.Spec.SchedulingDomain != k.Options.KPISchedulingDomain {
 			continue
 		}
 		kpis = append(kpis, kpi)
@@ -66,16 +66,14 @@ func (k *KPIStateKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, kpi := range kpis {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(kpi.Status.Conditions, v1alpha1.KPIConditionError):
-			state = "error"
-		case kpi.Status.Ready:
+		case meta.IsStatusConditionTrue(kpi.Status.Conditions, v1alpha1.KPIConditionReady):
 			state = "ready"
 		default:
 			state = "unknown"
 		}
 		ch <- prometheus.MustNewConstMetric(
 			k.counter, prometheus.GaugeValue, 1,
-			k.Options.KPIOperator, kpi.Name, state,
+			string(k.Options.KPISchedulingDomain), kpi.Name, state,
 		)
 	}
 }

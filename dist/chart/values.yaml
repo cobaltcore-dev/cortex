@@ -102,8 +102,8 @@ global:
 # Use this to unambiguate multiple cortex deployments in the same cluster.
 namePrefix: cortex
 conf:
-  # The operator will only touch CRs with this operator name.
-  operator: cortex
+  # The scheduling domain this operator is responsible for.
+  schedulingDomain: cortex
   # Used to differentiate different cortex deployments in the same cluster (e.g. leader election ID)
   leaderElectionID: cortex-unknown
   enabledControllers:

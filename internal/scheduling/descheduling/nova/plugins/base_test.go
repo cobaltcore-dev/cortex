@@ -23,13 +23,11 @@ func (o MockOptions) Validate() error {
 func TestBaseStep_Init(t *testing.T) {
 	step := BaseStep[MockOptions]{}
 	cl := fake.NewClientBuilder().Build()
-	err := step.Init(t.Context(), cl, v1alpha1.Step{
-		Spec: v1alpha1.StepSpec{
-			Opts: runtime.RawExtension{Raw: []byte(`{
-				"option1": "value1",
-				"option2": 2
-			}`)},
-		},
+	err := step.Init(t.Context(), cl, v1alpha1.StepSpec{
+		Opts: runtime.RawExtension{Raw: []byte(`{
+			"option1": "value1",
+			"option2": 2
+		}`)},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

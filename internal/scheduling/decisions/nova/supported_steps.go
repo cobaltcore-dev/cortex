@@ -31,4 +31,8 @@ var supportedSteps = map[string]func() NovaStep{
 	"filter_has_requested_traits":             func() NovaStep { return &filters.FilterHasRequestedTraits{} },
 	"filter_has_enough_capacity":              func() NovaStep { return &filters.FilterHasEnoughCapacity{} },
 	"filter_host_instructions":                func() NovaStep { return &filters.FilterHostInstructionsStep{} },
+	"filter_instance_group_affinity":          func() NovaStep { return &filters.FilterInstanceGroupAffinityStep{} },
+	"filter_instance_group_anti_affinity":     func() NovaStep { return &filters.FilterInstanceGroupAntiAffinityStep{} },
+	"filter_live_migratable":                  func() NovaStep { return &filters.FilterLiveMigratableStep{} },
+	"filter_requested_destination":            func() NovaStep { return &filters.FilterRequestedDestinationStep{} },
 }

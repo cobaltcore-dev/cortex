@@ -4,10 +4,10 @@ kind: KPI
 metadata:
   name: cortex-cinder-datasource-state
 spec:
-  operator: cortex-cinder
+  schedulingDomain: cinder
   impl: datasource_state_kpi
   opts:
-    datasourceOperator: cortex-cinder
+    datasourceSchedulingDomain: cortex-cinder
   description: |
     This KPI tracks the state of datasource resources managed by cortex.
 ---
@@ -16,10 +16,10 @@ kind: KPI
 metadata:
   name: cortex-cinder-knowledge-state
 spec:
-  operator: cortex-cinder
+  schedulingDomain: cinder
   impl: knowledge_state_kpi
   opts:
-    knowledgeOperator: cortex-cinder
+    knowledgeSchedulingDomain: cortex-cinder
   description: |
     This KPI tracks the state of knowledge resources managed by cortex.
 ---
@@ -28,10 +28,10 @@ kind: KPI
 metadata:
   name: cortex-cinder-decision-state
 spec:
-  operator: cortex-cinder
+  schedulingDomain: cinder
   impl: decision_state_kpi
   opts:
-    decisionOperator: cortex-cinder
+    decisionSchedulingDomain: cortex-cinder
   description: |
     This aggregated KPI tracks the state of decision resources managed by cortex.
 ---
@@ -40,10 +40,10 @@ kind: KPI
 metadata:
   name: cortex-cinder-kpi-state
 spec:
-  operator: cortex-cinder
+  schedulingDomain: cinder
   impl: kpi_state_kpi
   opts:
-    kpiOperator: cortex-cinder
+    kpiSchedulingDomain: cortex-cinder
   description: |
     This KPI tracks the state of kpi resources managed by cortex.
 ---
@@ -52,10 +52,10 @@ kind: KPI
 metadata:
   name: cortex-cinder-pipeline-state
 spec:
-  operator: cortex-cinder
+  schedulingDomain: cinder
   impl: pipeline_state_kpi
   opts:
-    pipelineOperator: cortex-cinder
+    pipelineSchedulingDomain: cortex-cinder
   description: |
     This KPI tracks the state of pipeline resources managed by cortex.
 ---
@@ -64,9 +64,9 @@ kind: KPI
 metadata:
   name: cortex-cinder-step-state
 spec:
-  operator: cortex-cinder
+  schedulingDomain: cinder
   impl: step_state_kpi
   opts:
-    stepOperator: cortex-cinder
+    stepSchedulingDomain: cortex-cinder
   description: |
     This KPI tracks the state of step resources managed by cortex.

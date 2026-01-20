@@ -36,31 +36,17 @@ type DeschedulingSpec struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// The phase in which the descheduling is.
-type DeschedulingStatusPhase string
-
 const (
-	// The descheduling was queued and is waiting to be processed.
-	DeschedulingStatusPhaseQueued DeschedulingStatusPhase = "queued"
+	// The descheduling was successfully processed.
+	DeschedulingConditionReady = "Ready"
 	// The descheduling is currently being processed.
-	DeschedulingStatusPhaseInProgress DeschedulingStatusPhase = "inProgress"
-	// The descheduling was completed successfully.
-	DeschedulingStatusPhaseCompleted DeschedulingStatusPhase = "completed"
-	// The descheduling failed.
-	DeschedulingStatusPhaseFailed DeschedulingStatusPhase = "failed"
-)
-
-const (
-	// Something went wrong during the descheduling process.
-	DeschedulingConditionError = "Error"
+	DeschedulingConditionInProgress = "InProgress"
 )
 
 type DeschedulingStatus struct {
-	// The current phase of the descheduling.
-	Phase DeschedulingStatusPhase `json:"phase"`
 	// The current status conditions of the descheduling.
 	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	// The name of the compute host where the VM was rescheduled to.
 	NewHost string `json:"newHost,omitempty"`
 	// The type of host where the VM was rescheduled to.
@@ -70,11 +56,11 @@ type DeschedulingStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Previous Host",type="string",JSONPath=".spec.prevHost"
 // +kubebuilder:printcolumn:name="New Host",type="string",JSONPath=".status.newHost"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Reason(s)",type="string",JSONPath=".spec.reason"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // Descheduling is the Schema for the deschedulings API
 type Descheduling struct {

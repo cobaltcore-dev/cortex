@@ -16,8 +16,8 @@ import (
 )
 
 type PipelineStateKPIOpts struct {
-	// The operator to filter pipelines by.
-	PipelineOperator string `yaml:"pipelineOperator"`
+	// The scheduling domain to filter pipelines by.
+	PipelineSchedulingDomain v1alpha1.SchedulingDomain `json:"pipelineSchedulingDomain"`
 }
 
 // KPI observing the state of pipeline resources managed by cortex.
@@ -57,7 +57,7 @@ func (k *PipelineStateKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	var pipelines []v1alpha1.Pipeline
 	for _, pipeline := range pipelineList.Items {
-		if pipeline.Spec.Operator != k.Options.PipelineOperator {
+		if pipeline.Spec.SchedulingDomain != k.Options.PipelineSchedulingDomain {
 			continue
 		}
 		pipelines = append(pipelines, pipeline)
@@ -66,16 +66,14 @@ func (k *PipelineStateKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, pipeline := range pipelines {
 		var state string
 		switch {
-		case meta.IsStatusConditionTrue(pipeline.Status.Conditions, v1alpha1.PipelineConditionError):
-			state = "error"
-		case pipeline.Status.Ready:
+		case meta.IsStatusConditionTrue(pipeline.Status.Conditions, v1alpha1.PipelineConditionReady):
 			state = "ready"
 		default:
 			state = "unknown"
 		}
 		ch <- prometheus.MustNewConstMetric(
 			k.counter, prometheus.GaugeValue, 1,
-			k.Options.PipelineOperator, pipeline.Name, state,
+			string(k.Options.PipelineSchedulingDomain), pipeline.Name, state,
 		)
 	}
 }

@@ -32,7 +32,7 @@ func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, dec
 }
 
 func TestNewAPI(t *testing.T) {
-	config := conf.Config{Operator: "test-operator"}
+	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
 
 	api := NewAPI(config, delegate)
@@ -46,8 +46,8 @@ func TestNewAPI(t *testing.T) {
 		t.Fatal("NewAPI did not return httpAPI type")
 	}
 
-	if httpAPI.config.Operator != "test-operator" {
-		t.Errorf("Expected operator 'test-operator', got %s", httpAPI.config.Operator)
+	if httpAPI.config.SchedulingDomain != "test-operator" {
+		t.Errorf("Expected scheduling domain 'test-operator', got %s", httpAPI.config.SchedulingDomain)
 	}
 
 	if httpAPI.delegate != delegate {
@@ -60,7 +60,7 @@ func TestNewAPI(t *testing.T) {
 }
 
 func TestHTTPAPI_Init(t *testing.T) {
-	config := conf.Config{Operator: "test-operator"}
+	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
 	api := NewAPI(config, delegate)
 
@@ -79,7 +79,7 @@ func TestHTTPAPI_Init(t *testing.T) {
 }
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
-	config := conf.Config{Operator: "test-operator"}
+	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
 	api := NewAPI(config, delegate).(*httpAPI)
 
@@ -258,8 +258,8 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				Status: v1alpha1.DecisionStatus{
 					Conditions: []metav1.Condition{
 						{
-							Type:   v1alpha1.DecisionConditionError,
-							Status: metav1.ConditionTrue,
+							Type:   v1alpha1.DecisionConditionReady,
+							Status: metav1.ConditionFalse,
 							Reason: "SchedulingError",
 						},
 					},
@@ -271,7 +271,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := conf.Config{Operator: "test-operator"}
+			config := conf.Config{SchedulingDomain: "test-operator"}
 			delegate := &mockHTTPAPIDelegate{
 				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
 					if tt.processDecisionErr != nil {
@@ -324,7 +324,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 }
 
 func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
-	config := conf.Config{Operator: "test-operator"}
+	config := conf.Config{SchedulingDomain: v1alpha1.SchedulingDomainNova}
 
 	var capturedDecision *v1alpha1.Decision
 	delegate := &mockHTTPAPIDelegate{
@@ -373,8 +373,8 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 	}
 
 	// Verify decision fields
-	if capturedDecision.Spec.Operator != "test-operator" {
-		t.Errorf("Expected operator 'test-operator', got %s", capturedDecision.Spec.Operator)
+	if capturedDecision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+		t.Errorf("Expected scheduling domain %s, got %s", v1alpha1.SchedulingDomainNova, capturedDecision.Spec.SchedulingDomain)
 	}
 
 	if capturedDecision.Spec.PipelineRef.Name != "test-pipeline" {
@@ -383,10 +383,6 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 
 	if capturedDecision.Spec.ResourceID != "test-uuid-123" {
 		t.Errorf("Expected resource ID 'test-uuid-123', got %s", capturedDecision.Spec.ResourceID)
-	}
-
-	if capturedDecision.Spec.Type != v1alpha1.DecisionTypeNovaServer {
-		t.Errorf("Expected type %s, got %s", v1alpha1.DecisionTypeNovaServer, capturedDecision.Spec.Type)
 	}
 
 	if capturedDecision.GenerateName != "nova-" {

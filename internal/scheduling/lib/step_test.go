@@ -12,11 +12,11 @@ import (
 )
 
 type mockStep[RequestType PipelineRequest] struct {
-	InitFunc func(ctx context.Context, client client.Client, step v1alpha1.Step) error
+	InitFunc func(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error
 	RunFunc  func(traceLog *slog.Logger, request RequestType) (*StepResult, error)
 }
 
-func (m *mockStep[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.Step) error {
+func (m *mockStep[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return m.InitFunc(ctx, client, step)
 }
 func (m *mockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
