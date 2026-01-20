@@ -6,6 +6,7 @@ package pods
 import (
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods/plugins/filters"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -18,4 +19,5 @@ var supportedSteps = map[string]func() PodStep{
 	"taint":        func() PodStep { return &filters.TaintFilter{} },
 	"nodeaffinity": func() PodStep { return &filters.NodeAffinityFilter{} },
 	"nodecapacity": func() PodStep { return &filters.NodeCapacityFilter{} },
+	"binpack":      func() PodStep { return &weighers.BinpackingStep{} },
 }
