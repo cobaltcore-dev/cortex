@@ -34,8 +34,8 @@ func (o VMwareGeneralPurposeBalancingStepOpts) Validate() error {
 
 // Step to balance VMs on hosts based on the host's available resources.
 type VMwareGeneralPurposeBalancingStep struct {
-	// BaseStep is a helper struct that provides common functionality for all steps.
-	scheduling.BaseStep[api.ExternalSchedulerRequest, VMwareGeneralPurposeBalancingStepOpts]
+	// Weigher is a helper struct that provides common functionality for all steps.
+	scheduling.Weigher[api.ExternalSchedulerRequest, VMwareGeneralPurposeBalancingStepOpts]
 }
 
 // Pack VMs on hosts based on their flavor.

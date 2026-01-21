@@ -14,7 +14,7 @@ import (
 )
 
 type FilterPackedVirtqueueStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.Filter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // If requested, only get hosts with packed virtqueues.

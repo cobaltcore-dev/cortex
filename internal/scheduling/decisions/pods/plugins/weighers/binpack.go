@@ -28,7 +28,7 @@ func (o BinpackingStepOpts) Validate() error {
 }
 
 type BinpackingStep struct {
-	scheduling.BaseStep[api.PodPipelineRequest, BinpackingStepOpts]
+	scheduling.Weigher[api.PodPipelineRequest, BinpackingStepOpts]
 }
 
 func (s *BinpackingStep) Run(traceLog *slog.Logger, request api.PodPipelineRequest) (*scheduling.StepResult, error) {

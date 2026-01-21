@@ -13,7 +13,7 @@ import (
 )
 
 type FilterMaintenanceStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.Filter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Check that the maintenance spec of the hypervisor doesn't prevent scheduling.

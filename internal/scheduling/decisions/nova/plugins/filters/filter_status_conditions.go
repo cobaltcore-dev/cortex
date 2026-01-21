@@ -15,7 +15,7 @@ import (
 )
 
 type FilterStatusConditionsStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.Filter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Check that all status conditions meet the expected values, for example,

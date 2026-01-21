@@ -44,8 +44,8 @@ func (o VMwareAvoidLongTermContendedHostsStepOpts) Validate() error {
 
 // Step to avoid long term contended hosts by downvoting them.
 type VMwareAvoidLongTermContendedHostsStep struct {
-	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.ExternalSchedulerRequest, VMwareAvoidLongTermContendedHostsStepOpts]
+	// Weigher is a helper struct that provides common functionality for all steps.
+	lib.Weigher[api.ExternalSchedulerRequest, VMwareAvoidLongTermContendedHostsStepOpts]
 }
 
 // Downvote hosts that are highly contended.

@@ -14,7 +14,7 @@ import (
 )
 
 type FilterRequestedDestinationStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.Filter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // If `requested_destination` is set in the request spec, filter hosts

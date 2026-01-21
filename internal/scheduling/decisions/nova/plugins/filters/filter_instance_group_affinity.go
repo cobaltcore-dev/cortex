@@ -12,7 +12,7 @@ import (
 )
 
 type FilterInstanceGroupAffinityStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.Filter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Select hosts in spec.instance_group.

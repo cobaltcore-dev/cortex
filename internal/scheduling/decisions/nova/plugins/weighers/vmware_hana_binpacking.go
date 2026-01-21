@@ -34,8 +34,8 @@ func (o VMwareHanaBinpackingStepOpts) Validate() error {
 
 // Step to balance VMs on hosts based on the host's available resources.
 type VMwareHanaBinpackingStep struct {
-	// BaseStep is a helper struct that provides common functionality for all steps.
-	scheduling.BaseStep[api.ExternalSchedulerRequest, VMwareHanaBinpackingStepOpts]
+	// Weigher is a helper struct that provides common functionality for all steps.
+	scheduling.Weigher[api.ExternalSchedulerRequest, VMwareHanaBinpackingStepOpts]
 }
 
 // Pack VMs on hosts based on their flavor.

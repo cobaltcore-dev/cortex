@@ -13,7 +13,7 @@ import (
 )
 
 type FilterCorrectAZStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.Filter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Only get hosts in the requested az.

@@ -15,7 +15,7 @@ import (
 )
 
 type FilterCapabilitiesStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.Filter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Get the provided capabilities of a hypervisor resource in the format Nova expects.
