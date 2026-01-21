@@ -33,7 +33,7 @@ type Pipeline struct {
 
 func (p *Pipeline) Init(
 	ctx context.Context,
-	confedSteps []v1alpha1.StepSpec,
+	confedSteps []v1alpha1.DetectorSpec,
 	supportedSteps map[string]Step,
 ) error {
 

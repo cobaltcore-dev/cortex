@@ -84,7 +84,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
-					Steps:            []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			expectError:  false,
@@ -112,7 +113,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
-					Steps:            []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			expectError:  true,
@@ -277,7 +279,8 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					CreateDecisions:  true,
-					Steps:            []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       true,
@@ -310,7 +313,8 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					CreateDecisions:  false,
-					Steps:            []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       false,
@@ -363,7 +367,8 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					CreateDecisions:  true,
-					Steps:            []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       true,
@@ -466,22 +471,25 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		steps       []v1alpha1.StepSpec
+		filters     []v1alpha1.FilterSpec
+		weighers    []v1alpha1.WeigherSpec
 		expectError bool
 	}{
 		{
 			name:        "empty steps",
-			steps:       []v1alpha1.StepSpec{},
+			filters:     []v1alpha1.FilterSpec{},
+			weighers:    []v1alpha1.WeigherSpec{},
 			expectError: false,
 		},
 		{
 			name: "supported netapp step",
-			steps: []v1alpha1.StepSpec{
+			weighers: []v1alpha1.WeigherSpec{
 				{
-					Type: v1alpha1.StepTypeWeigher,
-					Name: "netapp_cpu_usage_balancing",
-					Opts: runtime.RawExtension{
-						Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
+					StepSpec: v1alpha1.StepSpec{
+						Name: "netapp_cpu_usage_balancing",
+						Opts: runtime.RawExtension{
+							Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
+						},
 					},
 				},
 			},
@@ -489,10 +497,11 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.StepSpec{
+			filters: []v1alpha1.FilterSpec{
 				{
-					Type: v1alpha1.StepTypeFilter,
-					Name: "unsupported-plugin",
+					StepSpec: v1alpha1.StepSpec{
+						Name: "unsupported-plugin",
+					},
 				},
 			},
 			expectError: true,
@@ -508,7 +517,8 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
-					Steps:            tt.steps,
+					Filters:          tt.filters,
+					Weighers:         tt.weighers,
 				},
 			})
 

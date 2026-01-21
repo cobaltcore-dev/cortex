@@ -68,16 +68,21 @@ spec:
                   When this is false, the pipeline will still process requests.
                 type: boolean
               description:
-                description: An optional description of the pipeline.
+                description: An optional description of the pipeline, helping understand
+                  its purpose.
                 type: string
-              schedulingDomain:
+              detectors:
                 description: |-
-                  SchedulingDomain defines in which scheduling domain this pipeline
-                  is used (e.g., nova, cinder, manila).
-                type: string
-              steps:
-                description: The ordered list of steps that make up this pipeline.
+                  Ordered list of detectors to apply in a descheduling pipeline.
+
+                  This attribute is set only if the pipeline type is descheduler.
+                  Detectors find candidates for descheduling (migration off current host).
+                  These detectors are run after weighers are applied.
                 items:
+                  description: |-
+                    Detectors find candidates for descheduling (migration off current host).
+                    These detectors are run after weighers are applied, as part of a
+                    descheduler scheduling pipeline.
                   properties:
                     description:
                       description: |-
@@ -85,7 +90,11 @@ spec:
                         and decisions made by it.
                       type: string
                     knowledges:
-                      description: Knowledges this step depends on to be ready.
+                      description: |-
+                        Knowledges this step depends on to be ready.
+
+                        Detectors can depend on knowledges as they don't ensure valid placements
+                        and therefore are not on the critical path.
                       items:
                         description: ObjectReference contains enough information to
                           let you inspect or modify the referred object.
@@ -131,11 +140,6 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       type: array
-                    mandatory:
-                      default: true
-                      description: Whether this step is mandatory for the pipeline
-                        to be runnable.
-                      type: boolean
                     name:
                       description: |-
                         The name of the scheduler step in the cortex implementation.
@@ -146,41 +150,142 @@ spec:
                         can be used
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
-                    type:
-                      description: The type of the scheduler step.
-                      type: string
-                    weigher:
-                      description: If the type is "weigher", this contains additional
-                        configuration for it.
-                      properties:
-                        disabledValidations:
-                          description: |-
-                            The validations to disable for this step. If none are provided, all
-                            applied validations are enabled.
-                          properties:
-                            sameSubjectNumberInOut:
-                              description: |-
-                                Whether to validate that no subjects are removed or added from the scheduler
-                                step. This should only be disabled for scheduler steps that remove subjects.
-                                Thus, if no value is provided, the default is false.
-                              type: boolean
-                            someSubjectsRemain:
-                              description: |-
-                                Whether to validate that, after running the step, there are remaining subjects.
-                                This should only be disabled for scheduler steps that are expected to
-                                remove all subjects.
-                              type: boolean
-                          type: object
-                      type: object
                   required:
-                  - mandatory
                   - name
-                  - type
                   type: object
                 type: array
-              type:
-                description: The type of the pipeline.
+              filters:
+                description: |-
+                  Ordered list of filters to apply in a scheduling pipeline.
+
+                  This attribute is set only if the pipeline type is filter-weigher.
+                  Filters remove host candidates from an initial set, leaving
+                  valid candidates. Filters are run before weighers are applied.
+                items:
+                  description: |-
+                    Filters remove host candidates from an initial set, leaving
+                    valid candidates. Filters are run before weighers are applied, as
+                    part of a filter-weigher scheduling pipeline.
+                  properties:
+                    description:
+                      description: |-
+                        Additional description of the step which helps understand its purpose
+                        and decisions made by it.
+                      type: string
+                    name:
+                      description: |-
+                        The name of the scheduler step in the cortex implementation.
+                        Must match to a step implemented by the pipeline controller.
+                      type: string
+                    opts:
+                      description: Additional configuration for the extractor that
+                        can be used
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  required:
+                  - name
+                  type: object
+                type: array
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this pipeline
+                  is used (e.g., nova, cinder, manila).
                 type: string
+              type:
+                description: |-
+                  The type of the pipeline, used to differentiate between
+                  filter-weigher and descheduler pipelines within the same
+                  scheduling domain.
+
+                  If the type is filter-weigher, the filter and weigher attributes
+                  must be set. If the type is descheduler, the detectors attribute
+                  must be set.
+                enum:
+                - filter-weigher
+                - descheduler
+                type: string
+              weighers:
+                description: |-
+                  Ordered list of weighers to apply in a scheduling pipeline.
+
+                  This attribute is set only if the pipeline type is filter-weigher.
+                  These weighers are run after filters are applied.
+                items:
+                  description: |-
+                    Weighers assign weights to the remaining host candidates after filtering,
+                    making some hosts more preferable than others. Weighers are run
+                    after filters are applied, as part of a filter-weigher scheduling pipeline.
+                  properties:
+                    description:
+                      description: |-
+                        Additional description of the step which helps understand its purpose
+                        and decisions made by it.
+                      type: string
+                    knowledges:
+                      description: |-
+                        Knowledges this step depends on to be ready.
+
+                        Weighers can depend on knowledges as they don't break valid placements,
+                        they only make it more optimal.
+                      items:
+                        description: ObjectReference contains enough information to
+                          let you inspect or modify the referred object.
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          fieldPath:
+                            description: |-
+                              If referring to a piece of an object instead of an entire object, this string
+                              should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                              For example, if the object reference is to a container within a pod, this would take on a value like:
+                              "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                              the event) or if no container name is specified "spec.containers[2]" (container with
+                              index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                              referencing a part of an object.
+                            type: string
+                          kind:
+                            description: |-
+                              Kind of the referent.
+                              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                            type: string
+                          name:
+                            description: |-
+                              Name of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          namespace:
+                            description: |-
+                              Namespace of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                            type: string
+                          resourceVersion:
+                            description: |-
+                              Specific resourceVersion to which this reference is made, if any.
+                              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                            type: string
+                          uid:
+                            description: |-
+                              UID of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      type: array
+                    name:
+                      description: |-
+                        The name of the scheduler step in the cortex implementation.
+                        Must match to a step implemented by the pipeline controller.
+                      type: string
+                    opts:
+                      description: Additional configuration for the extractor that
+                        can be used
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  required:
+                  - name
+                  type: object
+                type: array
             required:
             - schedulingDomain
             - type

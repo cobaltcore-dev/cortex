@@ -188,7 +188,12 @@ func (c *DecisionPipelineController) InitPipeline(
 	p v1alpha1.Pipeline,
 ) (lib.Pipeline[ironcore.MachinePipelineRequest], error) {
 
-	return lib.NewPipeline(ctx, c.Client, p.Name, supportedSteps, p.Spec.Steps, c.Monitor)
+	return lib.NewFilterWeigherPipeline(
+		ctx, c.Client, p.Name,
+		supportedFilters, p.Spec.Filters,
+		supportedWeighers, p.Spec.Weighers,
+		c.Monitor,
+	)
 }
 
 func (c *DecisionPipelineController) handleMachine() handler.EventHandler {

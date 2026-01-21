@@ -18,7 +18,12 @@ func (m mockPipelineRequest) GetTraceLogArgs() []slog.Attr   { return m.TraceLog
 func (m mockPipelineRequest) GetSubjects() []string          { return m.Subjects }
 func (m mockPipelineRequest) GetWeights() map[string]float64 { return m.Weights }
 func (m mockPipelineRequest) GetPipeline() string            { return m.Pipeline }
-func (m mockPipelineRequest) WithPipeline(pipeline string) PipelineRequest {
-	m.Pipeline = pipeline
+
+func (m mockPipelineRequest) FilterSubjects(subjects map[string]float64) PipelineRequest {
+	filteredSubjects := make([]string, 0, len(subjects))
+	for subject := range subjects {
+		filteredSubjects = append(filteredSubjects, subject)
+	}
+	m.Subjects = filteredSubjects
 	return m
 }

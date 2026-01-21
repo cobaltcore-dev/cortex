@@ -11,8 +11,10 @@ import (
 
 type ManilaStep = lib.Step[api.ExternalSchedulerRequest]
 
-// Configuration of steps supported by the scheduling.
-// The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]func() ManilaStep{
+// Configuration of filters supported by the manila scheduler.
+var supportedFilters = map[string]func() ManilaStep{}
+
+// Configuration of weighers supported by the manila scheduler.
+var supportedWeighers = map[string]func() ManilaStep{
 	"netapp_cpu_usage_balancing": func() ManilaStep { return &weighers.NetappCPUUsageBalancingStep{} },
 }

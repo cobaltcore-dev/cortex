@@ -10,8 +10,10 @@ import (
 
 type MachineStep = lib.Step[ironcore.MachinePipelineRequest]
 
-// Configuration of steps supported by the scheduling.
-// The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]func() MachineStep{
+// Configuration of weighers supported by the machine scheduling.
+var supportedWeighers = map[string]func() MachineStep{
 	"noop": func() MachineStep { return &NoopFilter{} },
 }
+
+// Configuration of filters supported by the machine scheduling.
+var supportedFilters = map[string]func() MachineStep{}

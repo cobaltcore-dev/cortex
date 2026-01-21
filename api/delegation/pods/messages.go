@@ -6,6 +6,7 @@ package pods
 import (
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -32,4 +33,14 @@ func (r PodPipelineRequest) GetWeights() map[string]float64 {
 }
 func (r PodPipelineRequest) GetTraceLogArgs() []slog.Attr {
 	return []slog.Attr{}
+}
+func (r PodPipelineRequest) FilterSubjects(includedSubjects map[string]float64) lib.PipelineRequest {
+	filteredNodes := make([]corev1.Node, 0, len(includedSubjects))
+	for _, node := range r.Nodes {
+		if _, exists := includedSubjects[node.Name]; exists {
+			filteredNodes = append(filteredNodes, node)
+		}
+	}
+	r.Nodes = filteredNodes
+	return r
 }

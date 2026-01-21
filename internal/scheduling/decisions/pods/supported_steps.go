@@ -12,12 +12,15 @@ import (
 
 type PodStep = lib.Step[pods.PodPipelineRequest]
 
-// Configuration of steps supported by the scheduling.
-// The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]func() PodStep{
+// Configuration of filters supported by the pods scheduler.
+var supportedFilters = map[string]func() PodStep{
 	"noop":         func() PodStep { return &filters.NoopFilter{} },
 	"taint":        func() PodStep { return &filters.TaintFilter{} },
 	"nodeaffinity": func() PodStep { return &filters.NodeAffinityFilter{} },
 	"nodecapacity": func() PodStep { return &filters.NodeCapacityFilter{} },
-	"binpack":      func() PodStep { return &weighers.BinpackingStep{} },
+}
+
+// Configuration of weighers supported by the pods scheduler.
+var supportedWeighers = map[string]func() PodStep{
+	"binpack": func() PodStep { return &weighers.BinpackingStep{} },
 }

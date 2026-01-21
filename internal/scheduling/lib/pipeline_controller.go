@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
@@ -89,28 +90,21 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	old := obj.DeepCopy()
 
 	// Check if all steps are ready. If not, check if the step is mandatory.
-	obj.Status.TotalSteps = len(obj.Spec.Steps)
+	obj.Status.TotalSteps = len(obj.Spec.Filters) + len(obj.Spec.Weighers) + len(obj.Spec.Detectors)
 	obj.Status.ReadySteps = 0
-	for _, step := range obj.Spec.Steps {
-		err := c.checkStepReady(ctx, &step)
-		if err == nil {
+	for range obj.Spec.Filters { // Could use len() directly but want to keep the pattern.
+		// If needed, check if this filter needs any dependencies. For now,
+		// as filters do not depend on knowledges, we skip this.
+		obj.Status.ReadySteps++
+	}
+	for _, detector := range obj.Spec.Detectors {
+		if err := c.checkAllKnowledgesReady(ctx, detector.Knowledges); err == nil {
 			obj.Status.ReadySteps++
-			continue
 		}
-		if step.Mandatory {
-			meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.PipelineConditionReady,
-				Status:  metav1.ConditionFalse,
-				Reason:  "MandatoryStepNotReady",
-				Message: fmt.Sprintf("mandatory step %s not ready: %s", step.Name, err.Error()),
-			})
-			patch := client.MergeFrom(old)
-			if err := c.Status().Patch(ctx, obj, patch); err != nil {
-				log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
-			}
-			delete(c.Pipelines, obj.Name)
-			delete(c.PipelineConfigs, obj.Name)
-			return
+	}
+	for _, weigher := range obj.Spec.Weighers {
+		if err := c.checkAllKnowledgesReady(ctx, weigher.Knowledges); err == nil {
+			obj.Status.ReadySteps++
 		}
 	}
 	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
@@ -190,32 +184,32 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	delete(c.PipelineConfigs, pipelineConf.Name)
 }
 
-// Check if a step is ready, and if not, return an error indicating why not.
-func (c *BasePipelineController[PipelineType]) checkStepReady(
+// Check if all knowledges are ready, and if not, return an error indicating why not.
+func (c *BasePipelineController[PipelineType]) checkAllKnowledgesReady(
 	ctx context.Context,
-	obj *v1alpha1.StepSpec,
+	objects []corev1.ObjectReference,
 ) error {
 
 	log := ctrl.LoggerFrom(ctx)
 	// Check the status of all knowledges depending on this step.
 	readyKnowledges := 0
-	totalKnowledges := len(obj.Knowledges)
-	for _, knowledgeRef := range obj.Knowledges {
+	totalKnowledges := len(objects)
+	for _, objRef := range objects {
 		knowledge := &v1alpha1.Knowledge{}
 		if err := c.Get(ctx, client.ObjectKey{
-			Name:      knowledgeRef.Name,
-			Namespace: knowledgeRef.Namespace,
+			Name:      objRef.Name,
+			Namespace: objRef.Namespace,
 		}, knowledge); err != nil {
-			log.Error(err, "failed to get knowledge depending on step", "knowledgeName", knowledgeRef.Name)
+			log.Error(err, "failed to get knowledge depending on step", "knowledgeName", objRef.Name)
 			continue
 		}
 		// Check if the knowledge status conditions indicate an error.
 		if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
-			log.Info("knowledge not ready due to error condition", "knowledgeName", knowledgeRef.Name)
+			log.Info("knowledge not ready due to error condition", "knowledgeName", objRef.Name)
 			continue
 		}
 		if knowledge.Status.RawLength == 0 {
-			log.Info("knowledge not ready, no data available", "knowledgeName", knowledgeRef.Name)
+			log.Info("knowledge not ready, no data available", "knowledgeName", objRef.Name)
 			continue
 		}
 		readyKnowledges++
@@ -249,7 +243,17 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 	}
 	for _, pipeline := range pipelines.Items {
 		needsUpdate := false
-		for _, step := range pipeline.Spec.Steps {
+		// For filter-weigher pipelines, only weighers may depend on knowledges.
+		for _, step := range pipeline.Spec.Weighers {
+			for _, knowledgeRef := range step.Knowledges {
+				if knowledgeRef.Name == obj.Name && knowledgeRef.Namespace == obj.Namespace {
+					needsUpdate = true
+					break
+				}
+			}
+		}
+		// Check descheduler pipelines where detectors may depend on knowledges.
+		for _, step := range pipeline.Spec.Detectors {
 			for _, knowledgeRef := range step.Knowledges {
 				if knowledgeRef.Name == obj.Name && knowledgeRef.Namespace == obj.Namespace {
 					needsUpdate = true

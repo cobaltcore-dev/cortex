@@ -52,6 +52,14 @@ type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 	Client client.Client
 }
 
+// Common base implementation of a weigher step.
+// Functionally identical to BaseStep, but used for clarity.
+type Weigher[RequestType PipelineRequest, Opts StepOpts] struct{ BaseStep[RequestType, Opts] }
+
+// Common base implementation of a filter step.
+// Functionally identical to BaseStep, but used for clarity.
+type Filter[RequestType PipelineRequest, Opts StepOpts] struct{ BaseStep[RequestType, Opts] }
+
 // Init the step with the database and options.
 func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	opts := conf.NewRawOptsBytes(step.Opts.Raw)

@@ -52,7 +52,7 @@ func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, p v1
 		CycleDetector: c.CycleDetector,
 		Monitor:       c.Monitor.SubPipeline(p.Name),
 	}
-	err := pipeline.Init(ctx, p.Spec.Steps, supportedSteps)
+	err := pipeline.Init(ctx, p.Spec.Detectors, supportedSteps)
 	return pipeline, err
 }
 

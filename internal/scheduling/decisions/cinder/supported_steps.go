@@ -10,6 +10,8 @@ import (
 
 type CinderStep = lib.Step[api.ExternalSchedulerRequest]
 
-// Configuration of steps supported by the scheduler.
-// The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]func() CinderStep{}
+// Configuration of weighers supported by the cinder scheduling.
+var supportedWeighers = map[string]func() CinderStep{}
+
+// Configuration of filters supported by the machine scheduling.
+var supportedFilters = map[string]func() CinderStep{}

@@ -20,8 +20,8 @@ type AvoidHighStealPctStepOpts struct {
 }
 
 type AvoidHighStealPctStep struct {
-	// BaseStep is a helper struct that provides common functionality for all steps.
-	plugins.BaseStep[AvoidHighStealPctStepOpts]
+	// Detector is a helper struct that provides common functionality for all descheduler steps.
+	plugins.Detector[AvoidHighStealPctStepOpts]
 }
 
 func (s *AvoidHighStealPctStep) Run() ([]plugins.Decision, error) {

@@ -186,30 +186,30 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		steps       []v1alpha1.StepSpec
+		filters     []v1alpha1.FilterSpec
+		weighers    []v1alpha1.WeigherSpec
 		expectError bool
 	}{
 		{
 			name:        "empty steps",
-			steps:       []v1alpha1.StepSpec{},
+			filters:     []v1alpha1.FilterSpec{},
+			weighers:    []v1alpha1.WeigherSpec{},
 			expectError: false,
 		},
 		{
 			name: "noop step",
-			steps: []v1alpha1.StepSpec{
+			filters: []v1alpha1.FilterSpec{
 				{
-					Name: "noop",
-					Type: v1alpha1.StepTypeFilter,
+					StepSpec: v1alpha1.StepSpec{Name: "noop"},
 				},
 			},
 			expectError: false,
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.StepSpec{
+			filters: []v1alpha1.FilterSpec{
 				{
-					Name: "unsupported",
-					Type: v1alpha1.StepTypeFilter,
+					StepSpec: v1alpha1.StepSpec{Name: "unsupported"},
 				},
 			},
 			expectError: true,
@@ -223,7 +223,8 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Steps: tt.steps,
+					Filters:  tt.filters,
+					Weighers: tt.weighers,
 				},
 			})
 
@@ -291,7 +292,8 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 					CreateDecisions:  true,
-					Steps:            []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       true,
@@ -324,7 +326,8 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 					CreateDecisions:  false,
-					Steps:            []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       false,
@@ -370,7 +373,8 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 					CreateDecisions:  true,
-					Steps:            []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       true,

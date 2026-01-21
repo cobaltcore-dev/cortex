@@ -27,10 +27,14 @@ type pipeline[RequestType PipelineRequest] struct {
 	// The activation function to use when combining the
 	// results of the scheduler steps.
 	ActivationFunction
-	// The order in which scheduler steps are applied, by their step name.
-	order []string
-	// The steps by their name.
-	steps map[string]Step[RequestType]
+	// The order in which filters are applied, by their step name.
+	filtersOrder []string
+	// The filters by their name.
+	filters map[string]Step[RequestType]
+	// The order in which weighers are applied, by their step name.
+	weighersOrder []string
+	// The weighers by their name.
+	weighers map[string]Step[RequestType]
 	// Monitor to observe the pipeline.
 	monitor PipelineMonitor
 }
@@ -42,76 +46,135 @@ type StepWrapper[RequestType PipelineRequest] func(
 	impl Step[RequestType],
 ) (Step[RequestType], error)
 
-// Create a new pipeline with steps contained in the configuration.
-func NewPipeline[RequestType PipelineRequest](
+// Create a new pipeline with filters and weighers contained in the configuration.
+func NewFilterWeigherPipeline[RequestType PipelineRequest](
 	ctx context.Context,
 	client client.Client,
 	name string,
-	supportedSteps map[string]func() Step[RequestType],
-	confedSteps []v1alpha1.StepSpec,
+	supportedFilters map[string]func() Step[RequestType],
+	confedFilters []v1alpha1.FilterSpec,
+	supportedWeighers map[string]func() Step[RequestType],
+	confedWeighers []v1alpha1.WeigherSpec,
 	monitor PipelineMonitor,
 ) (Pipeline[RequestType], error) {
 
-	// Load all steps from the configuration.
-	stepsByName := make(map[string]Step[RequestType], len(confedSteps))
-	order := []string{}
-
 	pipelineMonitor := monitor.SubPipeline(name)
 
-	for _, stepConfig := range confedSteps {
-		slog.Info("scheduler: configuring step", "name", stepConfig.Name)
-		slog.Info("supported:", "steps", maps.Keys(supportedSteps))
-		makeStep, ok := supportedSteps[stepConfig.Name]
+	// Ensure there are no overlaps between filter and weigher names.
+	for filterName := range supportedFilters {
+		if _, ok := supportedWeighers[filterName]; ok {
+			return nil, errors.New("step name overlap between filters and weighers: " + filterName)
+		}
+	}
+
+	// Load all filters from the configuration.
+	filtersByName := make(map[string]Step[RequestType], len(confedFilters))
+	filtersOrder := []string{}
+	for _, filterConfig := range confedFilters {
+		slog.Info("scheduler: configuring filter", "name", filterConfig.Name)
+		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
+		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
-			return nil, errors.New("unsupported scheduler step name: " + stepConfig.Name)
+			return nil, errors.New("unsupported filter name: " + filterConfig.Name)
 		}
-		step := makeStep()
-		if stepConfig.Type == v1alpha1.StepTypeWeigher && stepConfig.Weigher != nil {
-			step = validateStep(step, stepConfig.Weigher.DisabledValidations)
+		filter := makeFilter()
+		filter = monitorStep(ctx, client, filterConfig.StepSpec, filter, pipelineMonitor)
+		if err := filter.Init(ctx, client, filterConfig.StepSpec); err != nil {
+			return nil, errors.New("failed to initialize filter: " + err.Error())
 		}
-		step = monitorStep(ctx, client, stepConfig, step, pipelineMonitor)
-		if err := step.Init(ctx, client, stepConfig); err != nil {
+		filtersByName[filterConfig.Name] = filter
+		filtersOrder = append(filtersOrder, filterConfig.Name)
+		slog.Info("scheduler: added filter", "name", filterConfig.Name)
+	}
+
+	// Load all weighers from the configuration.
+	weighersByName := make(map[string]Step[RequestType], len(confedWeighers))
+	weighersOrder := []string{}
+	for _, weigherConfig := range confedWeighers {
+		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
+		slog.Info("supported:", "weighers", maps.Keys(supportedWeighers))
+		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
+		if !ok {
+			return nil, errors.New("unsupported weigher name: " + weigherConfig.Name)
+		}
+		weigher := makeWeigher()
+		weigher = validateWeigher(weigher)
+		weigher = monitorStep(ctx, client, weigherConfig.StepSpec, weigher, pipelineMonitor)
+		if err := weigher.Init(ctx, client, weigherConfig.StepSpec); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
-		stepsByName[stepConfig.Name] = step
-		order = append(order, stepConfig.Name)
-		slog.Info(
-			"scheduler: added step",
-			"name", stepConfig.Name,
-		)
+		weighersByName[weigherConfig.Name] = weigher
+		weighersOrder = append(weighersOrder, weigherConfig.Name)
+		slog.Info("scheduler: added weigher", "name", weigherConfig.Name)
 	}
+
 	return &pipeline[RequestType]{
-		// All steps can be run in parallel.
-		order:   order,
-		steps:   stepsByName,
-		monitor: pipelineMonitor,
+		filtersOrder:  filtersOrder,
+		filters:       filtersByName,
+		weighersOrder: weighersOrder,
+		weighers:      weighersByName,
+		monitor:       pipelineMonitor,
 	}, nil
 }
 
-// Execute the scheduler steps in groups of the execution order.
-// The steps are run in parallel.
-func (p *pipeline[RequestType]) runSteps(log *slog.Logger, request RequestType) map[string]map[string]float64 {
-	var lock sync.Mutex
+// Execute filters and collect their activations by step name.
+// During this process, the request is mutated to only include the
+// remaining subjects.
+func (p *pipeline[RequestType]) runFilters(
+	log *slog.Logger,
+	request RequestType,
+) (filteredRequest RequestType) {
+
+	filteredRequest = request
+	for _, filterName := range p.filtersOrder {
+		filter := p.filters[filterName]
+		stepLog := log.With("filter", filterName)
+		stepLog.Info("scheduler: running filter")
+		result, err := filter.Run(stepLog, filteredRequest)
+		if errors.Is(err, ErrStepSkipped) {
+			stepLog.Info("scheduler: filter skipped")
+			continue
+		}
+		if err != nil {
+			stepLog.Error("scheduler: failed to run filter", "error", err)
+			continue
+		}
+		stepLog.Info("scheduler: finished filter")
+		// Mutate the request to only include the remaining subjects.
+		// Assume the resulting request type is the same as the input type.
+		filteredRequest = filteredRequest.FilterSubjects(result.Activations).(RequestType)
+	}
+	return filteredRequest
+}
+
+// Execute weighers and collect their activations by step name.
+func (p *pipeline[RequestType]) runWeighers(
+	log *slog.Logger,
+	filteredRequest RequestType,
+) map[string]map[string]float64 {
+
 	activationsByStep := map[string]map[string]float64{}
+	// Weighers can be run in parallel as they do not modify the request.
+	var lock sync.Mutex
 	var wg sync.WaitGroup
-	for _, stepName := range p.order {
-		step := p.steps[stepName]
+	for _, weigherName := range p.weighersOrder {
+		weigher := p.weighers[weigherName]
 		wg.Go(func() {
-			stepLog := log.With("stepName", stepName)
-			stepLog.Info("scheduler: running step")
-			result, err := step.Run(stepLog, request)
+			stepLog := log.With("weigher", weigherName)
+			stepLog.Info("scheduler: running weigher")
+			result, err := weigher.Run(stepLog, filteredRequest)
 			if errors.Is(err, ErrStepSkipped) {
-				stepLog.Info("scheduler: step skipped")
+				stepLog.Info("scheduler: weigher skipped")
 				return
 			}
 			if err != nil {
-				stepLog.Error("scheduler: failed to run step", "error", err)
+				stepLog.Error("scheduler: failed to run weigher", "error", err)
 				return
 			}
-			stepLog.Info("scheduler: finished step")
+			stepLog.Info("scheduler: finished weigher")
 			lock.Lock()
 			defer lock.Unlock()
-			activationsByStep[stepName] = result.Activations
+			activationsByStep[weigherName] = result.Activations
 		})
 	}
 	wg.Wait()
@@ -134,7 +197,7 @@ func (p *pipeline[RequestType]) normalizeInputWeights(weights map[string]float64
 }
 
 // Apply the step weights to the input weights.
-func (p *pipeline[RequestType]) applyStepWeights(
+func (p *pipeline[RequestType]) applyWeights(
 	stepWeights map[string]map[string]float64,
 	inWeights map[string]float64,
 ) map[string]float64 {
@@ -143,13 +206,13 @@ func (p *pipeline[RequestType]) applyStepWeights(
 	maps.Copy(outWeights, inWeights)
 
 	// Apply all activations in the strict order defined by the configuration.
-	for _, stepName := range p.order {
-		stepActivations, ok := stepWeights[stepName]
+	for _, weigherName := range p.weighersOrder {
+		weigherActivations, ok := stepWeights[weigherName]
 		if !ok {
 			// This is ok, since steps can be skipped.
 			continue
 		}
-		outWeights = p.Apply(outWeights, stepActivations)
+		outWeights = p.Apply(outWeights, weigherActivations)
 	}
 	return outWeights
 }
@@ -176,15 +239,27 @@ func (p *pipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResul
 	subjectsIn := request.GetSubjects()
 	traceLog.Info("scheduler: starting pipeline", "subjects", subjectsIn)
 
-	// Get weights from the scheduler steps, apply them to the input weights, and
-	// sort the subjects by their weights. The input weights are normalized before
-	// applying the step weights.
-	stepWeights := p.runSteps(traceLog, request)
-	traceLog.Info("scheduler: finished pipeline")
+	// Normalize the input weights so we can apply step weights meaningfully.
 	inWeights := p.normalizeInputWeights(request.GetWeights())
 	traceLog.Info("scheduler: input weights", "weights", inWeights)
-	outWeights := p.applyStepWeights(stepWeights, inWeights)
+
+	// Run filters first to reduce the number of subjects.
+	// Any weights assigned to filtered out subjects are ignored.
+	filteredRequest := p.runFilters(traceLog, request)
+	traceLog.Info(
+		"scheduler: finished filters",
+		"remainingSubjects", filteredRequest.GetSubjects(),
+	)
+
+	// Run weighers on the filtered subjects.
+	remainingWeights := make(map[string]float64, len(filteredRequest.GetSubjects()))
+	for _, subject := range filteredRequest.GetSubjects() {
+		remainingWeights[subject] = inWeights[subject]
+	}
+	stepWeights := p.runWeighers(traceLog, filteredRequest)
+	outWeights := p.applyWeights(stepWeights, remainingWeights)
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
+
 	subjects := p.sortSubjectsByWeights(outWeights)
 	traceLog.Info("scheduler: sorted subjects", "subjects", subjects)
 
@@ -199,14 +274,6 @@ func (p *pipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResul
 	}
 	if len(subjects) > 0 {
 		result.TargetHost = &subjects[0]
-	}
-	for _, stepName := range p.order {
-		if activations, ok := stepWeights[stepName]; ok {
-			result.StepResults = append(result.StepResults, v1alpha1.StepResult{
-				StepName:    stepName,
-				Activations: activations,
-			})
-		}
 	}
 	return result, nil
 }

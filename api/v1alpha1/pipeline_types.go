@@ -9,33 +9,42 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-type DisabledValidationsSpec struct {
-	// Whether to validate that no subjects are removed or added from the scheduler
-	// step. This should only be disabled for scheduler steps that remove subjects.
-	// Thus, if no value is provided, the default is false.
-	SameSubjectNumberInOut bool `json:"sameSubjectNumberInOut,omitempty"`
-	// Whether to validate that, after running the step, there are remaining subjects.
-	// This should only be disabled for scheduler steps that are expected to
-	// remove all subjects.
-	SomeSubjectsRemain bool `json:"someSubjectsRemain,omitempty"`
+// Filters remove host candidates from an initial set, leaving
+// valid candidates. Filters are run before weighers are applied, as
+// part of a filter-weigher scheduling pipeline.
+type FilterSpec struct {
+	StepSpec `json:",inline"` // Embed common step spec fields.
+
+	// Filters are not allowed to depend on knowledges, as knowledges can
+	// be outdated leading to invalid filtering decisions.
 }
 
-type StepType string
-
-const (
-	// Step for assigning weights to hosts.
-	StepTypeWeigher StepType = "weigher"
-	// Step for filtering hosts.
-	StepTypeFilter StepType = "filter"
-	// Step for generating descheduling recommendations.
-	StepTypeDescheduler StepType = "descheduler"
-)
-
+// Weighers assign weights to the remaining host candidates after filtering,
+// making some hosts more preferable than others. Weighers are run
+// after filters are applied, as part of a filter-weigher scheduling pipeline.
 type WeigherSpec struct {
-	// The validations to disable for this step. If none are provided, all
-	// applied validations are enabled.
+	StepSpec `json:",inline"` // Embed common step spec fields.
+
+	// Knowledges this step depends on to be ready.
+	//
+	// Weighers can depend on knowledges as they don't break valid placements,
+	// they only make it more optimal.
 	// +kubebuilder:validation:Optional
-	DisabledValidations DisabledValidationsSpec `json:"disabledValidations,omitempty"`
+	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
+}
+
+// Detectors find candidates for descheduling (migration off current host).
+// These detectors are run after weighers are applied, as part of a
+// descheduler scheduling pipeline.
+type DetectorSpec struct {
+	StepSpec `json:",inline"` // Embed common step spec fields.
+
+	// Knowledges this step depends on to be ready.
+	//
+	// Detectors can depend on knowledges as they don't ensure valid placements
+	// and therefore are not on the critical path.
+	// +kubebuilder:validation:Optional
+	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
 }
 
 type StepSpec struct {
@@ -43,26 +52,14 @@ type StepSpec struct {
 	// Must match to a step implemented by the pipeline controller.
 	Name string `json:"name"`
 
-	// The type of the scheduler step.
-	Type StepType `json:"type"`
-	// If the type is "weigher", this contains additional configuration for it.
-	// +kubebuilder:validation:Optional
-	Weigher *WeigherSpec `json:"weigher,omitempty"`
-
 	// Additional configuration for the extractor that can be used
 	// +kubebuilder:validation:Optional
 	Opts runtime.RawExtension `json:"opts,omitempty"`
-	// Knowledges this step depends on to be ready.
-	// +kubebuilder:validation:Optional
-	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
+
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
-
-	// Whether this step is mandatory for the pipeline to be runnable.
-	// +kubebuilder:default=true
-	Mandatory bool `json:"mandatory"`
 }
 
 type PipelineType string
@@ -80,17 +77,49 @@ type PipelineSpec struct {
 	// SchedulingDomain defines in which scheduling domain this pipeline
 	// is used (e.g., nova, cinder, manila).
 	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
-	// An optional description of the pipeline.
+
+	// An optional description of the pipeline, helping understand its purpose.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
+
 	// If this pipeline should create decision objects.
 	// When this is false, the pipeline will still process requests.
 	// +kubebuilder:default=false
 	CreateDecisions bool `json:"createDecisions,omitempty"`
-	// The type of the pipeline.
+
+	// The type of the pipeline, used to differentiate between
+	// filter-weigher and descheduler pipelines within the same
+	// scheduling domain.
+	//
+	// If the type is filter-weigher, the filter and weigher attributes
+	// must be set. If the type is descheduler, the detectors attribute
+	// must be set.
+	//
+	// +kubebuilder:validation:Enum=filter-weigher;descheduler
 	Type PipelineType `json:"type"`
-	// The ordered list of steps that make up this pipeline.
-	Steps []StepSpec `json:"steps,omitempty"`
+
+	// Ordered list of filters to apply in a scheduling pipeline.
+	//
+	// This attribute is set only if the pipeline type is filter-weigher.
+	// Filters remove host candidates from an initial set, leaving
+	// valid candidates. Filters are run before weighers are applied.
+	// +kubebuilder:validation:Optional
+	Filters []FilterSpec `json:"filters,omitempty"`
+
+	// Ordered list of weighers to apply in a scheduling pipeline.
+	//
+	// This attribute is set only if the pipeline type is filter-weigher.
+	// These weighers are run after filters are applied.
+	// +kubebuilder:validation:Optional
+	Weighers []WeigherSpec `json:"weighers,omitempty"`
+
+	// Ordered list of detectors to apply in a descheduling pipeline.
+	//
+	// This attribute is set only if the pipeline type is descheduler.
+	// Detectors find candidates for descheduling (migration off current host).
+	// These detectors are run after weighers are applied.
+	// +kubebuilder:validation:Optional
+	Detectors []DetectorSpec `json:"detectors,omitempty"`
 }
 
 const (

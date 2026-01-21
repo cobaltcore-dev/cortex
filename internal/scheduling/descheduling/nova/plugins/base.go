@@ -11,9 +11,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Common base for all steps that provides some functionality
+// Common base for all descheduler steps that provides some functionality
 // that would otherwise be duplicated across all steps.
-type BaseStep[Opts any] struct {
+type Detector[Opts any] struct {
 	// Options to pass via yaml to this step.
 	conf.JsonOpts[Opts]
 	// The kubernetes client to use.
@@ -21,7 +21,7 @@ type BaseStep[Opts any] struct {
 }
 
 // Init the step with the database and options.
-func (s *BaseStep[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (s *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	opts := conf.NewRawOptsBytes(step.Opts.Raw)
 	if err := s.Load(opts); err != nil {
 		return err
