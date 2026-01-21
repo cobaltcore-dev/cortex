@@ -39,7 +39,7 @@ func (k *DecisionStateKPI) Init(db *db.DB, client client.Client, opts conf.RawOp
 	k.counter = prometheus.NewDesc(
 		"cortex_decision_state",
 		"State of cortex managed decisions (aggregated)",
-		[]string{"operator", "state"},
+		[]string{"domain", "state"},
 		nil,
 	)
 	return nil

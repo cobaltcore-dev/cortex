@@ -20,7 +20,7 @@ spec:
   schedulingDomain: manila
   impl: datasource_state_kpi
   opts:
-    datasourceOperator: cortex-manila
+    datasourceSchedulingDomain: cortex-manila
   description: |
     This KPI tracks the state of datasource resources managed by cortex.
 ---
@@ -32,7 +32,7 @@ spec:
   schedulingDomain: manila
   impl: knowledge_state_kpi
   opts:
-    knowledgeOperator: cortex-manila
+    knowledgeSchedulingDomain: cortex-manila
   description: |
     This KPI tracks the state of knowledge resources managed by cortex.
 ---
@@ -44,7 +44,7 @@ spec:
   schedulingDomain: manila
   impl: decision_state_kpi
   opts:
-    decisionOperator: cortex-manila
+    decisionSchedulingDomain: cortex-manila
   description: |
     This aggregated KPI tracks the state of decision resources managed by cortex.
 ---
@@ -56,7 +56,7 @@ spec:
   schedulingDomain: manila
   impl: kpi_state_kpi
   opts:
-    kpiOperator: cortex-manila
+    kpiSchedulingDomain: cortex-manila
   description: |
     This KPI tracks the state of kpi resources managed by cortex.
 ---
@@ -68,7 +68,7 @@ spec:
   schedulingDomain: manila
   impl: pipeline_state_kpi
   opts:
-    pipelineOperator: cortex-manila
+    pipelineSchedulingDomain: cortex-manila
   description: |
     This KPI tracks the state of pipeline resources managed by cortex.
 ---
@@ -80,6 +80,6 @@ spec:
   schedulingDomain: manila
   impl: step_state_kpi
   opts:
-    stepOperator: cortex-manila
+    stepSchedulingDomain: cortex-manila
   description: |
     This KPI tracks the state of step resources managed by cortex.

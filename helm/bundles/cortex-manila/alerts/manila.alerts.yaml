@@ -159,7 +159,7 @@ groups:
         service will have a less recent view of the datacenter.
 
   - alert: CortexManilaDatasourceUnready
-    expr: cortex_datasource_state{operator="cortex-manila",state!="ready"} != 0
+    expr: cortex_datasource_state{domain="cortex-manila",state!="ready"} != 0
     for: 60m
     labels:
       context: datasources
@@ -175,7 +175,7 @@ groups:
         datasource status and logs for more details.
 
   - alert: CortexManilaKnowledgeUnready
-    expr: cortex_knowledge_state{operator="cortex-manila",state!="ready"} != 0
+    expr: cortex_knowledge_state{domain="cortex-manila",state!="ready"} != 0
     for: 60m
     labels:
       context: knowledge
@@ -191,7 +191,7 @@ groups:
         knowledge status and logs for more details.
 
   - alert: CortexManilaDecisionsWithErrors
-    expr: cortex_decision_state{operator="cortex-manila",state="error"} > 0
+    expr: cortex_decision_state{domain="cortex-manila",state="error"} > 0
     for: 5m
     labels:
       context: decisions
@@ -208,7 +208,7 @@ groups:
         VMs being processed.
 
   - alert: CortexManilaTooManyDecisionsWaiting
-    expr: cortex_decision_state{operator="cortex-manila",state="waiting"} > 10
+    expr: cortex_decision_state{domain="cortex-manila",state="waiting"} > 10
     for: 5m
     labels:
       context: decisions
@@ -228,8 +228,8 @@ groups:
 
   - alert: CortexManilaKPIUnready
     expr: |
-      cortex_kpi_state{operator="cortex-manila",state!="ready"} != 0 or
-      absent(cortex_kpi_state{operator="cortex-manila"})
+      cortex_kpi_state{domain="cortex-manila",state!="ready"} != 0 or
+      absent(cortex_kpi_state{domain="cortex-manila"})
     for: 60m
     labels:
       context: kpis
@@ -245,7 +245,7 @@ groups:
         KPI status and logs for more details.
 
   - alert: CortexManilaPipelineUnready
-    expr: cortex_pipeline_state{operator="cortex-manila",state!="ready"} != 0
+    expr: cortex_pipeline_state{domain="cortex-manila",state!="ready"} != 0
     for: 5m
     labels:
       context: kpis
@@ -261,7 +261,7 @@ groups:
         pipeline status and logs for more details.
 
   - alert: CortexManilaPipelineUnready
-    expr: cortex_pipeline_state{operator="cortex-manila",state!="ready"} != 0
+    expr: cortex_pipeline_state{domain="cortex-manila",state!="ready"} != 0
     for: 5m
     labels:
       context: pipelines
@@ -277,7 +277,7 @@ groups:
         pipeline status and logs for more details.
 
   - alert: CortexManilaStepUnready
-    expr: cortex_step_state{operator="cortex-manila",state!="ready"} != 0
+    expr: cortex_step_state{domain="cortex-manila",state!="ready"} != 0
     for: 5m
     labels:
       context: pipelines

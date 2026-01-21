@@ -39,7 +39,7 @@ func (k *KnowledgeStateKPI) Init(db *db.DB, client client.Client, opts conf.RawO
 	k.counter = prometheus.NewDesc(
 		"cortex_knowledge_state",
 		"State of cortex managed knowledges",
-		[]string{"operator", "knowledge", "state"},
+		[]string{"domain", "knowledge", "state"},
 		nil,
 	)
 	return nil

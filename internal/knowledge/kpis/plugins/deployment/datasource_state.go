@@ -39,7 +39,7 @@ func (k *DatasourceStateKPI) Init(db *db.DB, client client.Client, opts conf.Raw
 	k.counter = prometheus.NewDesc(
 		"cortex_datasource_state",
 		"State of cortex managed datasources",
-		[]string{"operator", "datasource", "state"},
+		[]string{"domain", "datasource", "state"},
 		nil,
 	)
 	return nil
