@@ -204,12 +204,12 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Filters: []v1alpha1.FilterSpec{
 						{
-							StepSpec: v1alpha1.StepSpec{Name: "test-filter"},
+							Name: "test-filter",
 						},
 					},
 					Weighers: []v1alpha1.WeigherSpec{
 						{
-							StepSpec: v1alpha1.StepSpec{Name: "test-weigher"},
+							Name: "test-weigher",
 						},
 					},
 				},
@@ -243,7 +243,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Weighers: []v1alpha1.WeigherSpec{
 						{
-							StepSpec: v1alpha1.StepSpec{Name: "test-weigher"},
+							Name: "test-weigher",
 							Knowledges: []corev1.ObjectReference{
 								{Name: "missing-knowledge", Namespace: "default"},
 							},
@@ -669,9 +669,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
 						Weighers: []v1alpha1.WeigherSpec{
 							{
-								StepSpec: v1alpha1.StepSpec{
-									Name: "test-weigher",
-								},
+								Name: "test-weigher",
 								Knowledges: []corev1.ObjectReference{
 									{Name: "test-knowledge", Namespace: "default"},
 								},
@@ -688,9 +686,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
 						Weighers: []v1alpha1.WeigherSpec{
 							{
-								StepSpec: v1alpha1.StepSpec{
-									Name: "test-weigher",
-								},
+								Name: "test-weigher",
 								Knowledges: []corev1.ObjectReference{
 									{Name: "other-knowledge", Namespace: "default"},
 								},
@@ -723,9 +719,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
 						Weighers: []v1alpha1.WeigherSpec{
 							{
-								StepSpec: v1alpha1.StepSpec{
-									Name: "test-weigher",
-								},
+								Name: "test-weigher",
 								Knowledges: []corev1.ObjectReference{
 									{Name: "test-knowledge", Namespace: "default"},
 								},
@@ -802,9 +796,7 @@ func TestBasePipelineController_HandleKnowledgeCreated(t *testing.T) {
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
 			Weighers: []v1alpha1.WeigherSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{
-						Name: "test-weigher",
-					},
+					Name: "test-weigher",
 					Knowledges: []corev1.ObjectReference{
 						{Name: "test-knowledge", Namespace: "default"},
 					},
@@ -955,9 +947,7 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Weighers: []v1alpha1.WeigherSpec{
 						{
-							StepSpec: v1alpha1.StepSpec{
-								Name: "test-weigher",
-							},
+							Name: "test-weigher",
 							Knowledges: []corev1.ObjectReference{
 								{Name: "test-knowledge", Namespace: "default"},
 							},
@@ -1025,9 +1015,7 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
 			Weighers: []v1alpha1.WeigherSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{
-						Name: "test-weigher",
-					},
+					Name: "test-weigher",
 					Knowledges: []corev1.ObjectReference{
 						{Name: "test-knowledge", Namespace: "default"},
 					},

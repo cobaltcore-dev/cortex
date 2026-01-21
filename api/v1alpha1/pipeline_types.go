@@ -13,7 +13,18 @@ import (
 // valid candidates. Filters are run before weighers are applied, as
 // part of a filter-weigher scheduling pipeline.
 type FilterSpec struct {
-	StepSpec `json:",inline"` // Embed common step spec fields.
+	// The name of the scheduler step in the cortex implementation.
+	// Must match to a step implemented by the pipeline controller.
+	Name string `json:"name"`
+
+	// Additional configuration for the extractor that can be used
+	// +kubebuilder:validation:Optional
+	Opts runtime.RawExtension `json:"opts,omitempty"`
+
+	// Additional description of the step which helps understand its purpose
+	// and decisions made by it.
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
 
 	// Filters are not allowed to depend on knowledges, as knowledges can
 	// be outdated leading to invalid filtering decisions.
@@ -23,7 +34,18 @@ type FilterSpec struct {
 // making some hosts more preferable than others. Weighers are run
 // after filters are applied, as part of a filter-weigher scheduling pipeline.
 type WeigherSpec struct {
-	StepSpec `json:",inline"` // Embed common step spec fields.
+	// The name of the scheduler step in the cortex implementation.
+	// Must match to a step implemented by the pipeline controller.
+	Name string `json:"name"`
+
+	// Additional configuration for the extractor that can be used
+	// +kubebuilder:validation:Optional
+	Opts runtime.RawExtension `json:"opts,omitempty"`
+
+	// Additional description of the step which helps understand its purpose
+	// and decisions made by it.
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
 
 	// Knowledges this step depends on to be ready.
 	//
@@ -37,17 +59,6 @@ type WeigherSpec struct {
 // These detectors are run after weighers are applied, as part of a
 // descheduler scheduling pipeline.
 type DetectorSpec struct {
-	StepSpec `json:",inline"` // Embed common step spec fields.
-
-	// Knowledges this step depends on to be ready.
-	//
-	// Detectors can depend on knowledges as they don't ensure valid placements
-	// and therefore are not on the critical path.
-	// +kubebuilder:validation:Optional
-	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
-}
-
-type StepSpec struct {
 	// The name of the scheduler step in the cortex implementation.
 	// Must match to a step implemented by the pipeline controller.
 	Name string `json:"name"`
@@ -60,6 +71,13 @@ type StepSpec struct {
 	// and decisions made by it.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
+
+	// Knowledges this step depends on to be ready.
+	//
+	// Detectors can depend on knowledges as they don't ensure valid placements
+	// and therefore are not on the critical path.
+	// +kubebuilder:validation:Optional
+	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
 }
 
 type PipelineType string

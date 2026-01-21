@@ -490,12 +490,12 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "unsupported step",
 			filters: []v1alpha1.FilterSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "test-plugin"},
+					Name: "test-plugin",
 				},
 			},
 			weighers: []v1alpha1.WeigherSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "test-plugin"},
+					Name: "test-plugin",
 				},
 			},
 			expectError: true, // Expected because test-plugin is not in supportedSteps

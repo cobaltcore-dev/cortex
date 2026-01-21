@@ -224,18 +224,14 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 		{
 			name: "noop step",
 			weighers: []v1alpha1.WeigherSpec{
-				{
-					StepSpec: v1alpha1.StepSpec{Name: "noop"},
-				},
+				{Name: "noop"},
 			},
 			expectError: false,
 		},
 		{
 			name: "unsupported step",
 			filters: []v1alpha1.FilterSpec{
-				{
-					StepSpec: v1alpha1.StepSpec{Name: "unsupported"},
-				},
+				{Name: "unsupported"},
 			},
 			expectError: true,
 		},

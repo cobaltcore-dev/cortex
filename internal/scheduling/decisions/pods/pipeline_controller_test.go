@@ -200,7 +200,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "noop step",
 			filters: []v1alpha1.FilterSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "noop"},
+					Name: "noop",
 				},
 			},
 			expectError: false,
@@ -209,7 +209,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "unsupported step",
 			filters: []v1alpha1.FilterSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "unsupported"},
+					Name: "unsupported",
 				},
 			},
 			expectError: true,

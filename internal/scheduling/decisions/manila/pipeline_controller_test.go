@@ -485,11 +485,9 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "supported netapp step",
 			weighers: []v1alpha1.WeigherSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{
-						Name: "netapp_cpu_usage_balancing",
-						Opts: runtime.RawExtension{
-							Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
-						},
+					Name: "netapp_cpu_usage_balancing",
+					Opts: runtime.RawExtension{
+						Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
 					},
 				},
 			},
@@ -499,9 +497,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "unsupported step",
 			filters: []v1alpha1.FilterSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{
-						Name: "unsupported-plugin",
-					},
+					Name: "unsupported-plugin",
 				},
 			},
 			expectError: true,

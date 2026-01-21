@@ -52,7 +52,7 @@ func TestPipeline_Init(t *testing.T) {
 				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.DetectorSpec{{
-				StepSpec: v1alpha1.StepSpec{Name: "test-step"},
+				Name: "test-step",
 			}},
 			expectedSteps: 1,
 		},
@@ -62,7 +62,7 @@ func TestPipeline_Init(t *testing.T) {
 				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.DetectorSpec{{
-				StepSpec: v1alpha1.StepSpec{Name: "unsupported-step"},
+				Name: "unsupported-step",
 			}},
 			expectedError: true,
 		},
@@ -72,7 +72,7 @@ func TestPipeline_Init(t *testing.T) {
 				"failing-step": &mockPipelineStep{initError: errors.New("init failed")},
 			},
 			confedSteps: []v1alpha1.DetectorSpec{{
-				StepSpec: v1alpha1.StepSpec{Name: "failing-step"},
+				Name: "failing-step",
 			}},
 			expectedError: true,
 		},
@@ -84,10 +84,10 @@ func TestPipeline_Init(t *testing.T) {
 			},
 			confedSteps: []v1alpha1.DetectorSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "step1"},
+					Name: "step1",
 				},
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "step2"},
+					Name: "step2",
 				},
 			},
 			expectedSteps: 2,

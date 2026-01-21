@@ -278,7 +278,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "supported step",
 			filters: []v1alpha1.FilterSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "filter_status_conditions"},
+					Name: "filter_status_conditions",
 				},
 			},
 			expectError: false,
@@ -287,7 +287,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "unsupported step",
 			filters: []v1alpha1.FilterSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "unsupported-plugin"},
+					Name: "unsupported-plugin",
 				},
 			},
 			expectError: true,
@@ -296,11 +296,9 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "step with scoping options",
 			filters: []v1alpha1.FilterSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{
-						Name: "filter_status_conditions",
-						Opts: runtime.RawExtension{
-							Raw: []byte(`{"scope":{"host_capabilities":{"any_of_trait_infixes":["TEST_TRAIT"]}}}`),
-						},
+					Name: "filter_status_conditions",
+					Opts: runtime.RawExtension{
+						Raw: []byte(`{"scope":{"host_capabilities":{"any_of_trait_infixes":["TEST_TRAIT"]}}}`),
 					},
 				},
 			},
@@ -310,11 +308,9 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "step with invalid scoping options",
 			filters: []v1alpha1.FilterSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{
-						Name: "filter_status_conditions",
-						Opts: runtime.RawExtension{
-							Raw: []byte(`invalid json`),
-						},
+					Name: "filter_status_conditions",
+					Opts: runtime.RawExtension{
+						Raw: []byte(`invalid json`),
 					},
 				},
 			},

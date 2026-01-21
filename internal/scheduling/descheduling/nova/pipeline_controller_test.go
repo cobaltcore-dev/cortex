@@ -48,7 +48,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 			name: "successful pipeline initialization",
 			steps: []v1alpha1.DetectorSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "mock-step"},
+					Name: "mock-step",
 				},
 			},
 			expectError: false,
@@ -57,7 +57,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 			name: "unsupported step",
 			steps: []v1alpha1.DetectorSpec{
 				{
-					StepSpec: v1alpha1.StepSpec{Name: "unsupported"},
+					Name: "unsupported",
 				},
 			},
 			expectError:   true,
