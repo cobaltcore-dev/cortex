@@ -223,7 +223,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "noop step",
 			steps: []v1alpha1.StepSpec{
 				{
-					Impl: "noop",
+					Name: "noop",
 					Type: v1alpha1.StepTypeFilter,
 				},
 			},
@@ -233,7 +233,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name: "unsupported step",
 			steps: []v1alpha1.StepSpec{
 				{
-					Impl: "unsupported",
+					Name: "unsupported",
 					Type: v1alpha1.StepTypeFilter,
 				},
 			},

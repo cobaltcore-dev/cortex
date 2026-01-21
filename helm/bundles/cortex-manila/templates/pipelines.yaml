@@ -13,7 +13,7 @@ spec:
   type: filter-weigher
   steps:
     - type: weigher
-      impl: netapp_cpu_usage_balancing
+      name: netapp_cpu_usage_balancing
       description: |
         This step uses netapp storage pool cpu metrics condensed into a feature
         to balance manila share placements across available storage pools.

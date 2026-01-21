@@ -49,7 +49,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 			steps: []v1alpha1.StepSpec{
 				{
 					Type: v1alpha1.StepTypeDescheduler,
-					Impl: "mock-step",
+					Name: "mock-step",
 				},
 			},
 			expectError: false,
@@ -60,7 +60,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 				{
 
 					Type: v1alpha1.StepTypeDescheduler,
-					Impl: "unsupported",
+					Name: "unsupported",
 				},
 			},
 			expectError:   true,

@@ -41,17 +41,17 @@ func (p *Pipeline) Init(
 	// Load all steps from the configuration.
 	p.steps = make(map[string]Step, len(confedSteps))
 	for _, stepConf := range confedSteps {
-		step, ok := supportedSteps[stepConf.Impl]
+		step, ok := supportedSteps[stepConf.Name]
 		if !ok {
-			return errors.New("descheduler: unsupported step: " + stepConf.Impl)
+			return errors.New("descheduler: unsupported step: " + stepConf.Name)
 		}
 		step = monitorStep(step, stepConf, p.Monitor)
 		if err := step.Init(ctx, p.Client, stepConf); err != nil {
 			return err
 		}
-		p.steps[stepConf.Impl] = step
-		p.order = append(p.order, stepConf.Impl)
-		slog.Info("descheduler: added step", "name", stepConf.Impl)
+		p.steps[stepConf.Name] = step
+		p.order = append(p.order, stepConf.Name)
+		slog.Info("descheduler: added step", "name", stepConf.Name)
 	}
 	return nil
 }

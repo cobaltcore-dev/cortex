@@ -39,14 +39,16 @@ type WeigherSpec struct {
 }
 
 type StepSpec struct {
+	// The name of the scheduler step in the cortex implementation.
+	// Must match to a step implemented by the pipeline controller.
+	Name string `json:"name"`
+
 	// The type of the scheduler step.
 	Type StepType `json:"type"`
 	// If the type is "weigher", this contains additional configuration for it.
 	// +kubebuilder:validation:Optional
 	Weigher *WeigherSpec `json:"weigher,omitempty"`
 
-	// The name of the scheduler step in the cortex implementation.
-	Impl string `json:"impl"`
 	// Additional configuration for the extractor that can be used
 	// +kubebuilder:validation:Optional
 	Opts runtime.RawExtension `json:"opts,omitempty"`

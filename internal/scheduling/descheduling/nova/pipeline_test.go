@@ -52,7 +52,7 @@ func TestPipeline_Init(t *testing.T) {
 				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.StepSpec{{
-				Impl: "test-step",
+				Name: "test-step",
 				Type: v1alpha1.StepTypeDescheduler,
 			}},
 			expectedSteps: 1,
@@ -63,7 +63,7 @@ func TestPipeline_Init(t *testing.T) {
 				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.StepSpec{{
-				Impl: "unsupported-step",
+				Name: "unsupported-step",
 				Type: v1alpha1.StepTypeDescheduler,
 			}},
 			expectedError: true,
@@ -74,7 +74,7 @@ func TestPipeline_Init(t *testing.T) {
 				"failing-step": &mockPipelineStep{initError: errors.New("init failed")},
 			},
 			confedSteps: []v1alpha1.StepSpec{{
-				Impl: "failing-step",
+				Name: "failing-step",
 				Type: v1alpha1.StepTypeDescheduler,
 			}},
 			expectedError: true,
@@ -87,11 +87,11 @@ func TestPipeline_Init(t *testing.T) {
 			},
 			confedSteps: []v1alpha1.StepSpec{
 				{
-					Impl: "step1",
+					Name: "step1",
 					Type: v1alpha1.StepTypeDescheduler,
 				},
 				{
-					Impl: "step2",
+					Name: "step2",
 					Type: v1alpha1.StepTypeDescheduler,
 				},
 			},

@@ -57,20 +57,19 @@ func monitorStep[RequestType PipelineRequest](
 	m PipelineMonitor,
 ) *StepMonitor[RequestType] {
 
-	stepName := step.Impl
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
 		runTimer = m.stepRunTimer.
-			WithLabelValues(m.PipelineName, stepName)
+			WithLabelValues(m.PipelineName, step.Name)
 	}
 	var removedSubjectsObserver prometheus.Observer
 	if m.stepRemovedSubjectsObserver != nil {
 		removedSubjectsObserver = m.stepRemovedSubjectsObserver.
-			WithLabelValues(m.PipelineName, stepName)
+			WithLabelValues(m.PipelineName, step.Name)
 	}
 	return &StepMonitor[RequestType]{
 		Step:                    impl,
-		stepName:                stepName,
+		stepName:                step.Name,
 		pipelineName:            m.PipelineName,
 		runTimer:                runTimer,
 		stepSubjectWeight:       m.stepSubjectWeight,

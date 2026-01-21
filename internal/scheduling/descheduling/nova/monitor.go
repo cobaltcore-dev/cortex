@@ -84,18 +84,17 @@ type StepMonitor struct {
 
 // Monitor a step by wrapping it with a StepMonitor.
 func monitorStep(step Step, conf v1alpha1.StepSpec, monitor Monitor) StepMonitor {
-	name := conf.Impl
 	var runTimer prometheus.Observer
 	if monitor.stepRunTimer != nil {
-		runTimer = monitor.stepRunTimer.WithLabelValues(name)
+		runTimer = monitor.stepRunTimer.WithLabelValues(conf.Name)
 	}
 	var descheduledCounter prometheus.Counter
 	if monitor.stepDeschedulingCounter != nil {
-		descheduledCounter = monitor.stepDeschedulingCounter.WithLabelValues(name)
+		descheduledCounter = monitor.stepDeschedulingCounter.WithLabelValues(conf.Name)
 	}
 	return StepMonitor{
 		step:               step,
-		stepName:           name,
+		stepName:           conf.Name,
 		runTimer:           runTimer,
 		descheduledCounter: descheduledCounter,
 	}

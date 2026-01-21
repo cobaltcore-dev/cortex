@@ -11,21 +11,21 @@ spec:
   createDecisions: true
   steps:
     - type: filter
-      impl: noop
+      name: noop
       description: |
         This is only a passthrough step which lets all pod candidates through.
         It is used as a placeholder step in the pods scheduler pipeline.
       knowledges: []
       mandatory: false
     - type: filter
-      impl: taint
+      name: taint
       description: |
         Filters nodes based on taints, excluding nodes with NoSchedule taints
         unless the pod has matching tolerations.
       knowledges: []
       mandatory: true
     - type: filter
-      impl: nodeaffinity
+      name: nodeaffinity
       description: |
         Filters nodes based on pod's node affinity requirements, matching
         nodes that satisfy the specified label selectors.

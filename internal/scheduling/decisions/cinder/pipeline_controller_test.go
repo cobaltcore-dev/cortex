@@ -483,7 +483,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			steps: []v1alpha1.StepSpec{
 				{
 					Type: v1alpha1.StepTypeFilter,
-					Impl: "test-plugin",
+					Name: "test-plugin",
 				},
 			},
 			expectError: true, // Expected because test-plugin is not in supportedSteps

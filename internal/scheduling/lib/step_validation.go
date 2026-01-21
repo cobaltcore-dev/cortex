@@ -24,7 +24,7 @@ type StepValidator[RequestType PipelineRequest] struct {
 // Initialize the wrapped step with the database and options.
 func (s *StepValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	slog.Info(
-		"scheduler: init validation for step", "name", step.Impl,
+		"scheduler: init validation for step", "name", step.Name,
 		"disabled", s.DisabledValidations,
 	)
 	return s.Step.Init(ctx, client, step)

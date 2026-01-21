@@ -102,7 +102,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 				Type:    v1alpha1.PipelineConditionReady,
 				Status:  metav1.ConditionFalse,
 				Reason:  "MandatoryStepNotReady",
-				Message: fmt.Sprintf("mandatory step %s not ready: %s", step.Impl, err.Error()),
+				Message: fmt.Sprintf("mandatory step %s not ready: %s", step.Name, err.Error()),
 			})
 			patch := client.MergeFrom(old)
 			if err := c.Status().Patch(ctx, obj, patch); err != nil {

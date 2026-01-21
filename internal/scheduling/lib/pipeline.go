@@ -59,11 +59,11 @@ func NewPipeline[RequestType PipelineRequest](
 	pipelineMonitor := monitor.SubPipeline(name)
 
 	for _, stepConfig := range confedSteps {
-		slog.Info("scheduler: configuring step", "name", stepConfig.Impl)
+		slog.Info("scheduler: configuring step", "name", stepConfig.Name)
 		slog.Info("supported:", "steps", maps.Keys(supportedSteps))
-		makeStep, ok := supportedSteps[stepConfig.Impl]
+		makeStep, ok := supportedSteps[stepConfig.Name]
 		if !ok {
-			return nil, errors.New("unsupported scheduler step impl: " + stepConfig.Impl)
+			return nil, errors.New("unsupported scheduler step name: " + stepConfig.Name)
 		}
 		step := makeStep()
 		if stepConfig.Type == v1alpha1.StepTypeWeigher && stepConfig.Weigher != nil {
@@ -73,11 +73,11 @@ func NewPipeline[RequestType PipelineRequest](
 		if err := step.Init(ctx, client, stepConfig); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
-		stepsByName[stepConfig.Impl] = step
-		order = append(order, stepConfig.Impl)
+		stepsByName[stepConfig.Name] = step
+		order = append(order, stepConfig.Name)
 		slog.Info(
 			"scheduler: added step",
-			"name", stepConfig.Impl,
+			"name", stepConfig.Name,
 		)
 	}
 	return &pipeline[RequestType]{

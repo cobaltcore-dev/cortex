@@ -479,7 +479,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			steps: []v1alpha1.StepSpec{
 				{
 					Type: v1alpha1.StepTypeWeigher,
-					Impl: "netapp_cpu_usage_balancing",
+					Name: "netapp_cpu_usage_balancing",
 					Opts: runtime.RawExtension{
 						Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
 					},
@@ -492,7 +492,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			steps: []v1alpha1.StepSpec{
 				{
 					Type: v1alpha1.StepTypeFilter,
-					Impl: "unsupported-plugin",
+					Name: "unsupported-plugin",
 				},
 			},
 			expectError: true,

@@ -200,7 +200,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Steps: []v1alpha1.StepSpec{
 						{
 							Type:      v1alpha1.StepTypeFilter,
-							Impl:      "test-filter",
+							Name:      "test-filter",
 							Mandatory: true,
 							Knowledges: []corev1.ObjectReference{
 								{Name: "knowledge-1", Namespace: "default"},
@@ -239,7 +239,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Steps: []v1alpha1.StepSpec{
 						{
 							Type:      v1alpha1.StepTypeFilter,
-							Impl:      "test-filter",
+							Name:      "test-filter",
 							Mandatory: true,
 							Knowledges: []corev1.ObjectReference{
 								{Name: "missing-knowledge", Namespace: "default"},
@@ -265,7 +265,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Steps: []v1alpha1.StepSpec{
 						{
 							Type:      v1alpha1.StepTypeFilter,
-							Impl:      "test-filter",
+							Name:      "test-filter",
 							Mandatory: false,
 							Knowledges: []corev1.ObjectReference{
 								{Name: "missing-knowledge", Namespace: "default"},
@@ -326,7 +326,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Steps: []v1alpha1.StepSpec{
 						{
 							Type:      v1alpha1.StepTypeFilter,
-							Impl:      "test-filter",
+							Name:      "test-filter",
 							Mandatory: true,
 							Knowledges: []corev1.ObjectReference{
 								{Name: "error-knowledge", Namespace: "default"},
@@ -563,7 +563,7 @@ func TestBasePipelineController_checkStepReady(t *testing.T) {
 			name: "step with no knowledge dependencies",
 			step: v1alpha1.StepSpec{
 				Type:       v1alpha1.StepTypeFilter,
-				Impl:       "test-filter",
+				Name:       "test-filter",
 				Knowledges: []corev1.ObjectReference{},
 			},
 			knowledges:  []v1alpha1.Knowledge{},
@@ -573,7 +573,7 @@ func TestBasePipelineController_checkStepReady(t *testing.T) {
 			name: "step with ready knowledge",
 			step: v1alpha1.StepSpec{
 				Type: v1alpha1.StepTypeFilter,
-				Impl: "test-filter",
+				Name: "test-filter",
 				Knowledges: []corev1.ObjectReference{
 					{Name: "ready-knowledge", Namespace: "default"},
 				},
@@ -595,7 +595,7 @@ func TestBasePipelineController_checkStepReady(t *testing.T) {
 			name: "step with knowledge in error state",
 			step: v1alpha1.StepSpec{
 				Type: v1alpha1.StepTypeFilter,
-				Impl: "test-filter",
+				Name: "test-filter",
 				Knowledges: []corev1.ObjectReference{
 					{Name: "error-knowledge", Namespace: "default"},
 				},
@@ -622,7 +622,7 @@ func TestBasePipelineController_checkStepReady(t *testing.T) {
 			name: "step with knowledge with no data",
 			step: v1alpha1.StepSpec{
 				Type: v1alpha1.StepTypeFilter,
-				Impl: "test-filter",
+				Name: "test-filter",
 				Knowledges: []corev1.ObjectReference{
 					{Name: "no-data-knowledge", Namespace: "default"},
 				},
@@ -644,7 +644,7 @@ func TestBasePipelineController_checkStepReady(t *testing.T) {
 			name: "step with missing knowledge",
 			step: v1alpha1.StepSpec{
 				Type: v1alpha1.StepTypeFilter,
-				Impl: "test-filter",
+				Name: "test-filter",
 				Knowledges: []corev1.ObjectReference{
 					{Name: "missing-knowledge", Namespace: "default"},
 				},
@@ -656,7 +656,7 @@ func TestBasePipelineController_checkStepReady(t *testing.T) {
 			name: "step with multiple knowledges, all ready",
 			step: v1alpha1.StepSpec{
 				Type: v1alpha1.StepTypeFilter,
-				Impl: "test-filter",
+				Name: "test-filter",
 				Knowledges: []corev1.ObjectReference{
 					{Name: "knowledge-1", Namespace: "default"},
 					{Name: "knowledge-2", Namespace: "default"},
@@ -688,7 +688,7 @@ func TestBasePipelineController_checkStepReady(t *testing.T) {
 			name: "step with multiple knowledges, some not ready",
 			step: v1alpha1.StepSpec{
 				Type: v1alpha1.StepTypeFilter,
-				Impl: "test-filter",
+				Name: "test-filter",
 				Knowledges: []corev1.ObjectReference{
 					{Name: "ready-knowledge", Namespace: "default"},
 					{Name: "not-ready-knowledge", Namespace: "default"},
@@ -784,7 +784,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Steps: []v1alpha1.StepSpec{
 							{
 								Type: v1alpha1.StepTypeFilter,
-								Impl: "test-filter",
+								Name: "test-filter",
 								Knowledges: []corev1.ObjectReference{
 									{Name: "test-knowledge", Namespace: "default"},
 								},
@@ -802,7 +802,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Steps: []v1alpha1.StepSpec{
 							{
 								Type: v1alpha1.StepTypeFilter,
-								Impl: "test-filter",
+								Name: "test-filter",
 								Knowledges: []corev1.ObjectReference{
 									{Name: "other-knowledge", Namespace: "default"},
 								},
@@ -836,7 +836,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Steps: []v1alpha1.StepSpec{
 							{
 								Type: v1alpha1.StepTypeFilter,
-								Impl: "test-filter",
+								Name: "test-filter",
 								Knowledges: []corev1.ObjectReference{
 									{Name: "test-knowledge", Namespace: "default"},
 								},
@@ -914,7 +914,7 @@ func TestBasePipelineController_HandleKnowledgeCreated(t *testing.T) {
 			Steps: []v1alpha1.StepSpec{
 				{
 					Type: v1alpha1.StepTypeFilter,
-					Impl: "test-filter",
+					Name: "test-filter",
 					Knowledges: []corev1.ObjectReference{
 						{Name: "test-knowledge", Namespace: "default"},
 					},
@@ -1066,7 +1066,7 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 					Steps: []v1alpha1.StepSpec{
 						{
 							Type: v1alpha1.StepTypeFilter,
-							Impl: "test-filter",
+							Name: "test-filter",
 							Knowledges: []corev1.ObjectReference{
 								{Name: "test-knowledge", Namespace: "default"},
 							},
@@ -1135,7 +1135,7 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 			Steps: []v1alpha1.StepSpec{
 				{
 					Type:      v1alpha1.StepTypeFilter,
-					Impl:      "test-filter",
+					Name:      "test-filter",
 					Mandatory: true,
 					Knowledges: []corev1.ObjectReference{
 						{Name: "test-knowledge", Namespace: "default"},

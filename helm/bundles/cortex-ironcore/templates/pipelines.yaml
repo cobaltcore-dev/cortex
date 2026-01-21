@@ -11,7 +11,7 @@ spec:
   createDecisions: true
   steps:
     - type: weigher
-      impl: noop
+      name: noop
       description: |
         This is only a passthrough step which assigns a zero-weight to all machinepool
         candidates. It is used as a placeholder step in the ironcore machines scheduler

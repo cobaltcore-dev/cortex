@@ -78,9 +78,6 @@ spec:
                         Additional description of the step which helps understand its purpose
                         and decisions made by it.
                       type: string
-                    impl:
-                      description: The name of the scheduler step in the cortex implementation.
-                      type: string
                     knowledges:
                       description: Knowledges this step depends on to be ready.
                       items:
@@ -133,6 +130,11 @@ spec:
                       description: Whether this step is mandatory for the pipeline
                         to be runnable.
                       type: boolean
+                    name:
+                      description: |-
+                        The name of the scheduler step in the cortex implementation.
+                        Must match to a step implemented by the pipeline controller.
+                      type: string
                     opts:
                       description: Additional configuration for the extractor that
                         can be used
@@ -165,8 +167,8 @@ spec:
                           type: object
                       type: object
                   required:
-                  - impl
                   - mandatory
+                  - name
                   - type
                   type: object
                 type: array
