@@ -102,11 +102,9 @@ type DecisionStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
-// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="Resource ID",type="string",JSONPath=".spec.resourceID"
 // +kubebuilder:printcolumn:name="#",type="string",JSONPath=".status.precedence"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="Took",type="string",JSONPath=".status.took"
 // +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
 // +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"

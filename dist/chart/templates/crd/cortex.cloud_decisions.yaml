@@ -24,9 +24,6 @@ spec:
     - jsonPath: .spec.schedulingDomain
       name: Domain
       type: string
-    - jsonPath: .spec.type
-      name: Type
-      type: string
     - jsonPath: .spec.resourceID
       name: Resource ID
       type: string
@@ -36,9 +33,6 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
-    - jsonPath: .status.took
-      name: Took
-      type: string
     - jsonPath: .spec.pipelineRef.name
       name: Pipeline
       type: string
