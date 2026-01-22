@@ -16,12 +16,12 @@ dependencies:
   # from: file://../../../dist/chart
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.6
+    version: 0.0.7
     alias: cortex-knowledge-controllers
   # from: file://../../../dist/chart
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.6
+    version: 0.0.7
     alias: cortex-scheduling-controllers
 
   # Owner info adds a configmap to the kubernetes cluster with information on
