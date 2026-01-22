@@ -11,7 +11,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
-	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -45,11 +45,11 @@ func (o NetappCPUUsageBalancingStepOpts) Validate() error {
 // Step to balance CPU usage by avoiding highly used storage pools.
 type NetappCPUUsageBalancingStep struct {
 	// Weigher is a helper struct that provides common functionality for all steps.
-	scheduling.Weigher[api.ExternalSchedulerRequest, NetappCPUUsageBalancingStepOpts]
+	lib.BaseWeigher[api.ExternalSchedulerRequest, NetappCPUUsageBalancingStepOpts]
 }
 
 // Downvote hosts that are highly contended.
-func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
+func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
@@ -74,14 +74,14 @@ func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.Ext
 		if _, ok := result.Activations[usage.StoragePoolName]; !ok {
 			continue
 		}
-		activationAvg := scheduling.MinMaxScale(
+		activationAvg := lib.MinMaxScale(
 			usage.AvgCPUUsagePct,
 			s.Options.AvgCPUUsageLowerBound,
 			s.Options.AvgCPUUsageUpperBound,
 			s.Options.AvgCPUUsageActivationLowerBound,
 			s.Options.AvgCPUUsageActivationUpperBound,
 		)
-		activationMax := scheduling.MinMaxScale(
+		activationMax := lib.MinMaxScale(
 			usage.MaxCPUUsagePct,
 			s.Options.MaxCPUUsageLowerBound,
 			s.Options.MaxCPUUsageUpperBound,

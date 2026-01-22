@@ -12,7 +12,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,11 +35,11 @@ func (o VMwareGeneralPurposeBalancingStepOpts) Validate() error {
 // Step to balance VMs on hosts based on the host's available resources.
 type VMwareGeneralPurposeBalancingStep struct {
 	// Weigher is a helper struct that provides common functionality for all steps.
-	scheduling.Weigher[api.ExternalSchedulerRequest, VMwareGeneralPurposeBalancingStepOpts]
+	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareGeneralPurposeBalancingStepOpts]
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
+func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	// Don't execute the step for non-hana flavors.
 	if strings.Contains(request.Spec.Data.Flavor.Data.Name, "hana") {
@@ -74,7 +74,7 @@ func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request a
 		result.
 			Statistics["ram utilized"].
 			Subjects[hostUtilization.ComputeHost] = hostUtilization.RAMUtilizedPct
-		result.Activations[hostUtilization.ComputeHost] = scheduling.MinMaxScale(
+		result.Activations[hostUtilization.ComputeHost] = lib.MinMaxScale(
 			hostUtilization.RAMUtilizedPct,
 			s.Options.RAMUtilizedLowerBoundPct,
 			s.Options.RAMUtilizedUpperBoundPct,

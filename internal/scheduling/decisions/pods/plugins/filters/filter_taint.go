@@ -18,7 +18,7 @@ type TaintFilter struct {
 	Alias string
 }
 
-func (f *TaintFilter) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (f *TaintFilter) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
 	return nil
 }
 

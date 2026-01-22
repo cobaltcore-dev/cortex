@@ -8,10 +8,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type CinderStep = lib.Step[api.ExternalSchedulerRequest]
+type CinderWeigher = lib.Weigher[api.ExternalSchedulerRequest]
 
 // Configuration of weighers supported by the cinder scheduling.
-var supportedWeighers = map[string]func() CinderStep{}
+var supportedWeighers = map[string]func() CinderWeigher{}
 
-// Configuration of filters supported by the machine scheduling.
-var supportedFilters = map[string]func() CinderStep{}
+type CinderFilter = lib.Filter[api.ExternalSchedulerRequest]
+
+// Configuration of filters supported by the cinder scheduling.
+var supportedFilters = map[string]func() CinderFilter{}

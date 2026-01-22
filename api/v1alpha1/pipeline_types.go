@@ -9,6 +9,16 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
+// Step as part of a cortex pipeline.
+type Step interface {
+	// Every step must have options so the pipeline can configure it.
+	GetOpts() runtime.RawExtension
+	// Every step must have a name so the pipeline can identify it.
+	GetName() string
+	// Every step can have an optional description.
+	GetDescription() string
+}
+
 // Filters remove host candidates from an initial set, leaving
 // valid candidates. Filters are run before weighers are applied, as
 // part of a filter-weigher scheduling pipeline.
@@ -29,6 +39,10 @@ type FilterSpec struct {
 	// Filters are not allowed to depend on knowledges, as knowledges can
 	// be outdated leading to invalid filtering decisions.
 }
+
+func (f FilterSpec) GetOpts() runtime.RawExtension { return f.Opts }
+func (f FilterSpec) GetName() string               { return f.Name }
+func (f FilterSpec) GetDescription() string        { return f.Description }
 
 // Weighers assign weights to the remaining host candidates after filtering,
 // making some hosts more preferable than others. Weighers are run
@@ -55,6 +69,10 @@ type WeigherSpec struct {
 	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
 }
 
+func (w WeigherSpec) GetOpts() runtime.RawExtension { return w.Opts }
+func (w WeigherSpec) GetName() string               { return w.Name }
+func (w WeigherSpec) GetDescription() string        { return w.Description }
+
 // Detectors find candidates for descheduling (migration off current host).
 // These detectors are run after weighers are applied, as part of a
 // descheduler scheduling pipeline.
@@ -79,6 +97,10 @@ type DetectorSpec struct {
 	// +kubebuilder:validation:Optional
 	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
 }
+
+func (d DetectorSpec) GetOpts() runtime.RawExtension { return d.Opts }
+func (d DetectorSpec) GetName() string               { return d.Name }
+func (d DetectorSpec) GetDescription() string        { return d.Description }
 
 type PipelineType string
 

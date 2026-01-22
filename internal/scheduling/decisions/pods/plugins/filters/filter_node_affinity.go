@@ -19,7 +19,7 @@ type NodeAffinityFilter struct {
 	Alias string
 }
 
-func (f *NodeAffinityFilter) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (f *NodeAffinityFilter) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
 	return nil
 }
 

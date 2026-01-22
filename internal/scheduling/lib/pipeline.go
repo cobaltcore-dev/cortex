@@ -30,30 +30,30 @@ type pipeline[RequestType PipelineRequest] struct {
 	// The order in which filters are applied, by their step name.
 	filtersOrder []string
 	// The filters by their name.
-	filters map[string]Step[RequestType]
+	filters map[string]Filter[RequestType]
 	// The order in which weighers are applied, by their step name.
 	weighersOrder []string
 	// The weighers by their name.
-	weighers map[string]Step[RequestType]
+	weighers map[string]Weigher[RequestType]
 	// Monitor to observe the pipeline.
 	monitor PipelineMonitor
 }
 
-type StepWrapper[RequestType PipelineRequest] func(
+type StepWrapper[RequestType PipelineRequest, SpecType v1alpha1.Step] func(
 	ctx context.Context,
 	client client.Client,
-	step v1alpha1.StepSpec,
-	impl Step[RequestType],
-) (Step[RequestType], error)
+	step SpecType,
+	impl Step[RequestType, SpecType],
+) (Step[RequestType, SpecType], error)
 
 // Create a new pipeline with filters and weighers contained in the configuration.
 func NewFilterWeigherPipeline[RequestType PipelineRequest](
 	ctx context.Context,
 	client client.Client,
 	name string,
-	supportedFilters map[string]func() Step[RequestType],
+	supportedFilters map[string]func() Filter[RequestType],
 	confedFilters []v1alpha1.FilterSpec,
-	supportedWeighers map[string]func() Step[RequestType],
+	supportedWeighers map[string]func() Weigher[RequestType],
 	confedWeighers []v1alpha1.WeigherSpec,
 	monitor PipelineMonitor,
 ) (Pipeline[RequestType], error) {
@@ -68,7 +68,7 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 	}
 
 	// Load all filters from the configuration.
-	filtersByName := make(map[string]Step[RequestType], len(confedFilters))
+	filtersByName := make(map[string]Filter[RequestType], len(confedFilters))
 	filtersOrder := []string{}
 	for _, filterConfig := range confedFilters {
 		slog.Info("scheduler: configuring filter", "name", filterConfig.Name)
@@ -78,8 +78,8 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 			return nil, errors.New("unsupported filter name: " + filterConfig.Name)
 		}
 		filter := makeFilter()
-		filter = monitorStep(ctx, client, filterConfig.StepSpec, filter, pipelineMonitor)
-		if err := filter.Init(ctx, client, filterConfig.StepSpec); err != nil {
+		filter = monitorStep(ctx, client, filterConfig, filter, pipelineMonitor)
+		if err := filter.Init(ctx, client, filterConfig); err != nil {
 			return nil, errors.New("failed to initialize filter: " + err.Error())
 		}
 		filtersByName[filterConfig.Name] = filter
@@ -88,7 +88,7 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 	}
 
 	// Load all weighers from the configuration.
-	weighersByName := make(map[string]Step[RequestType], len(confedWeighers))
+	weighersByName := make(map[string]Weigher[RequestType], len(confedWeighers))
 	weighersOrder := []string{}
 	for _, weigherConfig := range confedWeighers {
 		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
@@ -99,8 +99,8 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 		}
 		weigher := makeWeigher()
 		weigher = validateWeigher(weigher)
-		weigher = monitorStep(ctx, client, weigherConfig.StepSpec, weigher, pipelineMonitor)
-		if err := weigher.Init(ctx, client, weigherConfig.StepSpec); err != nil {
+		weigher = monitorStep(ctx, client, weigherConfig, weigher, pipelineMonitor)
+		if err := weigher.Init(ctx, client, weigherConfig); err != nil {
 			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
 		weighersByName[weigherConfig.Name] = weigher

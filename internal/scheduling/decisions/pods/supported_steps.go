@@ -10,17 +10,19 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type PodStep = lib.Step[pods.PodPipelineRequest]
+type PodFilter = lib.Filter[pods.PodPipelineRequest]
 
 // Configuration of filters supported by the pods scheduler.
-var supportedFilters = map[string]func() PodStep{
-	"noop":         func() PodStep { return &filters.NoopFilter{} },
-	"taint":        func() PodStep { return &filters.TaintFilter{} },
-	"nodeaffinity": func() PodStep { return &filters.NodeAffinityFilter{} },
-	"nodecapacity": func() PodStep { return &filters.NodeCapacityFilter{} },
+var supportedFilters = map[string]func() PodFilter{
+	"noop":         func() PodFilter { return &filters.NoopFilter{} },
+	"taint":        func() PodFilter { return &filters.TaintFilter{} },
+	"nodeaffinity": func() PodFilter { return &filters.NodeAffinityFilter{} },
+	"nodecapacity": func() PodFilter { return &filters.NodeCapacityFilter{} },
 }
 
+type PodWeigher = lib.Weigher[pods.PodPipelineRequest]
+
 // Configuration of weighers supported by the pods scheduler.
-var supportedWeighers = map[string]func() PodStep{
-	"binpack": func() PodStep { return &weighers.BinpackingStep{} },
+var supportedWeighers = map[string]func() PodWeigher{
+	"binpack": func() PodWeigher { return &weighers.BinpackingStep{} },
 }

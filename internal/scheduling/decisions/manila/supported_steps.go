@@ -9,12 +9,14 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type ManilaStep = lib.Step[api.ExternalSchedulerRequest]
+type ManilaFilter = lib.Filter[api.ExternalSchedulerRequest]
 
 // Configuration of filters supported by the manila scheduler.
-var supportedFilters = map[string]func() ManilaStep{}
+var supportedFilters = map[string]func() ManilaFilter{}
+
+type ManilaWeigher = lib.Weigher[api.ExternalSchedulerRequest]
 
 // Configuration of weighers supported by the manila scheduler.
-var supportedWeighers = map[string]func() ManilaStep{
-	"netapp_cpu_usage_balancing": func() ManilaStep { return &weighers.NetappCPUUsageBalancingStep{} },
+var supportedWeighers = map[string]func() ManilaWeigher{
+	"netapp_cpu_usage_balancing": func() ManilaWeigher { return &weighers.NetappCPUUsageBalancingStep{} },
 }

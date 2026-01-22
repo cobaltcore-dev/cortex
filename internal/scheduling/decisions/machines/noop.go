@@ -15,7 +15,7 @@ type NoopFilter struct {
 	Alias string
 }
 
-func (f *NoopFilter) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (f *NoopFilter) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
 	return nil
 }
 

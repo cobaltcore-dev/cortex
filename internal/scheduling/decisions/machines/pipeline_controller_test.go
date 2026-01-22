@@ -223,7 +223,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name: "noop step",
-			weighers: []v1alpha1.WeigherSpec{
+			filters: []v1alpha1.FilterSpec{
 				{Name: "noop"},
 			},
 			expectError: false,

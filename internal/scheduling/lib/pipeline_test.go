@@ -18,7 +18,7 @@ type mockFilter struct {
 	name string
 }
 
-func (m *mockFilter) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (m *mockFilter) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
 	return nil
 }
 
@@ -36,7 +36,7 @@ type mockWeigher struct {
 	name string
 }
 
-func (m *mockWeigher) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (m *mockWeigher) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
 	return nil
 }
 
@@ -52,13 +52,13 @@ func (m *mockWeigher) Run(traceLog *slog.Logger, request mockPipelineRequest) (*
 func TestPipeline_Run(t *testing.T) {
 	// Create an instance of the pipeline with a mock step
 	pipeline := &pipeline[mockPipelineRequest]{
-		filters: map[string]Step[mockPipelineRequest]{
+		filters: map[string]Filter[mockPipelineRequest]{
 			"mock_filter": &mockFilter{
 				name: "mock_filter",
 			},
 		},
 		filtersOrder: []string{"mock_filter"},
-		weighers: map[string]Step[mockPipelineRequest]{
+		weighers: map[string]Weigher[mockPipelineRequest]{
 			"mock_weigher": &mockWeigher{
 				name: "mock_weigher",
 			},
@@ -136,7 +136,7 @@ func TestPipeline_NormalizeNovaWeights(t *testing.T) {
 
 func TestPipeline_ApplyStepWeights(t *testing.T) {
 	p := &pipeline[mockPipelineRequest]{
-		weighers:      map[string]Step[mockPipelineRequest]{},
+		weighers:      map[string]Weigher[mockPipelineRequest]{},
 		weighersOrder: []string{"step1", "step2"},
 	}
 
@@ -214,7 +214,7 @@ func TestPipeline_RunFilters(t *testing.T) {
 		filtersOrder: []string{
 			"mock_filter",
 		},
-		filters: map[string]Step[mockPipelineRequest]{
+		filters: map[string]Filter[mockPipelineRequest]{
 			"mock_filter": mockStep,
 		},
 	}

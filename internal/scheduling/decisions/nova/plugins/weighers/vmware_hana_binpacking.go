@@ -12,7 +12,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,11 +35,11 @@ func (o VMwareHanaBinpackingStepOpts) Validate() error {
 // Step to balance VMs on hosts based on the host's available resources.
 type VMwareHanaBinpackingStep struct {
 	// Weigher is a helper struct that provides common functionality for all steps.
-	scheduling.Weigher[api.ExternalSchedulerRequest, VMwareHanaBinpackingStepOpts]
+	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareHanaBinpackingStepOpts]
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*scheduling.StepResult, error) {
+func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
 	result := s.PrepareResult(request)
 	// Don't execute the step for non-hana flavors.
 	if !strings.Contains(request.Spec.Data.Flavor.Data.Name, "hana") {
@@ -124,7 +124,7 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 		if after < s.Options.RAMUtilizedAfterLowerBoundPct || after > s.Options.RAMUtilizedAfterUpperBoundPct {
 			result.Activations[hostUtilization.ComputeHost] = s.NoEffect()
 		} else {
-			result.Activations[hostUtilization.ComputeHost] = scheduling.MinMaxScale(
+			result.Activations[hostUtilization.ComputeHost] = lib.MinMaxScale(
 				after,
 				s.Options.RAMUtilizedAfterLowerBoundPct,
 				s.Options.RAMUtilizedAfterUpperBoundPct,
