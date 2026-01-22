@@ -130,7 +130,7 @@ spec:
   schedulingDomain: nova
   impl: datasource_state_kpi
   opts:
-    datasourceSchedulingDomain: cortex-nova
+    datasourceSchedulingDomain: nova
   description: |
     This KPI tracks the state of datasource resources managed by cortex.
 ---
@@ -142,7 +142,7 @@ spec:
   schedulingDomain: nova
   impl: knowledge_state_kpi
   opts:
-    knowledgeSchedulingDomain: cortex-nova
+    knowledgeSchedulingDomain: nova
   description: |
     This KPI tracks the state of knowledge resources managed by cortex.
 ---
@@ -154,7 +154,7 @@ spec:
   schedulingDomain: nova
   impl: decision_state_kpi
   opts:
-    decisionSchedulingDomain: cortex-nova
+    decisionSchedulingDomain: nova
   description: |
     This aggregated KPI tracks the state of decision resources managed by cortex.
 ---
@@ -166,7 +166,7 @@ spec:
   schedulingDomain: nova
   impl: kpi_state_kpi
   opts:
-    kpiSchedulingDomain: cortex-nova
+    kpiSchedulingDomain: nova
   description: |
     This KPI tracks the state of kpi resources managed by cortex.
 ---
@@ -178,6 +178,6 @@ spec:
   schedulingDomain: nova
   impl: pipeline_state_kpi
   opts:
-    pipelineSchedulingDomain: cortex-nova
+    pipelineSchedulingDomain: nova
   description: |
     This KPI tracks the state of pipeline resources managed by cortex.
