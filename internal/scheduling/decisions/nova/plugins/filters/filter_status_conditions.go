@@ -21,7 +21,7 @@ type FilterStatusConditionsStep struct {
 // Check that all status conditions meet the expected values, for example,
 // that the hypervisor is ready and not disabled.
 func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {

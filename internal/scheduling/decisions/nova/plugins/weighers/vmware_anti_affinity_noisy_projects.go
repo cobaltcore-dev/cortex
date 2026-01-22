@@ -41,7 +41,7 @@ type VMwareAntiAffinityNoisyProjectsStep struct {
 
 // Downvote the hosts a project is currently running on if it's noisy.
 func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 
 	if !request.VMware {
 		slog.Debug("Skipping general purpose balancing step for non-VMware VM")

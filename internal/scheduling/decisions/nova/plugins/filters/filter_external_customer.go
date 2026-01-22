@@ -34,7 +34,7 @@ type FilterExternalCustomerStep struct {
 // Prefix-match the domain name for external customer domains and filter out hosts
 // that are not intended for external customers.
 func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
 	if err != nil {
 		return nil, err

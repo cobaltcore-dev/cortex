@@ -39,12 +39,12 @@ type pipeline[RequestType PipelineRequest] struct {
 	monitor PipelineMonitor
 }
 
-type StepWrapper[RequestType PipelineRequest, SpecType v1alpha1.Step] func(
+type StepWrapper[RequestType PipelineRequest, StepType v1alpha1.Step] func(
 	ctx context.Context,
 	client client.Client,
-	step SpecType,
-	impl Step[RequestType, SpecType],
-) (Step[RequestType, SpecType], error)
+	step StepType,
+	impl Step[RequestType, StepType],
+) (Step[RequestType, StepType], error)
 
 // Create a new pipeline with filters and weighers contained in the configuration.
 func NewFilterWeigherPipeline[RequestType PipelineRequest](

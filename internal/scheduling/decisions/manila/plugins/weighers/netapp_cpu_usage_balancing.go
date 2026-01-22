@@ -50,7 +50,7 @@ type NetappCPUUsageBalancingStep struct {
 
 // Downvote hosts that are highly contended.
 func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 

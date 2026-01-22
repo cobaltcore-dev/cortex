@@ -24,7 +24,7 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 	request api.ExternalSchedulerRequest,
 ) (*lib.StepResult, error) {
 
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 
 	ig := request.Spec.Data.InstanceGroup
 	if ig == nil {

@@ -32,7 +32,7 @@ type BinpackingStep struct {
 }
 
 func (s *BinpackingStep) Run(traceLog *slog.Logger, request api.PodPipelineRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 
 	podResources := helpers.GetPodResourceRequests(request.Pod)
 

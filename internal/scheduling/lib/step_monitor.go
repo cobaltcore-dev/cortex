@@ -20,7 +20,7 @@ import (
 )
 
 // Wraps a scheduler step to monitor its execution.
-type StepMonitor[RequestType PipelineRequest, SpecType v1alpha1.Step] struct {
+type StepMonitor[RequestType PipelineRequest, StepType v1alpha1.Step] struct {
 	// Mixin that can be embedded in a step to provide some activation function tooling.
 	ActivationFunction
 
@@ -30,7 +30,7 @@ type StepMonitor[RequestType PipelineRequest, SpecType v1alpha1.Step] struct {
 	stepName string
 
 	// The wrapped scheduler step to monitor.
-	Step Step[RequestType, SpecType]
+	Step Step[RequestType, StepType]
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
 	// A metric to monitor how much the step modifies the weights of the subjects.
@@ -44,18 +44,18 @@ type StepMonitor[RequestType PipelineRequest, SpecType v1alpha1.Step] struct {
 }
 
 // Initialize the wrapped step with the database and options.
-func (s *StepMonitor[RequestType, SpecType]) Init(ctx context.Context, client client.Client, step SpecType) error {
+func (s *StepMonitor[RequestType, StepType]) Init(ctx context.Context, client client.Client, step StepType) error {
 	return s.Step.Init(ctx, client, step)
 }
 
 // Schedule using the wrapped step and measure the time it takes.
-func monitorStep[RequestType PipelineRequest, SpecType v1alpha1.Step](
+func monitorStep[RequestType PipelineRequest, StepType v1alpha1.Step](
 	_ context.Context,
 	_ client.Client,
-	step SpecType,
-	impl Step[RequestType, SpecType],
+	step StepType,
+	impl Step[RequestType, StepType],
 	m PipelineMonitor,
-) *StepMonitor[RequestType, SpecType] {
+) *StepMonitor[RequestType, StepType] {
 
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
@@ -67,7 +67,7 @@ func monitorStep[RequestType PipelineRequest, SpecType v1alpha1.Step](
 		removedSubjectsObserver = m.stepRemovedSubjectsObserver.
 			WithLabelValues(m.PipelineName, step.GetName())
 	}
-	return &StepMonitor[RequestType, SpecType]{
+	return &StepMonitor[RequestType, StepType]{
 		Step:                    impl,
 		stepName:                step.GetName(),
 		pipelineName:            m.PipelineName,
@@ -80,7 +80,7 @@ func monitorStep[RequestType PipelineRequest, SpecType v1alpha1.Step](
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor[RequestType, SpecType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+func (s *StepMonitor[RequestType, StepType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)
 		defer timer.ObserveDuration()

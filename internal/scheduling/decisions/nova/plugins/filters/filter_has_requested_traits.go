@@ -22,7 +22,7 @@ type FilterHasRequestedTraits struct {
 // - "trait:<trait>": "forbidden" means the host must not have the specified trait.
 // - "trait:<trait>": "required" means the host must have the specified trait.
 func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 	var requiredTraits, forbiddenTraits []string
 	for key, value := range request.Spec.Data.Flavor.Data.ExtraSpecs {
 		if !strings.HasPrefix(key, "trait:") {

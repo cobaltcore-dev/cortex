@@ -18,7 +18,7 @@ type FilterMaintenanceStep struct {
 
 // Check that the maintenance spec of the hypervisor doesn't prevent scheduling.
 func (s *FilterMaintenanceStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {

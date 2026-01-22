@@ -45,7 +45,7 @@ func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
 // Check the capabilities of each host and if they match the extra spec provided
 // in the request spec flavor.
 func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 	requestedCapabilities := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if len(requestedCapabilities) == 0 {
 		traceLog.Debug("no flavor extra spec capabilities in request, skipping filter")

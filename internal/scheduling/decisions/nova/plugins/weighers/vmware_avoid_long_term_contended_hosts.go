@@ -50,7 +50,7 @@ type VMwareAvoidLongTermContendedHostsStep struct {
 
 // Downvote hosts that are highly contended.
 func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 
 	if !request.VMware {
 		slog.Debug("Skipping general purpose balancing step for non-VMware VM")

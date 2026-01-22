@@ -18,7 +18,7 @@ type FilterCorrectAZStep struct {
 
 // Only get hosts in the requested az.
 func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.AvailabilityZone == "" {
 		traceLog.Info("no availability zone requested, skipping filter_correct_az step")
 		return result, nil

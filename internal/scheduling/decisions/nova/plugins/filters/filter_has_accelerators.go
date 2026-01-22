@@ -19,7 +19,7 @@ type FilterHasAcceleratorsStep struct {
 
 // If requested, only get hosts with accelerators.
 func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if _, ok := extraSpecs["accel:device_profile"]; !ok {
 		traceLog.Debug("no accelerators requested")

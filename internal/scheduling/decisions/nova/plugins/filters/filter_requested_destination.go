@@ -25,7 +25,7 @@ func (s *FilterRequestedDestinationStep) Run(
 	request api.ExternalSchedulerRequest,
 ) (*lib.StepResult, error) {
 
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {

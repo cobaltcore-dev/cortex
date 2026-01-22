@@ -66,7 +66,7 @@ func (s *FilterLiveMigratableStep) Run(
 	request api.ExternalSchedulerRequest,
 ) (*lib.StepResult, error) {
 
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 
 	if !s.isLiveMigration(request) {
 		traceLog.Debug("not a live migration request, skipping filter")

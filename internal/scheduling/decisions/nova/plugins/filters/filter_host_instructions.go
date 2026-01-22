@@ -19,7 +19,7 @@ type FilterHostInstructionsStep struct {
 // - spec.ignore_hosts: Filter out all hosts in this list.
 // - spec.force_hosts: Include only hosts in this list.
 func (s *FilterHostInstructionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
-	result := s.PrepareResult(request)
+	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.IgnoreHosts != nil {
 		for _, host := range *request.Spec.Data.IgnoreHosts {
 			delete(result.Activations, host)

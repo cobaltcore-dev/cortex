@@ -30,13 +30,24 @@ type EmptyStepOpts struct{}
 func (EmptyStepOpts) Validate() error { return nil }
 
 // Interface for a scheduler step.
-type Step[RequestType PipelineRequest, SpecType v1alpha1.Step] interface {
+type Step[RequestType PipelineRequest, StepType v1alpha1.Step] interface {
 	// Configure the step and initialize things like a database connection.
-	Init(ctx context.Context, client client.Client, step SpecType) error
+	Init(ctx context.Context, client client.Client, step StepType) error
+
 	// Run this step of the scheduling pipeline.
-	// Return a map of keys to activation values. Important: keys that are
-	// not in the map are considered as filtered out.
-	// Provide a traceLog that contains the global request id and should
+	//
+	// The request is immutable and modifications are stored in the result.
+	// This allows steps to be run in parallel (e.g. weighers) without passing
+	// mutable state around.
+	//
+	// All hosts that should not be filtered out must be included in the returned
+	// map of activations. I.e., filters implementing this interface should
+	// remove activations by omitting them from the returned map.
+	//
+	// Weighers implementing this interface should adjust activation
+	// values in the returned map, including all hosts from the request.
+	//
+	// A traceLog is provided that contains the global request id and should
 	// be used to log the step's execution.
 	Run(traceLog *slog.Logger, request RequestType) (*StepResult, error)
 }
@@ -49,7 +60,7 @@ type Filter[RequestType PipelineRequest] = Step[RequestType, v1alpha1.FilterSpec
 
 // Common base for all steps that provides some functionality
 // that would otherwise be duplicated across all steps.
-type BaseStep[RequestType PipelineRequest, Opts StepOpts, SpecType v1alpha1.Step] struct {
+type BaseStep[RequestType PipelineRequest, Opts StepOpts, StepType v1alpha1.Step] struct {
 	// Options to pass via yaml to this step.
 	conf.JsonOpts[Opts]
 	// The activation function to use.
@@ -67,7 +78,7 @@ type BaseWeigher[RequestType PipelineRequest, Opts StepOpts] = BaseStep[RequestT
 type BaseFilter[RequestType PipelineRequest, Opts StepOpts] = BaseStep[RequestType, Opts, v1alpha1.FilterSpec]
 
 // Init the step with the database and options.
-func (s *BaseStep[RequestType, Opts, SpecType]) Init(ctx context.Context, client client.Client, step SpecType) error {
+func (s *BaseStep[RequestType, Opts, StepType]) Init(ctx context.Context, client client.Client, step StepType) error {
 	opts := conf.NewRawOptsBytes(step.GetOpts().Raw)
 	if err := s.Load(opts); err != nil {
 		return err
@@ -81,7 +92,8 @@ func (s *BaseStep[RequestType, Opts, SpecType]) Init(ctx context.Context, client
 }
 
 // Get a default result (no action) for the input weight keys given in the request.
-func (s *BaseStep[RequestType, Opts, SpecType]) PrepareResult(request RequestType) *StepResult {
+// Use this to initialize the result before applying filtering/weighing logic.
+func (s *BaseStep[RequestType, Opts, StepType]) IncludeAllHostsFromRequest(request RequestType) *StepResult {
 	activations := make(map[string]float64)
 	for _, subject := range request.GetSubjects() {
 		activations[subject] = s.NoEffect()
@@ -91,7 +103,7 @@ func (s *BaseStep[RequestType, Opts, SpecType]) PrepareResult(request RequestTyp
 }
 
 // Get default statistics for the input weight keys given in the request.
-func (s *BaseStep[RequestType, Opts, SpecType]) PrepareStats(request PipelineRequest, unit string) StepStatistics {
+func (s *BaseStep[RequestType, Opts, StepType]) PrepareStats(request RequestType, unit string) StepStatistics {
 	return StepStatistics{
 		Unit:     unit,
 		Subjects: make(map[string]float64, len(request.GetSubjects())),
