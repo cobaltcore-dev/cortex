@@ -79,19 +79,75 @@ spec:
                   Detectors find candidates for descheduling (migration off current host).
                   These detectors are run after weighers are applied.
                 items:
+                  description: |-
+                    Detectors find candidates for descheduling (migration off current host).
+                    These detectors are run after weighers are applied, as part of a
+                    descheduler scheduling pipeline.
                   properties:
                     description:
                       description: |-
                         Additional description of the step which helps understand its purpose
                         and decisions made by it.
                       type: string
+                    knowledges:
+                      description: |-
+                        Knowledges this step depends on to be ready.
+
+                        Detectors can depend on knowledges as they don't ensure valid placements
+                        and therefore are not on the critical path.
+                      items:
+                        description: ObjectReference contains enough information to
+                          let you inspect or modify the referred object.
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          fieldPath:
+                            description: |-
+                              If referring to a piece of an object instead of an entire object, this string
+                              should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                              For example, if the object reference is to a container within a pod, this would take on a value like:
+                              "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                              the event) or if no container name is specified "spec.containers[2]" (container with
+                              index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                              referencing a part of an object.
+                            type: string
+                          kind:
+                            description: |-
+                              Kind of the referent.
+                              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                            type: string
+                          name:
+                            description: |-
+                              Name of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          namespace:
+                            description: |-
+                              Namespace of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                            type: string
+                          resourceVersion:
+                            description: |-
+                              Specific resourceVersion to which this reference is made, if any.
+                              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                            type: string
+                          uid:
+                            description: |-
+                              UID of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      type: array
                     name:
                       description: |-
                         The name of the scheduler step in the cortex implementation.
                         Must match to a step implemented by the pipeline controller.
                       type: string
                     opts:
-                      description: Additional configuration for the step.
+                      description: Additional configuration for the extractor that
+                        can be used
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
                   required:
@@ -106,6 +162,10 @@ spec:
                   Filters remove host candidates from an initial set, leaving
                   valid candidates. Filters are run before weighers are applied.
                 items:
+                  description: |-
+                    Filters remove host candidates from an initial set, leaving
+                    valid candidates. Filters are run before weighers are applied, as
+                    part of a filter-weigher scheduling pipeline.
                   properties:
                     description:
                       description: |-
@@ -118,7 +178,8 @@ spec:
                         Must match to a step implemented by the pipeline controller.
                       type: string
                     opts:
-                      description: Additional configuration for the step.
+                      description: Additional configuration for the extractor that
+                        can be used
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
                   required:
@@ -150,19 +211,75 @@ spec:
                   This attribute is set only if the pipeline type is filter-weigher.
                   These weighers are run after filters are applied.
                 items:
+                  description: |-
+                    Weighers assign weights to the remaining host candidates after filtering,
+                    making some hosts more preferable than others. Weighers are run
+                    after filters are applied, as part of a filter-weigher scheduling pipeline.
                   properties:
                     description:
                       description: |-
                         Additional description of the step which helps understand its purpose
                         and decisions made by it.
                       type: string
+                    knowledges:
+                      description: |-
+                        Knowledges this step depends on to be ready.
+
+                        Weighers can depend on knowledges as they don't break valid placements,
+                        they only make it more optimal.
+                      items:
+                        description: ObjectReference contains enough information to
+                          let you inspect or modify the referred object.
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          fieldPath:
+                            description: |-
+                              If referring to a piece of an object instead of an entire object, this string
+                              should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                              For example, if the object reference is to a container within a pod, this would take on a value like:
+                              "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                              the event) or if no container name is specified "spec.containers[2]" (container with
+                              index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                              referencing a part of an object.
+                            type: string
+                          kind:
+                            description: |-
+                              Kind of the referent.
+                              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                            type: string
+                          name:
+                            description: |-
+                              Name of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          namespace:
+                            description: |-
+                              Namespace of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                            type: string
+                          resourceVersion:
+                            description: |-
+                              Specific resourceVersion to which this reference is made, if any.
+                              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                            type: string
+                          uid:
+                            description: |-
+                              UID of the referent.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      type: array
                     name:
                       description: |-
                         The name of the scheduler step in the cortex implementation.
                         Must match to a step implemented by the pipeline controller.
                       type: string
                     opts:
-                      description: Additional configuration for the step.
+                      description: Additional configuration for the extractor that
+                        can be used
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
                   required:

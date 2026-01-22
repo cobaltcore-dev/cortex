@@ -186,19 +186,19 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		filters     []v1alpha1.StepSpec
-		weighers    []v1alpha1.StepSpec
+		filters     []v1alpha1.FilterSpec
+		weighers    []v1alpha1.WeigherSpec
 		expectError bool
 	}{
 		{
 			name:        "empty steps",
-			filters:     []v1alpha1.StepSpec{},
-			weighers:    []v1alpha1.StepSpec{},
+			filters:     []v1alpha1.FilterSpec{},
+			weighers:    []v1alpha1.WeigherSpec{},
 			expectError: false,
 		},
 		{
 			name: "noop step",
-			filters: []v1alpha1.StepSpec{
+			filters: []v1alpha1.FilterSpec{
 				{
 					Name: "noop",
 				},
@@ -207,7 +207,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name: "unsupported step",
-			filters: []v1alpha1.StepSpec{
+			filters: []v1alpha1.FilterSpec{
 				{
 					Name: "unsupported",
 				},
@@ -292,8 +292,8 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 					CreateDecisions:  true,
-					Filters:          []v1alpha1.StepSpec{},
-					Weighers:         []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       true,
@@ -326,8 +326,8 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 					CreateDecisions:  false,
-					Filters:          []v1alpha1.StepSpec{},
-					Weighers:         []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       false,
@@ -373,8 +373,8 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 					CreateDecisions:  true,
-					Filters:          []v1alpha1.StepSpec{},
-					Weighers:         []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:       true,

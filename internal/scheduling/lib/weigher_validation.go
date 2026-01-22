@@ -19,7 +19,7 @@ type WeigherValidator[RequestType PipelineRequest] struct {
 }
 
 // Initialize the wrapped weigher with the database and options.
-func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
 	slog.Info("scheduler: init validation for step", "name", step.Name)
 	return s.Weigher.Init(ctx, client, step)
 }
@@ -51,9 +51,4 @@ func (s *WeigherValidator[RequestType]) Run(traceLog *slog.Logger, request Reque
 		return nil, errors.New("safety: no subjects remain after step execution")
 	}
 	return result, nil
-}
-
-// Return the required knowledges for this weigher.
-func (s *WeigherValidator[RequestType]) RequiredKnowledges() []string {
-	return s.Weigher.RequiredKnowledges()
 }
