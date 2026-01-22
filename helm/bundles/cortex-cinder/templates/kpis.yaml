@@ -7,7 +7,7 @@ spec:
   schedulingDomain: cinder
   impl: datasource_state_kpi
   opts:
-    datasourceSchedulingDomain: cortex-cinder
+    datasourceSchedulingDomain: cinder
   description: |
     This KPI tracks the state of datasource resources managed by cortex.
 ---
@@ -19,7 +19,7 @@ spec:
   schedulingDomain: cinder
   impl: knowledge_state_kpi
   opts:
-    knowledgeSchedulingDomain: cortex-cinder
+    knowledgeSchedulingDomain: cinder
   description: |
     This KPI tracks the state of knowledge resources managed by cortex.
 ---
@@ -31,7 +31,7 @@ spec:
   schedulingDomain: cinder
   impl: decision_state_kpi
   opts:
-    decisionSchedulingDomain: cortex-cinder
+    decisionSchedulingDomain: cinder
   description: |
     This aggregated KPI tracks the state of decision resources managed by cortex.
 ---
@@ -43,7 +43,7 @@ spec:
   schedulingDomain: cinder
   impl: kpi_state_kpi
   opts:
-    kpiSchedulingDomain: cortex-cinder
+    kpiSchedulingDomain: cinder
   description: |
     This KPI tracks the state of kpi resources managed by cortex.
 ---
@@ -55,6 +55,6 @@ spec:
   schedulingDomain: cinder
   impl: pipeline_state_kpi
   opts:
-    pipelineSchedulingDomain: cortex-cinder
+    pipelineSchedulingDomain: cinder
   description: |
     This KPI tracks the state of pipeline resources managed by cortex.
