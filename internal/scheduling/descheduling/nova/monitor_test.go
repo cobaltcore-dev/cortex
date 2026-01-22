@@ -80,7 +80,7 @@ type mockMonitorStep struct {
 	runCalled  bool
 }
 
-func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
+func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	m.initCalled = true
 	return m.initError
 }
@@ -90,6 +90,10 @@ func (m *mockMonitorStep) Run() ([]plugins.Decision, error) {
 	return m.decisions, m.runError
 }
 
+func (m *mockMonitorStep) RequiredKnowledges() []string {
+	return []string{}
+}
+
 func TestMonitorStep(t *testing.T) {
 	monitor := NewPipelineMonitor()
 	step := &mockMonitorStep{
@@ -97,7 +101,7 @@ func TestMonitorStep(t *testing.T) {
 			{VMID: "vm1", Reason: "test"},
 		},
 	}
-	conf := v1alpha1.DetectorSpec{Name: "test-step"}
+	conf := v1alpha1.StepSpec{Name: "test-step"}
 
 	monitoredStep := monitorStep(step, conf, monitor)
 
@@ -117,7 +121,7 @@ func TestMonitorStep(t *testing.T) {
 func TestStepMonitor_Init(t *testing.T) {
 	monitor := NewPipelineMonitor()
 	step := &mockMonitorStep{}
-	conf := v1alpha1.DetectorSpec{Name: "test-step"}
+	conf := v1alpha1.StepSpec{Name: "test-step"}
 
 	monitoredStep := monitorStep(step, conf, monitor)
 
@@ -139,7 +143,7 @@ func TestStepMonitor_Init_WithError(t *testing.T) {
 	step := &mockMonitorStep{
 		initError: expectedErr,
 	}
-	conf := v1alpha1.DetectorSpec{Name: "test-step"}
+	conf := v1alpha1.StepSpec{Name: "test-step"}
 	monitoredStep := monitorStep(step, conf, monitor)
 
 	client := fake.NewClientBuilder().Build()
@@ -159,7 +163,7 @@ func TestStepMonitor_Run(t *testing.T) {
 	step := &mockMonitorStep{
 		decisions: decisions,
 	}
-	conf := v1alpha1.DetectorSpec{Name: "test-step"}
+	conf := v1alpha1.StepSpec{Name: "test-step"}
 	monitoredStep := monitorStep(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
@@ -189,7 +193,7 @@ func TestStepMonitor_Run_WithError(t *testing.T) {
 	step := &mockMonitorStep{
 		runError: expectedErr,
 	}
-	conf := v1alpha1.DetectorSpec{Name: "test-step"}
+	conf := v1alpha1.StepSpec{Name: "test-step"}
 	monitoredStep := monitorStep(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
@@ -214,7 +218,7 @@ func TestStepMonitor_Run_EmptyResult(t *testing.T) {
 	step := &mockMonitorStep{
 		decisions: []plugins.Decision{}, // Empty slice
 	}
-	conf := v1alpha1.DetectorSpec{Name: "test-step"}
+	conf := v1alpha1.StepSpec{Name: "test-step"}
 	monitoredStep := monitorStep(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
@@ -242,7 +246,7 @@ func TestMonitorStep_WithNilMonitor(t *testing.T) {
 			{VMID: "vm1", Reason: "test"},
 		},
 	}
-	conf := v1alpha1.DetectorSpec{Name: "test-step"}
+	conf := v1alpha1.StepSpec{Name: "test-step"}
 	monitoredStep := monitorStep(step, conf, monitor)
 
 	// Should not panic with nil timers/counters

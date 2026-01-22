@@ -83,7 +83,7 @@ type StepMonitor struct {
 }
 
 // Monitor a descheduler step by wrapping it with a StepMonitor.
-func monitorStep(step Step, conf v1alpha1.DetectorSpec, monitor Monitor) StepMonitor {
+func monitorStep(step Step, conf v1alpha1.StepSpec, monitor Monitor) StepMonitor {
 	var runTimer prometheus.Observer
 	if monitor.stepRunTimer != nil {
 		runTimer = monitor.stepRunTimer.WithLabelValues(conf.Name)
@@ -101,8 +101,12 @@ func monitorStep(step Step, conf v1alpha1.DetectorSpec, monitor Monitor) StepMon
 }
 
 // Initialize the step with the database and options.
-func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
+func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return m.step.Init(ctx, client, step)
+}
+
+func (m StepMonitor) RequiredKnowledges() []string {
+	return m.step.RequiredKnowledges()
 }
 
 // Run the step and measure its execution time.

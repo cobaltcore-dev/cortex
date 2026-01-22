@@ -197,7 +197,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) (lib.Pipeline[pods.PodPipelineRequest], error) {
+) (lib.Pipeline[pods.PodPipelineRequest], int, int, error) {
 
 	return lib.NewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,

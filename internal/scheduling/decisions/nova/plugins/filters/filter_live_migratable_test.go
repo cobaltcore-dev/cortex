@@ -728,7 +728,9 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 
 			step := &FilterLiveMigratableStep{
 				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
-					Client: fakeClient,
+					BaseStep: lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
+						Client: fakeClient,
+					},
 				},
 			}
 
@@ -813,7 +815,9 @@ func TestFilterLiveMigratableStep_Run_SourceHostNotFound(t *testing.T) {
 
 	step := &FilterLiveMigratableStep{
 		BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
-			Client: fakeClient,
+			BaseStep: lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
+				Client: fakeClient,
+			},
 		},
 	}
 
@@ -857,7 +861,9 @@ func TestFilterLiveMigratableStep_Run_ClientError(t *testing.T) {
 
 	step := &FilterLiveMigratableStep{
 		BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
-			Client: fakeClient,
+			BaseStep: lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
+				Client: fakeClient,
+			},
 		},
 	}
 

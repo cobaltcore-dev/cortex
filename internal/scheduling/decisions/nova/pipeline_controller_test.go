@@ -207,7 +207,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 			}
 
 			if tt.pipeline != nil {
-				pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+				pipeline, _, _, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: tt.pipeline.Name,
 					},
@@ -320,7 +320,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+			pipeline, _, _, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-pipeline",
 				},
@@ -672,7 +672,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 
 			// Setup runtime pipeline if needed
 			if tt.pipeline != nil {
-				pipeline, err := controller.InitPipeline(context.Background(), v1alpha1.Pipeline{
+				pipeline, _, _, err := controller.InitPipeline(context.Background(), v1alpha1.Pipeline{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: tt.pipeline.Name,
 					},

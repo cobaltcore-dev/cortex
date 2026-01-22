@@ -7,7 +7,6 @@ import (
 	"context"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -193,13 +192,14 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		pipeline          *v1alpha1.Pipeline
-		knowledges        []v1alpha1.Knowledge
-		schedulingDomain  v1alpha1.SchedulingDomain
-		initPipelineError bool
-		expectReady       bool
-		expectInMap       bool
+		name                      string
+		pipeline                  *v1alpha1.Pipeline
+		knowledgeDependenciesFunc func(p v1alpha1.Pipeline) []string
+		knowledges                []v1alpha1.Knowledge
+		schedulingDomain          v1alpha1.SchedulingDomain
+		initPipelineError         bool
+		expectReady               bool
+		expectInMap               bool
 	}{
 		{
 			name: "pipeline with all steps ready",
@@ -252,12 +252,12 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Weighers: []v1alpha1.StepSpec{
 						{
 							Name: "test-weigher",
-							Knowledges: []corev1.ObjectReference{
-								{Name: "missing-knowledge", Namespace: "default"},
-							},
 						},
 					},
 				},
+			},
+			knowledgeDependenciesFunc: func(p v1alpha1.Pipeline) []string {
+				return []string{"missing-knowledge"}
 			},
 			knowledges:       []v1alpha1.Knowledge{},
 			schedulingDomain: v1alpha1.SchedulingDomainNova,
@@ -322,6 +322,9 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 				initializer.initPipelineFunc = func(ctx context.Context, p v1alpha1.Pipeline) (mockPipeline, int, int, error) {
 					return mockPipeline{}, 0, 0, context.Canceled
 				}
+			}
+			if tt.knowledgeDependenciesFunc != nil {
+				initializer.collectKnowledgeDependenciesFunc = tt.knowledgeDependenciesFunc
 			}
 
 			controller := &BasePipelineController[mockPipeline]{
@@ -496,11 +499,12 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		knowledge         *v1alpha1.Knowledge
-		pipelines         []v1alpha1.Pipeline
-		schedulingDomain  v1alpha1.SchedulingDomain
-		expectReEvaluated []string
+		name                      string
+		knowledge                 *v1alpha1.Knowledge
+		knowledgeDependenciesFunc func(p v1alpha1.Pipeline) []string
+		pipelines                 []v1alpha1.Pipeline
+		schedulingDomain          v1alpha1.SchedulingDomain
+		expectReEvaluated         []string
 	}{
 		{
 			name: "knowledge change triggers dependent pipeline re-evaluation",
@@ -527,9 +531,6 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
-								Knowledges: []corev1.ObjectReference{
-									{Name: "test-knowledge", Namespace: "default"},
-								},
 							},
 						},
 					},
@@ -544,13 +545,16 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
-								Knowledges: []corev1.ObjectReference{
-									{Name: "other-knowledge", Namespace: "default"},
-								},
 							},
 						},
 					},
 				},
+			},
+			knowledgeDependenciesFunc: func(p v1alpha1.Pipeline) []string {
+				if p.Name == "dependent-pipeline" {
+					return []string{"test-knowledge"}
+				}
+				return []string{"other-knowledge"}
 			},
 			schedulingDomain:  v1alpha1.SchedulingDomainNova,
 			expectReEvaluated: []string{"dependent-pipeline"},
@@ -577,13 +581,13 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
-								Knowledges: []corev1.ObjectReference{
-									{Name: "test-knowledge", Namespace: "default"},
-								},
 							},
 						},
 					},
 				},
+			},
+			knowledgeDependenciesFunc: func(p v1alpha1.Pipeline) []string {
+				return []string{"test-knowledge"}
 			},
 			schedulingDomain:  v1alpha1.SchedulingDomainNova,
 			expectReEvaluated: []string{},
@@ -654,12 +658,12 @@ func TestBasePipelineController_HandleKnowledgeCreated(t *testing.T) {
 			Weighers: []v1alpha1.StepSpec{
 				{
 					Name: "test-weigher",
-					Knowledges: []corev1.ObjectReference{
-						{Name: "test-knowledge", Namespace: "default"},
-					},
 				},
 			},
 		},
+	}
+	knowledgeDependenciesFunc := func(p v1alpha1.Pipeline) []string {
+		return []string{"test-knowledge"}
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -672,7 +676,8 @@ func TestBasePipelineController_HandleKnowledgeCreated(t *testing.T) {
 		Client:           fakeClient,
 		SchedulingDomain: v1alpha1.SchedulingDomainNova,
 		Initializer: &mockPipelineInitializer{
-			pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+			pipelineType:                     v1alpha1.PipelineTypeFilterWeigher,
+			collectKnowledgeDependenciesFunc: knowledgeDependenciesFunc,
 		},
 		Pipelines:       make(map[string]mockPipeline),
 		PipelineConfigs: make(map[string]v1alpha1.Pipeline),
@@ -805,12 +810,12 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 					Weighers: []v1alpha1.StepSpec{
 						{
 							Name: "test-weigher",
-							Knowledges: []corev1.ObjectReference{
-								{Name: "test-knowledge", Namespace: "default"},
-							},
 						},
 					},
 				},
+			}
+			knowledgeDependenciesFunc := func(p v1alpha1.Pipeline) []string {
+				return []string{"test-knowledge"}
 			}
 
 			fakeClient := fake.NewClientBuilder().
@@ -823,7 +828,8 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 				Client:           fakeClient,
 				SchedulingDomain: v1alpha1.SchedulingDomainNova,
 				Initializer: &mockPipelineInitializer{
-					pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+					pipelineType:                     v1alpha1.PipelineTypeFilterWeigher,
+					collectKnowledgeDependenciesFunc: knowledgeDependenciesFunc,
 				},
 				Pipelines:       make(map[string]mockPipeline),
 				PipelineConfigs: make(map[string]v1alpha1.Pipeline),
@@ -873,12 +879,12 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 			Weighers: []v1alpha1.StepSpec{
 				{
 					Name: "test-weigher",
-					Knowledges: []corev1.ObjectReference{
-						{Name: "test-knowledge", Namespace: "default"},
-					},
 				},
 			},
 		},
+	}
+	knowledgeDependenciesFunc := func(p v1alpha1.Pipeline) []string {
+		return []string{"test-knowledge"}
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -891,7 +897,8 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 		Client:           fakeClient,
 		SchedulingDomain: v1alpha1.SchedulingDomainNova,
 		Initializer: &mockPipelineInitializer{
-			pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+			pipelineType:                     v1alpha1.PipelineTypeFilterWeigher,
+			collectKnowledgeDependenciesFunc: knowledgeDependenciesFunc,
 		},
 		Pipelines: map[string]mockPipeline{
 			"test-pipeline": {name: "test-pipeline"},

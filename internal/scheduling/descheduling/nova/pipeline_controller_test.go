@@ -33,20 +33,23 @@ type mockControllerStep struct{}
 func (m *mockControllerStep) Run() ([]plugins.Decision, error) {
 	return nil, nil
 }
-func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
+func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return nil
+}
+func (m *mockControllerStep) RequiredKnowledges() []string {
+	return []string{}
 }
 
 func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	tests := []struct {
 		name          string
-		steps         []v1alpha1.DetectorSpec
+		steps         []v1alpha1.StepSpec
 		expectError   bool
 		expectedError string
 	}{
 		{
 			name: "successful pipeline initialization",
-			steps: []v1alpha1.DetectorSpec{
+			steps: []v1alpha1.StepSpec{
 				{
 					Name: "mock-step",
 				},
@@ -55,7 +58,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.DetectorSpec{
+			steps: []v1alpha1.StepSpec{
 				{
 					Name: "unsupported",
 				},
@@ -65,7 +68,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name:        "empty steps",
-			steps:       []v1alpha1.DetectorSpec{},
+			steps:       []v1alpha1.StepSpec{},
 			expectError: false,
 		},
 	}
@@ -81,7 +84,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 				CycleDetector: controller.CycleDetector,
 				Monitor:       controller.Monitor,
 			}
-			err := pipeline.Init(t.Context(), tt.steps, map[string]Step{
+			_, _, err := pipeline.Init(t.Context(), tt.steps, map[string]Step{
 				"mock-step": &mockControllerStep{},
 			})
 

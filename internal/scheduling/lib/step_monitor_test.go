@@ -21,7 +21,7 @@ func (m *mockObserver) Observe(value float64) {
 func TestStepMonitorRun(t *testing.T) {
 	runTimer := &mockObserver{}
 	removedSubjectsObserver := &mockObserver{}
-	monitor := &StepMonitor[mockPipelineRequest]{
+	monitor := &StepMonitor[mockPipelineRequest, *mockStep[mockPipelineRequest]]{
 		stepName: "mock_step",
 		Step: &mockStep[mockPipelineRequest]{
 			RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {

@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -42,23 +43,26 @@ type pipeline[RequestType PipelineRequest] struct {
 // Create a new pipeline with filters and weighers contained in the configuration.
 func NewFilterWeigherPipeline[RequestType PipelineRequest](
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	name string,
 	supportedFilters map[string]func() Filter[RequestType],
 	confedFilters []v1alpha1.StepSpec,
 	supportedWeighers map[string]func() Weigher[RequestType],
 	confedWeighers []v1alpha1.StepSpec,
 	monitor PipelineMonitor,
-) (Pipeline[RequestType], error) {
+) (p Pipeline[RequestType], ready int, total int, err error) {
 
 	pipelineMonitor := monitor.SubPipeline(name)
 
 	// Ensure there are no overlaps between filter and weigher names.
 	for filterName := range supportedFilters {
 		if _, ok := supportedWeighers[filterName]; ok {
-			return nil, errors.New("step name overlap between filters and weighers: " + filterName)
+			return nil, ready, total, errors.New("step name overlap between filters and weighers: " + filterName)
 		}
 	}
+
+	total = len(confedFilters) + len(confedWeighers)
+	ready = 0
 
 	// Load all filters from the configuration.
 	filtersByName := make(map[string]Filter[RequestType], len(confedFilters))
@@ -68,16 +72,17 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
-			return nil, errors.New("unsupported filter name: " + filterConfig.Name)
+			return nil, ready, total, errors.New("unsupported filter name: " + filterConfig.Name)
 		}
 		filter := makeFilter()
-		filter = monitorStep(ctx, client, filterConfig, filter, pipelineMonitor)
-		if err := filter.Init(ctx, client, filterConfig); err != nil {
-			return nil, errors.New("failed to initialize filter: " + err.Error())
+		filter = monitorFilter(ctx, cl, filterConfig, filter, pipelineMonitor)
+		if err := filter.Init(ctx, cl, filterConfig); err != nil {
+			return nil, ready, total, errors.New("failed to initialize filter: " + err.Error())
 		}
 		filtersByName[filterConfig.Name] = filter
 		filtersOrder = append(filtersOrder, filterConfig.Name)
 		slog.Info("scheduler: added filter", "name", filterConfig.Name)
+		ready++
 	}
 
 	// Load all weighers from the configuration.
@@ -88,17 +93,32 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 		slog.Info("supported:", "weighers", maps.Keys(supportedWeighers))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
-			return nil, errors.New("unsupported weigher name: " + weigherConfig.Name)
+			return nil, ready, total, errors.New("unsupported weigher name: " + weigherConfig.Name)
 		}
 		weigher := makeWeigher()
+		// Check if all knowledges this step requires are available.
+		for _, knowledgeName := range weigher.RequiredKnowledges() {
+			knowledge := &v1alpha1.Knowledge{}
+			if err := cl.Get(ctx, client.ObjectKey{Name: knowledgeName}, knowledge); err != nil {
+				return nil, ready, total, err
+			}
+			// Check if the knowledge status conditions indicate an error.
+			if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
+				return nil, ready, total, errors.New("knowledge not ready: " + knowledgeName)
+			}
+			if knowledge.Status.RawLength == 0 {
+				return nil, ready, total, errors.New("knowledge has no data: " + knowledgeName)
+			}
+		}
 		weigher = validateWeigher(weigher)
-		weigher = monitorStep(ctx, client, weigherConfig, weigher, pipelineMonitor)
-		if err := weigher.Init(ctx, client, weigherConfig); err != nil {
-			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
+		weigher = monitorWeigher(ctx, cl, weigherConfig, weigher, pipelineMonitor)
+		if err := weigher.Init(ctx, cl, weigherConfig); err != nil {
+			return nil, ready, total, errors.New("failed to initialize pipeline step: " + err.Error())
 		}
 		weighersByName[weigherConfig.Name] = weigher
 		weighersOrder = append(weighersOrder, weigherConfig.Name)
 		slog.Info("scheduler: added weigher", "name", weigherConfig.Name)
+		ready++
 	}
 
 	return &pipeline[RequestType]{
@@ -107,7 +127,7 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 		weighersOrder: weighersOrder,
 		weighers:      weighersByName,
 		monitor:       pipelineMonitor,
-	}, nil
+	}, ready, total, nil
 }
 
 // Execute filters and collect their activations by step name.

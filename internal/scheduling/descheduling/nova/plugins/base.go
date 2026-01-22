@@ -21,7 +21,7 @@ type Detector[Opts any] struct {
 }
 
 // Init the step with the database and options.
-func (s *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
+func (s *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	opts := conf.NewRawOptsBytes(step.Opts.Raw)
 	if err := s.Load(opts); err != nil {
 		return err
@@ -29,6 +29,10 @@ func (s *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1
 
 	s.Client = client
 	return nil
+}
+
+func (s *Detector[Opts]) RequiredKnowledges() []string {
+	return []string{}
 }
 
 type Decision struct {
