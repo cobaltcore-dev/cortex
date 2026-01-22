@@ -30,7 +30,7 @@ func (m *mockPipelineStep) Run() ([]plugins.Decision, error) {
 	return m.decisions, nil
 }
 
-func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	if m.initError != nil {
 		return m.initError
 	}
@@ -38,15 +38,11 @@ func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step 
 	return nil
 }
 
-func (m *mockPipelineStep) RequiredKnowledges() []string {
-	return []string{}
-}
-
 func TestPipeline_Init(t *testing.T) {
 	tests := []struct {
 		name           string
 		supportedSteps map[string]Step
-		confedSteps    []v1alpha1.StepSpec
+		confedSteps    []v1alpha1.DetectorSpec
 		expectedSteps  int
 		expectedError  bool
 	}{
@@ -55,7 +51,7 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Step{
 				"test-step": &mockPipelineStep{},
 			},
-			confedSteps: []v1alpha1.StepSpec{{
+			confedSteps: []v1alpha1.DetectorSpec{{
 				Name: "test-step",
 			}},
 			expectedSteps: 1,
@@ -65,7 +61,7 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Step{
 				"test-step": &mockPipelineStep{},
 			},
-			confedSteps: []v1alpha1.StepSpec{{
+			confedSteps: []v1alpha1.DetectorSpec{{
 				Name: "unsupported-step",
 			}},
 			expectedError: true,
@@ -75,7 +71,7 @@ func TestPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Step{
 				"failing-step": &mockPipelineStep{initError: errors.New("init failed")},
 			},
-			confedSteps: []v1alpha1.StepSpec{{
+			confedSteps: []v1alpha1.DetectorSpec{{
 				Name: "failing-step",
 			}},
 			expectedError: true,
@@ -86,7 +82,7 @@ func TestPipeline_Init(t *testing.T) {
 				"step1": &mockPipelineStep{},
 				"step2": &mockPipelineStep{},
 			},
-			confedSteps: []v1alpha1.StepSpec{
+			confedSteps: []v1alpha1.DetectorSpec{
 				{
 					Name: "step1",
 				},
@@ -102,7 +98,7 @@ func TestPipeline_Init(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pipeline := &Pipeline{}
 
-			_, _, err := pipeline.Init(t.Context(), tt.confedSteps, tt.supportedSteps)
+			err := pipeline.Init(t.Context(), tt.confedSteps, tt.supportedSteps)
 			if tt.expectedError {
 				if err == nil {
 					t.Fatalf("expected error during initialization, got none")

@@ -14,7 +14,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -34,44 +33,27 @@ type Pipeline struct {
 
 func (p *Pipeline) Init(
 	ctx context.Context,
-	confedSteps []v1alpha1.StepSpec,
+	confedSteps []v1alpha1.DetectorSpec,
 	supportedSteps map[string]Step,
-) (ready int, total int, err error) {
+) error {
 
 	p.order = []string{}
 	// Load all steps from the configuration.
 	p.steps = make(map[string]Step, len(confedSteps))
-	total = len(confedSteps)
-	ready = 0
 	for _, stepConf := range confedSteps {
 		step, ok := supportedSteps[stepConf.Name]
 		if !ok {
-			return ready, total, errors.New("descheduler: unsupported step: " + stepConf.Name)
-		}
-		// Check if all knowledges this step requires are available.
-		for _, knowledgeName := range step.RequiredKnowledges() {
-			knowledge := &v1alpha1.Knowledge{}
-			if err := p.Get(ctx, client.ObjectKey{Name: knowledgeName}, knowledge); err != nil {
-				return ready, total, err
-			}
-			// Check if the knowledge status conditions indicate an error.
-			if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
-				return ready, total, errors.New("knowledge not ready: " + knowledgeName)
-			}
-			if knowledge.Status.RawLength == 0 {
-				return ready, total, errors.New("knowledge has no data: " + knowledgeName)
-			}
+			return errors.New("descheduler: unsupported step: " + stepConf.Name)
 		}
 		step = monitorStep(step, stepConf, p.Monitor)
 		if err := step.Init(ctx, p.Client, stepConf); err != nil {
-			return ready, total, err
+			return err
 		}
 		p.steps[stepConf.Name] = step
 		p.order = append(p.order, stepConf.Name)
 		slog.Info("descheduler: added step", "name", stepConf.Name)
-		ready++
 	}
-	return ready, total, nil
+	return nil
 }
 
 // Execute the descheduler steps in parallel and collect the decisions made by

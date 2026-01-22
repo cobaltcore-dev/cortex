@@ -151,7 +151,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) (lib.Pipeline[api.ExternalSchedulerRequest], int, int, error) {
+) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
 
 	return lib.NewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,
@@ -159,24 +159,6 @@ func (c *DecisionPipelineController) InitPipeline(
 		supportedWeighers, p.Spec.Weighers,
 		c.Monitor,
 	)
-}
-
-func (c *DecisionPipelineController) CollectKnowledgeDependencies(p v1alpha1.Pipeline) []string {
-	dependencies := make(map[string]struct{})
-	for _, weigherConf := range p.Spec.Weighers {
-		weigher, ok := supportedWeighers[weigherConf.Name]
-		if !ok {
-			continue
-		}
-		for _, knowledgeName := range weigher().RequiredKnowledges() {
-			dependencies[knowledgeName] = struct{}{}
-		}
-	}
-	result := make([]string, 0, len(dependencies))
-	for knowledgeName := range dependencies {
-		result = append(result, knowledgeName)
-	}
-	return result
 }
 
 func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {

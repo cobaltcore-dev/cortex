@@ -46,19 +46,14 @@ func (c *DeschedulingsPipelineController) PipelineType() v1alpha1.PipelineType {
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (
-	pipeline *Pipeline,
-	ready int,
-	total int,
-	err error,
-) {
-	pipeline = &Pipeline{
+func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (*Pipeline, error) {
+	pipeline := &Pipeline{
 		Client:        c.Client,
 		CycleDetector: c.CycleDetector,
 		Monitor:       c.Monitor.SubPipeline(p.Name),
 	}
-	ready, total, err = pipeline.Init(ctx, p.Spec.Detectors, supportedSteps)
-	return pipeline, ready, total, err
+	err := pipeline.Init(ctx, p.Spec.Detectors, supportedSteps)
+	return pipeline, err
 }
 
 func (c *DeschedulingsPipelineController) CreateDeschedulingsPeriodically(ctx context.Context) {
@@ -81,24 +76,6 @@ func (c *DeschedulingsPipelineController) CreateDeschedulingsPeriodically(ctx co
 			time.Sleep(jobloop.DefaultJitter(time.Minute))
 		}
 	}
-}
-
-func (c *DeschedulingsPipelineController) CollectKnowledgeDependencies(p v1alpha1.Pipeline) []string {
-	dependencies := make(map[string]struct{})
-	for _, stepConf := range p.Spec.Detectors {
-		step, ok := supportedSteps[stepConf.Name]
-		if !ok {
-			continue
-		}
-		for _, knowledgeName := range step.RequiredKnowledges() {
-			dependencies[knowledgeName] = struct{}{}
-		}
-	}
-	result := make([]string, 0, len(dependencies))
-	for knowledgeName := range dependencies {
-		result = append(result, knowledgeName)
-	}
-	return result
 }
 
 func (c *DeschedulingsPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
