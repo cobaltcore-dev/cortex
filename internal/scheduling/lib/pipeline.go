@@ -27,7 +27,7 @@ type pipeline[RequestType PipelineRequest] struct {
 	// The activation function to use when combining the
 	// results of the scheduler steps.
 	ActivationFunction
-	// The order in which filters are applied, by their step name.
+	// The order in which filters are executed, by their step name.
 	filtersOrder []string
 	// The filters by their name.
 	filters map[string]Filter[RequestType]
@@ -39,22 +39,15 @@ type pipeline[RequestType PipelineRequest] struct {
 	monitor PipelineMonitor
 }
 
-type StepWrapper[RequestType PipelineRequest, StepType v1alpha1.Step] func(
-	ctx context.Context,
-	client client.Client,
-	step StepType,
-	impl Step[RequestType, StepType],
-) (Step[RequestType, StepType], error)
-
 // Create a new pipeline with filters and weighers contained in the configuration.
 func NewFilterWeigherPipeline[RequestType PipelineRequest](
 	ctx context.Context,
 	client client.Client,
 	name string,
 	supportedFilters map[string]func() Filter[RequestType],
-	confedFilters []v1alpha1.FilterSpec,
+	confedFilters []v1alpha1.StepSpec,
 	supportedWeighers map[string]func() Weigher[RequestType],
-	confedWeighers []v1alpha1.WeigherSpec,
+	confedWeighers []v1alpha1.StepSpec,
 	monitor PipelineMonitor,
 ) (Pipeline[RequestType], error) {
 

@@ -18,7 +18,7 @@ type mockFilter struct {
 	name string
 }
 
-func (m *mockFilter) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
+func (m *mockFilter) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return nil
 }
 
@@ -36,7 +36,7 @@ type mockWeigher struct {
 	name string
 }
 
-func (m *mockWeigher) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
+func (m *mockWeigher) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return nil
 }
 
@@ -47,6 +47,10 @@ func (m *mockWeigher) Run(traceLog *slog.Logger, request mockPipelineRequest) (*
 	return &StepResult{
 		Activations: map[string]float64{"host1": 0.0, "host2": 1.0},
 	}, nil
+}
+
+func (m *mockWeigher) RequiredKnowledges() []string {
+	return []string{}
 }
 
 func TestPipeline_Run(t *testing.T) {

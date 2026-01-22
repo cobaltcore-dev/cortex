@@ -7,12 +7,10 @@ import (
 	"log/slog"
 	"reflect"
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
-	mockStep := &mockStep[mockPipelineRequest, v1alpha1.WeigherSpec]{
+	mockStep := &mockStep[mockPipelineRequest]{
 		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
 			return &StepResult{
 				Activations: map[string]float64{
@@ -47,7 +45,7 @@ func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
 }
 
 func TestWeigherValidator_Run_HostNumberMismatch(t *testing.T) {
-	mockStep := &mockStep[mockPipelineRequest, v1alpha1.WeigherSpec]{
+	mockStep := &mockStep[mockPipelineRequest]{
 		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
 			return &StepResult{
 				Activations: map[string]float64{

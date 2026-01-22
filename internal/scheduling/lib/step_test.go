@@ -11,16 +11,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type mockStep[RequestType PipelineRequest, StepType v1alpha1.Step] struct {
-	InitFunc func(ctx context.Context, client client.Client, step StepType) error
+type mockStep[RequestType PipelineRequest] struct {
+	InitFunc func(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error
 	RunFunc  func(traceLog *slog.Logger, request RequestType) (*StepResult, error)
 }
 
-func (m *mockStep[RequestType, StepType]) Init(ctx context.Context, client client.Client, step StepType) error {
+func (m *mockStep[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return m.InitFunc(ctx, client, step)
 }
-func (m *mockStep[RequestType, StepType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+func (m *mockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
 	return m.RunFunc(traceLog, request)
+}
+func (m *mockStep[RequestType]) RequiredKnowledges() []string {
+	return []string{}
 }
 
 type MockOptions struct {

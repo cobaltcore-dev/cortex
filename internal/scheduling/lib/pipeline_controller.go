@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
@@ -27,7 +26,27 @@ type PipelineInitializer[PipelineType any] interface {
 	// This method is delegated to the parent controller, when a pipeline needs
 	// to be newly initialized or re-initialized to update it in the pipeline
 	// map.
-	InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (PipelineType, error)
+	//
+	// Ready and total indicate how many steps are ready out of the total
+	// configured steps. Sometimes, steps may be unready but this does not
+	// prevent the pipeline from being created, e.g., when weighers depend
+	// on knowledges that are not yet ready.
+	//
+	// If there was an error that blocks us from creating the pipeline, return
+	// a non-nil error.
+	InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (
+		pipeline PipelineType,
+		ready int,
+		total int,
+		err error,
+	)
+
+	// Collect knowledge dependencies for the given pipeline.
+	//
+	// This is used to determine which pipelines depend on which knowledges
+	// when a knowledge changes.
+	CollectKnowledgeDependencies(p v1alpha1.Pipeline) []string
+
 	// Get the accepted pipeline type for this controller.
 	//
 	// This is used to filter pipelines when listing existing pipelines on
@@ -89,28 +108,10 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	log := ctrl.LoggerFrom(ctx)
 	old := obj.DeepCopy()
 
-	// Check if all steps are ready. If not, check if the step is mandatory.
-	obj.Status.TotalSteps = len(obj.Spec.Filters) + len(obj.Spec.Weighers) + len(obj.Spec.Detectors)
-	obj.Status.ReadySteps = 0
-	for range obj.Spec.Filters { // Could use len() directly but want to keep the pattern.
-		// If needed, check if this filter needs any dependencies. For now,
-		// as filters do not depend on knowledges, we skip this.
-		obj.Status.ReadySteps++
-	}
-	for _, detector := range obj.Spec.Detectors {
-		if err := c.checkAllKnowledgesReady(ctx, detector.Knowledges); err == nil {
-			obj.Status.ReadySteps++
-		}
-	}
-	for _, weigher := range obj.Spec.Weighers {
-		if err := c.checkAllKnowledgesReady(ctx, weigher.Knowledges); err == nil {
-			obj.Status.ReadySteps++
-		}
-	}
-	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
-
 	var err error
-	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, *obj)
+	c.Pipelines[obj.Name], obj.Status.ReadySteps, obj.Status.TotalSteps, err = c.
+		Initializer.InitPipeline(ctx, *obj)
+	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
 	c.PipelineConfigs[obj.Name] = *obj
 	if err != nil {
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
@@ -184,45 +185,6 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	delete(c.PipelineConfigs, pipelineConf.Name)
 }
 
-// Check if all knowledges are ready, and if not, return an error indicating why not.
-func (c *BasePipelineController[PipelineType]) checkAllKnowledgesReady(
-	ctx context.Context,
-	objects []corev1.ObjectReference,
-) error {
-
-	log := ctrl.LoggerFrom(ctx)
-	// Check the status of all knowledges depending on this step.
-	readyKnowledges := 0
-	totalKnowledges := len(objects)
-	for _, objRef := range objects {
-		knowledge := &v1alpha1.Knowledge{}
-		if err := c.Get(ctx, client.ObjectKey{
-			Name:      objRef.Name,
-			Namespace: objRef.Namespace,
-		}, knowledge); err != nil {
-			log.Error(err, "failed to get knowledge depending on step", "knowledgeName", objRef.Name)
-			continue
-		}
-		// Check if the knowledge status conditions indicate an error.
-		if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
-			log.Info("knowledge not ready due to error condition", "knowledgeName", objRef.Name)
-			continue
-		}
-		if knowledge.Status.RawLength == 0 {
-			log.Info("knowledge not ready, no data available", "knowledgeName", objRef.Name)
-			continue
-		}
-		readyKnowledges++
-	}
-	if readyKnowledges != totalKnowledges {
-		return fmt.Errorf(
-			"%d/%d knowledges ready",
-			readyKnowledges, totalKnowledges,
-		)
-	}
-	return nil
-}
-
 // Handle a knowledge creation, update, or delete event from watching knowledge resources.
 func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 	ctx context.Context,
@@ -234,37 +196,32 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
-	log.Info("knowledge changed, re-evaluating dependent pipelines", "knowledgeName", obj.Name)
-	// Find all pipelines depending on this knowledge and re-evaluate them.
+	log.Info("knowledge changed readiness/availability, re-evaluating pipelines", "knowledgeName", obj.Name)
 	var pipelines v1alpha1.PipelineList
 	if err := c.List(ctx, &pipelines); err != nil {
 		log.Error(err, "failed to list pipelines for knowledge", "knowledgeName", obj.Name)
 		return
 	}
 	for _, pipeline := range pipelines.Items {
-		needsUpdate := false
-		// For filter-weigher pipelines, only weighers may depend on knowledges.
-		for _, step := range pipeline.Spec.Weighers {
-			for _, knowledgeRef := range step.Knowledges {
-				if knowledgeRef.Name == obj.Name && knowledgeRef.Namespace == obj.Namespace {
-					needsUpdate = true
-					break
-				}
+		if pipeline.Spec.SchedulingDomain != c.SchedulingDomain {
+			continue
+		}
+		if pipeline.Spec.Type != c.Initializer.PipelineType() {
+			continue
+		}
+		knowledgeDeps := c.Initializer.CollectKnowledgeDependencies(pipeline)
+		found := false
+		for _, knowledgeName := range knowledgeDeps {
+			if knowledgeName == obj.Name {
+				found = true
+				break
 			}
 		}
-		// Check descheduler pipelines where detectors may depend on knowledges.
-		for _, step := range pipeline.Spec.Detectors {
-			for _, knowledgeRef := range step.Knowledges {
-				if knowledgeRef.Name == obj.Name && knowledgeRef.Namespace == obj.Namespace {
-					needsUpdate = true
-					break
-				}
-			}
+		if !found {
+			continue
 		}
-		if needsUpdate {
-			log.Info("re-evaluating pipeline due to knowledge change", "pipelineName", pipeline.Name)
-			c.handlePipelineChange(ctx, &pipeline, queue)
-		}
+		log.Info("re-evaluating pipeline due to knowledge change", "pipelineName", pipeline.Name, "knowledgeName", obj.Name)
+		c.handlePipelineChange(ctx, &pipeline, queue)
 	}
 }
 

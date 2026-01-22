@@ -18,7 +18,7 @@ type NodeAvailableFilter struct {
 	Alias string
 }
 
-func (f *NodeAvailableFilter) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
+func (f *NodeAvailableFilter) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return nil
 }
 
