@@ -244,8 +244,7 @@ groups:
 
   - alert: CortexNovaKPIUnready
     expr: |
-      cortex_kpi_state{domain="nova",state!="ready"} != 0 or
-      absent(cortex_kpi_state{domain="nova"})
+      cortex_kpi_state{domain="nova",state!="ready"} != 0
     for: 60m
     labels:
       context: kpis
