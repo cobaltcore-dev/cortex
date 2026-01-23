@@ -36,7 +36,7 @@ func (o VMwareAntiAffinityNoisyProjectsStepOpts) Validate() error {
 // Step to avoid noisy projects by downvoting the hosts they are running on.
 type VMwareAntiAffinityNoisyProjectsStep struct {
 	// Weigher is a helper struct that provides common functionality for all steps.
-	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareAntiAffinityNoisyProjectsStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, VMwareAntiAffinityNoisyProjectsStepOpts]
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.

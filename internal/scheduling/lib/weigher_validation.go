@@ -15,17 +15,17 @@ import (
 // Wrapper for scheduler steps that validates them before/after execution.
 type WeigherValidator[RequestType PipelineRequest] struct {
 	// The wrapped weigher to validate.
-	Weigher Weigher[RequestType]
+	Weigher Step[RequestType]
 }
 
 // Initialize the wrapped weigher with the database and options.
-func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
+func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	slog.Info("scheduler: init validation for step", "name", step.Name)
 	return s.Weigher.Init(ctx, client, step)
 }
 
 // Validate the wrapped weigher with the database and options.
-func validateWeigher[RequestType PipelineRequest](weigher Weigher[RequestType]) *WeigherValidator[RequestType] {
+func validateWeigher[RequestType PipelineRequest](weigher Step[RequestType]) *WeigherValidator[RequestType] {
 	return &WeigherValidator[RequestType]{Weigher: weigher}
 }
 

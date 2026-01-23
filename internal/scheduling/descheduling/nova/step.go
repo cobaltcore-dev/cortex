@@ -21,5 +21,5 @@ type Step interface {
 	// Get the VMs on their current hosts that should be considered for descheduling.
 	Run() ([]plugins.Decision, error)
 	// Configure the step with a database and options.
-	Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error
+	Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error
 }

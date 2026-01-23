@@ -15,7 +15,7 @@ import (
 )
 
 type FilterHasRequestedTraits struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Filter hosts that do not have the requested traits given by the extra spec:

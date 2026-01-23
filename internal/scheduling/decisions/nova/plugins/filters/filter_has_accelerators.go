@@ -14,7 +14,7 @@ import (
 )
 
 type FilterHasAcceleratorsStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // If requested, only get hosts with accelerators.

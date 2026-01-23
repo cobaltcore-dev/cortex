@@ -72,8 +72,8 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
-						Filters:          []v1alpha1.FilterSpec{},
-						Weighers:         []v1alpha1.WeigherSpec{},
+						Filters:          []v1alpha1.StepSpec{},
+						Weighers:         []v1alpha1.StepSpec{},
 					},
 				},
 			},
@@ -92,8 +92,8 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
-						Filters:          []v1alpha1.FilterSpec{},
-						Weighers:         []v1alpha1.WeigherSpec{},
+						Filters:          []v1alpha1.StepSpec{},
+						Weighers:         []v1alpha1.StepSpec{},
 					},
 				},
 				{
@@ -103,8 +103,8 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
-						Filters:          []v1alpha1.FilterSpec{},
-						Weighers:         []v1alpha1.WeigherSpec{},
+						Filters:          []v1alpha1.StepSpec{},
+						Weighers:         []v1alpha1.StepSpec{},
 					},
 				},
 				{
@@ -114,8 +114,8 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Type:             v1alpha1.PipelineTypeDescheduler,
-						Filters:          []v1alpha1.FilterSpec{},
-						Weighers:         []v1alpha1.WeigherSpec{},
+						Filters:          []v1alpha1.StepSpec{},
+						Weighers:         []v1alpha1.StepSpec{},
 					},
 				},
 				{
@@ -125,8 +125,8 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
-						Filters:          []v1alpha1.FilterSpec{},
-						Weighers:         []v1alpha1.WeigherSpec{},
+						Filters:          []v1alpha1.StepSpec{},
+						Weighers:         []v1alpha1.StepSpec{},
 					},
 				},
 			},
@@ -202,12 +202,12 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					Filters: []v1alpha1.FilterSpec{
+					Filters: []v1alpha1.StepSpec{
 						{
 							Name: "test-filter",
 						},
 					},
-					Weighers: []v1alpha1.WeigherSpec{
+					Weighers: []v1alpha1.StepSpec{
 						{
 							Name: "test-weigher",
 						},
@@ -241,7 +241,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					Weighers: []v1alpha1.WeigherSpec{
+					Weighers: []v1alpha1.StepSpec{
 						{
 							Name: "test-weigher",
 							Knowledges: []corev1.ObjectReference{
@@ -265,7 +265,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					Weighers:         []v1alpha1.WeigherSpec{},
+					Weighers:         []v1alpha1.StepSpec{},
 				},
 			},
 			knowledges:        []v1alpha1.Knowledge{},
@@ -283,7 +283,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					Weighers:         []v1alpha1.WeigherSpec{},
+					Weighers:         []v1alpha1.StepSpec{},
 				},
 			},
 			knowledges:       []v1alpha1.Knowledge{},
@@ -361,8 +361,8 @@ func TestBasePipelineController_HandlePipelineCreated(t *testing.T) {
 		Spec: v1alpha1.PipelineSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
-			Filters:          []v1alpha1.FilterSpec{},
-			Weighers:         []v1alpha1.WeigherSpec{},
+			Filters:          []v1alpha1.StepSpec{},
+			Weighers:         []v1alpha1.StepSpec{},
 		},
 	}
 
@@ -406,8 +406,8 @@ func TestBasePipelineController_HandlePipelineUpdated(t *testing.T) {
 		Spec: v1alpha1.PipelineSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
-			Filters:          []v1alpha1.FilterSpec{},
-			Weighers:         []v1alpha1.WeigherSpec{},
+			Filters:          []v1alpha1.StepSpec{},
+			Weighers:         []v1alpha1.StepSpec{},
 		},
 	}
 
@@ -667,7 +667,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
-						Weighers: []v1alpha1.WeigherSpec{
+						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
 								Knowledges: []corev1.ObjectReference{
@@ -684,7 +684,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
-						Weighers: []v1alpha1.WeigherSpec{
+						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
 								Knowledges: []corev1.ObjectReference{
@@ -717,7 +717,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
-						Weighers: []v1alpha1.WeigherSpec{
+						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
 								Knowledges: []corev1.ObjectReference{
@@ -794,7 +794,7 @@ func TestBasePipelineController_HandleKnowledgeCreated(t *testing.T) {
 		Spec: v1alpha1.PipelineSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
-			Weighers: []v1alpha1.WeigherSpec{
+			Weighers: []v1alpha1.StepSpec{
 				{
 					Name: "test-weigher",
 					Knowledges: []corev1.ObjectReference{
@@ -945,7 +945,7 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					Weighers: []v1alpha1.WeigherSpec{
+					Weighers: []v1alpha1.StepSpec{
 						{
 							Name: "test-weigher",
 							Knowledges: []corev1.ObjectReference{
@@ -1013,7 +1013,7 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 		Spec: v1alpha1.PipelineSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
-			Weighers: []v1alpha1.WeigherSpec{
+			Weighers: []v1alpha1.StepSpec{
 				{
 					Name: "test-weigher",
 					Knowledges: []corev1.ObjectReference{

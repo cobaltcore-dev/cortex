@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 type mockObserver struct {
@@ -23,9 +21,9 @@ func (m *mockObserver) Observe(value float64) {
 func TestStepMonitorRun(t *testing.T) {
 	runTimer := &mockObserver{}
 	removedSubjectsObserver := &mockObserver{}
-	monitor := &StepMonitor[mockPipelineRequest, v1alpha1.WeigherSpec]{
+	monitor := &StepMonitor[mockPipelineRequest]{
 		stepName: "mock_step",
-		Step: &mockStep[mockPipelineRequest, v1alpha1.WeigherSpec]{
+		Step: &mockStep[mockPipelineRequest]{
 			RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
 				return &StepResult{
 					Activations: map[string]float64{"subject1": 0.1, "subject2": 1.0, "subject3": 0.0},

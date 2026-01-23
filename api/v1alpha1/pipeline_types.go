@@ -9,25 +9,12 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// Step as part of a cortex pipeline.
-type Step interface {
-	// Every step must have options so the pipeline can configure it.
-	GetOpts() runtime.RawExtension
-	// Every step must have a name so the pipeline can identify it.
-	GetName() string
-	// Every step can have an optional description.
-	GetDescription() string
-}
-
-// Filters remove host candidates from an initial set, leaving
-// valid candidates. Filters are run before weighers are applied, as
-// part of a filter-weigher scheduling pipeline.
-type FilterSpec struct {
+type StepSpec struct {
 	// The name of the scheduler step in the cortex implementation.
 	// Must match to a step implemented by the pipeline controller.
 	Name string `json:"name"`
 
-	// Additional configuration for the extractor that can be used
+	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
 	Opts runtime.RawExtension `json:"opts,omitempty"`
 
@@ -36,71 +23,12 @@ type FilterSpec struct {
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
 
-	// Filters are not allowed to depend on knowledges, as knowledges can
-	// be outdated leading to invalid filtering decisions.
-}
-
-func (f FilterSpec) GetOpts() runtime.RawExtension { return f.Opts }
-func (f FilterSpec) GetName() string               { return f.Name }
-func (f FilterSpec) GetDescription() string        { return f.Description }
-
-// Weighers assign weights to the remaining host candidates after filtering,
-// making some hosts more preferable than others. Weighers are run
-// after filters are applied, as part of a filter-weigher scheduling pipeline.
-type WeigherSpec struct {
-	// The name of the scheduler step in the cortex implementation.
-	// Must match to a step implemented by the pipeline controller.
-	Name string `json:"name"`
-
-	// Additional configuration for the extractor that can be used
-	// +kubebuilder:validation:Optional
-	Opts runtime.RawExtension `json:"opts,omitempty"`
-
-	// Additional description of the step which helps understand its purpose
-	// and decisions made by it.
-	// +kubebuilder:validation:Optional
-	Description string `json:"description,omitempty"`
-
-	// Knowledges this step depends on to be ready.
-	//
-	// Weighers can depend on knowledges as they don't break valid placements,
-	// they only make it more optimal.
+	// If required, steps can specify knowledges on which they depend.
+	// Changes to the knowledges' readiness will trigger re-evaluation of
+	// pipelines containing this step.
 	// +kubebuilder:validation:Optional
 	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
 }
-
-func (w WeigherSpec) GetOpts() runtime.RawExtension { return w.Opts }
-func (w WeigherSpec) GetName() string               { return w.Name }
-func (w WeigherSpec) GetDescription() string        { return w.Description }
-
-// Detectors find candidates for descheduling (migration off current host).
-// These detectors are run after weighers are applied, as part of a
-// descheduler scheduling pipeline.
-type DetectorSpec struct {
-	// The name of the scheduler step in the cortex implementation.
-	// Must match to a step implemented by the pipeline controller.
-	Name string `json:"name"`
-
-	// Additional configuration for the extractor that can be used
-	// +kubebuilder:validation:Optional
-	Opts runtime.RawExtension `json:"opts,omitempty"`
-
-	// Additional description of the step which helps understand its purpose
-	// and decisions made by it.
-	// +kubebuilder:validation:Optional
-	Description string `json:"description,omitempty"`
-
-	// Knowledges this step depends on to be ready.
-	//
-	// Detectors can depend on knowledges as they don't ensure valid placements
-	// and therefore are not on the critical path.
-	// +kubebuilder:validation:Optional
-	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
-}
-
-func (d DetectorSpec) GetOpts() runtime.RawExtension { return d.Opts }
-func (d DetectorSpec) GetName() string               { return d.Name }
-func (d DetectorSpec) GetDescription() string        { return d.Description }
 
 type PipelineType string
 
@@ -144,14 +72,14 @@ type PipelineSpec struct {
 	// Filters remove host candidates from an initial set, leaving
 	// valid candidates. Filters are run before weighers are applied.
 	// +kubebuilder:validation:Optional
-	Filters []FilterSpec `json:"filters,omitempty"`
+	Filters []StepSpec `json:"filters,omitempty"`
 
 	// Ordered list of weighers to apply in a scheduling pipeline.
 	//
 	// This attribute is set only if the pipeline type is filter-weigher.
 	// These weighers are run after filters are applied.
 	// +kubebuilder:validation:Optional
-	Weighers []WeigherSpec `json:"weighers,omitempty"`
+	Weighers []StepSpec `json:"weighers,omitempty"`
 
 	// Ordered list of detectors to apply in a descheduling pipeline.
 	//
@@ -159,7 +87,7 @@ type PipelineSpec struct {
 	// Detectors find candidates for descheduling (migration off current host).
 	// These detectors are run after weighers are applied.
 	// +kubebuilder:validation:Optional
-	Detectors []DetectorSpec `json:"detectors,omitempty"`
+	Detectors []StepSpec `json:"detectors,omitempty"`
 }
 
 const (

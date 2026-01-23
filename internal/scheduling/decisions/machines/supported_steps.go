@@ -8,12 +8,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type MachineWeigher = lib.Weigher[ironcore.MachinePipelineRequest]
+type MachineWeigher = lib.Step[ironcore.MachinePipelineRequest]
 
 // Configuration of weighers supported by the machine scheduling.
 var supportedWeighers = map[string]func() MachineWeigher{}
 
-type MachineFilter = lib.Filter[ironcore.MachinePipelineRequest]
+type MachineFilter = lib.Step[ironcore.MachinePipelineRequest]
 
 // Configuration of filters supported by the machine scheduling.
 var supportedFilters = map[string]func() MachineFilter{

@@ -28,7 +28,7 @@ func (opts FilterExternalCustomerStepOpts) Validate() error {
 }
 
 type FilterExternalCustomerStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterExternalCustomerStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, FilterExternalCustomerStepOpts]
 }
 
 // Prefix-match the domain name for external customer domains and filter out hosts

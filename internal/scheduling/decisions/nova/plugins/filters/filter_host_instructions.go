@@ -12,7 +12,7 @@ import (
 )
 
 type FilterHostInstructionsStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Filter hosts based on instructions given in the request spec. Supported are:

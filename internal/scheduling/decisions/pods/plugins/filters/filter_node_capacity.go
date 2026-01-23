@@ -19,7 +19,7 @@ type NodeCapacityFilter struct {
 	Alias string
 }
 
-func (f *NodeCapacityFilter) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
+func (f *NodeCapacityFilter) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	return nil
 }
 

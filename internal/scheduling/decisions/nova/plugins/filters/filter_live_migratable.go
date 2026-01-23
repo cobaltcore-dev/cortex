@@ -15,7 +15,7 @@ import (
 )
 
 type FilterLiveMigratableStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Check if the encountered request spec is a live migration.

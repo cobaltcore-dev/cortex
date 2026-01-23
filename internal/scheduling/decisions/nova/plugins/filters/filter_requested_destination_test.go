@@ -494,7 +494,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 				Build()
 
 			step := &FilterRequestedDestinationStep{
-				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
+				BaseStep: lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
 					Client: fakeClient,
 				},
 			}
@@ -575,7 +575,7 @@ func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 		Build()
 
 	step := &FilterRequestedDestinationStep{
-		BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
+		BaseStep: lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]{
 			Client: fakeClient,
 		},
 	}

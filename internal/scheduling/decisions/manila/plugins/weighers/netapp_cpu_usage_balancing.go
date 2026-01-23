@@ -45,7 +45,7 @@ func (o NetappCPUUsageBalancingStepOpts) Validate() error {
 // Step to balance CPU usage by avoiding highly used storage pools.
 type NetappCPUUsageBalancingStep struct {
 	// Weigher is a helper struct that provides common functionality for all steps.
-	lib.BaseWeigher[api.ExternalSchedulerRequest, NetappCPUUsageBalancingStepOpts]
+	lib.BaseStep[api.ExternalSchedulerRequest, NetappCPUUsageBalancingStepOpts]
 }
 
 // Downvote hosts that are highly contended.
