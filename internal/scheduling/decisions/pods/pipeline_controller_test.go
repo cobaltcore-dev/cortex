@@ -185,16 +185,18 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		filters     []v1alpha1.StepSpec
-		weighers    []v1alpha1.StepSpec
-		expectError bool
+		name                   string
+		filters                []v1alpha1.StepSpec
+		weighers               []v1alpha1.StepSpec
+		expectNonCriticalError bool
+		expectCriticalError    bool
 	}{
 		{
-			name:        "empty steps",
-			filters:     []v1alpha1.StepSpec{},
-			weighers:    []v1alpha1.StepSpec{},
-			expectError: false,
+			name:                   "empty steps",
+			filters:                []v1alpha1.StepSpec{},
+			weighers:               []v1alpha1.StepSpec{},
+			expectNonCriticalError: false,
+			expectCriticalError:    false,
 		},
 		{
 			name: "noop step",
@@ -203,7 +205,8 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					Name: "noop",
 				},
 			},
-			expectError: false,
+			expectNonCriticalError: false,
+			expectCriticalError:    false,
 		},
 		{
 			name: "unsupported step",
@@ -212,13 +215,14 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					Name: "unsupported",
 				},
 			},
-			expectError: true,
+			expectNonCriticalError: false,
+			expectCriticalError:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+			initResult := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-pipeline",
 				},
@@ -228,18 +232,20 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 				},
 			})
 
-			if tt.expectError && err == nil {
-				t.Error("expected error but got none")
-				return
+			if tt.expectCriticalError && initResult.CriticalErr == nil {
+				t.Error("expected critical error but got none")
 			}
 
-			if !tt.expectError && err != nil {
-				t.Errorf("expected no error, got: %v", err)
-				return
+			if !tt.expectCriticalError && initResult.CriticalErr != nil {
+				t.Errorf("expected no critical error, got: %v", initResult.CriticalErr)
 			}
 
-			if !tt.expectError && pipeline == nil {
-				t.Error("expected pipeline to be non-nil")
+			if tt.expectNonCriticalError && initResult.NonCriticalErr == nil {
+				t.Error("expected non-critical error but got none")
+			}
+
+			if !tt.expectNonCriticalError && initResult.NonCriticalErr != nil {
+				t.Errorf("expected no non-critical error, got: %v", initResult.NonCriticalErr)
 			}
 		})
 	}

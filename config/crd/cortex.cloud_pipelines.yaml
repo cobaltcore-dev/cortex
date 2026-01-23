@@ -24,11 +24,11 @@ spec:
     - jsonPath: .spec.type
       name: Type
       type: string
-    - jsonPath: .status.stepsReadyFrac
-      name: Steps
+    - jsonPath: .status.conditions[?(@.type=='AllStepsReady')].status
+      name: All Steps Ready
       type: string
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
-      name: Ready
+      name: Pipeline Ready
       type: string
     name: v1alpha1
     schema:
@@ -380,20 +380,6 @@ spec:
                   - type
                   type: object
                 type: array
-              readySteps:
-                description: The number of steps that are ready.
-                type: integer
-              stepsReadyFrac:
-                description: |-
-                  An overview of the readiness of the steps in the pipeline.
-                  Format: "ReadySteps / TotalSteps steps ready".
-                type: string
-              totalSteps:
-                description: The total number of steps configured in the pipeline.
-                type: integer
-            required:
-            - readySteps
-            - totalSteps
             type: object
         required:
         - spec

@@ -40,11 +40,11 @@ func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step 
 
 func TestPipeline_Init(t *testing.T) {
 	tests := []struct {
-		name           string
-		supportedSteps map[string]Step
-		confedSteps    []v1alpha1.StepSpec
-		expectedSteps  int
-		expectedError  bool
+		name                     string
+		supportedSteps           map[string]Step
+		confedSteps              []v1alpha1.StepSpec
+		expectedNonCriticalError bool
+		expectedCriticalError    bool
 	}{
 		{
 			name: "successful initialization with single step",
@@ -54,7 +54,8 @@ func TestPipeline_Init(t *testing.T) {
 			confedSteps: []v1alpha1.StepSpec{{
 				Name: "test-step",
 			}},
-			expectedSteps: 1,
+			expectedNonCriticalError: false,
+			expectedCriticalError:    false,
 		},
 		{
 			name: "initialization with unsupported step",
@@ -64,7 +65,8 @@ func TestPipeline_Init(t *testing.T) {
 			confedSteps: []v1alpha1.StepSpec{{
 				Name: "unsupported-step",
 			}},
-			expectedError: true,
+			expectedNonCriticalError: true,
+			expectedCriticalError:    false,
 		},
 		{
 			name: "initialization with step init error",
@@ -74,7 +76,8 @@ func TestPipeline_Init(t *testing.T) {
 			confedSteps: []v1alpha1.StepSpec{{
 				Name: "failing-step",
 			}},
-			expectedError: true,
+			expectedNonCriticalError: true,
+			expectedCriticalError:    false,
 		},
 		{
 			name: "initialization with multiple steps",
@@ -90,7 +93,8 @@ func TestPipeline_Init(t *testing.T) {
 					Name: "step2",
 				},
 			},
-			expectedSteps: 2,
+			expectedNonCriticalError: false,
+			expectedCriticalError:    false,
 		},
 	}
 
@@ -98,21 +102,22 @@ func TestPipeline_Init(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pipeline := &Pipeline{}
 
-			err := pipeline.Init(t.Context(), tt.confedSteps, tt.supportedSteps)
-			if tt.expectedError {
-				if err == nil {
-					t.Fatalf("expected error during initialization, got none")
+			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.confedSteps, tt.supportedSteps)
+			if tt.expectedCriticalError {
+				if criticalErr == nil {
+					t.Fatalf("expected critical error during initialization, got none")
 				}
 				return
 			}
-			if err != nil {
-				t.Fatalf("Failed to initialize pipeline: %v", err)
+			if criticalErr != nil {
+				t.Fatalf("Failed to initialize pipeline: %v", criticalErr)
 			}
 
-			if len(pipeline.steps) != tt.expectedSteps {
-				t.Errorf("expected %d steps, got %d", tt.expectedSteps, len(pipeline.steps))
+			if nonCriticalErr != nil && !tt.expectedNonCriticalError {
+				t.Errorf("unexpected non-critical error during initialization: %v", nonCriticalErr)
+			} else if nonCriticalErr == nil && tt.expectedNonCriticalError {
+				t.Errorf("expected non-critical error during initialization, got none")
 			}
-
 			// Verify that successfully initialized steps are actually initialized
 			for _, step := range pipeline.steps {
 				if stepMonitor, ok := step.(StepMonitor); ok {

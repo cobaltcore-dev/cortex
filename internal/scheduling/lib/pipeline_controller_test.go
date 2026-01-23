@@ -26,14 +26,17 @@ type mockPipeline struct {
 // Mock PipelineInitializer for testing
 type mockPipelineInitializer struct {
 	pipelineType     v1alpha1.PipelineType
-	initPipelineFunc func(ctx context.Context, p v1alpha1.Pipeline) (mockPipeline, error)
+	initPipelineFunc func(ctx context.Context, p v1alpha1.Pipeline) PipelineInitResult[mockPipeline]
 }
 
-func (m *mockPipelineInitializer) InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (mockPipeline, error) {
+func (m *mockPipelineInitializer) InitPipeline(
+	ctx context.Context, p v1alpha1.Pipeline,
+) PipelineInitResult[mockPipeline] {
+
 	if m.initPipelineFunc != nil {
 		return m.initPipelineFunc(ctx, p)
 	}
-	return mockPipeline{name: p.Name}, nil
+	return PipelineInitResult[mockPipeline]{Pipeline: mockPipeline{name: p.Name}}
 }
 
 func (m *mockPipelineInitializer) PipelineType() v1alpha1.PipelineType {
@@ -311,8 +314,8 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			}
 
 			if tt.initPipelineError {
-				initializer.initPipelineFunc = func(ctx context.Context, p v1alpha1.Pipeline) (mockPipeline, error) {
-					return mockPipeline{}, context.Canceled
+				initializer.initPipelineFunc = func(ctx context.Context, p v1alpha1.Pipeline) PipelineInitResult[mockPipeline] {
+					return PipelineInitResult[mockPipeline]{CriticalErr: context.Canceled}
 				}
 			}
 

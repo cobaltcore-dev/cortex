@@ -18,6 +18,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// Result returned by the InitPipeline interface method.
+type PipelineInitResult[PipelineType any] struct {
+	// The pipeline, if successfully created.
+	Pipeline PipelineType
+
+	// A critical error that prevented the pipeline from being initialized.
+	// If a critical error occurs, the pipeline should not be used.
+	CriticalErr error
+
+	// A non-critical error that occurred during initialization.
+	// If a non-critical error occurs, the pipeline may still be used.
+	// However, the error should be reported in the pipeline status
+	// so we can debug potential issues.
+	NonCriticalErr error
+}
+
 // The base pipeline controller will delegate some methods to the parent
 // controller struct. The parent controller only needs to conform to this
 // interface and set the delegate field accordingly.
@@ -27,7 +43,8 @@ type PipelineInitializer[PipelineType any] interface {
 	// This method is delegated to the parent controller, when a pipeline needs
 	// to be newly initialized or re-initialized to update it in the pipeline
 	// map.
-	InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (PipelineType, error)
+	InitPipeline(ctx context.Context, p v1alpha1.Pipeline) PipelineInitResult[PipelineType]
+
 	// Get the accepted pipeline type for this controller.
 	//
 	// This is used to filter pipelines when listing existing pipelines on
@@ -89,36 +106,22 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	log := ctrl.LoggerFrom(ctx)
 	old := obj.DeepCopy()
 
-	// Check if all steps are ready. If not, check if the step is mandatory.
-	obj.Status.TotalSteps = len(obj.Spec.Filters) + len(obj.Spec.Weighers) + len(obj.Spec.Detectors)
-	obj.Status.ReadySteps = 0
-	for range obj.Spec.Filters { // Could use len() directly but want to keep the pattern.
-		// If needed, check if this filter needs any dependencies. For now,
-		// as filters do not depend on knowledges, we skip this.
-		obj.Status.ReadySteps++
-	}
-	for _, detector := range obj.Spec.Detectors {
-		if err := c.checkAllKnowledgesReady(ctx, detector.Knowledges); err == nil {
-			obj.Status.ReadySteps++
-		}
-	}
-	for _, weigher := range obj.Spec.Weighers {
-		if err := c.checkAllKnowledgesReady(ctx, weigher.Knowledges); err == nil {
-			obj.Status.ReadySteps++
-		}
-	}
-	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
+	initResult := c.Initializer.InitPipeline(ctx, *obj)
 
-	var err error
-	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, *obj)
-	c.PipelineConfigs[obj.Name] = *obj
-	if err != nil {
-		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
+	// If there was a critical error, the pipeline cannot be used.
+	if initResult.CriticalErr != nil {
+		log.Error(initResult.CriticalErr, "failed to create pipeline", "pipelineName", obj.Name)
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.PipelineConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "PipelineInitFailed",
-			Message: err.Error(),
+			Message: initResult.CriticalErr.Error(),
+		})
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionAllStepsReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "PipelineInitFailed",
+			Message: initResult.CriticalErr.Error(),
 		})
 		patch := client.MergeFrom(old)
 		if err := c.Status().Patch(ctx, obj, patch); err != nil {
@@ -128,6 +131,21 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		delete(c.PipelineConfigs, obj.Name)
 		return
 	}
+
+	// If there was a non-critical error, continue running the pipeline but
+	// report the error in the pipeline status.
+	if initResult.NonCriticalErr != nil {
+		log.Error(initResult.NonCriticalErr, "non-critical error during pipeline initialization", "pipelineName", obj.Name)
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionAllStepsReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "SomeStepsNotReady",
+			Message: initResult.NonCriticalErr.Error(),
+		})
+	}
+
+	c.Pipelines[obj.Name] = initResult.Pipeline
+	c.PipelineConfigs[obj.Name] = *obj
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.PipelineConditionReady,

@@ -46,14 +46,22 @@ func (c *DeschedulingsPipelineController) PipelineType() v1alpha1.PipelineType {
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DeschedulingsPipelineController) InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (*Pipeline, error) {
+func (c *DeschedulingsPipelineController) InitPipeline(
+	ctx context.Context,
+	p v1alpha1.Pipeline,
+) lib.PipelineInitResult[*Pipeline] {
+
 	pipeline := &Pipeline{
 		Client:        c.Client,
 		CycleDetector: c.CycleDetector,
 		Monitor:       c.Monitor.SubPipeline(p.Name),
 	}
-	err := pipeline.Init(ctx, p.Spec.Detectors, supportedSteps)
-	return pipeline, err
+	nonCriticalErr, criticalErr := pipeline.Init(ctx, p.Spec.Detectors, supportedSteps)
+	return lib.PipelineInitResult[*Pipeline]{
+		Pipeline:       pipeline,
+		NonCriticalErr: nonCriticalErr,
+		CriticalErr:    criticalErr,
+	}
 }
 
 func (c *DeschedulingsPipelineController) CreateDeschedulingsPeriodically(ctx context.Context) {

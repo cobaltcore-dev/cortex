@@ -144,9 +144,9 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) (lib.Pipeline[api.ExternalSchedulerRequest], error) {
+) lib.PipelineInitResult[lib.Pipeline[api.ExternalSchedulerRequest]] {
 
-	return lib.NewFilterWeigherPipeline(
+	return lib.InitNewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,
 		supportedFilters, p.Spec.Filters,
 		supportedWeighers, p.Spec.Weighers,

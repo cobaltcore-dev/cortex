@@ -39,10 +39,10 @@ func (m *mockControllerStep) Init(ctx context.Context, client client.Client, ste
 
 func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	tests := []struct {
-		name          string
-		steps         []v1alpha1.StepSpec
-		expectError   bool
-		expectedError string
+		name                   string
+		steps                  []v1alpha1.StepSpec
+		expectNonCriticalError bool
+		expectCriticalError    bool
 	}{
 		{
 			name: "successful pipeline initialization",
@@ -51,7 +51,8 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 					Name: "mock-step",
 				},
 			},
-			expectError: false,
+			expectNonCriticalError: false,
+			expectCriticalError:    false,
 		},
 		{
 			name: "unsupported step",
@@ -60,13 +61,14 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 					Name: "unsupported",
 				},
 			},
-			expectError:   true,
-			expectedError: "descheduler: unsupported step: unsupported",
+			expectNonCriticalError: true,
+			expectCriticalError:    false,
 		},
 		{
-			name:        "empty steps",
-			steps:       []v1alpha1.StepSpec{},
-			expectError: false,
+			name:                   "empty steps",
+			steps:                  []v1alpha1.StepSpec{},
+			expectNonCriticalError: false,
+			expectCriticalError:    false,
 		},
 	}
 
@@ -81,23 +83,28 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 				CycleDetector: controller.CycleDetector,
 				Monitor:       controller.Monitor,
 			}
-			err := pipeline.Init(t.Context(), tt.steps, map[string]Step{
+			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.steps, map[string]Step{
 				"mock-step": &mockControllerStep{},
 			})
 
-			if tt.expectError {
-				if err == nil {
-					t.Error("expected error but got none")
+			if tt.expectCriticalError {
+				if criticalErr == nil {
+					t.Errorf("expected critical error, got none")
 				}
-				if tt.expectedError != "" && err.Error() != tt.expectedError {
-					t.Errorf("expected error %q, got %q", tt.expectedError, err.Error())
+			} else {
+				if criticalErr != nil {
+					t.Errorf("unexpected critical error: %v", criticalErr)
 				}
-				return
 			}
 
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-				return
+			if tt.expectNonCriticalError {
+				if nonCriticalErr == nil {
+					t.Errorf("expected non-critical error, got none")
+				}
+			} else {
+				if nonCriticalErr != nil {
+					t.Errorf("unexpected non-critical error: %v", nonCriticalErr)
+				}
 			}
 
 			if pipeline.CycleDetector != controller.CycleDetector {

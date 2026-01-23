@@ -93,16 +93,11 @@ type PipelineSpec struct {
 const (
 	// The pipeline is ready to be used.
 	PipelineConditionReady = "Ready"
+	// All steps in the pipeline are ready.
+	PipelineConditionAllStepsReady = "AllStepsReady"
 )
 
 type PipelineStatus struct {
-	// The total number of steps configured in the pipeline.
-	TotalSteps int `json:"totalSteps"`
-	// The number of steps that are ready.
-	ReadySteps int `json:"readySteps"`
-	// An overview of the readiness of the steps in the pipeline.
-	// Format: "ReadySteps / TotalSteps steps ready".
-	StepsReadyFrac string `json:"stepsReadyFrac,omitempty"`
 	// The current status conditions of the pipeline.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
@@ -114,8 +109,8 @@ type PipelineStatus struct {
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
-// +kubebuilder:printcolumn:name="Steps",type="string",JSONPath=".status.stepsReadyFrac"
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="All Steps Ready",type="string",JSONPath=".status.conditions[?(@.type=='AllStepsReady')].status"
+// +kubebuilder:printcolumn:name="Pipeline Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // Pipeline is the Schema for the decisions API
 type Pipeline struct {

@@ -35,7 +35,7 @@ func (p *Pipeline) Init(
 	ctx context.Context,
 	confedSteps []v1alpha1.StepSpec,
 	supportedSteps map[string]Step,
-) error {
+) (nonCriticalErr, criticalErr error) {
 
 	p.order = []string{}
 	// Load all steps from the configuration.
@@ -43,17 +43,19 @@ func (p *Pipeline) Init(
 	for _, stepConf := range confedSteps {
 		step, ok := supportedSteps[stepConf.Name]
 		if !ok {
-			return errors.New("descheduler: unsupported step: " + stepConf.Name)
+			nonCriticalErr = errors.New("descheduler: unsupported step name: " + stepConf.Name)
+			continue // Descheduler steps are optional.
 		}
 		step = monitorStep(step, stepConf, p.Monitor)
 		if err := step.Init(ctx, p.Client, stepConf); err != nil {
-			return err
+			nonCriticalErr = errors.New("descheduler: failed to initialize step " + stepConf.Name + ": " + err.Error())
+			continue // Descheduler steps are optional.
 		}
 		p.steps[stepConf.Name] = step
 		p.order = append(p.order, stepConf.Name)
 		slog.Info("descheduler: added step", "name", stepConf.Name)
 	}
-	return nil
+	return nonCriticalErr, nil // At the moment, there are no critical errors.
 }
 
 // Execute the descheduler steps in parallel and collect the decisions made by

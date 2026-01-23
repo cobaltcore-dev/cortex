@@ -47,7 +47,7 @@ type StepWrapper[RequestType PipelineRequest] func(
 ) (Step[RequestType], error)
 
 // Create a new pipeline with filters and weighers contained in the configuration.
-func NewFilterWeigherPipeline[RequestType PipelineRequest](
+func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 	ctx context.Context,
 	client client.Client,
 	name string,
@@ -56,14 +56,16 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 	supportedWeighers map[string]func() Step[RequestType],
 	confedWeighers []v1alpha1.StepSpec,
 	monitor PipelineMonitor,
-) (Pipeline[RequestType], error) {
+) PipelineInitResult[Pipeline[RequestType]] {
 
 	pipelineMonitor := monitor.SubPipeline(name)
 
 	// Ensure there are no overlaps between filter and weigher names.
 	for filterName := range supportedFilters {
 		if _, ok := supportedWeighers[filterName]; ok {
-			return nil, errors.New("step name overlap between filters and weighers: " + filterName)
+			return PipelineInitResult[Pipeline[RequestType]]{
+				CriticalErr: errors.New("step name overlap between filters and weighers: " + filterName),
+			}
 		}
 	}
 
@@ -75,12 +77,16 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
-			return nil, errors.New("unsupported filter name: " + filterConfig.Name)
+			return PipelineInitResult[Pipeline[RequestType]]{
+				CriticalErr: errors.New("unsupported filter name: " + filterConfig.Name),
+			}
 		}
 		filter := makeFilter()
 		filter = monitorStep(ctx, client, filterConfig, filter, pipelineMonitor)
 		if err := filter.Init(ctx, client, filterConfig); err != nil {
-			return nil, errors.New("failed to initialize filter: " + err.Error())
+			return PipelineInitResult[Pipeline[RequestType]]{
+				CriticalErr: errors.New("failed to initialize filter: " + err.Error()),
+			}
 		}
 		filtersByName[filterConfig.Name] = filter
 		filtersOrder = append(filtersOrder, filterConfig.Name)
@@ -90,32 +96,38 @@ func NewFilterWeigherPipeline[RequestType PipelineRequest](
 	// Load all weighers from the configuration.
 	weighersByName := make(map[string]Step[RequestType], len(confedWeighers))
 	weighersOrder := []string{}
+	var nonCriticalErr error
 	for _, weigherConfig := range confedWeighers {
 		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
 		slog.Info("supported:", "weighers", maps.Keys(supportedWeighers))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
-			return nil, errors.New("unsupported weigher name: " + weigherConfig.Name)
+			nonCriticalErr = errors.New("unsupported weigher name: " + weigherConfig.Name)
+			continue // Weighers are optional.
 		}
 		weigher := makeWeigher()
 		// Validate that the weigher doesn't unexpectedly filter out hosts.
 		weigher = validateWeigher(weigher)
 		weigher = monitorStep(ctx, client, weigherConfig, weigher, pipelineMonitor)
 		if err := weigher.Init(ctx, client, weigherConfig); err != nil {
-			return nil, errors.New("failed to initialize pipeline step: " + err.Error())
+			nonCriticalErr = errors.New("failed to initialize weigher: " + err.Error())
+			continue // Weighers are optional.
 		}
 		weighersByName[weigherConfig.Name] = weigher
 		weighersOrder = append(weighersOrder, weigherConfig.Name)
 		slog.Info("scheduler: added weigher", "name", weigherConfig.Name)
 	}
 
-	return &pipeline[RequestType]{
-		filtersOrder:  filtersOrder,
-		filters:       filtersByName,
-		weighersOrder: weighersOrder,
-		weighers:      weighersByName,
-		monitor:       pipelineMonitor,
-	}, nil
+	return PipelineInitResult[Pipeline[RequestType]]{
+		NonCriticalErr: nonCriticalErr,
+		Pipeline: &pipeline[RequestType]{
+			filtersOrder:  filtersOrder,
+			filters:       filtersByName,
+			weighersOrder: weighersOrder,
+			weighers:      weighersByName,
+			monitor:       pipelineMonitor,
+		},
+	}
 }
 
 // Execute filters and collect their activations by step name.

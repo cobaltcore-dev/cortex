@@ -207,16 +207,16 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 			}
 
 			if tt.pipeline != nil {
-				pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+				initResult := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: tt.pipeline.Name,
 					},
 					Spec: tt.pipeline.Spec,
 				})
-				if err != nil {
+				if initResult.CriticalErr != nil || initResult.NonCriticalErr != nil {
 					t.Fatalf("Failed to init pipeline: %v", err)
 				}
-				controller.Pipelines[tt.pipeline.Name] = pipeline
+				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
 			}
 
 			req := ctrl.Request{
@@ -263,16 +263,18 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		filters     []v1alpha1.StepSpec
-		weighers    []v1alpha1.StepSpec
-		expectError bool
+		name                   string
+		filters                []v1alpha1.StepSpec
+		weighers               []v1alpha1.StepSpec
+		expectNonCriticalError bool
+		expectCriticalError    bool
 	}{
 		{
-			name:        "empty steps",
-			filters:     []v1alpha1.StepSpec{},
-			weighers:    []v1alpha1.StepSpec{},
-			expectError: false,
+			name:                   "empty steps",
+			filters:                []v1alpha1.StepSpec{},
+			weighers:               []v1alpha1.StepSpec{},
+			expectNonCriticalError: false,
+			expectCriticalError:    false,
 		},
 		{
 			name: "supported step",
@@ -281,7 +283,8 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					Name: "filter_status_conditions",
 				},
 			},
-			expectError: false,
+			expectNonCriticalError: false,
+			expectCriticalError:    false,
 		},
 		{
 			name: "unsupported step",
@@ -290,7 +293,8 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					Name: "unsupported-plugin",
 				},
 			},
-			expectError: true,
+			expectNonCriticalError: false,
+			expectCriticalError:    true,
 		},
 		{
 			name: "step with scoping options",
@@ -302,7 +306,8 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					},
 				},
 			},
-			expectError: false,
+			expectNonCriticalError: false,
+			expectCriticalError:    false,
 		},
 		{
 			name: "step with invalid scoping options",
@@ -314,13 +319,14 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					},
 				},
 			},
-			expectError: true,
+			expectNonCriticalError: false,
+			expectCriticalError:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline, err := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
+			initResult := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-pipeline",
 				},
@@ -330,14 +336,17 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 				},
 			})
 
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
+			if tt.expectCriticalError && initResult.CriticalErr == nil {
+				t.Error("Expected critical error but got none")
 			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
+			if !tt.expectCriticalError && initResult.CriticalErr != nil {
+				t.Errorf("Expected no critical error but got: %v", initResult.CriticalErr)
 			}
-			if !tt.expectError && pipeline == nil {
-				t.Error("Expected pipeline but got nil")
+			if tt.expectNonCriticalError && initResult.NonCriticalErr == nil {
+				t.Error("Expected non-critical error but got none")
+			}
+			if !tt.expectNonCriticalError && initResult.NonCriticalErr != nil {
+				t.Errorf("Expected no non-critical error but got: %v", initResult.NonCriticalErr)
 			}
 		})
 	}
@@ -672,16 +681,16 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 
 			// Setup runtime pipeline if needed
 			if tt.pipeline != nil {
-				pipeline, err := controller.InitPipeline(context.Background(), v1alpha1.Pipeline{
+				initResult := controller.InitPipeline(context.Background(), v1alpha1.Pipeline{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: tt.pipeline.Name,
 					},
 					Spec: tt.pipeline.Spec,
 				})
-				if err != nil {
-					t.Fatalf("Failed to init pipeline: %v", err)
+				if initResult.CriticalErr != nil || initResult.NonCriticalErr != nil {
+					t.Fatalf("Failed to init pipeline: %v", initResult)
 				}
-				controller.Pipelines[tt.pipeline.Name] = pipeline
+				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
 			}
 
 			// Call the method under test
