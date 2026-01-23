@@ -7,7 +7,6 @@ import (
 	"context"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -231,30 +230,6 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					},
 				},
 			},
-			schedulingDomain: v1alpha1.SchedulingDomainNova,
-			expectReady:      true,
-			expectInMap:      true,
-		},
-		{
-			name: "pipeline with optional step not ready",
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline-optional",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					Weighers: []v1alpha1.StepSpec{
-						{
-							Name: "test-weigher",
-							Knowledges: []corev1.ObjectReference{
-								{Name: "missing-knowledge", Namespace: "default"},
-							},
-						},
-					},
-				},
-			},
-			knowledges:       []v1alpha1.Knowledge{},
 			schedulingDomain: v1alpha1.SchedulingDomainNova,
 			expectReady:      true,
 			expectInMap:      true,
@@ -484,157 +459,6 @@ func TestBasePipelineController_HandlePipelineDeleted(t *testing.T) {
 	}
 }
 
-func TestBasePipelineController_checkAllKnowledgesReady(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	tests := []struct {
-		name        string
-		knowledges  []v1alpha1.Knowledge
-		expectError bool
-	}{
-		{
-			name:        "no knowledges",
-			knowledges:  []v1alpha1.Knowledge{},
-			expectError: false,
-		},
-		{
-			name: "ready knowledge",
-			knowledges: []v1alpha1.Knowledge{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "ready-knowledge",
-						Namespace: "default",
-					},
-					Status: v1alpha1.KnowledgeStatus{
-						RawLength: 10,
-					},
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "knowledge in error state",
-			knowledges: []v1alpha1.Knowledge{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "error-knowledge",
-						Namespace: "default",
-					},
-					Status: v1alpha1.KnowledgeStatus{
-						Conditions: []metav1.Condition{
-							{
-								Type:   v1alpha1.KnowledgeConditionReady,
-								Status: metav1.ConditionFalse,
-							},
-						},
-					},
-				},
-			},
-			expectError: true,
-		},
-		{
-			name: "knowledge with no data",
-			knowledges: []v1alpha1.Knowledge{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "no-data-knowledge",
-						Namespace: "default",
-					},
-					Status: v1alpha1.KnowledgeStatus{
-						RawLength: 0,
-					},
-				},
-			},
-			expectError: true,
-		},
-		{
-			name: "multiple knowledges, all ready",
-			knowledges: []v1alpha1.Knowledge{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "knowledge-1",
-						Namespace: "default",
-					},
-					Status: v1alpha1.KnowledgeStatus{
-						RawLength: 10,
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "knowledge-2",
-						Namespace: "default",
-					},
-					Status: v1alpha1.KnowledgeStatus{
-						RawLength: 5,
-					},
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "multiple knowledges, some not ready",
-			knowledges: []v1alpha1.Knowledge{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "ready-knowledge",
-						Namespace: "default",
-					},
-					Status: v1alpha1.KnowledgeStatus{
-						RawLength: 10,
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "not-ready-knowledge",
-						Namespace: "default",
-					},
-					Status: v1alpha1.KnowledgeStatus{
-						RawLength: 0,
-					},
-				},
-			},
-			expectError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, len(tt.knowledges))
-			for i := range tt.knowledges {
-				objects[i] = &tt.knowledges[i]
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				Build()
-
-			controller := &BasePipelineController[mockPipeline]{
-				Client: fakeClient,
-			}
-
-			objectReferences := make([]corev1.ObjectReference, len(tt.knowledges))
-			for i, k := range tt.knowledges {
-				objectReferences[i] = corev1.ObjectReference{
-					Name:      k.Name,
-					Namespace: k.Namespace,
-				}
-			}
-			err := controller.checkAllKnowledgesReady(context.Background(), objectReferences)
-
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-			}
-		})
-	}
-}
-
 func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -649,7 +473,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 		expectReEvaluated []string
 	}{
 		{
-			name: "knowledge change triggers dependent pipeline re-evaluation",
+			name: "knowledge change triggers pipeline re-evaluation",
 			knowledge: &v1alpha1.Knowledge{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-knowledge",
@@ -665,7 +489,7 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 			pipelines: []v1alpha1.Pipeline{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "dependent-pipeline",
+						Name: "pipeline-1",
 					},
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
@@ -673,16 +497,13 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
-								Knowledges: []corev1.ObjectReference{
-									{Name: "test-knowledge", Namespace: "default"},
-								},
 							},
 						},
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "independent-pipeline",
+						Name: "pipeline-2",
 					},
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
@@ -690,16 +511,13 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
-								Knowledges: []corev1.ObjectReference{
-									{Name: "other-knowledge", Namespace: "default"},
-								},
 							},
 						},
 					},
 				},
 			},
 			schedulingDomain:  v1alpha1.SchedulingDomainNova,
-			expectReEvaluated: []string{"dependent-pipeline"},
+			expectReEvaluated: []string{"pipeline-1", "pipeline-2"},
 		},
 		{
 			name: "knowledge change in different scheduling domain",
@@ -723,9 +541,6 @@ func TestBasePipelineController_handleKnowledgeChange(t *testing.T) {
 						Weighers: []v1alpha1.StepSpec{
 							{
 								Name: "test-weigher",
-								Knowledges: []corev1.ObjectReference{
-									{Name: "test-knowledge", Namespace: "default"},
-								},
 							},
 						},
 					},
@@ -800,9 +615,6 @@ func TestBasePipelineController_HandleKnowledgeCreated(t *testing.T) {
 			Weighers: []v1alpha1.StepSpec{
 				{
 					Name: "test-weigher",
-					Knowledges: []corev1.ObjectReference{
-						{Name: "test-knowledge", Namespace: "default"},
-					},
 				},
 			},
 		},
@@ -951,9 +763,6 @@ func TestBasePipelineController_HandleKnowledgeUpdated(t *testing.T) {
 					Weighers: []v1alpha1.StepSpec{
 						{
 							Name: "test-weigher",
-							Knowledges: []corev1.ObjectReference{
-								{Name: "test-knowledge", Namespace: "default"},
-							},
 						},
 					},
 				},
@@ -1019,9 +828,6 @@ func TestBasePipelineController_HandleKnowledgeDeleted(t *testing.T) {
 			Weighers: []v1alpha1.StepSpec{
 				{
 					Name: "test-weigher",
-					Knowledges: []corev1.ObjectReference{
-						{Name: "test-knowledge", Namespace: "default"},
-					},
 				},
 			},
 		},

@@ -5,9 +5,12 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,13 +24,41 @@ type Detector[Opts any] struct {
 }
 
 // Init the step with the database and options.
-func (s *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (d *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+	d.Client = client
+
 	opts := conf.NewRawOptsBytes(step.Opts.Raw)
-	if err := s.Load(opts); err != nil {
+	if err := d.Load(opts); err != nil {
 		return err
 	}
+	return nil
+}
 
-	s.Client = client
+// Check if all knowledges are ready, and if not, return an error indicating why not.
+func (d *Detector[PipelineType]) CheckAllKnowledgesReady(
+	ctx context.Context,
+	knowledges ...corev1.ObjectReference,
+) error {
+
+	for _, objRef := range knowledges {
+		knowledge := &v1alpha1.Knowledge{}
+		if err := d.Client.Get(ctx, client.ObjectKey{
+			Name:      objRef.Name,
+			Namespace: objRef.Namespace,
+		}, knowledge); err != nil {
+			return fmt.Errorf("failed to get knowledge %s: %w", objRef.Name, err)
+		}
+		// Check if the knowledge status conditions indicate an error.
+		if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
+			return fmt.Errorf("knowledge %s not ready: %s",
+				objRef.Name,
+				meta.FindStatusCondition(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady).Message,
+			)
+		}
+		if knowledge.Status.RawLength == 0 {
+			return fmt.Errorf("knowledge %s not ready, no data available", objRef.Name)
+		}
+	}
 	return nil
 }
 

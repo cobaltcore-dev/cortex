@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -22,6 +23,19 @@ type AvoidHighStealPctStepOpts struct {
 type AvoidHighStealPctStep struct {
 	// Detector is a helper struct that provides common functionality for all descheduler steps.
 	plugins.Detector[AvoidHighStealPctStepOpts]
+}
+
+func (s *AvoidHighStealPctStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+	if err := s.Detector.Init(ctx, client, step); err != nil {
+		return err
+	}
+	// Check that all knowledges are ready.
+	if err := s.CheckAllKnowledgesReady(ctx,
+		corev1.ObjectReference{Name: "kvm-libvirt-domain-cpu-steal-pct"},
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *AvoidHighStealPctStep) Run() ([]plugins.Decision, error) {

@@ -4,7 +4,6 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -22,12 +21,6 @@ type StepSpec struct {
 	// and decisions made by it.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
-
-	// If required, steps can specify knowledges on which they depend.
-	// Changes to the knowledges' readiness will trigger re-evaluation of
-	// pipelines containing this step.
-	// +kubebuilder:validation:Optional
-	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
 }
 
 type PipelineType string
