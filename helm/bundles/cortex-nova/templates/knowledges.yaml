@@ -70,22 +70,8 @@ spec:
       - name: vmware-resolved-hostsystems
     datasources:
       - name: vrops-hostsystem-cpu-contention-short-term-percentage
----
-apiVersion: cortex.cloud/v1alpha1
-kind: Knowledge
-metadata:
-  name: kvm-libvirt-domain-cpu-steal-pct
-spec:
-  schedulingDomain: nova
-  extractor:
-    name: kvm_libvirt_domain_cpu_steal_pct_extractor
-  description: |
-    This knowledge identifies KVM libvirt domains that are experiencing CPU
-    steal, i.e. cpu contention or cpu wait.
-  dependencies:
-    datasources:
-      - name: kvm-libvirt-domain-steal-pct
-      - name: nova-servers
+
+
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge

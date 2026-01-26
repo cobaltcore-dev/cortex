@@ -66,6 +66,10 @@ pipelines:
   # Use this flag to disable the creation of decisions across all pipelines.
   createDecisions: false
 
+kvm:
+  # Use this flag to enable/disable KVM host related features.
+  enabled: false
+
 cortex: &cortex
   crd: {enable: false}
   # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.

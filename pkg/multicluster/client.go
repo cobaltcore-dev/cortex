@@ -243,6 +243,18 @@ func (c *statusClient) Patch(ctx context.Context, obj client.Object, patch clien
 	return cl.GetClient().Status().Patch(ctx, obj, patch, opts...)
 }
 
+// Pick the right cluster based on the resource URI and perform an Apply operation.
+// If the object does not implement Resource or no custom cluster is configured,
+// the home cluster is used.
+func (c *statusClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+	resource, ok := obj.(Resource)
+	if !ok {
+		return c.multiclusterClient.HomeCluster.GetClient().Status().Apply(ctx, obj, opts...)
+	}
+	cl := c.multiclusterClient.ClusterForResource(resource.URI())
+	return cl.GetClient().Status().Apply(ctx, obj, opts...)
+}
+
 // Provide a wrapper around the given subresource client which picks the right cluster
 // based on the resource URI.
 func (c *Client) SubResource(subResource string) client.SubResourceClient {
@@ -307,4 +319,16 @@ func (c *subResourceClient) Patch(ctx context.Context, obj client.Object, patch 
 	}
 	cl := c.multiclusterClient.ClusterForResource(resource.URI())
 	return cl.GetClient().SubResource(c.subResource).Patch(ctx, obj, patch, opts...)
+}
+
+// Pick the right cluster based on the resource URI and perform an Apply operation.
+// If the object does not implement Resource or no custom cluster is configured,
+// the home cluster is used.
+func (c *subResourceClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+	resource, ok := obj.(Resource)
+	if !ok {
+		return c.multiclusterClient.HomeCluster.GetClient().SubResource(c.subResource).Apply(ctx, obj, opts...)
+	}
+	cl := c.multiclusterClient.ClusterForResource(resource.URI())
+	return cl.GetClient().SubResource(c.subResource).Apply(ctx, obj, opts...)
 }
