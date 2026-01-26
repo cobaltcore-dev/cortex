@@ -21,7 +21,7 @@ jobs:
 
       - name: Get short commit SHA
         id: vars
-        run: echo "sha=sha-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: echo "sha=sha-$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
 
       - name: Get all changed postgres/ files
         id: changed_postgres_files
