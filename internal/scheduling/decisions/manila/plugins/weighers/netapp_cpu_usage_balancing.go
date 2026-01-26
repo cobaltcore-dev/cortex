@@ -46,12 +46,12 @@ func (o NetappCPUUsageBalancingStepOpts) Validate() error {
 // Step to balance CPU usage by avoiding highly used storage pools.
 type NetappCPUUsageBalancingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.ExternalSchedulerRequest, NetappCPUUsageBalancingStepOpts]
+	lib.BaseWeigher[api.ExternalSchedulerRequest, NetappCPUUsageBalancingStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
-func (s *NetappCPUUsageBalancingStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
-	if err := s.BaseStep.Init(ctx, client, step); err != nil {
+func (s *NetappCPUUsageBalancingStep) Init(ctx context.Context, client client.Client, weigher v1alpha1.WeigherSpec) error {
+	if err := s.BaseWeigher.Init(ctx, client, weigher); err != nil {
 		return err
 	}
 	if err := s.CheckKnowledges(ctx, corev1.ObjectReference{Name: "netapp-storage-pool-cpu-usage-manila"}); err != nil {

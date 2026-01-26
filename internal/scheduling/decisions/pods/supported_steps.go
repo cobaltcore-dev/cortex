@@ -10,7 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type PodFilter = lib.Step[pods.PodPipelineRequest]
+type PodFilter = lib.Filter[pods.PodPipelineRequest]
 
 // Configuration of filters supported by the pods scheduler.
 var supportedFilters = map[string]func() PodFilter{
@@ -20,7 +20,7 @@ var supportedFilters = map[string]func() PodFilter{
 	"nodecapacity": func() PodFilter { return &filters.NodeCapacityFilter{} },
 }
 
-type PodWeigher = lib.Step[pods.PodPipelineRequest]
+type PodWeigher = lib.Weigher[pods.PodPipelineRequest]
 
 // Configuration of weighers supported by the pods scheduler.
 var supportedWeighers = map[string]func() PodWeigher{

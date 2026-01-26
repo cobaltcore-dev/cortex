@@ -4,12 +4,8 @@
 package lib
 
 import (
-	"context"
 	"errors"
 	"log/slog"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -17,12 +13,9 @@ var (
 	ErrStepSkipped = errors.New("step skipped")
 )
 
-// Interface for a scheduler step.
+// Steps can be chained together to form a scheduling pipeline.
 type Step[RequestType PipelineRequest] interface {
-	// Configure the step and initialize things like a database connection.
-	Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error
-
-	// Run this step of the scheduling pipeline.
+	// Run this step in the scheduling pipeline.
 	//
 	// The request is immutable and modifications are stored in the result.
 	// This allows steps to be run in parallel (e.g. weighers) without passing
@@ -32,7 +25,7 @@ type Step[RequestType PipelineRequest] interface {
 	// map of activations. I.e., filters implementing this interface should
 	// remove activations by omitting them from the returned map.
 	//
-	// Weighers implementing this interface should adjust activation
+	// Filters implementing this interface should adjust activation
 	// values in the returned map, including all hosts from the request.
 	//
 	// A traceLog is provided that contains the global request id and should

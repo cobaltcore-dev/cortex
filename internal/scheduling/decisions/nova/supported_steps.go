@@ -10,7 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type NovaFilter = lib.Step[api.ExternalSchedulerRequest]
+type NovaFilter = lib.Filter[api.ExternalSchedulerRequest]
 
 // Configuration of filters supported by the nova scheduler.
 var supportedFilters = map[string]func() NovaFilter{
@@ -31,7 +31,7 @@ var supportedFilters = map[string]func() NovaFilter{
 	"filter_requested_destination":        func() NovaFilter { return &filters.FilterRequestedDestinationStep{} },
 }
 
-type NovaWeigher = lib.Step[api.ExternalSchedulerRequest]
+type NovaWeigher = lib.Weigher[api.ExternalSchedulerRequest]
 
 // Configuration of weighers supported by the nova scheduler.
 var supportedWeighers = map[string]func() NovaWeigher{

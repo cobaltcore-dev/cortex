@@ -4,64 +4,20 @@
 package lib
 
 import (
-	"context"
 	"log/slog"
 	"math"
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-type mockFilter struct {
-	err  error
-	name string
-}
-
-func (m *mockFilter) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
-	return nil
-}
-
-func (m *mockFilter) Run(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &StepResult{
-		Activations: map[string]float64{"host1": 0.0, "host2": 0.0},
-	}, nil
-}
-
-type mockWeigher struct {
-	err  error
-	name string
-}
-
-func (m *mockWeigher) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
-	return nil
-}
-
-func (m *mockWeigher) Run(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &StepResult{
-		Activations: map[string]float64{"host1": 0.0, "host2": 1.0},
-	}, nil
-}
 
 func TestPipeline_Run(t *testing.T) {
 	// Create an instance of the pipeline with a mock step
 	pipeline := &filterWeigherPipeline[mockPipelineRequest]{
-		filters: map[string]Step[mockPipelineRequest]{
-			"mock_filter": &mockFilter{
-				name: "mock_filter",
-			},
+		filters: map[string]Filter[mockPipelineRequest]{
+			"mock_filter": &mockFilter[mockPipelineRequest]{},
 		},
 		filtersOrder: []string{"mock_filter"},
-		weighers: map[string]Step[mockPipelineRequest]{
-			"mock_weigher": &mockWeigher{
-				name: "mock_weigher",
-			},
+		weighers: map[string]Weigher[mockPipelineRequest]{
+			"mock_weigher": &mockWeigher[mockPipelineRequest]{},
 		},
 		weighersOrder: []string{"mock_weigher"},
 	}
@@ -136,7 +92,7 @@ func TestPipeline_NormalizeNovaWeights(t *testing.T) {
 
 func TestPipeline_ApplyStepWeights(t *testing.T) {
 	p := &filterWeigherPipeline[mockPipelineRequest]{
-		weighers:      map[string]Step[mockPipelineRequest]{},
+		weighers:      map[string]Weigher[mockPipelineRequest]{},
 		weighersOrder: []string{"step1", "step2"},
 	}
 
@@ -207,14 +163,12 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 }
 
 func TestPipeline_RunFilters(t *testing.T) {
-	mockStep := &mockFilter{
-		name: "mock_filter",
-	}
+	mockStep := &mockFilter[mockPipelineRequest]{}
 	p := &filterWeigherPipeline[mockPipelineRequest]{
 		filtersOrder: []string{
 			"mock_filter",
 		},
-		filters: map[string]Step[mockPipelineRequest]{
+		filters: map[string]Filter[mockPipelineRequest]{
 			"mock_filter": mockStep,
 		},
 	}

@@ -36,12 +36,12 @@ func (o VMwareHanaBinpackingStepOpts) Validate() error {
 // Step to balance VMs on hosts based on the host's available resources.
 type VMwareHanaBinpackingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.ExternalSchedulerRequest, VMwareHanaBinpackingStepOpts]
+	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareHanaBinpackingStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
-func (s *VMwareHanaBinpackingStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
-	if err := s.BaseStep.Init(ctx, client, step); err != nil {
+func (s *VMwareHanaBinpackingStep) Init(ctx context.Context, client client.Client, weigher v1alpha1.WeigherSpec) error {
+	if err := s.BaseWeigher.Init(ctx, client, weigher); err != nil {
 		return err
 	}
 	if err := s.CheckKnowledges(ctx,

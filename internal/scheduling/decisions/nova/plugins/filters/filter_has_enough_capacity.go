@@ -23,7 +23,7 @@ type FilterHasEnoughCapacityOpts struct {
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
 
 type FilterHasEnoughCapacity struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, FilterHasEnoughCapacityOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, FilterHasEnoughCapacityOpts]
 }
 
 // Filter hosts that don't have enough capacity to run the requested flavor.

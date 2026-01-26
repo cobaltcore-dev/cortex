@@ -8,7 +8,22 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-type StepSpec struct {
+type FilterSpec struct {
+	// The name of the scheduler step in the cortex implementation.
+	// Must match to a step implemented by the pipeline controller.
+	Name string `json:"name"`
+
+	// Additional configuration for the step that can be used
+	// +kubebuilder:validation:Optional
+	Params runtime.RawExtension `json:"params,omitempty"`
+
+	// Additional description of the step which helps understand its purpose
+	// and decisions made by it.
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
+}
+
+type WeigherSpec struct {
 	// The name of the scheduler step in the cortex implementation.
 	// Must match to a step implemented by the pipeline controller.
 	Name string `json:"name"`
@@ -27,6 +42,21 @@ type StepSpec struct {
 	// relative to other steps in the same pipeline.
 	// +kubebuilder:validation:Optional
 	Multiplier *float64 `json:"multiplier,omitempty"`
+}
+
+type DetectorSpec struct {
+	// The name of the scheduler step in the cortex implementation.
+	// Must match to a step implemented by the pipeline controller.
+	Name string `json:"name"`
+
+	// Additional configuration for the step that can be used
+	// +kubebuilder:validation:Optional
+	Params runtime.RawExtension `json:"params,omitempty"`
+
+	// Additional description of the step which helps understand its purpose
+	// and decisions made by it.
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
 }
 
 type PipelineType string
@@ -71,14 +101,14 @@ type PipelineSpec struct {
 	// Filters remove host candidates from an initial set, leaving
 	// valid candidates. Filters are run before weighers are applied.
 	// +kubebuilder:validation:Optional
-	Filters []StepSpec `json:"filters,omitempty"`
+	Filters []FilterSpec `json:"filters,omitempty"`
 
 	// Ordered list of weighers to apply in a scheduling pipeline.
 	//
 	// This attribute is set only if the pipeline type is filter-weigher.
 	// These weighers are run after filters are applied.
 	// +kubebuilder:validation:Optional
-	Weighers []StepSpec `json:"weighers,omitempty"`
+	Weighers []WeigherSpec `json:"weighers,omitempty"`
 
 	// Ordered list of detectors to apply in a descheduling pipeline.
 	//
@@ -86,7 +116,7 @@ type PipelineSpec struct {
 	// Detectors find candidates for descheduling (migration off current host).
 	// These detectors are run after weighers are applied.
 	// +kubebuilder:validation:Optional
-	Detectors []StepSpec `json:"detectors,omitempty"`
+	Detectors []DetectorSpec `json:"detectors,omitempty"`
 }
 
 const (

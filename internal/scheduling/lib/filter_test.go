@@ -11,14 +11,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type mockStep[RequestType PipelineRequest] struct {
-	InitFunc func(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error
+type mockFilter[RequestType PipelineRequest] struct {
+	InitFunc func(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error
 	RunFunc  func(traceLog *slog.Logger, request RequestType) (*StepResult, error)
 }
 
-func (m *mockStep[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (m *mockFilter[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
 	return m.InitFunc(ctx, client, step)
 }
-func (m *mockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+func (m *mockFilter[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
 	return m.RunFunc(traceLog, request)
 }

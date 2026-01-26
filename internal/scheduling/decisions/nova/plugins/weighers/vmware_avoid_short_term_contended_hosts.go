@@ -46,12 +46,12 @@ func (o VMwareAvoidShortTermContendedHostsStepOpts) Validate() error {
 // Step to avoid recently contended hosts by downvoting them.
 type VMwareAvoidShortTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.ExternalSchedulerRequest, VMwareAvoidShortTermContendedHostsStepOpts]
+	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareAvoidShortTermContendedHostsStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
-func (s *VMwareAvoidShortTermContendedHostsStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
-	if err := s.BaseStep.Init(ctx, client, step); err != nil {
+func (s *VMwareAvoidShortTermContendedHostsStep) Init(ctx context.Context, client client.Client, weigher v1alpha1.WeigherSpec) error {
+	if err := s.BaseWeigher.Init(ctx, client, weigher); err != nil {
 		return err
 	}
 	if err := s.CheckKnowledges(ctx, corev1.ObjectReference{Name: "vmware-short-term-contended-hosts"}); err != nil {

@@ -9,12 +9,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type ManilaFilter = lib.Step[api.ExternalSchedulerRequest]
+type ManilaFilter = lib.Filter[api.ExternalSchedulerRequest]
 
 // Configuration of filters supported by the manila scheduler.
 var supportedFilters = map[string]func() ManilaFilter{}
 
-type ManilaWeigher = lib.Step[api.ExternalSchedulerRequest]
+type ManilaWeigher = lib.Weigher[api.ExternalSchedulerRequest]
 
 // Configuration of weighers supported by the manila scheduler.
 var supportedWeighers = map[string]func() ManilaWeigher{

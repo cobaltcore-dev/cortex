@@ -85,12 +85,6 @@ spec:
                         Additional description of the step which helps understand its purpose
                         and decisions made by it.
                       type: string
-                    multiplier:
-                      description: |-
-                        Optional multiplier to apply to the step's output.
-                        This can be used to increase or decrease the weight of a step
-                        relative to other steps in the same pipeline.
-                      type: number
                     name:
                       description: |-
                         The name of the scheduler step in the cortex implementation.
@@ -119,12 +113,6 @@ spec:
                         Additional description of the step which helps understand its purpose
                         and decisions made by it.
                       type: string
-                    multiplier:
-                      description: |-
-                        Optional multiplier to apply to the step's output.
-                        This can be used to increase or decrease the weight of a step
-                        relative to other steps in the same pipeline.
-                      type: number
                     name:
                       description: |-
                         The name of the scheduler step in the cortex implementation.

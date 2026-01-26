@@ -14,7 +14,7 @@ import (
 )
 
 type FilterInstanceGroupAntiAffinityStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Select hosts not in spec_obj.instance_group but only until

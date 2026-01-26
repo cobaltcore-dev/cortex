@@ -5,13 +5,9 @@ package lib
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -27,8 +23,8 @@ type BaseStep[RequestType PipelineRequest, Opts StepOpts] struct {
 }
 
 // Init the step with the database and options.
-func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
-	opts := conf.NewRawOptsBytes(step.Params.Raw)
+func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Client, params runtime.RawExtension) error {
+	opts := conf.NewRawOptsBytes(params.Raw)
 	if err := s.Load(opts); err != nil {
 		return err
 	}
@@ -37,30 +33,6 @@ func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Cl
 	}
 
 	s.Client = client
-	return nil
-}
-
-// Check if all knowledges are ready, and if not, return an error indicating why not.
-func (d *BaseStep[RequestType, Opts]) CheckKnowledges(ctx context.Context, kns ...corev1.ObjectReference) error {
-	if d.Client == nil {
-		return errors.New("kubernetes client not initialized")
-	}
-	for _, objRef := range kns {
-		knowledge := &v1alpha1.Knowledge{}
-		if err := d.Client.Get(ctx, client.ObjectKey{
-			Name:      objRef.Name,
-			Namespace: objRef.Namespace,
-		}, knowledge); err != nil {
-			return fmt.Errorf("failed to get knowledge %s: %w", objRef.Name, err)
-		}
-		// Check if the knowledge status conditions indicate an error.
-		if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
-			return fmt.Errorf("knowledge %s not ready", objRef.Name)
-		}
-		if knowledge.Status.RawLength == 0 {
-			return fmt.Errorf("knowledge %s not ready, no data available", objRef.Name)
-		}
-	}
 	return nil
 }
 

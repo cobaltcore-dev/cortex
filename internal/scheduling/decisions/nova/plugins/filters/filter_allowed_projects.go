@@ -14,7 +14,7 @@ import (
 )
 
 type FilterAllowedProjectsStep struct {
-	lib.BaseStep[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
 }
 
 // Lock certain hosts for certain projects, based on the hypervisor spec.

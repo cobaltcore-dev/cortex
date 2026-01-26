@@ -10,7 +10,7 @@ import (
 )
 
 func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
-	mockStep := &mockStep[mockPipelineRequest]{
+	mockStep := &mockWeigher[mockPipelineRequest]{
 		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
 			return &StepResult{
 				Activations: map[string]float64{
@@ -45,7 +45,7 @@ func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
 }
 
 func TestWeigherValidator_Run_HostNumberMismatch(t *testing.T) {
-	mockStep := &mockStep[mockPipelineRequest]{
+	mockStep := &mockWeigher[mockPipelineRequest]{
 		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
 			return &StepResult{
 				Activations: map[string]float64{

@@ -22,23 +22,23 @@ func TestStepMonitorRun(t *testing.T) {
 	runTimer := &mockObserver{}
 	removedSubjectsObserver := &mockObserver{}
 	monitor := &StepMonitor[mockPipelineRequest]{
-		stepName: "mock_step",
-		Step: &mockStep[mockPipelineRequest]{
-			RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
-				return &StepResult{
-					Activations: map[string]float64{"subject1": 0.1, "subject2": 1.0, "subject3": 0.0},
-				}, nil
-			},
-		},
+		stepName:                "mock_step",
 		runTimer:                runTimer,
 		stepSubjectWeight:       nil,
 		removedSubjectsObserver: removedSubjectsObserver,
+	}
+	step := &mockWeigher[mockPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+			return &StepResult{
+				Activations: map[string]float64{"subject1": 0.1, "subject2": 1.0, "subject3": 0.0},
+			}, nil
+		},
 	}
 	request := mockPipelineRequest{
 		Subjects: []string{"subject1", "subject2", "subject3"},
 		Weights:  map[string]float64{"subject1": 0.2, "subject2": 0.1, "subject3": 0.0},
 	}
-	if _, err := monitor.Run(slog.Default(), request); err != nil {
+	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 	if len(removedSubjectsObserver.Observations) != 1 {

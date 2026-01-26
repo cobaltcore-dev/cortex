@@ -36,12 +36,12 @@ func (o VMwareGeneralPurposeBalancingStepOpts) Validate() error {
 // Step to balance VMs on hosts based on the host's available resources.
 type VMwareGeneralPurposeBalancingStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseStep[api.ExternalSchedulerRequest, VMwareGeneralPurposeBalancingStepOpts]
+	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareGeneralPurposeBalancingStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
-func (s *VMwareGeneralPurposeBalancingStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
-	if err := s.BaseStep.Init(ctx, client, step); err != nil {
+func (s *VMwareGeneralPurposeBalancingStep) Init(ctx context.Context, client client.Client, weigher v1alpha1.WeigherSpec) error {
+	if err := s.BaseWeigher.Init(ctx, client, weigher); err != nil {
 		return err
 	}
 	if err := s.CheckKnowledges(ctx,

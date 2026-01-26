@@ -211,21 +211,21 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	tests := []struct {
 		name                   string
-		filters                []v1alpha1.StepSpec
-		weighers               []v1alpha1.StepSpec
+		filters                []v1alpha1.FilterSpec
+		weighers               []v1alpha1.WeigherSpec
 		expectNonCriticalError bool
 		expectCriticalError    bool
 	}{
 		{
 			name:                   "empty steps",
-			filters:                []v1alpha1.StepSpec{},
-			weighers:               []v1alpha1.StepSpec{},
+			filters:                []v1alpha1.FilterSpec{},
+			weighers:               []v1alpha1.WeigherSpec{},
 			expectNonCriticalError: false,
 			expectCriticalError:    false,
 		},
 		{
 			name: "noop step",
-			filters: []v1alpha1.StepSpec{
+			filters: []v1alpha1.FilterSpec{
 				{Name: "noop"},
 			},
 			expectNonCriticalError: false,
@@ -233,7 +233,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name: "unsupported step",
-			filters: []v1alpha1.StepSpec{
+			filters: []v1alpha1.FilterSpec{
 				{Name: "unsupported"},
 			},
 			expectNonCriticalError: false,
@@ -318,8 +318,8 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 					CreateDecisions:  true,
-					Filters:          []v1alpha1.StepSpec{},
-					Weighers:         []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:           true,
@@ -352,8 +352,8 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 					CreateDecisions:  false,
-					Filters:          []v1alpha1.StepSpec{},
-					Weighers:         []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:           false,
@@ -399,8 +399,8 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 					CreateDecisions:  true,
-					Filters:          []v1alpha1.StepSpec{},
-					Weighers:         []v1alpha1.StepSpec{},
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createDecisions:           true,

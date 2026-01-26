@@ -4,7 +4,6 @@
 package lib
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -14,9 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Wraps a scheduler step to monitor its execution.
@@ -29,8 +26,6 @@ type StepMonitor[RequestType PipelineRequest] struct {
 	// The name of this step.
 	stepName string
 
-	// The wrapped scheduler step to monitor.
-	Step Step[RequestType]
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
 	// A metric to monitor how much the step modifies the weights of the subjects.
@@ -43,35 +38,22 @@ type StepMonitor[RequestType PipelineRequest] struct {
 	stepImpactObserver *prometheus.HistogramVec
 }
 
-// Initialize the wrapped step with the database and options.
-func (s *StepMonitor[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
-	return s.Step.Init(ctx, client, step)
-}
-
 // Schedule using the wrapped step and measure the time it takes.
-func monitorStep[RequestType PipelineRequest](
-	_ context.Context,
-	_ client.Client,
-	step v1alpha1.StepSpec,
-	impl Step[RequestType],
-	m PipelineMonitor,
-) *StepMonitor[RequestType] {
-
+func monitorStep[RequestType PipelineRequest](stepName string, m PipelineMonitor) *StepMonitor[RequestType] {
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
 		runTimer = m.stepRunTimer.
-			WithLabelValues(m.PipelineName, step.Name)
+			WithLabelValues(m.PipelineName, stepName)
 	}
 	var removedSubjectsObserver prometheus.Observer
 	if m.stepRemovedSubjectsObserver != nil {
 		removedSubjectsObserver = m.stepRemovedSubjectsObserver.
-			WithLabelValues(m.PipelineName, step.Name)
+			WithLabelValues(m.PipelineName, stepName)
 	}
 	return &StepMonitor[RequestType]{
-		Step:                    impl,
-		stepName:                step.Name,
-		pipelineName:            m.PipelineName,
 		runTimer:                runTimer,
+		stepName:                stepName,
+		pipelineName:            m.PipelineName,
 		stepSubjectWeight:       m.stepSubjectWeight,
 		removedSubjectsObserver: removedSubjectsObserver,
 		stepReorderingsObserver: m.stepReorderingsObserver,
@@ -80,14 +62,19 @@ func monitorStep[RequestType PipelineRequest](
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+func (s *StepMonitor[RequestType]) RunWrapped(
+	traceLog *slog.Logger,
+	request RequestType,
+	step Step[RequestType],
+) (*StepResult, error) {
+
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)
 		defer timer.ObserveDuration()
 	}
 
 	inWeights := request.GetWeights()
-	stepResult, err := s.Step.Run(traceLog, request)
+	stepResult, err := step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
 	}
