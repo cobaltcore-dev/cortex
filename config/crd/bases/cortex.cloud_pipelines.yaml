@@ -80,7 +80,6 @@ spec:
                         and decisions made by it.
                       type: string
                     multiplier:
-                      default: 1
                       description: |-
                         Optional multiplier to apply to the step's output.
                         This can be used to increase or decrease the weight of a step
@@ -115,7 +114,6 @@ spec:
                         and decisions made by it.
                       type: string
                     multiplier:
-                      default: 1
                       description: |-
                         Optional multiplier to apply to the step's output.
                         This can be used to increase or decrease the weight of a step
@@ -167,7 +165,6 @@ spec:
                         and decisions made by it.
                       type: string
                     multiplier:
-                      default: 1
                       description: |-
                         Optional multiplier to apply to the step's output.
                         This can be used to increase or decrease the weight of a step

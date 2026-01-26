@@ -106,7 +106,11 @@ func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 		}
 		weighersByName[weigherConfig.Name] = weigher
 		weighersOrder = append(weighersOrder, weigherConfig.Name)
-		weighersMultipliers[weigherConfig.Name] = weigherConfig.Multiplier
+		if weigherConfig.Multiplier == nil {
+			weighersMultipliers[weigherConfig.Name] = 1.0
+		} else {
+			weighersMultipliers[weigherConfig.Name] = *weigherConfig.Multiplier
+		}
 		slog.Info("scheduler: added weigher", "name", weigherConfig.Name)
 	}
 

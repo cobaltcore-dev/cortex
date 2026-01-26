@@ -26,8 +26,7 @@ type StepSpec struct {
 	// This can be used to increase or decrease the weight of a step
 	// relative to other steps in the same pipeline.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=1.0
-	Multiplier float64 `json:"multiplier,omitempty"`
+	Multiplier *float64 `json:"multiplier,omitempty"`
 }
 
 type PipelineType string
