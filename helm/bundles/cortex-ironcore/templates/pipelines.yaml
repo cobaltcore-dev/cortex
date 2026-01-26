@@ -9,12 +9,10 @@ spec:
     This pipeline is used to schedule ironcore machines onto machinepools.
   type: filter-weigher
   createDecisions: true
-  steps:
-    - type: weigher
-      name: noop
+  filters: []
+  weighers:
+    - name: noop
       description: |
         This is only a passthrough step which assigns a zero-weight to all machinepool
         candidates. It is used as a placeholder step in the ironcore machines scheduler
         pipeline.
-      knowledges: []
-      mandatory: false
