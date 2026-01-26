@@ -1,4 +1,3 @@
-{{- $createDecisions := .Values.pipelines.createDecisions | default false }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
