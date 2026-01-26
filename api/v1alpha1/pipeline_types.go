@@ -21,6 +21,13 @@ type StepSpec struct {
 	// and decisions made by it.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
+
+	// Optional multiplier to apply to the step's output.
+	// This can be used to increase or decrease the weight of a step
+	// relative to other steps in the same pipeline.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=1.0
+	Multiplier float64 `json:"multiplier,omitempty"`
 }
 
 type PipelineType string

@@ -35,16 +35,11 @@ type pipeline[RequestType PipelineRequest] struct {
 	weighersOrder []string
 	// The weighers by their name.
 	weighers map[string]Step[RequestType]
+	// Multipliers to apply to weigher outputs.
+	weighersMultipliers map[string]float64
 	// Monitor to observe the pipeline.
 	monitor PipelineMonitor
 }
-
-type StepWrapper[RequestType PipelineRequest] func(
-	ctx context.Context,
-	client client.Client,
-	step v1alpha1.StepSpec,
-	impl Step[RequestType],
-) (Step[RequestType], error)
 
 // Create a new pipeline with filters and weighers contained in the configuration.
 func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
@@ -95,6 +90,7 @@ func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 
 	// Load all weighers from the configuration.
 	weighersByName := make(map[string]Step[RequestType], len(confedWeighers))
+	weighersMultipliers := make(map[string]float64, len(confedWeighers))
 	weighersOrder := []string{}
 	var nonCriticalErr error
 	for _, weigherConfig := range confedWeighers {
@@ -115,17 +111,19 @@ func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 		}
 		weighersByName[weigherConfig.Name] = weigher
 		weighersOrder = append(weighersOrder, weigherConfig.Name)
+		weighersMultipliers[weigherConfig.Name] = weigherConfig.Multiplier
 		slog.Info("scheduler: added weigher", "name", weigherConfig.Name)
 	}
 
 	return PipelineInitResult[Pipeline[RequestType]]{
 		NonCriticalErr: nonCriticalErr,
 		Pipeline: &pipeline[RequestType]{
-			filtersOrder:  filtersOrder,
-			filters:       filtersByName,
-			weighersOrder: weighersOrder,
-			weighers:      weighersByName,
-			monitor:       pipelineMonitor,
+			filtersOrder:        filtersOrder,
+			filters:             filtersByName,
+			weighersOrder:       weighersOrder,
+			weighers:            weighersByName,
+			weighersMultipliers: weighersMultipliers,
+			monitor:             pipelineMonitor,
 		},
 	}
 }
@@ -225,7 +223,11 @@ func (p *pipeline[RequestType]) applyWeights(
 			// This is ok, since steps can be skipped.
 			continue
 		}
-		outWeights = p.Apply(outWeights, weigherActivations)
+		multiplier, ok := p.weighersMultipliers[weigherName]
+		if !ok {
+			multiplier = 1.0
+		}
+		outWeights = p.Apply(outWeights, weigherActivations, multiplier)
 	}
 	return outWeights
 }
