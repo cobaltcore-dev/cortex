@@ -107,6 +107,13 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 			Reason:  "SomeStepsNotReady",
 			Message: initResult.NonCriticalErr.Error(),
 		})
+	} else {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionAllStepsReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllStepsReady",
+			Message: "all pipeline steps are ready",
+		})
 	}
 
 	c.Pipelines[obj.Name] = initResult.Pipeline
