@@ -47,7 +47,7 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Sanity checks.
 	lastExtracted := knowledge.Status.LastExtracted.Time
 	recency := knowledge.Spec.Recency.Duration
-	if lastExtracted.Add(recency).After(time.Now()) {
+	if lastExtracted.Add(recency).After(time.Now()) && knowledge.Status.RawLength != 0 {
 		log.Info("skipping knowledge extraction, not yet time", "name", knowledge.Name)
 		return ctrl.Result{RequeueAfter: time.Until(lastExtracted.Add(recency))}, nil
 	}

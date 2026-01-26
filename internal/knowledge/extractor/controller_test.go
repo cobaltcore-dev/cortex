@@ -84,6 +84,7 @@ func TestKnowledgeReconciler_Reconcile_SkipRecentExtraction(t *testing.T) {
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			LastExtracted: metav1.NewTime(recentTime),
+			RawLength:     100, // Indicate that there is existing data
 		},
 	}
 
