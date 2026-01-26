@@ -1,4 +1,3 @@
-{{- $enableKVM := .Values.kvm.enabled | default false }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
@@ -71,37 +70,6 @@ spec:
     timeRange: "1200s" # 20 minutes
     interval: "300s" # 5 minutes
     resolution: "60s" # 1 minute
-{{- if $enableKVM }}
----
-apiVersion: cortex.cloud/v1alpha1
-kind: Datasource
-metadata:
-  name: kvm-libvirt-domain-steal-pct
-spec:
-  schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
-  {{- if .Values.prometheus.sso.enabled }}
-  ssoSecretRef:
-    name: cortex-nova-prometheus-sso
-    namespace: {{ .Release.Namespace }}
-  {{- end }}
-  type: prometheus
-  prometheus:
-    secretRef:
-      name: cortex-nova-prometheus
-      namespace: {{ .Release.Namespace }}
-    alias: kvm_libvirt_domain_steal_pct
-    # This metric is exported by https://github.com/cobaltcore-dev/kvm-monitoring
-    query: |
-      max by (domain) (rate(kvm_domain_libvirt_vcpu_delay_nanoseconds[5m])) / 1e9 * 100
-    type: kvm_libvirt_domain_metric
-    # It's ok to only look at a short time period here.
-    timeRange: "1200s" # 20 minutes
-    interval: "300s" # 5 minutes
-    resolution: "60s" # 1 minute
-{{- end }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Datasource

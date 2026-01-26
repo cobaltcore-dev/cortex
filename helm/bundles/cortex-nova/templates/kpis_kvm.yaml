@@ -1,0 +1,16 @@
+{{- if .Values.kvm.enabled }}
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: kvm-host-capacity
+spec:
+  schedulingDomain: nova
+  impl: kvm_host_capacity_kpi
+  dependencies:
+    knowledges:
+      - name: host-details
+      - name: host-utilization
+  description: |
+    This KPI tracks the total, utilized, reserved and failover capacity of KVM hosts.
+{{- end }}
