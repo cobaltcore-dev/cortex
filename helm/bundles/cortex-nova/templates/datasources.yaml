@@ -1,3 +1,4 @@
+{{- $enableKVM := .Values.kvm.enabled | default false }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
@@ -70,6 +71,7 @@ spec:
     timeRange: "1200s" # 20 minutes
     interval: "300s" # 5 minutes
     resolution: "60s" # 1 minute
+{{- if $enableKVM }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
@@ -99,6 +101,7 @@ spec:
     timeRange: "1200s" # 20 minutes
     interval: "300s" # 5 minutes
     resolution: "60s" # 1 minute
+{{- end }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Datasource

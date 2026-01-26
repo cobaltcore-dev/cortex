@@ -1,3 +1,4 @@
+{{- $enableKVM := .Values.kvm.enabled | default false }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
@@ -107,6 +108,7 @@ spec:
       - name: nova-flavors
   description: |
     This KPI tracks VM commitments based on project commitments and VM flavors.
+{{- if $enableKVM }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
@@ -121,6 +123,7 @@ spec:
       - name: host-utilization
   description: |
     This KPI tracks the total, utilized, reserved and failover capacity of KVM hosts.
+{{- end }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI

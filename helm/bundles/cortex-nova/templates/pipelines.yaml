@@ -1,4 +1,5 @@
 {{- $createDecisions := .Values.pipelines.createDecisions | default false }}
+{{- $enableKVM := .Values.kvm.enabled | default false }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -83,6 +84,7 @@ spec:
         maxCPUContentionActivationLowerBound: 0.0
         maxCPUContentionActivationUpperBound: -0.25
       mandatory: false
+{{- if $enableKVM }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -247,3 +249,4 @@ spec:
       opts:
         maxStealPctOverObservedTimeSpan: 20.0
       mandatory: false
+{{- end }}
