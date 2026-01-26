@@ -22,12 +22,3 @@ func (m *mockStep[RequestType]) Init(ctx context.Context, client client.Client, 
 func (m *mockStep[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
 	return m.RunFunc(traceLog, request)
 }
-
-type MockOptions struct {
-	Option1 string `json:"option1"`
-	Option2 int    `json:"option2"`
-}
-
-func (o MockOptions) Validate() error {
-	return nil
-}
