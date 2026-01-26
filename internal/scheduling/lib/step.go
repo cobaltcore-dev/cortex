@@ -83,7 +83,7 @@ func (s *BaseStep[RequestType, Opts]) Init(ctx context.Context, client client.Cl
 // Check if all knowledges are ready, and if not, return an error indicating why not.
 func (d *BaseStep[RequestType, Opts]) CheckKnowledges(ctx context.Context, kns ...corev1.ObjectReference) error {
 	if d.Client == nil {
-		return fmt.Errorf("kubernetes client not initialized")
+		return errors.New("kubernetes client not initialized")
 	}
 	for _, objRef := range kns {
 		knowledge := &v1alpha1.Knowledge{}

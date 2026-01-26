@@ -5,6 +5,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -37,7 +38,7 @@ func (d *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1
 // Check if all knowledges are ready, and if not, return an error indicating why not.
 func (d *Detector[PipelineType]) CheckKnowledges(ctx context.Context, kns ...corev1.ObjectReference) error {
 	if d.Client == nil {
-		return fmt.Errorf("kubernetes client not initialized")
+		return errors.New("kubernetes client not initialized")
 	}
 	for _, objRef := range kns {
 		knowledge := &v1alpha1.Knowledge{}
