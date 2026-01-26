@@ -96,7 +96,7 @@ spec:
                         The name of the scheduler step in the cortex implementation.
                         Must match to a step implemented by the pipeline controller.
                       type: string
-                    opts:
+                    params:
                       description: Additional configuration for the step that can
                         be used
                       type: object
@@ -130,7 +130,7 @@ spec:
                         The name of the scheduler step in the cortex implementation.
                         Must match to a step implemented by the pipeline controller.
                       type: string
-                    opts:
+                    params:
                       description: Additional configuration for the step that can
                         be used
                       type: object
@@ -181,7 +181,7 @@ spec:
                         The name of the scheduler step in the cortex implementation.
                         Must match to a step implemented by the pipeline controller.
                       type: string
-                    opts:
+                    params:
                       description: Additional configuration for the step that can
                         be used
                       type: object

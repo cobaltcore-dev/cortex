@@ -301,7 +301,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			filters: []v1alpha1.StepSpec{
 				{
 					Name: "filter_status_conditions",
-					Opts: runtime.RawExtension{
+					Params: runtime.RawExtension{
 						Raw: []byte(`{"scope":{"host_capabilities":{"any_of_trait_infixes":["TEST_TRAIT"]}}}`),
 					},
 				},
@@ -314,7 +314,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			filters: []v1alpha1.StepSpec{
 				{
 					Name: "filter_status_conditions",
-					Opts: runtime.RawExtension{
+					Params: runtime.RawExtension{
 						Raw: []byte(`invalid json`),
 					},
 				},

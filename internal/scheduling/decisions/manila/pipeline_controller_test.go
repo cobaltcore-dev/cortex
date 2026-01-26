@@ -493,7 +493,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			weighers: []v1alpha1.StepSpec{
 				{
 					Name: "netapp_cpu_usage_balancing",
-					Opts: runtime.RawExtension{
+					Params: runtime.RawExtension{
 						Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
 					},
 				},

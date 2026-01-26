@@ -28,7 +28,7 @@ type Detector[Opts any] struct {
 func (d *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
 	d.Client = client
 
-	opts := conf.NewRawOptsBytes(step.Opts.Raw)
+	opts := conf.NewRawOptsBytes(step.Params.Raw)
 	if err := d.Load(opts); err != nil {
 		return err
 	}

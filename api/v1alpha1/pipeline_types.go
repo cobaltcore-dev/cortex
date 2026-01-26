@@ -15,7 +15,7 @@ type StepSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Opts runtime.RawExtension `json:"opts,omitempty"`
+	Params runtime.RawExtension `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
