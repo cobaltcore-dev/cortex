@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,8 +36,19 @@ func (o VMwareAntiAffinityNoisyProjectsStepOpts) Validate() error {
 
 // Step to avoid noisy projects by downvoting the hosts they are running on.
 type VMwareAntiAffinityNoisyProjectsStep struct {
-	// Weigher is a helper struct that provides common functionality for all steps.
+	// BaseStep is a helper struct that provides common functionality for all steps.
 	lib.BaseStep[api.ExternalSchedulerRequest, VMwareAntiAffinityNoisyProjectsStepOpts]
+}
+
+// Initialize the step and validate that all required knowledges are ready.
+func (s *VMwareAntiAffinityNoisyProjectsStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+	if err := s.BaseStep.Init(ctx, client, step); err != nil {
+		return err
+	}
+	if err := s.CheckKnowledges(ctx, corev1.ObjectReference{Name: "vmware-project-noisiness"}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.

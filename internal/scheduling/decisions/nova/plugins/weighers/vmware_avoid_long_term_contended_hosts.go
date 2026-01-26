@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -44,8 +45,19 @@ func (o VMwareAvoidLongTermContendedHostsStepOpts) Validate() error {
 
 // Step to avoid long term contended hosts by downvoting them.
 type VMwareAvoidLongTermContendedHostsStep struct {
-	// Weigher is a helper struct that provides common functionality for all steps.
+	// BaseStep is a helper struct that provides common functionality for all steps.
 	lib.BaseStep[api.ExternalSchedulerRequest, VMwareAvoidLongTermContendedHostsStepOpts]
+}
+
+// Initialize the step and validate that all required knowledges are ready.
+func (s *VMwareAvoidLongTermContendedHostsStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+	if err := s.BaseStep.Init(ctx, client, step); err != nil {
+		return err
+	}
+	if err := s.CheckKnowledges(ctx, corev1.ObjectReference{Name: "vmware-long-term-contended-hosts"}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Downvote hosts that are highly contended.

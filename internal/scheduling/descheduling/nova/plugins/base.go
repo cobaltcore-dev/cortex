@@ -35,12 +35,11 @@ func (d *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1
 }
 
 // Check if all knowledges are ready, and if not, return an error indicating why not.
-func (d *Detector[PipelineType]) CheckAllKnowledgesReady(
-	ctx context.Context,
-	knowledges ...corev1.ObjectReference,
-) error {
-
-	for _, objRef := range knowledges {
+func (d *Detector[PipelineType]) CheckKnowledges(ctx context.Context, kns ...corev1.ObjectReference) error {
+	if d.Client == nil {
+		return fmt.Errorf("kubernetes client not initialized")
+	}
+	for _, objRef := range kns {
 		knowledge := &v1alpha1.Knowledge{}
 		if err := d.Client.Get(ctx, client.ObjectKey{
 			Name:      objRef.Name,
@@ -50,10 +49,7 @@ func (d *Detector[PipelineType]) CheckAllKnowledgesReady(
 		}
 		// Check if the knowledge status conditions indicate an error.
 		if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
-			return fmt.Errorf("knowledge %s not ready: %s",
-				objRef.Name,
-				meta.FindStatusCondition(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady).Message,
-			)
+			return fmt.Errorf("knowledge %s not ready", objRef.Name)
 		}
 		if knowledge.Status.RawLength == 0 {
 			return fmt.Errorf("knowledge %s not ready, no data available", objRef.Name)

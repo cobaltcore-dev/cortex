@@ -17,7 +17,9 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/sapcc/go-bits/must"
 
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -465,14 +467,16 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 }
 
 func TestDecisionPipelineController_InitPipeline(t *testing.T) {
-	controller := &DecisionPipelineController{
-		Monitor: lib.PipelineMonitor{},
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
 	}
 
 	tests := []struct {
 		name                   string
 		filters                []v1alpha1.StepSpec
 		weighers               []v1alpha1.StepSpec
+		knowledges             []client.Object
 		expectNonCriticalError bool
 		expectCriticalError    bool
 	}{
@@ -480,6 +484,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 			name:                   "empty steps",
 			filters:                []v1alpha1.StepSpec{},
 			weighers:               []v1alpha1.StepSpec{},
+			knowledges:             []client.Object{},
 			expectNonCriticalError: false,
 			expectCriticalError:    false,
 		},
@@ -490,6 +495,34 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 					Name: "netapp_cpu_usage_balancing",
 					Opts: runtime.RawExtension{
 						Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
+					},
+				},
+			},
+			knowledges: []client.Object{
+				&v1alpha1.Knowledge{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "netapp-storage-pool-cpu-usage-manila",
+					},
+					Status: v1alpha1.KnowledgeStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   v1alpha1.KnowledgeConditionReady,
+								Status: metav1.ConditionTrue,
+							},
+						},
+						Raw: must.Return(v1alpha1.BoxFeatureList([]storage.StoragePoolCPUUsage{
+							{
+								StoragePoolName: "manila-share-1@backend1",
+								AvgCPUUsagePct:  50,
+								MaxCPUUsagePct:  80,
+							},
+							{
+								StoragePoolName: "manila-share-2@backend2",
+								AvgCPUUsagePct:  20,
+								MaxCPUUsagePct:  40,
+							},
+						})),
+						RawLength: 2,
 					},
 				},
 			},
@@ -510,6 +543,16 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.knowledges...).
+				WithStatusSubresource(&v1alpha1.Decision{}).
+				Build()
+			controller := &DecisionPipelineController{
+				Monitor: lib.PipelineMonitor{},
+			}
+			controller.Client = client // Through basepipelinecontroller
+
 			initResult := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-pipeline",

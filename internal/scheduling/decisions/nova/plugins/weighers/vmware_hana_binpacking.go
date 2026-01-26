@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -34,8 +35,22 @@ func (o VMwareHanaBinpackingStepOpts) Validate() error {
 
 // Step to balance VMs on hosts based on the host's available resources.
 type VMwareHanaBinpackingStep struct {
-	// Weigher is a helper struct that provides common functionality for all steps.
+	// BaseStep is a helper struct that provides common functionality for all steps.
 	lib.BaseStep[api.ExternalSchedulerRequest, VMwareHanaBinpackingStepOpts]
+}
+
+// Initialize the step and validate that all required knowledges are ready.
+func (s *VMwareHanaBinpackingStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+	if err := s.BaseStep.Init(ctx, client, step); err != nil {
+		return err
+	}
+	if err := s.CheckKnowledges(ctx,
+		corev1.ObjectReference{Name: "host-utilization"},
+		corev1.ObjectReference{Name: "host-capabilities"},
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Pack VMs on hosts based on their flavor.
