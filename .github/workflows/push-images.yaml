@@ -49,6 +49,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
             latest
+        env:
+          DOCKER_METADATA_SHORT_SHA_LENGTH: 8
       - name: Build and Push Cortex Postgres
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
         id: push_cortex_postgres
@@ -81,6 +83,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
             latest
+        env:
+          DOCKER_METADATA_SHORT_SHA_LENGTH: 8
       - name: Build and Push Cortex
         id: push_cortex
         uses: docker/build-push-action@v6
