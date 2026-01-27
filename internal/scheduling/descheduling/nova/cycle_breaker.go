@@ -12,21 +12,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type cycleDetector struct {
+type cycleBreaker struct {
 	// Nova API to get needed information for cycle detection.
 	novaAPI NovaAPI
 }
 
-func NewCycleDetector() lib.CycleDetector[plugins.VMDetection] {
-	return &cycleDetector{novaAPI: NewNovaAPI()}
+func NewCycleBreaker() lib.CycleBreaker[plugins.VMDetection] {
+	return &cycleBreaker{novaAPI: NewNovaAPI()}
 }
 
 // Initialize the cycle detector.
-func (c *cycleDetector) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (c *cycleBreaker) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return c.novaAPI.Init(ctx, client, conf)
 }
 
-func (c *cycleDetector) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
+func (c *cycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	keep := make(map[string]struct{}, len(decisions))
 	for _, decision := range decisions {
 		// Get the migrations for the VM.

@@ -18,13 +18,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-type mockCycleDetector struct{}
+type mockCycleBreaker struct{}
 
-func (m *mockCycleDetector) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockCycleBreaker) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return nil
 }
 
-func (m *mockCycleDetector) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
+func (m *mockCycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	return decisions, nil
 }
 
@@ -75,13 +75,13 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			controller := &DeschedulingsPipelineController{
-				Monitor:       lib.NewDetectorPipelineMonitor(),
-				CycleDetector: &mockCycleDetector{},
+				Monitor:      lib.NewDetectorPipelineMonitor(),
+				CycleBreaker: &mockCycleBreaker{},
 			}
 
 			pipeline := lib.DetectorPipeline[plugins.VMDetection]{
-				CycleDetector: controller.CycleDetector,
-				Monitor:       controller.Monitor,
+				CycleBreaker: controller.CycleBreaker,
+				Monitor:      controller.Monitor,
 			}
 			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.steps, map[string]lib.Detector[plugins.VMDetection]{
 				"mock-step": &mockControllerStep{},
@@ -107,7 +107,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 				}
 			}
 
-			if pipeline.CycleDetector != controller.CycleDetector {
+			if pipeline.CycleBreaker != controller.CycleBreaker {
 				t.Error("expected pipeline to have cycle detector set")
 			}
 

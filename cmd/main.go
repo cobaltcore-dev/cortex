@@ -312,9 +312,9 @@ func main() {
 		monitor := schedulinglib.NewDetectorPipelineMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
-			Monitor:       monitor,
-			Conf:          config,
-			CycleDetector: deschedulingnova.NewCycleDetector(),
+			Monitor:      monitor,
+			Conf:         config,
+			CycleBreaker: deschedulingnova.NewCycleBreaker(),
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = multiclusterClient

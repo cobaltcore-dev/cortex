@@ -13,24 +13,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type mockCycleDetectorNovaAPI struct {
+type mockCycleBreakerNovaAPI struct {
 	migrations map[string][]migration
 	getError   error
 }
 
-func (m *mockCycleDetectorNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockCycleBreakerNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return nil
 }
 
-func (m *mockCycleDetectorNovaAPI) Get(ctx context.Context, id string) (server, error) {
+func (m *mockCycleBreakerNovaAPI) Get(ctx context.Context, id string) (server, error) {
 	return server{}, errors.New("not implemented")
 }
 
-func (m *mockCycleDetectorNovaAPI) LiveMigrate(ctx context.Context, id string) error {
+func (m *mockCycleBreakerNovaAPI) LiveMigrate(ctx context.Context, id string) error {
 	return errors.New("not implemented")
 }
 
-func (m *mockCycleDetectorNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
+func (m *mockCycleBreakerNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
 	if m.getError != nil {
 		return nil, m.getError
 	}
@@ -40,7 +40,7 @@ func (m *mockCycleDetectorNovaAPI) GetServerMigrations(ctx context.Context, id s
 	return []migration{}, nil
 }
 
-func TestCycleDetector_Filter(t *testing.T) {
+func TestCycleBreaker_Filter(t *testing.T) {
 	tests := []struct {
 		name       string
 		decisions  []plugins.VMDetection
@@ -170,7 +170,7 @@ func TestCycleDetector_Filter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockAPI := &mockCycleDetectorNovaAPI{
+			mockAPI := &mockCycleBreakerNovaAPI{
 				migrations: tt.migrations,
 			}
 
@@ -178,7 +178,7 @@ func TestCycleDetector_Filter(t *testing.T) {
 				mockAPI.getError = errors.New("API error")
 			}
 
-			detector := cycleDetector{novaAPI: mockAPI}
+			detector := cycleBreaker{novaAPI: mockAPI}
 
 			ctx := context.Background()
 			result, err := detector.Filter(ctx, tt.decisions)
@@ -227,12 +227,12 @@ func TestCycleDetector_Filter(t *testing.T) {
 	}
 }
 
-func TestCycleDetector_Filter_EmptyVMDetections(t *testing.T) {
-	mockAPI := &mockCycleDetectorNovaAPI{
+func TestCycleBreaker_Filter_EmptyVMDetections(t *testing.T) {
+	mockAPI := &mockCycleBreakerNovaAPI{
 		migrations: map[string][]migration{},
 	}
 
-	detector := cycleDetector{novaAPI: mockAPI}
+	detector := cycleBreaker{novaAPI: mockAPI}
 
 	ctx := context.Background()
 	result, err := detector.Filter(ctx, []plugins.VMDetection{})
