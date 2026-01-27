@@ -23,9 +23,9 @@ func (f *NodeAffinityFilter) Init(ctx context.Context, client client.Client, ste
 	return nil
 }
 
-func (NodeAffinityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.StepResult, error) {
+func (NodeAffinityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
-	stats := make(map[string]lib.StepStatistics)
+	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 
 	for _, node := range request.Nodes {
 		if matchesNodeAffinity(node, request.Pod) {
@@ -33,7 +33,7 @@ func (NodeAffinityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineReq
 		}
 	}
 
-	return &lib.StepResult{Activations: activations, Statistics: stats}, nil
+	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
 }
 
 func matchesNodeAffinity(node corev1.Node, pod corev1.Pod) bool {

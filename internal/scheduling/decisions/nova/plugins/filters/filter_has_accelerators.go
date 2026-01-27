@@ -14,11 +14,11 @@ import (
 )
 
 type FilterHasAcceleratorsStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // If requested, only get hosts with accelerators.
-func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if _, ok := extraSpecs["accel:device_profile"]; !ok {

@@ -13,11 +13,11 @@ import (
 )
 
 type FilterCorrectAZStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Only get hosts in the requested az.
-func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.AvailabilityZone == "" {
 		traceLog.Info("no availability zone requested, skipping filter_correct_az step")

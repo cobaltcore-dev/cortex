@@ -71,7 +71,7 @@ func (r ExternalSchedulerRequest) GetTraceLogArgs() []slog.Attr {
 		slog.String("project", r.Context.ProjectID),
 	}
 }
-func (r ExternalSchedulerRequest) FilterSubjects(includedSubjects map[string]float64) lib.PipelineRequest {
+func (r ExternalSchedulerRequest) FilterSubjects(includedSubjects map[string]float64) lib.FilterWeigherPipelineRequest {
 	filteredHosts := make([]ExternalSchedulerHost, 0, len(includedSubjects))
 	for _, host := range r.Hosts {
 		if _, exists := includedSubjects[host.ComputeHost]; exists {

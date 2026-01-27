@@ -12,13 +12,13 @@ import (
 )
 
 type FilterHostInstructionsStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Filter hosts based on instructions given in the request spec. Supported are:
 // - spec.ignore_hosts: Filter out all hosts in this list.
 // - spec.force_hosts: Include only hosts in this list.
-func (s *FilterHostInstructionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *FilterHostInstructionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.IgnoreHosts != nil {
 		for _, host := range *request.Spec.Data.IgnoreHosts {

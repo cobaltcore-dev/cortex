@@ -121,15 +121,15 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Build()
 
 			controller := &DecisionPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.Pipeline[ironcore.MachinePipelineRequest]]{
-					Pipelines: map[string]lib.Pipeline[ironcore.MachinePipelineRequest]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]]{
+					Pipelines: map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{
 						"machines-scheduler": createMockPipeline(),
 					},
 				},
 				Conf: conf.Config{
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 				},
-				Monitor: lib.PipelineMonitor{},
+				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
 			controller.Client = client
 
@@ -206,7 +206,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 
 func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 	controller := &DecisionPipelineController{
-		Monitor: lib.PipelineMonitor{},
+		Monitor: lib.FilterWeigherPipelineMonitor{},
 	}
 
 	tests := []struct {
@@ -427,14 +427,14 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 				Build()
 
 			controller := &DecisionPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.Pipeline[ironcore.MachinePipelineRequest]]{
-					Pipelines:       map[string]lib.Pipeline[ironcore.MachinePipelineRequest]{},
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]]{
+					Pipelines:       map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
 				},
 				Conf: conf.Config{
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 				},
-				Monitor: lib.PipelineMonitor{},
+				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
 			controller.Client = client
 
@@ -548,7 +548,7 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 }
 
 // Helper function to create a mock pipeline that works with the ironcore types
-func createMockPipeline() lib.Pipeline[ironcore.MachinePipelineRequest] {
+func createMockPipeline() lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest] {
 	return &mockMachinePipeline{}
 }
 

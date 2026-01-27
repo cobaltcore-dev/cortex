@@ -118,15 +118,15 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Build()
 
 			controller := &DecisionPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.Pipeline[pods.PodPipelineRequest]]{
-					Pipelines: map[string]lib.Pipeline[pods.PodPipelineRequest]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[pods.PodPipelineRequest]]{
+					Pipelines: map[string]lib.FilterWeigherPipeline[pods.PodPipelineRequest]{
 						"pods-scheduler": createMockPodPipeline(),
 					},
 				},
 				Conf: conf.Config{
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 				},
-				Monitor: lib.PipelineMonitor{},
+				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
 			controller.Client = client
 
@@ -181,7 +181,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 
 func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 	controller := &DecisionPipelineController{
-		Monitor: lib.PipelineMonitor{},
+		Monitor: lib.FilterWeigherPipelineMonitor{},
 	}
 
 	tests := []struct {
@@ -407,14 +407,14 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 				Build()
 
 			controller := &DecisionPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.Pipeline[pods.PodPipelineRequest]]{
-					Pipelines:       map[string]lib.Pipeline[pods.PodPipelineRequest]{},
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[pods.PodPipelineRequest]]{
+					Pipelines:       map[string]lib.FilterWeigherPipeline[pods.PodPipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
 				},
 				Conf: conf.Config{
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 				},
-				Monitor: lib.PipelineMonitor{},
+				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
 			controller.Client = client
 
@@ -526,7 +526,7 @@ func TestDecisionPipelineController_ProcessNewPod(t *testing.T) {
 }
 
 // Helper function to create a mock pipeline that works with the pod types
-func createMockPodPipeline() lib.Pipeline[pods.PodPipelineRequest] {
+func createMockPodPipeline() lib.FilterWeigherPipeline[pods.PodPipelineRequest] {
 	return &mockPodPipeline{}
 }
 

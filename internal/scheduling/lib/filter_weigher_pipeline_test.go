@@ -9,14 +9,19 @@ import (
 	"testing"
 )
 
+// Mock pipeline type for testing
+type mockPipeline struct {
+	name string
+}
+
 func TestPipeline_Run(t *testing.T) {
 	// Create an instance of the pipeline with a mock step
-	pipeline := &filterWeigherPipeline[mockPipelineRequest]{
-		filters: map[string]Filter[mockPipelineRequest]{
-			"mock_filter": &mockFilter[mockPipelineRequest]{
-				RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+	pipeline := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{
+		filters: map[string]Filter[mockFilterWeigherPipelineRequest]{
+			"mock_filter": &mockFilter[mockFilterWeigherPipelineRequest]{
+				RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 					// Filter out host3
-					return &StepResult{
+					return &FilterWeigherPipelineStepResult{
 						Activations: map[string]float64{
 							"host1": 0.0,
 							"host2": 0.0,
@@ -26,16 +31,16 @@ func TestPipeline_Run(t *testing.T) {
 			},
 		},
 		filtersOrder: []string{"mock_filter"},
-		weighers: map[string]Weigher[mockPipelineRequest]{
-			"mock_weigher": &mockWeigher[mockPipelineRequest]{
-				RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+		weighers: map[string]Weigher[mockFilterWeigherPipelineRequest]{
+			"mock_weigher": &mockWeigher[mockFilterWeigherPipelineRequest]{
+				RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 					// Assign weights to hosts
 					activations := map[string]float64{
 						"host1": 0.5,
 						"host2": 1.0,
 						"host3": -0.5,
 					}
-					return &StepResult{
+					return &FilterWeigherPipelineStepResult{
 						Activations: activations,
 					}, nil
 				},
@@ -46,12 +51,12 @@ func TestPipeline_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        mockPipelineRequest
+		request        mockFilterWeigherPipelineRequest
 		expectedResult []string
 	}{
 		{
 			name: "Single step pipeline",
-			request: mockPipelineRequest{
+			request: mockFilterWeigherPipelineRequest{
 				Subjects: []string{"host1", "host2", "host3"},
 				Weights:  map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 			},
@@ -78,7 +83,7 @@ func TestPipeline_Run(t *testing.T) {
 }
 
 func TestPipeline_NormalizeNovaWeights(t *testing.T) {
-	p := &filterWeigherPipeline[mockPipelineRequest]{}
+	p := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{}
 
 	tests := []struct {
 		name     string
@@ -113,8 +118,8 @@ func TestPipeline_NormalizeNovaWeights(t *testing.T) {
 }
 
 func TestPipeline_ApplyStepWeights(t *testing.T) {
-	p := &filterWeigherPipeline[mockPipelineRequest]{
-		weighers:      map[string]Weigher[mockPipelineRequest]{},
+	p := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{
+		weighers:      map[string]Weigher[mockFilterWeigherPipelineRequest]{},
 		weighersOrder: []string{"step1", "step2"},
 	}
 
@@ -154,7 +159,7 @@ func TestPipeline_ApplyStepWeights(t *testing.T) {
 }
 
 func TestPipeline_SortHostsByWeights(t *testing.T) {
-	p := &filterWeigherPipeline[mockPipelineRequest]{}
+	p := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{}
 
 	tests := []struct {
 		name     string
@@ -185,10 +190,10 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 }
 
 func TestPipeline_RunFilters(t *testing.T) {
-	mockStep := &mockFilter[mockPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+	mockStep := &mockFilter[mockFilterWeigherPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			// Filter out host3
-			return &StepResult{
+			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
 					"host1": 0.0,
 					"host2": 0.0,
@@ -196,16 +201,16 @@ func TestPipeline_RunFilters(t *testing.T) {
 			}, nil
 		},
 	}
-	p := &filterWeigherPipeline[mockPipelineRequest]{
+	p := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{
 		filtersOrder: []string{
 			"mock_filter",
 		},
-		filters: map[string]Filter[mockPipelineRequest]{
+		filters: map[string]Filter[mockFilterWeigherPipelineRequest]{
 			"mock_filter": mockStep,
 		},
 	}
 
-	request := mockPipelineRequest{
+	request := mockFilterWeigherPipelineRequest{
 		Subjects: []string{"host1", "host2"},
 		Weights:  map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 	}

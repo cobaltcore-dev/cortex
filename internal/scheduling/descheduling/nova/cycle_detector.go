@@ -7,23 +7,17 @@ import (
 	"context"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-type CycleDetector interface {
-	// Initialize the cycle detector with needed clients.
-	Init(ctx context.Context, client client.Client, conf conf.Config) error
-	// Filter descheduling decisions to avoid cycles.
-	Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error)
-}
 
 type cycleDetector struct {
 	// Nova API to get needed information for cycle detection.
 	novaAPI NovaAPI
 }
 
-func NewCycleDetector() CycleDetector {
+func NewCycleDetector() lib.CycleDetector[plugins.VMDetection] {
 	return &cycleDetector{novaAPI: NewNovaAPI()}
 }
 
@@ -32,7 +26,7 @@ func (c *cycleDetector) Init(ctx context.Context, client client.Client, conf con
 	return c.novaAPI.Init(ctx, client, conf)
 }
 
-func (c *cycleDetector) Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error) {
+func (c *cycleDetector) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	keep := make(map[string]struct{}, len(decisions))
 	for _, decision := range decisions {
 		// Get the migrations for the VM.
@@ -59,7 +53,7 @@ func (c *cycleDetector) Filter(ctx context.Context, decisions []plugins.Decision
 			keep[decision.VMID] = struct{}{}
 		}
 	}
-	var output []plugins.Decision
+	var output []plugins.VMDetection
 	for _, decision := range decisions {
 		if _, ok := keep[decision.VMID]; ok {
 			output = append(output, decision)

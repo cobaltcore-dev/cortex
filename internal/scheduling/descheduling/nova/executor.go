@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 
@@ -35,7 +37,7 @@ type Executor struct {
 	// Configuration for the descheduler.
 	Conf conf.Config
 	// Monitor for tracking the descheduler execution.
-	Monitor Monitor
+	Monitor lib.DetectorMonitor[plugins.VMDetection]
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

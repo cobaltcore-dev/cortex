@@ -13,11 +13,11 @@ import (
 )
 
 type FilterMaintenanceStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Check that the maintenance spec of the hypervisor doesn't prevent scheduling.
-func (s *FilterMaintenanceStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *FilterMaintenanceStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	hvs := &hv1.HypervisorList{}

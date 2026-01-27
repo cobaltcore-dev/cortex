@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package nova
+package lib
 
 import (
 	"context"
@@ -9,15 +9,14 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestNewPipelineMonitor(t *testing.T) {
-	monitor := NewPipelineMonitor()
+func TestNewDetectorPipelineMonitor(t *testing.T) {
+	monitor := NewDetectorPipelineMonitor()
 
 	if monitor.stepRunTimer == nil {
 		t.Error("expected stepRunTimer to be initialized")
@@ -34,7 +33,7 @@ func TestNewPipelineMonitor(t *testing.T) {
 }
 
 func TestMonitor_Describe(t *testing.T) {
-	monitor := NewPipelineMonitor()
+	monitor := NewDetectorPipelineMonitor()
 	descs := make(chan *prometheus.Desc, 10)
 
 	go func() {
@@ -53,7 +52,7 @@ func TestMonitor_Describe(t *testing.T) {
 }
 
 func TestMonitor_Collect(t *testing.T) {
-	monitor := NewPipelineMonitor()
+	monitor := NewDetectorPipelineMonitor()
 	metrics := make(chan prometheus.Metric, 10)
 
 	go func() {
@@ -73,7 +72,7 @@ func TestMonitor_Collect(t *testing.T) {
 }
 
 type mockMonitorStep struct {
-	decisions  []plugins.Decision
+	decisions  []mockDetection
 	initError  error
 	runError   error
 	initCalled bool
@@ -85,21 +84,21 @@ func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v
 	return m.initError
 }
 
-func (m *mockMonitorStep) Run() ([]plugins.Decision, error) {
+func (m *mockMonitorStep) Run() ([]mockDetection, error) {
 	m.runCalled = true
 	return m.decisions, m.runError
 }
 
 func TestMonitorStep(t *testing.T) {
-	monitor := NewPipelineMonitor()
+	monitor := NewDetectorPipelineMonitor()
 	step := &mockMonitorStep{
-		decisions: []plugins.Decision{
-			{VMID: "vm1", Reason: "test"},
+		decisions: []mockDetection{
+			{resource: "vm1", reason: "test"},
 		},
 	}
 	conf := v1alpha1.DetectorSpec{Name: "test-step"}
 
-	monitoredStep := monitorStep(step, conf, monitor)
+	monitoredStep := monitorDetector(step, conf, monitor)
 
 	if monitoredStep.step != step {
 		t.Error("expected wrapped step to be preserved")
@@ -115,11 +114,11 @@ func TestMonitorStep(t *testing.T) {
 }
 
 func TestStepMonitor_Init(t *testing.T) {
-	monitor := NewPipelineMonitor()
+	monitor := NewDetectorPipelineMonitor()
 	step := &mockMonitorStep{}
 	conf := v1alpha1.DetectorSpec{Name: "test-step"}
 
-	monitoredStep := monitorStep(step, conf, monitor)
+	monitoredStep := monitorDetector(step, conf, monitor)
 
 	client := fake.NewClientBuilder().Build()
 	err := monitoredStep.Init(context.Background(), client, conf)
@@ -134,13 +133,13 @@ func TestStepMonitor_Init(t *testing.T) {
 }
 
 func TestStepMonitor_Init_WithError(t *testing.T) {
-	monitor := NewPipelineMonitor()
+	monitor := NewDetectorPipelineMonitor()
 	expectedErr := errors.New("init failed")
 	step := &mockMonitorStep{
 		initError: expectedErr,
 	}
 	conf := v1alpha1.DetectorSpec{Name: "test-step"}
-	monitoredStep := monitorStep(step, conf, monitor)
+	monitoredStep := monitorDetector(step, conf, monitor)
 
 	client := fake.NewClientBuilder().Build()
 	err := monitoredStep.Init(context.Background(), client, conf)
@@ -151,16 +150,16 @@ func TestStepMonitor_Init_WithError(t *testing.T) {
 }
 
 func TestStepMonitor_Run(t *testing.T) {
-	monitor := NewPipelineMonitor()
-	decisions := []plugins.Decision{
-		{VMID: "vm1", Reason: "test1"},
-		{VMID: "vm2", Reason: "test2"},
+	monitor := NewDetectorPipelineMonitor()
+	decisions := []mockDetection{
+		{resource: "vm1", reason: "test1"},
+		{resource: "vm2", reason: "test2"},
 	}
 	step := &mockMonitorStep{
 		decisions: decisions,
 	}
 	conf := v1alpha1.DetectorSpec{Name: "test-step"}
-	monitoredStep := monitorStep(step, conf, monitor)
+	monitoredStep := monitorDetector(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
 
@@ -184,13 +183,13 @@ func TestStepMonitor_Run(t *testing.T) {
 }
 
 func TestStepMonitor_Run_WithError(t *testing.T) {
-	monitor := NewPipelineMonitor()
+	monitor := NewDetectorPipelineMonitor()
 	expectedErr := errors.New("run failed")
 	step := &mockMonitorStep{
 		runError: expectedErr,
 	}
 	conf := v1alpha1.DetectorSpec{Name: "test-step"}
-	monitoredStep := monitorStep(step, conf, monitor)
+	monitoredStep := monitorDetector(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
 
@@ -210,12 +209,12 @@ func TestStepMonitor_Run_WithError(t *testing.T) {
 }
 
 func TestStepMonitor_Run_EmptyResult(t *testing.T) {
-	monitor := NewPipelineMonitor()
+	monitor := NewDetectorPipelineMonitor()
 	step := &mockMonitorStep{
-		decisions: []plugins.Decision{}, // Empty slice
+		decisions: []mockDetection{}, // Empty slice
 	}
 	conf := v1alpha1.DetectorSpec{Name: "test-step"}
-	monitoredStep := monitorStep(step, conf, monitor)
+	monitoredStep := monitorDetector(step, conf, monitor)
 
 	result, err := monitoredStep.Run()
 
@@ -236,14 +235,14 @@ func TestStepMonitor_Run_EmptyResult(t *testing.T) {
 
 func TestMonitorStep_WithNilMonitor(t *testing.T) {
 	// Test with empty monitor (nil fields)
-	monitor := Monitor{}
+	monitor := DetectorPipelineMonitor{}
 	step := &mockMonitorStep{
-		decisions: []plugins.Decision{
-			{VMID: "vm1", Reason: "test"},
+		decisions: []mockDetection{
+			{resource: "vm1", reason: "test"},
 		},
 	}
 	conf := v1alpha1.DetectorSpec{Name: "test-step"}
-	monitoredStep := monitorStep(step, conf, monitor)
+	monitoredStep := monitorDetector(step, conf, monitor)
 
 	// Should not panic with nil timers/counters
 	result, err := monitoredStep.Run()

@@ -61,7 +61,7 @@ func (s *VMwareAvoidLongTermContendedHostsStep) Init(ctx context.Context, client
 }
 
 // Downvote hosts that are highly contended.
-func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	if !request.VMware {

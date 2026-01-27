@@ -12,18 +12,18 @@ import (
 )
 
 // Wraps a scheduler weigher to monitor its execution.
-type WeigherMonitor[RequestType PipelineRequest] struct {
+type WeigherMonitor[RequestType FilterWeigherPipelineRequest] struct {
 	// The weigher to monitor.
 	weigher Weigher[RequestType]
 	// The monitor tracking the step's execution.
-	monitor *StepMonitor[RequestType]
+	monitor *FilterWeigherPipelineStepMonitor[RequestType]
 }
 
 // Wrap the given weigher with a monitor.
-func monitorWeigher[RequestType PipelineRequest](
+func monitorWeigher[RequestType FilterWeigherPipelineRequest](
 	weigher Weigher[RequestType],
 	stepName string,
-	m PipelineMonitor,
+	m FilterWeigherPipelineMonitor,
 ) *WeigherMonitor[RequestType] {
 
 	return &WeigherMonitor[RequestType]{
@@ -38,6 +38,6 @@ func (wm *WeigherMonitor[RequestType]) Init(ctx context.Context, client client.C
 }
 
 // Run the weigher and observe its execution.
-func (wm *WeigherMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+func (wm *WeigherMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	return wm.monitor.RunWrapped(traceLog, request, wm.weigher)
 }

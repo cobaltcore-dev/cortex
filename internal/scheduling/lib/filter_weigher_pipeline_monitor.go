@@ -8,7 +8,7 @@ import (
 )
 
 // Collection of Prometheus metrics to monitor scheduler pipeline
-type PipelineMonitor struct {
+type FilterWeigherPipelineMonitor struct {
 	// The pipeline name is used to differentiate between different pipelines.
 	PipelineName string
 
@@ -33,7 +33,7 @@ type PipelineMonitor struct {
 }
 
 // Create a new scheduler monitor and register the necessary Prometheus metrics.
-func NewPipelineMonitor() PipelineMonitor {
+func NewPipelineMonitor() FilterWeigherPipelineMonitor {
 	buckets := []float64{}
 	buckets = append(buckets, prometheus.LinearBuckets(0, 1, 10)...)
 	buckets = append(buckets, prometheus.LinearBuckets(10, 10, 4)...)
@@ -43,7 +43,7 @@ func NewPipelineMonitor() PipelineMonitor {
 		Help:    "From which index of the subject list the subject came from originally.",
 		Buckets: buckets,
 	}, []string{"pipeline", "step", "outidx"})
-	return PipelineMonitor{
+	return FilterWeigherPipelineMonitor{
 		stepRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
 			Help:    "Duration of scheduler pipeline step run",
@@ -87,14 +87,14 @@ func NewPipelineMonitor() PipelineMonitor {
 }
 
 // Get a copied pipeline monitor with the name set, after binding the metrics.
-func (m PipelineMonitor) SubPipeline(name string) PipelineMonitor {
+func (m FilterWeigherPipelineMonitor) SubPipeline(name string) FilterWeigherPipelineMonitor {
 	cp := m
 	cp.PipelineName = name
 	return cp
 }
 
 // Observe a scheduler pipeline result: subjects going in, and subjects going out.
-func (m *PipelineMonitor) observePipelineResult(request PipelineRequest, result []string) {
+func (m *FilterWeigherPipelineMonitor) observePipelineResult(request FilterWeigherPipelineRequest, result []string) {
 	// Observe the number of subjects going into the scheduler pipeline.
 	if m.subjectNumberInObserver != nil {
 		m.subjectNumberInObserver.
@@ -115,7 +115,7 @@ func (m *PipelineMonitor) observePipelineResult(request PipelineRequest, result 
 	}
 }
 
-func (m *PipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
+func (m *FilterWeigherPipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.stepRunTimer.Describe(ch)
 	m.stepSubjectWeight.Describe(ch)
 	m.stepRemovedSubjectsObserver.Describe(ch)
@@ -127,7 +127,7 @@ func (m *PipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.requestCounter.Describe(ch)
 }
 
-func (m *PipelineMonitor) Collect(ch chan<- prometheus.Metric) {
+func (m *FilterWeigherPipelineMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.stepRunTimer.Collect(ch)
 	m.stepSubjectWeight.Collect(ch)
 	m.stepRemovedSubjectsObserver.Collect(ch)

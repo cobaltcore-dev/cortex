@@ -12,8 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// Decision represents a descheduling decision for testing
-type Decision struct {
+// VMDetection represents a descheduling decision for testing
+type VMDetection struct {
 	VMID   string
 	Reason string
 	Host   string
@@ -26,12 +26,12 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		threshold         float64
-		features          []compute.LibvirtDomainCPUStealPct
-		expectedDecisions int
-		expectedVMs       []string
-		expectSkip        bool
+		name                 string
+		threshold            float64
+		features             []compute.LibvirtDomainCPUStealPct
+		expectedVMDetections int
+		expectedVMs          []string
+		expectSkip           bool
 	}{
 		{
 			name:       "skip when threshold is zero",
@@ -46,9 +46,9 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			expectSkip: true,
 		},
 		{
-			name:              "no VMs above threshold",
-			threshold:         80.0,
-			expectedDecisions: 0,
+			name:                 "no VMs above threshold",
+			threshold:            80.0,
+			expectedVMDetections: 0,
 			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 50.0},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.0},
@@ -56,10 +56,10 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			},
 		},
 		{
-			name:              "some VMs above threshold",
-			threshold:         70.0,
-			expectedDecisions: 2,
-			expectedVMs:       []string{"vm-2", "vm-4"},
+			name:                 "some VMs above threshold",
+			threshold:            70.0,
+			expectedVMDetections: 2,
+			expectedVMs:          []string{"vm-2", "vm-4"},
 			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 50.0},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.0},
@@ -68,10 +68,10 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			},
 		},
 		{
-			name:              "all VMs above threshold",
-			threshold:         40.0,
-			expectedDecisions: 3,
-			expectedVMs:       []string{"vm-1", "vm-2", "vm-3"},
+			name:                 "all VMs above threshold",
+			threshold:            40.0,
+			expectedVMDetections: 3,
+			expectedVMs:          []string{"vm-1", "vm-2", "vm-3"},
 			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 50.0},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.0},
@@ -79,10 +79,10 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			},
 		},
 		{
-			name:              "VM exactly at threshold (should not be selected)",
-			threshold:         75.0,
-			expectedDecisions: 1,
-			expectedVMs:       []string{"vm-3"},
+			name:                 "VM exactly at threshold (should not be selected)",
+			threshold:            75.0,
+			expectedVMDetections: 1,
+			expectedVMs:          []string{"vm-3"},
 			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 50.0},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.0}, // exactly at threshold
@@ -90,16 +90,16 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			},
 		},
 		{
-			name:              "empty database",
-			threshold:         50.0,
-			expectedDecisions: 0,
-			features:          []compute.LibvirtDomainCPUStealPct{},
+			name:                 "empty database",
+			threshold:            50.0,
+			expectedVMDetections: 0,
+			features:             []compute.LibvirtDomainCPUStealPct{},
 		},
 		{
-			name:              "high precision values",
-			threshold:         75.555,
-			expectedDecisions: 1,
-			expectedVMs:       []string{"vm-2"},
+			name:                 "high precision values",
+			threshold:            75.555,
+			expectedVMDetections: 1,
+			expectedVMs:          []string{"vm-2"},
 			features: []compute.LibvirtDomainCPUStealPct{
 				{InstanceUUID: "vm-1", Host: "host1", MaxStealTimePct: 75.554},
 				{InstanceUUID: "vm-2", Host: "host2", MaxStealTimePct: 75.556},
@@ -138,8 +138,8 @@ func TestAvoidHighStealPctStep_Run(t *testing.T) {
 			}
 
 			// Check number of decisions
-			if len(decisions) != tt.expectedDecisions {
-				t.Errorf("expected %d decisions, got %d", tt.expectedDecisions, len(decisions))
+			if len(decisions) != tt.expectedVMDetections {
+				t.Errorf("expected %d decisions, got %d", tt.expectedVMDetections, len(decisions))
 			}
 
 			// Check that the correct VMs were selected

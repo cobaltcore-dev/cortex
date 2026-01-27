@@ -22,9 +22,9 @@ func (f *NodeAvailableFilter) Init(ctx context.Context, client client.Client, st
 	return nil
 }
 
-func (NodeAvailableFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.StepResult, error) {
+func (NodeAvailableFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
-	stats := make(map[string]lib.StepStatistics)
+	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 
 	for _, node := range request.Nodes {
 		if isNodeHealthy(node) && isNodeSchedulable(node) {
@@ -32,7 +32,7 @@ func (NodeAvailableFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRe
 		}
 	}
 
-	return &lib.StepResult{Activations: activations, Statistics: stats}, nil
+	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
 }
 
 func isNodeHealthy(node corev1.Node) bool {

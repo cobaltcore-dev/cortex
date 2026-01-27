@@ -309,7 +309,7 @@ func main() {
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
-		monitor := deschedulingnova.NewPipelineMonitor()
+		monitor := schedulinglib.NewDetectorPipelineMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
 			Monitor:       monitor,

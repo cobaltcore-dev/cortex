@@ -15,7 +15,7 @@ import (
 )
 
 type FilterLiveMigratableStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Check if the encountered request spec is a live migration.
@@ -64,7 +64,7 @@ func (s *FilterLiveMigratableStep) checkHasSufficientFeatures(
 func (s *FilterLiveMigratableStep) Run(
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
-) (*lib.StepResult, error) {
+) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
 

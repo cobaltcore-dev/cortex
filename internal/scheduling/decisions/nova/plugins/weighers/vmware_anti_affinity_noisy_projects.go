@@ -52,7 +52,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Init(ctx context.Context, client c
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	if !request.VMware {

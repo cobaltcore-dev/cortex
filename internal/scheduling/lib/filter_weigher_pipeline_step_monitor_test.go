@@ -21,20 +21,20 @@ func (m *mockObserver) Observe(value float64) {
 func TestStepMonitorRun(t *testing.T) {
 	runTimer := &mockObserver{}
 	removedSubjectsObserver := &mockObserver{}
-	monitor := &StepMonitor[mockPipelineRequest]{
+	monitor := &FilterWeigherPipelineStepMonitor[mockFilterWeigherPipelineRequest]{
 		stepName:                "mock_step",
 		runTimer:                runTimer,
 		stepSubjectWeight:       nil,
 		removedSubjectsObserver: removedSubjectsObserver,
 	}
-	step := &mockWeigher[mockPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
-			return &StepResult{
+	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{"subject1": 0.1, "subject2": 1.0, "subject3": 0.0},
 			}, nil
 		},
 	}
-	request := mockPipelineRequest{
+	request := mockFilterWeigherPipelineRequest{
 		Subjects: []string{"subject1", "subject2", "subject3"},
 		Weights:  map[string]float64{"subject1": 0.2, "subject2": 0.1, "subject3": 0.0},
 	}

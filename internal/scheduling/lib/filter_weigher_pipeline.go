@@ -17,8 +17,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type FilterWeigherPipeline[RequestType FilterWeigherPipelineRequest] interface {
+	// Run the scheduling pipeline with the given request.
+	Run(request RequestType) (v1alpha1.DecisionResult, error)
+}
+
 // Pipeline of scheduler steps.
-type filterWeigherPipeline[RequestType PipelineRequest] struct {
+type filterWeigherPipeline[RequestType FilterWeigherPipelineRequest] struct {
 	// The activation function to use when combining the
 	// results of the scheduler steps.
 	ActivationFunction
@@ -33,11 +38,11 @@ type filterWeigherPipeline[RequestType PipelineRequest] struct {
 	// Multipliers to apply to weigher outputs.
 	weighersMultipliers map[string]float64
 	// Monitor to observe the pipeline.
-	monitor PipelineMonitor
+	monitor FilterWeigherPipelineMonitor
 }
 
 // Create a new pipeline with filters and weighers contained in the configuration.
-func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
+func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	ctx context.Context,
 	client client.Client,
 	name string,
@@ -45,15 +50,15 @@ func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 	confedFilters []v1alpha1.FilterSpec,
 	supportedWeighers map[string]func() Weigher[RequestType],
 	confedWeighers []v1alpha1.WeigherSpec,
-	monitor PipelineMonitor,
-) PipelineInitResult[Pipeline[RequestType]] {
+	monitor FilterWeigherPipelineMonitor,
+) PipelineInitResult[FilterWeigherPipeline[RequestType]] {
 
 	pipelineMonitor := monitor.SubPipeline(name)
 
 	// Ensure there are no overlaps between filter and weigher names.
 	for filterName := range supportedFilters {
 		if _, ok := supportedWeighers[filterName]; ok {
-			return PipelineInitResult[Pipeline[RequestType]]{
+			return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
 				CriticalErr: errors.New("step name overlap between filters and weighers: " + filterName),
 			}
 		}
@@ -67,7 +72,7 @@ func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
-			return PipelineInitResult[Pipeline[RequestType]]{
+			return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
 				CriticalErr: errors.New("unsupported filter name: " + filterConfig.Name),
 			}
 		}
@@ -75,7 +80,7 @@ func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 		filter = monitorFilter(filter, filterConfig.Name, pipelineMonitor)
 		filter = validateFilter(filter)
 		if err := filter.Init(ctx, client, filterConfig); err != nil {
-			return PipelineInitResult[Pipeline[RequestType]]{
+			return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
 				CriticalErr: errors.New("failed to initialize filter: " + err.Error()),
 			}
 		}
@@ -115,7 +120,7 @@ func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 		slog.Info("scheduler: added weigher", "name", weigherConfig.Name)
 	}
 
-	return PipelineInitResult[Pipeline[RequestType]]{
+	return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
 		NonCriticalErr: nonCriticalErr,
 		Pipeline: &filterWeigherPipeline[RequestType]{
 			filtersOrder:        filtersOrder,

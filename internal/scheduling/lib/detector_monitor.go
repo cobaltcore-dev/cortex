@@ -1,18 +1,17 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package nova
+package lib
 
 import (
 	"context"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type Monitor struct {
+type DetectorPipelineMonitor struct {
 	// A histogram to measure how long each step takes to run.
 	stepRunTimer *prometheus.HistogramVec
 	// A counter to measure how many vm ids are selected for descheduling by each step.
@@ -26,8 +25,8 @@ type Monitor struct {
 	PipelineName string
 }
 
-func NewPipelineMonitor() Monitor {
-	return Monitor{
+func NewDetectorPipelineMonitor() DetectorPipelineMonitor {
+	return DetectorPipelineMonitor{
 		stepRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "cortex_descheduler_pipeline_step_run_duration_seconds",
 			Help:    "Duration of descheduler pipeline step run",
@@ -51,29 +50,29 @@ func NewPipelineMonitor() Monitor {
 }
 
 // Get a copied pipeline monitor with the name set, after binding the metrics.
-func (m Monitor) SubPipeline(name string) Monitor {
+func (m DetectorPipelineMonitor) SubPipeline(name string) DetectorPipelineMonitor {
 	cp := m
 	cp.PipelineName = name
 	return cp
 }
 
-func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
+func (m *DetectorPipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.stepRunTimer.Describe(ch)
 	m.stepDeschedulingCounter.Describe(ch)
 	m.pipelineRunTimer.Describe(ch)
 	m.deschedulingRunTimer.Describe(ch)
 }
 
-func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
+func (m *DetectorPipelineMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.stepRunTimer.Collect(ch)
 	m.stepDeschedulingCounter.Collect(ch)
 	m.pipelineRunTimer.Collect(ch)
 	m.deschedulingRunTimer.Collect(ch)
 }
 
-type StepMonitor struct {
+type DetectorMonitor[DetectionType Detection] struct {
 	// The step being monitored.
-	step Detector
+	step Detector[DetectionType]
 	// The name of this step.
 	stepName string
 	// A timer to measure how long the step takes to run.
@@ -82,8 +81,13 @@ type StepMonitor struct {
 	descheduledCounter prometheus.Counter
 }
 
-// Monitor a descheduler step by wrapping it with a StepMonitor.
-func monitorStep(step Detector, conf v1alpha1.DetectorSpec, monitor Monitor) StepMonitor {
+// Monitor a descheduler step by wrapping it with a DetectorMonitor.
+func monitorDetector[DetectionType Detection](
+	step Detector[DetectionType],
+	conf v1alpha1.DetectorSpec,
+	monitor DetectorPipelineMonitor,
+) DetectorMonitor[DetectionType] {
+
 	var runTimer prometheus.Observer
 	if monitor.stepRunTimer != nil {
 		runTimer = monitor.stepRunTimer.WithLabelValues(conf.Name)
@@ -92,7 +96,7 @@ func monitorStep(step Detector, conf v1alpha1.DetectorSpec, monitor Monitor) Ste
 	if monitor.stepDeschedulingCounter != nil {
 		descheduledCounter = monitor.stepDeschedulingCounter.WithLabelValues(conf.Name)
 	}
-	return StepMonitor{
+	return DetectorMonitor[DetectionType]{
 		step:               step,
 		stepName:           conf.Name,
 		runTimer:           runTimer,
@@ -101,22 +105,25 @@ func monitorStep(step Detector, conf v1alpha1.DetectorSpec, monitor Monitor) Ste
 }
 
 // Initialize the step with the database and options.
-func (m StepMonitor) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
+func (m DetectorMonitor[DetectionType]) Init(
+	ctx context.Context, client client.Client, step v1alpha1.DetectorSpec,
+) error {
+
 	return m.step.Init(ctx, client, step)
 }
 
 // Run the step and measure its execution time.
-func (m StepMonitor) Run() ([]plugins.Decision, error) {
+func (m DetectorMonitor[DetectionType]) Run() ([]DetectionType, error) {
 	if m.runTimer != nil {
 		timer := prometheus.NewTimer(m.runTimer)
 		defer timer.ObserveDuration()
 	}
-	vmsToDeschedule, err := m.step.Run()
+	detections, err := m.step.Run()
 	if err != nil {
 		return nil, err
 	}
 	if m.descheduledCounter != nil {
-		m.descheduledCounter.Add(float64(len(vmsToDeschedule)))
+		m.descheduledCounter.Add(float64(len(detections)))
 	}
-	return vmsToDeschedule, nil
+	return detections, nil
 }

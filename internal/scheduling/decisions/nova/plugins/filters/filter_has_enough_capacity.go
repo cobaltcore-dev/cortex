@@ -40,7 +40,7 @@ type FilterHasEnoughCapacity struct {
 // known at this point.
 //
 // Please also note that disk space is currently not considered by this filter.
-func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// This map holds the free resources per host.

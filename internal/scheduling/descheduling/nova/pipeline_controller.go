@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -30,14 +31,14 @@ import (
 // reconfigure the pipelines as needed.
 type DeschedulingsPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[*Pipeline]
+	lib.BasePipelineController[*lib.DetectorPipeline[plugins.VMDetection]]
 
 	// Monitor to pass down to all pipelines.
-	Monitor Monitor
+	Monitor lib.DetectorPipelineMonitor
 	// Config for the scheduling operator.
 	Conf conf.Config
 	// Cycle detector to avoid descheduling loops.
-	CycleDetector CycleDetector
+	CycleDetector lib.CycleDetector[plugins.VMDetection]
 }
 
 // The type of pipeline this controller manages.
@@ -49,15 +50,15 @@ func (c *DeschedulingsPipelineController) PipelineType() v1alpha1.PipelineType {
 func (c *DeschedulingsPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) lib.PipelineInitResult[*Pipeline] {
+) lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]] {
 
-	pipeline := &Pipeline{
+	pipeline := &lib.DetectorPipeline[plugins.VMDetection]{
 		Client:        c.Client,
 		CycleDetector: c.CycleDetector,
 		Monitor:       c.Monitor.SubPipeline(p.Name),
 	}
 	nonCriticalErr, criticalErr := pipeline.Init(ctx, p.Spec.Detectors, supportedDetectors)
-	return lib.PipelineInitResult[*Pipeline]{
+	return lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]]{
 		Pipeline:       pipeline,
 		NonCriticalErr: nonCriticalErr,
 		CriticalErr:    criticalErr,
@@ -78,9 +79,48 @@ func (c *DeschedulingsPipelineController) CreateDeschedulingsPeriodically(ctx co
 				time.Sleep(jobloop.DefaultJitter(time.Minute))
 				continue
 			}
-			if err := p.createDeschedulings(ctx); err != nil {
-				slog.Error("descheduler: failed to create deschedulings", "error", err)
+			decisionsByStep := p.Run()
+			if len(decisionsByStep) == 0 {
+				slog.Info("descheduler: no decisions made in this run")
+				time.Sleep(jobloop.DefaultJitter(time.Minute))
+				continue
 			}
+			slog.Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
+			decisions := p.Combine(decisionsByStep)
+			var err error
+			decisions, err = p.CycleDetector.Filter(ctx, decisions)
+			if err != nil {
+				slog.Error("descheduler: failed to filter decisions for cycles", "error", err)
+				time.Sleep(jobloop.DefaultJitter(time.Minute))
+				continue
+			}
+			for _, decision := range decisions {
+				// Precaution: If a descheduling for the VM already exists, skip it.
+				// The TTL controller will clean up old deschedulings so the vm
+				// can be descheduled again later if needed, or we can manually
+				// delete the descheduling if we want to deschedule the VM again.
+				var existing v1alpha1.Descheduling
+				err := p.Get(ctx, client.ObjectKey{Name: decision.VMID}, &existing)
+				if err == nil {
+					slog.Info("descheduler: descheduling already exists for VM, skipping", "vmId", decision.VMID)
+					continue
+				}
+
+				descheduling := &v1alpha1.Descheduling{}
+				descheduling.Name = decision.VMID
+				descheduling.Spec.Ref = decision.VMID
+				descheduling.Spec.RefType = v1alpha1.DeschedulingSpecVMReferenceNovaServerUUID
+				descheduling.Spec.PrevHostType = v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName
+				descheduling.Spec.PrevHost = decision.Host
+				descheduling.Spec.Reason = decision.Reason
+				if err := p.Create(ctx, descheduling); err != nil {
+					slog.Error("descheduler: failed to create descheduling", "error", err)
+					time.Sleep(jobloop.DefaultJitter(time.Minute))
+					continue
+				}
+				slog.Info("descheduler: created descheduling", "vmId", decision.VMID, "host", decision.Host, "reason", decision.Reason)
+			}
+
 			time.Sleep(jobloop.DefaultJitter(time.Minute))
 		}
 	}

@@ -24,13 +24,13 @@ func (m *mockCycleDetector) Init(ctx context.Context, client client.Client, conf
 	return nil
 }
 
-func (m *mockCycleDetector) Filter(ctx context.Context, decisions []plugins.Decision) ([]plugins.Decision, error) {
+func (m *mockCycleDetector) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	return decisions, nil
 }
 
 type mockControllerStep struct{}
 
-func (m *mockControllerStep) Run() ([]plugins.Decision, error) {
+func (m *mockControllerStep) Run() ([]plugins.VMDetection, error) {
 	return nil, nil
 }
 func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
@@ -75,15 +75,15 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			controller := &DeschedulingsPipelineController{
-				Monitor:       NewPipelineMonitor(),
+				Monitor:       lib.NewDetectorPipelineMonitor(),
 				CycleDetector: &mockCycleDetector{},
 			}
 
-			pipeline := Pipeline{
+			pipeline := lib.DetectorPipeline[plugins.VMDetection]{
 				CycleDetector: controller.CycleDetector,
 				Monitor:       controller.Monitor,
 			}
-			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.steps, map[string]Detector{
+			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.steps, map[string]lib.Detector[plugins.VMDetection]{
 				"mock-step": &mockControllerStep{},
 			})
 
@@ -128,7 +128,7 @@ func TestDeschedulingsPipelineController_Reconcile(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	controller := &DeschedulingsPipelineController{
-		BasePipelineController: lib.BasePipelineController[*Pipeline]{
+		BasePipelineController: lib.BasePipelineController[*lib.DetectorPipeline[plugins.VMDetection]]{
 			Client: client,
 		},
 	}

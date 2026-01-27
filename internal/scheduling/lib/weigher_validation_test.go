@@ -10,9 +10,9 @@ import (
 )
 
 func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
-	mockStep := &mockWeigher[mockPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
-			return &StepResult{
+	mockStep := &mockWeigher[mockFilterWeigherPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 					"host2": 1.0,
@@ -21,11 +21,11 @@ func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
 		},
 	}
 
-	request := mockPipelineRequest{
+	request := mockFilterWeigherPipelineRequest{
 		Subjects: []string{"subject1", "subject2"},
 	}
 
-	validator := WeigherValidator[mockPipelineRequest]{
+	validator := WeigherValidator[mockFilterWeigherPipelineRequest]{
 		Weigher: mockStep,
 	}
 
@@ -45,9 +45,9 @@ func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
 }
 
 func TestWeigherValidator_Run_HostNumberMismatch(t *testing.T) {
-	mockStep := &mockWeigher[mockPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
-			return &StepResult{
+	mockStep := &mockWeigher[mockFilterWeigherPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
 				},
@@ -55,11 +55,11 @@ func TestWeigherValidator_Run_HostNumberMismatch(t *testing.T) {
 		},
 	}
 
-	request := mockPipelineRequest{
+	request := mockFilterWeigherPipelineRequest{
 		Subjects: []string{"subject1", "subject2"},
 	}
 
-	validator := WeigherValidator[mockPipelineRequest]{
+	validator := WeigherValidator[mockFilterWeigherPipelineRequest]{
 		Weigher: mockStep,
 	}
 

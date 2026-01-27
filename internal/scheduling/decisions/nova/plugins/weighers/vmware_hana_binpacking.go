@@ -54,7 +54,7 @@ func (s *VMwareHanaBinpackingStep) Init(ctx context.Context, client client.Clien
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Don't execute the step for non-hana flavors.
 	if !strings.Contains(request.Spec.Data.Flavor.Data.Name, "hana") {

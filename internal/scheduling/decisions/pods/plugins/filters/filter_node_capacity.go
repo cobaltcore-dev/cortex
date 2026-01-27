@@ -23,9 +23,9 @@ func (f *NodeCapacityFilter) Init(ctx context.Context, client client.Client, ste
 	return nil
 }
 
-func (NodeCapacityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.StepResult, error) {
+func (NodeCapacityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
-	stats := make(map[string]lib.StepStatistics)
+	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 
 	podRequests := helpers.GetPodResourceRequests(request.Pod)
 
@@ -35,7 +35,7 @@ func (NodeCapacityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineReq
 		}
 	}
 
-	return &lib.StepResult{Activations: activations, Statistics: stats}, nil
+	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
 }
 
 func hasCapacityForPod(node corev1.Node, podRequests corev1.ResourceList) bool {

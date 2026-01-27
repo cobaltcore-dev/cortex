@@ -13,7 +13,7 @@ import (
 )
 
 // Wrapper for scheduler steps that validates them before/after execution.
-type WeigherValidator[RequestType PipelineRequest] struct {
+type WeigherValidator[RequestType FilterWeigherPipelineRequest] struct {
 	// The wrapped weigher to validate.
 	Weigher Weigher[RequestType]
 }
@@ -25,12 +25,12 @@ func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.
 }
 
 // Validate the wrapped weigher with the database and options.
-func validateWeigher[RequestType PipelineRequest](weigher Weigher[RequestType]) *WeigherValidator[RequestType] {
+func validateWeigher[RequestType FilterWeigherPipelineRequest](weigher Weigher[RequestType]) *WeigherValidator[RequestType] {
 	return &WeigherValidator[RequestType]{Weigher: weigher}
 }
 
 // Run the weigher and validate what happens.
-func (s *WeigherValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+func (s *WeigherValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	result, err := s.Weigher.Run(traceLog, request)
 	if err != nil {
 		return nil, err

@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -22,12 +23,12 @@ type AvoidHighStealPctStepOpts struct {
 
 type AvoidHighStealPctStep struct {
 	// Detector is a helper struct that provides common functionality for all descheduler steps.
-	plugins.Detector[AvoidHighStealPctStepOpts]
+	lib.BaseDetector[AvoidHighStealPctStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
 func (s *AvoidHighStealPctStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
-	if err := s.Detector.Init(ctx, client, step); err != nil {
+	if err := s.BaseDetector.Init(ctx, client, step); err != nil {
 		return err
 	}
 	if err := s.CheckKnowledges(ctx, corev1.ObjectReference{Name: "kvm-libvirt-domain-cpu-steal-pct"}); err != nil {
@@ -36,7 +37,7 @@ func (s *AvoidHighStealPctStep) Init(ctx context.Context, client client.Client, 
 	return nil
 }
 
-func (s *AvoidHighStealPctStep) Run() ([]plugins.Decision, error) {
+func (s *AvoidHighStealPctStep) Run() ([]plugins.VMDetection, error) {
 	if s.Options.MaxStealPctOverObservedTimeSpan <= 0 {
 		slog.Info("skipping step because maxStealPctOverObservedTimeSpan is not set or <= 0")
 		return nil, nil
@@ -55,10 +56,10 @@ func (s *AvoidHighStealPctStep) Run() ([]plugins.Decision, error) {
 	if err != nil {
 		return nil, err
 	}
-	var decisions []plugins.Decision
+	var decisions []plugins.VMDetection
 	for _, f := range features {
 		if f.MaxStealTimePct > s.Options.MaxStealPctOverObservedTimeSpan {
-			decisions = append(decisions, plugins.Decision{
+			decisions = append(decisions, plugins.VMDetection{
 				VMID:   f.InstanceUUID,
 				Reason: fmt.Sprintf("kvm monitoring indicates cpu steal pct %.2f%% which is above %.2f%% threshold", f.MaxStealTimePct, s.Options.MaxStealPctOverObservedTimeSpan),
 				Host:   f.Host,

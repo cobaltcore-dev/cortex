@@ -3,7 +3,7 @@
 
 package lib
 
-type StepResult struct {
+type FilterWeigherPipelineStepResult struct {
 	// The activations calculated by this step.
 	Activations map[string]float64
 
@@ -22,10 +22,10 @@ type StepResult struct {
 	//
 	// These statistics are used to display the step's effect on the hosts.
 	// For example: max cpu contention: before [ 100%, 50%, 40% ], after [ 40%, 50%, 100% ]
-	Statistics map[string]StepStatistics
+	Statistics map[string]FilterWeigherPipelineStepStatistics
 }
 
-type StepStatistics struct {
+type FilterWeigherPipelineStepStatistics struct {
 	// The unit of the statistic.
 	Unit string
 	// The subjects and their values.

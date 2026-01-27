@@ -14,7 +14,7 @@ import (
 )
 
 type FilterRequestedDestinationStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // If `requested_destination` is set in the request spec, filter hosts
@@ -23,7 +23,7 @@ type FilterRequestedDestinationStep struct {
 func (s *FilterRequestedDestinationStep) Run(
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
-) (*lib.StepResult, error) {
+) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
 

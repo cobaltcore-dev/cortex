@@ -13,7 +13,7 @@ import (
 )
 
 // Wrapper for scheduler steps that validates them before/after execution.
-type FilterValidator[RequestType PipelineRequest] struct {
+type FilterValidator[RequestType FilterWeigherPipelineRequest] struct {
 	// The wrapped filter to validate.
 	Filter Filter[RequestType]
 }
@@ -25,12 +25,12 @@ func (s *FilterValidator[RequestType]) Init(ctx context.Context, client client.C
 }
 
 // Validate the wrapped filter with the database and options.
-func validateFilter[RequestType PipelineRequest](filter Filter[RequestType]) *FilterValidator[RequestType] {
+func validateFilter[RequestType FilterWeigherPipelineRequest](filter Filter[RequestType]) *FilterValidator[RequestType] {
 	return &FilterValidator[RequestType]{Filter: filter}
 }
 
 // Run the filter and validate what happens.
-func (s *FilterValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+func (s *FilterValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	result, err := s.Filter.Run(traceLog, request)
 	if err != nil {
 		return nil, err

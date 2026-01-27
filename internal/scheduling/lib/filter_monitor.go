@@ -12,18 +12,18 @@ import (
 )
 
 // Wraps a scheduler filter to monitor its execution.
-type FilterMonitor[RequestType PipelineRequest] struct {
+type FilterMonitor[RequestType FilterWeigherPipelineRequest] struct {
 	// The filter to monitor.
 	filter Filter[RequestType]
 	// The monitor tracking the step's execution.
-	monitor *StepMonitor[RequestType]
+	monitor *FilterWeigherPipelineStepMonitor[RequestType]
 }
 
 // Wrap the given filter with a monitor.
-func monitorFilter[RequestType PipelineRequest](
+func monitorFilter[RequestType FilterWeigherPipelineRequest](
 	filter Filter[RequestType],
 	stepName string,
-	m PipelineMonitor,
+	m FilterWeigherPipelineMonitor,
 ) *FilterMonitor[RequestType] {
 
 	return &FilterMonitor[RequestType]{
@@ -38,6 +38,6 @@ func (fm *FilterMonitor[RequestType]) Init(ctx context.Context, client client.Cl
 }
 
 // Run the filter and observe its execution.
-func (fm *FilterMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+func (fm *FilterMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	return fm.monitor.RunWrapped(traceLog, request, fm.filter)
 }

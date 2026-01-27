@@ -38,7 +38,7 @@ import (
 // reconfigure the pipelines as needed.
 type DecisionPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[lib.Pipeline[pods.PodPipelineRequest]]
+	lib.BasePipelineController[lib.FilterWeigherPipeline[pods.PodPipelineRequest]]
 
 	// Mutex to only allow one process at a time
 	processMu sync.Mutex
@@ -46,7 +46,7 @@ type DecisionPipelineController struct {
 	// Config for the scheduling operator.
 	Conf conf.Config
 	// Monitor to pass down to all pipelines.
-	Monitor lib.PipelineMonitor
+	Monitor lib.FilterWeigherPipelineMonitor
 }
 
 // The type of pipeline this controller manages.
@@ -197,7 +197,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) lib.PipelineInitResult[lib.Pipeline[pods.PodPipelineRequest]] {
+) lib.PipelineInitResult[lib.FilterWeigherPipeline[pods.PodPipelineRequest]] {
 
 	return lib.InitNewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,

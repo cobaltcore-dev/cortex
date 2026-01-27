@@ -17,7 +17,7 @@ import (
 )
 
 // Wraps a scheduler step to monitor its execution.
-type StepMonitor[RequestType PipelineRequest] struct {
+type FilterWeigherPipelineStepMonitor[RequestType FilterWeigherPipelineRequest] struct {
 	// Mixin that can be embedded in a step to provide some activation function tooling.
 	ActivationFunction
 
@@ -39,7 +39,7 @@ type StepMonitor[RequestType PipelineRequest] struct {
 }
 
 // Schedule using the wrapped step and measure the time it takes.
-func monitorStep[RequestType PipelineRequest](stepName string, m PipelineMonitor) *StepMonitor[RequestType] {
+func monitorStep[RequestType FilterWeigherPipelineRequest](stepName string, m FilterWeigherPipelineMonitor) *FilterWeigherPipelineStepMonitor[RequestType] {
 	var runTimer prometheus.Observer
 	if m.stepRunTimer != nil {
 		runTimer = m.stepRunTimer.
@@ -50,7 +50,7 @@ func monitorStep[RequestType PipelineRequest](stepName string, m PipelineMonitor
 		removedSubjectsObserver = m.stepRemovedSubjectsObserver.
 			WithLabelValues(m.PipelineName, stepName)
 	}
-	return &StepMonitor[RequestType]{
+	return &FilterWeigherPipelineStepMonitor[RequestType]{
 		runTimer:                runTimer,
 		stepName:                stepName,
 		pipelineName:            m.PipelineName,
@@ -62,11 +62,11 @@ func monitorStep[RequestType PipelineRequest](stepName string, m PipelineMonitor
 }
 
 // Run the step and observe its execution.
-func (s *StepMonitor[RequestType]) RunWrapped(
+func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 	traceLog *slog.Logger,
 	request RequestType,
-	step Step[RequestType],
-) (*StepResult, error) {
+	step FilterWeigherPipelineStep[RequestType],
+) (*FilterWeigherPipelineStepResult, error) {
 
 	if s.runTimer != nil {
 		timer := prometheus.NewTimer(s.runTimer)

@@ -15,13 +15,13 @@ import (
 )
 
 type FilterHasRequestedTraits struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Filter hosts that do not have the requested traits given by the extra spec:
 // - "trait:<trait>": "forbidden" means the host must not have the specified trait.
 // - "trait:<trait>": "required" means the host must have the specified trait.
-func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.StepResult, error) {
+func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	var requiredTraits, forbiddenTraits []string
 	for key, value := range request.Spec.Data.Flavor.Data.ExtraSpecs {

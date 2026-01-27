@@ -35,13 +35,13 @@ import (
 // reconfigure the pipelines as needed.
 type DecisionPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]
+	lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]
 
 	// Mutex to only allow one process at a time
 	processMu sync.Mutex
 
 	// Monitor to pass down to all pipelines.
-	Monitor lib.PipelineMonitor
+	Monitor lib.FilterWeigherPipelineMonitor
 	// Config for the scheduling operator.
 	Conf conf.Config
 }
@@ -144,7 +144,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 func (c *DecisionPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) lib.PipelineInitResult[lib.Pipeline[api.ExternalSchedulerRequest]] {
+) lib.PipelineInitResult[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]] {
 
 	return lib.InitNewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,

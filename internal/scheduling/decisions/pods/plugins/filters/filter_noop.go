@@ -27,12 +27,12 @@ func (f *NoopFilter) Init(ctx context.Context, client client.Client, step v1alph
 // not in the map are considered as filtered out.
 // Provide a traceLog that contains the global request id and should
 // be used to log the step's execution.
-func (NoopFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.StepResult, error) {
+func (NoopFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64, len(request.Nodes))
-	stats := make(map[string]lib.StepStatistics)
+	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 	// Usually you would do some filtering here, or adjust the weights.
 	for _, node := range request.Nodes {
 		activations[node.Name] = 0.0
 	}
-	return &lib.StepResult{Activations: activations, Statistics: stats}, nil
+	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
 }

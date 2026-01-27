@@ -22,9 +22,9 @@ func (f *TaintFilter) Init(ctx context.Context, client client.Client, step v1alp
 	return nil
 }
 
-func (TaintFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.StepResult, error) {
+func (TaintFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
-	stats := make(map[string]lib.StepStatistics)
+	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 
 	for _, node := range request.Nodes {
 		if canScheduleOnNode(node, request.Pod) {
@@ -32,7 +32,7 @@ func (TaintFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (
 		}
 	}
 
-	return &lib.StepResult{Activations: activations, Statistics: stats}, nil
+	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
 }
 
 func canScheduleOnNode(node corev1.Node, pod corev1.Pod) bool {

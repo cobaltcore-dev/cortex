@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -74,8 +76,8 @@ func (m *mockExecutorNovaAPI) GetServerMigrations(ctx context.Context, id string
 }
 
 // Create a zero-value Monitor for testing
-func newMockMonitor() Monitor {
-	return Monitor{}
+func newMockMonitor() lib.DetectorMonitor[plugins.VMDetection] {
+	return lib.DetectorMonitor[plugins.VMDetection]{}
 }
 
 func TestExecutor_Reconcile(t *testing.T) {

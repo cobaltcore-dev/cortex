@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package plugins
+package lib
 
 import (
 	"testing"
@@ -11,17 +11,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-type MockOptions struct {
+type mockDetection struct {
+	resource string
+	host     string
+	reason   string
+}
+
+func (d mockDetection) GetResource() string                { return d.resource }
+func (d mockDetection) GetHost() string                    { return d.host }
+func (d mockDetection) GetReason() string                  { return d.reason }
+func (d mockDetection) WithReason(reason string) Detection { d.reason = reason; return d }
+
+type mockDetectorOptions struct {
 	Option1 string `json:"option1"`
 	Option2 int    `json:"option2"`
 }
 
-func (o MockOptions) Validate() error {
+func (o mockDetectorOptions) Validate() error {
 	return nil
 }
 
 func TestDetector_Init(t *testing.T) {
-	step := Detector[MockOptions]{}
+	step := BaseDetector[mockDetectorOptions]{}
 	cl := fake.NewClientBuilder().Build()
 	err := step.Init(t.Context(), cl, v1alpha1.DetectorSpec{
 		Params: runtime.RawExtension{Raw: []byte(`{

@@ -14,7 +14,7 @@ import (
 )
 
 type FilterInstanceGroupAntiAffinityStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Select hosts not in spec_obj.instance_group but only until
@@ -22,7 +22,7 @@ type FilterInstanceGroupAntiAffinityStep struct {
 func (s *FilterInstanceGroupAntiAffinityStep) Run(
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
-) (*lib.StepResult, error) {
+) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
 

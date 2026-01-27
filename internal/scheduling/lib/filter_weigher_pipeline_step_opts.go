@@ -4,12 +4,12 @@
 package lib
 
 // Interface to which step options must conform.
-type StepOpts interface {
+type FilterWeigherPipelineStepOpts interface {
 	// Validate the options for this step.
 	Validate() error
 }
 
 // Empty step opts conforming to the StepOpts interface (validation always succeeds).
-type EmptyStepOpts struct{}
+type EmptyFilterWeigherPipelineStepOpts struct{}
 
-func (EmptyStepOpts) Validate() error { return nil }
+func (EmptyFilterWeigherPipelineStepOpts) Validate() error { return nil }

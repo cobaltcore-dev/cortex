@@ -157,11 +157,11 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				Build()
 
 			controller := &DecisionPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
 					Client:    client,
-					Pipelines: make(map[string]lib.Pipeline[api.ExternalSchedulerRequest]),
+					Pipelines: make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 				},
-				Monitor: lib.PipelineMonitor{},
+				Monitor: lib.FilterWeigherPipelineMonitor{},
 				Conf: conf.Config{
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 				},
@@ -397,12 +397,12 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 				Build()
 
 			controller := &DecisionPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.Pipeline[api.ExternalSchedulerRequest]]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
 					Client:          client,
-					Pipelines:       make(map[string]lib.Pipeline[api.ExternalSchedulerRequest]),
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
-				Monitor: lib.PipelineMonitor{},
+				Monitor: lib.FilterWeigherPipelineMonitor{},
 				Conf: conf.Config{
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 				},
@@ -471,7 +471,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 
 func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 	controller := &DecisionPipelineController{
-		Monitor: lib.PipelineMonitor{},
+		Monitor: lib.FilterWeigherPipelineMonitor{},
 	}
 
 	tests := []struct {
