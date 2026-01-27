@@ -6,7 +6,6 @@ package pods
 import (
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods/plugins/filters"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -18,11 +17,4 @@ var supportedFilters = map[string]func() PodFilter{
 	"taint":        func() PodFilter { return &filters.TaintFilter{} },
 	"nodeaffinity": func() PodFilter { return &filters.NodeAffinityFilter{} },
 	"nodecapacity": func() PodFilter { return &filters.NodeCapacityFilter{} },
-}
-
-type PodWeigher = lib.Weigher[pods.PodPipelineRequest]
-
-// Configuration of weighers supported by the pods scheduler.
-var supportedWeighers = map[string]func() PodWeigher{
-	"binpack": func() PodWeigher { return &weighers.BinpackingStep{} },
 }

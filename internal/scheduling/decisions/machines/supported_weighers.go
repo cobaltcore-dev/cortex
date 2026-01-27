@@ -12,10 +12,3 @@ type MachineWeigher = lib.Weigher[ironcore.MachinePipelineRequest]
 
 // Configuration of weighers supported by the machine scheduling.
 var supportedWeighers = map[string]func() MachineWeigher{}
-
-type MachineFilter = lib.Filter[ironcore.MachinePipelineRequest]
-
-// Configuration of filters supported by the machine scheduling.
-var supportedFilters = map[string]func() MachineFilter{
-	"noop": func() MachineFilter { return &NoopFilter{} },
-}
