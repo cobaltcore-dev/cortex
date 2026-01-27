@@ -20,7 +20,7 @@ type DetectorPipeline[DetectionType Detection] struct {
 	// Kubernetes client to create descheduling resources.
 	client.Client
 	// Cycle detector to avoid cycles in descheduling.
-	CycleBreaker CycleBreaker[DetectionType]
+	DetectorCycleBreaker DetectorCycleBreaker[DetectionType]
 	// Monitor to use for tracking the pipeline.
 	Monitor DetectorPipelineMonitor
 

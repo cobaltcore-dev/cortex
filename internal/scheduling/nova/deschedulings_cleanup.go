@@ -17,10 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-type CleanupOnStartup struct{ *Cleanup }
+type DeschedulingsCleanupOnStartup struct{ *DeschedulingsCleanup }
 
 // Cleanup all old deschedulings on controller startup.
-func (s *CleanupOnStartup) Start(ctx context.Context) error {
+func (s *DeschedulingsCleanupOnStartup) Start(ctx context.Context) error {
 	log := logf.FromContext(ctx).WithName("ttl-startup-reconciler")
 	log.Info("starting descheduling cleanup for existing resources")
 	var resources v1alpha1.DeschedulingList
@@ -52,14 +52,14 @@ func (s *CleanupOnStartup) Start(ctx context.Context) error {
 }
 
 // Removes old deschedulings.
-type Cleanup struct {
+type DeschedulingsCleanup struct {
 	// Client for the kubernetes API.
 	client.Client
 	// Kubernetes scheme to use for the deschedulings.
 	Scheme *runtime.Scheme
 }
 
-func (r *Cleanup) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *DeschedulingsCleanup) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithName("cleanup")
 
 	// Fetch the descheduling object
@@ -91,8 +91,8 @@ func (r *Cleanup) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result,
 	return ctrl.Result{}, nil
 }
 
-func (r *Cleanup) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
-	if err := mgr.Add(&CleanupOnStartup{r}); err != nil {
+func (r *DeschedulingsCleanup) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
+	if err := mgr.Add(&DeschedulingsCleanupOnStartup{r}); err != nil {
 		return err
 	}
 	return multicluster.BuildController(mcl, mgr).

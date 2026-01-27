@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 
@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-type Executor struct {
+type DeschedulingsExecutor struct {
 	// Client for the kubernetes API.
 	client.Client
 	// Kubernetes scheme to use for the deschedulings.
@@ -42,7 +42,7 @@ type Executor struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
 	descheduling := &v1alpha1.Descheduling{}
@@ -253,9 +253,9 @@ func (e *Executor) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result
 	return ctrl.Result{}, nil
 }
 
-func (s *Executor) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+func (s *DeschedulingsExecutor) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	return multicluster.BuildController(mcl, mgr).
-		Named("cortex-descheduler").
+		Named("cortex-nova-deschedulings-executor").
 		For(
 			&v1alpha1.Descheduling{},
 			// Only schedule machines that have the custom scheduler set.

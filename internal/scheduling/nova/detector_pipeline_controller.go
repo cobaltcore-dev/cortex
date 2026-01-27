@@ -10,8 +10,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/sapcc/go-bits/jobloop"
@@ -29,7 +29,7 @@ import (
 //
 // Additionally, the controller watches for pipeline and step changes to
 // reconfigure the pipelines as needed.
-type DeschedulingsPipelineController struct {
+type DetectorPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[*lib.DetectorPipeline[plugins.VMDetection]]
 
@@ -38,24 +38,24 @@ type DeschedulingsPipelineController struct {
 	// Config for the scheduling operator.
 	Conf conf.Config
 	// Cycle detector to avoid descheduling loops.
-	CycleBreaker lib.CycleBreaker[plugins.VMDetection]
+	DetectorCycleBreaker lib.DetectorCycleBreaker[plugins.VMDetection]
 }
 
 // The type of pipeline this controller manages.
-func (c *DeschedulingsPipelineController) PipelineType() v1alpha1.PipelineType {
+func (c *DetectorPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeDescheduler
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DeschedulingsPipelineController) InitPipeline(
+func (c *DetectorPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
 ) lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]] {
 
 	pipeline := &lib.DetectorPipeline[plugins.VMDetection]{
-		Client:       c.Client,
-		CycleBreaker: c.CycleBreaker,
-		Monitor:      c.Monitor.SubPipeline(p.Name),
+		Client:               c.Client,
+		DetectorCycleBreaker: c.DetectorCycleBreaker,
+		Monitor:              c.Monitor.SubPipeline(p.Name),
 	}
 	nonCriticalErr, criticalErr := pipeline.Init(ctx, p.Spec.Detectors, supportedDetectors)
 	return lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]]{
@@ -65,7 +65,7 @@ func (c *DeschedulingsPipelineController) InitPipeline(
 	}
 }
 
-func (c *DeschedulingsPipelineController) CreateDeschedulingsPeriodically(ctx context.Context) {
+func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -88,7 +88,7 @@ func (c *DeschedulingsPipelineController) CreateDeschedulingsPeriodically(ctx co
 			slog.Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
 			decisions := p.Combine(decisionsByStep)
 			var err error
-			decisions, err = p.CycleBreaker.Filter(ctx, decisions)
+			decisions, err = p.DetectorCycleBreaker.Filter(ctx, decisions)
 			if err != nil {
 				slog.Error("descheduler: failed to filter decisions for cycles", "error", err)
 				time.Sleep(jobloop.DefaultJitter(time.Minute))
@@ -126,17 +126,17 @@ func (c *DeschedulingsPipelineController) CreateDeschedulingsPeriodically(ctx co
 	}
 }
 
-func (c *DeschedulingsPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (c *DetectorPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// This controller does not reconcile any resources directly.
 	return ctrl.Result{}, nil
 }
 
-func (c *DeschedulingsPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
+func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		// Initialize the cycle detector.
-		return c.CycleBreaker.Init(ctx, mgr.GetClient(), c.Conf)
+		return c.DetectorCycleBreaker.Init(ctx, mgr.GetClient(), c.Conf)
 	})); err != nil {
 		return err
 	}

@@ -42,16 +42,15 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/explanation"
 	decisionsmachines "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/machines"
 	decisionsmanila "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/manila"
-	decisionsnova "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/nova"
 	decisionpods "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods"
-	deschedulingnova "github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova"
 	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
 	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
 	cinderexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/cinder"
 	manilaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/manila"
-	novaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/nova"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	decisionsnova "github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -305,16 +304,16 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		novaexternal.NewAPI(config, decisionController).Init(mux)
+		nova.NewAPI(config, decisionController).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
 		monitor := schedulinglib.NewDetectorPipelineMonitor()
 		metrics.Registry.MustRegister(&monitor)
-		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
-			Monitor:      monitor,
-			Conf:         config,
-			CycleBreaker: deschedulingnova.NewCycleBreaker(),
+		deschedulingsController := &nova.DetectorPipelineController{
+			Monitor:              monitor,
+			Conf:                 config,
+			DetectorCycleBreaker: nova.NewDetectorCycleBreaker(),
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = multiclusterClient
@@ -324,7 +323,7 @@ func main() {
 		}
 		go deschedulingsController.CreateDeschedulingsPeriodically(ctx)
 		// Deschedulings cleanup on startup
-		if err := (&deschedulingnova.Cleanup{
+		if err := (&nova.DeschedulingsCleanup{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
@@ -512,7 +511,7 @@ func main() {
 			Interval: time.Hour,
 			Name:     "nova-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return decisionsnova.Cleanup(ctx, multiclusterClient, config)
+				return nova.DecisionsCleanup(ctx, multiclusterClient, config)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add nova decisions cleanup task to manager")

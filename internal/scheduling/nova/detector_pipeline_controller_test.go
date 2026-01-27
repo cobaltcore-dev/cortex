@@ -9,8 +9,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -18,13 +18,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-type mockCycleBreaker struct{}
+type mockDetectorCycleBreaker struct{}
 
-func (m *mockCycleBreaker) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockDetectorCycleBreaker) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return nil
 }
 
-func (m *mockCycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
+func (m *mockDetectorCycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	return decisions, nil
 }
 
@@ -37,7 +37,7 @@ func (m *mockControllerStep) Init(ctx context.Context, client client.Client, ste
 	return nil
 }
 
-func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
+func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 	tests := []struct {
 		name                   string
 		steps                  []v1alpha1.DetectorSpec
@@ -74,14 +74,14 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			controller := &DeschedulingsPipelineController{
-				Monitor:      lib.NewDetectorPipelineMonitor(),
-				CycleBreaker: &mockCycleBreaker{},
+			controller := &DetectorPipelineController{
+				Monitor:              lib.NewDetectorPipelineMonitor(),
+				DetectorCycleBreaker: &mockDetectorCycleBreaker{},
 			}
 
 			pipeline := lib.DetectorPipeline[plugins.VMDetection]{
-				CycleBreaker: controller.CycleBreaker,
-				Monitor:      controller.Monitor,
+				DetectorCycleBreaker: controller.DetectorCycleBreaker,
+				Monitor:              controller.Monitor,
 			}
 			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.steps, map[string]lib.Detector[plugins.VMDetection]{
 				"mock-step": &mockControllerStep{},
@@ -107,7 +107,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 				}
 			}
 
-			if pipeline.CycleBreaker != controller.CycleBreaker {
+			if pipeline.DetectorCycleBreaker != controller.DetectorCycleBreaker {
 				t.Error("expected pipeline to have cycle detector set")
 			}
 
@@ -118,7 +118,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	}
 }
 
-func TestDeschedulingsPipelineController_Reconcile(t *testing.T) {
+func TestDetectorPipelineController_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := v1alpha1.AddToScheme(scheme)
 	if err != nil {
@@ -127,7 +127,7 @@ func TestDeschedulingsPipelineController_Reconcile(t *testing.T) {
 
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	controller := &DeschedulingsPipelineController{
+	controller := &DetectorPipelineController{
 		BasePipelineController: lib.BasePipelineController[*lib.DetectorPipeline[plugins.VMDetection]]{
 			Client: client,
 		},

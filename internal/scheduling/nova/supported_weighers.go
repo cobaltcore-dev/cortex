@@ -5,8 +5,8 @@ package nova
 
 import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/nova/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 )
 
 type NovaWeigher = lib.Weigher[api.ExternalSchedulerRequest]

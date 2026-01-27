@@ -158,7 +158,7 @@ func TestCleanup_Reconcile(t *testing.T) {
 				WithObjects(tt.descheduling).
 				Build()
 
-			cleanup := &Cleanup{
+			cleanup := &DeschedulingsCleanup{
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -220,7 +220,7 @@ func TestCleanup_Reconcile_NonexistentResource(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	cleanup := &Cleanup{
+	cleanup := &DeschedulingsCleanup{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
@@ -305,13 +305,13 @@ func TestCleanupOnStartup_Start(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	cleanup := &Cleanup{
+	cleanup := &DeschedulingsCleanup{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
 
-	cleanupOnStartup := &CleanupOnStartup{
-		Cleanup: cleanup,
+	cleanupOnStartup := &DeschedulingsCleanupOnStartup{
+		DeschedulingsCleanup: cleanup,
 	}
 
 	ctx := context.Background()
@@ -352,13 +352,13 @@ func TestCleanupOnStartup_Start_EmptyList(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	cleanup := &Cleanup{
+	cleanup := &DeschedulingsCleanup{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
 
-	cleanupOnStartup := &CleanupOnStartup{
-		Cleanup: cleanup,
+	cleanupOnStartup := &DeschedulingsCleanupOnStartup{
+		DeschedulingsCleanup: cleanup,
 	}
 
 	ctx := context.Background()

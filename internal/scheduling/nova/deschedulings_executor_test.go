@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -333,7 +333,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Descheduling{}).
 				Build()
 
-			executor := &Executor{
+			executor := &DeschedulingsExecutor{
 				Client:  client,
 				Scheme:  scheme,
 				NovaAPI: tt.novaAPI,
@@ -405,7 +405,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 	}
 }
 
-func TestExecutor_ReconcileNotFound(t *testing.T) {
+func TestDeschedulingsExecutor_ReconcileNotFound(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := v1alpha1.AddToScheme(scheme)
 	if err != nil {
@@ -413,7 +413,7 @@ func TestExecutor_ReconcileNotFound(t *testing.T) {
 	}
 
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	executor := &Executor{
+	executor := &DeschedulingsExecutor{
 		Client:  client,
 		Scheme:  scheme,
 		NovaAPI: &mockExecutorNovaAPI{},

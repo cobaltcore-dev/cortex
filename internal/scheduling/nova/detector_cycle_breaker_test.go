@@ -8,29 +8,29 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type mockCycleBreakerNovaAPI struct {
+type mockDetectorCycleBreakerNovaAPI struct {
 	migrations map[string][]migration
 	getError   error
 }
 
-func (m *mockCycleBreakerNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockDetectorCycleBreakerNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return nil
 }
 
-func (m *mockCycleBreakerNovaAPI) Get(ctx context.Context, id string) (server, error) {
+func (m *mockDetectorCycleBreakerNovaAPI) Get(ctx context.Context, id string) (server, error) {
 	return server{}, errors.New("not implemented")
 }
 
-func (m *mockCycleBreakerNovaAPI) LiveMigrate(ctx context.Context, id string) error {
+func (m *mockDetectorCycleBreakerNovaAPI) LiveMigrate(ctx context.Context, id string) error {
 	return errors.New("not implemented")
 }
 
-func (m *mockCycleBreakerNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
+func (m *mockDetectorCycleBreakerNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
 	if m.getError != nil {
 		return nil, m.getError
 	}
@@ -40,7 +40,7 @@ func (m *mockCycleBreakerNovaAPI) GetServerMigrations(ctx context.Context, id st
 	return []migration{}, nil
 }
 
-func TestCycleBreaker_Filter(t *testing.T) {
+func TestDetectorCycleBreaker_Filter(t *testing.T) {
 	tests := []struct {
 		name       string
 		decisions  []plugins.VMDetection
@@ -170,7 +170,7 @@ func TestCycleBreaker_Filter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockAPI := &mockCycleBreakerNovaAPI{
+			mockAPI := &mockDetectorCycleBreakerNovaAPI{
 				migrations: tt.migrations,
 			}
 
@@ -178,7 +178,7 @@ func TestCycleBreaker_Filter(t *testing.T) {
 				mockAPI.getError = errors.New("API error")
 			}
 
-			detector := cycleBreaker{novaAPI: mockAPI}
+			detector := detectorCycleBreaker{novaAPI: mockAPI}
 
 			ctx := context.Background()
 			result, err := detector.Filter(ctx, tt.decisions)
@@ -227,12 +227,12 @@ func TestCycleBreaker_Filter(t *testing.T) {
 	}
 }
 
-func TestCycleBreaker_Filter_EmptyVMDetections(t *testing.T) {
-	mockAPI := &mockCycleBreakerNovaAPI{
+func TestDetectorCycleBreaker_Filter_EmptyVMDetections(t *testing.T) {
+	mockAPI := &mockDetectorCycleBreakerNovaAPI{
 		migrations: map[string][]migration{},
 	}
 
-	detector := cycleBreaker{novaAPI: mockAPI}
+	detector := detectorCycleBreaker{novaAPI: mockAPI}
 
 	ctx := context.Background()
 	result, err := detector.Filter(ctx, []plugins.VMDetection{})
