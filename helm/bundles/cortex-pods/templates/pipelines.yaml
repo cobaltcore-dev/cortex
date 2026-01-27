@@ -10,10 +10,6 @@ spec:
   type: filter-weigher
   createDecisions: true
   filters:
-    - name: noop
-      description: |
-        This is only a passthrough step which lets all pod candidates through.
-        It is used as a placeholder step in the pods scheduler pipeline.
     - name: taint
       description: |
         Filters nodes based on taints, excluding nodes with NoSchedule taints
@@ -22,4 +18,13 @@ spec:
       description: |
         Filters nodes based on pod's node affinity requirements, matching
         nodes that satisfy the specified label selectors.
-  weighers: []
+          knowledges: []
+    - name: nodecapacity
+      description: |
+        Filters nodes based on the amount of allocatable resources,
+        excluding nodes with insufficient resources.
+  weighers:
+    - name: binpack
+      description: |
+        This steps prefers nodes with a higher utilization after the workload is placed,
+        by calculating a weighted average of the individual resource utilizations.

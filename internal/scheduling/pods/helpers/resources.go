@@ -37,6 +37,22 @@ func AddResourcesInto(dst, src corev1.ResourceList) {
 	}
 }
 
+// SubtractResourcesInto modifies dst in-place by subtracting the quantity of each resource of src.
+// If a resource doesn't exist in dst, it will be ignored.
+// If subtraction would result in a negative value, the resource is set to zero.
+func SubtractResourcesInto(dst, src corev1.ResourceList) {
+	for resource, qty := range src {
+		if existing, ok := dst[resource]; ok {
+			existing.Sub(qty)
+			// Ensure we don't go negative
+			if existing.Sign() < 0 {
+				existing.Set(0)
+			}
+			dst[resource] = existing
+		}
+	}
+}
+
 // MaxResourcesInto modifies dst in-place by taking the maximum quantity of the resources of dst and src.
 func MaxResourcesInto(dst, src corev1.ResourceList) {
 	for resource, qty := range src {

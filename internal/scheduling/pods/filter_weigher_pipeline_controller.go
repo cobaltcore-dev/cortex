@@ -45,6 +45,11 @@ type FilterWeigherPipelineController struct {
 	// Mutex to only allow one process at a time
 	processMu sync.Mutex
 
+	// Mutex to serialize updates/access of nodes
+	nodesMu sync.RWMutex
+	// State of the nodes available for scheduling
+	nodes []corev1.Node
+
 	// Config for the scheduling operator.
 	Conf conf.Config
 	// Monitor to pass down to all pipelines.
@@ -157,17 +162,12 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return nil
 	}
 
-	// Find all available nodes.
-	nodes := &corev1.NodeList{}
-	if err := c.List(ctx, nodes); err != nil {
-		return err
-	}
-	if len(nodes.Items) == 0 {
-		return errors.New("no nodes available for scheduling")
-	}
+	c.nodesMu.RLock()
+	nodes := c.nodes
+	c.nodesMu.RUnlock()
 
 	// Execute the scheduling pipeline.
-	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
+	request := pods.PodPipelineRequest{Nodes: nodes, Pod: *pod}
 	result, err := pipeline.Run(request)
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
@@ -175,6 +175,10 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	}
 	decision.Status.Result = &result
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
+
+	if result.TargetHost == nil {
+		return errors.New("no suitable host found for pod")
+	}
 
 	// Assign the first node returned by the pipeline using a Binding.
 	binding := &corev1.Binding{
@@ -207,6 +211,45 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 		weighers.Index, p.Spec.Weighers,
 		c.Monitor,
 	)
+}
+
+func (c *FilterWeigherPipelineController) updateNodes(ctx context.Context) error {
+	nodesList := &corev1.NodeList{}
+	if err := c.List(ctx, nodesList); err != nil {
+		return err
+	}
+
+	c.nodesMu.Lock()
+	defer c.nodesMu.Unlock()
+
+	c.nodes = nodesList.Items
+
+	log := ctrl.LoggerFrom(ctx)
+	log.V(1).Info("updated nodes", "nodeCount", len(nodesList.Items))
+	return nil
+}
+
+func (c *FilterWeigherPipelineController) handleNode() handler.EventHandler {
+	return handler.Funcs{
+		CreateFunc: func(ctx context.Context, evt event.CreateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if err := c.updateNodes(ctx); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to update nodes cache on node create")
+			}
+		},
+		UpdateFunc: func(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if err := c.updateNodes(ctx); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to update nodes cache on node update")
+			}
+		},
+		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if err := c.updateNodes(ctx); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to update nodes cache on node delete")
+			}
+		},
+	}
 }
 
 func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
@@ -255,7 +298,16 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
+
+	if err := mgr.Add(manager.RunnableFunc(c.updateNodes)); err != nil {
+		return err
+	}
+
 	return multicluster.BuildController(mcl, mgr).
+		WatchesMulticluster(
+			&corev1.Node{},
+			c.handleNode(),
+		).
 		WatchesMulticluster(
 			&corev1.Pod{},
 			c.handlePod(),
@@ -266,7 +318,15 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 					// Skip pods that already have a node assigned.
 					return false
 				}
-				return pod.Spec.SchedulerName == string(v1alpha1.SchedulingDomainPods)
+				if pod.Spec.SchedulerName != string(v1alpha1.SchedulingDomainPods) {
+					// Skip pods that should not be scheduled by cortex
+					return false
+				}
+				if pod.ObjectMeta.OwnerReferences != nil {
+					// Skip pods that are managed by a larger entity, e.g. by a PodGroupSet
+					return false
+				}
+				return true
 			}),
 		).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.

@@ -528,6 +528,8 @@ func createMockPodPipeline() lib.FilterWeigherPipeline[pods.PodPipelineRequest] 
 	return &mockPodPipeline{}
 }
 
+// mockPodPipeline is a mock implementation of lib.Pipeline[pods.PodPipelineRequest]
+// for testing purposes. It returns the first available node as the target host.
 type mockPodPipeline struct{}
 
 func (m *mockPodPipeline) Run(request pods.PodPipelineRequest) (v1alpha1.DecisionResult, error) {
@@ -538,6 +540,7 @@ func (m *mockPodPipeline) Run(request pods.PodPipelineRequest) (v1alpha1.Decisio
 	// Return the first node as the target host
 	targetHost := request.Nodes[0].Name
 	return v1alpha1.DecisionResult{
-		TargetHost: &targetHost,
+		TargetHost:           &targetHost,
+		AggregatedOutWeights: map[string]float64{targetHost: 1.0},
 	}, nil
 }

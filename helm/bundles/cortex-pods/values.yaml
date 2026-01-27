@@ -19,16 +19,21 @@ alerts:
   prometheus: openstack
 
 cortex:
-  enabled: false
+  enabled: true
   # CRDs are deployed in the cortex-crds chart.
   crd: { enable: false }
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-pods
+  rbac:
+    enable: true
+    pods:
+      enable: true
   conf:
     # The operator will only touch CRs with this scheduling domain name.
     schedulingDomain: pods
     enabledControllers:
       - pods-decisions-pipeline-controller
+      - podgroupsets-controller
       - explanation-controller
     monitoring:
       labels:

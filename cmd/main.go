@@ -376,6 +376,23 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if slices.Contains(config.EnabledControllers, "podgroupsets-controller") {
+		if !slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
+			setupLog.Error(nil, "podgroupsets-controller requires pods-decisions-pipeline-controller to be enabled")
+			os.Exit(1)
+		}
+
+		controller := &pods.PodGroupSetController{
+			Client:  multiclusterClient,
+			Monitor: pipelineMonitor,
+			Conf:    config,
+		}
+
+		if err := controller.SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PodGroupSetController")
+			os.Exit(1)
+		}
+	}
 	if slices.Contains(config.EnabledControllers, "explanation-controller") {
 		// Setup a controller which will reconcile the history and explanation for
 		// decision resources.

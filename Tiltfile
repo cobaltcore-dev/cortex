@@ -7,16 +7,17 @@
 analytics_settings(False)
 
 # Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
-ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore,pods')
+ACTIVE_DEPLOYMENTS_ENV = os.getenv(
+    'ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore,pods')
 if ACTIVE_DEPLOYMENTS_ENV == "":
-    ACTIVE_DEPLOYMENTS = [] # Catch "".split(",") = [""]
+    ACTIVE_DEPLOYMENTS = []  # Catch "".split(",") = [""]
 else:
     ACTIVE_DEPLOYMENTS = ACTIVE_DEPLOYMENTS_ENV.split(',')
 
 if not os.getenv('TILT_VALUES_PATH'):
     fail("TILT_VALUES_PATH is not set.")
 if not os.path.exists(os.getenv('TILT_VALUES_PATH')):
-    fail("TILT_VALUES_PATH "+ os.getenv('TILT_VALUES_PATH') + " does not exist.")
+    fail("TILT_VALUES_PATH " + os.getenv('TILT_VALUES_PATH') + " does not exist.")
 tilt_values = [os.getenv('TILT_VALUES_PATH')]
 
 tilt_overrides = os.getenv('TILT_OVERRIDES_PATH')
@@ -30,19 +31,20 @@ helm_repo(
     labels=['Repositories'],
 )
 
-########### Dependency CRDs
+# Dependency CRDs
 # Make sure the local cluster is running if you are running into startup issues here.
 url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/hypervisor-crd.yaml'
 local('curl ' + url + ' | kubectl apply -f -')
 
-########### Cortex Operator & CRDs
+# Cortex Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.',
-    dockerfile='Dockerfile',
-    only=['internal/', 'cmd/', 'api/', 'pkg', 'go.mod', 'go.sum', 'Dockerfile'],
-)
+             dockerfile='Dockerfile',
+             only=['internal/', 'cmd/', 'api/', 'pkg',
+                   'go.mod', 'go.sum', 'Dockerfile'],
+             )
 local('sh helm/sync.sh helm/library/cortex')
 
-########### Cortex Bundles
+# Cortex Bundles
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
 
 # Package the lib charts locally and sync them to the bundle charts. In this way
@@ -84,7 +86,8 @@ dep_charts = {
 
 for (bundle_chart_path, bundle_chart_name) in bundle_charts:
     for (dep_chart_path, dep_chart_name) in dep_charts[bundle_chart_name]:
-        print('--- Syncing dependency ' + dep_chart_name + ' into bundle ' + bundle_chart_name)
+        print('--- Syncing dependency ' + dep_chart_name +
+              ' into bundle ' + bundle_chart_name)
         watch_file(dep_chart_path)
         local('sh helm/sync.sh ' + dep_chart_path)
         local('helm package ' + dep_chart_path)
@@ -96,10 +99,12 @@ for (bundle_chart_path, bundle_chart_name) in bundle_charts:
             local('mv -f ' + gen_tgz + ' ' + bundle_chart_path + '/charts/')
             continue
         # If it is there, compare the files and only copy if they differ.
-        cmp = 'sh helm/cmp.sh ' + gen_tgz + ' ' + bundle_chart_path + '/charts/' + gen_tgz
+        cmp = 'sh helm/cmp.sh ' + gen_tgz + ' ' + \
+            bundle_chart_path + '/charts/' + gen_tgz
         cmp_result = str(local(cmp)).strip()
         if cmp_result == 'true':
-            print('Skipping ' + dep_chart_name + ' as it is already up to date in ' + bundle_chart_name)
+            print('Skipping ' + dep_chart_name +
+                  ' as it is already up to date in ' + bundle_chart_name)
             local('rm -f ' + gen_tgz)
         else:
             print('Updating ' + dep_chart_name + ' in ' + bundle_chart_name)
@@ -131,14 +136,16 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=crd_extra_va
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=tilt_values))
+    k8s_yaml(helm('./helm/bundles/cortex-nova',
+             name='cortex-nova', values=tilt_values))
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8000, 5432),
     ])
     k8s_resource('cortex-nova-scheduling-controller-manager', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8001, 8080),
     ])
-    k8s_resource('cortex-nova-knowledge-controller-manager', labels=['Cortex-Nova'])
+    k8s_resource('cortex-nova-knowledge-controller-manager',
+                 labels=['Cortex-Nova'])
     local_resource(
         'Scheduler E2E Tests (Nova)',
         '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /manager e2e-nova"',
@@ -149,14 +156,16 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
 
 if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=tilt_values))
+    k8s_yaml(helm('./helm/bundles/cortex-manila',
+             name='cortex-manila', values=tilt_values))
     k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
         port_forward(8002, 5432),
     ])
     k8s_resource('cortex-manila-scheduling-controller-manager', labels=['Cortex-Manila'], port_forwards=[
-            port_forward(8003, 8080),
+        port_forward(8003, 8080),
     ])
-    k8s_resource('cortex-manila-knowledge-controller-manager', labels=['Cortex-Manila'])
+    k8s_resource('cortex-manila-knowledge-controller-manager',
+                 labels=['Cortex-Manila'])
     local_resource(
         'Scheduler E2E Tests (Manila)',
         '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduling-controller-manager -- /manager e2e-manila"',
@@ -166,14 +175,16 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     )
 
 if 'cinder' in ACTIVE_DEPLOYMENTS:
-    k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=tilt_values))
+    k8s_yaml(helm('./helm/bundles/cortex-cinder',
+             name='cortex-cinder', values=tilt_values))
     k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8004, 5432),
     ])
     k8s_resource('cortex-cinder-scheduling-controller-manager', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8005, 8080),
     ])
-    k8s_resource('cortex-cinder-knowledge-controller-manager', labels=['Cortex-Cinder'])
+    k8s_resource('cortex-cinder-knowledge-controller-manager',
+                 labels=['Cortex-Cinder'])
     local_resource(
         'Scheduler E2E Tests (Cinder)',
         '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduling-controller-manager -- /manager e2e-cinder"',
@@ -189,8 +200,10 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
     k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machinepools.yaml')
     k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machineclasses.yaml')
     # Deploy IronCore controller
-    k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=tilt_values))
-    k8s_resource('cortex-ironcore-controller-manager', labels=['Cortex-IronCore'])
+    k8s_yaml(helm('./helm/bundles/cortex-ironcore',
+             name='cortex-ironcore', values=tilt_values))
+    k8s_resource('cortex-ironcore-controller-manager',
+                 labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
     k8s_yaml('samples/ironcore/machinepool.yaml')
     k8s_yaml('samples/ironcore/machineclass.yaml')
@@ -198,16 +211,14 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
 
 if 'pods' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Pods bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-pods', name='cortex-pods', values=tilt_values),)
+    k8s_yaml(helm('./helm/bundles/cortex-pods',
+             name='cortex-pods', values=tilt_values),)
     k8s_resource('cortex-pods-controller-manager', labels=['Cortex-Pods'])
-    # Deploy example resources
-    k8s_yaml('samples/pods/node.yaml')
-    k8s_yaml('samples/pods/pod.yaml')
-    k8s_resource('test-pod', labels=['Cortex-Pods'])
 
-########### Dev Dependencies
+# Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
-k8s_yaml(helm('./helm/dev/cortex-prometheus-operator', name='cortex-prometheus-operator')) # Operator
+k8s_yaml(helm('./helm/dev/cortex-prometheus-operator',
+         name='cortex-prometheus-operator'))  # Operator
 k8s_resource('cortex-prometheus-operator', labels=['Monitoring'])
 k8s_resource(
     new_name='cortex-prometheus',
