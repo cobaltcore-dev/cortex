@@ -393,3 +393,208 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 		t.Error("NovaRaw should not be nil")
 	}
 }
+
+func TestHTTPAPI_inferPipelineName(t *testing.T) {
+	config := conf.Config{SchedulingDomain: "test-operator"}
+	delegate := &mockHTTPAPIDelegate{}
+	api := NewAPI(config, delegate).(*httpAPI)
+
+	tests := []struct {
+		name           string
+		requestData    novaapi.ExternalSchedulerRequest
+		expectedResult string
+		expectErr      bool
+		errContains    string
+	}{
+		{
+			name: "qemu hypervisor without reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "qemu",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "nova-external-scheduler-kvm",
+			expectErr:      false,
+		},
+		{
+			name: "qemu hypervisor with reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "qemu",
+								},
+							},
+						},
+					},
+				},
+				Reservation: true,
+			},
+			expectedResult: "nova-external-scheduler-kvm-all-filters-enabled",
+			expectErr:      false,
+		},
+		{
+			name: "QEMU hypervisor uppercase",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "QEMU",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "nova-external-scheduler-kvm",
+			expectErr:      false,
+		},
+		{
+			name: "ch hypervisor without reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "ch",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "nova-external-scheduler-kvm",
+			expectErr:      false,
+		},
+		{
+			name: "ch hypervisor with reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "ch",
+								},
+							},
+						},
+					},
+				},
+				Reservation: true,
+			},
+			expectedResult: "nova-external-scheduler-kvm-all-filters-enabled",
+			expectErr:      false,
+		},
+		{
+			name: "vmware hypervisor without reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "VMware vCenter Server",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "nova-external-scheduler-vmware",
+			expectErr:      false,
+		},
+		{
+			name: "vmware hypervisor with reservation - error",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "VMware vCenter Server",
+								},
+							},
+						},
+					},
+				},
+				Reservation: true,
+			},
+			expectErr:   true,
+			errContains: "reservations are not supported on vmware hypervisors",
+		},
+		{
+			name: "missing hypervisor_type",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectErr:   true,
+			errContains: "missing hypervisor_type",
+		},
+		{
+			name: "unsupported hypervisor_type",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "unknown-hypervisor",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectErr:   true,
+			errContains: "unsupported hypervisor_type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := api.inferPipelineName(tt.requestData)
+
+			if tt.expectErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("expected error to contain '%s', got '%s'", tt.errContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if result != tt.expectedResult {
+					t.Errorf("expected pipeline name '%s', got '%s'", tt.expectedResult, result)
+				}
+			}
+		})
+	}
+}

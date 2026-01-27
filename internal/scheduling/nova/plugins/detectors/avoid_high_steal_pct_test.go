@@ -4,11 +4,14 @@
 package detectors
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -17,6 +20,102 @@ type VMDetection struct {
 	VMID   string
 	Reason string
 	Host   string
+}
+
+func TestAvoidHighStealPctStep_Init(t *testing.T) {
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	validParams := runtime.RawExtension{
+		Raw: []byte(`{"maxStealPctOverObservedTimeSpan": 80.0}`),
+	}
+
+	tests := []struct {
+		name          string
+		knowledge     *v1alpha1.Knowledge
+		detectorSpec  v1alpha1.DetectorSpec
+		wantError     bool
+		errorContains string
+	}{
+		{
+			name: "successful init with valid knowledge",
+			knowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{Name: "kvm-libvirt-domain-cpu-steal-pct"},
+				Status: v1alpha1.KnowledgeStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   v1alpha1.KnowledgeConditionReady,
+							Status: metav1.ConditionTrue,
+						},
+					},
+					RawLength: 10,
+				},
+			},
+			detectorSpec: v1alpha1.DetectorSpec{
+				Name:   "avoid_high_steal_pct",
+				Params: validParams,
+			},
+			wantError: false,
+		},
+		{
+			name:      "fails when knowledge doesn't exist",
+			knowledge: nil,
+			detectorSpec: v1alpha1.DetectorSpec{
+				Name:   "avoid_high_steal_pct",
+				Params: validParams,
+			},
+			wantError:     true,
+			errorContains: "failed to get knowledge",
+		},
+		{
+			name: "fails when knowledge not ready",
+			knowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{Name: "kvm-libvirt-domain-cpu-steal-pct"},
+				Status: v1alpha1.KnowledgeStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   v1alpha1.KnowledgeConditionReady,
+							Status: metav1.ConditionFalse,
+						},
+					},
+					RawLength: 0,
+				},
+			},
+			detectorSpec: v1alpha1.DetectorSpec{
+				Name:   "avoid_high_steal_pct",
+				Params: validParams,
+			},
+			wantError:     true,
+			errorContains: "not ready",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(scheme)
+			if tt.knowledge != nil {
+				builder = builder.WithObjects(tt.knowledge)
+			}
+			client := builder.Build()
+
+			step := &AvoidHighStealPctStep{}
+			err := step.Init(context.Background(), client, tt.detectorSpec)
+
+			if tt.wantError {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error containing %q, got %q", tt.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
 }
 
 func TestAvoidHighStealPctStep_Run(t *testing.T) {

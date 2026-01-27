@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type mockDetectorCycleBreakerNovaAPI struct {
@@ -244,4 +245,78 @@ func TestDetectorCycleBreaker_Filter_EmptyVMDetections(t *testing.T) {
 	if len(result) != 0 {
 		t.Errorf("expected empty result for empty input, got %d decisions", len(result))
 	}
+}
+
+func TestNewDetectorCycleBreaker(t *testing.T) {
+	detector := NewDetectorCycleBreaker()
+
+	if detector == nil {
+		t.Fatal("expected non-nil detector")
+	}
+
+	// Verify it's the correct type
+	_, ok := detector.(*detectorCycleBreaker)
+	if !ok {
+		t.Errorf("expected *detectorCycleBreaker, got %T", detector)
+	}
+
+	// Verify the novaAPI field is initialized
+	detectorImpl := detector.(*detectorCycleBreaker)
+	if detectorImpl.novaAPI == nil {
+		t.Error("expected novaAPI to be initialized")
+	}
+}
+
+func TestDetectorCycleBreaker_Init(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupMock func() NovaAPI
+		expectErr bool
+	}{
+		{
+			name: "successful initialization",
+			setupMock: func() NovaAPI {
+				return &mockDetectorCycleBreakerNovaAPI{}
+			},
+			expectErr: false,
+		},
+		{
+			name: "initialization with error",
+			setupMock: func() NovaAPI {
+				return &mockDetectorCycleBreakerNovaAPIWithInitError{}
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detector := &detectorCycleBreaker{
+				novaAPI: tt.setupMock(),
+			}
+
+			ctx := context.Background()
+			fakeClient := fake.NewClientBuilder().Build()
+			cfg := conf.Config{}
+
+			err := detector.Init(ctx, fakeClient, cfg)
+
+			if tt.expectErr && err == nil {
+				t.Error("expected error but got none")
+			}
+
+			if !tt.expectErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// mockDetectorCycleBreakerNovaAPIWithInitError is a mock that returns an error on Init
+type mockDetectorCycleBreakerNovaAPIWithInitError struct {
+	mockDetectorCycleBreakerNovaAPI
+}
+
+func (m *mockDetectorCycleBreakerNovaAPIWithInitError) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	return errors.New("init error")
 }

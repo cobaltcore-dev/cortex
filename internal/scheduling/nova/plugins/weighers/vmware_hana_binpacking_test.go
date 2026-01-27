@@ -4,13 +4,16 @@
 package weighers
 
 import (
+	"context"
 	"log/slog"
+	"strings"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -43,6 +46,94 @@ func TestVMwareHanaBinpackingStepOpts_Validate(t *testing.T) {
 			err := tt.opts.Validate()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestVMwareHanaBinpackingStep_Init(t *testing.T) {
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	validParams := runtime.RawExtension{
+		Raw: []byte(`{
+			"ramUtilizedAfterLowerBoundPct": 30.0,
+			"ramUtilizedAfterUpperBoundPct": 80.0,
+			"ramUtilizedAfterActivationLowerBound": 0.0,
+			"ramUtilizedAfterActivationUpperBound": 1.0
+		}`),
+	}
+
+	tests := []struct {
+		name          string
+		knowledges    []*v1alpha1.Knowledge
+		weigherSpec   v1alpha1.WeigherSpec
+		wantError     bool
+		errorContains string
+	}{
+		{
+			name: "successful init with valid knowledges",
+			knowledges: []*v1alpha1.Knowledge{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host-utilization"},
+					Status: v1alpha1.KnowledgeStatus{
+						Conditions: []metav1.Condition{
+							{Type: v1alpha1.KnowledgeConditionReady, Status: metav1.ConditionTrue},
+						},
+						RawLength: 10,
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host-capabilities"},
+					Status: v1alpha1.KnowledgeStatus{
+						Conditions: []metav1.Condition{
+							{Type: v1alpha1.KnowledgeConditionReady, Status: metav1.ConditionTrue},
+						},
+						RawLength: 10,
+					},
+				},
+			},
+			weigherSpec: v1alpha1.WeigherSpec{
+				Name:   "vmware_hana_binpacking",
+				Params: validParams,
+			},
+			wantError: false,
+		},
+		{
+			name:       "fails when host-utilization knowledge doesn't exist",
+			knowledges: nil,
+			weigherSpec: v1alpha1.WeigherSpec{
+				Name:   "vmware_hana_binpacking",
+				Params: validParams,
+			},
+			wantError:     true,
+			errorContains: "failed to get knowledge",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(scheme)
+			for _, k := range tt.knowledges {
+				builder = builder.WithObjects(k)
+			}
+			client := builder.Build()
+
+			step := &VMwareHanaBinpackingStep{}
+			err := step.Init(context.Background(), client, tt.weigherSpec)
+
+			if tt.wantError {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error containing %q, got %q", tt.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
 			}
 		})
 	}
@@ -102,11 +193,11 @@ func TestVMwareHanaBinpackingStep_Run(t *testing.T) {
 	step.Client = fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(&v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: "host-utilization"},
+			ObjectMeta: metav1.ObjectMeta{Name: "host-utilization"},
 			Status:     v1alpha1.KnowledgeStatus{Raw: hostUtilizations},
 		}).
 		WithObjects(&v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: "host-capabilities"},
+			ObjectMeta: metav1.ObjectMeta{Name: "host-capabilities"},
 			Status:     v1alpha1.KnowledgeStatus{Raw: hostCapabilities},
 		}).
 		Build()

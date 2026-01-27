@@ -4,15 +4,162 @@
 package weighers
 
 import (
+	"context"
 	"log/slog"
+	"strings"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestVMwareAvoidLongTermContendedHostsStepOpts_Validate(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      VMwareAvoidLongTermContendedHostsStepOpts
+		wantError bool
+	}{
+		{
+			name: "valid opts with different bounds",
+			opts: VMwareAvoidLongTermContendedHostsStepOpts{
+				AvgCPUContentionLowerBound:           0.0,
+				AvgCPUContentionUpperBound:           100.0,
+				AvgCPUContentionActivationLowerBound: 0.0,
+				AvgCPUContentionActivationUpperBound: -1.0,
+				MaxCPUContentionLowerBound:           0.0,
+				MaxCPUContentionUpperBound:           100.0,
+				MaxCPUContentionActivationLowerBound: 0.0,
+				MaxCPUContentionActivationUpperBound: -1.0,
+			},
+			wantError: false,
+		},
+		{
+			name: "invalid opts - equal avg bounds",
+			opts: VMwareAvoidLongTermContendedHostsStepOpts{
+				AvgCPUContentionLowerBound:           50.0,
+				AvgCPUContentionUpperBound:           50.0, // Same as lower
+				AvgCPUContentionActivationLowerBound: 0.0,
+				AvgCPUContentionActivationUpperBound: -1.0,
+				MaxCPUContentionLowerBound:           0.0,
+				MaxCPUContentionUpperBound:           100.0,
+				MaxCPUContentionActivationLowerBound: 0.0,
+				MaxCPUContentionActivationUpperBound: -1.0,
+			},
+			wantError: true,
+		},
+		{
+			name: "invalid opts - equal max bounds",
+			opts: VMwareAvoidLongTermContendedHostsStepOpts{
+				AvgCPUContentionLowerBound:           0.0,
+				AvgCPUContentionUpperBound:           100.0,
+				AvgCPUContentionActivationLowerBound: 0.0,
+				AvgCPUContentionActivationUpperBound: -1.0,
+				MaxCPUContentionLowerBound:           50.0,
+				MaxCPUContentionUpperBound:           50.0, // Same as lower
+				MaxCPUContentionActivationLowerBound: 0.0,
+				MaxCPUContentionActivationUpperBound: -1.0,
+			},
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.opts.Validate()
+			if (err != nil) != tt.wantError {
+				t.Errorf("Validate() error = %v, wantError %v", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestVMwareAvoidLongTermContendedHostsStep_Init(t *testing.T) {
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	validParams := runtime.RawExtension{
+		Raw: []byte(`{
+			"avgCPUContentionLowerBound": 0,
+			"avgCPUContentionUpperBound": 100,
+			"avgCPUContentionActivationLowerBound": 0,
+			"avgCPUContentionActivationUpperBound": -1,
+			"maxCPUContentionLowerBound": 0,
+			"maxCPUContentionUpperBound": 100,
+			"maxCPUContentionActivationLowerBound": 0,
+			"maxCPUContentionActivationUpperBound": -1
+		}`),
+	}
+
+	tests := []struct {
+		name          string
+		knowledge     *v1alpha1.Knowledge
+		weigherSpec   v1alpha1.WeigherSpec
+		wantError     bool
+		errorContains string
+	}{
+		{
+			name: "successful init with valid knowledge",
+			knowledge: &v1alpha1.Knowledge{
+				ObjectMeta: metav1.ObjectMeta{Name: "vmware-long-term-contended-hosts"},
+				Status: v1alpha1.KnowledgeStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   v1alpha1.KnowledgeConditionReady,
+							Status: metav1.ConditionTrue,
+						},
+					},
+					RawLength: 10,
+				},
+			},
+			weigherSpec: v1alpha1.WeigherSpec{
+				Name:   "vmware_avoid_long_term_contended_hosts",
+				Params: validParams,
+			},
+			wantError: false,
+		},
+		{
+			name:      "fails when knowledge doesn't exist",
+			knowledge: nil,
+			weigherSpec: v1alpha1.WeigherSpec{
+				Name:   "vmware_avoid_long_term_contended_hosts",
+				Params: validParams,
+			},
+			wantError:     true,
+			errorContains: "failed to get knowledge",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(scheme)
+			if tt.knowledge != nil {
+				builder = builder.WithObjects(tt.knowledge)
+			}
+			client := builder.Build()
+
+			step := &VMwareAvoidLongTermContendedHostsStep{}
+			err := step.Init(context.Background(), client, tt.weigherSpec)
+
+			if tt.wantError {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error containing %q, got %q", tt.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
 
 func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 	scheme, err := v1alpha1.SchemeBuilder.Build()
@@ -43,7 +190,7 @@ func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 	step.Client = fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(&v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: "vmware-long-term-contended-hosts"},
+			ObjectMeta: metav1.ObjectMeta{Name: "vmware-long-term-contended-hosts"},
 			Status:     v1alpha1.KnowledgeStatus{Raw: vropsHostsystemContentionLongTerm},
 		}).
 		Build()
