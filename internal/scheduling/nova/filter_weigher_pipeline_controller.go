@@ -34,7 +34,7 @@ import (
 //
 // Additionally, the controller watches for pipeline and step changes to
 // reconfigure the pipelines as needed.
-type DecisionPipelineController struct {
+type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]
 
@@ -48,12 +48,12 @@ type DecisionPipelineController struct {
 }
 
 // The type of pipeline this controller manages.
-func (c *DecisionPipelineController) PipelineType() v1alpha1.PipelineType {
+func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeFilterWeigher
 }
 
 // Callback executed when kubernetes asks to reconcile a decision resource.
-func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
@@ -73,7 +73,7 @@ func (c *DecisionPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 // Process the decision from the API. Should create and return the updated decision.
-func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
+func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
@@ -112,7 +112,7 @@ func (c *DecisionPipelineController) ProcessNewDecisionFromAPI(ctx context.Conte
 	return err
 }
 
-func (c *DecisionPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
+func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
@@ -148,7 +148,7 @@ func (c *DecisionPipelineController) process(ctx context.Context, decision *v1al
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *DecisionPipelineController) InitPipeline(
+func (c *FilterWeigherPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
 ) lib.PipelineInitResult[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]] {
@@ -161,7 +161,7 @@ func (c *DecisionPipelineController) InitPipeline(
 	)
 }
 
-func (c *DecisionPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {

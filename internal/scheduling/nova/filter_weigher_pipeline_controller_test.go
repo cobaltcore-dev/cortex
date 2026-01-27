@@ -24,7 +24,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
-func TestDecisionPipelineController_Reconcile(t *testing.T) {
+func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
@@ -195,7 +195,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
-			controller := &DecisionPipelineController{
+			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
 					Client:    client,
 					Pipelines: make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
@@ -257,8 +257,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 	}
 }
 
-func TestDecisionPipelineController_InitPipeline(t *testing.T) {
-	controller := &DecisionPipelineController{
+func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
+	controller := &FilterWeigherPipelineController{
 		Monitor: lib.FilterWeigherPipelineMonitor{},
 	}
 
@@ -352,7 +352,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 	}
 }
 
-func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
+func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
@@ -662,7 +662,7 @@ func TestDecisionPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
-			controller := &DecisionPipelineController{
+			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
 					Client:          client,
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),

@@ -22,7 +22,7 @@ import (
 )
 
 // Delete all decisions for manila shares that have been deleted.
-func Cleanup(ctx context.Context, client client.Client, conf conf.Config) error {
+func DecisionsCleanup(ctx context.Context, client client.Client, conf conf.Config) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error

@@ -41,16 +41,14 @@ import (
 	decisionscinder "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/explanation"
 	decisionsmachines "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/machines"
-	decisionsmanila "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/manila"
 	decisionpods "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods"
 	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
 	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
 	cinderexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/cinder"
-	manilaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/manila"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
-	decisionsnova "github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -294,7 +292,7 @@ func main() {
 	metrics.Registry.MustRegister(&pipelineMonitor)
 
 	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
-		decisionController := &decisionsnova.DecisionPipelineController{
+		decisionController := &nova.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -332,7 +330,7 @@ func main() {
 		}
 	}
 	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
-		controller := &decisionsmanila.DecisionPipelineController{
+		controller := &manila.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -342,10 +340,10 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manilaexternal.NewAPI(config, controller).Init(mux)
+		manila.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
-		controller := &decisionscinder.DecisionPipelineController{
+		controller := &decisionscinder.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -358,7 +356,7 @@ func main() {
 		cinderexternal.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
-		controller := &decisionsmachines.DecisionPipelineController{
+		controller := &decisionsmachines.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -370,7 +368,7 @@ func main() {
 		}
 	}
 	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
-		controller := &decisionpods.DecisionPipelineController{
+		controller := &decisionpods.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -525,7 +523,7 @@ func main() {
 			Interval: time.Hour,
 			Name:     "manila-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return decisionsmanila.Cleanup(ctx, multiclusterClient, config)
+				return manila.DecisionsCleanup(ctx, multiclusterClient, config)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add manila decisions cleanup task to manager")

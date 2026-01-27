@@ -339,7 +339,7 @@ func TestCleanupManila(t *testing.T) {
 					Namespace: "default",
 				},
 			}
-			err := Cleanup(context.Background(), client, config)
+			err := DecisionsCleanup(context.Background(), client, config)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -427,7 +427,7 @@ func TestCleanupManilaDecisionsCancel(t *testing.T) {
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
-	if err := Cleanup(ctx, client, config); err != nil {
+	if err := DecisionsCleanup(ctx, client, config); err != nil {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("Unexpected error during cleanup: %v", err)
 		}

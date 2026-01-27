@@ -5,8 +5,8 @@ package manila
 
 import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/manila/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila/plugins/weighers"
 )
 
 type ManilaWeigher = lib.Weigher[api.ExternalSchedulerRequest]

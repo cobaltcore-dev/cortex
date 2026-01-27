@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestDecisionPipelineController_Reconcile(t *testing.T) {
+func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheduling scheme: %v", err)
@@ -120,7 +120,7 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
-			controller := &DecisionPipelineController{
+			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]]{
 					Pipelines: map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{
 						"machines-scheduler": createMockPipeline(),
@@ -204,8 +204,8 @@ func TestDecisionPipelineController_Reconcile(t *testing.T) {
 	}
 }
 
-func TestDecisionPipelineController_InitPipeline(t *testing.T) {
-	controller := &DecisionPipelineController{
+func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
+	controller := &FilterWeigherPipelineController{
 		Monitor: lib.FilterWeigherPipelineMonitor{},
 	}
 
@@ -271,7 +271,7 @@ func TestDecisionPipelineController_InitPipeline(t *testing.T) {
 	}
 }
 
-func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
+func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheduling scheme: %v", err)
@@ -426,7 +426,7 @@ func TestDecisionPipelineController_ProcessNewMachine(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
-			controller := &DecisionPipelineController{
+			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]]{
 					Pipelines:       map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
