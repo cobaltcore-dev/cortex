@@ -310,7 +310,7 @@ func TestSyncerSync(t *testing.T) {
 					t.Fatalf("failed to create table: %v", err)
 				}
 			},
-			startTime:     time.Unix(1609459200, 0),
+			startTime:     time.Now().Add(-2 * time.Hour), // Use recent time to avoid iterating through years of hourly intervals
 			expectedCalls: 1,
 		},
 		{
