@@ -38,14 +38,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
-	decisionscinder "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/cinder"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/explanation"
 	decisionsmachines "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/machines"
 	decisionpods "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods"
 	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
 	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
-	cinderexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/cinder"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
@@ -343,7 +342,7 @@ func main() {
 		manila.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
-		controller := &decisionscinder.FilterWeigherPipelineController{
+		controller := &cinder.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -353,7 +352,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cinderexternal.NewAPI(config, controller).Init(mux)
+		cinder.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &decisionsmachines.FilterWeigherPipelineController{
@@ -537,7 +536,7 @@ func main() {
 			Interval: time.Hour,
 			Name:     "cinder-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return decisionscinder.Cleanup(ctx, multiclusterClient, config)
+				return cinder.DecisionsCleanup(ctx, multiclusterClient, config)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add cinder decisions cleanup task to manager")
