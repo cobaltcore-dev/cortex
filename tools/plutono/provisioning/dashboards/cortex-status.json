@@ -571,7 +571,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=~\"nova-external-scheduler-.*\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_filter_weigher_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=~\"nova-external-scheduler-.*\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -647,7 +647,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_scheduler_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila-external-scheduler\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_filter_weigher_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=\"manila-external-scheduler\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -733,7 +733,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (pipeline, subject, step, alias) (delta(cortex_scheduler_pipeline_step_weight_modification[2m]))",
+          "expr": "sum by (pipeline, subject, step, alias) (delta(cortex_filter_weigher_pipeline_step_weight_modification[2m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1265,7 +1265,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_scheduler_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step, alias, pipeline))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_filter_weigher_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step, alias, pipeline))",
           "interval": "",
           "legendFormat": "{{pipeline}} {{step}}",
           "refId": "A"
@@ -1372,7 +1372,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(pipeline) (rate(cortex_scheduler_pipeline_requests_total{}[2m]))",
+          "expr": "sum by(pipeline) (rate(cortex_filter_weigher_pipeline_requests_total{}[2m]))",
           "interval": "",
           "legendFormat": "Pipeline: {{pipeline}}",
           "refId": "A"
@@ -2222,7 +2222,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_descheduler_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
+          "expr": "histogram_quantile(0.95, sum(rate(cortex_detector_pipeline_step_run_duration_seconds_bucket[2m])) by (le, step))",
           "interval": "",
           "legendFormat": "{{step}}",
           "refId": "A"

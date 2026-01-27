@@ -27,9 +27,6 @@ func TestNewDetectorPipelineMonitor(t *testing.T) {
 	if monitor.pipelineRunTimer == nil {
 		t.Error("expected pipelineRunTimer to be initialized")
 	}
-	if monitor.deschedulingRunTimer == nil {
-		t.Error("expected deschedulingRunTimer to be initialized")
-	}
 }
 
 func TestMonitor_Describe(t *testing.T) {

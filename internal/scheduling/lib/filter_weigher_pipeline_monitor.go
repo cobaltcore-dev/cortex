@@ -39,48 +39,48 @@ func NewPipelineMonitor() FilterWeigherPipelineMonitor {
 	buckets = append(buckets, prometheus.LinearBuckets(10, 10, 4)...)
 	buckets = append(buckets, prometheus.LinearBuckets(50, 50, 6)...)
 	stepReorderingsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cortex_scheduler_pipeline_step_shift_origin",
+		Name:    "cortex_filter_weigher_pipeline_step_shift_origin",
 		Help:    "From which index of the subject list the subject came from originally.",
 		Buckets: buckets,
 	}, []string{"pipeline", "step", "outidx"})
 	return FilterWeigherPipelineMonitor{
 		stepRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_scheduler_pipeline_step_run_duration_seconds",
+			Name:    "cortex_filter_weigher_pipeline_step_run_duration_seconds",
 			Help:    "Duration of scheduler pipeline step run",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"pipeline", "step"}),
 		stepSubjectWeight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_scheduler_pipeline_step_weight_modification",
+			Name: "cortex_filter_weigher_pipeline_step_weight_modification",
 			Help: "Modification of subject weight by scheduler pipeline step",
 		}, []string{"pipeline", "subject", "step"}),
 		stepRemovedSubjectsObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_scheduler_pipeline_step_removed_subjects",
+			Name:    "cortex_filter_weigher_pipeline_step_removed_subjects",
 			Help:    "Number of subjects removed by scheduler pipeline step",
 			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 		}, []string{"pipeline", "step"}),
 		stepReorderingsObserver: stepReorderingsObserver,
 		stepImpactObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_scheduler_pipeline_step_impact",
+			Name:    "cortex_filter_weigher_pipeline_step_impact",
 			Help:    "Impact of the step on the subjects",
 			Buckets: prometheus.ExponentialBucketsRange(0.01, 1000, 20),
 		}, []string{"pipeline", "step", "stat", "unit"}),
 		pipelineRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_scheduler_pipeline_run_duration_seconds",
+			Name:    "cortex_filter_weigher_pipeline_run_duration_seconds",
 			Help:    "Duration of scheduler pipeline run",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"pipeline"}),
 		subjectNumberInObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_scheduler_pipeline_subject_number_in",
+			Name:    "cortex_filter_weigher_pipeline_subject_number_in",
 			Help:    "Number of subjects going into the scheduler pipeline",
 			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 		}, []string{"pipeline"}),
 		subjectNumberOutObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_scheduler_pipeline_subject_number_out",
+			Name:    "cortex_filter_weigher_pipeline_subject_number_out",
 			Help:    "Number of subjects coming out of the scheduler pipeline",
 			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 		}, []string{"pipeline"}),
 		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_scheduler_pipeline_requests_total",
+			Name: "cortex_filter_weigher_pipeline_requests_total",
 			Help: "Total number of requests processed by the scheduler.",
 		}, []string{"pipeline"}),
 	}

@@ -18,8 +18,6 @@ type DetectorPipelineMonitor struct {
 	stepDeschedulingCounter *prometheus.GaugeVec
 	// A histogram to measure how long the pipeline takes to run in total.
 	pipelineRunTimer prometheus.Histogram
-	// A histogram to measure how long it takes to deschedule a VM.
-	deschedulingRunTimer *prometheus.HistogramVec
 
 	// The name of the pipeline being monitored.
 	PipelineName string
@@ -28,24 +26,19 @@ type DetectorPipelineMonitor struct {
 func NewDetectorPipelineMonitor() DetectorPipelineMonitor {
 	return DetectorPipelineMonitor{
 		stepRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_descheduler_pipeline_step_run_duration_seconds",
-			Help:    "Duration of descheduler pipeline step run",
+			Name:    "cortex_detector_pipeline_step_run_duration_seconds",
+			Help:    "Duration of detector pipeline step run",
 			Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
 		}, []string{"step"}),
 		stepDeschedulingCounter: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_descheduler_pipeline_step_vms_descheduled",
-			Help: "Number of vms descheduled by a descheduler pipeline step",
+			Name: "cortex_detector_pipeline_step_detections",
+			Help: "Number of resources detected by a detector pipeline step",
 		}, []string{"step"}),
 		pipelineRunTimer: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name:    "cortex_descheduler_pipeline_run_duration_seconds",
+			Name:    "cortex_detector_pipeline_run_duration_seconds",
 			Help:    "Duration of descheduler pipeline run",
 			Buckets: prometheus.DefBuckets,
 		}),
-		deschedulingRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_descheduler_pipeline_vm_descheduling_duration_seconds",
-			Help:    "Duration of descheduling a VM in the descheduler pipeline",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 21), // 0.001s to ~1048s in 21 buckets
-		}, []string{"error", "skipped", "source_host", "target_host", "vm_id"}),
 	}
 }
 
@@ -60,14 +53,12 @@ func (m *DetectorPipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.stepRunTimer.Describe(ch)
 	m.stepDeschedulingCounter.Describe(ch)
 	m.pipelineRunTimer.Describe(ch)
-	m.deschedulingRunTimer.Describe(ch)
 }
 
 func (m *DetectorPipelineMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.stepRunTimer.Collect(ch)
 	m.stepDeschedulingCounter.Collect(ch)
 	m.pipelineRunTimer.Collect(ch)
-	m.deschedulingRunTimer.Collect(ch)
 }
 
 type DetectorMonitor[DetectionType Detection] struct {
