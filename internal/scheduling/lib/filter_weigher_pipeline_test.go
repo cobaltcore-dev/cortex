@@ -4,9 +4,15 @@
 package lib
 
 import (
+	"context"
 	"log/slog"
 	"math"
 	"testing"
+
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // Mock pipeline type for testing
@@ -218,5 +224,196 @@ func TestPipeline_RunFilters(t *testing.T) {
 	req := p.runFilters(slog.Default(), request)
 	if len(req.Subjects) != 2 {
 		t.Fatalf("expected 2 step results, got %d", len(req.Subjects))
+	}
+}
+
+func TestInitNewFilterWeigherPipeline_Success(t *testing.T) {
+	scheme := runtime.NewScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	supportedFilters := map[string]func() Filter[mockFilterWeigherPipelineRequest]{
+		"test-filter": func() Filter[mockFilterWeigherPipelineRequest] {
+			return &mockFilter[mockFilterWeigherPipelineRequest]{
+				InitFunc: func(ctx context.Context, c client.Client, step v1alpha1.FilterSpec) error {
+					return nil
+				},
+			}
+		},
+	}
+
+	supportedWeighers := map[string]func() Weigher[mockFilterWeigherPipelineRequest]{
+		"test-weigher": func() Weigher[mockFilterWeigherPipelineRequest] {
+			return &mockWeigher[mockFilterWeigherPipelineRequest]{
+				InitFunc: func(ctx context.Context, c client.Client, step v1alpha1.WeigherSpec) error {
+					return nil
+				},
+			}
+		},
+	}
+
+	confedFilters := []v1alpha1.FilterSpec{
+		{
+			Name: "test-filter",
+			Params: runtime.RawExtension{
+				Raw: []byte(`{}`),
+			},
+		},
+	}
+
+	confedWeighers := []v1alpha1.WeigherSpec{
+		{
+			Name: "test-weigher",
+			Params: runtime.RawExtension{
+				Raw: []byte(`{}`),
+			},
+		},
+	}
+
+	monitor := FilterWeigherPipelineMonitor{
+		PipelineName: "test-pipeline",
+	}
+
+	result := InitNewFilterWeigherPipeline(
+		t.Context(),
+		cl,
+		"test-pipeline",
+		supportedFilters,
+		confedFilters,
+		supportedWeighers,
+		confedWeighers,
+		monitor,
+	)
+
+	if result.CriticalErr != nil {
+		t.Fatalf("expected no critical error, got %v", result.CriticalErr)
+	}
+	if result.Pipeline == nil {
+		t.Fatal("expected pipeline, got nil")
+	}
+}
+
+func TestInitNewFilterWeigherPipeline_UnsupportedFilter(t *testing.T) {
+	scheme := runtime.NewScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	supportedFilters := map[string]func() Filter[mockFilterWeigherPipelineRequest]{}
+	supportedWeighers := map[string]func() Weigher[mockFilterWeigherPipelineRequest]{}
+
+	confedFilters := []v1alpha1.FilterSpec{
+		{
+			Name: "unsupported-filter",
+			Params: runtime.RawExtension{
+				Raw: []byte(`{}`),
+			},
+		},
+	}
+
+	monitor := FilterWeigherPipelineMonitor{
+		PipelineName: "test-pipeline",
+	}
+
+	result := InitNewFilterWeigherPipeline(
+		t.Context(),
+		cl,
+		"test-pipeline",
+		supportedFilters,
+		confedFilters,
+		supportedWeighers,
+		nil,
+		monitor,
+	)
+
+	if result.CriticalErr == nil {
+		t.Fatal("expected critical error for unsupported filter, got nil")
+	}
+}
+
+func TestInitNewFilterWeigherPipeline_NameOverlap(t *testing.T) {
+	scheme := runtime.NewScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Create filter and weigher with same name
+	supportedFilters := map[string]func() Filter[mockFilterWeigherPipelineRequest]{
+		"duplicate-name": func() Filter[mockFilterWeigherPipelineRequest] {
+			return &mockFilter[mockFilterWeigherPipelineRequest]{}
+		},
+	}
+	supportedWeighers := map[string]func() Weigher[mockFilterWeigherPipelineRequest]{
+		"duplicate-name": func() Weigher[mockFilterWeigherPipelineRequest] {
+			return &mockWeigher[mockFilterWeigherPipelineRequest]{}
+		},
+	}
+
+	monitor := FilterWeigherPipelineMonitor{
+		PipelineName: "test-pipeline",
+	}
+
+	result := InitNewFilterWeigherPipeline(
+		t.Context(),
+		cl,
+		"test-pipeline",
+		supportedFilters,
+		nil,
+		supportedWeighers,
+		nil,
+		monitor,
+	)
+
+	if result.CriticalErr == nil {
+		t.Fatal("expected critical error for name overlap, got nil")
+	}
+}
+
+func TestInitNewFilterWeigherPipeline_UnsupportedWeigher(t *testing.T) {
+	scheme := runtime.NewScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	supportedFilters := map[string]func() Filter[mockFilterWeigherPipelineRequest]{}
+	supportedWeighers := map[string]func() Weigher[mockFilterWeigherPipelineRequest]{}
+
+	confedWeighers := []v1alpha1.WeigherSpec{
+		{
+			Name: "unsupported-weigher",
+			Params: runtime.RawExtension{
+				Raw: []byte(`{}`),
+			},
+		},
+	}
+
+	monitor := FilterWeigherPipelineMonitor{
+		PipelineName: "test-pipeline",
+	}
+
+	result := InitNewFilterWeigherPipeline(
+		t.Context(),
+		cl,
+		"test-pipeline",
+		supportedFilters,
+		nil,
+		supportedWeighers,
+		confedWeighers,
+		monitor,
+	)
+
+	// Unsupported weigher should result in non-critical error
+	if result.NonCriticalErr == nil {
+		t.Fatal("expected non-critical error for unsupported weigher, got nil")
+	}
+	if result.CriticalErr != nil {
+		t.Fatalf("expected no critical error, got %v", result.CriticalErr)
+	}
+}
+
+func TestFilterWeigherPipelineMonitor_SubPipeline(t *testing.T) {
+	monitor := NewPipelineMonitor()
+
+	subPipeline := monitor.SubPipeline("test-sub-pipeline")
+
+	if subPipeline.PipelineName != "test-sub-pipeline" {
+		t.Errorf("expected pipeline name 'test-sub-pipeline', got '%s'", subPipeline.PipelineName)
+	}
+	// Verify that the original monitor is not modified
+	if monitor.PipelineName == "test-sub-pipeline" {
+		t.Error("original monitor should not be modified")
 	}
 }

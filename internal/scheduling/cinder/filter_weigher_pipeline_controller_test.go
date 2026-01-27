@@ -469,6 +469,16 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 	}
 }
 
+func TestFilterWeigherPipelineController_PipelineType(t *testing.T) {
+	controller := &FilterWeigherPipelineController{}
+
+	pipelineType := controller.PipelineType()
+
+	if pipelineType != v1alpha1.PipelineTypeFilterWeigher {
+		t.Errorf("expected pipeline type %s, got %s", v1alpha1.PipelineTypeFilterWeigher, pipelineType)
+	}
+}
+
 func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 	controller := &FilterWeigherPipelineController{
 		Monitor: lib.FilterWeigherPipelineMonitor{},

@@ -308,6 +308,55 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 	}
 }
 
+func TestHTTPAPI_inferPipelineName(t *testing.T) {
+	config := conf.Config{SchedulingDomain: "test-operator"}
+	delegate := &mockHTTPAPIDelegate{}
+	api := NewAPI(config, delegate).(*httpAPI)
+
+	tests := []struct {
+		name         string
+		request      cinderapi.ExternalSchedulerRequest
+		expectedName string
+		expectError  bool
+	}{
+		{
+			name: "returns default pipeline name",
+			request: cinderapi.ExternalSchedulerRequest{
+				Hosts: []cinderapi.ExternalSchedulerHost{
+					{VolumeHost: "host1"},
+				},
+				Weights: map[string]float64{
+					"host1": 1.0,
+				},
+			},
+			expectedName: "cinder-external-scheduler",
+			expectError:  false,
+		},
+		{
+			name:         "returns default pipeline name for empty request",
+			request:      cinderapi.ExternalSchedulerRequest{},
+			expectedName: "cinder-external-scheduler",
+			expectError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipelineName, err := api.inferPipelineName(tt.request)
+
+			if tt.expectError && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+			if pipelineName != tt.expectedName {
+				t.Errorf("expected pipeline name %s, got %s", tt.expectedName, pipelineName)
+			}
+		})
+	}
+}
+
 func TestHTTPAPI_CinderExternalScheduler_DecisionCreation(t *testing.T) {
 	config := conf.Config{SchedulingDomain: v1alpha1.SchedulingDomainCinder}
 

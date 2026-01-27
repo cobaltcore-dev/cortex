@@ -256,3 +256,65 @@ func TestMonitorStep_WithNilMonitor(t *testing.T) {
 		t.Error("expected Run to be called on wrapped step")
 	}
 }
+
+func TestDetectorPipelineMonitor_SubPipeline(t *testing.T) {
+	tests := []struct {
+		name             string
+		originalName     string
+		newPipelineName  string
+		expectedOriginal string
+		expectedNew      string
+	}{
+		{
+			name:             "creates copy with new name",
+			originalName:     "original-pipeline",
+			newPipelineName:  "new-pipeline",
+			expectedOriginal: "original-pipeline",
+			expectedNew:      "new-pipeline",
+		},
+		{
+			name:             "works with empty original name",
+			originalName:     "",
+			newPipelineName:  "new-pipeline",
+			expectedOriginal: "",
+			expectedNew:      "new-pipeline",
+		},
+		{
+			name:             "works with empty new name",
+			originalName:     "original-pipeline",
+			newPipelineName:  "",
+			expectedOriginal: "original-pipeline",
+			expectedNew:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := NewDetectorPipelineMonitor()
+			original.PipelineName = tt.originalName
+
+			copied := original.SubPipeline(tt.newPipelineName)
+
+			// Check that original is unchanged
+			if original.PipelineName != tt.expectedOriginal {
+				t.Errorf("original pipeline name changed, expected %s, got %s", tt.expectedOriginal, original.PipelineName)
+			}
+
+			// Check that copy has new name
+			if copied.PipelineName != tt.expectedNew {
+				t.Errorf("copied pipeline name incorrect, expected %s, got %s", tt.expectedNew, copied.PipelineName)
+			}
+
+			// Verify that the metrics are shared (same pointers)
+			if copied.stepRunTimer != original.stepRunTimer {
+				t.Error("expected stepRunTimer to be shared between original and copy")
+			}
+			if copied.stepDeschedulingCounter != original.stepDeschedulingCounter {
+				t.Error("expected stepDeschedulingCounter to be shared between original and copy")
+			}
+			if copied.pipelineRunTimer != original.pipelineRunTimer {
+				t.Error("expected pipelineRunTimer to be shared between original and copy")
+			}
+		})
+	}
+}

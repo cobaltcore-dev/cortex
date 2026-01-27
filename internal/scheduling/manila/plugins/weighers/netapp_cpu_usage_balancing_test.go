@@ -14,6 +14,83 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+func TestNetappCPUUsageBalancingStepOpts_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        NetappCPUUsageBalancingStepOpts
+		expectError bool
+	}{
+		{
+			name: "valid options with different bounds",
+			opts: NetappCPUUsageBalancingStepOpts{
+				AvgCPUUsageLowerBound:           0.0,
+				AvgCPUUsageUpperBound:           100.0,
+				AvgCPUUsageActivationLowerBound: 0.0,
+				AvgCPUUsageActivationUpperBound: -1.0,
+				MaxCPUUsageLowerBound:           0.0,
+				MaxCPUUsageUpperBound:           100.0,
+				MaxCPUUsageActivationLowerBound: 0.0,
+				MaxCPUUsageActivationUpperBound: -1.0,
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid - avg bounds equal",
+			opts: NetappCPUUsageBalancingStepOpts{
+				AvgCPUUsageLowerBound:           50.0,
+				AvgCPUUsageUpperBound:           50.0, // Same as lower
+				AvgCPUUsageActivationLowerBound: 0.0,
+				AvgCPUUsageActivationUpperBound: -1.0,
+				MaxCPUUsageLowerBound:           0.0,
+				MaxCPUUsageUpperBound:           100.0,
+				MaxCPUUsageActivationLowerBound: 0.0,
+				MaxCPUUsageActivationUpperBound: -1.0,
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid - max bounds equal",
+			opts: NetappCPUUsageBalancingStepOpts{
+				AvgCPUUsageLowerBound:           0.0,
+				AvgCPUUsageUpperBound:           100.0,
+				AvgCPUUsageActivationLowerBound: 0.0,
+				AvgCPUUsageActivationUpperBound: -1.0,
+				MaxCPUUsageLowerBound:           75.0,
+				MaxCPUUsageUpperBound:           75.0, // Same as lower
+				MaxCPUUsageActivationLowerBound: 0.0,
+				MaxCPUUsageActivationUpperBound: -1.0,
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid - both bounds equal",
+			opts: NetappCPUUsageBalancingStepOpts{
+				AvgCPUUsageLowerBound:           0.0,
+				AvgCPUUsageUpperBound:           0.0, // Same as lower
+				AvgCPUUsageActivationLowerBound: 0.0,
+				AvgCPUUsageActivationUpperBound: -1.0,
+				MaxCPUUsageLowerBound:           0.0,
+				MaxCPUUsageUpperBound:           0.0, // Same as lower
+				MaxCPUUsageActivationLowerBound: 0.0,
+				MaxCPUUsageActivationUpperBound: -1.0,
+			},
+			expectError: true, // First error is for avg bounds
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.opts.Validate()
+			if tt.expectError && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestNetappCPUUsageBalancingStep_Run(t *testing.T) {
 	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {

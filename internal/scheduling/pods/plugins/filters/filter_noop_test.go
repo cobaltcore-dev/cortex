@@ -8,9 +8,29 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestNoopFilter_Init(t *testing.T) {
+	filter := &NoopFilter{}
+	scheme := runtime.NewScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	err := filter.Init(t.Context(), cl, v1alpha1.FilterSpec{
+		Name: "noop",
+		Params: runtime.RawExtension{
+			Raw: []byte(`{}`),
+		},
+	})
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
 
 func TestNoopFilter_Run(t *testing.T) {
 	tests := []struct {

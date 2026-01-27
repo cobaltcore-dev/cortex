@@ -14,6 +14,64 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func TestBinpackingStepOpts_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        BinpackingStepOpts
+		expectError bool
+	}{
+		{
+			name: "valid options with positive weights",
+			opts: BinpackingStepOpts{
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceCPU:    2.0,
+					corev1.ResourceMemory: 1.0,
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid options with zero weights",
+			opts: BinpackingStepOpts{
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceCPU:    0.0,
+					corev1.ResourceMemory: 0.0,
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid options with empty weights",
+			opts: BinpackingStepOpts{
+				ResourceWeights: map[corev1.ResourceName]float64{},
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid options with negative weight",
+			opts: BinpackingStepOpts{
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceCPU:    -1.0,
+					corev1.ResourceMemory: 1.0,
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.opts.Validate()
+			if tt.expectError && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestBinpackingStep_Run(t *testing.T) {
 	tests := []struct {
 		name     string

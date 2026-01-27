@@ -8,10 +8,30 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestNodeCapacityFilter_Init(t *testing.T) {
+	filter := &NodeCapacityFilter{}
+	scheme := runtime.NewScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	err := filter.Init(t.Context(), cl, v1alpha1.FilterSpec{
+		Name: "node-capacity",
+		Params: runtime.RawExtension{
+			Raw: []byte(`{}`),
+		},
+	})
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
 
 func TestNodeCapacityFilter_Run(t *testing.T) {
 	tests := []struct {
