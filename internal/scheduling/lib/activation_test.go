@@ -67,7 +67,7 @@ func TestActivationFunction_Apply(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := af.Apply(tt.in, tt.activations)
+			result := af.Apply(tt.in, tt.activations, 1.0)
 			if len(result) != len(tt.expected) {
 				t.Fatalf("expected %d hosts, got %d", len(tt.expected), len(result))
 			}
