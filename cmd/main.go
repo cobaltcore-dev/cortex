@@ -39,9 +39,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
-	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
-	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
-	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/explanation"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
@@ -89,13 +86,13 @@ func main() {
 		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
 		case "e2e-nova":
-			novae2e.RunChecks(ctx, client, config)
+			nova.RunChecks(ctx, client, config)
 			return
 		case "e2e-cinder":
-			cindere2e.RunChecks(ctx, client, config)
+			cinder.RunChecks(ctx, client, config)
 			return
 		case "e2e-manila":
-			manilae2e.RunChecks(ctx, client, config)
+			manila.RunChecks(ctx, client, config)
 			return
 		}
 	}
