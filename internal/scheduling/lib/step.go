@@ -4,13 +4,7 @@
 package lib
 
 import (
-	"errors"
 	"log/slog"
-)
-
-var (
-	// This error is returned from the step at any time when the step should be skipped.
-	ErrStepSkipped = errors.New("step skipped")
 )
 
 // Steps can be chained together to form a scheduling pipeline.

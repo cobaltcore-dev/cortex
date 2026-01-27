@@ -56,7 +56,7 @@ func (c *DeschedulingsPipelineController) InitPipeline(
 		CycleDetector: c.CycleDetector,
 		Monitor:       c.Monitor.SubPipeline(p.Name),
 	}
-	nonCriticalErr, criticalErr := pipeline.Init(ctx, p.Spec.Detectors, supportedSteps)
+	nonCriticalErr, criticalErr := pipeline.Init(ctx, p.Spec.Detectors, supportedDetectors)
 	return lib.PipelineInitResult[*Pipeline]{
 		Pipeline:       pipeline,
 		NonCriticalErr: nonCriticalErr,

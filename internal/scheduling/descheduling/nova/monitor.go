@@ -73,7 +73,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 
 type StepMonitor struct {
 	// The step being monitored.
-	step Step
+	step Detector
 	// The name of this step.
 	stepName string
 	// A timer to measure how long the step takes to run.
@@ -83,7 +83,7 @@ type StepMonitor struct {
 }
 
 // Monitor a descheduler step by wrapping it with a StepMonitor.
-func monitorStep(step Step, conf v1alpha1.DetectorSpec, monitor Monitor) StepMonitor {
+func monitorStep(step Detector, conf v1alpha1.DetectorSpec, monitor Monitor) StepMonitor {
 	var runTimer prometheus.Observer
 	if monitor.stepRunTimer != nil {
 		runTimer = monitor.stepRunTimer.WithLabelValues(conf.Name)

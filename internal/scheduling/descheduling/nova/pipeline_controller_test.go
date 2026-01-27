@@ -83,7 +83,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 				CycleDetector: controller.CycleDetector,
 				Monitor:       controller.Monitor,
 			}
-			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.steps, map[string]Step{
+			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.steps, map[string]Detector{
 				"mock-step": &mockControllerStep{},
 			})
 

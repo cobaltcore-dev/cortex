@@ -7,6 +7,6 @@ import "github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/p
 
 // Configuration of steps supported by the descheduler.
 // The steps actually used by the scheduler are defined through the configuration file.
-var supportedSteps = map[string]Step{
+var supportedDetectors = map[string]Detector{
 	"avoid_high_steal_pct": &kvm.AvoidHighStealPctStep{},
 }

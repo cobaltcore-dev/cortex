@@ -13,6 +13,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -28,18 +29,18 @@ type Pipeline struct {
 	// The order in which scheduler steps are applied, by their step name.
 	order []string
 	// The steps by their name.
-	steps map[string]Step
+	steps map[string]Detector
 }
 
 func (p *Pipeline) Init(
 	ctx context.Context,
 	confedSteps []v1alpha1.DetectorSpec,
-	supportedSteps map[string]Step,
+	supportedSteps map[string]Detector,
 ) (nonCriticalErr, criticalErr error) {
 
 	p.order = []string{}
 	// Load all steps from the configuration.
-	p.steps = make(map[string]Step, len(confedSteps))
+	p.steps = make(map[string]Detector, len(confedSteps))
 	for _, stepConf := range confedSteps {
 		step, ok := supportedSteps[stepConf.Name]
 		if !ok {
@@ -72,7 +73,7 @@ func (p *Pipeline) run() map[string][]plugins.Decision {
 		wg.Go(func() {
 			slog.Info("descheduler: running step")
 			decisions, err := step.Run()
-			if errors.Is(err, ErrStepSkipped) {
+			if errors.Is(err, lib.ErrStepSkipped) {
 				slog.Info("descheduler: step skipped")
 				return
 			}

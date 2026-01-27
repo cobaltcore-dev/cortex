@@ -11,6 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -41,14 +42,14 @@ func (m *mockPipelineStep) Init(ctx context.Context, client client.Client, step 
 func TestPipeline_Init(t *testing.T) {
 	tests := []struct {
 		name                     string
-		supportedSteps           map[string]Step
+		supportedSteps           map[string]Detector
 		confedSteps              []v1alpha1.DetectorSpec
 		expectedNonCriticalError bool
 		expectedCriticalError    bool
 	}{
 		{
 			name: "successful initialization with single step",
-			supportedSteps: map[string]Step{
+			supportedSteps: map[string]Detector{
 				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.DetectorSpec{{
@@ -59,7 +60,7 @@ func TestPipeline_Init(t *testing.T) {
 		},
 		{
 			name: "initialization with unsupported step",
-			supportedSteps: map[string]Step{
+			supportedSteps: map[string]Detector{
 				"test-step": &mockPipelineStep{},
 			},
 			confedSteps: []v1alpha1.DetectorSpec{{
@@ -70,7 +71,7 @@ func TestPipeline_Init(t *testing.T) {
 		},
 		{
 			name: "initialization with step init error",
-			supportedSteps: map[string]Step{
+			supportedSteps: map[string]Detector{
 				"failing-step": &mockPipelineStep{initError: errors.New("init failed")},
 			},
 			confedSteps: []v1alpha1.DetectorSpec{{
@@ -81,7 +82,7 @@ func TestPipeline_Init(t *testing.T) {
 		},
 		{
 			name: "initialization with multiple steps",
-			supportedSteps: map[string]Step{
+			supportedSteps: map[string]Detector{
 				"step1": &mockPipelineStep{},
 				"step2": &mockPipelineStep{},
 			},
@@ -135,13 +136,13 @@ func TestPipeline_Init(t *testing.T) {
 func TestPipeline_run(t *testing.T) {
 	tests := []struct {
 		name            string
-		steps           map[string]Step
+		steps           map[string]Detector
 		order           []string
 		expectedResults map[string][]plugins.Decision
 	}{
 		{
 			name: "successful run with single step",
-			steps: map[string]Step{
+			steps: map[string]Detector{
 				"test-step": &mockPipelineStep{
 					decisions: []plugins.Decision{
 						{VMID: "vm1", Reason: "test reason", Host: "host1"},
@@ -157,7 +158,7 @@ func TestPipeline_run(t *testing.T) {
 		},
 		{
 			name: "run with step error",
-			steps: map[string]Step{
+			steps: map[string]Detector{
 				"failing-step": &mockPipelineStep{
 					runError: errors.New("step failed"),
 				},
@@ -167,9 +168,9 @@ func TestPipeline_run(t *testing.T) {
 		},
 		{
 			name: "run with step skipped",
-			steps: map[string]Step{
+			steps: map[string]Detector{
 				"skipped-step": &mockPipelineStep{
-					runError: ErrStepSkipped,
+					runError: lib.ErrStepSkipped,
 				},
 			},
 			order:           []string{"skipped-step"},
@@ -177,7 +178,7 @@ func TestPipeline_run(t *testing.T) {
 		},
 		{
 			name: "run with multiple steps",
-			steps: map[string]Step{
+			steps: map[string]Detector{
 				"step1": &mockPipelineStep{
 					decisions: []plugins.Decision{
 						{VMID: "vm1", Reason: "reason1", Host: "host1"},
@@ -318,14 +319,14 @@ func TestPipeline_combine(t *testing.T) {
 
 func TestSupportedSteps(t *testing.T) {
 	// Test that SupportedSteps is properly initialized
-	if len(supportedSteps) == 0 {
+	if len(supportedDetectors) == 0 {
 		t.Error("SupportedSteps should not be empty")
 	}
 }
 
 // Benchmark tests
 func BenchmarkPipeline_run(b *testing.B) {
-	steps := map[string]Step{
+	steps := map[string]Detector{
 		"step1": &mockPipelineStep{
 			decisions: []plugins.Decision{
 				{VMID: "vm1", Reason: "bench reason", Host: "host1"},
