@@ -73,6 +73,7 @@ func InitNewFilterWeigherPipeline[RequestType PipelineRequest](
 		}
 		filter := makeFilter()
 		filter = monitorFilter(filter, filterConfig.Name, pipelineMonitor)
+		filter = validateFilter(filter)
 		if err := filter.Init(ctx, client, filterConfig); err != nil {
 			return PipelineInitResult[Pipeline[RequestType]]{
 				CriticalErr: errors.New("failed to initialize filter: " + err.Error()),

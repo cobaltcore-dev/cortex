@@ -25,7 +25,7 @@ type Detector[Opts any] struct {
 }
 
 // Init the step with the database and options.
-func (d *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (d *Detector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	d.Client = client
 
 	opts := conf.NewRawOptsBytes(step.Params.Raw)

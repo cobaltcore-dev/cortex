@@ -33,20 +33,20 @@ type mockControllerStep struct{}
 func (m *mockControllerStep) Run() ([]plugins.Decision, error) {
 	return nil, nil
 }
-func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	return nil
 }
 
 func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 	tests := []struct {
 		name                   string
-		steps                  []v1alpha1.StepSpec
+		steps                  []v1alpha1.DetectorSpec
 		expectNonCriticalError bool
 		expectCriticalError    bool
 	}{
 		{
 			name: "successful pipeline initialization",
-			steps: []v1alpha1.StepSpec{
+			steps: []v1alpha1.DetectorSpec{
 				{
 					Name: "mock-step",
 				},
@@ -56,7 +56,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name: "unsupported step",
-			steps: []v1alpha1.StepSpec{
+			steps: []v1alpha1.DetectorSpec{
 				{
 					Name: "unsupported",
 				},
@@ -66,7 +66,7 @@ func TestDeschedulingsPipelineController_InitPipeline(t *testing.T) {
 		},
 		{
 			name:                   "empty steps",
-			steps:                  []v1alpha1.StepSpec{},
+			steps:                  []v1alpha1.DetectorSpec{},
 			expectNonCriticalError: false,
 			expectCriticalError:    false,
 		},

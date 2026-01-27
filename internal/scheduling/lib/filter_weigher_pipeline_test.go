@@ -13,11 +13,33 @@ func TestPipeline_Run(t *testing.T) {
 	// Create an instance of the pipeline with a mock step
 	pipeline := &filterWeigherPipeline[mockPipelineRequest]{
 		filters: map[string]Filter[mockPipelineRequest]{
-			"mock_filter": &mockFilter[mockPipelineRequest]{},
+			"mock_filter": &mockFilter[mockPipelineRequest]{
+				RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+					// Filter out host3
+					return &StepResult{
+						Activations: map[string]float64{
+							"host1": 0.0,
+							"host2": 0.0,
+						},
+					}, nil
+				},
+			},
 		},
 		filtersOrder: []string{"mock_filter"},
 		weighers: map[string]Weigher[mockPipelineRequest]{
-			"mock_weigher": &mockWeigher[mockPipelineRequest]{},
+			"mock_weigher": &mockWeigher[mockPipelineRequest]{
+				RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+					// Assign weights to hosts
+					activations := map[string]float64{
+						"host1": 0.5,
+						"host2": 1.0,
+						"host3": -0.5,
+					}
+					return &StepResult{
+						Activations: activations,
+					}, nil
+				},
+			},
 		},
 		weighersOrder: []string{"mock_weigher"},
 	}
@@ -163,7 +185,17 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 }
 
 func TestPipeline_RunFilters(t *testing.T) {
-	mockStep := &mockFilter[mockPipelineRequest]{}
+	mockStep := &mockFilter[mockPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockPipelineRequest) (*StepResult, error) {
+			// Filter out host3
+			return &StepResult{
+				Activations: map[string]float64{
+					"host1": 0.0,
+					"host2": 0.0,
+				},
+			}, nil
+		},
+	}
 	p := &filterWeigherPipeline[mockPipelineRequest]{
 		filtersOrder: []string{
 			"mock_filter",

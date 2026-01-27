@@ -26,7 +26,7 @@ type AvoidHighStealPctStep struct {
 }
 
 // Initialize the step and validate that all required knowledges are ready.
-func (s *AvoidHighStealPctStep) Init(ctx context.Context, client client.Client, step v1alpha1.StepSpec) error {
+func (s *AvoidHighStealPctStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	if err := s.Detector.Init(ctx, client, step); err != nil {
 		return err
 	}

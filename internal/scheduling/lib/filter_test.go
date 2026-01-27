@@ -17,8 +17,14 @@ type mockFilter[RequestType PipelineRequest] struct {
 }
 
 func (m *mockFilter[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
+	if m.InitFunc == nil {
+		return nil
+	}
 	return m.InitFunc(ctx, client, step)
 }
 func (m *mockFilter[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*StepResult, error) {
+	if m.RunFunc == nil {
+		return &StepResult{}, nil
+	}
 	return m.RunFunc(traceLog, request)
 }
