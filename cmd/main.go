@@ -39,15 +39,15 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/explanation"
-	decisionsmachines "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/machines"
-	decisionpods "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods"
 	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
 	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
 	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/explanation"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -355,7 +355,7 @@ func main() {
 		cinder.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
-		controller := &decisionsmachines.FilterWeigherPipelineController{
+		controller := &machines.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -367,7 +367,7 @@ func main() {
 		}
 	}
 	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
-		controller := &decisionpods.FilterWeigherPipelineController{
+		controller := &pods.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}

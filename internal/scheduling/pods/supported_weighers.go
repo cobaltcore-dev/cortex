@@ -5,8 +5,8 @@ package pods
 
 import (
 	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/plugins/weighers"
 )
 
 type PodWeigher = lib.Weigher[pods.PodPipelineRequest]
