@@ -408,7 +408,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			if tt.pipelineConfig != nil {
 				controller.PipelineConfigs[tt.pipelineConfig.Name] = *tt.pipelineConfig
 				initResult := controller.InitPipeline(t.Context(), *tt.pipelineConfig)
-				if initResult.CriticalErr != nil || initResult.NonCriticalErr != nil {
+				if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
 					t.Fatalf("Failed to init pipeline: %v", initResult)
 				}
 				controller.Pipelines[tt.pipelineConfig.Name] = initResult.Pipeline
@@ -575,18 +575,18 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 				},
 			})
 
-			if tt.expectCriticalError && initResult.CriticalErr == nil {
-				t.Error("Expected error but got none")
+			if !tt.expectCriticalError && len(initResult.FilterErrors) > 0 {
+				t.Errorf("Expected no critical error but got: %v", initResult.FilterErrors)
 			}
-			if !tt.expectCriticalError && initResult.CriticalErr != nil {
-				t.Errorf("Expected no error but got: %v", initResult.CriticalErr)
+			if tt.expectCriticalError && len(initResult.FilterErrors) == 0 {
+				t.Error("Expected critical error but got none")
 			}
 
-			if tt.expectNonCriticalError && initResult.NonCriticalErr == nil {
-				t.Error("Expected non-critical error but got none")
+			if !tt.expectNonCriticalError && len(initResult.WeigherErrors) > 0 {
+				t.Errorf("Expected no non-critical error but got: %v", initResult.WeigherErrors)
 			}
-			if !tt.expectNonCriticalError && initResult.NonCriticalErr != nil {
-				t.Errorf("Expected no non-critical error but got: %v", initResult.NonCriticalErr)
+			if tt.expectNonCriticalError && len(initResult.WeigherErrors) == 0 {
+				t.Error("Expected non-critical error but got none")
 			}
 		})
 	}

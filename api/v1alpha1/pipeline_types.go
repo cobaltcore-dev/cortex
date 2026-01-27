@@ -65,9 +65,9 @@ const (
 	// Pipeline containing filter-weigher steps for initial placement,
 	// migration, etc. of instances.
 	PipelineTypeFilterWeigher PipelineType = "filter-weigher"
-	// Pipeline containing descheduler steps for generating descheduling
+	// Pipeline containing detector steps, e.g. for generating descheduling
 	// recommendations.
-	PipelineTypeDescheduler PipelineType = "descheduler"
+	PipelineTypeDetector PipelineType = "detector"
 )
 
 type PipelineSpec struct {
@@ -85,14 +85,14 @@ type PipelineSpec struct {
 	CreateDecisions bool `json:"createDecisions,omitempty"`
 
 	// The type of the pipeline, used to differentiate between
-	// filter-weigher and descheduler pipelines within the same
+	// filter-weigher and detector pipelines within the same
 	// scheduling domain.
 	//
 	// If the type is filter-weigher, the filter and weigher attributes
-	// must be set. If the type is descheduler, the detectors attribute
+	// must be set. If the type is detector, the detectors attribute
 	// must be set.
 	//
-	// +kubebuilder:validation:Enum=filter-weigher;descheduler
+	// +kubebuilder:validation:Enum=filter-weigher;detector
 	Type PipelineType `json:"type"`
 
 	// Ordered list of filters to apply in a scheduling pipeline.
@@ -112,11 +112,44 @@ type PipelineSpec struct {
 
 	// Ordered list of detectors to apply in a descheduling pipeline.
 	//
-	// This attribute is set only if the pipeline type is descheduler.
+	// This attribute is set only if the pipeline type is detector.
 	// Detectors find candidates for descheduling (migration off current host).
 	// These detectors are run after weighers are applied.
 	// +kubebuilder:validation:Optional
 	Detectors []DetectorSpec `json:"detectors,omitempty"`
+}
+
+const (
+	FilterConditionReady   = "Ready"
+	WeigherConditionReady  = "Ready"
+	DetectorConditionReady = "Ready"
+)
+
+type FilterStatus struct {
+	// The name of the filter.
+	Name string `json:"name"`
+
+	// The current status conditions of the filter.
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+}
+
+type WeigherStatus struct {
+	// The name of the weigher.
+	Name string `json:"name"`
+
+	// The current status conditions of the weigher.
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+}
+
+type DetectorStatus struct {
+	// The name of the detector.
+	Name string `json:"name"`
+
+	// The current status conditions of the detector.
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 const (
@@ -127,6 +160,18 @@ const (
 )
 
 type PipelineStatus struct {
+	// List of statuses for each filter in the pipeline.
+	// +kubebuilder:validation:Optional
+	Filters []FilterStatus `json:"filters,omitempty"`
+
+	// List of statuses for each weigher in the pipeline.
+	// +kubebuilder:validation:Optional
+	Weighers []WeigherStatus `json:"weighers,omitempty"`
+
+	// List of statuses for each detector in the pipeline.
+	// +kubebuilder:validation:Optional
+	Detectors []DetectorStatus `json:"detectors,omitempty"`
+
 	// The current status conditions of the pipeline.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`

@@ -213,8 +213,8 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					},
 					Spec: tt.pipeline.Spec,
 				})
-				if initResult.CriticalErr != nil || initResult.NonCriticalErr != nil {
-					t.Fatalf("Failed to init pipeline: %v", err)
+				if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
+					t.Fatalf("Failed to initialize pipeline: filter errors: %v, weigher errors: %v", initResult.FilterErrors, initResult.WeigherErrors)
 				}
 				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
 			}
@@ -336,17 +336,17 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 				},
 			})
 
-			if tt.expectCriticalError && initResult.CriticalErr == nil {
+			if tt.expectCriticalError && len(initResult.FilterErrors) == 0 {
 				t.Error("Expected critical error but got none")
 			}
-			if !tt.expectCriticalError && initResult.CriticalErr != nil {
-				t.Errorf("Expected no critical error but got: %v", initResult.CriticalErr)
+			if !tt.expectCriticalError && len(initResult.FilterErrors) > 0 {
+				t.Errorf("Unexpected critical errors: %v", initResult.FilterErrors)
 			}
-			if tt.expectNonCriticalError && initResult.NonCriticalErr == nil {
+			if tt.expectNonCriticalError && len(initResult.WeigherErrors) == 0 {
 				t.Error("Expected non-critical error but got none")
 			}
-			if !tt.expectNonCriticalError && initResult.NonCriticalErr != nil {
-				t.Errorf("Expected no non-critical error but got: %v", initResult.NonCriticalErr)
+			if !tt.expectNonCriticalError && len(initResult.WeigherErrors) > 0 {
+				t.Errorf("Unexpected non-critical errors: %v", initResult.WeigherErrors)
 			}
 		})
 	}
@@ -687,8 +687,8 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					},
 					Spec: tt.pipeline.Spec,
 				})
-				if initResult.CriticalErr != nil || initResult.NonCriticalErr != nil {
-					t.Fatalf("Failed to init pipeline: %v", initResult)
+				if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
+					t.Fatalf("Failed to initialize pipeline: filter errors: %v, weigher errors: %v", initResult.FilterErrors, initResult.WeigherErrors)
 				}
 				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
 			}

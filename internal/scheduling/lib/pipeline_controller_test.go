@@ -5,6 +5,7 @@ package lib
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -90,7 +91,7 @@ func TestBasePipelineController_InitAllPipelines(t *testing.T) {
 					},
 					Spec: v1alpha1.PipelineSpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
-						Type:             v1alpha1.PipelineTypeDescheduler,
+						Type:             v1alpha1.PipelineTypeDetector,
 						Filters:          []v1alpha1.FilterSpec{},
 						Weighers:         []v1alpha1.WeigherSpec{},
 					},
@@ -265,7 +266,11 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 
 			if tt.initPipelineError {
 				initializer.initPipelineFunc = func(ctx context.Context, p v1alpha1.Pipeline) PipelineInitResult[mockPipeline] {
-					return PipelineInitResult[mockPipeline]{CriticalErr: context.Canceled}
+					return PipelineInitResult[mockPipeline]{
+						FilterErrors: map[string]error{
+							"test-filter": errors.New("failed to init filter"),
+						},
+					}
 				}
 			}
 

@@ -34,27 +34,28 @@ func (p *DetectorPipeline[DetectionType]) Init(
 	ctx context.Context,
 	confedSteps []v1alpha1.DetectorSpec,
 	supportedSteps map[string]Detector[DetectionType],
-) (nonCriticalErr, criticalErr error) {
+) (detectorErrs map[string]error) {
 
 	p.order = []string{}
 	// Load all steps from the configuration.
 	p.steps = make(map[string]Detector[DetectionType], len(confedSteps))
+	detectorErrs = make(map[string]error)
 	for _, stepConf := range confedSteps {
 		step, ok := supportedSteps[stepConf.Name]
 		if !ok {
-			nonCriticalErr = errors.New("descheduler: unsupported step name: " + stepConf.Name)
-			continue // Descheduler steps are optional.
+			detectorErrs[stepConf.Name] = errors.New("descheduler: unsupported step name: " + stepConf.Name)
+			continue
 		}
 		step = monitorDetector(step, stepConf, p.Monitor)
 		if err := step.Init(ctx, p.Client, stepConf); err != nil {
-			nonCriticalErr = errors.New("descheduler: failed to initialize step " + stepConf.Name + ": " + err.Error())
-			continue // Descheduler steps are optional.
+			detectorErrs[stepConf.Name] = errors.New("descheduler: failed to initialize step " + stepConf.Name + ": " + err.Error())
+			continue
 		}
 		p.steps[stepConf.Name] = step
 		p.order = append(p.order, stepConf.Name)
 		slog.Info("descheduler: added step", "name", stepConf.Name)
 	}
-	return nonCriticalErr, nil // At the moment, there are no critical errors.
+	return detectorErrs
 }
 
 // Execute the descheduler steps in parallel and collect the decisions made by

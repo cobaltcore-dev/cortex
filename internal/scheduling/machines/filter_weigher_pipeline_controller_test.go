@@ -255,17 +255,17 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 				},
 			})
 
-			if tt.expectCriticalError && initResult.CriticalErr == nil {
+			if tt.expectCriticalError && len(initResult.FilterErrors) == 0 {
 				t.Error("Expected critical error but got none")
 			}
-			if !tt.expectCriticalError && initResult.CriticalErr != nil {
-				t.Errorf("Expected no critical error but got: %v", initResult.CriticalErr)
+			if !tt.expectCriticalError && len(initResult.FilterErrors) > 0 {
+				t.Errorf("Expected no critical error but got: %v", initResult.FilterErrors)
 			}
-			if tt.expectNonCriticalError && initResult.NonCriticalErr == nil {
+			if tt.expectNonCriticalError && len(initResult.WeigherErrors) == 0 {
 				t.Error("Expected non-critical error but got none")
 			}
-			if !tt.expectNonCriticalError && initResult.NonCriticalErr != nil {
-				t.Errorf("Expected no non-critical error but got: %v", initResult.NonCriticalErr)
+			if !tt.expectNonCriticalError && len(initResult.WeigherErrors) > 0 {
+				t.Errorf("Expected no non-critical error but got: %v", initResult.WeigherErrors)
 			}
 		})
 	}

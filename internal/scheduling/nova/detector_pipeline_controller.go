@@ -43,7 +43,7 @@ type DetectorPipelineController struct {
 
 // The type of pipeline this controller manages.
 func (c *DetectorPipelineController) PipelineType() v1alpha1.PipelineType {
-	return v1alpha1.PipelineTypeDescheduler
+	return v1alpha1.PipelineTypeDetector
 }
 
 // The base controller will delegate the pipeline creation down to this method.
@@ -57,11 +57,10 @@ func (c *DetectorPipelineController) InitPipeline(
 		DetectorCycleBreaker: c.DetectorCycleBreaker,
 		Monitor:              c.Monitor.SubPipeline(p.Name),
 	}
-	nonCriticalErr, criticalErr := pipeline.Init(ctx, p.Spec.Detectors, supportedDetectors)
+	errs := pipeline.Init(ctx, p.Spec.Detectors, supportedDetectors)
 	return lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]]{
 		Pipeline:       pipeline,
-		NonCriticalErr: nonCriticalErr,
-		CriticalErr:    criticalErr,
+		DetectorErrors: errs,
 	}
 }
 

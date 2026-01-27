@@ -42,7 +42,6 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 		name                   string
 		steps                  []v1alpha1.DetectorSpec
 		expectNonCriticalError bool
-		expectCriticalError    bool
 	}{
 		{
 			name: "successful pipeline initialization",
@@ -52,7 +51,6 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 				},
 			},
 			expectNonCriticalError: false,
-			expectCriticalError:    false,
 		},
 		{
 			name: "unsupported step",
@@ -62,13 +60,11 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 				},
 			},
 			expectNonCriticalError: true,
-			expectCriticalError:    false,
 		},
 		{
 			name:                   "empty steps",
 			steps:                  []v1alpha1.DetectorSpec{},
 			expectNonCriticalError: false,
-			expectCriticalError:    false,
 		},
 	}
 
@@ -83,27 +79,17 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 				DetectorCycleBreaker: controller.DetectorCycleBreaker,
 				Monitor:              controller.Monitor,
 			}
-			nonCriticalErr, criticalErr := pipeline.Init(t.Context(), tt.steps, map[string]lib.Detector[plugins.VMDetection]{
+			errs := pipeline.Init(t.Context(), tt.steps, map[string]lib.Detector[plugins.VMDetection]{
 				"mock-step": &mockControllerStep{},
 			})
 
-			if tt.expectCriticalError {
-				if criticalErr == nil {
-					t.Errorf("expected critical error, got none")
-				}
-			} else {
-				if criticalErr != nil {
-					t.Errorf("unexpected critical error: %v", criticalErr)
-				}
-			}
-
 			if tt.expectNonCriticalError {
-				if nonCriticalErr == nil {
+				if len(errs) == 0 {
 					t.Errorf("expected non-critical error, got none")
 				}
 			} else {
-				if nonCriticalErr != nil {
-					t.Errorf("unexpected non-critical error: %v", nonCriticalErr)
+				if len(errs) > 0 {
+					t.Errorf("unexpected non-critical error: %v", errs)
 				}
 			}
 

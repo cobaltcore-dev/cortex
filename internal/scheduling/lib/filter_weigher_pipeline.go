@@ -55,34 +55,26 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 
 	pipelineMonitor := monitor.SubPipeline(name)
 
-	// Ensure there are no overlaps between filter and weigher names.
-	for filterName := range supportedFilters {
-		if _, ok := supportedWeighers[filterName]; ok {
-			return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
-				CriticalErr: errors.New("step name overlap between filters and weighers: " + filterName),
-			}
-		}
-	}
-
 	// Load all filters from the configuration.
 	filtersByName := make(map[string]Filter[RequestType], len(confedFilters))
 	filtersOrder := []string{}
+	filterErrors := make(map[string]error)
 	for _, filterConfig := range confedFilters {
 		slog.Info("scheduler: configuring filter", "name", filterConfig.Name)
 		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
-			return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
-				CriticalErr: errors.New("unsupported filter name: " + filterConfig.Name),
-			}
+			slog.Error("scheduler: unsupported filter", "name", filterConfig.Name)
+			filterErrors[filterConfig.Name] = errors.New("unsupported filter name: " + filterConfig.Name)
+			continue
 		}
 		filter := makeFilter()
-		filter = monitorFilter(filter, filterConfig.Name, pipelineMonitor)
 		filter = validateFilter(filter)
+		filter = monitorFilter(filter, filterConfig.Name, pipelineMonitor)
 		if err := filter.Init(ctx, client, filterConfig); err != nil {
-			return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
-				CriticalErr: errors.New("failed to initialize filter: " + err.Error()),
-			}
+			slog.Error("scheduler: failed to initialize filter", "name", filterConfig.Name, "error", err)
+			filterErrors[filterConfig.Name] = errors.New("failed to initialize filter: " + err.Error())
+			continue
 		}
 		filtersByName[filterConfig.Name] = filter
 		filtersOrder = append(filtersOrder, filterConfig.Name)
@@ -93,22 +85,24 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	weighersByName := make(map[string]Weigher[RequestType], len(confedWeighers))
 	weighersMultipliers := make(map[string]float64, len(confedWeighers))
 	weighersOrder := []string{}
-	var nonCriticalErr error
+	weigherErrors := make(map[string]error)
 	for _, weigherConfig := range confedWeighers {
 		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
 		slog.Info("supported:", "weighers", maps.Keys(supportedWeighers))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
-			nonCriticalErr = errors.New("unsupported weigher name: " + weigherConfig.Name)
-			continue // Weighers are optional.
+			slog.Error("scheduler: unsupported weigher", "name", weigherConfig.Name)
+			weigherErrors[weigherConfig.Name] = errors.New("unsupported weigher name: " + weigherConfig.Name)
+			continue
 		}
 		weigher := makeWeigher()
 		// Validate that the weigher doesn't unexpectedly filter out hosts.
 		weigher = validateWeigher(weigher)
 		weigher = monitorWeigher(weigher, weigherConfig.Name, pipelineMonitor)
 		if err := weigher.Init(ctx, client, weigherConfig); err != nil {
-			nonCriticalErr = errors.New("failed to initialize weigher: " + err.Error())
-			continue // Weighers are optional.
+			slog.Error("scheduler: failed to initialize weigher", "name", weigherConfig.Name, "error", err)
+			weigherErrors[weigherConfig.Name] = errors.New("failed to initialize weigher: " + err.Error())
+			continue
 		}
 		weighersByName[weigherConfig.Name] = weigher
 		weighersOrder = append(weighersOrder, weigherConfig.Name)
@@ -121,7 +115,8 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	}
 
 	return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
-		NonCriticalErr: nonCriticalErr,
+		FilterErrors:  filterErrors,
+		WeigherErrors: weigherErrors,
 		Pipeline: &filterWeigherPipeline[RequestType]{
 			filtersOrder:        filtersOrder,
 			filters:             filtersByName,

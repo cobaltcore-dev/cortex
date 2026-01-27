@@ -14,15 +14,12 @@ type PipelineInitResult[PipelineType any] struct {
 	// The pipeline, if successfully created.
 	Pipeline PipelineType
 
-	// A critical error that prevented the pipeline from being initialized.
-	// If a critical error occurs, the pipeline should not be used.
-	CriticalErr error
-
-	// A non-critical error that occurred during initialization.
-	// If a non-critical error occurs, the pipeline may still be used.
-	// However, the error should be reported in the pipeline status
-	// so we can debug potential issues.
-	NonCriticalErr error
+	// Errors for filters, if any, by their name.
+	FilterErrors map[string]error
+	// Errors for weighers, if any, by their name.
+	WeigherErrors map[string]error
+	// Errors for detectors, if any, by their name.
+	DetectorErrors map[string]error
 }
 
 // The base pipeline controller will delegate some methods to the parent

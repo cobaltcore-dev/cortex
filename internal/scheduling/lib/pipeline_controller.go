@@ -5,6 +5,7 @@ package lib
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -73,20 +74,84 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 
 	initResult := c.Initializer.InitPipeline(ctx, *obj)
 
+	obj.Status.Filters = []v1alpha1.FilterStatus{}
+	for _, filter := range obj.Spec.Filters {
+		fs := v1alpha1.FilterStatus{Name: filter.Name}
+		if err, ok := initResult.FilterErrors[filter.Name]; ok {
+			meta.SetStatusCondition(&fs.Conditions, metav1.Condition{
+				Type:    v1alpha1.FilterConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "FilterInitFailed",
+				Message: err.Error(),
+			})
+		} else {
+			meta.SetStatusCondition(&fs.Conditions, metav1.Condition{
+				Type:    v1alpha1.FilterConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "FilterReady",
+				Message: "filter is ready",
+			})
+		}
+		obj.Status.Filters = append(obj.Status.Filters, fs)
+	}
+
+	obj.Status.Weighers = []v1alpha1.WeigherStatus{}
+	for _, weigher := range obj.Spec.Weighers {
+		ws := v1alpha1.WeigherStatus{Name: weigher.Name}
+		if err, ok := initResult.WeigherErrors[weigher.Name]; ok {
+			meta.SetStatusCondition(&ws.Conditions, metav1.Condition{
+				Type:    v1alpha1.WeigherConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "WeigherInitFailed",
+				Message: err.Error(),
+			})
+		} else {
+			meta.SetStatusCondition(&ws.Conditions, metav1.Condition{
+				Type:    v1alpha1.WeigherConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "WeigherReady",
+				Message: "weigher is ready",
+			})
+		}
+		obj.Status.Weighers = append(obj.Status.Weighers, ws)
+	}
+
+	obj.Status.Detectors = []v1alpha1.DetectorStatus{}
+	for _, detector := range obj.Spec.Detectors {
+		ds := v1alpha1.DetectorStatus{Name: detector.Name}
+		if err, ok := initResult.DetectorErrors[detector.Name]; ok {
+			meta.SetStatusCondition(&ds.Conditions, metav1.Condition{
+				Type:    v1alpha1.DetectorConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "DetectorInitFailed",
+				Message: err.Error(),
+			})
+		} else {
+			meta.SetStatusCondition(&ds.Conditions, metav1.Condition{
+				Type:    v1alpha1.DetectorConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "DetectorReady",
+				Message: "detector is ready",
+			})
+		}
+		obj.Status.Detectors = append(obj.Status.Detectors, ds)
+	}
+
 	// If there was a critical error, the pipeline cannot be used.
-	if initResult.CriticalErr != nil {
-		log.Error(initResult.CriticalErr, "failed to create pipeline", "pipelineName", obj.Name)
+	if len(initResult.FilterErrors) > 0 {
+		err := errors.New("one or more filters failed to initialize")
+		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.PipelineConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "PipelineInitFailed",
-			Message: initResult.CriticalErr.Error(),
+			Message: err.Error(),
 		})
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.PipelineConditionAllStepsReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "PipelineInitFailed",
-			Message: initResult.CriticalErr.Error(),
+			Message: err.Error(),
 		})
 		patch := client.MergeFrom(old)
 		if err := c.Status().Patch(ctx, obj, patch); err != nil {
@@ -99,13 +164,14 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 
 	// If there was a non-critical error, continue running the pipeline but
 	// report the error in the pipeline status.
-	if initResult.NonCriticalErr != nil {
-		log.Error(initResult.NonCriticalErr, "non-critical error during pipeline initialization", "pipelineName", obj.Name)
+	if len(initResult.WeigherErrors) > 0 || len(initResult.DetectorErrors) > 0 {
+		err := errors.New("one or more weighers or detectors failed to initialize")
+		log.Error(err, "non-critical error during pipeline initialization", "pipelineName", obj.Name)
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.PipelineConditionAllStepsReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "SomeStepsNotReady",
-			Message: initResult.NonCriticalErr.Error(),
+			Message: err.Error(),
 		})
 	} else {
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{

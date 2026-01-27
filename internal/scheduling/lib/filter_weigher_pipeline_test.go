@@ -284,8 +284,11 @@ func TestInitNewFilterWeigherPipeline_Success(t *testing.T) {
 		monitor,
 	)
 
-	if result.CriticalErr != nil {
-		t.Fatalf("expected no critical error, got %v", result.CriticalErr)
+	if len(result.FilterErrors) != 0 {
+		t.Fatalf("expected no filter error, got %v", result.FilterErrors)
+	}
+	if len(result.WeigherErrors) != 0 {
+		t.Fatalf("expected no weigher error, got %v", result.WeigherErrors)
 	}
 	if result.Pipeline == nil {
 		t.Fatal("expected pipeline, got nil")
@@ -323,44 +326,8 @@ func TestInitNewFilterWeigherPipeline_UnsupportedFilter(t *testing.T) {
 		monitor,
 	)
 
-	if result.CriticalErr == nil {
+	if result.FilterErrors["unsupported-filter"] == nil {
 		t.Fatal("expected critical error for unsupported filter, got nil")
-	}
-}
-
-func TestInitNewFilterWeigherPipeline_NameOverlap(t *testing.T) {
-	scheme := runtime.NewScheme()
-	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-	// Create filter and weigher with same name
-	supportedFilters := map[string]func() Filter[mockFilterWeigherPipelineRequest]{
-		"duplicate-name": func() Filter[mockFilterWeigherPipelineRequest] {
-			return &mockFilter[mockFilterWeigherPipelineRequest]{}
-		},
-	}
-	supportedWeighers := map[string]func() Weigher[mockFilterWeigherPipelineRequest]{
-		"duplicate-name": func() Weigher[mockFilterWeigherPipelineRequest] {
-			return &mockWeigher[mockFilterWeigherPipelineRequest]{}
-		},
-	}
-
-	monitor := FilterWeigherPipelineMonitor{
-		PipelineName: "test-pipeline",
-	}
-
-	result := InitNewFilterWeigherPipeline(
-		t.Context(),
-		cl,
-		"test-pipeline",
-		supportedFilters,
-		nil,
-		supportedWeighers,
-		nil,
-		monitor,
-	)
-
-	if result.CriticalErr == nil {
-		t.Fatal("expected critical error for name overlap, got nil")
 	}
 }
 
@@ -395,12 +362,11 @@ func TestInitNewFilterWeigherPipeline_UnsupportedWeigher(t *testing.T) {
 		monitor,
 	)
 
-	// Unsupported weigher should result in non-critical error
-	if result.NonCriticalErr == nil {
-		t.Fatal("expected non-critical error for unsupported weigher, got nil")
+	if result.WeigherErrors["unsupported-weigher"] == nil {
+		t.Fatal("expected error for unsupported weigher, got nil")
 	}
-	if result.CriticalErr != nil {
-		t.Fatalf("expected no critical error, got %v", result.CriticalErr)
+	if len(result.FilterErrors) != 0 {
+		t.Fatalf("expected no filter error, got %v", result.FilterErrors)
 	}
 }
 

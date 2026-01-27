@@ -130,7 +130,7 @@ spec:
     This pipeline runs steps that select virtual machines to deschedule from
     compute hosts in order to optimize resource usage and performance.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
-  type: descheduler
+  type: detector
   createDecisions: true
   detectors:
     - name: avoid_high_steal_pct

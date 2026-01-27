@@ -36,7 +36,6 @@ func TestDetectorPipeline_Init(t *testing.T) {
 		confedSteps        []v1alpha1.DetectorSpec
 		supportedSteps     map[string]Detector[mockDetection]
 		expectNonCritical  bool
-		expectCritical     bool
 		expectedStepsCount int
 	}{
 		{
@@ -48,7 +47,6 @@ func TestDetectorPipeline_Init(t *testing.T) {
 				"step1": &mockDetectorStep{},
 			},
 			expectNonCritical:  false,
-			expectCritical:     false,
 			expectedStepsCount: 1,
 		},
 		{
@@ -62,7 +60,6 @@ func TestDetectorPipeline_Init(t *testing.T) {
 				"step2": &mockDetectorStep{},
 			},
 			expectNonCritical:  false,
-			expectCritical:     false,
 			expectedStepsCount: 2,
 		},
 		{
@@ -72,7 +69,6 @@ func TestDetectorPipeline_Init(t *testing.T) {
 			},
 			supportedSteps:     map[string]Detector[mockDetection]{},
 			expectNonCritical:  true,
-			expectCritical:     false,
 			expectedStepsCount: 0,
 		},
 		{
@@ -84,7 +80,6 @@ func TestDetectorPipeline_Init(t *testing.T) {
 				"failing_step": &mockDetectorStep{initErr: errors.New("init failed")},
 			},
 			expectNonCritical:  true,
-			expectCritical:     false,
 			expectedStepsCount: 0,
 		},
 		{
@@ -92,7 +87,6 @@ func TestDetectorPipeline_Init(t *testing.T) {
 			confedSteps:        []v1alpha1.DetectorSpec{},
 			supportedSteps:     map[string]Detector[mockDetection]{},
 			expectNonCritical:  false,
-			expectCritical:     false,
 			expectedStepsCount: 0,
 		},
 		{
@@ -105,7 +99,6 @@ func TestDetectorPipeline_Init(t *testing.T) {
 				"valid_step": &mockDetectorStep{},
 			},
 			expectNonCritical:  true,
-			expectCritical:     false,
 			expectedStepsCount: 1,
 		},
 	}
@@ -118,23 +111,17 @@ func TestDetectorPipeline_Init(t *testing.T) {
 				Monitor: DetectorPipelineMonitor{},
 			}
 
-			nonCriticalErr, criticalErr := pipeline.Init(
+			errs := pipeline.Init(
 				context.Background(),
 				tt.confedSteps,
 				tt.supportedSteps,
 			)
 
-			if tt.expectNonCritical && nonCriticalErr == nil {
-				t.Error("expected non-critical error, got nil")
+			if tt.expectNonCritical && len(errs) == 0 {
+				t.Errorf("expected non-critical errors, got none")
 			}
-			if !tt.expectNonCritical && nonCriticalErr != nil {
-				t.Errorf("expected no non-critical error, got %v", nonCriticalErr)
-			}
-			if tt.expectCritical && criticalErr == nil {
-				t.Error("expected critical error, got nil")
-			}
-			if !tt.expectCritical && criticalErr != nil {
-				t.Errorf("expected no critical error, got %v", criticalErr)
+			if !tt.expectNonCritical && len(errs) > 0 {
+				t.Errorf("did not expect non-critical errors, got: %v", errs)
 			}
 			if len(pipeline.steps) != tt.expectedStepsCount {
 				t.Errorf("expected %d steps, got %d", tt.expectedStepsCount, len(pipeline.steps))
