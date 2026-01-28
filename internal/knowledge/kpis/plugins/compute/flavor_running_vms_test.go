@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
@@ -31,6 +32,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 	defer dbEnv.Close()
 	if err := testDB.CreateTable(
 		testDB.AddTable(nova.Server{}),
+		testDB.AddTable(identity.Project{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -66,6 +68,15 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 			OSEXTAvailabilityZone: "zone2",
 			TenantID:              "project-2",
 		},
+
+		&identity.Project{
+			ID:   "project-1",
+			Name: "Project One",
+		},
+		&identity.Project{
+			ID:   "project-2",
+			Name: "Project Two",
+		},
 	}
 
 	if err := testDB.Insert(mockData...); err != nil {
@@ -86,6 +97,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 		AvailabilityZone string
 		RunningVMs       float64
 		ProjectID        string
+		ProjectName      string
 	}
 
 	metrics := make(map[string]FlavorRunningVMsMetric, 0)
@@ -104,6 +116,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 		flavor := labels["flavor_name"]
 		availabilityZone := labels["availability_zone"]
 		projectID := labels["project_id"]
+		projectName := labels["project_name"]
 
 		key := flavor + "|" + availabilityZone + "|" + projectID
 
@@ -111,6 +124,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 			FlavorName:       flavor,
 			AvailabilityZone: availabilityZone,
 			ProjectID:        projectID,
+			ProjectName:      projectName,
 			RunningVMs:       m.GetGauge().GetValue(),
 		}
 	}
@@ -120,18 +134,21 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 			FlavorName:       "small",
 			AvailabilityZone: "zone1",
 			ProjectID:        "project-1",
+			ProjectName:      "Project One",
 			RunningVMs:       1,
 		},
 		"medium|zone1|project-1": {
 			FlavorName:       "medium",
 			AvailabilityZone: "zone1",
 			ProjectID:        "project-1",
+			ProjectName:      "Project One",
 			RunningVMs:       1,
 		},
 		"medium|zone2|project-1": {
 			FlavorName:       "medium",
 			AvailabilityZone: "zone2",
 			ProjectID:        "project-1",
+			ProjectName:      "Project One",
 			RunningVMs:       2,
 		},
 		"medium|zone2|project-2": {
@@ -139,6 +156,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 			AvailabilityZone: "zone2",
 			RunningVMs:       1,
 			ProjectID:        "project-2",
+			ProjectName:      "Project Two",
 		},
 	}
 
