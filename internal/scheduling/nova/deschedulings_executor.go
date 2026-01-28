@@ -32,8 +32,8 @@ type DeschedulingsExecutor struct {
 	// Kubernetes scheme to use for the deschedulings.
 	Scheme *runtime.Scheme
 
-	// Nova API to execute the descheduling operations.
-	NovaAPI NovaAPI
+	// Nova client to execute the descheduling operations.
+	NovaClient NovaClient
 	// Configuration for the descheduler.
 	Conf conf.Config
 	// Monitor for tracking the descheduler execution.
@@ -111,7 +111,7 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	vmId := descheduling.Spec.Ref
-	server, err := e.NovaAPI.Get(ctx, vmId)
+	server, err := e.NovaClient.Get(ctx, vmId)
 	if err != nil {
 		// Delete the descheduling if the VM was not found.
 		log.Info("VM not found, deleting descheduling", "vmId", vmId)
@@ -168,7 +168,7 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	log.Info("descheduler: executing migration for VM", "vmId", vmId)
-	if err := e.NovaAPI.LiveMigrate(ctx, vmId); err != nil {
+	if err := e.NovaClient.LiveMigrate(ctx, vmId); err != nil {
 		log.Error(err, "descheduler: failed to live-migrate VM", "vmId", vmId, "error", err)
 		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
@@ -187,7 +187,7 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 	// Wait for the migration to complete.
 	log.Info("descheduler: live-migration started", "vmId", vmId)
 	for {
-		server, err = e.NovaAPI.Get(ctx, vmId)
+		server, err = e.NovaClient.Get(ctx, vmId)
 		if err != nil {
 			log.Error(err, "descheduler: failed to get VM status", "vmId", vmId)
 			// Consider migration as failed

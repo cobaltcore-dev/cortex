@@ -59,3 +59,7 @@ func hasToleration(pod corev1.Pod, taint corev1.Taint) bool {
 	}
 	return false
 }
+
+func init() {
+	Index["taint"] = func() PodFilter { return &TaintFilter{} }
+}

@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"

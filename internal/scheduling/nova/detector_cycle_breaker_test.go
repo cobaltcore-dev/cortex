@@ -14,24 +14,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-type mockDetectorCycleBreakerNovaAPI struct {
+type mockDetectorCycleBreakerNovaClient struct {
 	migrations map[string][]migration
 	getError   error
 }
 
-func (m *mockDetectorCycleBreakerNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockDetectorCycleBreakerNovaClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return nil
 }
 
-func (m *mockDetectorCycleBreakerNovaAPI) Get(ctx context.Context, id string) (server, error) {
+func (m *mockDetectorCycleBreakerNovaClient) Get(ctx context.Context, id string) (server, error) {
 	return server{}, errors.New("not implemented")
 }
 
-func (m *mockDetectorCycleBreakerNovaAPI) LiveMigrate(ctx context.Context, id string) error {
+func (m *mockDetectorCycleBreakerNovaClient) LiveMigrate(ctx context.Context, id string) error {
 	return errors.New("not implemented")
 }
 
-func (m *mockDetectorCycleBreakerNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
+func (m *mockDetectorCycleBreakerNovaClient) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
 	if m.getError != nil {
 		return nil, m.getError
 	}
@@ -171,7 +171,7 @@ func TestDetectorCycleBreaker_Filter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockAPI := &mockDetectorCycleBreakerNovaAPI{
+			mockAPI := &mockDetectorCycleBreakerNovaClient{
 				migrations: tt.migrations,
 			}
 
@@ -179,7 +179,7 @@ func TestDetectorCycleBreaker_Filter(t *testing.T) {
 				mockAPI.getError = errors.New("API error")
 			}
 
-			detector := detectorCycleBreaker{novaAPI: mockAPI}
+			detector := detectorCycleBreaker{novaClient: mockAPI}
 
 			ctx := context.Background()
 			result, err := detector.Filter(ctx, tt.decisions)
@@ -229,11 +229,11 @@ func TestDetectorCycleBreaker_Filter(t *testing.T) {
 }
 
 func TestDetectorCycleBreaker_Filter_EmptyVMDetections(t *testing.T) {
-	mockAPI := &mockDetectorCycleBreakerNovaAPI{
+	mockAPI := &mockDetectorCycleBreakerNovaClient{
 		migrations: map[string][]migration{},
 	}
 
-	detector := detectorCycleBreaker{novaAPI: mockAPI}
+	detector := detectorCycleBreaker{novaClient: mockAPI}
 
 	ctx := context.Background()
 	result, err := detector.Filter(ctx, []plugins.VMDetection{})
@@ -260,30 +260,30 @@ func TestNewDetectorCycleBreaker(t *testing.T) {
 		t.Errorf("expected *detectorCycleBreaker, got %T", detector)
 	}
 
-	// Verify the novaAPI field is initialized
+	// Verify the novaClient field is initialized
 	detectorImpl := detector.(*detectorCycleBreaker)
-	if detectorImpl.novaAPI == nil {
-		t.Error("expected novaAPI to be initialized")
+	if detectorImpl.novaClient == nil {
+		t.Error("expected novaClient to be initialized")
 	}
 }
 
 func TestDetectorCycleBreaker_Init(t *testing.T) {
 	tests := []struct {
 		name      string
-		setupMock func() NovaAPI
+		setupMock func() NovaClient
 		expectErr bool
 	}{
 		{
 			name: "successful initialization",
-			setupMock: func() NovaAPI {
-				return &mockDetectorCycleBreakerNovaAPI{}
+			setupMock: func() NovaClient {
+				return &mockDetectorCycleBreakerNovaClient{}
 			},
 			expectErr: false,
 		},
 		{
 			name: "initialization with error",
-			setupMock: func() NovaAPI {
-				return &mockDetectorCycleBreakerNovaAPIWithInitError{}
+			setupMock: func() NovaClient {
+				return &mockDetectorCycleBreakerNovaClientWithInitError{}
 			},
 			expectErr: true,
 		},
@@ -292,7 +292,7 @@ func TestDetectorCycleBreaker_Init(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			detector := &detectorCycleBreaker{
-				novaAPI: tt.setupMock(),
+				novaClient: tt.setupMock(),
 			}
 
 			ctx := context.Background()
@@ -312,11 +312,11 @@ func TestDetectorCycleBreaker_Init(t *testing.T) {
 	}
 }
 
-// mockDetectorCycleBreakerNovaAPIWithInitError is a mock that returns an error on Init
-type mockDetectorCycleBreakerNovaAPIWithInitError struct {
-	mockDetectorCycleBreakerNovaAPI
+// mockDetectorCycleBreakerNovaClientWithInitError is a mock that returns an error on Init
+type mockDetectorCycleBreakerNovaClientWithInitError struct {
+	mockDetectorCycleBreakerNovaClient
 }
 
-func (m *mockDetectorCycleBreakerNovaAPIWithInitError) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockDetectorCycleBreakerNovaClientWithInitError) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return errors.New("init error")
 }

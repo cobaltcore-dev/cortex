@@ -17,6 +17,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila/plugins/filters"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -148,8 +150,8 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 
 	return lib.InitNewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,
-		supportedFilters, p.Spec.Filters,
-		supportedWeighers, p.Spec.Weighers,
+		filters.Index, p.Spec.Filters,
+		weighers.Index, p.Spec.Weighers,
 		c.Monitor,
 	)
 }

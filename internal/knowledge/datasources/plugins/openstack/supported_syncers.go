@@ -8,12 +8,12 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/cinder"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/manila"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/placement"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/cinder"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/manila"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 )

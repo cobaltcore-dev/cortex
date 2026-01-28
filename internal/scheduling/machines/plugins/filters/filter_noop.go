@@ -1,4 +1,7 @@
-package machines
+// Copyright SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package filters
 
 import (
 	"context"
@@ -32,4 +35,8 @@ func (NoopFilter) Run(traceLog *slog.Logger, request ironcore.MachinePipelineReq
 		activations[pool.Name] = 1.0
 	}
 	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
+}
+
+func init() {
+	Index["noop"] = func() MachineFilter { return &NoopFilter{} }
 }

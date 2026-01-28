@@ -36,3 +36,7 @@ func (NoopFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*
 	}
 	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
 }
+
+func init() {
+	Index["noop"] = func() PodFilter { return &NoopFilter{} }
+}

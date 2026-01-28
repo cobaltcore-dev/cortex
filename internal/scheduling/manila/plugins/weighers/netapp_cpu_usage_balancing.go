@@ -106,3 +106,9 @@ func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.Ext
 	}
 	return result, nil
 }
+
+func init() {
+	Index["netapp_cpu_usage_balancing"] = func() lib.Weigher[api.ExternalSchedulerRequest] {
+		return &NetappCPUUsageBalancingStep{}
+	}
+}

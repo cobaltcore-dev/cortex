@@ -49,3 +49,7 @@ func (s *FilterInstanceGroupAffinityStep) Run(
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_instance_group_affinity"] = func() NovaFilter { return &FilterInstanceGroupAffinityStep{} }
+}

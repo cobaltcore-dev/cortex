@@ -12,6 +12,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/detectors"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/sapcc/go-bits/jobloop"
@@ -57,7 +58,7 @@ func (c *DetectorPipelineController) InitPipeline(
 		DetectorCycleBreaker: c.DetectorCycleBreaker,
 		Monitor:              c.Monitor.SubPipeline(p.Name),
 	}
-	errs := pipeline.Init(ctx, p.Spec.Detectors, supportedDetectors)
+	errs := pipeline.Init(ctx, p.Spec.Detectors, detectors.Index)
 	return lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]]{
 		Pipeline:       pipeline,
 		DetectorErrors: errs,

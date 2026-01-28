@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-type mockExecutorNovaAPI struct {
+type mockExecutorNovaClient struct {
 	servers        map[string]server
 	migrations     map[string][]migration
 	getError       error
@@ -31,11 +31,11 @@ type mockExecutorNovaAPI struct {
 	migrationDelay time.Duration
 }
 
-func (m *mockExecutorNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockExecutorNovaClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	return nil
 }
 
-func (m *mockExecutorNovaAPI) Get(ctx context.Context, id string) (server, error) {
+func (m *mockExecutorNovaClient) Get(ctx context.Context, id string) (server, error) {
 	if m.getError != nil {
 		return server{}, m.getError
 	}
@@ -45,7 +45,7 @@ func (m *mockExecutorNovaAPI) Get(ctx context.Context, id string) (server, error
 	return server{}, errors.New("server not found")
 }
 
-func (m *mockExecutorNovaAPI) LiveMigrate(ctx context.Context, id string) error {
+func (m *mockExecutorNovaClient) LiveMigrate(ctx context.Context, id string) error {
 	if m.migrateError != nil {
 		return m.migrateError
 	}
@@ -68,7 +68,7 @@ func (m *mockExecutorNovaAPI) LiveMigrate(ctx context.Context, id string) error 
 	return nil
 }
 
-func (m *mockExecutorNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
+func (m *mockExecutorNovaClient) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
 	if migs, ok := m.migrations[id]; ok {
 		return migs, nil
 	}
@@ -90,7 +90,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 	tests := []struct {
 		name               string
 		descheduling       *v1alpha1.Descheduling
-		novaAPI            *mockExecutorNovaAPI
+		novaAPI            *mockExecutorNovaClient
 		config             conf.Config
 		expectedReady      bool
 		expectedInProgress bool
@@ -112,7 +112,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI: &mockExecutorNovaAPI{
+			novaAPI: &mockExecutorNovaClient{
 				servers: map[string]server{
 					"vm-123": {ID: "vm-123", Status: "ACTIVE", ComputeHost: "old-host"},
 				},
@@ -137,7 +137,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI: &mockExecutorNovaAPI{
+			novaAPI: &mockExecutorNovaClient{
 				servers: map[string]server{
 					"vm-123": {ID: "vm-123", Status: "ACTIVE", ComputeHost: "old-host"},
 				},
@@ -161,7 +161,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI:            &mockExecutorNovaAPI{},
+			novaAPI:            &mockExecutorNovaClient{},
 			expectedReady:      false,
 			expectedInProgress: false,
 			expectedError:      "unsupported refType: unsupported-type",
@@ -180,7 +180,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI:            &mockExecutorNovaAPI{},
+			novaAPI:            &mockExecutorNovaClient{},
 			expectedReady:      false,
 			expectedInProgress: false,
 			expectedError:      "unsupported prevHostType: unsupported-host-type",
@@ -199,7 +199,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI:            &mockExecutorNovaAPI{},
+			novaAPI:            &mockExecutorNovaClient{},
 			expectedReady:      false,
 			expectedInProgress: false,
 			expectedError:      "missing ref",
@@ -218,7 +218,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI:        &mockExecutorNovaAPI{servers: map[string]server{}},
+			novaAPI:        &mockExecutorNovaClient{servers: map[string]server{}},
 			expectDeletion: true,
 		},
 		{
@@ -236,7 +236,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI: &mockExecutorNovaAPI{
+			novaAPI: &mockExecutorNovaClient{
 				servers: map[string]server{
 					"vm-123": {ID: "vm-123", Status: "ACTIVE", ComputeHost: "different-host"},
 				},
@@ -259,7 +259,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI: &mockExecutorNovaAPI{
+			novaAPI: &mockExecutorNovaClient{
 				servers: map[string]server{
 					"vm-123": {ID: "vm-123", Status: "SHUTOFF", ComputeHost: "host1"},
 				},
@@ -282,7 +282,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				Status: v1alpha1.DeschedulingStatus{},
 			},
-			novaAPI: &mockExecutorNovaAPI{
+			novaAPI: &mockExecutorNovaClient{
 				servers: map[string]server{
 					"vm-123": {ID: "vm-123", Status: "ACTIVE", ComputeHost: "host1"},
 				},
@@ -317,7 +317,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			novaAPI:            &mockExecutorNovaAPI{},
+			novaAPI:            &mockExecutorNovaClient{},
 			expectDeletion:     false,
 			expectedReady:      false,
 			expectedInProgress: true,
@@ -334,11 +334,11 @@ func TestExecutor_Reconcile(t *testing.T) {
 				Build()
 
 			executor := &DeschedulingsExecutor{
-				Client:  client,
-				Scheme:  scheme,
-				NovaAPI: tt.novaAPI,
-				Conf:    tt.config,
-				Monitor: newMockMonitor(),
+				Client:     client,
+				Scheme:     scheme,
+				NovaClient: tt.novaAPI,
+				Conf:       tt.config,
+				Monitor:    newMockMonitor(),
 			}
 
 			req := ctrl.Request{
@@ -414,10 +414,10 @@ func TestDeschedulingsExecutor_ReconcileNotFound(t *testing.T) {
 
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	executor := &DeschedulingsExecutor{
-		Client:  client,
-		Scheme:  scheme,
-		NovaAPI: &mockExecutorNovaAPI{},
-		Monitor: newMockMonitor(),
+		Client:     client,
+		Scheme:     scheme,
+		NovaClient: &mockExecutorNovaClient{},
+		Monitor:    newMockMonitor(),
 	}
 
 	req := ctrl.Request{

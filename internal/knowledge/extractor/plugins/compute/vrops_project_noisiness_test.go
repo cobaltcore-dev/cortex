@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/prometheus"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	"k8s.io/apimachinery/pkg/runtime"

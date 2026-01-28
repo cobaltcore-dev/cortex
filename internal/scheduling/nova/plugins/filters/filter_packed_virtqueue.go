@@ -52,3 +52,7 @@ func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_packed_virtqueue"] = func() NovaFilter { return &FilterPackedVirtqueueStep{} }
+}

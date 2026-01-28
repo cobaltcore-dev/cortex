@@ -116,3 +116,7 @@ func matchesNodeSelectorRequirement(node corev1.Node, req corev1.NodeSelectorReq
 		return false
 	}
 }
+
+func init() {
+	Index["nodeaffinity"] = func() PodFilter { return &NodeAffinityFilter{} }
+}

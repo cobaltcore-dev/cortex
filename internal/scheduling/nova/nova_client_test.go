@@ -18,14 +18,14 @@ func setupNovaMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.K
 	return server, &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 }
 
-func TestNewNovaAPI(t *testing.T) {
-	api := NewNovaAPI()
+func TestNewNovaClient(t *testing.T) {
+	api := NewNovaClient()
 	if api == nil {
 		t.Fatal("expected non-nil api")
 	}
 }
 
-func TestNovaAPI_GetServer(t *testing.T) {
+func TestNovaClient_GetServer(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("expected GET method, got %s", r.Method)
@@ -39,7 +39,7 @@ func TestNovaAPI_GetServer(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	nova := novaAPI{}
+	nova := novaClient{}
 	nova.sc = &gophercloud.ServiceClient{
 		ProviderClient: k.Client(),
 		Endpoint:       server.URL + "/",
@@ -57,7 +57,7 @@ func TestNovaAPI_GetServer(t *testing.T) {
 	}
 }
 
-func TestNovaAPI_LiveMigrate(t *testing.T) {
+func TestNovaClient_LiveMigrate(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("expected POST method, got %s", r.Method)
@@ -66,7 +66,7 @@ func TestNovaAPI_LiveMigrate(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	nova := novaAPI{}
+	nova := novaClient{}
 	nova.sc = &gophercloud.ServiceClient{
 		ProviderClient: k.Client(),
 		Endpoint:       server.URL + "/",
@@ -81,7 +81,7 @@ func TestNovaAPI_LiveMigrate(t *testing.T) {
 	}
 }
 
-func TestNovaAPI_GetServerMigrations(t *testing.T) {
+func TestNovaClient_GetServerMigrations(t *testing.T) {
 	migrationsResponse := `{"migrations": [
 	{"instance_uuid": "server-123", "source_compute": "host-1", "dest_compute": "host-2"},
 	{"instance_uuid": "server-123", "source_compute": "host-2", "dest_compute": "host-3"}
@@ -100,7 +100,7 @@ func TestNovaAPI_GetServerMigrations(t *testing.T) {
 	}
 	server, k := setupNovaMockServer(handler)
 	defer server.Close()
-	nova := novaAPI{}
+	nova := novaClient{}
 	nova.sc = &gophercloud.ServiceClient{
 		ProviderClient: k.Client(),
 		Endpoint:       server.URL + "/",
