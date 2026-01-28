@@ -80,3 +80,7 @@ func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.Exte
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_status_conditions"] = func() NovaFilter { return &FilterStatusConditionsStep{} }
+}

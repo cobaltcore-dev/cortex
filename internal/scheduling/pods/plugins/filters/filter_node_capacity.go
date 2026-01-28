@@ -52,3 +52,7 @@ func hasCapacityForPod(node corev1.Node, podRequests corev1.ResourceList) bool {
 
 	return true
 }
+
+func init() {
+	Index["nodecapacity"] = func() PodFilter { return &NodeCapacityFilter{} }
+}

@@ -59,3 +59,7 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_correct_az"] = func() NovaFilter { return &FilterCorrectAZStep{} }
+}

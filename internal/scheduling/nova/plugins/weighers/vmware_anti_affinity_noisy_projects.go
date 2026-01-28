@@ -94,3 +94,9 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request
 	}
 	return result, nil
 }
+
+func init() {
+	Index["vmware_anti_affinity_noisy_projects"] = func() lib.Weigher[api.ExternalSchedulerRequest] {
+		return &VMwareAntiAffinityNoisyProjectsStep{}
+	}
+}

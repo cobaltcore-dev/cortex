@@ -112,3 +112,9 @@ func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, reque
 	}
 	return result, nil
 }
+
+func init() {
+	Index["vmware_avoid_long_term_contended_hosts"] = func() lib.Weigher[api.ExternalSchedulerRequest] {
+		return &VMwareAvoidLongTermContendedHostsStep{}
+	}
+}

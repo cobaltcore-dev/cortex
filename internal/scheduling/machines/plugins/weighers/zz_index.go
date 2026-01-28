@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package machines
+package weighers
 
 import (
 	"github.com/cobaltcore-dev/cortex/api/delegation/ironcore"
@@ -11,4 +11,4 @@ import (
 type MachineWeigher = lib.Weigher[ironcore.MachinePipelineRequest]
 
 // Configuration of weighers supported by the machine scheduling.
-var supportedWeighers = map[string]func() MachineWeigher{}
+var Index = map[string]func() MachineWeigher{}

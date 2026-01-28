@@ -72,3 +72,7 @@ func (s *AvoidHighStealPctStep) Run() ([]plugins.VMDetection, error) {
 	}
 	return decisions, nil
 }
+
+func init() {
+	Index["avoid_high_steal_pct"] = &AvoidHighStealPctStep{}
+}

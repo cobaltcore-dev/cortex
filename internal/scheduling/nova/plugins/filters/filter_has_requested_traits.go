@@ -80,3 +80,7 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_has_requested_traits"] = func() NovaFilter { return &FilterHasRequestedTraits{} }
+}

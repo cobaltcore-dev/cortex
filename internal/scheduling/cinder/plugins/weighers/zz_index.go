@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package cinder
+package weighers
 
 import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/cinder"
@@ -11,4 +11,4 @@ import (
 type CinderWeigher = lib.Weigher[api.ExternalSchedulerRequest]
 
 // Configuration of weighers supported by the cinder scheduling.
-var supportedWeighers = map[string]func() CinderWeigher{}
+var Index = map[string]func() CinderWeigher{}

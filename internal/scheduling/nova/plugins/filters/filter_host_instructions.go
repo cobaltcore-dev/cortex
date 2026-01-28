@@ -36,3 +36,7 @@ func (s *FilterHostInstructionsStep) Run(traceLog *slog.Logger, request api.Exte
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_host_instructions"] = func() NovaFilter { return &FilterHostInstructionsStep{} }
+}

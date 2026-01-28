@@ -45,3 +45,7 @@ func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_allowed_projects"] = func() NovaFilter { return &FilterAllowedProjectsStep{} }
+}

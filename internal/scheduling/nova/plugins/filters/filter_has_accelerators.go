@@ -51,3 +51,7 @@ func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_has_accelerators"] = func() NovaFilter { return &FilterHasAcceleratorsStep{} }
+}

@@ -79,3 +79,7 @@ func (s *BinpackingStep) calculateBinpackScore(node corev1.Node, podResources co
 
 	return math.Min(1.0, totalWeightedUtilization/totalWeight)
 }
+
+func init() {
+	Index["binpack"] = func() PodWeigher { return &BinpackingStep{} }
+}

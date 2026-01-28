@@ -63,3 +63,7 @@ func (s *FilterMaintenanceStep) Run(traceLog *slog.Logger, request api.ExternalS
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_maintenance"] = func() NovaFilter { return &FilterMaintenanceStep{} }
+}

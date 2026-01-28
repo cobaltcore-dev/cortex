@@ -151,3 +151,9 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 
 	return result, nil
 }
+
+func init() {
+	Index["vmware_hana_binpacking"] = func() lib.Weigher[api.ExternalSchedulerRequest] {
+		return &VMwareHanaBinpackingStep{}
+	}
+}

@@ -112,3 +112,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_capabilities"] = func() NovaFilter { return &FilterCapabilitiesStep{} }
+}

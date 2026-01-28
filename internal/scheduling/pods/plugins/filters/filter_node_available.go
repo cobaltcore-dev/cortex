@@ -66,3 +66,7 @@ func isNodeHealthy(node corev1.Node) bool {
 func isNodeSchedulable(node corev1.Node) bool {
 	return !node.Spec.Unschedulable
 }
+
+func init() {
+	Index["nodeavailable"] = func() PodFilter { return &NodeAvailableFilter{} }
+}

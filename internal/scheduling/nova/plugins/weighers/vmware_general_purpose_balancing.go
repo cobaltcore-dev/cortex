@@ -134,3 +134,9 @@ func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request a
 
 	return result, nil
 }
+
+func init() {
+	Index["vmware_general_purpose_balancing"] = func() lib.Weigher[api.ExternalSchedulerRequest] {
+		return &VMwareGeneralPurposeBalancingStep{}
+	}
+}

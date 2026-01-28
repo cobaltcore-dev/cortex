@@ -85,3 +85,7 @@ func (s *FilterRequestedDestinationStep) Run(
 
 	return result, nil
 }
+
+func init() {
+	Index["filter_requested_destination"] = func() NovaFilter { return &FilterRequestedDestinationStep{} }
+}

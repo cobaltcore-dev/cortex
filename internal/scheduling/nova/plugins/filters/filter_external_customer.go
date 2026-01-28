@@ -80,3 +80,7 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_external_customer"] = func() NovaFilter { return &FilterExternalCustomerStep{} }
+}

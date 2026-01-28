@@ -114,3 +114,7 @@ func (s *FilterLiveMigratableStep) Run(
 	}
 	return result, nil
 }
+
+func init() {
+	Index["filter_live_migratable"] = func() NovaFilter { return &FilterLiveMigratableStep{} }
+}

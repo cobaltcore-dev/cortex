@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package cinder
+package filters
 
 import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/cinder"
@@ -11,4 +11,4 @@ import (
 type CinderFilter = lib.Filter[api.ExternalSchedulerRequest]
 
 // Configuration of filters supported by the cinder scheduling.
-var supportedFilters = map[string]func() CinderFilter{}
+var Index = map[string]func() CinderFilter{}
