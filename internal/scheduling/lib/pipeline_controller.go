@@ -5,6 +5,7 @@ package lib
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -16,23 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-// The base pipeline controller will delegate some methods to the parent
-// controller struct. The parent controller only needs to conform to this
-// interface and set the delegate field accordingly.
-type PipelineInitializer[PipelineType any] interface {
-	// Initialize a new pipeline with the given steps.
-	//
-	// This method is delegated to the parent controller, when a pipeline needs
-	// to be newly initialized or re-initialized to update it in the pipeline
-	// map.
-	InitPipeline(ctx context.Context, p v1alpha1.Pipeline) (PipelineType, error)
-	// Get the accepted pipeline type for this controller.
-	//
-	// This is used to filter pipelines when listing existing pipelines on
-	// startup or when reacting to pipeline events.
-	PipelineType() v1alpha1.PipelineType
-}
 
 // Base controller for decision pipelines.
 type BasePipelineController[PipelineType any] struct {
@@ -88,40 +72,83 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	log := ctrl.LoggerFrom(ctx)
 	old := obj.DeepCopy()
 
-	// Check if all steps are ready. If not, check if the step is mandatory.
-	obj.Status.TotalSteps = len(obj.Spec.Steps)
-	obj.Status.ReadySteps = 0
-	for _, step := range obj.Spec.Steps {
-		err := c.checkStepReady(ctx, &step)
-		if err == nil {
-			obj.Status.ReadySteps++
-			continue
-		}
-		if step.Mandatory {
-			meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.PipelineConditionReady,
-				Status:  metav1.ConditionFalse,
-				Reason:  "MandatoryStepNotReady",
-				Message: fmt.Sprintf("mandatory step %s not ready: %s", step.Impl, err.Error()),
-			})
-			patch := client.MergeFrom(old)
-			if err := c.Status().Patch(ctx, obj, patch); err != nil {
-				log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
-			}
-			delete(c.Pipelines, obj.Name)
-			delete(c.PipelineConfigs, obj.Name)
-			return
-		}
-	}
-	obj.Status.StepsReadyFrac = fmt.Sprintf("%d/%d", obj.Status.ReadySteps, obj.Status.TotalSteps)
+	initResult := c.Initializer.InitPipeline(ctx, *obj)
 
-	var err error
-	c.Pipelines[obj.Name], err = c.Initializer.InitPipeline(ctx, *obj)
-	c.PipelineConfigs[obj.Name] = *obj
-	if err != nil {
+	obj.Status.Filters = []v1alpha1.FilterStatus{}
+	for _, filter := range obj.Spec.Filters {
+		fs := v1alpha1.FilterStatus{Name: filter.Name}
+		if err, ok := initResult.FilterErrors[filter.Name]; ok {
+			meta.SetStatusCondition(&fs.Conditions, metav1.Condition{
+				Type:    v1alpha1.FilterConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "FilterInitFailed",
+				Message: err.Error(),
+			})
+		} else {
+			meta.SetStatusCondition(&fs.Conditions, metav1.Condition{
+				Type:    v1alpha1.FilterConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "FilterReady",
+				Message: "filter is ready",
+			})
+		}
+		obj.Status.Filters = append(obj.Status.Filters, fs)
+	}
+
+	obj.Status.Weighers = []v1alpha1.WeigherStatus{}
+	for _, weigher := range obj.Spec.Weighers {
+		ws := v1alpha1.WeigherStatus{Name: weigher.Name}
+		if err, ok := initResult.WeigherErrors[weigher.Name]; ok {
+			meta.SetStatusCondition(&ws.Conditions, metav1.Condition{
+				Type:    v1alpha1.WeigherConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "WeigherInitFailed",
+				Message: err.Error(),
+			})
+		} else {
+			meta.SetStatusCondition(&ws.Conditions, metav1.Condition{
+				Type:    v1alpha1.WeigherConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "WeigherReady",
+				Message: "weigher is ready",
+			})
+		}
+		obj.Status.Weighers = append(obj.Status.Weighers, ws)
+	}
+
+	obj.Status.Detectors = []v1alpha1.DetectorStatus{}
+	for _, detector := range obj.Spec.Detectors {
+		ds := v1alpha1.DetectorStatus{Name: detector.Name}
+		if err, ok := initResult.DetectorErrors[detector.Name]; ok {
+			meta.SetStatusCondition(&ds.Conditions, metav1.Condition{
+				Type:    v1alpha1.DetectorConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "DetectorInitFailed",
+				Message: err.Error(),
+			})
+		} else {
+			meta.SetStatusCondition(&ds.Conditions, metav1.Condition{
+				Type:    v1alpha1.DetectorConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "DetectorReady",
+				Message: "detector is ready",
+			})
+		}
+		obj.Status.Detectors = append(obj.Status.Detectors, ds)
+	}
+
+	// If there was a critical error, the pipeline cannot be used.
+	if len(initResult.FilterErrors) > 0 {
+		err := errors.New("one or more filters failed to initialize")
 		log.Error(err, "failed to create pipeline", "pipelineName", obj.Name)
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.PipelineConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "PipelineInitFailed",
+			Message: err.Error(),
+		})
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionAllStepsReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "PipelineInitFailed",
 			Message: err.Error(),
@@ -134,6 +161,29 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		delete(c.PipelineConfigs, obj.Name)
 		return
 	}
+
+	// If there was a non-critical error, continue running the pipeline but
+	// report the error in the pipeline status.
+	if len(initResult.WeigherErrors) > 0 || len(initResult.DetectorErrors) > 0 {
+		err := errors.New("one or more weighers or detectors failed to initialize")
+		log.Error(err, "non-critical error during pipeline initialization", "pipelineName", obj.Name)
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionAllStepsReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "SomeStepsNotReady",
+			Message: err.Error(),
+		})
+	} else {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionAllStepsReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllStepsReady",
+			Message: "all pipeline steps are ready",
+		})
+	}
+
+	c.Pipelines[obj.Name] = initResult.Pipeline
+	c.PipelineConfigs[obj.Name] = *obj
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.PipelineConditionReady,
@@ -190,46 +240,7 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	delete(c.PipelineConfigs, pipelineConf.Name)
 }
 
-// Check if a step is ready, and if not, return an error indicating why not.
-func (c *BasePipelineController[PipelineType]) checkStepReady(
-	ctx context.Context,
-	obj *v1alpha1.StepSpec,
-) error {
-
-	log := ctrl.LoggerFrom(ctx)
-	// Check the status of all knowledges depending on this step.
-	readyKnowledges := 0
-	totalKnowledges := len(obj.Knowledges)
-	for _, knowledgeRef := range obj.Knowledges {
-		knowledge := &v1alpha1.Knowledge{}
-		if err := c.Get(ctx, client.ObjectKey{
-			Name:      knowledgeRef.Name,
-			Namespace: knowledgeRef.Namespace,
-		}, knowledge); err != nil {
-			log.Error(err, "failed to get knowledge depending on step", "knowledgeName", knowledgeRef.Name)
-			continue
-		}
-		// Check if the knowledge status conditions indicate an error.
-		if meta.IsStatusConditionFalse(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
-			log.Info("knowledge not ready due to error condition", "knowledgeName", knowledgeRef.Name)
-			continue
-		}
-		if knowledge.Status.RawLength == 0 {
-			log.Info("knowledge not ready, no data available", "knowledgeName", knowledgeRef.Name)
-			continue
-		}
-		readyKnowledges++
-	}
-	if readyKnowledges != totalKnowledges {
-		return fmt.Errorf(
-			"%d/%d knowledges ready",
-			readyKnowledges, totalKnowledges,
-		)
-	}
-	return nil
-}
-
-// Handle a knowledge creation, update, or delete event from watching knowledge resources.
+// Handle a knowledge creation, readiness update, or delete event from watching knowledge resources.
 func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 	ctx context.Context,
 	obj *v1alpha1.Knowledge,
@@ -240,27 +251,23 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
-	log.Info("knowledge changed, re-evaluating dependent pipelines", "knowledgeName", obj.Name)
+	log.Info("knowledge changed, re-evaluating all pipelines", "knowledgeName", obj.Name)
 	// Find all pipelines depending on this knowledge and re-evaluate them.
 	var pipelines v1alpha1.PipelineList
 	if err := c.List(ctx, &pipelines); err != nil {
-		log.Error(err, "failed to list pipelines for knowledge", "knowledgeName", obj.Name)
+		log.Error(err, "failed to list pipelines for knowledge change", "knowledgeName", obj.Name)
 		return
 	}
 	for _, pipeline := range pipelines.Items {
-		needsUpdate := false
-		for _, step := range pipeline.Spec.Steps {
-			for _, knowledgeRef := range step.Knowledges {
-				if knowledgeRef.Name == obj.Name && knowledgeRef.Namespace == obj.Namespace {
-					needsUpdate = true
-					break
-				}
-			}
+		// TODO: Not all pipelines may depend on this knowledge. At the moment
+		// we re-evaluate all pipelines matching this controller.
+		if pipeline.Spec.SchedulingDomain != c.SchedulingDomain {
+			continue
 		}
-		if needsUpdate {
-			log.Info("re-evaluating pipeline due to knowledge change", "pipelineName", pipeline.Name)
-			c.handlePipelineChange(ctx, &pipeline, queue)
+		if pipeline.Spec.Type != c.Initializer.PipelineType() {
+			continue
 		}
+		c.handlePipelineChange(ctx, &pipeline, queue)
 	}
 }
 

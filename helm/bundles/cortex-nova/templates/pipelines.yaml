@@ -1,4 +1,3 @@
-{{- $createDecisions := .Values.pipelines.createDecisions | default false }}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -14,47 +13,35 @@ spec:
     This is the pipeline used for VMware.
   type: filter-weigher
   createDecisions: false
-  steps:
-    - type: weigher
-      impl: vmware_hana_binpacking
+  filters: []
+  weighers:
+    - name: vmware_hana_binpacking
       description: |
         This step pulls HANA VMs onto the smallest possible gaps on HANA-exclusive
         VMware hosts. In this way hosts with much free space are held free for
         larger HANA VMs, improving overall packing efficiency for HANA workloads.
-      knowledges:
-        - name: host-utilization
-        - name: host-capabilities
-      opts:
+      params:
         ramUtilizedAfterLowerBoundPct: 0
         ramUtilizedAfterUpperBoundPct: 100
         ramUtilizedAfterActivationLowerBound: 0.0
         ramUtilizedAfterActivationUpperBound: 1.0
-      mandatory: false
-    - type: weigher
-      impl: vmware_general_purpose_balancing
+    - name: vmware_general_purpose_balancing
       description: |
         This step balances non-HANA VMs across non-HANA exclusive VMware hosts. It
         pulls vms onto the freeest hosts possible to ensure an even distribution of
         workloads across the available infrastructure.
-      knowledges:
-        - name: host-utilization
-        - name: host-capabilities
-      opts:
+      params:
         ramUtilizedLowerBoundPct: 0
         ramUtilizedUpperBoundPct: 100
         ramUtilizedActivationLowerBound: 1.0
         ramUtilizedActivationUpperBound: 0.0
-      mandatory: false
-    - type: weigher
-      impl: vmware_avoid_long_term_contended_hosts
+    - name: vmware_avoid_long_term_contended_hosts
       description: |
         This step avoids placing vms on vmware hosts with a high CPU contention over
         a longer period of time, based on vrops contention metrics. In particular,
         this step looks at a longer time window of 4 weeks to identify hosts that
         are consistently contended.
-      knowledges:
-        - name: vmware-long-term-contended-hosts
-      opts:
+      params:
         avgCPUContentionLowerBound: 0 # pct
         avgCPUContentionUpperBound: 10 # pct
         avgCPUContentionActivationLowerBound: 0.0
@@ -63,17 +50,13 @@ spec:
         maxCPUContentionUpperBound: 10 # pct
         maxCPUContentionActivationLowerBound: 0.0
         maxCPUContentionActivationUpperBound: -0.25
-      mandatory: false
-    - type: weigher
-      impl: vmware_avoid_short_term_contended_hosts
+    - name: vmware_avoid_short_term_contended_hosts
       description: |
         This step avoids placing vms on vmware hosts with a high CPU contention over
         a shorter period of time, based on vrops contention metrics. In particular,
         this step looks at a shorter time window of 20 minutes to identify hosts that
         are currently contended.
-      knowledges:
-        - name: vmware-short-term-contended-hosts
-      opts:
+      params:
         avgCPUContentionLowerBound: 0 # pct
         avgCPUContentionUpperBound: 10 # pct
         avgCPUContentionActivationLowerBound: 0.0
@@ -82,4 +65,3 @@ spec:
         maxCPUContentionUpperBound: 10 # pct
         maxCPUContentionActivationLowerBound: 0.0
         maxCPUContentionActivationUpperBound: -0.25
-      mandatory: false

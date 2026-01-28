@@ -110,17 +110,24 @@ for (bundle_chart_path, _) in bundle_charts:
     local('sh helm/sync.sh ' + bundle_chart_path)
 
 
-k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=[
-    # Locally enable IronCore CRDs and rolebindings (these are not deployed by default).
-    'cortex.crd.ironcore.enable=true',
-    'cortex.rbac.ironcore.enable=true',
-    # Tilt is weird and thus we need to set this here even when its provided in the values.
-    'cortex.namePrefix=cortex-ironcore',
-
-    'cortex.crd.pods.enable=true',
-    'cortex.rbac.pods.enable=true',
-    'cortex.namePrefix=cortex-pods',
-]))
+crd_extra_values = []
+if 'ironcore' in ACTIVE_DEPLOYMENTS:
+    crd_extra_values.extend([
+        # Locally enable IronCore CRDs and rolebindings (these are not deployed by default).
+        'cortex.crd.ironcore.enable=true',
+        'cortex.rbac.ironcore.enable=true',
+        # Tilt is weird and thus we need to set this here even when its provided in the values.
+        'cortex.namePrefix=cortex-ironcore',
+    ])
+if 'pods' in ACTIVE_DEPLOYMENTS:
+    crd_extra_values.extend([
+        # Locally enable Pods CRDs and rolebindings (these are not deployed by default).
+        'cortex.crd.pods.enable=true',
+        'cortex.rbac.pods.enable=true',
+        # Tilt is weird and thus we need to set this here even when its provided in the values.
+        'cortex.namePrefix=cortex-pods',
+    ])
+k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=crd_extra_values))
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")

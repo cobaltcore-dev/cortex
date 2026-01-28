@@ -24,11 +24,11 @@ spec:
     - jsonPath: .spec.type
       name: Type
       type: string
-    - jsonPath: .status.stepsReadyFrac
-      name: Steps
+    - jsonPath: .status.conditions[?(@.type=='AllStepsReady')].status
+      name: All Steps Ready
       type: string
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
-      name: Ready
+      name: Pipeline Ready
       type: string
     name: v1alpha1
     schema:
@@ -62,15 +62,16 @@ spec:
                   When this is false, the pipeline will still process requests.
                 type: boolean
               description:
-                description: An optional description of the pipeline.
+                description: An optional description of the pipeline, helping understand
+                  its purpose.
                 type: string
-              schedulingDomain:
+              detectors:
                 description: |-
-                  SchedulingDomain defines in which scheduling domain this pipeline
-                  is used (e.g., nova, cinder, manila).
-                type: string
-              steps:
-                description: The ordered list of steps that make up this pipeline.
+                  Ordered list of detectors to apply in a descheduling pipeline.
+
+                  This attribute is set only if the pipeline type is detector.
+                  Detectors find candidates for descheduling (migration off current host).
+                  These detectors are run after weighers are applied.
                 items:
                   properties:
                     description:
@@ -78,101 +79,99 @@ spec:
                         Additional description of the step which helps understand its purpose
                         and decisions made by it.
                       type: string
-                    impl:
-                      description: The name of the scheduler step in the cortex implementation.
+                    name:
+                      description: |-
+                        The name of the scheduler step in the cortex implementation.
+                        Must match to a step implemented by the pipeline controller.
                       type: string
-                    knowledges:
-                      description: Knowledges this step depends on to be ready.
-                      items:
-                        description: ObjectReference contains enough information to
-                          let you inspect or modify the referred object.
-                        properties:
-                          apiVersion:
-                            description: API version of the referent.
-                            type: string
-                          fieldPath:
-                            description: |-
-                              If referring to a piece of an object instead of an entire object, this string
-                              should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                              For example, if the object reference is to a container within a pod, this would take on a value like:
-                              "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                              the event) or if no container name is specified "spec.containers[2]" (container with
-                              index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                              referencing a part of an object.
-                            type: string
-                          kind:
-                            description: |-
-                              Kind of the referent.
-                              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                            type: string
-                          name:
-                            description: |-
-                              Name of the referent.
-                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                            type: string
-                          namespace:
-                            description: |-
-                              Namespace of the referent.
-                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                            type: string
-                          resourceVersion:
-                            description: |-
-                              Specific resourceVersion to which this reference is made, if any.
-                              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                            type: string
-                          uid:
-                            description: |-
-                              UID of the referent.
-                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                            type: string
-                        type: object
-                        x-kubernetes-map-type: atomic
-                      type: array
-                    mandatory:
-                      default: true
-                      description: Whether this step is mandatory for the pipeline
-                        to be runnable.
-                      type: boolean
-                    opts:
-                      description: Additional configuration for the extractor that
-                        can be used
+                    params:
+                      description: Additional configuration for the step that can
+                        be used
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
-                    type:
-                      description: The type of the scheduler step.
-                      type: string
-                    weigher:
-                      description: If the type is "weigher", this contains additional
-                        configuration for it.
-                      properties:
-                        disabledValidations:
-                          description: |-
-                            The validations to disable for this step. If none are provided, all
-                            applied validations are enabled.
-                          properties:
-                            sameSubjectNumberInOut:
-                              description: |-
-                                Whether to validate that no subjects are removed or added from the scheduler
-                                step. This should only be disabled for scheduler steps that remove subjects.
-                                Thus, if no value is provided, the default is false.
-                              type: boolean
-                            someSubjectsRemain:
-                              description: |-
-                                Whether to validate that, after running the step, there are remaining subjects.
-                                This should only be disabled for scheduler steps that are expected to
-                                remove all subjects.
-                              type: boolean
-                          type: object
-                      type: object
                   required:
-                  - impl
-                  - mandatory
-                  - type
+                  - name
                   type: object
                 type: array
-              type:
-                description: The type of the pipeline.
+              filters:
+                description: |-
+                  Ordered list of filters to apply in a scheduling pipeline.
+
+                  This attribute is set only if the pipeline type is filter-weigher.
+                  Filters remove host candidates from an initial set, leaving
+                  valid candidates. Filters are run before weighers are applied.
+                items:
+                  properties:
+                    description:
+                      description: |-
+                        Additional description of the step which helps understand its purpose
+                        and decisions made by it.
+                      type: string
+                    name:
+                      description: |-
+                        The name of the scheduler step in the cortex implementation.
+                        Must match to a step implemented by the pipeline controller.
+                      type: string
+                    params:
+                      description: Additional configuration for the step that can
+                        be used
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  required:
+                  - name
+                  type: object
+                type: array
+              schedulingDomain:
+                description: |-
+                  SchedulingDomain defines in which scheduling domain this pipeline
+                  is used (e.g., nova, cinder, manila).
                 type: string
+              type:
+                description: |-
+                  The type of the pipeline, used to differentiate between
+                  filter-weigher and detector pipelines within the same
+                  scheduling domain.
+
+                  If the type is filter-weigher, the filter and weigher attributes
+                  must be set. If the type is detector, the detectors attribute
+                  must be set.
+                enum:
+                - filter-weigher
+                - detector
+                type: string
+              weighers:
+                description: |-
+                  Ordered list of weighers to apply in a scheduling pipeline.
+
+                  This attribute is set only if the pipeline type is filter-weigher.
+                  These weighers are run after filters are applied.
+                items:
+                  properties:
+                    description:
+                      description: |-
+                        Additional description of the step which helps understand its purpose
+                        and decisions made by it.
+                      type: string
+                    multiplier:
+                      description: |-
+                        Optional multiplier to apply to the step's output.
+                        This can be used to increase or decrease the weight of a step
+                        relative to other steps in the same pipeline.
+                      type: number
+                    name:
+                      description: |-
+                        The name of the scheduler step in the cortex implementation.
+                        Must match to a step implemented by the pipeline controller.
+                      type: string
+                    params:
+                      description: Additional configuration for the step that can
+                        be used
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  required:
+                  - name
+                  type: object
+                type: array
             required:
             - schedulingDomain
             - type
@@ -237,20 +236,213 @@ spec:
                   - type
                   type: object
                 type: array
-              readySteps:
-                description: The number of steps that are ready.
-                type: integer
-              stepsReadyFrac:
-                description: |-
-                  An overview of the readiness of the steps in the pipeline.
-                  Format: "ReadySteps / TotalSteps steps ready".
-                type: string
-              totalSteps:
-                description: The total number of steps configured in the pipeline.
-                type: integer
-            required:
-            - readySteps
-            - totalSteps
+              detectors:
+                description: List of statuses for each detector in the pipeline.
+                items:
+                  properties:
+                    conditions:
+                      description: The current status conditions of the detector.
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      type: array
+                    name:
+                      description: The name of the detector.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              filters:
+                description: List of statuses for each filter in the pipeline.
+                items:
+                  properties:
+                    conditions:
+                      description: The current status conditions of the filter.
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      type: array
+                    name:
+                      description: The name of the filter.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              weighers:
+                description: List of statuses for each weigher in the pipeline.
+                items:
+                  properties:
+                    conditions:
+                      description: The current status conditions of the weigher.
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      type: array
+                    name:
+                      description: The name of the weigher.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
         required:
         - spec

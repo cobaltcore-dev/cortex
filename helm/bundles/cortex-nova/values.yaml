@@ -62,10 +62,6 @@ openstack:
     enabled: false
     <<: *sharedSSOCert
 
-pipelines:
-  # Use this flag to disable the creation of decisions across all pipelines.
-  createDecisions: false
-
 kvm:
   # Use this flag to enable/disable KVM host related features.
   enabled: false

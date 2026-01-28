@@ -11,4 +11,5 @@ spec:
     for additional filtering and weighing via this external scheduler pipeline.
     Cortex returns a ranked list of hosts back to cinder for final selection.
   type: filter-weigher
-  steps: []
+  filters: []
+  weighers: []

@@ -1,0 +1,322 @@
+// Copyright SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package nova
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+)
+
+type mockDetectorCycleBreakerNovaAPI struct {
+	migrations map[string][]migration
+	getError   error
+}
+
+func (m *mockDetectorCycleBreakerNovaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	return nil
+}
+
+func (m *mockDetectorCycleBreakerNovaAPI) Get(ctx context.Context, id string) (server, error) {
+	return server{}, errors.New("not implemented")
+}
+
+func (m *mockDetectorCycleBreakerNovaAPI) LiveMigrate(ctx context.Context, id string) error {
+	return errors.New("not implemented")
+}
+
+func (m *mockDetectorCycleBreakerNovaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
+	if m.getError != nil {
+		return nil, m.getError
+	}
+	if migs, ok := m.migrations[id]; ok {
+		return migs, nil
+	}
+	return []migration{}, nil
+}
+
+func TestDetectorCycleBreaker_Filter(t *testing.T) {
+	tests := []struct {
+		name       string
+		decisions  []plugins.VMDetection
+		migrations map[string][]migration
+		expected   []plugins.VMDetection
+		expectErr  bool
+	}{
+		{
+			name: "no cycles - all decisions pass through",
+			decisions: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+				{VMID: "vm-2", Reason: "high memory", Host: "host-b"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+				},
+				"vm-2": {
+					{SourceCompute: "host-b", DestCompute: "host-c"},
+				},
+			},
+			expected: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+				{VMID: "vm-2", Reason: "high memory", Host: "host-b"},
+			},
+		},
+		{
+			name: "simple cycle detected - decision filtered out",
+			decisions: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+					{SourceCompute: "host-b", DestCompute: "host-a"}, // Cycle back to host-a
+				},
+			},
+			expected: []plugins.VMDetection{}, // Filtered out due to cycle
+		},
+		{
+			name: "three-hop cycle detected",
+			decisions: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+					{SourceCompute: "host-b", DestCompute: "host-c"},
+					{SourceCompute: "host-c", DestCompute: "host-a"}, // Cycle back to host-a
+				},
+			},
+			expected: []plugins.VMDetection{}, // Filtered out due to cycle
+		},
+		{
+			name: "mixed scenarios - some cycles, some not",
+			decisions: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},    // Has cycle
+				{VMID: "vm-2", Reason: "high memory", Host: "host-x"}, // No cycle
+				{VMID: "vm-3", Reason: "high disk", Host: "host-y"},   // No migrations
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+					{SourceCompute: "host-b", DestCompute: "host-a"}, // Cycle
+				},
+				"vm-2": {
+					{SourceCompute: "host-x", DestCompute: "host-y"},
+					{SourceCompute: "host-y", DestCompute: "host-z"}, // No cycle
+				},
+				"vm-3": {}, // No migrations
+			},
+			expected: []plugins.VMDetection{
+				{VMID: "vm-2", Reason: "high memory", Host: "host-x"},
+				{VMID: "vm-3", Reason: "high disk", Host: "host-y"},
+			},
+		},
+		{
+			name: "complex cycle with multiple hops",
+			decisions: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+					{SourceCompute: "host-b", DestCompute: "host-c"},
+					{SourceCompute: "host-c", DestCompute: "host-d"},
+					{SourceCompute: "host-d", DestCompute: "host-b"}, // Cycle to host-b (not host-a)
+				},
+			},
+			expected: []plugins.VMDetection{}, // Filtered out due to cycle
+		},
+		{
+			name: "no migrations - decision passes through",
+			decisions: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {}, // No migrations
+			},
+			expected: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+		},
+		{
+			name: "single migration - no cycle possible",
+			decisions: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{
+				"vm-1": {
+					{SourceCompute: "host-a", DestCompute: "host-b"},
+				},
+			},
+			expected: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+		},
+		{
+			name: "API error when getting migrations",
+			decisions: []plugins.VMDetection{
+				{VMID: "vm-1", Reason: "high CPU", Host: "host-a"},
+			},
+			migrations: map[string][]migration{},
+			expectErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockAPI := &mockDetectorCycleBreakerNovaAPI{
+				migrations: tt.migrations,
+			}
+
+			if tt.expectErr {
+				mockAPI.getError = errors.New("API error")
+			}
+
+			detector := detectorCycleBreaker{novaAPI: mockAPI}
+
+			ctx := context.Background()
+			result, err := detector.Filter(ctx, tt.decisions)
+
+			if tt.expectErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d decisions, got %d", len(tt.expected), len(result))
+				return
+			}
+
+			// Check if all expected decisions are present
+			expectedMap := make(map[string]plugins.VMDetection)
+			for _, d := range tt.expected {
+				expectedMap[d.VMID] = d
+			}
+
+			for _, resultVMDetection := range result {
+				expectedVMDetection, found := expectedMap[resultVMDetection.VMID]
+				if !found {
+					t.Errorf("unexpected decision for VM %s", resultVMDetection.VMID)
+					continue
+				}
+
+				if resultVMDetection.Reason != expectedVMDetection.Reason {
+					t.Errorf("expected reason %s for VM %s, got %s",
+						expectedVMDetection.Reason, resultVMDetection.VMID, resultVMDetection.Reason)
+				}
+
+				if resultVMDetection.Host != expectedVMDetection.Host {
+					t.Errorf("expected host %s for VM %s, got %s",
+						expectedVMDetection.Host, resultVMDetection.VMID, resultVMDetection.Host)
+				}
+			}
+		})
+	}
+}
+
+func TestDetectorCycleBreaker_Filter_EmptyVMDetections(t *testing.T) {
+	mockAPI := &mockDetectorCycleBreakerNovaAPI{
+		migrations: map[string][]migration{},
+	}
+
+	detector := detectorCycleBreaker{novaAPI: mockAPI}
+
+	ctx := context.Background()
+	result, err := detector.Filter(ctx, []plugins.VMDetection{})
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Errorf("expected empty result for empty input, got %d decisions", len(result))
+	}
+}
+
+func TestNewDetectorCycleBreaker(t *testing.T) {
+	detector := NewDetectorCycleBreaker()
+
+	if detector == nil {
+		t.Fatal("expected non-nil detector")
+	}
+
+	// Verify it's the correct type
+	_, ok := detector.(*detectorCycleBreaker)
+	if !ok {
+		t.Errorf("expected *detectorCycleBreaker, got %T", detector)
+	}
+
+	// Verify the novaAPI field is initialized
+	detectorImpl := detector.(*detectorCycleBreaker)
+	if detectorImpl.novaAPI == nil {
+		t.Error("expected novaAPI to be initialized")
+	}
+}
+
+func TestDetectorCycleBreaker_Init(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupMock func() NovaAPI
+		expectErr bool
+	}{
+		{
+			name: "successful initialization",
+			setupMock: func() NovaAPI {
+				return &mockDetectorCycleBreakerNovaAPI{}
+			},
+			expectErr: false,
+		},
+		{
+			name: "initialization with error",
+			setupMock: func() NovaAPI {
+				return &mockDetectorCycleBreakerNovaAPIWithInitError{}
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detector := &detectorCycleBreaker{
+				novaAPI: tt.setupMock(),
+			}
+
+			ctx := context.Background()
+			fakeClient := fake.NewClientBuilder().Build()
+			cfg := conf.Config{}
+
+			err := detector.Init(ctx, fakeClient, cfg)
+
+			if tt.expectErr && err == nil {
+				t.Error("expected error but got none")
+			}
+
+			if !tt.expectErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// mockDetectorCycleBreakerNovaAPIWithInitError is a mock that returns an error on Init
+type mockDetectorCycleBreakerNovaAPIWithInitError struct {
+	mockDetectorCycleBreakerNovaAPI
+}
+
+func (m *mockDetectorCycleBreakerNovaAPIWithInitError) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+	return errors.New("init error")
+}

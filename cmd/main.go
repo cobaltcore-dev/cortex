@@ -38,20 +38,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
-	decisionscinder "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/cinder"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/explanation"
-	decisionsmachines "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/machines"
-	decisionsmanila "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/manila"
-	decisionsnova "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/nova"
-	decisionpods "github.com/cobaltcore-dev/cortex/internal/scheduling/decisions/pods"
-	deschedulingnova "github.com/cobaltcore-dev/cortex/internal/scheduling/descheduling/nova"
-	cindere2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/cinder"
-	manilae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/manila"
-	novae2e "github.com/cobaltcore-dev/cortex/internal/scheduling/e2e/nova"
-	cinderexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/cinder"
-	manilaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/manila"
-	novaexternal "github.com/cobaltcore-dev/cortex/internal/scheduling/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/explanation"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -93,13 +86,13 @@ func main() {
 		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
 		case "e2e-nova":
-			novae2e.RunChecks(ctx, client, config)
+			nova.RunChecks(ctx, client, config)
 			return
 		case "e2e-cinder":
-			cindere2e.RunChecks(ctx, client, config)
+			cinder.RunChecks(ctx, client, config)
 			return
 		case "e2e-manila":
-			manilae2e.RunChecks(ctx, client, config)
+			manila.RunChecks(ctx, client, config)
 			return
 		}
 	}
@@ -295,7 +288,7 @@ func main() {
 	metrics.Registry.MustRegister(&pipelineMonitor)
 
 	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
-		decisionController := &decisionsnova.DecisionPipelineController{
+		decisionController := &nova.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -305,16 +298,16 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		novaexternal.NewAPI(config, decisionController).Init(mux)
+		nova.NewAPI(config, decisionController).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
-		monitor := deschedulingnova.NewPipelineMonitor()
+		monitor := schedulinglib.NewDetectorPipelineMonitor()
 		metrics.Registry.MustRegister(&monitor)
-		deschedulingsController := &deschedulingnova.DeschedulingsPipelineController{
-			Monitor:       monitor,
-			Conf:          config,
-			CycleDetector: deschedulingnova.NewCycleDetector(),
+		deschedulingsController := &nova.DetectorPipelineController{
+			Monitor:              monitor,
+			Conf:                 config,
+			DetectorCycleBreaker: nova.NewDetectorCycleBreaker(),
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = multiclusterClient
@@ -324,7 +317,7 @@ func main() {
 		}
 		go deschedulingsController.CreateDeschedulingsPeriodically(ctx)
 		// Deschedulings cleanup on startup
-		if err := (&deschedulingnova.Cleanup{
+		if err := (&nova.DeschedulingsCleanup{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
@@ -333,7 +326,7 @@ func main() {
 		}
 	}
 	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
-		controller := &decisionsmanila.DecisionPipelineController{
+		controller := &manila.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -343,10 +336,10 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manilaexternal.NewAPI(config, controller).Init(mux)
+		manila.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
-		controller := &decisionscinder.DecisionPipelineController{
+		controller := &cinder.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -356,10 +349,10 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cinderexternal.NewAPI(config, controller).Init(mux)
+		cinder.NewAPI(config, controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
-		controller := &decisionsmachines.DecisionPipelineController{
+		controller := &machines.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -371,7 +364,7 @@ func main() {
 		}
 	}
 	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
-		controller := &decisionpods.DecisionPipelineController{
+		controller := &pods.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 			Conf:    config,
 		}
@@ -512,7 +505,7 @@ func main() {
 			Interval: time.Hour,
 			Name:     "nova-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return decisionsnova.Cleanup(ctx, multiclusterClient, config)
+				return nova.DecisionsCleanup(ctx, multiclusterClient, config)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add nova decisions cleanup task to manager")
@@ -526,7 +519,7 @@ func main() {
 			Interval: time.Hour,
 			Name:     "manila-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return decisionsmanila.Cleanup(ctx, multiclusterClient, config)
+				return manila.DecisionsCleanup(ctx, multiclusterClient, config)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add manila decisions cleanup task to manager")
@@ -540,7 +533,7 @@ func main() {
 			Interval: time.Hour,
 			Name:     "cinder-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return decisionscinder.Cleanup(ctx, multiclusterClient, config)
+				return cinder.DecisionsCleanup(ctx, multiclusterClient, config)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add cinder decisions cleanup task to manager")
