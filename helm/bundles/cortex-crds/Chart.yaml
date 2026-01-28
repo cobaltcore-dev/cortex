@@ -5,7 +5,7 @@ apiVersion: v2
 name: cortex-crds
 description: A Helm chart deploying Cortex CRDs.
 type: application
-version: 0.0.22
+version: 0.0.23
 appVersion: 0.1.0
 dependencies:
   # from: file://../../../dist/chart
