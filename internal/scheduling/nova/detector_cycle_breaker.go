@@ -14,23 +14,23 @@ import (
 
 type detectorCycleBreaker struct {
 	// Nova API to get needed information for cycle detection.
-	novaAPI NovaAPI
+	novaClient NovaClient
 }
 
 func NewDetectorCycleBreaker() lib.DetectorCycleBreaker[plugins.VMDetection] {
-	return &detectorCycleBreaker{novaAPI: NewNovaAPI()}
+	return &detectorCycleBreaker{novaClient: NewNovaClient()}
 }
 
 // Initialize the cycle detector.
 func (c *detectorCycleBreaker) Init(ctx context.Context, client client.Client, conf conf.Config) error {
-	return c.novaAPI.Init(ctx, client, conf)
+	return c.novaClient.Init(ctx, client, conf)
 }
 
 func (c *detectorCycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	keep := make(map[string]struct{}, len(decisions))
 	for _, decision := range decisions {
 		// Get the migrations for the VM.
-		migrations, err := c.novaAPI.GetServerMigrations(ctx, decision.VMID)
+		migrations, err := c.novaClient.GetServerMigrations(ctx, decision.VMID)
 		if err != nil {
 			return nil, err
 		}
