@@ -6,7 +6,7 @@ package compute
 import (
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"

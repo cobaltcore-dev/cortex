@@ -14,7 +14,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"

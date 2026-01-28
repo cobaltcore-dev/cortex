@@ -10,7 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"

@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
