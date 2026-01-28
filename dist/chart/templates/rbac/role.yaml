@@ -15,7 +15,6 @@ rules:
   - reservations
   - decisions
   - deschedulings
-  - steps
   - pipelines
   - kpis
   verbs:
@@ -34,7 +33,6 @@ rules:
   - reservations/finalizers
   - decisions/finalizers
   - deschedulings/finalizers
-  - steps/finalizers
   - pipelines/finalizers
   - kpis/finalizers
   verbs:
@@ -47,7 +45,6 @@ rules:
   - reservations/status
   - decisions/status
   - deschedulings/status
-  - steps/status
   - pipelines/status
   - kpis/status
   verbs:
