@@ -30,7 +30,7 @@ type migration struct {
 	DestCompute   string `json:"dest_compute"`
 }
 
-type NovaAPI interface {
+type NovaClient interface {
 	// Initialize the Nova API with the Keystone authentication.
 	Init(ctx context.Context, client client.Client, conf conf.Config) error
 	// Get a server by ID.
@@ -41,16 +41,16 @@ type NovaAPI interface {
 	GetServerMigrations(ctx context.Context, id string) ([]migration, error)
 }
 
-type novaAPI struct {
+type novaClient struct {
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
 }
 
-func NewNovaAPI() NovaAPI {
-	return &novaAPI{}
+func NewNovaClient() NovaClient {
+	return &novaClient{}
 }
 
-func (api *novaAPI) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (api *novaClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error
@@ -88,7 +88,7 @@ func (api *novaAPI) Init(ctx context.Context, client client.Client, conf conf.Co
 }
 
 // Get a server by ID.
-func (api *novaAPI) Get(ctx context.Context, id string) (server, error) {
+func (api *novaClient) Get(ctx context.Context, id string) (server, error) {
 	var s server
 	if err := servers.Get(ctx, api.sc, id).ExtractInto(&s); err != nil {
 		return server{}, err
@@ -97,7 +97,7 @@ func (api *novaAPI) Get(ctx context.Context, id string) (server, error) {
 }
 
 // Live migrate a server to a new host (doesn't wait for it to complete).
-func (api *novaAPI) LiveMigrate(ctx context.Context, id string) error {
+func (api *novaClient) LiveMigrate(ctx context.Context, id string) error {
 	blockMigration := false
 	lmo := servers.LiveMigrateOpts{
 		Host:           nil,
@@ -108,7 +108,7 @@ func (api *novaAPI) LiveMigrate(ctx context.Context, id string) error {
 }
 
 // Get migrations for a server by ID.
-func (api *novaAPI) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
+func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]migration, error) {
 	// Note: currently we need to fetch this without gophercloud.
 	// See: https://github.com/gophercloud/gophercloud/pull/3244
 	initialURL := api.sc.Endpoint + "os-migrations" + "?instance_uuid=" + id
