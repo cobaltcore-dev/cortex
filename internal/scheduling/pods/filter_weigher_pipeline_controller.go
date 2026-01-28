@@ -21,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -54,6 +55,8 @@ type FilterWeigherPipelineController struct {
 	Conf conf.Config
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
+	// Recorder for publishing Event objects
+	Recorder events.EventRecorder
 }
 
 // The type of pipeline this controller manages.
@@ -177,6 +180,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
 	if result.TargetHost == nil {
+		c.Recorder.Eventf(pod, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePod", "0/%d nodes are available", len(nodes))
 		return errors.New("no suitable host found for pod")
 	}
 
@@ -195,6 +199,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.V(1).Error(err, "failed to assign node to pod via binding")
 		return err
 	}
+	c.Recorder.Eventf(pod, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePod", "Successfully assigned %s/%s to %s", pod.Namespace, pod.Name, *result.TargetHost)
 	log.V(1).Info("assigned node to pod", "node", *result.TargetHost)
 	return nil
 }

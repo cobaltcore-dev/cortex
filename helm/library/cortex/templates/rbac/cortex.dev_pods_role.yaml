@@ -48,4 +48,11 @@ rules:
   - pods/binding
   verbs:
   - create
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 {{- end -}}

@@ -18,6 +18,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,6 +31,10 @@ import (
 type PodGroupSetController struct {
 	client.Client
 
+	// TODO: the pods filter-weigher-pipeline controller and this controller both
+	// have a seperate mutex which means they are both allowed to bind pods at the
+	// same time which opens up race conditions due to the delayed updates of the
+	// node's allocatable resources
 	// Mutex to only allow one process at a time
 	processMu sync.Mutex
 
@@ -45,6 +50,8 @@ type PodGroupSetController struct {
 	Monitor lib.FilterWeigherPipelineMonitor
 	// Config for the scheduling operator
 	Conf conf.Config
+	// Recorder for publishing Event objects
+	Recorder events.EventRecorder
 }
 
 func (c *PodGroupSetController) ProcessNewPodGroupSet(ctx context.Context, pgs *v1alpha1.PodGroupSet) error {
@@ -107,8 +114,10 @@ func (c *PodGroupSetController) ProcessNewPodGroupSet(ctx context.Context, pgs *
 		if err := c.createPods(ctx, pgs, bestPlacements); err != nil {
 			return err
 		}
+		c.Recorder.Eventf(pgs, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePGS", "Successfully created pods of %s/%s", pgs.Namespace, pgs.Name)
 	} else {
 		log.Info("no suitable placement found", "PodGroupSet", pgs.Name)
+		c.Recorder.Eventf(pgs, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePGS", "No suitable placement found for PodGroupSet %s (%s)", pgs.Name, pgs.Namespace)
 	}
 
 	log.Info("PodGroupSet processed", "duration", time.Since(startedAt))
@@ -219,6 +228,7 @@ func (c *PodGroupSetController) createPods(ctx context.Context, pgs *v1alpha1.Po
 				log.V(1).Error(err, "failed to assign node to pod via binding")
 				return err
 			}
+			c.Recorder.Eventf(pod, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePod", "Successfully assigned %s/%s to %s", pod.Namespace, pod.Name, nodeName)
 			log.Info("created pod", "pod", podName, "node", nodeName)
 		}
 	}

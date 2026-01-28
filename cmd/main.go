@@ -366,8 +366,9 @@ func main() {
 	}
 	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
 		controller := &pods.FilterWeigherPipelineController{
-			Monitor: pipelineMonitor,
-			Conf:    config,
+			Monitor:  pipelineMonitor,
+			Conf:     config,
+			Recorder: mgr.GetEventRecorder("pods-decisions-pipeline-controller"),
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -383,9 +384,10 @@ func main() {
 		}
 
 		controller := &pods.PodGroupSetController{
-			Client:  multiclusterClient,
-			Monitor: pipelineMonitor,
-			Conf:    config,
+			Client:   multiclusterClient,
+			Monitor:  pipelineMonitor,
+			Conf:     config,
+			Recorder: mgr.GetEventRecorder("podgroupsets-controller"),
 		}
 
 		if err := controller.SetupWithManager(mgr, multiclusterClient); err != nil {
