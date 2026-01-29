@@ -38,11 +38,8 @@ type PodGroupSetController struct {
 	// Mutex to only allow one process at a time
 	processMu sync.Mutex
 
-	// Mutex to serialize updates/access of the topology
-	topologyMu sync.RWMutex
-	// State of the cluster's topology which contains
-	// all nodes available for scheduling
-	topology *Topology
+	// SchedulerContext holds state of the scheduling cache and queue
+	SCtx *SchedulerContext
 
 	podPipeline lib.FilterWeigherPipeline[pods.PodPipelineRequest]
 
@@ -69,9 +66,7 @@ func (c *PodGroupSetController) ProcessNewPodGroupSet(ctx context.Context, pgs *
 		}
 	}
 
-	c.topologyMu.RLock()
-	topology := c.topology
-	c.topologyMu.RUnlock()
+	topology := c.SCtx.Cache.GetTopology()
 
 	var bestPlacements map[string]string
 	var bestWeight float64
@@ -81,7 +76,35 @@ func (c *PodGroupSetController) ProcessNewPodGroupSet(ctx context.Context, pgs *
 			canFit := true
 			for resourceName, requestedQty := range podGroupSetResourceRequests {
 				allocatableQty, exists := topologyNode.Allocatable[resourceName]
+				log.V(1).Info("Checking resource allocation",
+					"topologyNode", topologyNode.Name,
+					"resourceName", resourceName,
+					"requestedQty", requestedQty.String(),
+					"allocatableQty", func() string {
+						if exists {
+							return allocatableQty.String()
+						}
+						return "not available"
+					}(),
+					"exists", exists)
+
 				if !exists || requestedQty.Cmp(allocatableQty) > 0 {
+					log.V(1).Info("Resource requirement not met",
+						"topologyNode", topologyNode.Name,
+						"resourceName", resourceName,
+						"requestedQty", requestedQty.String(),
+						"allocatableQty", func() string {
+							if exists {
+								return allocatableQty.String()
+							}
+							return "not available"
+						}(),
+						"reason", func() string {
+							if !exists {
+								return "resource not available"
+							}
+							return "insufficient capacity"
+						}())
 					canFit = false
 					break
 				}
@@ -118,6 +141,12 @@ func (c *PodGroupSetController) ProcessNewPodGroupSet(ctx context.Context, pgs *
 	} else {
 		log.Info("no suitable placement found", "PodGroupSet", pgs.Name)
 		c.Recorder.Eventf(pgs, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePGS", "No suitable placement found for PodGroupSet %s (%s)", pgs.Name, pgs.Namespace)
+
+		// Add PodGroupSet to scheduling queue for retry when resources become available
+		if c.SCtx.Queue != nil {
+			log.Info("Adding PodGroupSet to scheduling queue due to scheduling failure", "PodGroupSet", pgs.Name, "namespace", pgs.Namespace)
+			c.SCtx.Queue.AddPodGroupSet(pgs)
+		}
 	}
 
 	log.Info("PodGroupSet processed", "duration", time.Since(startedAt))
@@ -191,6 +220,7 @@ func (c *PodGroupSetController) createPods(ctx context.Context, pgs *v1alpha1.Po
 				continue
 			}
 
+			// TODO: is this really necessarry or should this case be handled somewhere else?
 			existing := &corev1.Pod{}
 			err := c.Get(ctx, client.ObjectKey{Name: podName, Namespace: pgs.Namespace}, existing)
 			if err == nil {
@@ -214,6 +244,10 @@ func (c *PodGroupSetController) createPods(ctx context.Context, pgs *v1alpha1.Po
 				return err
 			}
 
+			// Assume that the binding succeeds and mark resources as allocated
+			pod.Spec.NodeName = nodeName
+			c.SCtx.Cache.AddPod(pod)
+
 			binding := &corev1.Binding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      podName,
@@ -226,6 +260,14 @@ func (c *PodGroupSetController) createPods(ctx context.Context, pgs *v1alpha1.Po
 			}
 			if err := c.Create(ctx, binding); err != nil {
 				log.V(1).Error(err, "failed to assign node to pod via binding")
+				c.SCtx.Cache.RemovePod(pod)
+
+				// Add PodGroupSet to scheduling queue for retry when resources become available
+				if c.SCtx.Queue != nil {
+					log.Info("Adding PodGroupSet to scheduling queue due to pod binding failure", "PodGroupSet", pgs.Name, "namespace", pgs.Namespace, "pod", podName)
+					c.SCtx.Queue.AddPodGroupSet(pgs)
+				}
+
 				return err
 			}
 			c.Recorder.Eventf(pod, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePod", "Successfully assigned %s/%s to %s", pod.Namespace, pod.Name, nodeName)
@@ -233,47 +275,6 @@ func (c *PodGroupSetController) createPods(ctx context.Context, pgs *v1alpha1.Po
 		}
 	}
 	return nil
-}
-
-func (c *PodGroupSetController) updateTopology(ctx context.Context) error {
-	nodes := &corev1.NodeList{}
-	if err := c.List(ctx, nodes); err != nil {
-		log := ctrl.LoggerFrom(ctx)
-		log.Error(err, "failed to list nodes")
-		return err
-	}
-
-	c.topologyMu.Lock()
-	defer c.topologyMu.Unlock()
-
-	c.topology = NewTopology(TopologyLevelNames, nodes.Items)
-
-	log := ctrl.LoggerFrom(ctx)
-	log.V(1).Info("updated topology", "nodeCount", len(nodes.Items))
-	return nil
-}
-
-func (c *PodGroupSetController) handleNode() handler.EventHandler {
-	return handler.Funcs{
-		CreateFunc: func(ctx context.Context, evt event.CreateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			if err := c.updateTopology(ctx); err != nil {
-				log := ctrl.LoggerFrom(ctx)
-				log.Error(err, "failed to update topology on node create")
-			}
-		},
-		UpdateFunc: func(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			if err := c.updateTopology(ctx); err != nil {
-				log := ctrl.LoggerFrom(ctx)
-				log.Error(err, "failed to update topology on node update")
-			}
-		},
-		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			if err := c.updateTopology(ctx); err != nil {
-				log := ctrl.LoggerFrom(ctx)
-				log.Error(err, "failed to update topology on node delete")
-			}
-		},
-	}
 }
 
 func (c *PodGroupSetController) handlePodGroupSet() handler.EventHandler {
@@ -345,15 +346,7 @@ func (c *PodGroupSetController) SetupWithManager(mgr manager.Manager, mcl *multi
 		return err
 	}
 
-	if err := mgr.Add(manager.RunnableFunc(c.updateTopology)); err != nil {
-		return err
-	}
-
 	return multicluster.BuildController(mcl, mgr).
-		WatchesMulticluster(
-			&corev1.Node{},
-			c.handleNode(),
-		).
 		WatchesMulticluster(
 			&v1alpha1.PodGroupSet{},
 			c.handlePodGroupSet(),

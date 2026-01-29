@@ -15,6 +15,8 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -365,6 +367,25 @@ func main() {
 		}
 	}
 	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
+		clientset, err := kubernetes.NewForConfig(restConfig)
+		if err != nil {
+			setupLog.Error(err, "unable to create kubernetes clientset")
+			os.Exit(1)
+		}
+		informerFactory := informers.NewSharedInformerFactory(clientset, 30*time.Second)
+		schedulerContext := pods.SchedulerContext{
+			Logger: ctrl.Log,
+			Cache:  pods.NewCache(),
+		}
+		schedulerContext.AddEventHandlers(informerFactory)
+		informerFactory.Start(ctx.Done())
+		informerFactory.WaitForCacheSync(ctx.Done())
+
+		if err := schedulerContext.WaitForHandlersSync(ctx); err != nil {
+			setupLog.Error(err, "handlers are not fully synchronized")
+			os.Exit(1)
+		}
+
 		controller := &pods.FilterWeigherPipelineController{
 			Monitor:  pipelineMonitor,
 			Conf:     config,
@@ -376,24 +397,26 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+
+		// Store schedulerContext for use in PodGroupSetController
+		if slices.Contains(config.EnabledControllers, "podgroupsets-controller") {
+			controller := &pods.PodGroupSetController{
+				Client:   multiclusterClient,
+				SCtx:     &schedulerContext,
+				Monitor:  pipelineMonitor,
+				Conf:     config,
+				Recorder: mgr.GetEventRecorder("podgroupsets-controller"),
+			}
+
+			if err := controller.SetupWithManager(mgr, multiclusterClient); err != nil {
+				setupLog.Error(err, "unable to create controller", "controller", "PodGroupSetController")
+				os.Exit(1)
+			}
+		}
 	}
-	if slices.Contains(config.EnabledControllers, "podgroupsets-controller") {
-		if !slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
-			setupLog.Error(nil, "podgroupsets-controller requires pods-decisions-pipeline-controller to be enabled")
-			os.Exit(1)
-		}
-
-		controller := &pods.PodGroupSetController{
-			Client:   multiclusterClient,
-			Monitor:  pipelineMonitor,
-			Conf:     config,
-			Recorder: mgr.GetEventRecorder("podgroupsets-controller"),
-		}
-
-		if err := controller.SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "PodGroupSetController")
-			os.Exit(1)
-		}
+	if slices.Contains(config.EnabledControllers, "podgroupsets-controller") && !slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
+		setupLog.Error(nil, "podgroupsets-controller requires pods-decisions-pipeline-controller to be enabled")
+		os.Exit(1)
 	}
 	if slices.Contains(config.EnabledControllers, "explanation-controller") {
 		// Setup a controller which will reconcile the history and explanation for

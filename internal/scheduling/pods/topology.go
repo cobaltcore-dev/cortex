@@ -65,6 +65,10 @@ func NewTopology(topologyLevels []TopologyLevelName, nodes []corev1.Node) *Topol
 	}
 	topology.Nodes[TopologyLeafLevel] = make(map[string]*TopologyNode)
 	for _, node := range nodes {
+		// Skip control plane nodes - they should not be used for pod scheduling
+		if isControlPlaneNode(node) {
+			continue
+		}
 		topology.addNode(node)
 	}
 	return &topology
@@ -111,4 +115,29 @@ func (n *TopologyNode) addNode(node corev1.Node) {
 	helpers.AddResourcesInto(n.Capacity, node.Status.Capacity)
 	helpers.AddResourcesInto(n.Allocatable, node.Status.Allocatable)
 	n.Nodes = append(n.Nodes, node)
+}
+
+// isControlPlaneNode checks if a node is a control plane node and should be excluded from pod scheduling
+func isControlPlaneNode(node corev1.Node) bool {
+	// Check for common control plane taints
+	for _, taint := range node.Spec.Taints {
+		switch taint.Key {
+		case "node-role.kubernetes.io/master":
+			return true
+		case "node-role.kubernetes.io/control-plane":
+			return true
+		}
+	}
+
+	// Check for common control plane labels
+	if node.Labels != nil {
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
+			return true
+		}
+		if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
+			return true
+		}
+	}
+
+	return false
 }

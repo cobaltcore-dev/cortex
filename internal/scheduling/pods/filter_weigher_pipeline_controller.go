@@ -46,10 +46,8 @@ type FilterWeigherPipelineController struct {
 	// Mutex to only allow one process at a time
 	processMu sync.Mutex
 
-	// Mutex to serialize updates/access of nodes
-	nodesMu sync.RWMutex
-	// State of the nodes available for scheduling
-	nodes []corev1.Node
+	// SchedulerContext holds state of the scheduling cache and queue
+	sCtx *SchedulerContext
 
 	// Config for the scheduling operator.
 	Conf conf.Config
@@ -165,9 +163,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return nil
 	}
 
-	c.nodesMu.RLock()
-	nodes := c.nodes
-	c.nodesMu.RUnlock()
+	nodes := c.sCtx.Cache.GetNodes()
 
 	// Execute the scheduling pipeline.
 	request := pods.PodPipelineRequest{Nodes: nodes, Pod: *pod}
@@ -181,8 +177,19 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 
 	if result.TargetHost == nil {
 		c.Recorder.Eventf(pod, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePod", "0/%d nodes are available", len(nodes))
+
+		// Add pod to scheduling queue for retry when resources become available
+		if c.sCtx.Queue != nil {
+			log.Info("Adding pod to scheduling queue due to scheduling failure", "pod", pod.Name, "namespace", pod.Namespace)
+			c.sCtx.Queue.AddPod(pod)
+		}
+
 		return errors.New("no suitable host found for pod")
 	}
+
+	// Assume that the binding succeeds and mark resources as allocated
+	pod.Spec.NodeName = *result.TargetHost
+	c.sCtx.Cache.AddPod(pod)
 
 	// Assign the first node returned by the pipeline using a Binding.
 	binding := &corev1.Binding{
@@ -197,6 +204,14 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	}
 	if err := c.Create(ctx, binding); err != nil {
 		log.V(1).Error(err, "failed to assign node to pod via binding")
+		c.sCtx.Cache.RemovePod(pod)
+
+		// Add pod to scheduling queue for retry when resources become available
+		if c.sCtx.Queue != nil {
+			log.Info("Adding pod to scheduling queue due to binding failure", "pod", pod.Name, "namespace", pod.Namespace)
+			c.sCtx.Queue.AddPod(pod)
+		}
+
 		return err
 	}
 	c.Recorder.Eventf(pod, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePod", "Successfully assigned %s/%s to %s", pod.Namespace, pod.Name, *result.TargetHost)
@@ -216,45 +231,6 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 		weighers.Index, p.Spec.Weighers,
 		c.Monitor,
 	)
-}
-
-func (c *FilterWeigherPipelineController) updateNodes(ctx context.Context) error {
-	nodesList := &corev1.NodeList{}
-	if err := c.List(ctx, nodesList); err != nil {
-		return err
-	}
-
-	c.nodesMu.Lock()
-	defer c.nodesMu.Unlock()
-
-	c.nodes = nodesList.Items
-
-	log := ctrl.LoggerFrom(ctx)
-	log.V(1).Info("updated nodes", "nodeCount", len(nodesList.Items))
-	return nil
-}
-
-func (c *FilterWeigherPipelineController) handleNode() handler.EventHandler {
-	return handler.Funcs{
-		CreateFunc: func(ctx context.Context, evt event.CreateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			if err := c.updateNodes(ctx); err != nil {
-				log := ctrl.LoggerFrom(ctx)
-				log.Error(err, "failed to update nodes cache on node create")
-			}
-		},
-		UpdateFunc: func(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			if err := c.updateNodes(ctx); err != nil {
-				log := ctrl.LoggerFrom(ctx)
-				log.Error(err, "failed to update nodes cache on node update")
-			}
-		},
-		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			if err := c.updateNodes(ctx); err != nil {
-				log := ctrl.LoggerFrom(ctx)
-				log.Error(err, "failed to update nodes cache on node delete")
-			}
-		},
-	}
 }
 
 func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
@@ -304,15 +280,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 		return err
 	}
 
-	if err := mgr.Add(manager.RunnableFunc(c.updateNodes)); err != nil {
-		return err
-	}
-
 	return multicluster.BuildController(mcl, mgr).
-		WatchesMulticluster(
-			&corev1.Node{},
-			c.handleNode(),
-		).
 		WatchesMulticluster(
 			&corev1.Pod{},
 			c.handlePod(),
