@@ -27,17 +27,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get all changed dist/chart Chart.yaml files
-        id: changed-chart-yaml-files-dist
+      - name: Get all changed helm/library/cortex Chart.yaml files
+        id: changed-chart-yaml-files-core
         uses: tj-actions/changed-files@v47
         with:
           files: |
-            dist/chart/Chart.yaml
-      - name: Push dist charts to registry
-        if: steps.changed-chart-yaml-files-dist.outputs.all_changed_files != ''
+            helm/library/cortex/Chart.yaml
+      - name: Push cortex core charts to registry
+        if: steps.changed-chart-yaml-files-core.outputs.all_changed_files != ''
         shell: bash
         env:
-          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-dist.outputs.all_changed_files }}
+          ALL_CHANGED_FILES: ${{ steps.changed-chart-yaml-files-core.outputs.all_changed_files }}
         run: |
           for CHART_FILE in ${ALL_CHANGED_FILES}; do
             CHART_DIR=$(dirname $CHART_FILE)

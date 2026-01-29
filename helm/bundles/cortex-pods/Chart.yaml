@@ -8,7 +8,7 @@ type: application
 version: 0.0.1
 appVersion: 0.1.0
 dependencies:
-  # from: file://../../../dist/chart
+  # from: file://../../library/cortex
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
     version: 0.0.11
