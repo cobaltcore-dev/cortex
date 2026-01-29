@@ -191,7 +191,7 @@ groups:
         knowledge status and logs for more details.
 
   - alert: CortexManilaDecisionsWithErrors
-    expr: cortex_decision_state{domain="cortex-manila",state="error"} > 0
+    expr: cortex_decision_state{domain="manila",state="error"} > 0
     for: 5m
     labels:
       context: decisions
@@ -208,7 +208,7 @@ groups:
         VMs being processed.
 
   - alert: CortexManilaTooManyDecisionsWaiting
-    expr: cortex_decision_state{domain="cortex-manila",state="waiting"} > 10
+    expr: cortex_decision_state{domain="manila",state="waiting"} > 10
     for: 5m
     labels:
       context: decisions
