@@ -49,7 +49,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "node2"},
 					},
 				},
-				Pod: corev1.Pod{},
+				Pod: &corev1.Pod{},
 			},
 			expected: map[string]float64{
 				"node1": 0.0,
@@ -85,7 +85,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
@@ -136,7 +136,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "node3"},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
@@ -179,7 +179,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "node2"},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
@@ -220,7 +220,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "node2"},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
@@ -268,7 +268,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
@@ -323,7 +323,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "node3"},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
@@ -372,7 +372,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
@@ -441,13 +441,13 @@ func TestMatchesNodeAffinity(t *testing.T) {
 	tests := []struct {
 		name     string
 		node     corev1.Node
-		pod      corev1.Pod
+		pod      *corev1.Pod
 		expected bool
 	}{
 		{
 			name:     "no affinity",
 			node:     corev1.Node{},
-			pod:      corev1.Pod{},
+			pod:      &corev1.Pod{},
 			expected: true,
 		},
 		{
@@ -459,7 +459,7 @@ func TestMatchesNodeAffinity(t *testing.T) {
 					},
 				},
 			},
-			pod: corev1.Pod{
+			pod: &corev1.Pod{
 				Spec: corev1.PodSpec{
 					Affinity: &corev1.Affinity{
 						NodeAffinity: &corev1.NodeAffinity{
@@ -491,7 +491,7 @@ func TestMatchesNodeAffinity(t *testing.T) {
 					},
 				},
 			},
-			pod: corev1.Pod{
+			pod: &corev1.Pod{
 				Spec: corev1.PodSpec{
 					Affinity: &corev1.Affinity{
 						NodeAffinity: &corev1.NodeAffinity{

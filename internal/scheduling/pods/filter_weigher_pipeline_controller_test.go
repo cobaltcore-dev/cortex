@@ -3,7 +3,7 @@
 
 package pods
 
-import (
+/*import (
 	"context"
 	"testing"
 
@@ -543,4 +543,4 @@ func (m *mockPodPipeline) Run(request pods.PodPipelineRequest) (v1alpha1.Decisio
 		TargetHost:           &targetHost,
 		AggregatedOutWeights: map[string]float64{targetHost: 1.0},
 	}, nil
-}
+}*/

@@ -54,16 +54,16 @@ func (c *Cache) AddPod(pod *corev1.Pod) {
 		return
 	}
 
-	podRequests := helpers.GetPodResourceRequests(*pod)
+	podRequests := helpers.GetPodResourceRequests(pod)
 
 	// Get current allocatable resources before adding the pod
-	var beforeAllocatable corev1.ResourceList
+	/*var beforeAllocatable corev1.ResourceList
 	for _, node := range c.Nodes {
 		if node.Name == pod.Spec.NodeName {
 			beforeAllocatable = node.Status.Allocatable.DeepCopy()
 			break
 		}
-	}
+	}*/
 
 	if allocated, exists := c.nodeAllocated[pod.Spec.NodeName]; exists {
 		helpers.AddResourcesInto(allocated, podRequests)
@@ -75,7 +75,7 @@ func (c *Cache) AddPod(pod *corev1.Pod) {
 	c.updateNodeAllocatable(pod.Spec.NodeName)
 
 	// Get allocatable resources after adding the pod
-	var afterAllocatable corev1.ResourceList
+	/*var afterAllocatable corev1.ResourceList
 	for _, node := range c.Nodes {
 		if node.Name == pod.Spec.NodeName {
 			afterAllocatable = node.Status.Allocatable.DeepCopy()
@@ -83,8 +83,9 @@ func (c *Cache) AddPod(pod *corev1.Pod) {
 		}
 	}
 
-	fmt.Printf("Cache.AddPod: pod=%s/%s node=%s podRequests=%v beforeAllocatable=%v afterAllocatable=%v\n",
-		pod.Namespace, pod.Name, pod.Spec.NodeName, podRequests, beforeAllocatable, afterAllocatable)
+	//fmt.Printf("Cache.AddPod: pod=%s/%s node=%s podRequests=%v beforeAllocatable=%v afterAllocatable=%v\n",
+	//	pod.Namespace, pod.Name, pod.Spec.NodeName, podRequests, beforeAllocatable, afterAllocatable)
+	*/
 
 	c.updateTopology()
 }
@@ -97,7 +98,7 @@ func (c *Cache) RemovePod(pod *corev1.Pod) {
 		return
 	}
 
-	podRequests := helpers.GetPodResourceRequests(*pod)
+	podRequests := helpers.GetPodResourceRequests(pod)
 
 	// Get current allocatable resources before removing the pod
 	var beforeAllocatable corev1.ResourceList

@@ -9,7 +9,7 @@ import (
 
 // GetPodResourceRequests calculates the effective resource requests for a pod
 // by summing container requests and taking the max of init container requests.
-func GetPodResourceRequests(pod corev1.Pod) corev1.ResourceList {
+func GetPodResourceRequests(pod *corev1.Pod) corev1.ResourceList {
 	requests := make(corev1.ResourceList)
 
 	for _, container := range pod.Spec.Containers {

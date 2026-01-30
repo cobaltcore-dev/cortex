@@ -111,7 +111,7 @@ func TestBinpackingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -153,7 +153,7 @@ func TestBinpackingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -193,7 +193,7 @@ func TestBinpackingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -225,7 +225,7 @@ func TestBinpackingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{

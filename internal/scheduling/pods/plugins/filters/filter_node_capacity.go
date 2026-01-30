@@ -7,7 +7,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
+	api "github.com/cobaltcore-dev/cortex/api/delegation/pods"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/helpers"
@@ -23,7 +23,7 @@ func (f *NodeCapacityFilter) Init(ctx context.Context, client client.Client, ste
 	return nil
 }
 
-func (NodeCapacityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (NodeCapacityFilter) Run(traceLog *slog.Logger, request api.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
 	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 

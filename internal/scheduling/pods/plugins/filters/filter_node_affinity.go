@@ -36,7 +36,7 @@ func (NodeAffinityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineReq
 	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
 }
 
-func matchesNodeAffinity(node corev1.Node, pod corev1.Pod) bool {
+func matchesNodeAffinity(node corev1.Node, pod *corev1.Pod) bool {
 	if pod.Spec.Affinity == nil || pod.Spec.Affinity.NodeAffinity == nil {
 		return true
 	}

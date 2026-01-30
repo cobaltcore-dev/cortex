@@ -4,6 +4,10 @@ metadata:
   name: test-pod
 spec:
   schedulerName: pods
+  tolerations:
+  - key: "kwok.x-k8s.io/node"
+    operator: "Exists"
+    effect: "NoSchedule"
   containers:
     - name: nginx
       image: nginx:latest

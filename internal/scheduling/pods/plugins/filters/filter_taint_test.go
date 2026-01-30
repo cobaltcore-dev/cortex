@@ -49,7 +49,7 @@ func TestTaintFilter_Run(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "node2"},
 					},
 				},
-				Pod: corev1.Pod{},
+				Pod: &corev1.Pod{},
 			},
 			expected: map[string]float64{
 				"node1": 0.0,
@@ -75,7 +75,7 @@ func TestTaintFilter_Run(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "node2"},
 					},
 				},
-				Pod: corev1.Pod{},
+				Pod: &corev1.Pod{},
 			},
 			expected: map[string]float64{
 				"node2": 0.0,
@@ -98,7 +98,7 @@ func TestTaintFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Tolerations: []corev1.Toleration{
 							{
@@ -131,7 +131,7 @@ func TestTaintFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Tolerations: []corev1.Toleration{
 							{
@@ -164,7 +164,7 @@ func TestTaintFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Tolerations: []corev1.Toleration{
 							{
@@ -194,7 +194,7 @@ func TestTaintFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{},
+				Pod: &corev1.Pod{},
 			},
 			expected: map[string]float64{
 				"node1": 0.0,
@@ -231,7 +231,7 @@ func TestTaintFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Tolerations: []corev1.Toleration{
 							{
@@ -294,13 +294,13 @@ func TestCanScheduleOnNode(t *testing.T) {
 	tests := []struct {
 		name     string
 		node     corev1.Node
-		pod      corev1.Pod
+		pod      *corev1.Pod
 		expected bool
 	}{
 		{
 			name:     "no taints",
 			node:     corev1.Node{},
-			pod:      corev1.Pod{},
+			pod:      &corev1.Pod{},
 			expected: true,
 		},
 		{
@@ -315,7 +315,7 @@ func TestCanScheduleOnNode(t *testing.T) {
 					},
 				},
 			},
-			pod:      corev1.Pod{},
+			pod:      &corev1.Pod{},
 			expected: false,
 		},
 		{
@@ -330,7 +330,7 @@ func TestCanScheduleOnNode(t *testing.T) {
 					},
 				},
 			},
-			pod: corev1.Pod{
+			pod: &corev1.Pod{
 				Spec: corev1.PodSpec{
 					Tolerations: []corev1.Toleration{
 						{
@@ -432,7 +432,7 @@ func TestHasToleration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := hasToleration(tt.pod, tt.taint)
+			result := hasToleration(&tt.pod, tt.taint)
 			if result != tt.expected {
 				t.Errorf("expected %v, got %v", tt.expected, result)
 			}

@@ -62,7 +62,7 @@ func TestNodeCapacityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -100,7 +100,7 @@ func TestNodeCapacityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -144,7 +144,7 @@ func TestNodeCapacityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -187,7 +187,7 @@ func TestNodeCapacityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -220,7 +220,7 @@ func TestNodeCapacityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -264,7 +264,7 @@ func TestNodeCapacityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						InitContainers: []corev1.Container{
 							{
@@ -328,7 +328,7 @@ func TestNodeCapacityFilter_Run(t *testing.T) {
 						},
 					},
 				},
-				Pod: corev1.Pod{
+				Pod: &corev1.Pod{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{

@@ -20,7 +20,7 @@ var (
 	handlers            []cache.ResourceEventHandlerRegistration
 )
 
-func (s *SchedulerContext) WaitForHandlersSync(ctx context.Context) error {
+func (s *Scheduler) WaitForHandlersSync(ctx context.Context) error {
 	return wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(ctx context.Context) (done bool, err error) {
 		for _, handler := range s.Handlers {
 			if !handler.HasSynced() {
@@ -31,7 +31,7 @@ func (s *SchedulerContext) WaitForHandlersSync(ctx context.Context) error {
 	})
 }
 
-func (s *SchedulerContext) AddEventHandlers(informerFactory informers.SharedInformerFactory) error {
+func (s *Scheduler) AddEventHandlers(informerFactory informers.SharedInformerFactory) error {
 	if handlerRegistration, err = informerFactory.Core().V1().Pods().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    s.handleAddPod,
 		UpdateFunc: s.handleUpdatePod,
@@ -52,25 +52,28 @@ func (s *SchedulerContext) AddEventHandlers(informerFactory informers.SharedInfo
 	}
 	handlers = append(handlers, handlerRegistration)
 
+	// TODO: PGS event handler
+
 	s.Handlers = handlers
 	return nil
 }
 
-func (s *SchedulerContext) handleAddPod(obj interface{}) {
-	// TODO: scheduled pods are currently handled by the controller themselves.
-	// In the future we need to implement assumePod/forgetPod functions which
-	// temporarely edit the cache but need to be verified by the informer or
-	// be deleted after some timeout if the binding fails
-
-	/* pod, ok := obj.(*corev1.Pod)
+func (s *Scheduler) handleAddPod(obj interface{}) {
+	pod, ok := obj.(*corev1.Pod)
 	if !ok {
-		klog.Error("Cannot convert to *corev1.Pod", "obj", obj)
+		s.Logger.Error(nil, "Cannot convert to *corev1.Pod", "obj", obj)
 		return
 	}
-	s.Cache.AddPod(pod) */
+	if pod.Spec.SchedulerName != string(s.podPipelineController.SchedulingDomain) {
+		return
+	}
+	s.Queue.Add(&PodSchedulingItem{
+		Namespace: pod.Namespace,
+		Name:      pod.Name,
+	})
 }
 
-func (s *SchedulerContext) handleUpdatePod(oldObj, newObj interface{}) {
+func (s *Scheduler) handleUpdatePod(oldObj, newObj interface{}) {
 	oldPod, ok := oldObj.(*corev1.Pod)
 	if !ok {
 		s.Logger.Error(nil, "Cannot convert oldObj to *corev1.Pod", "obj", oldObj)
@@ -83,16 +86,18 @@ func (s *SchedulerContext) handleUpdatePod(oldObj, newObj interface{}) {
 		return
 	}
 
-	// Log resource changes for pod updates
-	if oldPod.Spec.NodeName != "" {
-		oldResources := helpers.GetPodResourceRequests(*oldPod)
-		s.Logger.Info("Removing old pod resources from cache", "pod", oldPod.Name, "namespace", oldPod.Namespace, "node", oldPod.Spec.NodeName, "resources", oldResources)
-	}
+	/*
+		// Log resource changes for pod updates
+		if oldPod.Spec.NodeName != "" {
+			oldResources := helpers.GetPodResourceRequests(oldPod)
+			s.Logger.Info("Removing old pod resources from cache", "pod", oldPod.Name, "namespace", oldPod.Namespace, "node", oldPod.Spec.NodeName, "resources", oldResources)
+		}
 
-	if newPod.Spec.NodeName != "" {
-		newResources := helpers.GetPodResourceRequests(*newPod)
-		s.Logger.Info("Adding new pod resources to cache", "pod", newPod.Name, "namespace", newPod.Namespace, "node", newPod.Spec.NodeName, "resources", newResources)
-	}
+		if newPod.Spec.NodeName != "" {
+			newResources := helpers.GetPodResourceRequests(newPod)
+			s.Logger.Info("Adding new pod resources to cache", "pod", newPod.Name, "namespace", newPod.Namespace, "node", newPod.Spec.NodeName, "resources", newResources)
+		}
+	*/
 
 	s.Cache.RemovePod(oldPod)
 	// TODO: this condition is a workaround since the initial resource allocation is marked in
@@ -104,7 +109,7 @@ func (s *SchedulerContext) handleUpdatePod(oldObj, newObj interface{}) {
 	}
 }
 
-func (s *SchedulerContext) handleDeletePod(obj interface{}) {
+func (s *Scheduler) handleDeletePod(obj interface{}) {
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		s.Logger.Error(nil, "Cannot convert to *corev1.Pod", "obj", obj)
@@ -112,7 +117,7 @@ func (s *SchedulerContext) handleDeletePod(obj interface{}) {
 	}
 
 	if pod.Spec.NodeName != "" {
-		podResources := helpers.GetPodResourceRequests(*pod)
+		podResources := helpers.GetPodResourceRequests(pod)
 		s.Logger.Info("Deleting pod from cache", "pod", pod.Name, "namespace", pod.Namespace, "node", pod.Spec.NodeName, "resources", podResources)
 	} else {
 		s.Logger.Info("Deleting pod from cache", "pod", pod.Name, "namespace", pod.Namespace)
@@ -120,14 +125,12 @@ func (s *SchedulerContext) handleDeletePod(obj interface{}) {
 
 	s.Cache.RemovePod(pod)
 
-	// Trigger rescheduling when a pod is deleted as resources are now available
-	if s.Queue != nil {
-		s.Logger.Info("Triggering rescheduling due to pod deletion", "pod", pod.Name, "namespace", pod.Namespace)
-		s.Queue.TriggerRescheduling()
-	}
+	// TODO: remove pod from queue if in queue
+
+	s.Queue.MoveAllToActive("pod deletion")
 }
 
-func (s *SchedulerContext) handleAddNode(obj interface{}) {
+func (s *Scheduler) handleAddNode(obj interface{}) {
 	node, ok := obj.(*corev1.Node)
 	if !ok {
 		s.Logger.Error(nil, "Cannot convert to *corev1.Node", "obj", obj)
@@ -143,14 +146,10 @@ func (s *SchedulerContext) handleAddNode(obj interface{}) {
 	s.Logger.Info("Adding node to cache", "node", node.Name, "capacity", node.Status.Capacity, "allocatable", node.Status.Allocatable)
 	s.Cache.AddNode(node)
 
-	// Trigger rescheduling when a new node is added as new capacity is available
-	if s.Queue != nil {
-		s.Logger.Info("Triggering rescheduling due to node addition", "node", node.Name)
-		s.Queue.TriggerRescheduling()
-	}
+	s.Queue.MoveAllToActive("node added")
 }
 
-func (s *SchedulerContext) handleUpdateNode(oldObj, newObj interface{}) {
+func (s *Scheduler) handleUpdateNode(oldObj, newObj interface{}) {
 	oldNode, ok := oldObj.(*corev1.Node)
 	if !ok {
 		s.Logger.Error(nil, "Cannot convert oldObj to *corev1.Node", "obj", oldObj)
@@ -177,7 +176,7 @@ func (s *SchedulerContext) handleUpdateNode(oldObj, newObj interface{}) {
 	s.Cache.AddNode(newNode)
 }
 
-func (s *SchedulerContext) handleDeleteNode(obj interface{}) {
+func (s *Scheduler) handleDeleteNode(obj interface{}) {
 	node, ok := obj.(*corev1.Node)
 	if !ok {
 		s.Logger.Error(nil, "Cannot convert to *corev1.Node", "obj", obj)
@@ -186,3 +185,29 @@ func (s *SchedulerContext) handleDeleteNode(obj interface{}) {
 	s.Logger.Info("Deleting node from cache", "node", node.Name, "capacity", node.Status.Capacity, "allocatable", node.Status.Allocatable)
 	s.Cache.RemoveNode(node)
 }
+
+/*
+DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			log := ctrl.LoggerFrom(ctx)
+			podgroupset := evt.Object.(*v1alpha1.PodGroupSet)
+
+			for _, group := range podgroupset.Spec.PodGroups {
+				for i := range int(group.Spec.Replicas) {
+					podName := podgroupset.PodName(group.Name, i)
+					pod := &corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      podName,
+							Namespace: podgroupset.Namespace,
+						},
+					}
+					if err := c.Delete(ctx, pod); err != nil {
+						if client.IgnoreNotFound(err) != nil {
+							log.Error(err, "failed to delete pod for deleted podgroupset", "pod", podName)
+						}
+					} else {
+						log.Info("deleted pod for deleted podgroupset", "pod", podName)
+					}
+				}
+			}
+		},
+*/
