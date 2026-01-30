@@ -3,17 +3,17 @@ module github.com/cobaltcore-dev/cortex
 go 1.25.0
 
 require (
-	github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260126102401-51e4cc5c5add
+	github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260129144138-c1a22b815ff9
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.10.0
 	github.com/ironcore-dev/ironcore v0.2.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260116110244-dee8151c1378
+	github.com/sapcc/go-bits v0.0.0-20260129131511-4f0cd43323e7
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
-	sigs.k8s.io/controller-runtime v0.23.0
+	sigs.k8s.io/controller-runtime v0.23.1
 )
 
 require (
@@ -55,7 +55,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.1
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/moby/sys/user v0.4.0 // indirect
@@ -118,6 +118,6 @@ require (
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.33.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.2-0.20260122202528-d9cc6641c482 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

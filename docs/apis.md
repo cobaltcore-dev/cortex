@@ -15,9 +15,7 @@ graph LR;
     end
 
     subgraph scheduling [Scheduling]
-    step(Step CRD)
     pipeline(Pipeline CRD)
-    step -- n/n ready --> pipeline
     descheduling(Descheduling CRD)
     decision(Decision CRD)
     reservation(Reservation CRD)
@@ -28,7 +26,7 @@ graph LR;
 
     prometheus(Prometheus)
     kpi --> prometheus
-    knowledge -- n/n ready --> step
+    knowledge -- n/n ready --> pipeline
 ```
 
 ### Datasources
@@ -61,23 +59,13 @@ KPIs expose metrics for knowledges. They contain a reference to the prometheus m
 
 Once the resource is created cortex will mount the KPI into the prometheus metrics endpoint and expose the implemented metrics.
 
-### Steps
-
-```bash
-kubectl get steps
-```
-
-Steps provide scheduling logic such as filtering, weighing, or descheduling. Each step depends on a selected set of knowledges, and provides a reference to the step's implementation. Furthermore, the step resource allows to configure custom parameters or options which can be used to fine-tune the step's behavior.
-
-Once created, cortex will check if the underlying step data is available and mark this step as ready. This allows the pipeline into which the step is mounted to react appropriately to changes in the step's dependencies.
-
 ### Pipelines
 
 ```bash
 kubectl get pipelines
 ```
 
-Pipelines bundle scheduling steps together. As part of a pipeline, steps can be marked as mandatory or not. This determines if the pipeline becomes unready if a step is missing data.
+Pipelines bundle scheduling steps together. Filters are mandatory, while weighers and detectors are optional.
 
 The state of the pipeline is propagated automatically through the states of its steps. Check the pipeline state object to determine if the pipeline can currently be executed or not.
 
