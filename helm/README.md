@@ -9,7 +9,7 @@ The Cortex helm chart architecture follows a three-tier structure:
 ```
 Bundle Charts (umbrella charts)
     ↓ includes
-Operator Charts (from dist/chart directories), Library Charts (shared components)
+Library Charts (shared components)
     + for local development
 Dev Charts (development tooling)
 ```
@@ -25,10 +25,10 @@ helm/
 │   ├── cortex-ironcore/         # IronCore scheduling domain
 │   └── cortex-crds/             # CRDs for all operators
 ├── library/                   # Shared library charts
-│   └── cortex-postgres/         # PostgreSQL database
-├── dev/                       # Development-only charts
-│   └── cortex-prometheus-operator/  # Local monitoring stack
-*/dist/chart/                  # Generated operator charts
+│   ├── cortex-postgres/         # PostgreSQL database
+|   └── cortex/                  # Core cortex library
+└── dev/                       # Development-only charts
+    └── cortex-prometheus-operator/  # Local monitoring stack
 ```
 
 ## Chart Types
@@ -45,16 +45,13 @@ Bundle charts are **umbrella charts** that represent complete deployments for sp
 - `cortex-ironcore` - IronCore scheduling domain (compute, ...)
 - `cortex-crds` - Custom Resource Definitions for all operators
 
-### Operator Chart (from `dist/chart/`)
-
-The operator chart contains the core Kubernetes operators built from the Go modules. These are **not stored in the helm/ directory** but are generated in `dist/chart` directory as it is a [Kubebuilder](https://book.kubebuilder.io/reference/generating-crd) scaffold.
-
 ### Library Charts (`library/`)
 
 Library charts provide **shared, reusable components** that are consumed by bundle charts as dependencies.
 
 **Available library charts:**
 
+- `cortex` - [Kubebuilder](https://book.kubebuilder.io/reference/generating-crd) scaffold including CRDs and the cortex manager
 - `cortex-postgres` - PostgreSQL database deployment with monitoring
 
 **Integration with bundles:**
