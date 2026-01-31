@@ -5,6 +5,7 @@ package pods
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -15,6 +16,8 @@ import (
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var failedSchedulingError error = errors.New("FailedScheduling")
 
 type Scheduler struct {
 	Logger   logr.Logger
@@ -38,16 +41,11 @@ func (scheduler *Scheduler) SetPipelineController(controller *FilterWeigherPipel
 }
 
 func New(ctx context.Context, informerFactory informers.SharedInformerFactory) *Scheduler {
-	scheduler := &Scheduler{}
-
-	// Create scheduling queue
-	scheduler.Queue = NewPrioritySchedulingQueue()
-
-	// Create cache
-	scheduler.Cache = NewCache()
-
-	// Initialize listers
-	scheduler.PodLister = informerFactory.Core().V1().Pods().Lister()
+	scheduler := &Scheduler{
+		Queue:     NewPrioritySchedulingQueue(),
+		Cache:     NewCache(),
+		PodLister: informerFactory.Core().V1().Pods().Lister(),
+	}
 	// PodGroupSetLister will be initialized when custom informer factory is available
 
 	// Add event handlers
@@ -62,13 +60,10 @@ func (scheduler *Scheduler) Run(ctx context.Context) {
 }
 
 func (scheduler *Scheduler) ScheduleOne(ctx context.Context) {
-	// Get next item from the scheduling queue
 	item, shutdown := scheduler.Queue.Get()
 	if shutdown {
 		return
 	}
-
-	// Ensure Done is called when we finish processing
 	defer scheduler.Queue.Done(item)
 
 	// Parse namespace and name from the item key (format: "namespace/name")
@@ -80,23 +75,22 @@ func (scheduler *Scheduler) ScheduleOne(ctx context.Context) {
 	}
 	namespace, name := parts[0], parts[1]
 
-	// Process the item based on its type
 	switch item.Kind() {
 	case KindPod:
-		// Get the Pod object using the lister
 		pod, err := scheduler.PodLister.Pods(namespace).Get(name)
 		if err != nil {
 			scheduler.Logger.Error(err, "failed to get pod from lister", "namespace", namespace, "name", name)
-			// Add to unschedulable queue for retry
-			scheduler.Queue.AddUnschedulable(item)
+			scheduler.Queue.AddBackoff(item)
 			return
 		}
 
-		// Call schedulePod with the actual Pod object
 		if err := scheduler.schedulePod(ctx, pod); err != nil {
 			scheduler.Logger.Error(err, "failed to schedule pod", "pod", pod.Name, "namespace", pod.Namespace)
-			// Add to unschedulable queue for retry
-			scheduler.Queue.AddUnschedulable(item)
+			if errors.Is(err, failedSchedulingError) {
+				scheduler.Queue.AddUnschedulable(item)
+			} else {
+				scheduler.Queue.AddBackoff(item)
+			}
 		}
 
 	/*

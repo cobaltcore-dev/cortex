@@ -4,7 +4,6 @@
 package pods
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/helpers"
@@ -12,7 +11,7 @@ import (
 )
 
 type Cache struct {
-	// Mutex to serialize updates/access of teh cache
+	// Mutex to serialize updates/access of the cache
 	mu sync.RWMutex
 	// State of the nodes available for scheduling
 	Nodes []corev1.Node
@@ -56,15 +55,6 @@ func (c *Cache) AddPod(pod *corev1.Pod) {
 
 	podRequests := helpers.GetPodResourceRequests(pod)
 
-	// Get current allocatable resources before adding the pod
-	/*var beforeAllocatable corev1.ResourceList
-	for _, node := range c.Nodes {
-		if node.Name == pod.Spec.NodeName {
-			beforeAllocatable = node.Status.Allocatable.DeepCopy()
-			break
-		}
-	}*/
-
 	if allocated, exists := c.nodeAllocated[pod.Spec.NodeName]; exists {
 		helpers.AddResourcesInto(allocated, podRequests)
 		c.nodeAllocated[pod.Spec.NodeName] = allocated
@@ -73,19 +63,6 @@ func (c *Cache) AddPod(pod *corev1.Pod) {
 	}
 
 	c.updateNodeAllocatable(pod.Spec.NodeName)
-
-	// Get allocatable resources after adding the pod
-	/*var afterAllocatable corev1.ResourceList
-	for _, node := range c.Nodes {
-		if node.Name == pod.Spec.NodeName {
-			afterAllocatable = node.Status.Allocatable.DeepCopy()
-			break
-		}
-	}
-
-	//fmt.Printf("Cache.AddPod: pod=%s/%s node=%s podRequests=%v beforeAllocatable=%v afterAllocatable=%v\n",
-	//	pod.Namespace, pod.Name, pod.Spec.NodeName, podRequests, beforeAllocatable, afterAllocatable)
-	*/
 
 	c.updateTopology()
 }
@@ -100,33 +77,12 @@ func (c *Cache) RemovePod(pod *corev1.Pod) {
 
 	podRequests := helpers.GetPodResourceRequests(pod)
 
-	// Get current allocatable resources before removing the pod
-	var beforeAllocatable corev1.ResourceList
-	for _, node := range c.Nodes {
-		if node.Name == pod.Spec.NodeName {
-			beforeAllocatable = node.Status.Allocatable.DeepCopy()
-			break
-		}
-	}
-
 	if allocated, exists := c.nodeAllocated[pod.Spec.NodeName]; exists {
 		helpers.SubtractResourcesInto(allocated, podRequests)
 		c.nodeAllocated[pod.Spec.NodeName] = allocated
 	}
 
 	c.updateNodeAllocatable(pod.Spec.NodeName)
-
-	// Get allocatable resources after removing the pod
-	var afterAllocatable corev1.ResourceList
-	for _, node := range c.Nodes {
-		if node.Name == pod.Spec.NodeName {
-			afterAllocatable = node.Status.Allocatable.DeepCopy()
-			break
-		}
-	}
-
-	fmt.Printf("Cache.RemovePod: pod=%s/%s node=%s podRequests=%v beforeAllocatable=%v afterAllocatable=%v\n",
-		pod.Namespace, pod.Name, pod.Spec.NodeName, podRequests, beforeAllocatable, afterAllocatable)
 
 	c.updateTopology()
 }

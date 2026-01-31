@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/helpers"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -86,21 +85,8 @@ func (s *Scheduler) handleUpdatePod(oldObj, newObj interface{}) {
 		return
 	}
 
-	/*
-		// Log resource changes for pod updates
-		if oldPod.Spec.NodeName != "" {
-			oldResources := helpers.GetPodResourceRequests(oldPod)
-			s.Logger.Info("Removing old pod resources from cache", "pod", oldPod.Name, "namespace", oldPod.Namespace, "node", oldPod.Spec.NodeName, "resources", oldResources)
-		}
-
-		if newPod.Spec.NodeName != "" {
-			newResources := helpers.GetPodResourceRequests(newPod)
-			s.Logger.Info("Adding new pod resources to cache", "pod", newPod.Name, "namespace", newPod.Namespace, "node", newPod.Spec.NodeName, "resources", newResources)
-		}
-	*/
-
 	s.Cache.RemovePod(oldPod)
-	// TODO: this condition is a workaround since the initial resource allocation is marked in
+	// TODO: this condition is a workaround since the initial resource allocation for newly binded pods is marked in
 	// the pipeline and the pod binding update observed here would duplicate the cache entry.
 	// Future plan: track which pods are assumed/confirmed to avoid multiple entries
 	// of the same pod
@@ -114,13 +100,6 @@ func (s *Scheduler) handleDeletePod(obj interface{}) {
 	if !ok {
 		s.Logger.Error(nil, "Cannot convert to *corev1.Pod", "obj", obj)
 		return
-	}
-
-	if pod.Spec.NodeName != "" {
-		podResources := helpers.GetPodResourceRequests(pod)
-		s.Logger.Info("Deleting pod from cache", "pod", pod.Name, "namespace", pod.Namespace, "node", pod.Spec.NodeName, "resources", podResources)
-	} else {
-		s.Logger.Info("Deleting pod from cache", "pod", pod.Name, "namespace", pod.Namespace)
 	}
 
 	s.Cache.RemovePod(pod)
@@ -137,13 +116,6 @@ func (s *Scheduler) handleAddNode(obj interface{}) {
 		return
 	}
 
-	// Skip control plane nodes - they should not be used for pod scheduling
-	if isControlPlaneNode(*node) {
-		s.Logger.Info("Skipping control plane node", "node", node.Name)
-		return
-	}
-
-	s.Logger.Info("Adding node to cache", "node", node.Name, "capacity", node.Status.Capacity, "allocatable", node.Status.Allocatable)
 	s.Cache.AddNode(node)
 
 	s.Queue.MoveAllToActive("node added")
@@ -161,16 +133,6 @@ func (s *Scheduler) handleUpdateNode(oldObj, newObj interface{}) {
 		s.Logger.Error(nil, "Cannot convert newObj to *corev1.Node", "obj", newObj)
 		return
 	}
-
-	// Skip control plane nodes - they should not be used for pod scheduling
-	if isControlPlaneNode(*newNode) {
-		s.Logger.Info("Skipping control plane node update", "node", newNode.Name)
-		return
-	}
-
-	s.Logger.Info("Updating node in cache", "node", newNode.Name,
-		"old_capacity", oldNode.Status.Capacity, "old_allocatable", oldNode.Status.Allocatable,
-		"new_capacity", newNode.Status.Capacity, "new_allocatable", newNode.Status.Allocatable)
 
 	s.Cache.RemoveNode(oldNode)
 	s.Cache.AddNode(newNode)

@@ -112,6 +112,9 @@ func (t *Topology) addNode(node corev1.Node) {
 }
 
 func (n *TopologyNode) addNode(node corev1.Node) {
+	if isControlPlaneNode(node) {
+		return
+	}
 	helpers.AddResourcesInto(n.Capacity, node.Status.Capacity)
 	helpers.AddResourcesInto(n.Allocatable, node.Status.Allocatable)
 	n.Nodes = append(n.Nodes, node)

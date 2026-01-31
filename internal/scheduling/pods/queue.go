@@ -2,20 +2,16 @@ package pods
 
 import (
 	"container/heap"
-	"fmt"
 	"sync"
 	"time"
 )
-
-//
-// Public interfaces
-//
 
 type SchedulingQueue interface {
 	Add(item SchedulingItem)
 	Get() (SchedulingItem, bool)
 	Done(item SchedulingItem)
 
+	AddBackoff(item SchedulingItem)
 	AddUnschedulable(item SchedulingItem)
 	MoveAllToActive(reason string)
 
@@ -35,10 +31,6 @@ type SchedulingItem interface {
 	String() string
 }
 
-//
-// Internal queue item
-//
-
 type queueItem struct {
 	item SchedulingItem
 
@@ -47,21 +39,16 @@ type queueItem struct {
 
 	enqueueTime time.Time
 
-	// backoff handling
 	backoffDuration time.Duration
 	readyAt         time.Time
 }
-
-//
-// Priority heap (Active Queue)
-//
 
 type priorityHeap []*queueItem
 
 func (h priorityHeap) Len() int { return len(h) }
 
 func (h priorityHeap) Less(i, j int) bool {
-	// Higher priority first
+	// Higher priority values first
 	return h[i].priority > h[j].priority
 }
 
@@ -87,27 +74,22 @@ func (h *priorityHeap) Pop() interface{} {
 	return qi
 }
 
-//
-// Scheduling queue implementation
-//
-
+// PrioritySchedulingQueue implements SchedulingQueue
 type PrioritySchedulingQueue struct {
 	lock sync.Mutex
 	cond *sync.Cond
 
-	activeQ  priorityHeap
+	// Contains items that should be scheduled immeadietly
+	activeQ priorityHeap
+	// Contains items that failed to schedule but are expected to get scheduled eventually (e.g. pipeline not ready)
 	backoffQ []*queueItem
+	// Contains items that are waiting for events to happen (e.g. new capacity)
 	unschedQ map[string]*queueItem
 
-	// global deduplication
 	items map[string]*queueItem
 
 	shuttingDown bool
 }
-
-//
-// Constructor
-//
 
 func NewPrioritySchedulingQueue() *PrioritySchedulingQueue {
 	q := &PrioritySchedulingQueue{
@@ -121,15 +103,9 @@ func NewPrioritySchedulingQueue() *PrioritySchedulingQueue {
 	return q
 }
 
-//
-// Public API
-//
-
 func (q *PrioritySchedulingQueue) Add(item SchedulingItem) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
-
-	fmt.Printf(`add to active queue %s`, item.Key())
 
 	if q.shuttingDown {
 		return
@@ -176,15 +152,11 @@ func (q *PrioritySchedulingQueue) Get() (SchedulingItem, bool) {
 func (q *PrioritySchedulingQueue) Done(item SchedulingItem) {
 	// Currently no-op.
 	// Hook for metrics, tracing, or future state tracking.
-
-	fmt.Printf(`queue done %s`, item.Key())
 }
 
 func (q *PrioritySchedulingQueue) AddUnschedulable(item SchedulingItem) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
-
-	fmt.Printf(`queue unscheduable %s`, item.Key())
 
 	key := item.Key()
 	qi, exists := q.items[key]
@@ -199,7 +171,9 @@ func (q *PrioritySchedulingQueue) MoveAllToActive(reason string) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	fmt.Printf(`queue move all to active %s`, reason)
+	// TODO: this should not move all pods to the active queue per default.
+	// Instead, only pods that would benefit from reason should be
+	// reconsidered for scheduling (see kube-scheduler queueing hints)
 
 	for key, qi := range q.unschedQ {
 		delete(q.unschedQ, key)
@@ -217,15 +191,9 @@ func (q *PrioritySchedulingQueue) ShutDown() {
 	q.cond.Broadcast()
 }
 
-//
-// Backoff handling (internal)
-//
-
 func (q *PrioritySchedulingQueue) AddBackoff(item SchedulingItem) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
-
-	fmt.Printf(`add backoff %s`, item.Key())
 
 	qi, exists := q.items[item.Key()]
 	if !exists {
@@ -238,6 +206,9 @@ func (q *PrioritySchedulingQueue) AddBackoff(item SchedulingItem) {
 	q.backoffQ = append(q.backoffQ, qi)
 }
 
+// TODO: I think a seperate go routine is needed in order for the backoff
+// behavior to work correctly. Currently, backoff is only flushed on
+// a successful `Get()` invokation
 func (q *PrioritySchedulingQueue) flushBackoffLocked() {
 	now := time.Now()
 	n := 0
@@ -267,11 +238,9 @@ func nextBackoff(prev time.Duration) time.Duration {
 	return next
 }
 
-//
-// SchedulingItem implementations
-//
+// TODO: these definitions are duplicates apart from `Kind()`
 
-// PodSchedulingItem wraps a Pod with metadata for the scheduling queue
+// PodSchedulingItem implements SchedulingItem
 type PodSchedulingItem struct {
 	Namespace string
 	Name      string
@@ -289,7 +258,7 @@ func (p *PodSchedulingItem) String() string {
 	return "Pod(" + p.Key() + ")"
 }
 
-// PodGroupSetSchedulingItem wraps a PodGroupSet with metadata for the scheduling queue
+// PodGroupSetSchedulingItem implements SchedulingItem
 type PodGroupSetSchedulingItem struct {
 	Namespace string
 	Name      string
