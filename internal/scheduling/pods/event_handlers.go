@@ -7,10 +7,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/generated/informers/externalversions"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -30,7 +34,7 @@ func (s *Scheduler) WaitForHandlersSync(ctx context.Context) error {
 	})
 }
 
-func (s *Scheduler) AddEventHandlers(informerFactory informers.SharedInformerFactory) error {
+func (s *Scheduler) AddEventHandlers(informerFactory informers.SharedInformerFactory, customInformerFactory externalversions.SharedInformerFactory) error {
 	if handlerRegistration, err = informerFactory.Core().V1().Pods().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    s.handleAddPod,
 		UpdateFunc: s.handleUpdatePod,
@@ -51,7 +55,16 @@ func (s *Scheduler) AddEventHandlers(informerFactory informers.SharedInformerFac
 	}
 	handlers = append(handlers, handlerRegistration)
 
-	// TODO: PGS event handler
+	if handlerRegistration, err = customInformerFactory.Api().V1alpha1().PodGroupSets().Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc:    s.handleAddPodGroupSet,
+			UpdateFunc: s.handleUpdatePodGroupSet,
+			DeleteFunc: s.handleDeletePodGroupSet,
+		},
+	); err != nil {
+		return err
+	}
+	handlers = append(handlers, handlerRegistration)
 
 	s.Handlers = handlers
 	return nil
@@ -148,28 +161,69 @@ func (s *Scheduler) handleDeleteNode(obj interface{}) {
 	s.Cache.RemoveNode(node)
 }
 
-/*
-DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			log := ctrl.LoggerFrom(ctx)
-			podgroupset := evt.Object.(*v1alpha1.PodGroupSet)
+func (s *Scheduler) handleAddPodGroupSet(obj interface{}) {
+	pgs, ok := obj.(*v1alpha1.PodGroupSet)
+	if !ok {
+		s.Logger.Error(nil, "Cannot convert to *v1alpha1.PodGroupSet", "obj", obj)
+		return
+	}
 
-			for _, group := range podgroupset.Spec.PodGroups {
-				for i := range int(group.Spec.Replicas) {
-					podName := podgroupset.PodName(group.Name, i)
-					pod := &corev1.Pod{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      podName,
-							Namespace: podgroupset.Namespace,
-						},
-					}
-					if err := c.Delete(ctx, pod); err != nil {
-						if client.IgnoreNotFound(err) != nil {
-							log.Error(err, "failed to delete pod for deleted podgroupset", "pod", podName)
-						}
-					} else {
-						log.Info("deleted pod for deleted podgroupset", "pod", podName)
-					}
-				}
+	s.Queue.Add(&PodGroupSetSchedulingItem{
+		Namespace: pgs.Namespace,
+		Name:      pgs.Name,
+	})
+}
+
+func (s *Scheduler) handleUpdatePodGroupSet(oldObj, newObj interface{}) {
+	_, ok := oldObj.(*v1alpha1.PodGroupSet)
+	if !ok {
+		s.Logger.Error(nil, "Cannot convert oldObj to *v1alpha1.PodGroupSet", "obj", oldObj)
+		return
+	}
+
+	newPgs, ok := newObj.(*v1alpha1.PodGroupSet)
+	if !ok {
+		s.Logger.Error(nil, "Cannot convert newObj to *v1alpha1.PodGroupSet", "obj", newObj)
+		return
+	}
+
+	s.Logger.Info("PodGroupSet updated", "name", newPgs.Name, "namespace", newPgs.Namespace)
+
+	// TODO: implement update behavior of PodGroupSets
+}
+
+func (s *Scheduler) handleDeletePodGroupSet(obj interface{}) {
+	pgs, ok := obj.(*v1alpha1.PodGroupSet)
+	if !ok {
+		s.Logger.Error(nil, "Cannot convert to *v1alpha1.PodGroupSet", "obj", obj)
+		return
+	}
+
+	// TODO: remove PGS from queue if in queue
+
+	// TODO: the lifecycle management of PGSs should not fall into the
+	// responsibility of the scheduler. Instead, a PodGroupSetController
+	// similar to the PipelineController should be implemented that handle both
+	// the pod creation and deletions of a PGS
+	for _, group := range pgs.Spec.PodGroups {
+		for i := range int(group.Spec.Replicas) {
+			podName := pgs.PodName(group.Name, i)
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: pgs.Namespace,
+				},
 			}
-		},
-*/
+			if err := s.Client.Delete(context.Background(), pod); err != nil {
+				if client.IgnoreNotFound(err) != nil {
+					// log.Error(err, "failed to delete pod for deleted podgroupset", "pod", podName)
+				}
+			} else {
+				s.Cache.RemovePod(pod)
+				// log.Info("deleted pod for deleted podgroupset", "pod", podName)
+			}
+		}
+	}
+
+	s.Queue.MoveAllToActive("PodGroupSet deletion")
+}

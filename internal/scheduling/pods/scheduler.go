@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/pkg/generated/informers/externalversions"
+	podgroupsetlisters "github.com/cobaltcore-dev/cortex/pkg/generated/listers/api/v1alpha1"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -29,8 +31,8 @@ type Scheduler struct {
 	Client   client.Client
 
 	// Listers for getting objects from informer cache
-	PodLister corev1listers.PodLister
-	//PodGroupSetLister podgroupsetlisters.PodGroupSetLister
+	PodLister         corev1listers.PodLister
+	PodGroupSetLister podgroupsetlisters.PodGroupSetLister
 
 	podPipelineController *FilterWeigherPipelineController
 }
@@ -40,16 +42,19 @@ func (scheduler *Scheduler) SetPipelineController(controller *FilterWeigherPipel
 	scheduler.podPipelineController = controller
 }
 
-func New(ctx context.Context, informerFactory informers.SharedInformerFactory) *Scheduler {
+func New(ctx context.Context, informerFactory informers.SharedInformerFactory, customInformerFactory externalversions.SharedInformerFactory) *Scheduler {
 	scheduler := &Scheduler{
-		Queue:     NewPrioritySchedulingQueue(),
-		Cache:     NewCache(),
-		PodLister: informerFactory.Core().V1().Pods().Lister(),
+		Queue:             NewPrioritySchedulingQueue(),
+		Cache:             NewCache(),
+		PodLister:         informerFactory.Core().V1().Pods().Lister(),
+		PodGroupSetLister: customInformerFactory.Api().V1alpha1().PodGroupSets().Lister(),
 	}
-	// PodGroupSetLister will be initialized when custom informer factory is available
 
-	// Add event handlers
-	scheduler.AddEventHandlers(informerFactory)
+	// Add event handlers with both informer factories
+	if err := scheduler.AddEventHandlers(informerFactory, customInformerFactory); err != nil {
+		// Log error but don't fail scheduler creation - handlers can be added later
+		// This is needed because the logger might not be set yet
+	}
 
 	return scheduler
 }
@@ -93,24 +98,24 @@ func (scheduler *Scheduler) ScheduleOne(ctx context.Context) {
 			}
 		}
 
-	/*
-		case KindPodGroupSet:
-			// Get the PodGroupSet object using the generated lister
-			pgs, err := scheduler.PodGroupSetLister.PodGroupSets(namespace).Get(name)
-			if err != nil {
-				scheduler.Logger.Error(err, "failed to get podgroupset from lister", "namespace", namespace, "name", name)
-				// Add to unschedulable queue for retry
-				scheduler.Queue.AddUnschedulable(item)
-				return
-			}
+	case KindPodGroupSet:
+		// Get the PodGroupSet object using the generated lister
+		pgs, err := scheduler.PodGroupSetLister.PodGroupSets(namespace).Get(name)
+		if err != nil {
+			scheduler.Logger.Error(err, "failed to get podgroupset from lister", "namespace", namespace, "name", name)
+			scheduler.Queue.AddBackoff(item)
+			return
+		}
 
-			// Call schedulePodGroupSet with the actual PodGroupSet object
-			if err := scheduler.schedulePodGroupSet(ctx, pgs); err != nil {
-				scheduler.Logger.Error(err, "failed to schedule podgroupset", "podgroupset", pgs.Name, "namespace", pgs.Namespace)
-				// Add to unschedulable queue for retry
+		// Call schedulePodGroupSet with the actual PodGroupSet object
+		if err := scheduler.schedulePodGroupSet(ctx, pgs); err != nil {
+			scheduler.Logger.Error(err, "failed to schedule podgroupset", "podgroupset", pgs.Name, "namespace", pgs.Namespace)
+			if errors.Is(err, failedSchedulingError) {
 				scheduler.Queue.AddUnschedulable(item)
+			} else {
+				scheduler.Queue.AddBackoff(item)
 			}
-	*/
+		}
 
 	default:
 		scheduler.Logger.Error(nil, "unknown item kind", "kind", item.Kind(), "item", item.String())

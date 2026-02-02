@@ -37,10 +37,6 @@ func (s *Scheduler) schedulePod(ctx context.Context, pod *corev1.Pod) error {
 
 	if result.TargetHost == nil {
 		s.Recorder.Eventf(pod, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePod", "0/%d nodes are available", len(nodes))
-		s.Queue.Add(&PodSchedulingItem{
-			Namespace: pod.Namespace,
-			Name:      pod.Name,
-		})
 		return failedSchedulingError
 	}
 
@@ -61,12 +57,6 @@ func (s *Scheduler) schedulePod(ctx context.Context, pod *corev1.Pod) error {
 	if err := s.Client.Create(ctx, binding); err != nil {
 		log.V(1).Error(err, "failed to assign node to pod via binding")
 		s.Cache.RemovePod(pod)
-
-		s.Queue.Add(&PodSchedulingItem{
-			Namespace: pod.Namespace,
-			Name:      pod.Name,
-		})
-
 		return err
 	}
 	s.Recorder.Eventf(pod, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePod", "Successfully assigned %s/%s to %s", pod.Namespace, pod.Name, *result.TargetHost)

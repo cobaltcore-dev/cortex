@@ -51,6 +51,8 @@ import (
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/pkg/generated/clientset/versioned"
+	"github.com/cobaltcore-dev/cortex/pkg/generated/informers/externalversions"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/task"
@@ -375,7 +377,14 @@ func main() {
 
 		informerFactory := informers.NewSharedInformerFactory(clientset, 30*time.Second)
 
-		scheduler := pods.New(ctx, informerFactory)
+		customClientset, err := versioned.NewForConfig(restConfig)
+		if err != nil {
+			setupLog.Error(err, "unable to create custom clientset")
+			os.Exit(1)
+		}
+		customInformerFactory := externalversions.NewSharedInformerFactory(customClientset, 30*time.Second)
+
+		scheduler := pods.New(ctx, informerFactory, customInformerFactory)
 		scheduler.Logger = ctrl.Log.WithName("pods-scheduler")
 		scheduler.Client = multiclusterClient
 		scheduler.Recorder = mgr.GetEventRecorder("pods-scheduler")

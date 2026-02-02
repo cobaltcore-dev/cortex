@@ -16,12 +16,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const podPipelineRefName string = "pods-scheduler"
 
-func (s *Scheduler) ProcessNewPodGroupSet(ctx context.Context, pgs *v1alpha1.PodGroupSet) error {
+func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGroupSet) error {
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now()
 
@@ -43,35 +42,7 @@ func (s *Scheduler) ProcessNewPodGroupSet(ctx context.Context, pgs *v1alpha1.Pod
 			canFit := true
 			for resourceName, requestedQty := range podGroupSetResourceRequests {
 				allocatableQty, exists := topologyNode.Allocatable[resourceName]
-				log.V(1).Info("Checking resource allocation",
-					"topologyNode", topologyNode.Name,
-					"resourceName", resourceName,
-					"requestedQty", requestedQty.String(),
-					"allocatableQty", func() string {
-						if exists {
-							return allocatableQty.String()
-						}
-						return "not available"
-					}(),
-					"exists", exists)
-
 				if !exists || requestedQty.Cmp(allocatableQty) > 0 {
-					log.V(1).Info("Resource requirement not met",
-						"topologyNode", topologyNode.Name,
-						"resourceName", resourceName,
-						"requestedQty", requestedQty.String(),
-						"allocatableQty", func() string {
-							if exists {
-								return allocatableQty.String()
-							}
-							return "not available"
-						}(),
-						"reason", func() string {
-							if !exists {
-								return "resource not available"
-							}
-							return "insufficient capacity"
-						}())
 					canFit = false
 					break
 				}
@@ -84,7 +55,10 @@ func (s *Scheduler) ProcessNewPodGroupSet(ctx context.Context, pgs *v1alpha1.Pod
 			if !ok {
 				return fmt.Errorf("pipeline %s not configured", podPipelineRefName)
 			}
-			pipeline, _ := s.podPipelineController.Pipelines[podPipelineRefName] // TODO: error handling
+			pipeline, ok := s.podPipelineController.Pipelines[podPipelineRefName]
+			if !ok {
+				return fmt.Errorf("pipeline %s not found", podPipelineRefName)
+			}
 			placements, weight, err := s.getPodGroupSetPlacement(pgs, topologyNode.Nodes, pipeline)
 			if err != nil {
 				log.V(1).Error(err, "failed to schedule PodGroupSet")
@@ -113,12 +87,7 @@ func (s *Scheduler) ProcessNewPodGroupSet(ctx context.Context, pgs *v1alpha1.Pod
 	} else {
 		log.Info("no suitable placement found", "PodGroupSet", pgs.Name)
 		s.Recorder.Eventf(pgs, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePGS", "No suitable placement found for PodGroupSet %s (%s)", pgs.Name, pgs.Namespace)
-
-		// Add PodGroupSet to scheduling queue for retry when resources become available
-		if s.Queue != nil {
-			log.Info("Adding PodGroupSet to scheduling queue due to scheduling failure", "PodGroupSet", pgs.Name, "namespace", pgs.Namespace)
-			// s.Queue.AddPodGroupSet(pgs)
-		}
+		return failedSchedulingError
 	}
 
 	log.Info("PodGroupSet processed", "duration", time.Since(startedAt))
@@ -126,6 +95,9 @@ func (s *Scheduler) ProcessNewPodGroupSet(ctx context.Context, pgs *v1alpha1.Pod
 }
 
 func (s *Scheduler) getPodGroupSetPlacement(pgs *v1alpha1.PodGroupSet, nodes []corev1.Node, podPipeline lib.FilterWeigherPipeline[pods.PodPipelineRequest]) (map[string]string, float64, error) {
+	// TODO: the nodePool behavior mimics the cache which is not optimal.
+	// The problem is that we are currently iterating over the topology which would
+	// get modified if the cache changes
 	nodePool := make([]corev1.Node, len(nodes))
 	for i, node := range nodes {
 		nodePool[i] = *node.DeepCopy()
@@ -192,15 +164,6 @@ func (s *Scheduler) createPods(ctx context.Context, pgs *v1alpha1.PodGroupSet, p
 				continue
 			}
 
-			// TODO: is this really necessarry or should this case be handled somewhere else?
-			existing := &corev1.Pod{}
-			err := s.Client.Get(ctx, client.ObjectKey{Name: podName, Namespace: pgs.Namespace}, existing)
-			if err == nil {
-				continue
-			} else if client.IgnoreNotFound(err) != nil {
-				return err
-			}
-
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      podName,
@@ -233,13 +196,6 @@ func (s *Scheduler) createPods(ctx context.Context, pgs *v1alpha1.PodGroupSet, p
 			if err := s.Client.Create(ctx, binding); err != nil {
 				log.V(1).Error(err, "failed to assign node to pod via binding")
 				s.Cache.RemovePod(pod)
-
-				// Add PodGroupSet to scheduling queue for retry when resources become available
-				if s.Queue != nil {
-					log.Info("Adding PodGroupSet to scheduling queue due to pod binding failure", "PodGroupSet", pgs.Name, "namespace", pgs.Namespace, "pod", podName)
-					// s.Queue.AddPodGroupSet(pgs)
-				}
-
 				return err
 			}
 			s.Recorder.Eventf(pod, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePod", "Successfully assigned %s/%s to %s", pod.Namespace, pod.Name, nodeName)
