@@ -40,7 +40,7 @@ docker_build('ghcr.io/cobaltcore-dev/cortex', '.',
     dockerfile='Dockerfile',
     only=['internal/', 'cmd/', 'api/', 'pkg', 'go.mod', 'go.sum', 'Dockerfile'],
 )
-local('sh helm/sync.sh dist/chart')
+local('sh helm/sync.sh helm/library/cortex')
 
 ########### Cortex Bundles
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
@@ -58,27 +58,27 @@ bundle_charts = [
 ]
 dep_charts = {
     'cortex-crds': [
-        ('dist/chart', 'cortex'),
+        ('helm/library/cortex', 'cortex'),
     ],
     'cortex-nova': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('dist/chart', 'cortex'),
+        ('helm/library/cortex', 'cortex'),
     ],
     'cortex-manila': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('dist/chart', 'cortex'),
+        ('helm/library/cortex', 'cortex'),
     ],
     'cortex-cinder': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('dist/chart', 'cortex'),
+        ('helm/library/cortex', 'cortex'),
     ],
     'cortex-ironcore': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('dist/chart', 'cortex'),
+        ('helm/library/cortex', 'cortex'),
     ],
     'cortex-pods': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
-        ('dist/chart', 'cortex'),
+        ('helm/library/cortex', 'cortex'),
     ],
 }
 

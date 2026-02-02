@@ -58,9 +58,9 @@ helm upgrade --install cortex-ironcore ./helm/bundles/cortex-ironcore \
 ```
 
 > [!TIP]
-> If you made changes to the scheduling/ helm chart, you can update it in the bundle and run helm upgrade again:
+> If you made changes to the cortex helm chart, you can update it in the bundle and run helm upgrade again:
 > ```bash
-> helm package ./scheduling/dist/chart --destination ./helm/bundles/cortex-ironcore/charts
+> helm package ./library/cortex --destination ./helm/bundles/cortex-ironcore/charts
 > ```
 
 ### Demo
