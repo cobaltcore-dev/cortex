@@ -30,7 +30,6 @@ func (s *Scheduler) schedulePod(ctx context.Context, pod *corev1.Pod) error {
 	request := pods.PodPipelineRequest{Nodes: nodes, Pod: pod}
 	result, err := pipeline.Run(request)
 	if err != nil {
-		log.V(1).Error(err, "failed to run filter-weigher pipeline")
 		return errors.New("failed to run filter-weigher pipeline")
 	}
 	log.Info("filter-weigher pipeline executed successfully", "duration", time.Since(startedAt))
@@ -55,11 +54,9 @@ func (s *Scheduler) schedulePod(ctx context.Context, pod *corev1.Pod) error {
 		},
 	}
 	if err := s.Client.Create(ctx, binding); err != nil {
-		log.V(1).Error(err, "failed to assign node to pod via binding")
 		s.Cache.RemovePod(pod)
 		return err
 	}
 	s.Recorder.Eventf(pod, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePod", "Successfully assigned %s/%s to %s", pod.Namespace, pod.Name, *result.TargetHost)
-	log.V(1).Info("assigned node to pod", "node", *result.TargetHost)
 	return nil
 }

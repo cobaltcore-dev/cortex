@@ -48,7 +48,6 @@ func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGr
 				}
 			}
 			if !canFit {
-				s.Logger.Info("no topology fit", "node", topologyNode.Name)
 				continue
 			}
 
@@ -67,7 +66,6 @@ func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGr
 			}
 
 			if len(placements) == 0 {
-				s.Logger.Info("no pipeline placement fit", "node", topologyNode.Name)
 				continue
 			}
 
@@ -82,19 +80,19 @@ func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGr
 	}
 
 	if len(bestPlacements) > 0 {
-		// Update PodGroupSet status with placements
 		if err := s.updatePodGroupSetStatus(ctx, pgs, bestPlacements); err != nil {
 			log.Error(err, "failed to update PodGroupSet status", "PodGroupSet", pgs.Name)
-			// Don't return error here as pods are already created successfully
+			return err
 		}
 
+		// TODO: this should be the responsibility of the PodGroupSetController
+		// Important: marking the resources as allocated in the cache still needs to happen here
 		if err := s.createPods(ctx, pgs, bestPlacements); err != nil {
 			return err
 		}
 
 		s.Recorder.Eventf(pgs, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePGS", "Successfully created pods of %s/%s", pgs.Namespace, pgs.Name)
 	} else {
-		log.Info("no suitable placement found", "PodGroupSet", pgs.Name)
 		s.Recorder.Eventf(pgs, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePGS", "No suitable placement found for PodGroupSet %s (%s)", pgs.Name, pgs.Namespace)
 		return failedSchedulingError
 	}
@@ -158,18 +156,11 @@ func (s *Scheduler) getPodGroupSetPlacement(pgs *v1alpha1.PodGroupSet, nodes []c
 func (s *Scheduler) createPods(ctx context.Context, pgs *v1alpha1.PodGroupSet, placements map[string]string) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	// TODO: this needs to happen in two steps:
-	// 1. Create a PodReservation (new CR) for each pod
-	// If not successfull, delete reservations and reprocess PGS
-	// 2. Create pods and bind to node with respective reservation
-	// and in doing so delete the reservations
-
 	for _, group := range pgs.Spec.PodGroups {
 		for i := range int(group.Spec.Replicas) {
 			podName := pgs.PodName(group.Name, i)
 			nodeName, ok := placements[podName]
 			if !ok {
-				log.Info("No placement for pod", "key", podName)
 				continue
 			}
 
@@ -208,20 +199,15 @@ func (s *Scheduler) createPods(ctx context.Context, pgs *v1alpha1.PodGroupSet, p
 				return err
 			}
 			s.Recorder.Eventf(pod, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePod", "Successfully assigned %s/%s to %s", pod.Namespace, pod.Name, nodeName)
-			log.Info("created pod", "pod", podName, "node", nodeName)
 		}
 	}
 	return nil
 }
 
 func (s *Scheduler) updatePodGroupSetStatus(ctx context.Context, pgs *v1alpha1.PodGroupSet, placements map[string]string) error {
-	// Create a copy of the PodGroupSet to modify its status
 	pgsCopy := pgs.DeepCopy()
-
-	// Set the phase to Scheduled
 	pgsCopy.Status.Phase = v1alpha1.PodGroupSetPhaseScheduled
 
-	// Convert placements map to PodPlacement slice
 	pgsCopy.Status.Placements = make([]v1alpha1.PodPlacement, 0, len(placements))
 	for podName, nodeName := range placements {
 		pgsCopy.Status.Placements = append(pgsCopy.Status.Placements, v1alpha1.PodPlacement{
@@ -230,6 +216,5 @@ func (s *Scheduler) updatePodGroupSetStatus(ctx context.Context, pgs *v1alpha1.P
 		})
 	}
 
-	// Update the status subresource
 	return s.Client.Status().Update(ctx, pgsCopy)
 }

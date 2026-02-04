@@ -29,7 +29,7 @@ crds: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomRes
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:allowDangerousTypes=true webhook paths="./..." output:crd:artifacts:config=helm/library/cortex/files/crds
 
 .PHONY: generate
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations as well as client, informer and lister implementations.
 	$(CONTROLLER_GEN) crd:allowDangerousTypes=true object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	hack/generate-code.sh
 

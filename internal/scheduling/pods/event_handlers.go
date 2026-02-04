@@ -5,7 +5,6 @@ package pods
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -14,12 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
-)
-
-var (
-	handlerRegistration cache.ResourceEventHandlerRegistration
-	err                 error
-	handlers            []cache.ResourceEventHandlerRegistration
 )
 
 func (s *Scheduler) WaitForHandlersSync(ctx context.Context) error {
@@ -34,6 +27,11 @@ func (s *Scheduler) WaitForHandlersSync(ctx context.Context) error {
 }
 
 func (s *Scheduler) AddEventHandlers(informerFactory informers.SharedInformerFactory, customInformerFactory externalversions.SharedInformerFactory) error {
+	var (
+		handlerRegistration cache.ResourceEventHandlerRegistration
+		err                 error
+		handlers            []cache.ResourceEventHandlerRegistration
+	)
 	if handlerRegistration, err = informerFactory.Core().V1().Pods().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    s.handleAddPod,
 		UpdateFunc: s.handleUpdatePod,
@@ -75,7 +73,6 @@ func (s *Scheduler) handleAddPod(obj interface{}) {
 		s.Logger.Error(nil, "Cannot convert to *corev1.Pod", "obj", obj)
 		return
 	}
-	fmt.Println("add pod")
 	if pod.Spec.NodeName != "" {
 		// Skip pods that already have a node assigned.
 		s.Cache.AddPod(pod)
@@ -90,7 +87,6 @@ func (s *Scheduler) handleAddPod(obj interface{}) {
 		// Skip pods that are managed by a larger entity, e.g. by a PodGroupSet
 		return
 	}
-	fmt.Println("add pod to queue")
 	s.Queue.Add(&PodSchedulingItem{
 		Namespace: pod.Namespace,
 		Name:      pod.Name,
@@ -115,9 +111,11 @@ func (s *Scheduler) handleUpdatePod(oldObj, newObj interface{}) {
 	// the pipeline and the pod binding update observed here would duplicate the cache entry.
 	// Future plan: track which pods are assumed/confirmed to avoid multiple entries
 	// of the same pod
-	if oldPod.Spec.NodeName != "" {
-		s.Cache.AddPod(newPod)
+	if oldPod.Spec.NodeName == "" {
+		return
 	}
+
+	s.Cache.AddPod(newPod)
 }
 
 func (s *Scheduler) handleDeletePod(obj interface{}) {
@@ -127,10 +125,8 @@ func (s *Scheduler) handleDeletePod(obj interface{}) {
 		return
 	}
 
-	fmt.Printf("@@@ handlePodDeletion %s - %s\n", pod.Name, pod.Spec.NodeName)
 	s.Cache.RemovePod(pod)
 
-	s.Logger.Info("move all to active pod")
 	s.Queue.MoveAllToActive("pod deletion")
 }
 
@@ -169,7 +165,6 @@ func (s *Scheduler) handleDeleteNode(obj interface{}) {
 		s.Logger.Error(nil, "Cannot convert to *corev1.Node", "obj", obj)
 		return
 	}
-	s.Logger.Info("Deleting node from cache", "node", node.Name, "capacity", node.Status.Capacity, "allocatable", node.Status.Allocatable)
 	s.Cache.RemoveNode(node)
 }
 
@@ -182,7 +177,8 @@ func (s *Scheduler) handleAddPodGroupSet(obj interface{}) {
 
 	// TODO: handle the case that the PGS is already scheduled
 
-	// Calculate total pod count across all pod groups
+	// Calculate total pod count across all pod groups,
+	// this used to determine the priority of the workload
 	var totalPods int
 	for _, group := range pgs.Spec.PodGroups {
 		totalPods += int(group.Spec.Replicas)
@@ -214,51 +210,11 @@ func (s *Scheduler) handleUpdatePodGroupSet(oldObj, newObj interface{}) {
 }
 
 func (s *Scheduler) handleDeletePodGroupSet(obj interface{}) {
-	pgs, ok := obj.(*v1alpha1.PodGroupSet)
+	_, ok := obj.(*v1alpha1.PodGroupSet)
 	if !ok {
 		s.Logger.Error(nil, "Cannot convert to *v1alpha1.PodGroupSet", "obj", obj)
 		return
 	}
 
-	if pgs.Status.Phase == v1alpha1.PodGroupSetPhasePending {
-		return
-	}
-
-	// TODO: the lifecycle management of PGSs should not fall into the
-	// responsibility of the scheduler. Instead, a PodGroupSetController
-	// similar to the PipelineController should be implemented that handle both
-	// the pod creation and deletions of a PGS
-
-	// Create a map of pod names to node names from the placement status
-	placementMap := make(map[string]string)
-	for _, placement := range pgs.Status.Placements {
-		placementMap[placement.PodName] = placement.NodeName
-	}
-
-	// TODO: somehow the deletion is not working correctly.
-	// the K-Tracer test is failing sinc after deletion of workload-0
-	// there is still no capacity for workload-2
-	/*for _, group := range pgs.Spec.PodGroups {
-		for i := range int(group.Spec.Replicas) {
-			podName := pgs.PodName(group.Name, i)
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      podName,
-					Namespace: pgs.Namespace,
-				},
-			}
-
-			// Set the node name from placement status if available
-			if nodeName, exists := placementMap[podName]; exists {
-				pod.Spec.NodeName = nodeName
-			} else {
-				s.Logger.Info("not found", "pod", pod, "placements", placementMap)
-			}
-
-			s.Cache.RemovePod(pod)
-		}
-	}
-
-	s.Logger.Info("move all to active pgs", "pgs", pgs.Name)
-	s.Queue.MoveAllToActive("PodGroupSet deletion")*/
+	// TODO: are there any action points regarding in the queue?
 }

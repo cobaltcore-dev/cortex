@@ -65,7 +65,7 @@ func NewTopology(topologyLevels []TopologyLevelName, nodes []corev1.Node) *Topol
 	}
 	topology.Nodes[TopologyLeafLevel] = make(map[string]*TopologyNode)
 	for _, node := range nodes {
-		// Skip control plane nodes - they should not be used for pod scheduling
+		// Skip control plane nodes - they should not be used for scheduling PodGroupSets
 		if isControlPlaneNode(node) {
 			continue
 		}
@@ -120,7 +120,6 @@ func (n *TopologyNode) addNode(node corev1.Node) {
 	n.Nodes = append(n.Nodes, node)
 }
 
-// isControlPlaneNode checks if a node is a control plane node and should be excluded from pod scheduling
 func isControlPlaneNode(node corev1.Node) bool {
 	// Check for common control plane taints
 	for _, taint := range node.Spec.Taints {

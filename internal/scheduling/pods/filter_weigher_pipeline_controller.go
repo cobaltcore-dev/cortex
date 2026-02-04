@@ -20,7 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// TODO: docstring, only purpose is detecting pipiline changes
+// The pipeline controller watches for pipeline changes
+// to reconfigure the pipelines as needed.
 type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[lib.FilterWeigherPipeline[pods.PodPipelineRequest]]

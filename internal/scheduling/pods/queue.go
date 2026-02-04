@@ -29,9 +29,6 @@ type SchedulingItem interface {
 	Key() string
 	Kind() ItemKind
 	String() string
-	// GetSize returns the size for priority calculation:
-	// - For PodGroupSets: number of pods in the group
-	// - For Pods: returns 1 (used as secondary criteria after enqueue time)
 	GetSize() int
 }
 
@@ -55,7 +52,6 @@ func (h priorityHeap) Less(i, j int) bool {
 	// 1. PodGroupSets before Pods
 	// 2. For PodGroupSets: larger pod count first
 	// 3. For Pods: earlier enqueue time first (FIFO)
-	// 4. For same type with same priority: earlier enqueue time first
 
 	itemI, itemJ := h[i].item, h[j].item
 	kindI, kindJ := itemI.Kind(), itemJ.Kind()
@@ -83,7 +79,6 @@ func (h priorityHeap) Less(i, j int) bool {
 		return h[i].enqueueTime.Before(h[j].enqueueTime)
 	}
 
-	// Fallback - should not reach here
 	return h[i].enqueueTime.Before(h[j].enqueueTime)
 }
 
@@ -121,6 +116,7 @@ type PrioritySchedulingQueue struct {
 	// Contains items that are waiting for events to happen (e.g. new capacity)
 	unschedQ map[string]*queueItem
 
+	// items is used to retain the state of each queueing item (e.g. enqueue time) when moving between queues
 	items map[string]*queueItem
 
 	shuttingDown bool
@@ -136,7 +132,6 @@ func NewPrioritySchedulingQueue() *PrioritySchedulingQueue {
 	q.cond = sync.NewCond(&q.lock)
 	heap.Init(&q.activeQ)
 
-	// Start background goroutine to periodically flush backoff queue
 	go q.flushBackoffPeriodically()
 
 	return q
@@ -245,9 +240,6 @@ func (q *PrioritySchedulingQueue) AddBackoff(item SchedulingItem) {
 	q.backoffQ = append(q.backoffQ, qi)
 }
 
-// TODO: I think a seperate go routine is needed in order for the backoff
-// behavior to work correctly. Currently, backoff is only flushed on
-// a successful `Get()` invokation
 func (q *PrioritySchedulingQueue) flushBackoffLocked() {
 	now := time.Now()
 	n := 0
@@ -283,25 +275,22 @@ func (q *PrioritySchedulingQueue) flushBackoffPeriodically() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			q.lock.Lock()
-			if q.shuttingDown {
-				q.lock.Unlock()
-				return
-			}
-
-			before := len(q.backoffQ)
-			q.flushBackoffLocked()
-			after := len(q.backoffQ)
-
-			// Signal waiters if we moved items to active queue
-			if before > after && q.activeQ.Len() > 0 {
-				q.cond.Signal()
-			}
+	for range ticker.C {
+		q.lock.Lock()
+		if q.shuttingDown {
 			q.lock.Unlock()
+			return
 		}
+
+		before := len(q.backoffQ)
+		q.flushBackoffLocked()
+		after := len(q.backoffQ)
+
+		// Signal waiters if we moved items to active queue
+		if before > after && q.activeQ.Len() > 0 {
+			q.cond.Signal()
+		}
+		q.lock.Unlock()
 	}
 }
 
@@ -326,7 +315,7 @@ func (p *PodSchedulingItem) String() string {
 }
 
 func (p *PodSchedulingItem) GetSize() int {
-	return 1 // Pods have size 1 for priority calculation
+	return 1
 }
 
 // PodGroupSetSchedulingItem implements SchedulingItem

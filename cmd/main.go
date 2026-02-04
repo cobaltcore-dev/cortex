@@ -384,7 +384,11 @@ func main() {
 		}
 		customInformerFactory := externalversions.NewSharedInformerFactory(customClientset, 30*time.Second)
 
-		scheduler := pods.New(ctx, informerFactory, customInformerFactory)
+		scheduler, err := pods.New(ctx, informerFactory, customInformerFactory)
+		if err != nil {
+			setupLog.Error(err, "unable to instantiate scheduler")
+			os.Exit(1)
+		}
 		scheduler.Logger = ctrl.Log.WithName("pods-scheduler")
 		scheduler.Client = multiclusterClient
 		scheduler.Recorder = mgr.GetEventRecorder("pods-scheduler")
@@ -413,10 +417,6 @@ func main() {
 			setupLog.Info("starting pods scheduler")
 			scheduler.Run(ctx)
 		}()
-	}
-	if slices.Contains(config.EnabledControllers, "podgroupsets-controller") && !slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
-		setupLog.Error(nil, "podgroupsets-controller requires pods-decisions-pipeline-controller to be enabled")
-		os.Exit(1)
 	}
 	if slices.Contains(config.EnabledControllers, "explanation-controller") {
 		// Setup a controller which will reconcile the history and explanation for

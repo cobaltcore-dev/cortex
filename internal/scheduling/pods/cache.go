@@ -4,7 +4,6 @@
 package pods
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/helpers"
@@ -73,7 +72,6 @@ func (c *Cache) RemovePod(pod *corev1.Pod) {
 	defer c.mu.Unlock()
 
 	if pod.Spec.NodeName == "" {
-		fmt.Printf("@@@ pod %s", pod.Name)
 		return
 	}
 
@@ -140,7 +138,7 @@ func (c *Cache) updateNodeAllocatable(nodeName string) {
 			if allocated, exists := c.nodeAllocated[nodeName]; exists {
 				helpers.SubtractResourcesInto(remaining, allocated)
 			} else {
-				fmt.Printf("@@@ %s", nodeName)
+				// TODO: error case
 			}
 
 			c.Nodes[i].Status.Allocatable = remaining
