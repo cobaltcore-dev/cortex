@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var failedSchedulingError error = errors.New("FailedScheduling")
+var errFailedScheduling error = errors.New("FailedScheduling")
 
 type Scheduler struct {
 	Logger   logr.Logger
@@ -97,7 +97,7 @@ func (scheduler *Scheduler) ScheduleOne(ctx context.Context) {
 
 		if err := scheduler.schedulePod(ctx, pod); err != nil {
 			scheduler.Logger.Error(err, "failed to schedule pod", "pod", pod.Name, "namespace", pod.Namespace)
-			if errors.Is(err, failedSchedulingError) {
+			if errors.Is(err, errFailedScheduling) {
 				scheduler.Queue.AddUnschedulable(item)
 			} else {
 				scheduler.Queue.AddBackoff(item)
@@ -122,7 +122,7 @@ func (scheduler *Scheduler) ScheduleOne(ctx context.Context) {
 
 		if err := scheduler.schedulePodGroupSet(ctx, pgs); err != nil {
 			scheduler.Logger.Error(err, "failed to schedule podgroupset", "podgroupset", pgs.Name, "namespace", pgs.Namespace)
-			if errors.Is(err, failedSchedulingError) {
+			if errors.Is(err, errFailedScheduling) {
 				scheduler.Logger.Info("failed scheduling add to unschedulable")
 				scheduler.Queue.AddUnschedulable(item)
 			} else {

@@ -94,14 +94,14 @@ func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGr
 		s.Recorder.Eventf(pgs, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePGS", "Successfully created pods of %s/%s", pgs.Namespace, pgs.Name)
 	} else {
 		s.Recorder.Eventf(pgs, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePGS", "No suitable placement found for PodGroupSet %s (%s)", pgs.Name, pgs.Namespace)
-		return failedSchedulingError
+		return errFailedScheduling
 	}
 
 	log.Info("PodGroupSet processed", "duration", time.Since(startedAt))
 	return nil
 }
 
-func (s *Scheduler) getPodGroupSetPlacement(pgs *v1alpha1.PodGroupSet, nodes []corev1.Node, podPipeline lib.FilterWeigherPipeline[pods.PodPipelineRequest]) (map[string]string, float64, error) {
+func (s *Scheduler) getPodGroupSetPlacement(pgs *v1alpha1.PodGroupSet, nodes []corev1.Node, podPipeline lib.FilterWeigherPipeline[pods.PodPipelineRequest]) (targetPlacements map[string]string, placementWeight float64, err error) {
 	// TODO: the nodePool behavior mimics the cache which is not optimal.
 	// The problem is that we are currently iterating over the topology which would
 	// get modified if the cache changes
@@ -110,8 +110,8 @@ func (s *Scheduler) getPodGroupSetPlacement(pgs *v1alpha1.PodGroupSet, nodes []c
 		nodePool[i] = *node.DeepCopy()
 	}
 
-	targetPlacements := make(map[string]string)
-	placementWeight := 0.0
+	targetPlacements = make(map[string]string)
+	placementWeight = 0.0
 
 	for _, group := range pgs.Spec.PodGroups {
 		for i := range int(group.Spec.Replicas) {

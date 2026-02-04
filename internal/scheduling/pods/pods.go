@@ -36,7 +36,7 @@ func (s *Scheduler) schedulePod(ctx context.Context, pod *corev1.Pod) error {
 
 	if result.TargetHost == nil {
 		s.Recorder.Eventf(pod, nil, corev1.EventTypeWarning, "FailedScheduling", "SchedulePod", "0/%d nodes are available", len(nodes))
-		return failedSchedulingError
+		return errFailedScheduling
 	}
 
 	// Assume that the binding succeeds and mark resources as allocated

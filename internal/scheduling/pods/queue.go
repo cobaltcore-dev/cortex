@@ -256,15 +256,17 @@ func (q *PrioritySchedulingQueue) flushBackoffLocked() {
 	q.backoffQ = q.backoffQ[:n]
 }
 
+// TODO: the backoff behavior needs to be reconsidered
+// and should not be hard-coded
 func nextBackoff(prev time.Duration) time.Duration {
 	if prev == 0 {
 		return 1 * time.Second
 	}
 
 	next := prev * 2
-	max := 60 * time.Second
-	if next > max {
-		return max
+	max_backoff := 60 * time.Second
+	if next > max_backoff {
+		return max_backoff
 	}
 	return next
 }

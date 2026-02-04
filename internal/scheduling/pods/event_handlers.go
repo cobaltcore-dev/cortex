@@ -83,7 +83,7 @@ func (s *Scheduler) handleAddPod(obj interface{}) {
 		s.Cache.AddPod(pod)
 		return
 	}
-	if pod.ObjectMeta.OwnerReferences != nil {
+	if pod.OwnerReferences != nil {
 		// Skip pods that are managed by a larger entity, e.g. by a PodGroupSet
 		return
 	}

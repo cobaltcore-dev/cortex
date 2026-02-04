@@ -44,6 +44,7 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
 ) lib.PipelineInitResult[lib.FilterWeigherPipeline[pods.PodPipelineRequest]] {
+
 	return lib.InitNewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,
 		filters.Index, p.Spec.Filters,

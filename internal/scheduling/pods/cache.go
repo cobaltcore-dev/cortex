@@ -137,9 +137,8 @@ func (c *Cache) updateNodeAllocatable(nodeName string) {
 
 			if allocated, exists := c.nodeAllocated[nodeName]; exists {
 				helpers.SubtractResourcesInto(remaining, allocated)
-			} else {
-				// TODO: error case
 			}
+			// TODO: error case
 
 			c.Nodes[i].Status.Allocatable = remaining
 			break
