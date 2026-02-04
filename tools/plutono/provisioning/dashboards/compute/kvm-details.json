@@ -2423,7 +2423,7 @@
     },
     "timepicker": {},
     "timezone": "",
-    "title": "Cortex KVM Infrastructure - Compute",
-    "uid": "cortex-compute-kvm",
+    "title": "Cortex KVM Compute Infrastructure - Details",
+    "uid": "cortex-compute-kvm-details",
     "version": 1
 }
