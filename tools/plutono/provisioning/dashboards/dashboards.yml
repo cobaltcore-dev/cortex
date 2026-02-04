@@ -13,3 +13,13 @@ providers:
     allowUiUpdates: true
     options:
       path: /etc/plutono/provisioning/dashboards
+
+  - name: 'workload'
+    orgId: 1
+    folder: 'Workload'
+    type: file
+    disableDeletion: false
+    editable: true
+    allowUiUpdates: true
+    options:
+      path: /etc/plutono/provisioning/dashboards/workload
