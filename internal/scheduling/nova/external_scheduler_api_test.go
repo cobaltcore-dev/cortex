@@ -15,7 +15,6 @@ import (
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -32,8 +31,8 @@ func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, dec
 }
 
 func TestNewAPI(t *testing.T) {
-	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
+	config := HTTPAPIConfig{}
 
 	api := NewAPI(config, delegate)
 
@@ -46,10 +45,6 @@ func TestNewAPI(t *testing.T) {
 		t.Fatal("NewAPI did not return httpAPI type")
 	}
 
-	if httpAPI.config.SchedulingDomain != "test-operator" {
-		t.Errorf("Expected scheduling domain 'test-operator', got %s", httpAPI.config.SchedulingDomain)
-	}
-
 	if httpAPI.delegate != delegate {
 		t.Error("Delegate not set correctly")
 	}
@@ -60,8 +55,8 @@ func TestNewAPI(t *testing.T) {
 }
 
 func TestHTTPAPI_Init(t *testing.T) {
-	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
+	config := HTTPAPIConfig{}
 	api := NewAPI(config, delegate)
 
 	mux := http.NewServeMux()
@@ -79,8 +74,8 @@ func TestHTTPAPI_Init(t *testing.T) {
 }
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
-	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
+	config := HTTPAPIConfig{}
 	api := NewAPI(config, delegate).(*httpAPI)
 
 	tests := []struct {
@@ -271,7 +266,6 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := conf.Config{SchedulingDomain: "test-operator"}
 			delegate := &mockHTTPAPIDelegate{
 				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
 					if tt.processDecisionErr != nil {
@@ -285,6 +279,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				},
 			}
 
+			config := HTTPAPIConfig{}
 			api := NewAPI(config, delegate).(*httpAPI)
 
 			var body *strings.Reader
@@ -324,8 +319,6 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 }
 
 func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
-	config := conf.Config{SchedulingDomain: v1alpha1.SchedulingDomainNova}
-
 	var capturedDecision *v1alpha1.Decision
 	delegate := &mockHTTPAPIDelegate{
 		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
@@ -338,6 +331,7 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 		},
 	}
 
+	config := HTTPAPIConfig{}
 	api := NewAPI(config, delegate).(*httpAPI)
 
 	requestData := novaapi.ExternalSchedulerRequest{
@@ -395,8 +389,10 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 }
 
 func TestHTTPAPI_inferPipelineName(t *testing.T) {
-	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
+	config := HTTPAPIConfig{
+		ExperimentalProjectIDs: []string{"my-experimental-project-id"},
+	}
 	api := NewAPI(config, delegate).(*httpAPI)
 
 	tests := []struct {
@@ -406,6 +402,26 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 		expectErr      bool
 		errContains    string
 	}{
+		{
+			name: "experimental project ID requesting kvm vm",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						ProjectID: "my-experimental-project-id",
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "qemu",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "nova-external-scheduler-kvm-all-filters-enabled",
+			expectErr:      false,
+		},
 		{
 			name: "qemu hypervisor without reservation",
 			requestData: novaapi.ExternalSchedulerRequest{

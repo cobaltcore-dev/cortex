@@ -298,7 +298,8 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		nova.NewAPI(config, decisionController).Init(mux)
+		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
+		nova.NewAPI(httpAPIConf, decisionController).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller

@@ -96,6 +96,8 @@ cortex-scheduling-controllers:
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-scheduling
+    # OpenStack projects that use experimental features.
+    experimentalProjectIDs: []
     monitoring:
       labels:
         <<: *cortexMonitoringLabels

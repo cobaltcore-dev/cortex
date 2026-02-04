@@ -5,13 +5,13 @@ apiVersion: v2
 name: cortex-crds
 description: A Helm chart deploying Cortex CRDs.
 type: application
-version: 0.0.25
+version: 0.0.26
 appVersion: 0.1.0
 dependencies:
   # from: file://../../library/cortex
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.12
+    version: 0.0.13
 
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
