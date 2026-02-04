@@ -6,6 +6,7 @@ package nova
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -23,6 +24,28 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
+
+// mockCandidateGatherer implements CandidateGatherer for testing
+type mockCandidateGatherer struct {
+	called        bool
+	err           error
+	gatheredHosts []api.ExternalSchedulerHost
+}
+
+func (m *mockCandidateGatherer) MutateWithAllCandidates(ctx context.Context, request *api.ExternalSchedulerRequest) error {
+	m.called = true
+	if m.err != nil {
+		return m.err
+	}
+	if m.gatheredHosts != nil {
+		request.Hosts = m.gatheredHosts
+		request.Weights = make(map[string]float64)
+		for _, host := range m.gatheredHosts {
+			request.Weights[host.ComputeHost] = 0.0
+		}
+	}
+	return nil
+}
 
 func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -197,8 +220,9 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 
 			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
-					Client:    client,
-					Pipelines: make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					Client:          client,
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 				Conf: conf.Config{
@@ -217,6 +241,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to initialize pipeline: filter errors: %v, weigher errors: %v", initResult.FilterErrors, initResult.WeigherErrors)
 				}
 				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
+				controller.PipelineConfigs[tt.pipeline.Name] = *tt.pipeline
 			}
 
 			req := ctrl.Request{
@@ -734,3 +759,187 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 		})
 	}
 }
+
+func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
+
+	// Create a request with initial hosts
+	novaRequest := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Name:      "RequestSpec",
+			Namespace: "nova_object",
+			Version:   "1.19",
+			Data: api.NovaSpec{
+				ProjectID:    "test-project",
+				UserID:       "test-user",
+				InstanceUUID: "test-instance-uuid",
+				NumInstances: 1,
+			},
+		},
+		Context: api.NovaRequestContext{
+			ProjectID:       "test-project",
+			UserID:          "test-user",
+			RequestID:       "req-123",
+			GlobalRequestID: func() *string { s := "global-req-123"; return &s }(),
+		},
+		Hosts: []api.ExternalSchedulerHost{
+			{ComputeHost: "original-host-1", HypervisorHostname: "hv-1"},
+			{ComputeHost: "original-host-2", HypervisorHostname: "hv-2"},
+		},
+		Weights:  map[string]float64{"original-host-1": 1.0, "original-host-2": 0.5},
+		Pipeline: "test-pipeline",
+	}
+
+	novaRaw, err := json.Marshal(novaRequest)
+	if err != nil {
+		t.Fatalf("Failed to marshal nova request: %v", err)
+	}
+
+	tests := []struct {
+		name               string
+		ignorePreselection bool
+		gathererErr        error
+		gatheredHosts      []api.ExternalSchedulerHost
+		expectGathererCall bool
+		expectError        bool
+		errorContains      string
+	}{
+		{
+			name:               "IgnorePreselection disabled - gatherer not called",
+			ignorePreselection: false,
+			gathererErr:        nil,
+			gatheredHosts:      nil,
+			expectGathererCall: false,
+			expectError:        false,
+		},
+		{
+			name:               "IgnorePreselection enabled - gatherer called and succeeds",
+			ignorePreselection: true,
+			gathererErr:        nil,
+			gatheredHosts: []api.ExternalSchedulerHost{
+				{ComputeHost: "gathered-host-1", HypervisorHostname: "gathered-host-1"},
+				{ComputeHost: "gathered-host-2", HypervisorHostname: "gathered-host-2"},
+				{ComputeHost: "gathered-host-3", HypervisorHostname: "gathered-host-3"},
+			},
+			expectGathererCall: true,
+			expectError:        false,
+		},
+		{
+			name:               "IgnorePreselection enabled - gatherer returns error",
+			ignorePreselection: true,
+			gathererErr:        errGathererFailed,
+			gatheredHosts:      nil,
+			expectGathererCall: true,
+			expectError:        true,
+			errorContains:      "gatherer failed",
+		},
+		{
+			name:               "IgnorePreselection enabled - gatherer returns empty hosts",
+			ignorePreselection: true,
+			gathererErr:        nil,
+			gatheredHosts:      []api.ExternalSchedulerHost{},
+			expectGathererCall: true,
+			expectError:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockGatherer := &mockCandidateGatherer{
+				err:           tt.gathererErr,
+				gatheredHosts: tt.gatheredHosts,
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&v1alpha1.Decision{}).
+				Build()
+
+			controller := &FilterWeigherPipelineController{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+					Client:          fakeClient,
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+				},
+				Monitor:  lib.FilterWeigherPipelineMonitor{},
+				gatherer: mockGatherer,
+				Conf: conf.Config{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+			}
+
+			// Setup pipeline config with IgnorePreselection flag
+			pipelineConf := v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:               v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain:   v1alpha1.SchedulingDomainNova,
+					CreateDecisions:    false,
+					IgnorePreselection: tt.ignorePreselection,
+					Filters:            []v1alpha1.FilterSpec{},
+					Weighers:           []v1alpha1.WeigherSpec{},
+				},
+			}
+			controller.PipelineConfigs["test-pipeline"] = pipelineConf
+
+			// Initialize the pipeline
+			initResult := controller.InitPipeline(context.Background(), pipelineConf)
+			if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
+				t.Fatalf("Failed to initialize pipeline: filter errors: %v, weigher errors: %v", initResult.FilterErrors, initResult.WeigherErrors)
+			}
+			controller.Pipelines["test-pipeline"] = initResult.Pipeline
+
+			// Create decision
+			decision := &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decision-preselection",
+					Namespace: "default",
+				},
+				Spec: v1alpha1.DecisionSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					PipelineRef: corev1.ObjectReference{
+						Name: "test-pipeline",
+					},
+					NovaRaw: &runtime.RawExtension{
+						Raw: novaRaw,
+					},
+				},
+			}
+
+			// Process the decision
+			err := controller.ProcessNewDecisionFromAPI(context.Background(), decision)
+
+			// Verify gatherer was called (or not) as expected
+			if tt.expectGathererCall && !mockGatherer.called {
+				t.Error("Expected gatherer to be called but it was not")
+			}
+			if !tt.expectGathererCall && mockGatherer.called {
+				t.Error("Expected gatherer not to be called but it was")
+			}
+
+			// Verify error expectations
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+			if tt.errorContains != "" && (err == nil || !strings.Contains(err.Error(), tt.errorContains)) {
+				t.Errorf("Expected error to contain %q, got: %v", tt.errorContains, err)
+			}
+
+			// Verify result is set when no error
+			if !tt.expectError && decision.Status.Result == nil {
+				t.Error("Expected result to be set but was nil")
+			}
+		})
+	}
+}
+
+// Error variable for testing
+var errGathererFailed = errors.New("gatherer failed")
