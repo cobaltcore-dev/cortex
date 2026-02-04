@@ -1739,7 +1739,7 @@
         ]
       },
       "gridPos": {
-        "h": 28,
+        "h": 16,
         "w": 24,
         "x": 0,
         "y": 25
@@ -1999,7 +1999,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 41
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2014,7 +2014,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (compute_host) (\n  cortex_vmware_host_capacity_available{\n    resource=\"cpu\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n        workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\"\n  }\n) \n/\nmax by (compute_host) (\n  cortex_vmware_host_capacity_total{\n    resource=\"cpu\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n        workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\"\n  }\n) * 100",
+          "expr": "max by (compute_host) (\n  cortex_vmware_host_capacity_available{\n    resource=\"cpu\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n    workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\",\n    decommissioned=~\"$decommissioned\",\n    external_customer=~\"$external_customer\",\n    pinned_projects=~\"$pinned_projects\"\n  }\n) \n/\nmax by (compute_host) (\n  cortex_vmware_host_capacity_total{\n    resource=\"cpu\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n    workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\",\n    decommissioned=~\"$decommissioned\",\n    external_customer=~\"$external_customer\",\n    pinned_projects=~\"$pinned_projects\"\n  }\n) * 100",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -2071,7 +2071,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 64
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2086,7 +2086,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (compute_host) (\n  cortex_vmware_host_capacity_available{\n    resource=\"ram\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n        workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\"\n  }\n) \n/\nmax by (compute_host) (\n  cortex_vmware_host_capacity_total{\n    resource=\"ram\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n        workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\"\n  }\n) * 100",
+          "expr": "max by (compute_host) (\n  cortex_vmware_host_capacity_available{\n    resource=\"ram\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n    workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\",\n    decommissioned=~\"$decommissioned\",\n    external_customer=~\"$external_customer\",\n    pinned_projects=~\"$pinned_projects\"\n  }\n) \n/\nmax by (compute_host) (\n  cortex_vmware_host_capacity_total{\n    resource=\"ram\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n    workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\",\n    decommissioned=~\"$decommissioned\",\n    external_customer=~\"$external_customer\",\n    pinned_projects=~\"$pinned_projects\"\n  }\n) * 100",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
@@ -2143,7 +2143,7 @@
         "h": 23,
         "w": 24,
         "x": 0,
-        "y": 99
+        "y": 87
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -2158,7 +2158,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "max by (compute_host) (\n  cortex_vmware_host_capacity_available{\n    resource=\"disk\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n        workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\"\n  }\n) \n/\nmax by (compute_host) (\n  cortex_vmware_host_capacity_total{\n    resource=\"disk\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n        workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\"\n  }\n) * 100",
+          "expr": "max by (compute_host) (\n  cortex_vmware_host_capacity_available{\n    resource=\"disk\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n        workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\",\n    decommissioned=~\"$decommissioned\",\n    external_customer=~\"$external_customer\",\n    pinned_projects=~\"$pinned_projects\"\n  }\n) \n/\nmax by (compute_host) (\n  cortex_vmware_host_capacity_total{\n    resource=\"disk\",\n    availability_zone=~\"$availability_zone\",\n    compute_host=~\"$compute_host\",\n    workload_type=~\"$workload_type\",\n    cpu_architecture=~\"$cpu_architecture\",\n    pinned_project_ids=~\"(^$|.*$project_id.*)\",\n    enabled=~\"$enabled\",\n    decommissioned=~\"$decommissioned\",\n    external_customer=~\"$external_customer\",\n    pinned_projects=~\"$pinned_projects\"\n  }\n) * 100",
           "interval": "",
           "legendFormat": "{{compute_host}}",
           "queryType": "randomWalk",
