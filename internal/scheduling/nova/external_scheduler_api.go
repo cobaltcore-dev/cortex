@@ -12,11 +12,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +25,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
+
+// Custom configuration for the Nova external scheduler api.
+type HTTPAPIConfig struct {
+	// OpenStack projects that use experimental features.
+	ExperimentalProjectIDs []string `json:"experimentalProjectIDs,omitempty"`
+}
 
 type HTTPAPIDelegate interface {
 	// Process the decision from the API. Should create and return the updated decision.
@@ -37,12 +43,12 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	config   conf.Config
+	config   HTTPAPIConfig
 	monitor  scheduling.APIMonitor
 	delegate HTTPAPIDelegate
 }
 
-func NewAPI(config conf.Config, delegate HTTPAPIDelegate) HTTPAPI {
+func NewAPI(config HTTPAPIConfig, delegate HTTPAPIDelegate) HTTPAPI {
 	return &httpAPI{
 		config:   config,
 		monitor:  scheduling.NewSchedulerMonitor(),
@@ -88,11 +94,19 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	}
 	switch strings.ToLower(hvType) {
 	case "qemu", "ch":
-		if requestData.Reservation {
-			return "nova-external-scheduler-kvm-all-filters-enabled", nil
-		} else {
-			return "nova-external-scheduler-kvm", nil
+		enableAllFilters := false
+		// If the nova request matches a configurable openstack project,
+		// use a different pipeline that has all filters enabled.
+		if slices.Contains(httpAPI.config.ExperimentalProjectIDs, requestData.Spec.Data.ProjectID) {
+			enableAllFilters = true
 		}
+		if requestData.Reservation {
+			enableAllFilters = true
+		}
+		if enableAllFilters {
+			return "nova-external-scheduler-kvm-all-filters-enabled", nil
+		}
+		return "nova-external-scheduler-kvm", nil
 	case "vmware vcenter server":
 		if requestData.Reservation {
 			return "", errors.New("reservations are not supported on vmware hypervisors")
