@@ -8,5 +8,5 @@ Set your `OS_*` environment variables to the desired values. You should scope to
 
 Then run:
 ```bash
-go run commands/spawner/main.go
+go run tools/spawner/main.go
 ```
