@@ -14,12 +14,12 @@ providers:
     options:
       path: /etc/plutono/provisioning/dashboards
 
-  - name: 'workload'
+  - name: 'compute'
     orgId: 1
-    folder: 'Workload'
+    folder: 'Compute'
     type: file
     disableDeletion: false
     editable: true
     allowUiUpdates: true
     options:
-      path: /etc/plutono/provisioning/dashboards/workload
+      path: /etc/plutono/provisioning/dashboards/compute
