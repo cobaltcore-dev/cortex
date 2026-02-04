@@ -6,7 +6,7 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 .PHONY: all
-all: lint test crds deepcopy
+all: crds deepcopy lint test
 
 .PHONY: help
 help: ## Display this help.
