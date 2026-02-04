@@ -84,6 +84,12 @@ type PipelineSpec struct {
 	// +kubebuilder:default=false
 	CreateDecisions bool `json:"createDecisions,omitempty"`
 
+	// If this pipeline should ignore host preselection and gather all
+	// available placement candidates before applying filters, instead of
+	// relying on a pre-filtered set and weights.
+	// +kubebuilder:default=false
+	IgnorePreselection bool `json:"ignorePreselection,omitempty"`
+
 	// The type of the pipeline, used to differentiate between
 	// filter-weigher and detector pipelines within the same
 	// scheduling domain.

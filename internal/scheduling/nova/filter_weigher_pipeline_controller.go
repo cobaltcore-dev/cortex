@@ -47,6 +47,8 @@ type FilterWeigherPipelineController struct {
 	Monitor lib.FilterWeigherPipelineMonitor
 	// Config for the scheduling operator.
 	Conf conf.Config
+	// Candidate gatherer to get all placement candidates if needed.
+	gatherer CandidateGatherer
 }
 
 // The type of pipeline this controller manages.
@@ -133,6 +135,22 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return err
 	}
 
+	// If necessary gather all placement candidates before filtering.
+	// This will override the hosts and weights in the nova request.
+	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
+	if !ok {
+		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
+		return errors.New("pipeline config not found")
+	}
+	if pipelineConf.Spec.IgnorePreselection {
+		log.Info("gathering all placement candidates before filtering")
+		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
+			log.Error(err, "failed to gather all placement candidates")
+			return err
+		}
+		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
+	}
+
 	result, err := pipeline.Run(request)
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
@@ -166,6 +184,7 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
+	c.gatherer = &candidateGatherer{Client: mgr.GetClient()}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

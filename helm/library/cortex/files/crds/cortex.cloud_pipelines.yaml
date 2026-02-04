@@ -121,6 +121,13 @@ spec:
                   - name
                   type: object
                 type: array
+              ignorePreselection:
+                default: false
+                description: |-
+                  If this pipeline should ignore host preselection and gather all
+                  available placement candidates before applying filters, instead of
+                  relying on a pre-filtered set and weights.
+                type: boolean
               schedulingDomain:
                 description: |-
                   SchedulingDomain defines in which scheduling domain this pipeline
