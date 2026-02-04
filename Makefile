@@ -6,7 +6,7 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 .PHONY: all
-all: crds deepcopy lint test
+all: crds generate lint test
 
 .PHONY: help
 help: ## Display this help.
