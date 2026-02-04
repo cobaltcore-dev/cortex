@@ -6,13 +6,9 @@ set -o pipefail
 
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 
-CODEGEN_PKG=$(go list -f '{{.Dir}}' -m k8s.io/code-generator)
-if [[ -z "${CODEGEN_PKG}" ]]; then
-  echo "Failed to get k8s.io/code-generator path"
-  exit 1
-fi
 
-source "${CODEGEN_PKG}/kube_codegen.sh"
+
+source "${SCRIPT_ROOT}/hack/kube_codegen.sh"
 
 THIS_PKG="github.com/cobaltcore-dev/cortex"
 

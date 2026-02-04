@@ -24,7 +24,29 @@ type PodGroupSetSpec struct {
 	PodGroups []PodGroup `json:"podGroups"`
 }
 
+type PodGroupSetPhase string
+
+const (
+	PodGroupSetPhasePending PodGroupSetPhase = "Pending"
+	// PodGroupSetPhaseScheduled means placements have been calculated for all pods
+	PodGroupSetPhaseScheduled PodGroupSetPhase = "Scheduled"
+	// PodGroupSetPhaseRunning means all pods have been created and are running
+	PodGroupSetPhaseRunning PodGroupSetPhase = "Running"
+	PodGroupSetPhaseFailed  PodGroupSetPhase = "Failed"
+)
+
+type PodPlacement struct {
+	PodName  string `json:"podName"`
+	NodeName string `json:"nodeName"`
+}
+
 type PodGroupSetStatus struct {
+	// +kubebuilder:validation:Optional
+	Phase PodGroupSetPhase `json:"phase,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	Placements []PodPlacement `json:"placements,omitempty"`
+
 	// The current status conditions of the pod group set.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`

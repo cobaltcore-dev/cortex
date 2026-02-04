@@ -48,6 +48,7 @@ func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGr
 				}
 			}
 			if !canFit {
+				s.Logger.Info("no topology fit", "node", topologyNode.Name)
 				continue
 			}
 
@@ -66,6 +67,7 @@ func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGr
 			}
 
 			if len(placements) == 0 {
+				s.Logger.Info("no pipeline placement fit", "node", topologyNode.Name)
 				continue
 			}
 
@@ -80,9 +82,16 @@ func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGr
 	}
 
 	if len(bestPlacements) > 0 {
+		// Update PodGroupSet status with placements
+		if err := s.updatePodGroupSetStatus(ctx, pgs, bestPlacements); err != nil {
+			log.Error(err, "failed to update PodGroupSet status", "PodGroupSet", pgs.Name)
+			// Don't return error here as pods are already created successfully
+		}
+
 		if err := s.createPods(ctx, pgs, bestPlacements); err != nil {
 			return err
 		}
+
 		s.Recorder.Eventf(pgs, nil, corev1.EventTypeNormal, "Scheduled", "SchedulePGS", "Successfully created pods of %s/%s", pgs.Namespace, pgs.Name)
 	} else {
 		log.Info("no suitable placement found", "PodGroupSet", pgs.Name)
@@ -203,4 +212,24 @@ func (s *Scheduler) createPods(ctx context.Context, pgs *v1alpha1.PodGroupSet, p
 		}
 	}
 	return nil
+}
+
+func (s *Scheduler) updatePodGroupSetStatus(ctx context.Context, pgs *v1alpha1.PodGroupSet, placements map[string]string) error {
+	// Create a copy of the PodGroupSet to modify its status
+	pgsCopy := pgs.DeepCopy()
+
+	// Set the phase to Scheduled
+	pgsCopy.Status.Phase = v1alpha1.PodGroupSetPhaseScheduled
+
+	// Convert placements map to PodPlacement slice
+	pgsCopy.Status.Placements = make([]v1alpha1.PodPlacement, 0, len(placements))
+	for podName, nodeName := range placements {
+		pgsCopy.Status.Placements = append(pgsCopy.Status.Placements, v1alpha1.PodPlacement{
+			PodName:  podName,
+			NodeName: nodeName,
+		})
+	}
+
+	// Update the status subresource
+	return s.Client.Status().Update(ctx, pgsCopy)
 }

@@ -6,17 +6,20 @@ package pods
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/pkg/generated/informers/externalversions"
 	podgroupsetlisters "github.com/cobaltcore-dev/cortex/pkg/generated/listers/api/v1alpha1"
 	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var failedSchedulingError error = errors.New("FailedScheduling")
@@ -65,11 +68,15 @@ func (scheduler *Scheduler) Run(ctx context.Context) {
 }
 
 func (scheduler *Scheduler) ScheduleOne(ctx context.Context) {
+	logger := log.FromContext(ctx)
+	logger.Info("calling Queue.Get")
 	item, shutdown := scheduler.Queue.Get()
 	if shutdown {
+		fmt.Println("schedule one shutdown")
 		return
 	}
-	defer scheduler.Queue.Done(item)
+
+	logger.Info("schedule one", "item", item.Key())
 
 	// Parse namespace and name from the item key (format: "namespace/name")
 	key := item.Key()
@@ -84,9 +91,17 @@ func (scheduler *Scheduler) ScheduleOne(ctx context.Context) {
 	case KindPod:
 		pod, err := scheduler.PodLister.Pods(namespace).Get(name)
 		if err != nil {
-			scheduler.Logger.Error(err, "failed to get pod from lister", "namespace", namespace, "name", name)
-			scheduler.Queue.AddBackoff(item)
-			return
+			if apierrors.IsNotFound(err) {
+				// Pod was deleted - stop scheduling it
+				scheduler.Logger.Info("pod not found, assuming deleted", "namespace", namespace, "name", name)
+				scheduler.Queue.Done(item)
+				return
+			} else {
+				// Other error (informer not synced, temporary failure, etc.)
+				scheduler.Logger.Error(err, "temporary error getting pod from lister", "namespace", namespace, "name", name)
+				scheduler.Queue.AddBackoff(item)
+				return
+			}
 		}
 
 		if err := scheduler.schedulePod(ctx, pod); err != nil {
@@ -96,25 +111,41 @@ func (scheduler *Scheduler) ScheduleOne(ctx context.Context) {
 			} else {
 				scheduler.Queue.AddBackoff(item)
 			}
+		} else {
+			// Only call Done() on successful scheduling
+			scheduler.Queue.Done(item)
 		}
 
 	case KindPodGroupSet:
 		// Get the PodGroupSet object using the generated lister
 		pgs, err := scheduler.PodGroupSetLister.PodGroupSets(namespace).Get(name)
 		if err != nil {
-			scheduler.Logger.Error(err, "failed to get podgroupset from lister", "namespace", namespace, "name", name)
-			scheduler.Queue.AddBackoff(item)
-			return
+			if apierrors.IsNotFound(err) {
+				// PodGroupSet was deleted - stop scheduling it
+				scheduler.Logger.Info("podgroupset not found, assuming deleted", "namespace", namespace, "name", name)
+				scheduler.Queue.Done(item)
+				return
+			} else {
+				// Other error (informer not synced, temporary failure, etc.)
+				scheduler.Logger.Error(err, "temporary error getting podgroupset from lister", "namespace", namespace, "name", name)
+				scheduler.Queue.AddBackoff(item)
+				return
+			}
 		}
 
 		// Call schedulePodGroupSet with the actual PodGroupSet object
 		if err := scheduler.schedulePodGroupSet(ctx, pgs); err != nil {
 			scheduler.Logger.Error(err, "failed to schedule podgroupset", "podgroupset", pgs.Name, "namespace", pgs.Namespace)
 			if errors.Is(err, failedSchedulingError) {
+				scheduler.Logger.Info("failed scheduling add to unschedulable")
 				scheduler.Queue.AddUnschedulable(item)
 			} else {
+				scheduler.Logger.Info("failed scheduling add to backoff")
 				scheduler.Queue.AddBackoff(item)
 			}
+		} else {
+			// Only call Done() on successful scheduling
+			scheduler.Queue.Done(item)
 		}
 
 	default:

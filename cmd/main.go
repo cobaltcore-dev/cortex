@@ -402,7 +402,9 @@ func main() {
 		}
 
 		informerFactory.Start(ctx.Done())
+		customInformerFactory.Start(ctx.Done())
 		informerFactory.WaitForCacheSync(ctx.Done())
+		customInformerFactory.WaitForCacheSync(ctx.Done())
 		if err := scheduler.WaitForHandlersSync(ctx); err != nil {
 			setupLog.Error(err, "could not sync all event handlers")
 		}

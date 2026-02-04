@@ -8677,6 +8677,20 @@ spec:
                   - type
                   type: object
                 type: array
+              phase:
+                type: string
+              placements:
+                items:
+                  properties:
+                    nodeName:
+                      type: string
+                    podName:
+                      type: string
+                  required:
+                  - nodeName
+                  - podName
+                  type: object
+                type: array
             type: object
         type: object
     served: true

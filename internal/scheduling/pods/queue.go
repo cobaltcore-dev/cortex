@@ -29,13 +29,16 @@ type SchedulingItem interface {
 	Key() string
 	Kind() ItemKind
 	String() string
+	// GetSize returns the size for priority calculation:
+	// - For PodGroupSets: number of pods in the group
+	// - For Pods: returns 1 (used as secondary criteria after enqueue time)
+	GetSize() int
 }
 
 type queueItem struct {
 	item SchedulingItem
 
-	priority int
-	index    int
+	index int
 
 	enqueueTime time.Time
 
@@ -48,8 +51,40 @@ type priorityHeap []*queueItem
 func (h priorityHeap) Len() int { return len(h) }
 
 func (h priorityHeap) Less(i, j int) bool {
-	// Higher priority values first
-	return h[i].priority > h[j].priority
+	// Priority ordering:
+	// 1. PodGroupSets before Pods
+	// 2. For PodGroupSets: larger pod count first
+	// 3. For Pods: earlier enqueue time first (FIFO)
+	// 4. For same type with same priority: earlier enqueue time first
+
+	itemI, itemJ := h[i].item, h[j].item
+	kindI, kindJ := itemI.Kind(), itemJ.Kind()
+
+	// PodGroupSets always come before Pods
+	if kindI == KindPodGroupSet && kindJ == KindPod {
+		return true
+	}
+	if kindI == KindPod && kindJ == KindPodGroupSet {
+		return false
+	}
+
+	// Both are PodGroupSets - order by pod count (larger first)
+	if kindI == KindPodGroupSet && kindJ == KindPodGroupSet {
+		sizeI, sizeJ := itemI.GetSize(), itemJ.GetSize()
+		if sizeI != sizeJ {
+			return sizeI > sizeJ // Larger PodGroupSets first
+		}
+		// Same size - use enqueue time (earlier first)
+		return h[i].enqueueTime.Before(h[j].enqueueTime)
+	}
+
+	// Both are Pods - order by enqueue time (earlier first)
+	if kindI == KindPod && kindJ == KindPod {
+		return h[i].enqueueTime.Before(h[j].enqueueTime)
+	}
+
+	// Fallback - should not reach here
+	return h[i].enqueueTime.Before(h[j].enqueueTime)
 }
 
 func (h priorityHeap) Swap(i, j int) {
@@ -100,6 +135,10 @@ func NewPrioritySchedulingQueue() *PrioritySchedulingQueue {
 	}
 	q.cond = sync.NewCond(&q.lock)
 	heap.Init(&q.activeQ)
+
+	// Start background goroutine to periodically flush backoff queue
+	go q.flushBackoffPeriodically()
+
 	return q
 }
 
@@ -117,10 +156,7 @@ func (q *PrioritySchedulingQueue) Add(item SchedulingItem) {
 	}
 
 	qi := &queueItem{
-		item: item,
-		// TODO: implement LGFS (largest gang served first)
-		// for pods maybe do largest resource request first, weighted similarly to binpack weigher
-		priority:    0, // placeholder
+		item:        item,
 		enqueueTime: time.Now(),
 	}
 
@@ -150,8 +186,11 @@ func (q *PrioritySchedulingQueue) Get() (SchedulingItem, bool) {
 }
 
 func (q *PrioritySchedulingQueue) Done(item SchedulingItem) {
-	// Currently no-op.
-	// Hook for metrics, tracing, or future state tracking.
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	key := item.Key()
+	delete(q.items, key)
 }
 
 func (q *PrioritySchedulingQueue) AddUnschedulable(item SchedulingItem) {
@@ -238,6 +277,34 @@ func nextBackoff(prev time.Duration) time.Duration {
 	return next
 }
 
+// flushBackoffPeriodically runs in a background goroutine to periodically
+// move items from backoff queue to active queue when they're ready
+func (q *PrioritySchedulingQueue) flushBackoffPeriodically() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			q.lock.Lock()
+			if q.shuttingDown {
+				q.lock.Unlock()
+				return
+			}
+
+			before := len(q.backoffQ)
+			q.flushBackoffLocked()
+			after := len(q.backoffQ)
+
+			// Signal waiters if we moved items to active queue
+			if before > after && q.activeQ.Len() > 0 {
+				q.cond.Signal()
+			}
+			q.lock.Unlock()
+		}
+	}
+}
+
 // TODO: these definitions are duplicates apart from `Kind()`
 
 // PodSchedulingItem implements SchedulingItem
@@ -258,10 +325,15 @@ func (p *PodSchedulingItem) String() string {
 	return "Pod(" + p.Key() + ")"
 }
 
+func (p *PodSchedulingItem) GetSize() int {
+	return 1 // Pods have size 1 for priority calculation
+}
+
 // PodGroupSetSchedulingItem implements SchedulingItem
 type PodGroupSetSchedulingItem struct {
 	Namespace string
 	Name      string
+	PodCount  int // Number of pods in this PodGroupSet
 }
 
 func (pgs *PodGroupSetSchedulingItem) Key() string {
@@ -274,4 +346,8 @@ func (pgs *PodGroupSetSchedulingItem) Kind() ItemKind {
 
 func (pgs *PodGroupSetSchedulingItem) String() string {
 	return "PodGroupSet(" + pgs.Key() + ")"
+}
+
+func (pgs *PodGroupSetSchedulingItem) GetSize() int {
+	return pgs.PodCount
 }
