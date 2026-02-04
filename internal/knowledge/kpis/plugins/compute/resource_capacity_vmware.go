@@ -46,8 +46,9 @@ func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts c
 			"enabled",
 			"decommissioned",
 			"external_customer",
-			"disabled_reason",
 			"pinned_projects",
+			"disabled_reason",
+			"pinned_project_ids",
 		},
 		nil,
 	)
@@ -64,6 +65,7 @@ func (k *VMwareResourceCapacityKPI) Init(db *db.DB, client client.Client, opts c
 			"decommissioned",
 			"external_customer",
 			"pinned_projects",
+			"pinned_project_ids",
 		},
 		nil,
 	)
@@ -152,9 +154,11 @@ func (k *VMwareResourceCapacityKPI) exportCapacityMetricVMware(ch chan<- prometh
 	enabled := strconv.FormatBool(host.Enabled)
 	decommissioned := strconv.FormatBool(host.Decommissioned)
 	externalCustomer := strconv.FormatBool(host.ExternalCustomer)
-	pinnedProjects := ""
+	pinnedProjectIds := ""
+	pinnedProjects := "false"
 	if host.PinnedProjects != nil {
-		pinnedProjects = *host.PinnedProjects
+		pinnedProjectIds = *host.PinnedProjects
+		pinnedProjects = "true"
 	}
 
 	disabledReason := "-"
@@ -174,8 +178,9 @@ func (k *VMwareResourceCapacityKPI) exportCapacityMetricVMware(ch chan<- prometh
 		enabled,
 		decommissioned,
 		externalCustomer,
-		disabledReason,
 		pinnedProjects,
+		disabledReason,
+		pinnedProjectIds,
 	)
 
 	ch <- prometheus.MustNewConstMetric(
@@ -191,5 +196,6 @@ func (k *VMwareResourceCapacityKPI) exportCapacityMetricVMware(ch chan<- prometh
 		decommissioned,
 		externalCustomer,
 		pinnedProjects,
+		pinnedProjectIds,
 	)
 }

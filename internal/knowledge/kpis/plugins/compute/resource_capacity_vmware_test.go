@@ -166,6 +166,7 @@ func TestVMwareResourceCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 		WorkloadType     string
 		DisabledReason   string
 		PinnedProjects   string
+		PinnedProjectIds string
 		Value            float64
 	}
 
@@ -203,6 +204,7 @@ func TestVMwareResourceCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			WorkloadType:     labels["workload_type"],
 			DisabledReason:   labels["disabled_reason"],
 			PinnedProjects:   labels["pinned_projects"],
+			PinnedProjectIds: labels["pinned_project_ids"],
 			Value:            m.GetGauge().GetValue(),
 		}
 	}
@@ -218,7 +220,8 @@ func TestVMwareResourceCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			DisabledReason:   "-",
-			PinnedProjects:   "",
+			PinnedProjects:   "false",
+			PinnedProjectIds: "",
 			Value:            60, // 100 - 40
 		},
 		"vmware-host-ram": {
@@ -231,7 +234,8 @@ func TestVMwareResourceCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			DisabledReason:   "-",
-			PinnedProjects:   "",
+			PinnedProjects:   "false",
+			PinnedProjectIds: "",
 			Value:            160, // 200 - 40
 		},
 		"vmware-host-disk": {
@@ -244,7 +248,8 @@ func TestVMwareResourceCapacityKPI_Collect_AbsoluteMetric(t *testing.T) {
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
 			DisabledReason:   "-",
-			PinnedProjects:   "",
+			PinnedProjects:   "false",
+			PinnedProjectIds: "",
 			Value:            260, // 300 - 40
 		},
 	}
@@ -284,7 +289,7 @@ func TestVMwareResourceCapacityKPI_Collect_TotalMetric(t *testing.T) {
 			Decommissioned:   true,
 			ExternalCustomer: true,
 			DisabledReason:   nil,
-			PinnedProjects:   nil,
+			PinnedProjects:   testlib.Ptr("project1,project2"),
 		},
 		// Skip this because it's not a VMware host
 		&compute.HostDetails{
@@ -396,6 +401,7 @@ func TestVMwareResourceCapacityKPI_Collect_TotalMetric(t *testing.T) {
 		CPUArchitecture  string
 		WorkloadType     string
 		PinnedProjects   string
+		PinnedProjectIds string
 		Value            float64
 	}
 
@@ -432,6 +438,7 @@ func TestVMwareResourceCapacityKPI_Collect_TotalMetric(t *testing.T) {
 			CPUArchitecture:  labels["cpu_architecture"],
 			WorkloadType:     labels["workload_type"],
 			PinnedProjects:   labels["pinned_projects"],
+			PinnedProjectIds: labels["pinned_project_ids"],
 			Value:            m.GetGauge().GetValue(),
 		}
 	}
@@ -446,7 +453,8 @@ func TestVMwareResourceCapacityKPI_Collect_TotalMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			PinnedProjects:   "",
+			PinnedProjects:   "true",
+			PinnedProjectIds: "project1,project2",
 			Value:            100,
 		},
 		"vmware-host-ram": {
@@ -458,7 +466,8 @@ func TestVMwareResourceCapacityKPI_Collect_TotalMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			PinnedProjects:   "",
+			PinnedProjects:   "true",
+			PinnedProjectIds: "project1,project2",
 			Value:            200,
 		},
 		"vmware-host-disk": {
@@ -470,7 +479,8 @@ func TestVMwareResourceCapacityKPI_Collect_TotalMetric(t *testing.T) {
 			ExternalCustomer: "true",
 			CPUArchitecture:  "cascade-lake",
 			WorkloadType:     "general-purpose",
-			PinnedProjects:   "",
+			PinnedProjects:   "true",
+			PinnedProjectIds: "project1,project2",
 			Value:            300,
 		},
 	}
