@@ -5,13 +5,13 @@ apiVersion: v2
 name: cortex-ironcore
 description: A Helm chart deploying Cortex for IronCore.
 type: application
-version: 0.0.26
+version: 0.0.27
 appVersion: 0.1.0
 dependencies:
   # from: file://../../library/cortex
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.13
+    version: 0.0.14
 
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
