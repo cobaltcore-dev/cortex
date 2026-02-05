@@ -65,6 +65,21 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, gvks ...sch
 	return cl, nil
 }
 
+// Get the gvk registered for the given resource in the home cluster's RESTMapper.
+func (c *Client) GVKFromHomeScheme(obj runtime.Object) (gvk schema.GroupVersionKind, err error) {
+	gvks, unversioned, err := c.HomeScheme.ObjectKinds(obj)
+	if err != nil {
+		return gvk, err
+	}
+	if unversioned {
+		return gvk, errors.New("cannot list unversioned resource")
+	}
+	if len(gvks) != 1 {
+		return gvk, errors.New("expected exactly one gvk for list object")
+	}
+	return gvks[0], nil
+}
+
 // Get the cluster for the given group version kind.
 //
 // If this object kind does not have a remote cluster configured,
@@ -93,7 +108,10 @@ func (c *Client) ClientForResource(gvk schema.GroupVersionKind) client.Client {
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.ClientForResource(gvk).Get(ctx, key, obj, opts...)
 }
 
@@ -101,7 +119,10 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	gvk := list.GetObjectKind().GroupVersionKind()
+	gvk, err := c.GVKFromHomeScheme(list)
+	if err != nil {
+		return err
+	}
 	return c.ClientForResource(gvk).List(ctx, list, opts...)
 }
 
@@ -116,7 +137,10 @@ func (c *Client) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *Client) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.ClientForResource(gvk).Create(ctx, obj, opts...)
 }
 
@@ -124,7 +148,10 @@ func (c *Client) Create(ctx context.Context, obj client.Object, opts ...client.C
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *Client) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.ClientForResource(gvk).Delete(ctx, obj, opts...)
 }
 
@@ -132,7 +159,10 @@ func (c *Client) Delete(ctx context.Context, obj client.Object, opts ...client.D
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *Client) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.ClientForResource(gvk).Update(ctx, obj, opts...)
 }
 
@@ -140,7 +170,10 @@ func (c *Client) Update(ctx context.Context, obj client.Object, opts ...client.U
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *Client) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.ClientForResource(gvk).Patch(ctx, obj, patch, opts...)
 }
 
@@ -148,7 +181,10 @@ func (c *Client) Patch(ctx context.Context, obj client.Object, patch client.Patc
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *Client) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.ClientForResource(gvk).DeleteAllOf(ctx, obj, opts...)
 }
 
@@ -184,7 +220,10 @@ type statusClient struct{ multiclusterClient *Client }
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *statusClient) Create(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceCreateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.multiclusterClient.ClientForResource(gvk).
 		Status().Create(ctx, obj, subResource, opts...)
 }
@@ -193,7 +232,10 @@ func (c *statusClient) Create(ctx context.Context, obj, subResource client.Objec
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *statusClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.multiclusterClient.ClientForResource(gvk).
 		Status().Update(ctx, obj, opts...)
 }
@@ -202,7 +244,10 @@ func (c *statusClient) Update(ctx context.Context, obj client.Object, opts ...cl
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *statusClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.multiclusterClient.ClientForResource(gvk).
 		Status().Patch(ctx, obj, patch, opts...)
 }
@@ -236,7 +281,10 @@ type subResourceClient struct {
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceGetOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.multiclusterClient.ClientForResource(gvk).
 		SubResource(c.subResource).Get(ctx, obj, subResource, opts...)
 }
@@ -245,7 +293,10 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *subResourceClient) Create(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceCreateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.multiclusterClient.ClientForResource(gvk).
 		SubResource(c.subResource).Create(ctx, obj, subResource, opts...)
 }
@@ -254,7 +305,10 @@ func (c *subResourceClient) Create(ctx context.Context, obj, subResource client.
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *subResourceClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.multiclusterClient.ClientForResource(gvk).
 		SubResource(c.subResource).Update(ctx, obj, opts...)
 }
@@ -263,7 +317,10 @@ func (c *subResourceClient) Update(ctx context.Context, obj client.Object, opts 
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *subResourceClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
 	return c.multiclusterClient.ClientForResource(gvk).
 		SubResource(c.subResource).Patch(ctx, obj, patch, opts...)
 }
