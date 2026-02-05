@@ -200,10 +200,6 @@ if 'pods' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Pods bundle")
     k8s_yaml(helm('./helm/bundles/cortex-pods', name='cortex-pods', values=tilt_values),)
     k8s_resource('cortex-pods-controller-manager', labels=['Cortex-Pods'])
-    # Deploy example resources
-    k8s_yaml('samples/pods/node.yaml')
-    k8s_yaml('samples/pods/pod.yaml')
-    k8s_resource('test-pod', labels=['Cortex-Pods'])
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')

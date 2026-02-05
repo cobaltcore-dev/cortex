@@ -35,7 +35,7 @@ func (TaintFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (
 	return &lib.FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}, nil
 }
 
-func canScheduleOnNode(node corev1.Node, pod corev1.Pod) bool {
+func canScheduleOnNode(node corev1.Node, pod *corev1.Pod) bool {
 	for _, taint := range node.Spec.Taints {
 		if taint.Effect == corev1.TaintEffectNoSchedule {
 			if !hasToleration(pod, taint) {
@@ -46,7 +46,7 @@ func canScheduleOnNode(node corev1.Node, pod corev1.Pod) bool {
 	return true
 }
 
-func hasToleration(pod corev1.Pod, taint corev1.Taint) bool {
+func hasToleration(pod *corev1.Pod, taint corev1.Taint) bool {
 	for _, toleration := range pod.Spec.Tolerations {
 		if toleration.Key == taint.Key {
 			if toleration.Operator == corev1.TolerationOpExists {

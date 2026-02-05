@@ -6,7 +6,7 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 .PHONY: all
-all: crds deepcopy lint test
+all: crds generate lint test
 
 .PHONY: help
 help: ## Display this help.
@@ -28,9 +28,53 @@ test: ## Run all tests.
 crds: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:allowDangerousTypes=true webhook paths="./..." output:crd:artifacts:config=helm/library/cortex/files/crds
 
-.PHONY: deepcopy
-deepcopy: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) crd:allowDangerousTypes=true object:headerFile="hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=helm/library/cortex/files/crds
+.PHONY: generate
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations as well as client, informer and lister implementations.
+	$(CONTROLLER_GEN) crd:allowDangerousTypes=true object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	hack/generate-code.sh
+
+.PHONY: dekustomize
+dekustomize:
+	@echo "Backing up stuff that shouldn't be overridden by kubebuilder-helm..."
+	@TEMP_DIR=$$(mktemp -d); \
+	if [ -d "dist/chart/templates/rbac" ]; then \
+		cp -r dist/chart/templates/rbac "$$TEMP_DIR/rbac"; \
+	fi; \
+	if [ -d "dist/chart/templates/prometheus" ]; then \
+		cp -r dist/chart/templates/prometheus "$$TEMP_DIR/prometheus"; \
+	fi; \
+	if [ -d "dist/chart/templates/metrics" ]; then \
+		cp -r dist/chart/templates/metrics "$$TEMP_DIR/metrics"; \
+	fi; \
+	if [ -d ".github" ]; then \
+		cp -r .github "$$TEMP_DIR/github"; \
+	fi; \
+	echo "Generating helm chart..."; \
+	kubebuilder edit --plugins=helm/v1-alpha; \
+	echo "Restoring stuff that shouldn't be overridden by kubebuilder-helm..."; \
+	if [ -d "$$TEMP_DIR/rbac" ]; then \
+		rm -rf dist/chart/templates/rbac; \
+		cp -r "$$TEMP_DIR/rbac" dist/chart/templates/rbac; \
+	fi; \
+	if [ -d "$$TEMP_DIR/prometheus" ]; then \
+		rm -rf dist/chart/templates/prometheus; \
+		cp -r "$$TEMP_DIR/prometheus" dist/chart/templates/prometheus; \
+	fi; \
+	if [ -d "$$TEMP_DIR/metrics" ]; then \
+		rm -rf dist/chart/templates/metrics; \
+		cp -r "$$TEMP_DIR/metrics" dist/chart/templates/metrics; \
+	fi; \
+	if [ -d "$$TEMP_DIR/github" ]; then \
+		rm -rf .github; \
+		cp -r "$$TEMP_DIR/github" .github; \
+	fi; \
+	rm -rf "$$TEMP_DIR"; \
+	echo "Directories restored successfully."
+
+##@ Build
+
+.PHONY: build
+build: manifests generate dekustomize
 
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):

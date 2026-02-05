@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"math"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/pods"
+	pods "github.com/cobaltcore-dev/cortex/api/delegation/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/helpers"
 	corev1 "k8s.io/api/core/v1"
@@ -28,10 +28,10 @@ func (o BinpackingStepOpts) Validate() error {
 }
 
 type BinpackingStep struct {
-	lib.BaseWeigher[api.PodPipelineRequest, BinpackingStepOpts]
+	lib.BaseWeigher[pods.PodPipelineRequest, BinpackingStepOpts]
 }
 
-func (s *BinpackingStep) Run(traceLog *slog.Logger, request api.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *BinpackingStep) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	podResources := helpers.GetPodResourceRequests(request.Pod)

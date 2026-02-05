@@ -1,0 +1,38 @@
+apiVersion: cortex.cloud/v1alpha1
+kind: PodGroupSet
+metadata:
+  name: podgroupset-example
+spec:
+  podGroups:
+    - name: foo
+      spec:
+        replicas: 1
+        podSpec:
+          tolerations:
+          - key: "kwok.x-k8s.io/node"
+            operator: "Exists"
+            effect: "NoSchedule"
+          containers:
+            - name: nginx
+              image: nginx:latest
+    - name: bar
+      spec:
+        replicas: 2
+        podSpec:
+          tolerations:
+          - key: "kwok.x-k8s.io/node"
+            operator: "Exists"
+            effect: "NoSchedule"
+          containers:
+            - name: busybox
+              image: busybox:latest
+              command: ["sleep", "3600"]
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "250m"
+                  nvidia.com/gpu: 6
+                limits:
+                  memory: "64Mi"
+                  cpu: "250m"
+                  nvidia.com/gpu: 6

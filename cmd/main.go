@@ -15,6 +15,8 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,6 +52,8 @@ import (
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/pkg/generated/clientset/versioned"
+	"github.com/cobaltcore-dev/cortex/pkg/generated/informers/externalversions"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/task"
@@ -385,16 +389,54 @@ func main() {
 		}
 	}
 	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
+		clientset, err := kubernetes.NewForConfig(restConfig)
+		if err != nil {
+			setupLog.Error(err, "unable to create kubernetes clientset")
+			os.Exit(1)
+		}
+
+		informerFactory := informers.NewSharedInformerFactory(clientset, 30*time.Second)
+
+		customClientset, err := versioned.NewForConfig(restConfig)
+		if err != nil {
+			setupLog.Error(err, "unable to create custom clientset")
+			os.Exit(1)
+		}
+		customInformerFactory := externalversions.NewSharedInformerFactory(customClientset, 30*time.Second)
+
+		scheduler, err := pods.New(ctx, informerFactory, customInformerFactory)
+		if err != nil {
+			setupLog.Error(err, "unable to instantiate scheduler")
+			os.Exit(1)
+		}
+		scheduler.Logger = ctrl.Log.WithName("pods-scheduler")
+		scheduler.Client = multiclusterClient
+		scheduler.Recorder = mgr.GetEventRecorder("pods-scheduler")
+
 		controller := &pods.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
-		// Inferred through the base controller.
 		controller.Client = multiclusterClient
-		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
+
+		scheduler.SetPipelineController(controller)
+
+		if err := controller.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+
+		informerFactory.Start(ctx.Done())
+		customInformerFactory.Start(ctx.Done())
+		informerFactory.WaitForCacheSync(ctx.Done())
+		customInformerFactory.WaitForCacheSync(ctx.Done())
+		if err := scheduler.WaitForHandlersSync(ctx); err != nil {
+			setupLog.Error(err, "could not sync all event handlers")
+		}
+
+		go func() {
+			setupLog.Info("starting pods scheduler")
+			scheduler.Run(ctx)
+		}()
 	}
 	if slices.Contains(config.EnabledControllers, "explanation-controller") {
 		// Setup a controller which will reconcile the history and explanation for

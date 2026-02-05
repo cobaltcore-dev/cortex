@@ -9,7 +9,7 @@ import (
 
 // GetPodResourceRequests calculates the effective resource requests for a pod
 // by summing container requests and taking the max of init container requests.
-func GetPodResourceRequests(pod corev1.Pod) corev1.ResourceList {
+func GetPodResourceRequests(pod *corev1.Pod) corev1.ResourceList {
 	requests := make(corev1.ResourceList)
 
 	for _, container := range pod.Spec.Containers {
@@ -34,6 +34,22 @@ func AddResourcesInto(dst, src corev1.ResourceList) {
 			qty.Add(existing)
 		}
 		dst[resource] = qty
+	}
+}
+
+// SubtractResourcesInto modifies dst in-place by subtracting the quantity of each resource of src.
+// If a resource doesn't exist in dst, it will be ignored.
+// If subtraction would result in a negative value, the resource is set to zero.
+func SubtractResourcesInto(dst, src corev1.ResourceList) {
+	for resource, qty := range src {
+		if existing, ok := dst[resource]; ok {
+			existing.Sub(qty)
+			// Ensure we don't go negative
+			if existing.Sign() < 0 {
+				existing.Set(0)
+			}
+			dst[resource] = existing
+		}
 	}
 }
 
