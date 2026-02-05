@@ -35,14 +35,16 @@ type MulticlusterBuilder struct {
 //
 // If the object implements Resource, we pick the right cluster based on the
 // resource URI. If your builder needs this method, pass it to the builder
+// Watch resources, potentially in a remote cluster.
+//
+// Determines the appropriate cluster by looking up the object's GroupVersionKind (GVK)
+// in the home scheme. If your builder needs this method, pass it to the builder
 // as the first call and then proceed with other builder methods.
 func (b MulticlusterBuilder) WatchesMulticluster(object client.Object, eventHandler handler.TypedEventHandler[client.Object, reconcile.Request], predicates ...predicate.Predicate) MulticlusterBuilder {
-	resource, ok := object.(Resource)
-	if !ok {
-		b.Builder = b.Watches(object, eventHandler, builder.WithPredicates(predicates...))
-		return b
+	cl := b.multiclusterClient.HomeCluster // default cluster
+	if gvk, err := b.multiclusterClient.GVKFromHomeScheme(object); err == nil {
+		cl = b.multiclusterClient.ClusterForResource(gvk)
 	}
-	cl := b.multiclusterClient.ClusterForResource(resource.URI())
 	clusterCache := cl.GetCache()
 	b.Builder = b.WatchesRawSource(source.Kind(clusterCache, object, eventHandler, predicates...))
 	return b

@@ -35,8 +35,8 @@ type DBConfig struct {
 // It is assumed that the remote apiserver accepts the serviceaccount tokens
 // issued by the local cluster.
 type APIServerOverrideConfig struct {
-	// The resource URI, e.g. "steps.cortex.cloud/v1alpha1"
-	Resource string `json:"resource"`
+	// The resource GVK formatted as "<group>/<version>", e.g. "cortex.cloud/v1alpha1/Decision"
+	GVK string `json:"gvk"`
 	// The remote kubernetes apiserver url, e.g. "https://my-apiserver:6443"
 	Host string `json:"host"`
 	// The root CA certificate to verify the remote apiserver.

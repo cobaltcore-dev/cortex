@@ -96,9 +96,6 @@ type KPIList struct {
 	Items           []KPI `json:"items"`
 }
 
-func (*KPI) URI() string     { return "kpis.cortex.cloud/v1alpha1" }
-func (*KPIList) URI() string { return "kpis.cortex.cloud/v1alpha1" }
-
 func init() {
 	SchemeBuilder.Register(&KPI{}, &KPIList{})
 }

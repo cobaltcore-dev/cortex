@@ -136,9 +136,6 @@ type DecisionList struct {
 	Items           []Decision `json:"items"`
 }
 
-func (*Decision) URI() string     { return "decisions.cortex.cloud/v1alpha1" }
-func (*DecisionList) URI() string { return "decisions.cortex.cloud/v1alpha1" }
-
 func init() {
 	SchemeBuilder.Register(&Decision{}, &DecisionList{})
 }

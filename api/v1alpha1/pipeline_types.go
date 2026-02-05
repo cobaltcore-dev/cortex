@@ -218,9 +218,6 @@ type PipelineList struct {
 	Items           []Pipeline `json:"items"`
 }
 
-func (*Pipeline) URI() string     { return "pipelines.cortex.cloud/v1alpha1" }
-func (*PipelineList) URI() string { return "pipelines.cortex.cloud/v1alpha1" }
-
 func init() {
 	SchemeBuilder.Register(&Pipeline{}, &PipelineList{})
 }
