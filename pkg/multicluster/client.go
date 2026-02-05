@@ -35,12 +35,12 @@ type Client struct {
 }
 
 // Add a remote cluster which uses the same REST config as the home cluster,
-// but a different host, for the given resource URI.
+// but a different host, for the given resource gvks.
 //
 // This can be used when the remote cluster accepts the home cluster's service
 // account tokens. See the kubernetes documentation on structured auth to
 // learn more about jwt-based authentication across clusters.
-func (c *Client) AddRemote(ctx context.Context, host, caCert string, objs ...runtime.Object) (cluster.Cluster, error) {
+func (c *Client) AddRemote(ctx context.Context, host, caCert string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
 	log := ctrl.LoggerFrom(ctx)
 	homeRestConfig := *c.HomeRestConfig
 	restConfigCopy := homeRestConfig
@@ -58,8 +58,7 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, objs ...run
 	if c.remoteClusters == nil {
 		c.remoteClusters = make(map[schema.GroupVersionKind]cluster.Cluster)
 	}
-	for _, obj := range objs {
-		gvk := obj.GetObjectKind().GroupVersionKind()
+	for _, gvk := range gvks {
 		log.Info("adding remote cluster for resource", "gvk", gvk, "host", host)
 		c.remoteClusters[gvk] = cl
 	}
