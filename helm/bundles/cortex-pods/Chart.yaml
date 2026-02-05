@@ -11,7 +11,7 @@ dependencies:
   # from: file://../../library/cortex
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.15
+    version: 0.0.16
 
   # Owner info adds a configmap to the kubernetes cluster with information on
   # the service owner. This makes it easier to find out who to contact in case
