@@ -88,9 +88,6 @@ type DeschedulingList struct {
 	Items           []Descheduling `json:"items"`
 }
 
-func (*Descheduling) URI() string     { return "deschedulings.cortex.cloud/v1alpha1" }
-func (*DeschedulingList) URI() string { return "deschedulings.cortex.cloud/v1alpha1" }
-
 func init() {
 	SchemeBuilder.Register(&Descheduling{}, &DeschedulingList{})
 }

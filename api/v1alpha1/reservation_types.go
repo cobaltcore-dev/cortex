@@ -97,9 +97,6 @@ type ReservationList struct {
 	Items           []Reservation `json:"items"`
 }
 
-func (*Reservation) URI() string     { return "reservations.cortex.cloud/v1alpha1" }
-func (*ReservationList) URI() string { return "reservations.cortex.cloud/v1alpha1" }
-
 func init() {
 	SchemeBuilder.Register(&Reservation{}, &ReservationList{})
 }
