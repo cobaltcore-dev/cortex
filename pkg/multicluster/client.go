@@ -144,7 +144,7 @@ func (c *Client) Create(ctx context.Context, obj client.Object, opts ...client.C
 	return c.ClientForResource(gvk).Create(ctx, obj, opts...)
 }
 
-// Pick the right cluster based on the resource type and perform a Create operation.
+// Pick the right cluster based on the resource type and perform a Delete operation.
 // If the object does not implement Resource or no custom cluster is configured,
 // the home cluster is used.
 func (c *Client) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
