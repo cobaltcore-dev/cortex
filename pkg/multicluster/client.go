@@ -97,6 +97,9 @@ func (c *Client) ClusterForResource(gvk schema.GroupVersionKind) cluster.Cluster
 // Get the client for the given resource URI.
 //
 // If this URI does not have a remote cluster configured, the home cluster's
+// Get the client for the given resource group version kind.
+//
+// If this object kind does not have a remote cluster configured, the home cluster's
 // client is returned.
 func (c *Client) ClientForResource(gvk schema.GroupVersionKind) client.Client {
 	return c.
