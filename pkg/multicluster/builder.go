@@ -37,12 +37,8 @@ type MulticlusterBuilder struct {
 // resource URI. If your builder needs this method, pass it to the builder
 // as the first call and then proceed with other builder methods.
 func (b MulticlusterBuilder) WatchesMulticluster(object client.Object, eventHandler handler.TypedEventHandler[client.Object, reconcile.Request], predicates ...predicate.Predicate) MulticlusterBuilder {
-	resource, ok := object.(Resource)
-	if !ok {
-		b.Builder = b.Watches(object, eventHandler, builder.WithPredicates(predicates...))
-		return b
-	}
-	cl := b.multiclusterClient.ClusterForResource(resource.URI())
+	gvk := object.GetObjectKind().GroupVersionKind()
+	cl := b.multiclusterClient.ClusterForResource(gvk)
 	clusterCache := cl.GetCache()
 	b.Builder = b.WatchesRawSource(source.Kind(clusterCache, object, eventHandler, predicates...))
 	return b

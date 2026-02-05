@@ -79,7 +79,7 @@ tee $TILT_OVERRIDES_PATH <<EOF
 global:
   conf:
     apiServerOverrides:
-    - resource: decisions.cortex.cloud/v1alpha1
+    - gvk: cortex.cloud/v1alpha1/Decision
       host: https://host.docker.internal:8444
       caCert: |
 $(cat /tmp/root-ca-remote.pem | sed 's/^/        /')

@@ -188,7 +188,8 @@ func (c *Controller) StartupCallback(ctx context.Context) error {
 // This function sets up the controller with the provided manager.
 func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	if !c.SkipIndexFields {
-		cluster := mcl.ClusterForResource((&v1alpha1.Decision{}).URI())
+		gvk := (&v1alpha1.Decision{}).GetObjectKind().GroupVersionKind()
+		cluster := mcl.ClusterForResource(gvk)
 		if err := cluster.GetCache().IndexField(
 			context.Background(), &v1alpha1.Decision{}, "spec.resourceID",
 			func(obj client.Object) []string {

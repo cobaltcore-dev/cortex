@@ -257,8 +257,32 @@ func main() {
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
 	}
+	// Get all registered runtime.Object types in the current scheme and use
+	// them to configure remote clusters.
+	var objectsByGVK = make(map[string]runtime.Object)
+	for gvk := range scheme.AllKnownTypes() {
+		obj, err := scheme.New(gvk)
+		if err != nil {
+			setupLog.Error(err, "unable to create object for gvk", "gvk", gvk)
+			os.Exit(1)
+		}
+		// This produces something like: "cortex.cloud/v1alpha1/Decision" which can
+		// be used to look up the right cluster for a given API server override.
+		formatted := gvk.GroupVersion().String() + "/" + gvk.Kind
+		objectsByGVK[formatted] = obj
+	}
+	for gvkStr := range objectsByGVK {
+		setupLog.Info("scheme gvk registered", "gvk", gvkStr)
+	}
 	for _, override := range config.APIServerOverrides {
-		cluster, err := multiclusterClient.AddRemote(override.Resource, override.Host, override.CACert)
+		// Check if we have any registered objects for this API server override.
+		obj, ok := objectsByGVK[override.GVK]
+		if !ok {
+			setupLog.Error(nil, "no registered objects for apiserver override resource",
+				"apiserver", override.Host, "gvk", override.GVK)
+			os.Exit(1)
+		}
+		cluster, err := multiclusterClient.AddRemote(ctx, override.Host, override.CACert, obj)
 		if err != nil {
 			setupLog.Error(err, "unable to create cluster for apiserver override", "apiserver", override.Host)
 			os.Exit(1)
