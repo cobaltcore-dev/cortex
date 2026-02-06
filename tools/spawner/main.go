@@ -427,15 +427,31 @@ func main() {
 				CreateOptsBuilder: sco,
 			}
 			ho := servers.SchedulerHintOpts{}
-			_, err := servers.Create(ctx, projectCompute, so, ho).Extract()
+			serverCreateResult, err := servers.Create(ctx, projectCompute, so, ho).Extract()
 			baseMsg := fmt.Sprintf(
-				"🚀 (%d/%d) Spawned VM %s on %s with flavor %s, image %s ",
+				"... (%d/%d) Spawning VM %s on %s with flavor %s, image %s ",
 				i+1, vmsToSpawn, name, az, image.Name, flavor.Name,
 			)
 			if err != nil {
 				fmt.Printf("%s🚫 Error: %s\n", baseMsg, err)
-			} else {
-				fmt.Printf("%s🎉 Success\n", baseMsg)
+				return
+			}
+			// Wait for the instance to become active.
+			for {
+				s, err := servers.Get(ctx, projectCompute, serverCreateResult.ID).Extract()
+				if err != nil {
+					fmt.Printf("%s🚫 Error while waiting for server to become active: %s\n", baseMsg, err)
+					break
+				}
+				if s.Status == "ACTIVE" {
+					fmt.Printf("%s✅ VM is active\n", baseMsg)
+					break
+				}
+				if s.Status == "ERROR" {
+					// Get additional error details from the server's fault message if available.
+					fmt.Printf("%s🚫 VM entered error state, fault: %s (%s)\n", baseMsg, s.Fault.Message, s.Fault.Details)
+					break
+				}
 			}
 		})
 	}
