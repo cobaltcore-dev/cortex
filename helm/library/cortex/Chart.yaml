@@ -3,6 +3,6 @@ name: cortex
 description: A Helm chart to distribute cortex.
 type: application
 version: 0.0.17
-appVersion: "sha-523bbd6c"
+appVersion: "sha-4aac7aa9"
 icon: "https://example.com/icon.png"
 dependencies: []
