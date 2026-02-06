@@ -24,7 +24,7 @@ prometheus:
 exporter:
   image:
     repository: prometheuscommunity/postgres-exporter
-    tag: "v0.18.1"
+    tag: "v0.19.0"
     pullPolicy: IfNotPresent
 
   resources:
