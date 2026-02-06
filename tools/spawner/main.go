@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/tools/spawner/cli"
 	"github.com/cobaltcore-dev/cortex/tools/spawner/defaults"
@@ -174,6 +175,51 @@ func main() {
 			}
 			wg.Wait()
 			fmt.Println("🧨 Deleted all existing VMs")
+		}
+	}
+
+	// Delete existing volumes.
+	fmt.Println("🔄 Looking up existing volumes")
+	volumePages := must.Return(volumes.List(projectCinder, volumes.ListOpts{}).AllPages(ctx))
+	volumesAll := must.Return(volumes.ExtractVolumes(volumePages))
+	var volumesToDelete []volumes.Volume
+	var volumesToDeleteNames []string
+	for _, v := range volumesAll {
+		// Make some basic checks to ensure that we only delete the workload-spawner volumes.
+		if strings.Contains(v.Name, prefix) {
+			volumesToDelete = append(volumesToDelete, v)
+			volumesToDeleteNames = append(volumesToDeleteNames, v.Name)
+		}
+	}
+	if len(volumesToDelete) > 0 {
+		// Get manual input to delete the volumes.
+		fmt.Printf("❓ Delete existing volumes %v? [y/N, default: \033[1;34my\033[0m]: ", volumesToDeleteNames)
+		volumeReader := bufio.NewReader(os.Stdin)
+		volumeInput := must.Return(volumeReader.ReadString('\n'))
+		volumeInput = strings.TrimSpace(volumeInput)
+		if volumeInput == "y" || volumeInput == "" {
+			var wg sync.WaitGroup
+			for _, v := range volumesToDelete {
+				wg.Go(func() {
+					fmt.Printf("🧨 Deleting volume %s\n", v.Name)
+					result := volumes.Delete(ctx, projectCinder, v.ID, volumes.DeleteOpts{})
+					must.Succeed(result.Err)
+					// Wait until the volume is deleted.
+					for {
+						vol, err := volumes.Get(ctx, projectCinder, v.ID).Extract()
+						if err != nil {
+							// Assume the volume is gone.
+							break
+						}
+						if vol.Status == "DELETED" {
+							break
+						}
+					}
+					fmt.Printf("💥 Deleted volume %s\n", v.Name)
+				})
+			}
+			wg.Wait()
+			fmt.Println("🧨 Deleted all existing volumes")
 		}
 	}
 
@@ -391,6 +437,7 @@ func main() {
 				Name:             volumeName,
 				ImageID:          image.ID,
 				AvailabilityZone: az,
+				VolumeType:       "nfs",
 			}, nil).Extract())
 
 			// Wait for volume to be available
@@ -438,6 +485,7 @@ func main() {
 			}
 			// Wait for the instance to become active.
 			for {
+				time.Sleep(1 * time.Second)
 				s, err := servers.Get(ctx, projectCompute, serverCreateResult.ID).Extract()
 				if err != nil {
 					fmt.Printf("%s🚫 Error while waiting for server to become active: %s\n", baseMsg, err)
