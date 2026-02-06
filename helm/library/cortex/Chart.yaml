@@ -2,7 +2,7 @@ apiVersion: v2
 name: cortex
 description: A Helm chart to distribute cortex.
 type: application
-version: 0.0.16
-appVersion: "sha-9cb5e299"
+version: 0.0.17
+appVersion: "sha-523bbd6c"
 icon: "https://example.com/icon.png"
 dependencies: []
