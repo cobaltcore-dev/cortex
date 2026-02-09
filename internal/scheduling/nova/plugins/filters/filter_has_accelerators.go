@@ -22,7 +22,7 @@ func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.Exter
 	result := s.IncludeAllHostsFromRequest(request)
 	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if _, ok := extraSpecs["accel:device_profile"]; !ok {
-		traceLog.Debug("no accelerators requested")
+		traceLog.Info("no accelerators requested, skipping filter")
 		return result, nil
 	}
 

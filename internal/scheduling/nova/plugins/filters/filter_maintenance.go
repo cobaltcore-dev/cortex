@@ -51,10 +51,13 @@ func (s *FilterMaintenanceStep) Run(traceLog *slog.Logger, request api.ExternalS
 			)
 			continue
 		}
+		traceLog.Info(
+			"hypervisor maintenance flag allows scheduling, keeping host",
+			"host", hv.Name, "maintenance", hv.Spec.Maintenance,
+		)
 		hostsReady[hv.Name] = struct{}{}
 	}
 
-	traceLog.Info("hosts passing maintenance filter", "hosts", hostsReady)
 	for host := range result.Activations {
 		if _, ok := hostsReady[host]; ok {
 			continue
