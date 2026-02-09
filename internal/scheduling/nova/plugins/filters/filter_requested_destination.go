@@ -68,7 +68,11 @@ func (s *FilterRequestedDestinationStep) Run(
 			}
 			if !found {
 				delete(result.Activations, host)
-				traceLog.Info("filtered out host not in requested_destination aggregates", "host", host)
+				traceLog.Info(
+					"filtered out host not in requested_destination aggregates",
+					"host", host, "hostAggregates", hvAggregates,
+					"requestedAggregates", rd.Data.Aggregates,
+				)
 				continue
 			}
 			traceLog.Info("host is in requested_destination aggregates, keeping", "host", host)
