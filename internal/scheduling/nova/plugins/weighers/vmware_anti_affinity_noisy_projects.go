@@ -90,7 +90,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request
 			s.Options.AvgCPUUsageActivationLowerBound,
 			s.Options.AvgCPUUsageActivationUpperBound,
 		)
-		result.Statistics["avg cpu usage of this project"].Subjects[p.ComputeHost] = p.AvgCPUOfProject
+		result.Statistics["avg cpu usage of this project"].Hosts[p.ComputeHost] = p.AvgCPUOfProject
 	}
 	return result, nil
 }

@@ -88,6 +88,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 			return nil, err
 		}
 	}
+	traceLog.Info("looking for capabilities", "capabilities", hvCaps)
 
 	// Check which hosts match the requested capabilities.
 	for host := range result.Activations {
@@ -109,6 +110,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 				break
 			}
 		}
+		traceLog.Info("host matches requested capabilities, keeping", "host", host)
 	}
 	return result, nil
 }

@@ -1214,7 +1214,7 @@
             }
         },
         {
-            "collapsed": false,
+            "collapsed": true,
             "datasource": null,
             "gridPos": {
                 "h": 1,
@@ -1224,7 +1224,7 @@
             },
             "id": 291,
             "panels": [],
-            "repeat": null,
+            "repeat": "nodes",
             "title": "$nodes",
             "type": "row"
         },
@@ -2423,7 +2423,7 @@
     },
     "timepicker": {},
     "timezone": "",
-    "title": "Cortex KVM Infrastructure - Compute",
-    "uid": "cortex-kvm-infrastructure-compute",
+    "title": "Cortex KVM Compute Infrastructure - Details",
+    "uid": "cortex-compute-kvm-details",
     "version": 1
 }

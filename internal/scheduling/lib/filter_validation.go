@@ -35,17 +35,17 @@ func (s *FilterValidator[RequestType]) Run(traceLog *slog.Logger, request Reques
 	if err != nil {
 		return nil, err
 	}
-	// Note that for some schedulers the same subject (e.g. compute host) may
+	// Note that for some schedulers the same host (e.g. compute host) may
 	// appear multiple times if there is a substruct (e.g. hypervisor hostname).
-	// Since cortex will only schedule on the subject level and not below,
-	// we need to deduplicate the subjects first before the validation.
+	// Since cortex will only schedule on the host level and not below,
+	// we need to deduplicate the hosts first before the validation.
 	deduplicated := map[string]struct{}{}
-	for _, subject := range request.GetSubjects() {
-		deduplicated[subject] = struct{}{}
+	for _, host := range request.GetHosts() {
+		deduplicated[host] = struct{}{}
 	}
-	// Filters can only remove subjects, not add new ones.
+	// Filters can only remove hosts, not add new ones.
 	if len(result.Activations) > len(deduplicated) {
-		return nil, errors.New("safety: number of subjects increased during step execution")
+		return nil, errors.New("safety: number of hosts increased during step execution")
 	}
 	return result, nil
 }

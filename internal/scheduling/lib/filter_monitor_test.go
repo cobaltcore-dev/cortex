@@ -88,18 +88,18 @@ func TestFilterMonitor_Run(t *testing.T) {
 	}
 
 	runTimer := &mockObserver{}
-	removedSubjectsObserver := &mockObserver{}
+	removedHostsObserver := &mockObserver{}
 	monitor := FilterWeigherPipelineMonitor{
 		PipelineName: "test-pipeline",
 	}
 	fm := monitorFilter(mockFilter, "test-filter", monitor)
 	// Manually set monitors for testing
 	fm.monitor.runTimer = runTimer
-	fm.monitor.removedSubjectsObserver = removedSubjectsObserver
+	fm.monitor.removedHostsObserver = removedHostsObserver
 
 	request := mockFilterWeigherPipelineRequest{
-		Subjects: []string{"host1", "host2", "host3"},
-		Weights:  map[string]float64{"host1": 0.1, "host2": 0.2, "host3": 0.3},
+		Hosts:   []string{"host1", "host2", "host3"},
+		Weights: map[string]float64{"host1": 0.1, "host2": 0.2, "host3": 0.3},
 	}
 
 	result, err := fm.Run(slog.Default(), request)

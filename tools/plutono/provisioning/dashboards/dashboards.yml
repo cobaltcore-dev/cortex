@@ -13,3 +13,13 @@ providers:
     allowUiUpdates: true
     options:
       path: /etc/plutono/provisioning/dashboards
+
+  - name: 'compute'
+    orgId: 1
+    folder: 'Compute'
+    type: file
+    disableDeletion: false
+    editable: true
+    allowUiUpdates: true
+    options:
+      path: /etc/plutono/provisioning/dashboards/compute

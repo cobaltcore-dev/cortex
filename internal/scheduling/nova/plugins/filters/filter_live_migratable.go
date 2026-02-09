@@ -69,13 +69,13 @@ func (s *FilterLiveMigratableStep) Run(
 	result := s.IncludeAllHostsFromRequest(request)
 
 	if !s.isLiveMigration(request) {
-		traceLog.Debug("not a live migration request, skipping filter")
+		traceLog.Info("not a live migration request, skipping filter")
 		return result, nil
 	}
 
 	sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host")
 	if err != nil || sourceHost == "" {
-		traceLog.Debug("no source_host scheduler hint, skipping filter")
+		traceLog.Info("no source_host scheduler hint, skipping filter")
 		//nolint:nilerr // Not an error we want to fail the scheduling for.
 		return result, nil
 	}
@@ -110,7 +110,9 @@ func (s *FilterLiveMigratableStep) Run(
 				"host", host,
 				"reason", err.Error(),
 			)
+			continue
 		}
+		traceLog.Info("host is suitable for live migration, keeping", "host", host)
 	}
 	return result, nil
 }

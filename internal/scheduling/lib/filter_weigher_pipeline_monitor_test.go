@@ -42,40 +42,40 @@ func TestSchedulerMonitor(t *testing.T) {
 		t.Fatalf("stepRunTimer test failed: %v", err)
 	}
 
-	// Test stepSubjectWeight
-	expectedStepSubjectWeight := strings.NewReader(`
-        # HELP cortex_filter_weigher_pipeline_step_weight_modification Modification of subject weight by scheduler pipeline step
+	// Test stepHostWeight
+	expectedStepHostWeight := strings.NewReader(`
+        # HELP cortex_filter_weigher_pipeline_step_weight_modification Modification of host weight by scheduler pipeline step
         # TYPE cortex_filter_weigher_pipeline_step_weight_modification gauge
-        cortex_filter_weigher_pipeline_step_weight_modification{pipeline="test",step="test_step",subject="test_subject"} 42
+        cortex_filter_weigher_pipeline_step_weight_modification{host="test_host",pipeline="test",step="test_step"} 42
     `)
-	monitor.stepSubjectWeight.WithLabelValues("test", "test_subject", "test_step").Set(42)
-	err = testutil.GatherAndCompare(registry, expectedStepSubjectWeight, "cortex_filter_weigher_pipeline_step_weight_modification")
+	monitor.stepHostWeight.WithLabelValues("test", "test_host", "test_step").Set(42)
+	err = testutil.GatherAndCompare(registry, expectedStepHostWeight, "cortex_filter_weigher_pipeline_step_weight_modification")
 	if err != nil {
-		t.Fatalf("stepSubjectWeight test failed: %v", err)
+		t.Fatalf("stepHostWeight test failed: %v", err)
 	}
 
-	// Test stepRemovedSubjectsObserver
-	expectedRemovedSubjectsObserver := strings.NewReader(`
-        # HELP cortex_filter_weigher_pipeline_step_removed_subjects Number of subjects removed by scheduler pipeline step
-        # TYPE cortex_filter_weigher_pipeline_step_removed_subjects histogram
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="1"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="2.154434690031884"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="4.641588833612779"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="10.000000000000002"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="21.544346900318843"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="46.4158883361278"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="100.00000000000003"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="215.44346900318845"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="464.15888336127813"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="1000.0000000000006"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_bucket{pipeline="test",step="test_step",le="+Inf"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_sum{pipeline="test",step="test_step"} 1
-        cortex_filter_weigher_pipeline_step_removed_subjects_count{pipeline="test",step="test_step"} 1
+	// Test stepRemovedHostsObserver
+	expectedRemovedHostsObserver := strings.NewReader(`
+        # HELP cortex_filter_weigher_pipeline_step_removed_hosts Number of hosts removed by scheduler pipeline step
+        # TYPE cortex_filter_weigher_pipeline_step_removed_hosts histogram
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="1"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="2.154434690031884"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="4.641588833612779"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="10.000000000000002"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="21.544346900318843"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="46.4158883361278"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="100.00000000000003"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="215.44346900318845"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="464.15888336127813"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="1000.0000000000006"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_bucket{pipeline="test",step="test_step",le="+Inf"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_sum{pipeline="test",step="test_step"} 1
+        cortex_filter_weigher_pipeline_step_removed_hosts_count{pipeline="test",step="test_step"} 1
     `)
-	monitor.stepRemovedSubjectsObserver.WithLabelValues("test", "test_step").Observe(1)
-	err = testutil.GatherAndCompare(registry, expectedRemovedSubjectsObserver, "cortex_filter_weigher_pipeline_step_removed_subjects")
+	monitor.stepRemovedHostsObserver.WithLabelValues("test", "test_step").Observe(1)
+	err = testutil.GatherAndCompare(registry, expectedRemovedHostsObserver, "cortex_filter_weigher_pipeline_step_removed_hosts")
 	if err != nil {
-		t.Fatalf("stepRemovedSubjectsObserver test failed: %v", err)
+		t.Fatalf("stepRemovedHostsObserver test failed: %v", err)
 	}
 
 	// Test pipelineRunTimer

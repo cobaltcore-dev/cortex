@@ -188,18 +188,15 @@ func (c *Controller) StartupCallback(ctx context.Context) error {
 // This function sets up the controller with the provided manager.
 func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	if !c.SkipIndexFields {
-		gvk, err := mcl.GVKFromHomeScheme(&v1alpha1.Decision{})
-		if err != nil {
-			return err
+		ctx := context.Background()
+		obj := &v1alpha1.Decision{}
+		lst := &v1alpha1.DecisionList{}
+		idx := "spec.resourceID"
+		fnc := func(obj client.Object) []string {
+			decision := obj.(*v1alpha1.Decision)
+			return []string{decision.Spec.ResourceID}
 		}
-		cluster := mcl.ClusterForResource(gvk)
-		if err := cluster.GetCache().IndexField(
-			context.Background(), &v1alpha1.Decision{}, "spec.resourceID",
-			func(obj client.Object) []string {
-				decision := obj.(*v1alpha1.Decision)
-				return []string{decision.Spec.ResourceID}
-			},
-		); err != nil {
+		if err := mcl.IndexField(ctx, obj, lst, idx, fnc); err != nil {
 			return err
 		}
 	}

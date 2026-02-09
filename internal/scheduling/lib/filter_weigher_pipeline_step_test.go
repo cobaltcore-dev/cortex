@@ -89,22 +89,22 @@ func (o failingValidationOptions) Validate() error {
 func TestBaseFilterWeigherPipelineStep_IncludeAllHostsFromRequest(t *testing.T) {
 	tests := []struct {
 		name          string
-		subjects      []string
+		hosts         []string
 		expectedCount int
 	}{
 		{
-			name:          "multiple subjects",
-			subjects:      []string{"host1", "host2", "host3"},
+			name:          "multiple hosts",
+			hosts:         []string{"host1", "host2", "host3"},
 			expectedCount: 3,
 		},
 		{
-			name:          "single subject",
-			subjects:      []string{"host1"},
+			name:          "single host",
+			hosts:         []string{"host1"},
 			expectedCount: 1,
 		},
 		{
-			name:          "empty subjects",
-			subjects:      []string{},
+			name:          "empty hosts",
+			hosts:         []string{},
 			expectedCount: 0,
 		},
 	}
@@ -116,7 +116,7 @@ func TestBaseFilterWeigherPipelineStep_IncludeAllHostsFromRequest(t *testing.T) 
 			}
 
 			request := mockFilterWeigherPipelineRequest{
-				Subjects: tt.subjects,
+				Hosts: tt.hosts,
 			}
 
 			result := step.IncludeAllHostsFromRequest(request)
@@ -127,9 +127,9 @@ func TestBaseFilterWeigherPipelineStep_IncludeAllHostsFromRequest(t *testing.T) 
 			if len(result.Activations) != tt.expectedCount {
 				t.Errorf("expected %d activations, got %d", tt.expectedCount, len(result.Activations))
 			}
-			for _, subject := range tt.subjects {
-				if _, ok := result.Activations[subject]; !ok {
-					t.Errorf("expected subject %s in activations", subject)
+			for _, host := range tt.hosts {
+				if _, ok := result.Activations[host]; !ok {
+					t.Errorf("expected host %s in activations", host)
 				}
 			}
 			if result.Statistics == nil {
@@ -142,25 +142,25 @@ func TestBaseFilterWeigherPipelineStep_IncludeAllHostsFromRequest(t *testing.T) 
 func TestBaseFilterWeigherPipelineStep_PrepareStats(t *testing.T) {
 	tests := []struct {
 		name         string
-		subjects     []string
+		hosts        []string
 		unit         string
 		expectedUnit string
 	}{
 		{
-			name:         "with subjects and unit",
-			subjects:     []string{"host1", "host2", "host3"},
+			name:         "with hosts and unit",
+			hosts:        []string{"host1", "host2", "host3"},
 			unit:         "percentage",
 			expectedUnit: "percentage",
 		},
 		{
-			name:         "empty subjects",
-			subjects:     []string{},
+			name:         "empty hosts",
+			hosts:        []string{},
 			unit:         "count",
 			expectedUnit: "count",
 		},
 		{
 			name:         "empty unit",
-			subjects:     []string{"host1"},
+			hosts:        []string{"host1"},
 			unit:         "",
 			expectedUnit: "",
 		},
@@ -171,7 +171,7 @@ func TestBaseFilterWeigherPipelineStep_PrepareStats(t *testing.T) {
 			step := &BaseFilterWeigherPipelineStep[mockFilterWeigherPipelineRequest, testStepOptions]{}
 
 			request := mockFilterWeigherPipelineRequest{
-				Subjects: tt.subjects,
+				Hosts: tt.hosts,
 			}
 
 			stats := step.PrepareStats(request, tt.unit)
@@ -179,8 +179,8 @@ func TestBaseFilterWeigherPipelineStep_PrepareStats(t *testing.T) {
 			if stats.Unit != tt.expectedUnit {
 				t.Errorf("expected unit %s, got %s", tt.expectedUnit, stats.Unit)
 			}
-			if stats.Subjects == nil {
-				t.Error("expected subjects map to be initialized")
+			if stats.Hosts == nil {
+				t.Error("expected hosts map to be initialized")
 			}
 			// Maps don't have a cap() function, but we can verify the map is initialized
 			// and works correctly by checking it's not nil (already done above)

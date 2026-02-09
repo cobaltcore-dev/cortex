@@ -15,7 +15,7 @@ type MachinePipelineRequest struct {
 	Pools []ironcorev1alpha1.MachinePool `json:"pools"`
 }
 
-func (r MachinePipelineRequest) GetSubjects() []string {
+func (r MachinePipelineRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Pools))
 	for i, host := range r.Pools {
 		hosts[i] = host.Name
@@ -32,10 +32,10 @@ func (r MachinePipelineRequest) GetWeights() map[string]float64 {
 func (r MachinePipelineRequest) GetTraceLogArgs() []slog.Attr {
 	return []slog.Attr{}
 }
-func (r MachinePipelineRequest) FilterSubjects(includedSubjects map[string]float64) lib.FilterWeigherPipelineRequest {
-	filteredPools := make([]ironcorev1alpha1.MachinePool, 0, len(includedSubjects))
+func (r MachinePipelineRequest) FilterHosts(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
+	filteredPools := make([]ironcorev1alpha1.MachinePool, 0, len(includedHosts))
 	for _, pool := range r.Pools {
-		if _, exists := includedSubjects[pool.Name]; exists {
+		if _, exists := includedHosts[pool.Name]; exists {
 			filteredPools = append(filteredPools, pool)
 		}
 	}

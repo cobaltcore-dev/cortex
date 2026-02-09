@@ -67,6 +67,7 @@ func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.Exte
 			}
 		}
 		if allMet {
+			traceLog.Info("hypervisor meets all status conditions, keeping host", "host", hv.Name)
 			hostsReady[hv.Name] = struct{}{}
 		}
 	}

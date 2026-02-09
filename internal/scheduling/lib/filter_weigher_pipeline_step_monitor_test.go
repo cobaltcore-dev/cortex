@@ -20,32 +20,32 @@ func (m *mockObserver) Observe(value float64) {
 
 func TestStepMonitorRun(t *testing.T) {
 	runTimer := &mockObserver{}
-	removedSubjectsObserver := &mockObserver{}
+	removedHostsObserver := &mockObserver{}
 	monitor := &FilterWeigherPipelineStepMonitor[mockFilterWeigherPipelineRequest]{
-		stepName:                "mock_step",
-		runTimer:                runTimer,
-		stepSubjectWeight:       nil,
-		removedSubjectsObserver: removedSubjectsObserver,
+		stepName:             "mock_step",
+		runTimer:             runTimer,
+		stepHostWeight:       nil,
+		removedHostsObserver: removedHostsObserver,
 	}
 	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
 		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			return &FilterWeigherPipelineStepResult{
-				Activations: map[string]float64{"subject1": 0.1, "subject2": 1.0, "subject3": 0.0},
+				Activations: map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0},
 			}, nil
 		},
 	}
 	request := mockFilterWeigherPipelineRequest{
-		Subjects: []string{"subject1", "subject2", "subject3"},
-		Weights:  map[string]float64{"subject1": 0.2, "subject2": 0.1, "subject3": 0.0},
+		Hosts:   []string{"host1", "host2", "host3"},
+		Weights: map[string]float64{"host1": 0.2, "host2": 0.1, "host3": 0.0},
 	}
 	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if len(removedSubjectsObserver.Observations) != 1 {
-		t.Errorf("removedSubjectsObserver.Observations = %v, want 1", len(removedSubjectsObserver.Observations))
+	if len(removedHostsObserver.Observations) != 1 {
+		t.Errorf("removedHostsObserver.Observations = %v, want 1", len(removedHostsObserver.Observations))
 	}
-	if removedSubjectsObserver.Observations[0] != 0 {
-		t.Errorf("removedSubjectsObserver.Observations[0] = %v, want 0", removedSubjectsObserver.Observations[0])
+	if removedHostsObserver.Observations[0] != 0 {
+		t.Errorf("removedHostsObserver.Observations[0] = %v, want 0", removedHostsObserver.Observations[0])
 	}
 	if len(runTimer.Observations) != 1 {
 		t.Errorf("runTimer.Observations = %v, want 1", len(runTimer.Observations))
@@ -116,7 +116,7 @@ func TestImpact(t *testing.T) {
 			expected: 0.0,
 		},
 		{
-			name:     "Missing Subjects",
+			name:     "Missing Hosts",
 			before:   []string{"h0", "h1", "h2", "h3"},
 			after:    []string{"h0", "h1"},
 			stats:    map[string]float64{"h0": 30.0, "h1": 20.0, "h2": 10.0, "h3": 0.0},

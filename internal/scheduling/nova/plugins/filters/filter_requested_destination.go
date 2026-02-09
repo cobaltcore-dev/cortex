@@ -29,11 +29,11 @@ func (s *FilterRequestedDestinationStep) Run(
 
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {
-		traceLog.Debug("no requested_destination in request, skipping filter")
+		traceLog.Info("no requested_destination in request, skipping filter")
 		return result, nil
 	}
 	if len(rd.Data.Aggregates) == 0 && rd.Data.Host == "" {
-		traceLog.Debug("requested_destination has no host or aggregates, skipping filter")
+		traceLog.Info("requested_destination has no host or aggregates, skipping filter")
 		return result, nil
 	}
 
@@ -69,7 +69,9 @@ func (s *FilterRequestedDestinationStep) Run(
 			if !found {
 				delete(result.Activations, host)
 				traceLog.Info("filtered out host not in requested_destination aggregates", "host", host)
+				continue
 			}
+			traceLog.Info("host is in requested_destination aggregates, keeping", "host", host)
 		}
 	}
 
@@ -79,7 +81,9 @@ func (s *FilterRequestedDestinationStep) Run(
 			if host != rd.Data.Host {
 				delete(result.Activations, host)
 				traceLog.Info("filtered out host not matching requested_destination host", "host", host)
+				continue
 			}
+			traceLog.Info("host matches requested_destination host, keeping", "host", host)
 		}
 	}
 

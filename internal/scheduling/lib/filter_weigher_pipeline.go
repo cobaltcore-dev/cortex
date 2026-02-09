@@ -130,7 +130,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 
 // Execute filters and collect their activations by step name.
 // During this process, the request is mutated to only include the
-// remaining subjects.
+// remaining hosts.
 func (p *filterWeigherPipeline[RequestType]) runFilters(
 	log *slog.Logger,
 	request RequestType,
@@ -151,9 +151,9 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 			continue
 		}
 		stepLog.Info("scheduler: finished filter")
-		// Mutate the request to only include the remaining subjects.
+		// Mutate the request to only include the remaining hosts.
 		// Assume the resulting request type is the same as the input type.
-		filteredRequest = filteredRequest.FilterSubjects(result.Activations).(RequestType)
+		filteredRequest = filteredRequest.FilterHosts(result.Activations).(RequestType)
 	}
 	return filteredRequest
 }
@@ -192,17 +192,17 @@ func (p *filterWeigherPipeline[RequestType]) runWeighers(
 	return activationsByStep
 }
 
-// Apply an initial weight to the subjects.
+// Apply an initial weight to the hosts.
 //
 // Context:
 // Openstack schedulers may give us very large (positive/negative) weights such as
 // -99,000 or 99,000 (Nova). We want to respect these values, but still adjust them
-// to a meaningful value. If the scheduler really doesn't want us to run on a subject, it
+// to a meaningful value. If the scheduler really doesn't want us to run on a host, it
 // should run a filter instead of setting a weight.
 func (p *filterWeigherPipeline[RequestType]) normalizeInputWeights(weights map[string]float64) map[string]float64 {
 	normalizedWeights := make(map[string]float64, len(weights))
-	for subjectname, weight := range weights {
-		normalizedWeights[subjectname] = math.Tanh(weight)
+	for hostname, weight := range weights {
+		normalizedWeights[hostname] = math.Tanh(weight)
 	}
 	return normalizedWeights
 }
@@ -232,17 +232,17 @@ func (p *filterWeigherPipeline[RequestType]) applyWeights(
 	return outWeights
 }
 
-// Sort the subjects by their weights.
-func (s *filterWeigherPipeline[RequestType]) sortSubjectsByWeights(weights map[string]float64) []string {
-	// Sort the subjects (keys) by their weights.
-	subjects := slices.Collect(maps.Keys(weights))
-	sort.Slice(subjects, func(i, j int) bool {
-		return weights[subjects[i]] > weights[subjects[j]]
+// Sort the hosts by their weights.
+func (s *filterWeigherPipeline[RequestType]) sortHostsByWeights(weights map[string]float64) []string {
+	// Sort the hosts (keys) by their weights.
+	hosts := slices.Collect(maps.Keys(weights))
+	sort.Slice(hosts, func(i, j int) bool {
+		return weights[hosts[i]] > weights[hosts[j]]
 	})
-	return subjects
+	return hosts
 }
 
-// Evaluate the pipeline and return a list of subjects in order of preference.
+// Evaluate the pipeline and return a list of hosts in order of preference.
 func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResult, error) {
 	slogArgs := request.GetTraceLogArgs()
 	slogArgsAny := make([]any, 0, len(slogArgs))
@@ -251,44 +251,44 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	}
 	traceLog := slog.With(slogArgsAny...)
 
-	subjectsIn := request.GetSubjects()
-	traceLog.Info("scheduler: starting pipeline", "subjects", subjectsIn)
+	hostsIn := request.GetHosts()
+	traceLog.Info("scheduler: starting pipeline", "hosts", hostsIn)
 
 	// Normalize the input weights so we can apply step weights meaningfully.
 	inWeights := p.normalizeInputWeights(request.GetWeights())
 	traceLog.Info("scheduler: input weights", "weights", inWeights)
 
-	// Run filters first to reduce the number of subjects.
-	// Any weights assigned to filtered out subjects are ignored.
+	// Run filters first to reduce the number of hosts.
+	// Any weights assigned to filtered out hosts are ignored.
 	filteredRequest := p.runFilters(traceLog, request)
 	traceLog.Info(
 		"scheduler: finished filters",
-		"remainingSubjects", filteredRequest.GetSubjects(),
+		"remainingHosts", filteredRequest.GetHosts(),
 	)
 
-	// Run weighers on the filtered subjects.
-	remainingWeights := make(map[string]float64, len(filteredRequest.GetSubjects()))
-	for _, subject := range filteredRequest.GetSubjects() {
-		remainingWeights[subject] = inWeights[subject]
+	// Run weighers on the filtered hosts.
+	remainingWeights := make(map[string]float64, len(filteredRequest.GetHosts()))
+	for _, host := range filteredRequest.GetHosts() {
+		remainingWeights[host] = inWeights[host]
 	}
 	stepWeights := p.runWeighers(traceLog, filteredRequest)
 	outWeights := p.applyWeights(stepWeights, remainingWeights)
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
 
-	subjects := p.sortSubjectsByWeights(outWeights)
-	traceLog.Info("scheduler: sorted subjects", "subjects", subjects)
+	hosts := p.sortHostsByWeights(outWeights)
+	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
 
 	// Collect some metrics about the pipeline execution.
-	go p.monitor.observePipelineResult(request, subjects)
+	go p.monitor.observePipelineResult(request, hosts)
 
 	result := v1alpha1.DecisionResult{
 		RawInWeights:         request.GetWeights(),
 		NormalizedInWeights:  inWeights,
 		AggregatedOutWeights: outWeights,
-		OrderedHosts:         subjects,
+		OrderedHosts:         hosts,
 	}
-	if len(subjects) > 0 {
-		result.TargetHost = &subjects[0]
+	if len(hosts) > 0 {
+		result.TargetHost = &hosts[0]
 	}
 	return result, nil
 }

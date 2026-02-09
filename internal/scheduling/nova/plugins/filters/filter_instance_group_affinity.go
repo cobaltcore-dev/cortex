@@ -25,27 +25,28 @@ func (s *FilterInstanceGroupAffinityStep) Run(
 
 	ig := request.Spec.Data.InstanceGroup
 	if ig == nil {
-		traceLog.Debug("no instance group in request, skipping filter")
+		traceLog.Info("no instance group in request, skipping filter")
 		return result, nil
 	}
 	policy := ig.Data.Policy
 	if policy != "affinity" {
-		traceLog.Debug("instance group policy is not 'affinity', skipping filter")
+		traceLog.Info("instance group policy is not 'affinity', skipping filter")
 		return result, nil
 	}
 
 	if len(ig.Data.Hosts) == 0 {
 		// Nothing to do.
-		traceLog.Debug("instance group has no hosts, skipping filter")
+		traceLog.Info("instance group has no hosts, skipping filter")
 		return result, nil
 	}
 
 	for host := range result.Activations {
 		if slices.Contains(ig.Data.Hosts, host) {
+			traceLog.Info("host is in instance group, keeping", "host", host)
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtered out host not in instance group", slog.String("host", host))
+		traceLog.Info("filtered out host not in instance group", "host", host)
 	}
 	return result, nil
 }

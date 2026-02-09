@@ -35,7 +35,7 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 	for _, hv := range hvs.Items {
 		az, ok := hv.Labels["topology.kubernetes.io/zone"]
 		if !ok {
-			traceLog.Warn("hypervisor missing topology.kubernetes.io/zone label", "host", hv.Name)
+			traceLog.Warn("host missing topology.kubernetes.io/zone label, keeping", "host", hv.Name)
 			continue
 		}
 		if az == request.Spec.Data.AvailabilityZone {
@@ -52,6 +52,7 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 	)
 	for host := range result.Activations {
 		if _, ok := computeHostsInAZ[host]; ok {
+			traceLog.Info("host is in requested az, keeping", "host", host)
 			continue
 		}
 		delete(result.Activations, host)

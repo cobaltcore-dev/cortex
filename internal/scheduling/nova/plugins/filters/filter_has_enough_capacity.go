@@ -162,13 +162,20 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			delete(result.Activations, host)
 			continue
 		}
+		traceLog.Info(
+			"host has enough capacity", "host", host,
+			"requested_vcpus", request.Spec.Data.Flavor.Data.VCPUs,
+			"available_vcpus", freeCPU.String(),
+			"requested_memory_mb", request.Spec.Data.Flavor.Data.MemoryMB,
+			"available_memory_mb", freeMemory.String(),
+		)
 	}
 
 	// Remove all hosts that weren't encountered.
 	for host := range result.Activations {
 		if _, ok := hostsEncountered[host]; !ok {
 			delete(result.Activations, host)
-			traceLog.Debug(
+			traceLog.Info(
 				"removing host with unknown capacity",
 				"host", host,
 			)

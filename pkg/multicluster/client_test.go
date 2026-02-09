@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
@@ -38,19 +39,62 @@ func (u *unknownType) DeepCopyObject() runtime.Object {
 	return &unknownType{TypeMeta: u.TypeMeta, ObjectMeta: u.ObjectMeta}
 }
 
+// fakeCache implements cache.Cache interface for testing IndexField.
+type fakeCache struct {
+	cache.Cache
+	indexFieldFunc func(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error
+	// Track calls to IndexField for verification
+	indexFieldCalls []indexFieldCall
+	mu              sync.Mutex
+}
+
+type indexFieldCall struct {
+	obj   client.Object
+	field string
+}
+
+func (f *fakeCache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
+	f.mu.Lock()
+	f.indexFieldCalls = append(f.indexFieldCalls, indexFieldCall{obj: obj, field: field})
+	f.mu.Unlock()
+	if f.indexFieldFunc != nil {
+		return f.indexFieldFunc(ctx, obj, field, extractValue)
+	}
+	return nil
+}
+
+func (f *fakeCache) getIndexFieldCalls() []indexFieldCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.indexFieldCalls
+}
+
 // fakeCluster implements cluster.Cluster interface for testing.
 type fakeCluster struct {
 	cluster.Cluster
 	fakeClient client.Client
+	fakeCache  *fakeCache
 }
 
 func (f *fakeCluster) GetClient() client.Client {
 	return f.fakeClient
 }
 
+func (f *fakeCluster) GetCache() cache.Cache {
+	return f.fakeCache
+}
+
 func newFakeCluster(scheme *runtime.Scheme, objs ...client.Object) *fakeCluster {
 	return &fakeCluster{
 		fakeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
+		fakeCache:  &fakeCache{},
+	}
+}
+
+func newFakeClusterWithCache(scheme *runtime.Scheme, fakeCache *fakeCache, objs ...client.Object) *fakeCluster {
+	return &fakeCluster{
+		fakeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
+		fakeCache:  fakeCache,
 	}
 }
 
@@ -1447,5 +1491,71 @@ func TestClient_StatusAndSubResource_ErrorOnUnknownType(t *testing.T) {
 	err = c.SubResource("status").Patch(ctx, obj, client.MergeFrom(obj))
 	if err == nil {
 		t.Error("expected error for unknown type in subresource Patch")
+	}
+}
+
+// TestClient_IndexField_WithRemoteClusters tests IndexField with remote clusters configured.
+func TestClient_IndexField_WithRemoteClusters(t *testing.T) {
+	scheme := newTestScheme(t)
+
+	homeCache := &fakeCache{}
+	homeCluster := newFakeClusterWithCache(scheme, homeCache)
+
+	remoteObjCache := &fakeCache{}
+	remoteObjCluster := newFakeClusterWithCache(scheme, remoteObjCache)
+
+	remoteListCache := &fakeCache{}
+	remoteListCluster := newFakeClusterWithCache(scheme, remoteListCache)
+
+	objGVK := schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "ConfigMap",
+	}
+	listGVK := schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "ConfigMapList",
+	}
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{
+			objGVK:  remoteObjCluster,
+			listGVK: remoteListCluster,
+		},
+	}
+
+	ctx := context.Background()
+
+	obj := &corev1.ConfigMap{}
+	list := &corev1.ConfigMapList{}
+	field := "metadata.name"
+	extractValue := func(obj client.Object) []string {
+		return []string{obj.GetName()}
+	}
+
+	err := c.IndexField(ctx, obj, list, field, extractValue)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify IndexField was called on the remote object cluster's cache
+	objCalls := remoteObjCache.getIndexFieldCalls()
+	if len(objCalls) != 1 {
+		t.Errorf("expected 1 IndexField call on remote object cluster, got %d", len(objCalls))
+	}
+
+	// Verify IndexField was called on the remote list cluster's cache
+	listCalls := remoteListCache.getIndexFieldCalls()
+	if len(listCalls) != 1 {
+		t.Errorf("expected 1 IndexField call on remote list cluster, got %d", len(listCalls))
+	}
+
+	// Verify home cluster cache was NOT called
+	homeCalls := homeCache.getIndexFieldCalls()
+	if len(homeCalls) != 0 {
+		t.Errorf("expected 0 IndexField calls on home cluster, got %d", len(homeCalls))
 	}
 }

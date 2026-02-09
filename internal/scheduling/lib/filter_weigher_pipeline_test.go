@@ -63,8 +63,8 @@ func TestPipeline_Run(t *testing.T) {
 		{
 			name: "Single step pipeline",
 			request: mockFilterWeigherPipelineRequest{
-				Subjects: []string{"host1", "host2", "host3"},
-				Weights:  map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
+				Hosts:   []string{"host1", "host2", "host3"},
+				Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 			},
 			expectedResult: []string{"host2", "host1"},
 		},
@@ -185,7 +185,7 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := p.sortSubjectsByWeights(tt.weights)
+			result := p.sortHostsByWeights(tt.weights)
 			for i, host := range tt.expected {
 				if result[i] != host {
 					t.Errorf("expected host %s at position %d, got %s", host, i, result[i])
@@ -217,13 +217,13 @@ func TestPipeline_RunFilters(t *testing.T) {
 	}
 
 	request := mockFilterWeigherPipelineRequest{
-		Subjects: []string{"host1", "host2"},
-		Weights:  map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
+		Hosts:   []string{"host1", "host2"},
+		Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 	}
 
 	req := p.runFilters(slog.Default(), request)
-	if len(req.Subjects) != 2 {
-		t.Fatalf("expected 2 step results, got %d", len(req.Subjects))
+	if len(req.Hosts) != 2 {
+		t.Fatalf("expected 2 step results, got %d", len(req.Hosts))
 	}
 }
 

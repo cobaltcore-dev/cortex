@@ -17,7 +17,7 @@ type PodPipelineRequest struct {
 	Pod corev1.Pod `json:"pod"`
 }
 
-func (r PodPipelineRequest) GetSubjects() []string {
+func (r PodPipelineRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Nodes))
 	for i, host := range r.Nodes {
 		hosts[i] = host.Name
@@ -34,10 +34,10 @@ func (r PodPipelineRequest) GetWeights() map[string]float64 {
 func (r PodPipelineRequest) GetTraceLogArgs() []slog.Attr {
 	return []slog.Attr{}
 }
-func (r PodPipelineRequest) FilterSubjects(includedSubjects map[string]float64) lib.FilterWeigherPipelineRequest {
-	filteredNodes := make([]corev1.Node, 0, len(includedSubjects))
+func (r PodPipelineRequest) FilterHosts(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
+	filteredNodes := make([]corev1.Node, 0, len(includedHosts))
 	for _, node := range r.Nodes {
-		if _, exists := includedSubjects[node.Name]; exists {
+		if _, exists := includedHosts[node.Name]; exists {
 			filteredNodes = append(filteredNodes, node)
 		}
 	}
