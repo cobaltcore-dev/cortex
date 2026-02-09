@@ -334,3 +334,29 @@ func (c *subResourceClient) Patch(ctx context.Context, obj client.Object, patch 
 func (c *subResourceClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
 	return errors.New("apply operation is not supported in multicluster subresource client")
 }
+
+// Index a field for a resource in the matching cluster's cache.
+// Usually, you want to index the same field in both the object and list type,
+// as both would be mapped to individual clients based on their GVK.
+func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.ObjectList, field string, extractValue client.IndexerFunc) error {
+	gvkObj, err := c.GVKFromHomeScheme(obj)
+	if err != nil {
+		return err
+	}
+	if err := c.ClusterForResource(gvkObj).
+		GetCache().
+		IndexField(ctx, obj, field, extractValue); err != nil {
+		return err
+	}
+	// Index the object in the list cluster as well.
+	gvkList, err := c.GVKFromHomeScheme(list)
+	if err != nil {
+		return err
+	}
+	if err := c.ClusterForResource(gvkList).
+		GetCache().
+		IndexField(ctx, obj, field, extractValue); err != nil {
+		return err
+	}
+	return nil
+}
