@@ -164,10 +164,10 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 		traceLog.Info(
 			"host has enough capacity", "host", host,
-			"requested_vcpus", request.Spec.Data.Flavor.Data.VCPUs,
-			"available_vcpus", freeCPU.String(),
+			"requested_cpus", request.Spec.Data.Flavor.Data.VCPUs,
+			"available_cpus", freeCPU.String(),
 			"requested_memory_mb", request.Spec.Data.Flavor.Data.MemoryMB,
-			"available_memory_mb", freeMemory.String(),
+			"available_memory", freeMemory.String(),
 		)
 	}
 
