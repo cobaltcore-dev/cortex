@@ -91,6 +91,7 @@ func newFakeCluster(scheme *runtime.Scheme, objs ...client.Object) *fakeCluster 
 	}
 }
 
+//nolint:unparam
 func newFakeClusterWithCache(scheme *runtime.Scheme, fakeCache *fakeCache, objs ...client.Object) *fakeCluster {
 	return &fakeCluster{
 		fakeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
@@ -1557,5 +1558,104 @@ func TestClient_IndexField_WithRemoteClusters(t *testing.T) {
 	homeCalls := homeCache.getIndexFieldCalls()
 	if len(homeCalls) != 0 {
 		t.Errorf("expected 0 IndexField calls on home cluster, got %d", len(homeCalls))
+	}
+}
+
+// TestClient_IndexField_SameClusterSkipsSecondIndex tests that when object and list map to
+// the same cluster, IndexField is only called once to avoid re-defining the index (which would error).
+func TestClient_IndexField_SameClusterSkipsSecondIndex(t *testing.T) {
+	scheme := newTestScheme(t)
+
+	// Use the same cache/cluster for both object and list GVKs
+	remoteCache := &fakeCache{}
+	remoteCluster := newFakeClusterWithCache(scheme, remoteCache)
+
+	homeCache := &fakeCache{}
+	homeCluster := newFakeClusterWithCache(scheme, homeCache)
+
+	objGVK := schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "ConfigMap",
+	}
+	listGVK := schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "ConfigMapList",
+	}
+
+	// Both object and list GVKs point to the SAME remote cluster instance
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{
+			objGVK:  remoteCluster,
+			listGVK: remoteCluster, // Same cluster instance
+		},
+	}
+
+	ctx := context.Background()
+
+	obj := &corev1.ConfigMap{}
+	list := &corev1.ConfigMapList{}
+	field := "metadata.name"
+	extractValue := func(obj client.Object) []string {
+		return []string{obj.GetName()}
+	}
+
+	err := c.IndexField(ctx, obj, list, field, extractValue)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Key assertion: IndexField should only be called ONCE because both object
+	// and list resolve to the same cluster. Calling it twice would cause an error
+	// from re-defining the same index.
+	remoteCalls := remoteCache.getIndexFieldCalls()
+	if len(remoteCalls) != 1 {
+		t.Errorf("expected 1 IndexField call (skipping duplicate for same cluster), got %d", len(remoteCalls))
+	}
+
+	// Home cluster should not be called at all
+	homeCalls := homeCache.getIndexFieldCalls()
+	if len(homeCalls) != 0 {
+		t.Errorf("expected 0 IndexField calls on home cluster, got %d", len(homeCalls))
+	}
+}
+
+// TestClient_IndexField_HomeClusterSkipsSecondIndex tests that when both object and list
+// use the home cluster (no remote clusters configured), IndexField is only called once.
+func TestClient_IndexField_HomeClusterSkipsSecondIndex(t *testing.T) {
+	scheme := newTestScheme(t)
+
+	homeCache := &fakeCache{}
+	homeCluster := newFakeClusterWithCache(scheme, homeCache)
+
+	// No remote clusters configured - both object and list will use home cluster
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	ctx := context.Background()
+
+	obj := &corev1.ConfigMap{}
+	list := &corev1.ConfigMapList{}
+	field := "metadata.name"
+	extractValue := func(obj client.Object) []string {
+		return []string{obj.GetName()}
+	}
+
+	err := c.IndexField(ctx, obj, list, field, extractValue)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Key assertion: IndexField should only be called ONCE because both object
+	// and list resolve to the same home cluster. Calling it twice would cause
+	// an error from re-defining the same index.
+	homeCalls := homeCache.getIndexFieldCalls()
+	if len(homeCalls) != 1 {
+		t.Errorf("expected 1 IndexField call (skipping duplicate for same home cluster), got %d", len(homeCalls))
 	}
 }
