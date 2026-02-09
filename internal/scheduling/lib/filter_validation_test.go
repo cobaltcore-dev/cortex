@@ -83,15 +83,15 @@ func TestFilterValidator_Init(t *testing.T) {
 func TestFilterValidator_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		subjects      []string
+		hosts         []string
 		runResult     *FilterWeigherPipelineStepResult
 		runError      error
 		expectError   bool
 		errorContains string
 	}{
 		{
-			name:     "successful run - filter removes some subjects",
-			subjects: []string{"host1", "host2", "host3"},
+			name:  "successful run - filter removes some hosts",
+			hosts: []string{"host1", "host2", "host3"},
 			runResult: &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
@@ -102,8 +102,8 @@ func TestFilterValidator_Run(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:     "successful run - filter keeps all subjects",
-			subjects: []string{"host1", "host2"},
+			name:  "successful run - filter keeps all hosts",
+			hosts: []string{"host1", "host2"},
 			runResult: &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
@@ -115,14 +115,14 @@ func TestFilterValidator_Run(t *testing.T) {
 		},
 		{
 			name:        "run error from filter",
-			subjects:    []string{"host1"},
+			hosts:       []string{"host1"},
 			runResult:   nil,
 			runError:    errors.New("filter error"),
 			expectError: true,
 		},
 		{
-			name:     "validation error - subjects increased",
-			subjects: []string{"host1"},
+			name:  "validation error - hosts increased",
+			hosts: []string{"host1"},
 			runResult: &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
@@ -132,11 +132,11 @@ func TestFilterValidator_Run(t *testing.T) {
 			},
 			runError:      nil,
 			expectError:   true,
-			errorContains: "number of subjects increased",
+			errorContains: "number of hosts increased",
 		},
 		{
-			name:     "handle duplicate subjects in request",
-			subjects: []string{"host1", "host1", "host2"},
+			name:  "handle duplicate hosts in request",
+			hosts: []string{"host1", "host1", "host2"},
 			runResult: &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
 					"host1": 1.0,
@@ -157,7 +157,7 @@ func TestFilterValidator_Run(t *testing.T) {
 			}
 			validator := validateFilter(filter)
 			request := mockFilterWeigherPipelineRequest{
-				Subjects: tt.subjects,
+				Hosts: tt.hosts,
 			}
 			traceLog := slog.Default()
 

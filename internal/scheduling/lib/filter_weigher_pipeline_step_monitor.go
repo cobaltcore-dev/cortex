@@ -28,13 +28,13 @@ type FilterWeigherPipelineStepMonitor[RequestType FilterWeigherPipelineRequest] 
 
 	// A timer to measure how long the step takes to run.
 	runTimer prometheus.Observer
-	// A metric to monitor how much the step modifies the weights of the subjects.
-	stepSubjectWeight *prometheus.GaugeVec
-	// A metric to observe how many subjects are removed from the state.
-	removedSubjectsObserver prometheus.Observer
-	// A metric measuring where the subject at a given index came from originally.
+	// A metric to monitor how much the step modifies the weights of the hosts.
+	stepHostWeight *prometheus.GaugeVec
+	// A metric to observe how many hosts are removed from the state.
+	removedHostsObserver prometheus.Observer
+	// A metric measuring where the host at a given index came from originally.
 	stepReorderingsObserver *prometheus.HistogramVec
-	// A metric measuring the impact of the step on the subjects.
+	// A metric measuring the impact of the step on the hosts.
 	stepImpactObserver *prometheus.HistogramVec
 }
 
@@ -45,17 +45,17 @@ func monitorStep[RequestType FilterWeigherPipelineRequest](stepName string, m Fi
 		runTimer = m.stepRunTimer.
 			WithLabelValues(m.PipelineName, stepName)
 	}
-	var removedSubjectsObserver prometheus.Observer
-	if m.stepRemovedSubjectsObserver != nil {
-		removedSubjectsObserver = m.stepRemovedSubjectsObserver.
+	var removedHostsObserver prometheus.Observer
+	if m.stepRemovedHostsObserver != nil {
+		removedHostsObserver = m.stepRemovedHostsObserver.
 			WithLabelValues(m.PipelineName, stepName)
 	}
 	return &FilterWeigherPipelineStepMonitor[RequestType]{
 		runTimer:                runTimer,
 		stepName:                stepName,
 		pipelineName:            m.PipelineName,
-		stepSubjectWeight:       m.stepSubjectWeight,
-		removedSubjectsObserver: removedSubjectsObserver,
+		stepHostWeight:          m.stepHostWeight,
+		removedHostsObserver:    removedHostsObserver,
 		stepReorderingsObserver: m.stepReorderingsObserver,
 		stepImpactObserver:      m.stepImpactObserver,
 	}
@@ -83,60 +83,60 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 		"inWeights", inWeights, "outWeights", stepResult.Activations,
 	)
 
-	// Observe how much the step modifies the weights of the subjects.
-	if s.stepSubjectWeight != nil {
-		for subject, weight := range stepResult.Activations {
-			s.stepSubjectWeight.
-				WithLabelValues(s.pipelineName, subject, s.stepName).
+	// Observe how much the step modifies the weights of the hosts.
+	if s.stepHostWeight != nil {
+		for host, weight := range stepResult.Activations {
+			s.stepHostWeight.
+				WithLabelValues(s.pipelineName, host, s.stepName).
 				Add(weight)
 			if weight != 0.0 {
 				traceLog.Info(
-					"scheduler: modified subject weight",
+					"scheduler: modified host weight",
 					"name", s.stepName, "weight", weight,
 				)
 			}
 		}
 	}
 
-	// Observe how many subjects are removed from the state.
-	subjectsIn := request.GetSubjects()
-	subjectsOut := slices.Collect(maps.Keys(stepResult.Activations))
-	nSubjectsRemoved := len(subjectsIn) - len(subjectsOut)
-	if nSubjectsRemoved < 0 {
+	// Observe how many hosts are removed from the state.
+	hostsIn := request.GetHosts()
+	hostsOut := slices.Collect(maps.Keys(stepResult.Activations))
+	nHostsRemoved := len(hostsIn) - len(hostsOut)
+	if nHostsRemoved < 0 {
 		traceLog.Info(
-			"scheduler: removed subjects",
-			"name", s.stepName, "count", nSubjectsRemoved,
+			"scheduler: removed hosts",
+			"name", s.stepName, "count", nHostsRemoved,
 		)
 	}
-	if s.removedSubjectsObserver != nil {
-		s.removedSubjectsObserver.Observe(float64(nSubjectsRemoved))
+	if s.removedHostsObserver != nil {
+		s.removedHostsObserver.Observe(float64(nHostsRemoved))
 	}
 
-	// Calculate additional metrics to see which subjects were reordered and how far.
-	sort.Slice(subjectsIn, func(i, j int) bool {
-		iSubject, jSubject := subjectsIn[i], subjectsIn[j]
-		return s.Norm(inWeights[iSubject]) > s.Norm(inWeights[jSubject])
+	// Calculate additional metrics to see which hosts were reordered and how far.
+	sort.Slice(hostsIn, func(i, j int) bool {
+		iHost, jHost := hostsIn[i], hostsIn[j]
+		return s.Norm(inWeights[iHost]) > s.Norm(inWeights[jHost])
 	})
-	sort.Slice(subjectsOut, func(i, j int) bool {
+	sort.Slice(hostsOut, func(i, j int) bool {
 		// Add the weights together to get an estimate how far this step alone
-		// would have moved the subject.
-		iSubject, jSubject := subjectsOut[i], subjectsOut[j]
-		iSum := s.Norm(inWeights[iSubject]) + s.Norm(stepResult.Activations[iSubject])
-		jSum := s.Norm(inWeights[jSubject]) + s.Norm(stepResult.Activations[jSubject])
+		// would have moved the host.
+		iHost, jHost := hostsOut[i], hostsOut[j]
+		iSum := s.Norm(inWeights[iHost]) + s.Norm(stepResult.Activations[iHost])
+		jSum := s.Norm(inWeights[jHost]) + s.Norm(stepResult.Activations[jHost])
 		return iSum > jSum
 	})
-	for idx := range min(len(subjectsOut), 5) { // Look at the first 5 subjects.
-		// The subject at this index was moved from its original position.
+	for idx := range min(len(hostsOut), 5) { // Look at the first 5 hosts.
+		// The host at this index was moved from its original position.
 		// Observe how far it was moved.
-		originalIdx := slices.Index(subjectsIn, subjectsOut[idx])
+		originalIdx := slices.Index(hostsIn, hostsOut[idx])
 		if s.stepReorderingsObserver != nil {
 			o := s.stepReorderingsObserver.
 				WithLabelValues(s.pipelineName, s.stepName, strconv.Itoa(idx))
 			o.Observe(float64(originalIdx))
 		}
 		traceLog.Info(
-			"scheduler: reordered subject",
-			"name", s.stepName, "subject", subjectsOut[idx],
+			"scheduler: reordered host",
+			"name", s.stepName, "host", hostsOut[idx],
 			"originalIdx", originalIdx, "newIdx", idx,
 		)
 	}
@@ -144,35 +144,35 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 	// Based on the provided step statistics, log something like this:
 	// max cpu contention: before [ 100%, 50%, 40% ], after [ 40%, 50%, 100% ]
 	for statName, statData := range stepResult.Statistics {
-		if statData.Subjects == nil {
+		if statData.Hosts == nil {
 			continue
 		}
 		msg := "scheduler: statistics for step " + s.stepName
 		msg += " -- " + statName + ""
 		var beforeBuilder strings.Builder
-		for i, subject := range subjectsIn {
-			if subjectStat, ok := statData.Subjects[subject]; ok {
-				beforeBuilder.WriteString(strconv.FormatFloat(subjectStat, 'f', 2, 64))
+		for i, host := range hostsIn {
+			if hostStat, ok := statData.Hosts[host]; ok {
+				beforeBuilder.WriteString(strconv.FormatFloat(hostStat, 'f', 2, 64))
 				beforeBuilder.WriteString(" ")
 				beforeBuilder.WriteString(statData.Unit)
 			} else {
 				beforeBuilder.WriteString("-")
 			}
-			if i < len(subjectsIn)-1 {
+			if i < len(hostsIn)-1 {
 				beforeBuilder.WriteString(", ")
 			}
 		}
 		before := beforeBuilder.String()
 		var afterBuilder strings.Builder
-		for i, subject := range subjectsOut {
-			if subjectStat, ok := statData.Subjects[subject]; ok {
-				afterBuilder.WriteString(strconv.FormatFloat(subjectStat, 'f', 2, 64))
+		for i, host := range hostsOut {
+			if hostStat, ok := statData.Hosts[host]; ok {
+				afterBuilder.WriteString(strconv.FormatFloat(hostStat, 'f', 2, 64))
 				afterBuilder.WriteString(" ")
 				afterBuilder.WriteString(statData.Unit)
 			} else {
 				afterBuilder.WriteString("-")
 			}
-			if i < len(subjectsOut)-1 {
+			if i < len(hostsOut)-1 {
 				afterBuilder.WriteString(", ")
 			}
 		}
@@ -182,10 +182,10 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 
 	// Calculate the impact for each recorded stat.
 	for statName, statData := range stepResult.Statistics {
-		if statData.Subjects == nil {
+		if statData.Hosts == nil {
 			continue
 		}
-		impact, err := impact(subjectsIn, subjectsOut, statData.Subjects, 5)
+		impact, err := impact(hostsIn, hostsOut, statData.Hosts, 5)
 		if err != nil {
 			traceLog.Error(
 				"scheduler: error calculating impact",
@@ -210,28 +210,28 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 
 // Calculate the impact of a scheduler step by comparing the before and after states.
 // The impact is calculated as the sum of the absolute differences in the
-// indices of the subjects in the before and after states, multiplied by the
+// indices of the hosts in the before and after states, multiplied by the
 // absolute difference in the statistics at those indices.
 func impact(before, after []string, stats map[string]float64, topK int) (float64, error) {
 	impact := 0.0
-	for newIdx, subject := range after {
+	for newIdx, host := range after {
 		if newIdx >= topK {
 			break
 		}
 		// Since we are looking at small sets, this is likely faster
 		// than creating the map and using it.
-		oldIdx := slices.Index(before, subject)
+		oldIdx := slices.Index(before, host)
 		if oldIdx < 0 {
 			// This case should not happen, because the scheduler step doesn't
-			// add new subjects, it only reorders existing ones or filters.
-			return 0, fmt.Errorf("subject %s not found in before state", subject)
+			// add new hosts, it only reorders existing ones or filters.
+			return 0, fmt.Errorf("host %s not found in before state", host)
 		}
 		if oldIdx == newIdx {
-			// No impact if the subject stayed at the same index.
+			// No impact if the host stayed at the same index.
 			continue
 		}
 		oldStatAtIdx := stats[before[newIdx]]
-		newStatAtIdx := stats[subject]
+		newStatAtIdx := stats[host]
 
 		idxDisplacement := math.Abs(float64(oldIdx - newIdx))
 		statDifference := math.Abs(oldStatAtIdx - newStatAtIdx)
@@ -240,7 +240,7 @@ func impact(before, after []string, stats map[string]float64, topK int) (float64
 
 		slog.Debug(
 			"scheduler: impact calculation",
-			"subject", subject,
+			"host", host,
 			"oldIdx", oldIdx,
 			"newIdx", newIdx,
 			"idxDisplacement", idxDisplacement,
@@ -253,8 +253,8 @@ func impact(before, after []string, stats map[string]float64, topK int) (float64
 	slog.Debug(
 		"scheduler: total impact",
 		"impact", impact,
-		"subjectsBefore", before,
-		"subjectsAfter", after,
+		"hostsBefore", before,
+		"hostsAfter", after,
 		"stats", stats,
 	)
 

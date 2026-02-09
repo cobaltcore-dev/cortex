@@ -61,8 +61,8 @@ func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) Init(ctx context.Cont
 // Use this to initialize the result before applying filtering/weighing logic.
 func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) IncludeAllHostsFromRequest(request RequestType) *FilterWeigherPipelineStepResult {
 	activations := make(map[string]float64)
-	for _, subject := range request.GetSubjects() {
-		activations[subject] = s.NoEffect()
+	for _, host := range request.GetHosts() {
+		activations[host] = s.NoEffect()
 	}
 	stats := make(map[string]FilterWeigherPipelineStepStatistics)
 	return &FilterWeigherPipelineStepResult{Activations: activations, Statistics: stats}
@@ -71,7 +71,7 @@ func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) IncludeAllHostsFromRe
 // Get default statistics for the input weight keys given in the request.
 func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) PrepareStats(request RequestType, unit string) FilterWeigherPipelineStepStatistics {
 	return FilterWeigherPipelineStepStatistics{
-		Unit:     unit,
-		Subjects: make(map[string]float64, len(request.GetSubjects())),
+		Unit:  unit,
+		Hosts: make(map[string]float64, len(request.GetHosts())),
 	}
 }

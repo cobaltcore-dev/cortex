@@ -14,20 +14,20 @@ type FilterWeigherPipelineMonitor struct {
 
 	// A histogram to measure how long each step takes to run.
 	stepRunTimer *prometheus.HistogramVec
-	// A metric to monitor how much the step modifies the weights of the subjects.
-	stepSubjectWeight *prometheus.GaugeVec
-	// A histogram to observe how many subjects are removed from the state.
-	stepRemovedSubjectsObserver *prometheus.HistogramVec
-	// Histogram measuring where the subject at a given index came from originally.
+	// A metric to monitor how much the step modifies the weights of the hosts.
+	stepHostWeight *prometheus.GaugeVec
+	// A histogram to observe how many hosts are removed from the state.
+	stepRemovedHostsObserver *prometheus.HistogramVec
+	// Histogram measuring where the host at a given index came from originally.
 	stepReorderingsObserver *prometheus.HistogramVec
-	// A histogram to observe the impact of the step on the subjects.
+	// A histogram to observe the impact of the step on the hosts.
 	stepImpactObserver *prometheus.HistogramVec
 	// A histogram to measure how long the pipeline takes to run in total.
 	pipelineRunTimer *prometheus.HistogramVec
-	// A histogram to observe the number of subjects going into the scheduler pipeline.
-	subjectNumberInObserver *prometheus.HistogramVec
-	// A histogram to observe the number of subjects coming out of the scheduler pipeline.
-	subjectNumberOutObserver *prometheus.HistogramVec
+	// A histogram to observe the number of hosts going into the scheduler pipeline.
+	hostNumberInObserver *prometheus.HistogramVec
+	// A histogram to observe the number of hosts coming out of the scheduler pipeline.
+	hostNumberOutObserver *prometheus.HistogramVec
 	// Counter for the number of requests processed by the scheduler.
 	requestCounter *prometheus.CounterVec
 }
@@ -40,7 +40,7 @@ func NewPipelineMonitor() FilterWeigherPipelineMonitor {
 	buckets = append(buckets, prometheus.LinearBuckets(50, 50, 6)...)
 	stepReorderingsObserver := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_filter_weigher_pipeline_step_shift_origin",
-		Help:    "From which index of the subject list the subject came from originally.",
+		Help:    "From which index of the host list the host came from originally.",
 		Buckets: buckets,
 	}, []string{"pipeline", "step", "outidx"})
 	return FilterWeigherPipelineMonitor{
@@ -49,19 +49,19 @@ func NewPipelineMonitor() FilterWeigherPipelineMonitor {
 			Help:    "Duration of scheduler pipeline step run",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"pipeline", "step"}),
-		stepSubjectWeight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		stepHostWeight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_filter_weigher_pipeline_step_weight_modification",
-			Help: "Modification of subject weight by scheduler pipeline step",
-		}, []string{"pipeline", "subject", "step"}),
-		stepRemovedSubjectsObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_filter_weigher_pipeline_step_removed_subjects",
-			Help:    "Number of subjects removed by scheduler pipeline step",
+			Help: "Modification of host weight by scheduler pipeline step",
+		}, []string{"pipeline", "host", "step"}),
+		stepRemovedHostsObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_filter_weigher_pipeline_step_removed_hosts",
+			Help:    "Number of hosts removed by scheduler pipeline step",
 			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 		}, []string{"pipeline", "step"}),
 		stepReorderingsObserver: stepReorderingsObserver,
 		stepImpactObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "cortex_filter_weigher_pipeline_step_impact",
-			Help:    "Impact of the step on the subjects",
+			Help:    "Impact of the step on the hosts",
 			Buckets: prometheus.ExponentialBucketsRange(0.01, 1000, 20),
 		}, []string{"pipeline", "step", "stat", "unit"}),
 		pipelineRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
@@ -69,14 +69,14 @@ func NewPipelineMonitor() FilterWeigherPipelineMonitor {
 			Help:    "Duration of scheduler pipeline run",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"pipeline"}),
-		subjectNumberInObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_filter_weigher_pipeline_subject_number_in",
-			Help:    "Number of subjects going into the scheduler pipeline",
+		hostNumberInObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_filter_weigher_pipeline_host_number_in",
+			Help:    "Number of hosts going into the scheduler pipeline",
 			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 		}, []string{"pipeline"}),
-		subjectNumberOutObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "cortex_filter_weigher_pipeline_subject_number_out",
-			Help:    "Number of subjects coming out of the scheduler pipeline",
+		hostNumberOutObserver: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "cortex_filter_weigher_pipeline_host_number_out",
+			Help:    "Number of hosts coming out of the scheduler pipeline",
 			Buckets: prometheus.ExponentialBucketsRange(1, 1000, 10),
 		}, []string{"pipeline"}),
 		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -93,17 +93,17 @@ func (m FilterWeigherPipelineMonitor) SubPipeline(name string) FilterWeigherPipe
 	return cp
 }
 
-// Observe a scheduler pipeline result: subjects going in, and subjects going out.
+// Observe a scheduler pipeline result: hosts going in, and hosts going out.
 func (m *FilterWeigherPipelineMonitor) observePipelineResult(request FilterWeigherPipelineRequest, result []string) {
-	// Observe the number of subjects going into the scheduler pipeline.
-	if m.subjectNumberInObserver != nil {
-		m.subjectNumberInObserver.
+	// Observe the number of hosts going into the scheduler pipeline.
+	if m.hostNumberInObserver != nil {
+		m.hostNumberInObserver.
 			WithLabelValues(m.PipelineName).
-			Observe(float64(len(request.GetSubjects())))
+			Observe(float64(len(request.GetHosts())))
 	}
-	// Observe the number of subjects coming out of the scheduler pipeline.
-	if m.subjectNumberOutObserver != nil {
-		m.subjectNumberOutObserver.
+	// Observe the number of hosts coming out of the scheduler pipeline.
+	if m.hostNumberOutObserver != nil {
+		m.hostNumberOutObserver.
 			WithLabelValues(m.PipelineName).
 			Observe(float64(len(result)))
 	}
@@ -117,24 +117,24 @@ func (m *FilterWeigherPipelineMonitor) observePipelineResult(request FilterWeigh
 
 func (m *FilterWeigherPipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.stepRunTimer.Describe(ch)
-	m.stepSubjectWeight.Describe(ch)
-	m.stepRemovedSubjectsObserver.Describe(ch)
+	m.stepHostWeight.Describe(ch)
+	m.stepRemovedHostsObserver.Describe(ch)
 	m.stepReorderingsObserver.Describe(ch)
 	m.stepImpactObserver.Describe(ch)
 	m.pipelineRunTimer.Describe(ch)
-	m.subjectNumberInObserver.Describe(ch)
-	m.subjectNumberOutObserver.Describe(ch)
+	m.hostNumberInObserver.Describe(ch)
+	m.hostNumberOutObserver.Describe(ch)
 	m.requestCounter.Describe(ch)
 }
 
 func (m *FilterWeigherPipelineMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.stepRunTimer.Collect(ch)
-	m.stepSubjectWeight.Collect(ch)
-	m.stepRemovedSubjectsObserver.Collect(ch)
+	m.stepHostWeight.Collect(ch)
+	m.stepRemovedHostsObserver.Collect(ch)
 	m.stepReorderingsObserver.Collect(ch)
 	m.stepImpactObserver.Collect(ch)
 	m.pipelineRunTimer.Collect(ch)
-	m.subjectNumberInObserver.Collect(ch)
-	m.subjectNumberOutObserver.Collect(ch)
+	m.hostNumberInObserver.Collect(ch)
+	m.hostNumberOutObserver.Collect(ch)
 	m.requestCounter.Collect(ch)
 }

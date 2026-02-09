@@ -28,6 +28,6 @@ type FilterWeigherPipelineStepResult struct {
 type FilterWeigherPipelineStepStatistics struct {
 	// The unit of the statistic.
 	Unit string
-	// The subjects and their values.
-	Subjects map[string]float64
+	// The hosts and their values.
+	Hosts map[string]float64
 }

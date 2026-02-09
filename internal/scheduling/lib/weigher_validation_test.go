@@ -94,7 +94,7 @@ func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
 	}
 
 	request := mockFilterWeigherPipelineRequest{
-		Subjects: []string{"subject1", "subject2"},
+		Hosts: []string{"host1", "host2"},
 	}
 
 	validator := WeigherValidator[mockFilterWeigherPipelineRequest]{
@@ -128,7 +128,7 @@ func TestWeigherValidator_Run_HostNumberMismatch(t *testing.T) {
 	}
 
 	request := mockFilterWeigherPipelineRequest{
-		Subjects: []string{"subject1", "subject2"},
+		Hosts: []string{"host1", "host2"},
 	}
 
 	validator := WeigherValidator[mockFilterWeigherPipelineRequest]{
@@ -144,7 +144,7 @@ func TestWeigherValidator_Run_HostNumberMismatch(t *testing.T) {
 		t.Errorf("Run() weights = %v, want nil", result.Activations)
 	}
 
-	expectedError := "safety: number of (deduplicated) subjects changed during step execution"
+	expectedError := "safety: number of (deduplicated) hosts changed during step execution"
 	if err.Error() != expectedError {
 		t.Errorf("Run() error = %v, want %v", err.Error(), expectedError)
 	}

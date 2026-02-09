@@ -88,7 +88,7 @@ func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request a
 		}
 		result.
 			Statistics["ram utilized"].
-			Subjects[hostUtilization.ComputeHost] = hostUtilization.RAMUtilizedPct
+			Hosts[hostUtilization.ComputeHost] = hostUtilization.RAMUtilizedPct
 		result.Activations[hostUtilization.ComputeHost] = lib.MinMaxScale(
 			hostUtilization.RAMUtilizedPct,
 			s.Options.RAMUtilizedLowerBoundPct,

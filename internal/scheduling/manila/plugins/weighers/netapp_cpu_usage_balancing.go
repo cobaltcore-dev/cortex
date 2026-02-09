@@ -101,8 +101,8 @@ func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.Ext
 			s.Options.MaxCPUUsageActivationUpperBound,
 		)
 		result.Activations[usage.StoragePoolName] = activationAvg + activationMax
-		result.Statistics["avg cpu contention"].Subjects[usage.StoragePoolName] = usage.AvgCPUUsagePct
-		result.Statistics["max cpu contention"].Subjects[usage.StoragePoolName] = usage.MaxCPUUsagePct
+		result.Statistics["avg cpu contention"].Hosts[usage.StoragePoolName] = usage.AvgCPUUsagePct
+		result.Statistics["max cpu contention"].Hosts[usage.StoragePoolName] = usage.MaxCPUUsagePct
 	}
 	return result, nil
 }

@@ -134,14 +134,14 @@ kubectl logs deploy/cortex-ironcore-controller-manager
 The logs show that the cortex scheduler pipeline has been executed and a machine pool has been assigned to the machine:
 
 ```log
-2025/10/13 11:11:08 INFO scheduler: starting pipeline subjects=[ironcore-in-a-box-control-plane]
+2025/10/13 11:11:08 INFO scheduler: starting pipeline hosts=[ironcore-in-a-box-control-plane]
 2025/10/13 11:11:08 INFO scheduler: running step stepName=noop stepAlias=""
 2025/10/13 11:11:08 INFO scheduler: finished step stepName=noop stepAlias="" name=noop alias="" inWeights=map[ironcore-in-a-box-control-plane:0] outWeights=map[ironcore-in-a-box-control-plane:1]
-2025/10/13 11:11:08 INFO scheduler: modified subject weight stepName=noop stepAlias="" name=noop alias="" weight=1
-2025/10/13 11:11:08 INFO scheduler: reordered subject stepName=noop stepAlias="" name=noop alias="" subject=ironcore-in-a-box-control-plane originalIdx=0 newIdx=0
+2025/10/13 11:11:08 INFO scheduler: modified host weight stepName=noop stepAlias="" name=noop alias="" weight=1
+2025/10/13 11:11:08 INFO scheduler: reordered host stepName=noop stepAlias="" name=noop alias="" host=ironcore-in-a-box-control-plane originalIdx=0 newIdx=0
 2025/10/13 11:11:08 INFO scheduler: finished step stepName=noop stepAlias=""
 2025/10/13 11:11:08 INFO scheduler: finished pipeline
 2025/10/13 11:11:08 INFO scheduler: input weights weights=map[ironcore-in-a-box-control-plane:0]
 2025/10/13 11:11:08 INFO scheduler: output weights weights=map[ironcore-in-a-box-control-plane:0.7615941559557649]
-2025/10/13 11:11:08 INFO scheduler: sorted subjects subjects=[ironcore-in-a-box-control-plane]
+2025/10/13 11:11:08 INFO scheduler: sorted hosts hosts=[ironcore-in-a-box-control-plane]
 ```

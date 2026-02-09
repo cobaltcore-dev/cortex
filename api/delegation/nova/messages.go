@@ -49,7 +49,7 @@ type ExternalSchedulerRequest struct {
 	Pipeline string `json:"pipeline"`
 }
 
-func (r ExternalSchedulerRequest) GetSubjects() []string {
+func (r ExternalSchedulerRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Hosts))
 	for i, host := range r.Hosts {
 		hosts[i] = host.ComputeHost
@@ -71,10 +71,10 @@ func (r ExternalSchedulerRequest) GetTraceLogArgs() []slog.Attr {
 		slog.String("project", r.Context.ProjectID),
 	}
 }
-func (r ExternalSchedulerRequest) FilterSubjects(includedSubjects map[string]float64) lib.FilterWeigherPipelineRequest {
-	filteredHosts := make([]ExternalSchedulerHost, 0, len(includedSubjects))
+func (r ExternalSchedulerRequest) FilterHosts(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
+	filteredHosts := make([]ExternalSchedulerHost, 0, len(includedHosts))
 	for _, host := range r.Hosts {
-		if _, exists := includedSubjects[host.ComputeHost]; exists {
+		if _, exists := includedHosts[host.ComputeHost]; exists {
 			filteredHosts = append(filteredHosts, host)
 		}
 	}

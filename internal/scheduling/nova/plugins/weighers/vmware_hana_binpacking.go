@@ -133,7 +133,7 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 				hostUtilization.TotalRAMAllocatableMB * 100)
 		result.
 			Statistics["ram utilized after"].
-			Subjects[hostUtilization.ComputeHost] = after
+			Hosts[hostUtilization.ComputeHost] = after
 
 		// Only apply activation if the projected utilization is within the acceptable range
 		if after < s.Options.RAMUtilizedAfterLowerBoundPct || after > s.Options.RAMUtilizedAfterUpperBoundPct {

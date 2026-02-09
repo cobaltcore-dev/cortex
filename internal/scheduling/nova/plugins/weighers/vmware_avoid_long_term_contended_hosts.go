@@ -107,8 +107,8 @@ func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, reque
 			s.Options.MaxCPUContentionActivationUpperBound,
 		)
 		result.Activations[host.ComputeHost] = activationAvg + activationMax
-		result.Statistics["avg cpu contention"].Subjects[host.ComputeHost] = host.AvgCPUContention
-		result.Statistics["max cpu contention"].Subjects[host.ComputeHost] = host.MaxCPUContention
+		result.Statistics["avg cpu contention"].Hosts[host.ComputeHost] = host.AvgCPUContention
+		result.Statistics["max cpu contention"].Hosts[host.ComputeHost] = host.MaxCPUContention
 	}
 	return result, nil
 }
