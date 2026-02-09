@@ -343,7 +343,8 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 	if err != nil {
 		return err
 	}
-	if err := c.ClusterForResource(gvkObj).
+	objCluster := c.ClusterForResource(gvkObj)
+	if err := objCluster.
 		GetCache().
 		IndexField(ctx, obj, field, extractValue); err != nil {
 		return err
@@ -353,7 +354,13 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 	if err != nil {
 		return err
 	}
-	if err := c.ClusterForResource(gvkList).
+	objListCluster := c.ClusterForResource(gvkList)
+	// If the object and list map to the same cluster, we have already indexed
+	// the field above and re-defining the index will lead to an indexer conflict.
+	if objCluster == objListCluster {
+		return nil
+	}
+	if err := objListCluster.
 		GetCache().
 		IndexField(ctx, obj, field, extractValue); err != nil {
 		return err
