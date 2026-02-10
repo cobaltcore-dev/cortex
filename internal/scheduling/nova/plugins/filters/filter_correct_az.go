@@ -10,6 +10,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type FilterCorrectAZStep struct {
@@ -33,9 +34,9 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 	// "topology.kubernetes.io/zone" on the hv crd.
 	var computeHostsInAZ = make(map[string]struct{})
 	for _, hv := range hvs.Items {
-		az, ok := hv.Labels["topology.kubernetes.io/zone"]
+		az, ok := hv.Labels[corev1.LabelTopologyZone]
 		if !ok {
-			traceLog.Warn("host missing topology.kubernetes.io/zone label, keeping", "host", hv.Name)
+			traceLog.Warn("host missing zone label, keeping", "host", hv.Name)
 			continue
 		}
 		if az == request.Spec.Data.AvailabilityZone {
