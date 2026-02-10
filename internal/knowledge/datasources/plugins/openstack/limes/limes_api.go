@@ -136,6 +136,14 @@ func (api *limesAPI) getCommitments(ctx context.Context, project identity.Projec
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	// This can happen if a project was deleted after we fetched the list of projects but before we fetched the commitments for the project.
+	// In this case, we can simply ignore the error and return an empty list of commitments for the project.
+	if resp.StatusCode == http.StatusNotFound {
+		slog.Warn("project not found, skipping", "projectID", project.ID, "domainID", project.DomainID)
+		return []Commitment{}, nil
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
