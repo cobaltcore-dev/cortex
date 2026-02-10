@@ -140,7 +140,7 @@ func (api *limesAPI) getCommitments(ctx context.Context, project identity.Projec
 	// This can happen if a project was deleted after we fetched the list of projects but before we fetched the commitments for the project.
 	// In this case, we can simply ignore the error and return an empty list of commitments for the project.
 	if resp.StatusCode == http.StatusNotFound {
-		slog.Warn("project not found, skipping", "projectID", project.ID, "domainID", project.DomainID)
+		slog.Warn("limes returned 404 for project, skipping", "projectID", project.ID, "domainID", project.DomainID)
 		return []Commitment{}, nil
 	}
 
