@@ -64,11 +64,6 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Init(ctx context.Context, clien
 func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
-	if !request.VMware {
-		slog.Debug("Skipping general purpose balancing step for non-VMware VM")
-		return result, nil
-	}
-
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 

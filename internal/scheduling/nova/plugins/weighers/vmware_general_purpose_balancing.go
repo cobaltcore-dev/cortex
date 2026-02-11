@@ -61,10 +61,6 @@ func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request a
 		slog.Debug("Skipping general purpose balancing step for HANA flavor", "flavor", request.Spec.Data.Flavor.Data.Name)
 		return result, nil
 	}
-	if !request.VMware {
-		slog.Debug("Skipping general purpose balancing step for non-VMware VM")
-		return result, nil
-	}
 
 	result.Statistics["ram utilized"] = s.PrepareStats(request, "%")
 

@@ -570,7 +570,7 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				Reservation: false,
 			},
 			expectErr:   true,
-			errContains: "missing hypervisor_type",
+			errContains: "failed to determine hypervisor type from request data",
 		},
 		{
 			name: "unsupported hypervisor_type",
@@ -589,7 +589,7 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				Reservation: false,
 			},
 			expectErr:   true,
-			errContains: "unsupported hypervisor_type",
+			errContains: "failed to determine hypervisor type from request data",
 		},
 	}
 

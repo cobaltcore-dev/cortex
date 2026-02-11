@@ -8,6 +8,298 @@ import (
 	"testing"
 )
 
+func TestGetIntent(t *testing.T) {
+	tests := []struct {
+		name           string
+		schedulerHints map[string]any
+		expectedIntent RequestIntent
+		expectError    bool
+	}{
+		{
+			name: "rebuild intent",
+			schedulerHints: map[string]any{
+				"_nova_check_type": "rebuild",
+			},
+			expectedIntent: RebuildIntent,
+			expectError:    false,
+		},
+		{
+			name: "resize intent",
+			schedulerHints: map[string]any{
+				"_nova_check_type": "resize",
+			},
+			expectedIntent: ResizeIntent,
+			expectError:    false,
+		},
+		{
+			name: "live migration intent",
+			schedulerHints: map[string]any{
+				"_nova_check_type": "live_migrate",
+			},
+			expectedIntent: LiveMigrationIntent,
+			expectError:    false,
+		},
+		{
+			name: "evacuate intent",
+			schedulerHints: map[string]any{
+				"_nova_check_type": "evacuate",
+			},
+			expectedIntent: EvacuateIntent,
+			expectError:    false,
+		},
+		{
+			name: "create intent (default for unknown type)",
+			schedulerHints: map[string]any{
+				"_nova_check_type": "unknown_type",
+			},
+			expectedIntent: CreateIntent,
+			expectError:    false,
+		},
+		{
+			name: "create intent (default for empty string)",
+			schedulerHints: map[string]any{
+				"_nova_check_type": "",
+			},
+			expectedIntent: CreateIntent,
+			expectError:    false,
+		},
+		{
+			name: "rebuild intent from list hint",
+			schedulerHints: map[string]any{
+				"_nova_check_type": []any{"rebuild"},
+			},
+			expectedIntent: RebuildIntent,
+			expectError:    false,
+		},
+		{
+			name: "resize intent from list hint",
+			schedulerHints: map[string]any{
+				"_nova_check_type": []any{"resize"},
+			},
+			expectedIntent: ResizeIntent,
+			expectError:    false,
+		},
+		{
+			name: "live migration intent from list hint",
+			schedulerHints: map[string]any{
+				"_nova_check_type": []any{"live_migrate"},
+			},
+			expectedIntent: LiveMigrationIntent,
+			expectError:    false,
+		},
+		{
+			name: "evacuate intent from list hint",
+			schedulerHints: map[string]any{
+				"_nova_check_type": []any{"evacuate"},
+			},
+			expectedIntent: EvacuateIntent,
+			expectError:    false,
+		},
+		{
+			name:           "error when scheduler hints are nil",
+			schedulerHints: nil,
+			expectedIntent: "",
+			expectError:    true,
+		},
+		{
+			name:           "error when _nova_check_type key is missing",
+			schedulerHints: map[string]any{},
+			expectedIntent: "",
+			expectError:    true,
+		},
+		{
+			name: "error for unsupported hint type (int)",
+			schedulerHints: map[string]any{
+				"_nova_check_type": 123,
+			},
+			expectedIntent: "",
+			expectError:    true,
+		},
+		{
+			name: "error for empty list hint",
+			schedulerHints: map[string]any{
+				"_nova_check_type": []any{},
+			},
+			expectedIntent: "",
+			expectError:    true,
+		},
+		{
+			name: "error for list with non-string element",
+			schedulerHints: map[string]any{
+				"_nova_check_type": []any{123},
+			},
+			expectedIntent: "",
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ExternalSchedulerRequest{
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						SchedulerHints: tt.schedulerHints,
+					},
+				},
+			}
+
+			intent, err := req.GetIntent()
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if intent != tt.expectedIntent {
+				t.Errorf("expected intent %q, got %q", tt.expectedIntent, intent)
+			}
+		})
+	}
+}
+
+func TestGetHypervisorType(t *testing.T) {
+	tests := []struct {
+		name               string
+		extraSpecs         map[string]string
+		expectedHypervisor HypervisorType
+		expectError        bool
+	}{
+		{
+			name: "QEMU hypervisor type (lowercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "qemu",
+			},
+			expectedHypervisor: HypervisorTypeQEMU,
+			expectError:        false,
+		},
+		{
+			name: "QEMU hypervisor type (uppercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "QEMU",
+			},
+			expectedHypervisor: HypervisorTypeQEMU,
+			expectError:        false,
+		},
+		{
+			name: "QEMU hypervisor type (mixed case)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "Qemu",
+			},
+			expectedHypervisor: HypervisorTypeQEMU,
+			expectError:        false,
+		},
+		{
+			name: "CH hypervisor type (lowercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "ch",
+			},
+			expectedHypervisor: HypervisorTypeCH,
+			expectError:        false,
+		},
+		{
+			name: "CH hypervisor type (uppercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "CH",
+			},
+			expectedHypervisor: HypervisorTypeCH,
+			expectError:        false,
+		},
+		{
+			name: "VMware hypervisor type (exact case)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "VMware vCenter Server",
+			},
+			expectedHypervisor: HypervisorTypeVMware,
+			expectError:        false,
+		},
+		{
+			name: "VMware hypervisor type (lowercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "vmware vcenter server",
+			},
+			expectedHypervisor: HypervisorTypeVMware,
+			expectError:        false,
+		},
+		{
+			name: "VMware hypervisor type (uppercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "VMWARE VCENTER SERVER",
+			},
+			expectedHypervisor: HypervisorTypeVMware,
+			expectError:        false,
+		},
+		{
+			name:               "error when hypervisor_type key is missing",
+			extraSpecs:         map[string]string{},
+			expectedHypervisor: "",
+			expectError:        true,
+		},
+		{
+			name:               "error when extra specs is nil",
+			extraSpecs:         nil,
+			expectedHypervisor: "",
+			expectError:        true,
+		},
+		{
+			name: "error for unsupported hypervisor type",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "unsupported_hypervisor",
+			},
+			expectedHypervisor: "",
+			expectError:        true,
+		},
+		{
+			name: "error for empty hypervisor type value",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "",
+			},
+			expectedHypervisor: "",
+			expectError:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ExternalSchedulerRequest{
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						Flavor: NovaObject[NovaFlavor]{
+							Data: NovaFlavor{
+								ExtraSpecs: tt.extraSpecs,
+							},
+						},
+					},
+				},
+			}
+
+			hypervisorType, err := req.GetHypervisorType()
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if hypervisorType != tt.expectedHypervisor {
+				t.Errorf("expected hypervisor type %q, got %q", tt.expectedHypervisor, hypervisorType)
+			}
+		})
+	}
+}
+
 func TestNovaSpecUnmarshal(t *testing.T) {
 	var jsonData = `{
         "spec": {

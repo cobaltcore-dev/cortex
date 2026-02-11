@@ -61,10 +61,6 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 		slog.Debug("Skipping hana binpacking step for non-HANA flavor", "flavor", request.Spec.Data.Flavor.Data.Name)
 		return result, nil
 	}
-	if !request.VMware {
-		slog.Debug("Skipping hana binpacking step for non-VMware VM")
-		return result, nil
-	}
 
 	result.Statistics["ram utilized after"] = s.PrepareStats(request, "%")
 
