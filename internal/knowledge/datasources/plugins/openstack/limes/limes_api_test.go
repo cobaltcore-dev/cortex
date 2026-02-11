@@ -146,6 +146,15 @@ func TestLimesAPI_GetAllCommitments_MultipleProjects(t *testing.T) {
 		}
 	})
 
+	handler.HandleFunc("/v1/domains/domain1/projects/project-deleted/commitments", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, err := w.Write([]byte(`{"error": "project not found"}`))
+		if err != nil {
+			t.Fatalf("failed to write response: %v", err)
+		}
+	})
+
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -162,6 +171,8 @@ func TestLimesAPI_GetAllCommitments_MultipleProjects(t *testing.T) {
 	projects := []identity.Project{
 		{ID: "project1", DomainID: "domain1"},
 		{ID: "project2", DomainID: "domain1"},
+		// Returns a 404, should be handled gracefully and not cause the entire API call to fail.
+		{ID: "project-deleted", DomainID: "domain1"},
 	}
 	commitments, err := api.GetAllCommitments(ctx, projects)
 	if err != nil {
