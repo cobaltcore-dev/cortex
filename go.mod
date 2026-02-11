@@ -1,6 +1,6 @@
 module github.com/cobaltcore-dev/cortex
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260205162610-ca866d614be7
