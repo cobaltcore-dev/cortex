@@ -224,7 +224,6 @@ func TestVMwareGeneralPurposeBalancingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -251,32 +250,6 @@ func TestVMwareGeneralPurposeBalancingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedActivations: map[string]float64{
-				"host1": 0.0, // should be no-effect
-				"host2": 0.0, // should be no-effect
-			},
-			expectStatistics: false,
-		},
-		{
-			name: "Non-VMware VM should be skipped",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "m1.medium",
-								MemoryMB: 4096,
-							},
-						},
-					},
-				},
-				VMware: false,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -301,7 +274,6 @@ func TestVMwareGeneralPurposeBalancingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host_unknown"}, // no capabilities for this host

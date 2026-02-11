@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
@@ -32,15 +33,6 @@ type ExternalSchedulerRequest struct {
 
 	// Whether the request is a reservation.
 	Reservation bool `json:"reservation"`
-
-	// Whether the Nova scheduling request is a rebuild request.
-	Rebuild bool `json:"rebuild"`
-	// Whether the Nova scheduling request is a resize request.
-	Resize bool `json:"resize"`
-	// Whether the Nova scheduling request is a live migration.
-	Live bool `json:"live"`
-	// Whether the affected VM is a VMware VM.
-	VMware bool `json:"vmware"`
 
 	Hosts   []ExternalSchedulerHost `json:"hosts"`
 	Weights map[string]float64      `json:"weights"`
@@ -80,6 +72,33 @@ func (r ExternalSchedulerRequest) FilterHosts(includedHosts map[string]float64) 
 	}
 	r.Hosts = filteredHosts
 	return r
+}
+
+type HypervisorType string
+
+const (
+	// HypervisorTypeQEMU represents QEMU/KVM hypervisors.
+	HypervisorTypeQEMU HypervisorType = "qemu"
+	// HypervisorTypeCH represents Cloud-Hypervisor/KVM hypervisors.
+	HypervisorTypeCH HypervisorType = "ch"
+	// HypervisorTypeVMware represents VMware hypervisors.
+	HypervisorTypeVMware HypervisorType = "vmware"
+)
+
+// GetHypervisorType determines the hypervisor type based on the requested flavor.
+func (req ExternalSchedulerRequest) GetHypervisorType() (HypervisorType, error) {
+	extraSpecs := req.Spec.Data.Flavor.Data.ExtraSpecs
+	if val, ok := extraSpecs["capabilities:hypervisor_type"]; ok {
+		switch strings.ToLower(val) {
+		case "qemu":
+			return HypervisorTypeQEMU, nil
+		case "ch":
+			return HypervisorTypeCH, nil
+		case "vmware vcenter server":
+			return HypervisorTypeVMware, nil
+		}
+	}
+	return "", errors.New("hypervisor type not specified in flavor extra specs")
 }
 
 type RequestIntent string

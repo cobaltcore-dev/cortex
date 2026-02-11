@@ -203,7 +203,6 @@ func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 		{
 			name: "Avoid contended hosts",
 			request: api.ExternalSchedulerRequest{
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -221,7 +220,6 @@ func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 		{
 			name: "Missing data",
 			request: api.ExternalSchedulerRequest{
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host4"},
 					{ComputeHost: "host5"},

@@ -217,7 +217,6 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 						ProjectID: "project1",
 					},
 				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -237,7 +236,6 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 						ProjectID: "project2",
 					},
 				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -249,12 +247,6 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		{
 			name: "No noisy project data",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project3",
-					},
-				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},

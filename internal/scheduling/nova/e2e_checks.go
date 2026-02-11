@@ -289,12 +289,6 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	} else if err := json.Unmarshal([]byte(flavor.ExtraSpecs), &extraSpecs); err != nil {
 		panic(err)
 	}
-	// Check if the flavor is for vmware.
-	vmware, kvm := false, false
-	if val, ok := extraSpecs["capabilities:hypervisor_type"]; ok {
-		vmware = strings.EqualFold(val, "VMware vCenter Server")
-		kvm = strings.EqualFold(val, "qemu") || strings.EqualFold(val, "ch")
-	}
 	slog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
 	request := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
@@ -314,10 +308,12 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 		}},
 		Hosts:   hosts,
 		Weights: weights,
-		VMware:  vmware,
 	}
 	// Force to use the pipeline with all filters enabled for kvm flavors.
-	if kvm {
+	hvType, err := request.GetHypervisorType()
+	if err != nil {
+		slog.Info("failed to determine hypervisor type, using default pipeline", "error", err)
+	} else if hvType == api.HypervisorTypeQEMU || hvType == api.HypervisorTypeCH {
 		request.Pipeline = "nova-external-scheduler-kvm-all-filters-enabled"
 	}
 	return request

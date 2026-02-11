@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -88,12 +87,13 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 // Note that the pipelines provided here need to be created in the cluster.
 // See also the helm/cortex-nova bundle.
 func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerRequest) (string, error) {
-	hvType, ok := requestData.Spec.Data.Flavor.Data.ExtraSpecs["capabilities:hypervisor_type"]
-	if !ok {
-		return "", fmt.Errorf("missing hypervisor_type in flavor extra specs: %v", requestData.Spec.Data.Flavor.Data.ExtraSpecs)
+	hvType, err := requestData.GetHypervisorType()
+	if err != nil {
+		slog.Info("failed to determine hypervisor type, cannot infer pipeline name", "error", err)
+		return "", errors.New("failed to determine hypervisor type from request data")
 	}
-	switch strings.ToLower(hvType) {
-	case "qemu", "ch":
+	switch hvType {
+	case api.HypervisorTypeCH, api.HypervisorTypeQEMU:
 		enableAllFilters := false
 		// If the nova request matches a configurable openstack project,
 		// use a different pipeline that has all filters enabled.
@@ -107,7 +107,7 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 			return "nova-external-scheduler-kvm-all-filters-enabled", nil
 		}
 		return "nova-external-scheduler-kvm", nil
-	case "vmware vcenter server":
+	case api.HypervisorTypeVMware:
 		if requestData.Reservation {
 			return "", errors.New("reservations are not supported on vmware hypervisors")
 		}
