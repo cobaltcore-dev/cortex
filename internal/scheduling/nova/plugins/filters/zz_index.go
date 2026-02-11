@@ -4,7 +4,7 @@
 package filters
 
 import (
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 

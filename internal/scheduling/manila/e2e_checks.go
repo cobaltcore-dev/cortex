@@ -11,7 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
+	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"

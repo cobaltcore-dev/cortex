@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 )
 
 func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cobaltcore-dev/cortex/api/delegation/ironcore"
-	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/ironcore/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
+	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"

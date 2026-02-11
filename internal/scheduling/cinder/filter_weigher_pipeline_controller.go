@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/cinder"
+	api "github.com/cobaltcore-dev/cortex/api/external/cinder"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

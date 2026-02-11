@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
+	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/sapcc/go-bits/must"
 

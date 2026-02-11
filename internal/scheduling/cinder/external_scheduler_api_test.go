@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	cinderapi "github.com/cobaltcore-dev/cortex/api/delegation/cinder"
+	cinderapi "github.com/cobaltcore-dev/cortex/api/external/cinder"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 

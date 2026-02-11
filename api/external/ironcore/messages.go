@@ -6,7 +6,7 @@ package ironcore
 import (
 	"log/slog"
 
-	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/ironcore/v1alpha1"
+	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 

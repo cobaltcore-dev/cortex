@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	novaapi "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

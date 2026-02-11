@@ -4,7 +4,7 @@
 package filters
 
 import (
-	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
+	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 

@@ -7,8 +7,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/delegation/ironcore"
-	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/ironcore/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
+	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
