@@ -164,6 +164,142 @@ func TestGetIntent(t *testing.T) {
 	}
 }
 
+func TestGetHypervisorType(t *testing.T) {
+	tests := []struct {
+		name               string
+		extraSpecs         map[string]string
+		expectedHypervisor HypervisorType
+		expectError        bool
+	}{
+		{
+			name: "QEMU hypervisor type (lowercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "qemu",
+			},
+			expectedHypervisor: HypervisorTypeQEMU,
+			expectError:        false,
+		},
+		{
+			name: "QEMU hypervisor type (uppercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "QEMU",
+			},
+			expectedHypervisor: HypervisorTypeQEMU,
+			expectError:        false,
+		},
+		{
+			name: "QEMU hypervisor type (mixed case)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "Qemu",
+			},
+			expectedHypervisor: HypervisorTypeQEMU,
+			expectError:        false,
+		},
+		{
+			name: "CH hypervisor type (lowercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "ch",
+			},
+			expectedHypervisor: HypervisorTypeCH,
+			expectError:        false,
+		},
+		{
+			name: "CH hypervisor type (uppercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "CH",
+			},
+			expectedHypervisor: HypervisorTypeCH,
+			expectError:        false,
+		},
+		{
+			name: "VMware hypervisor type (exact case)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "VMware vCenter Server",
+			},
+			expectedHypervisor: HypervisorTypeVMware,
+			expectError:        false,
+		},
+		{
+			name: "VMware hypervisor type (lowercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "vmware vcenter server",
+			},
+			expectedHypervisor: HypervisorTypeVMware,
+			expectError:        false,
+		},
+		{
+			name: "VMware hypervisor type (uppercase)",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "VMWARE VCENTER SERVER",
+			},
+			expectedHypervisor: HypervisorTypeVMware,
+			expectError:        false,
+		},
+		{
+			name:               "error when hypervisor_type key is missing",
+			extraSpecs:         map[string]string{},
+			expectedHypervisor: "",
+			expectError:        true,
+		},
+		{
+			name:               "error when extra specs is nil",
+			extraSpecs:         nil,
+			expectedHypervisor: "",
+			expectError:        true,
+		},
+		{
+			name: "error for unsupported hypervisor type",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "unsupported_hypervisor",
+			},
+			expectedHypervisor: "",
+			expectError:        true,
+		},
+		{
+			name: "error for empty hypervisor type value",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "",
+			},
+			expectedHypervisor: "",
+			expectError:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ExternalSchedulerRequest{
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						Flavor: NovaObject[NovaFlavor]{
+							Data: NovaFlavor{
+								ExtraSpecs: tt.extraSpecs,
+							},
+						},
+					},
+				},
+			}
+
+			hypervisorType, err := req.GetHypervisorType()
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if hypervisorType != tt.expectedHypervisor {
+				t.Errorf("expected hypervisor type %q, got %q", tt.expectedHypervisor, hypervisorType)
+			}
+		})
+	}
+}
+
 func TestNovaSpecUnmarshal(t *testing.T) {
 	var jsonData = `{
         "spec": {

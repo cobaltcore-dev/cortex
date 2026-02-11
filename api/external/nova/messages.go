@@ -97,6 +97,7 @@ func (req ExternalSchedulerRequest) GetHypervisorType() (HypervisorType, error) 
 		case "vmware vcenter server":
 			return HypervisorTypeVMware, nil
 		}
+		return "", fmt.Errorf("unsupported hypervisor_type: %s", val)
 	}
 	return "", errors.New("hypervisor type not specified in flavor extra specs")
 }
