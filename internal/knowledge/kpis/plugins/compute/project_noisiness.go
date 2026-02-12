@@ -11,8 +11,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/tools"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -67,7 +67,7 @@ func (k *VMwareProjectNoisinessKPI) Collect(ch chan<- prometheus.Metric) {
 	valueFunc := func(noisiness compute.VROpsProjectNoisiness) float64 {
 		return float64(noisiness.AvgCPUOfProject)
 	}
-	hists, counts, sums := tools.Histogram(features, buckets, keysFunc, valueFunc)
+	hists, counts, sums := math.Histogram(features, buckets, keysFunc, valueFunc)
 	for key, hist := range hists {
 		ch <- prometheus.MustNewConstHistogram(k.projectNoisinessDesc, counts[key], sums[key], hist)
 	}
