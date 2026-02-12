@@ -14,7 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,6 +26,13 @@ var (
 	// Identifier for the creator of reservations.
 	Creator = "commitments syncer"
 )
+
+type SyncerConfig struct {
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+}
 
 type Syncer struct {
 	// Client to fetch commitments.
@@ -43,7 +50,7 @@ func NewSyncer(k8sClient client.Client) *Syncer {
 }
 
 // Initialize the syncer.
-func (s *Syncer) Init(ctx context.Context, config conf.Config) error {
+func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
 	// Initialize the syncer.
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err

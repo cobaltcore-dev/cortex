@@ -22,7 +22,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 // mockCandidateGatherer implements CandidateGatherer for testing
@@ -225,9 +224,6 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-				},
 			}
 
 			if tt.pipeline != nil {
@@ -694,9 +690,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-				},
 			}
 
 			// Setup pipeline configurations if needed
@@ -866,9 +859,6 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 				},
 				Monitor:  lib.FilterWeigherPipelineMonitor{},
 				gatherer: mockGatherer,
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-				},
 			}
 
 			// Setup pipeline config with IgnorePreselection flag

@@ -21,7 +21,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -164,9 +163,6 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					Pipelines: make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainManila,
-				},
 			}
 
 			if tt.pipeline != nil {
@@ -400,9 +396,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainManila,
-				},
 			}
 
 			if tt.pipelineConfig != nil {

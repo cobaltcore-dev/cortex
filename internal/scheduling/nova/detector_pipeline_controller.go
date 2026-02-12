@@ -13,7 +13,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/detectors"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/sapcc/go-bits/jobloop"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,8 +35,6 @@ type DetectorPipelineController struct {
 
 	// Monitor to pass down to all pipelines.
 	Monitor lib.DetectorPipelineMonitor
-	// Config for the scheduling operator.
-	Conf conf.Config
 	// Cycle detector to avoid descheduling loops.
 	Breaker lib.DetectorCycleBreaker[plugins.VMDetection]
 }

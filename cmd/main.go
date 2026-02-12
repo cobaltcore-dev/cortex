@@ -75,10 +75,30 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+type Config struct {
+	// The controller will only touch resources with this scheduling domain.
+	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
+
+	// ID used to identify leader election participants.
+	LeaderElectionID string `json:"leaderElectionID,omitempty"`
+
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+
+	// List of enabled controllers.
+	EnabledControllers []string `json:"enabledControllers"`
+
+	// List of enabled tasks.
+	EnabledTasks []string `json:"enabledTasks"`
+}
+
 //nolint:gocyclo
 func main() {
 	ctx := context.Background()
-	config := conf.GetConfigOrDie[conf.Config]()
+	config := conf.GetConfigOrDie[Config]()
 	restConfig := ctrl.GetConfigOrDie()
 
 	// Custom entrypoint for scheduler e2e tests.
@@ -87,13 +107,15 @@ func main() {
 		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
 		case "e2e-nova":
-			nova.RunChecks(ctx, client, config)
+			novaChecksConfig := conf.GetConfigOrDie[nova.ChecksConfig]()
+			nova.RunChecks(ctx, client, novaChecksConfig)
 			return
 		case "e2e-cinder":
-			cinder.RunChecks(ctx, client, config)
+			cinder.RunChecks(ctx, client)
 			return
 		case "e2e-manila":
-			manila.RunChecks(ctx, client, config)
+			manilaChecksConfig := conf.GetConfigOrDie[manila.ChecksConfig]()
+			manila.RunChecks(ctx, client, manilaChecksConfig)
 			return
 		}
 	}
@@ -284,7 +306,6 @@ func main() {
 	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
 		decisionController := &nova.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		decisionController.Client = multiclusterClient
@@ -310,7 +331,6 @@ func main() {
 		cycleBreaker := &nova.DetectorCycleBreaker{NovaClient: novaClient}
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: monitor,
-			Conf:    config,
 			Breaker: cycleBreaker,
 		}
 		// Inferred through the base controller.
@@ -352,7 +372,6 @@ func main() {
 	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
 		controller := &manila.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -360,12 +379,11 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manila.NewAPI(config, controller).Init(mux)
+		manila.NewAPI(controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &cinder.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -373,12 +391,11 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cinder.NewAPI(config, controller).Init(mux)
+		cinder.NewAPI(controller).Init(mux)
 	}
 	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &machines.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -390,7 +407,6 @@ func main() {
 	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
 		controller := &pods.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -434,7 +450,7 @@ func main() {
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
-			Conf:    config,
+			Conf:    conf.GetConfigOrDie[openstack.OpenStackDatasourceReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "OpenStackDatasourceReconciler")
 			os.Exit(1)
@@ -443,7 +459,7 @@ func main() {
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
-			Conf:    config,
+			Conf:    conf.GetConfigOrDie[prometheus.PrometheusDatasourceReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")
 			os.Exit(1)
@@ -456,7 +472,7 @@ func main() {
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
-			Conf:    config,
+			Conf:    conf.GetConfigOrDie[extractor.KnowledgeReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KnowledgeReconciler")
 			os.Exit(1)
@@ -464,7 +480,7 @@ func main() {
 		if err := (&extractor.TriggerReconciler{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-			Conf:   config,
+			Conf:   conf.GetConfigOrDie[extractor.TriggerReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "TriggerReconciler")
 			os.Exit(1)
@@ -512,12 +528,13 @@ func main() {
 	if slices.Contains(config.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
 		syncer := commitments.NewSyncer(multiclusterClient)
+		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "commitments-sync-task",
 			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
-			Init:     func(ctx context.Context) error { return syncer.Init(ctx, config) },
+			Init:     func(ctx context.Context) error { return syncer.Init(ctx, syncerConfig) },
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add commitments sync task to manager")
 			os.Exit(1)
@@ -525,12 +542,13 @@ func main() {
 	}
 	if slices.Contains(config.EnabledTasks, "nova-decisions-cleanup-task") {
 		setupLog.Info("starting nova decisions cleanup task")
+		decisionsCleanupConfig := conf.GetConfigOrDie[nova.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "nova-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return nova.DecisionsCleanup(ctx, multiclusterClient, config)
+				return nova.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add nova decisions cleanup task to manager")
@@ -539,12 +557,13 @@ func main() {
 	}
 	if slices.Contains(config.EnabledTasks, "manila-decisions-cleanup-task") {
 		setupLog.Info("starting manila decisions cleanup task")
+		decisionsCleanupConfig := conf.GetConfigOrDie[manila.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "manila-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return manila.DecisionsCleanup(ctx, multiclusterClient, config)
+				return manila.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add manila decisions cleanup task to manager")
@@ -553,12 +572,13 @@ func main() {
 	}
 	if slices.Contains(config.EnabledTasks, "cinder-decisions-cleanup-task") {
 		setupLog.Info("starting cinder decisions cleanup task")
+		decisionsCleanupConfig := conf.GetConfigOrDie[cinder.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "cinder-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return cinder.DecisionsCleanup(ctx, multiclusterClient, config)
+				return cinder.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add cinder decisions cleanup task to manager")

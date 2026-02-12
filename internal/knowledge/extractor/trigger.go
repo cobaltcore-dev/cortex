@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,6 +21,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+type TriggerReconcilerConfig struct {
+	// The controller will only touch resources with this scheduling domain.
+	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
+}
+
 // TriggerReconciler watches datasource and knowledge changes to trigger
 // reconciliation of dependent knowledge resources based on recency requirements.
 type TriggerReconciler struct {
@@ -30,7 +34,7 @@ type TriggerReconciler struct {
 	// Kubernetes scheme to use.
 	Scheme *runtime.Scheme
 	// Config for the reconciler.
-	Conf conf.Config
+	Conf TriggerReconcilerConfig
 }
 
 // Reconcile handles changes to datasource and knowledge resources and triggers

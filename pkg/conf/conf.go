@@ -7,30 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 )
-
-type Config struct {
-	// The controller will only touch resources with this scheduling domain.
-	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
-
-	// ID used to identify leader election participants.
-	LeaderElectionID string `json:"leaderElectionID,omitempty"`
-
-	// Secret ref to keystone credentials stored in a k8s secret.
-	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
-
-	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
-	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
-
-	// List of enabled controllers.
-	EnabledControllers []string `json:"enabledControllers"`
-
-	// List of enabled tasks.
-	EnabledTasks []string `json:"enabledTasks"`
-}
 
 // Create a new configuration from the default config json file.
 //

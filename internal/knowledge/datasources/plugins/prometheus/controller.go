@@ -12,7 +12,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	corev1 "k8s.io/api/core/v1"
@@ -27,13 +26,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+type PrometheusDatasourceReconcilerConfig struct {
+	// The controller will only touch resources with this scheduling domain.
+	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+}
+
 type PrometheusDatasourceReconciler struct {
 	// Client for the kubernetes API.
 	client.Client
 	// Kubernetes scheme to use for the deschedulings.
 	Scheme *runtime.Scheme
 	// Config for the reconciler.
-	Conf conf.Config
+	Conf PrometheusDatasourceReconcilerConfig
 	// Monitor for tracking the datasource syncs.
 	Monitor datasources.Monitor
 }

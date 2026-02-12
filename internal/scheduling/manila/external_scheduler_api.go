@@ -15,7 +15,6 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
@@ -36,14 +35,12 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	config   conf.Config
 	monitor  scheduling.APIMonitor
 	delegate HTTPAPIDelegate
 }
 
-func NewAPI(config conf.Config, delegate HTTPAPIDelegate) HTTPAPI {
+func NewAPI(delegate HTTPAPIDelegate) HTTPAPI {
 	return &httpAPI{
-		config:   config,
 		monitor:  scheduling.NewSchedulerMonitor(),
 		delegate: delegate,
 	}

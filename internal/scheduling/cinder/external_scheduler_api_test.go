@@ -15,7 +15,6 @@ import (
 
 	cinderapi "github.com/cobaltcore-dev/cortex/api/external/cinder"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -32,10 +31,9 @@ func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, dec
 }
 
 func TestNewAPI(t *testing.T) {
-	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
 
-	api := NewAPI(config, delegate)
+	api := NewAPI(delegate)
 
 	if api == nil {
 		t.Fatal("NewAPI returned nil")
@@ -44,10 +42,6 @@ func TestNewAPI(t *testing.T) {
 	httpAPI, ok := api.(*httpAPI)
 	if !ok {
 		t.Fatal("NewAPI did not return httpAPI type")
-	}
-
-	if httpAPI.config.SchedulingDomain != "test-operator" {
-		t.Errorf("Expected scheduling domain 'test-operator', got %s", httpAPI.config.SchedulingDomain)
 	}
 
 	if httpAPI.delegate != delegate {
@@ -60,9 +54,8 @@ func TestNewAPI(t *testing.T) {
 }
 
 func TestHTTPAPI_Init(t *testing.T) {
-	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(config, delegate)
+	api := NewAPI(delegate)
 
 	mux := http.NewServeMux()
 	api.Init(mux)
@@ -79,9 +72,8 @@ func TestHTTPAPI_Init(t *testing.T) {
 }
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
-	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(config, delegate).(*httpAPI)
+	api := NewAPI(delegate).(*httpAPI)
 
 	tests := []struct {
 		name        string
@@ -256,7 +248,6 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := conf.Config{SchedulingDomain: "test-operator"}
 			delegate := &mockHTTPAPIDelegate{
 				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
 					if tt.processDecisionErr != nil {
@@ -270,7 +261,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 				},
 			}
 
-			api := NewAPI(config, delegate).(*httpAPI)
+			api := NewAPI(delegate).(*httpAPI)
 
 			var body *strings.Reader
 			if tt.body != "" {
@@ -309,9 +300,8 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 }
 
 func TestHTTPAPI_inferPipelineName(t *testing.T) {
-	config := conf.Config{SchedulingDomain: "test-operator"}
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(config, delegate).(*httpAPI)
+	api := NewAPI(delegate).(*httpAPI)
 
 	tests := []struct {
 		name         string
@@ -358,8 +348,6 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 }
 
 func TestHTTPAPI_CinderExternalScheduler_DecisionCreation(t *testing.T) {
-	config := conf.Config{SchedulingDomain: v1alpha1.SchedulingDomainCinder}
-
 	var capturedDecision *v1alpha1.Decision
 	delegate := &mockHTTPAPIDelegate{
 		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
@@ -372,7 +360,7 @@ func TestHTTPAPI_CinderExternalScheduler_DecisionCreation(t *testing.T) {
 		},
 	}
 
-	api := NewAPI(config, delegate).(*httpAPI)
+	api := NewAPI(delegate).(*httpAPI)
 
 	requestData := cinderapi.ExternalSchedulerRequest{
 		Hosts: []cinderapi.ExternalSchedulerHost{
