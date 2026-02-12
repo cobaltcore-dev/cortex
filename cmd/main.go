@@ -386,10 +386,11 @@ func main() {
 	if slices.Contains(config.EnabledControllers, "reservations-controller") {
 		monitor := reservationscontroller.NewControllerMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
+		reservationsControllerConfig := conf.GetConfigOrDie[reservationscontroller.Config]()
 		if err := (&reservationscontroller.ReservationReconciler{
 			Client:           multiclusterClient,
 			Scheme:           mgr.GetScheme(),
-			Conf:             config,
+			Conf:             reservationsControllerConfig,
 			HypervisorClient: reservationscontroller.NewHypervisorClient(),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Reservation")

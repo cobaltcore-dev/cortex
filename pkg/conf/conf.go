@@ -12,21 +12,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Endpoints for the reservations operator.
-type EndpointsConfig struct {
-	// The nova external scheduler endpoint.
-	NovaExternalScheduler string `json:"novaExternalScheduler"`
-}
-
 type Config struct {
 	// The controller will only touch resources with this scheduling domain.
 	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
 
 	// ID used to identify leader election participants.
 	LeaderElectionID string `json:"leaderElectionID,omitempty"`
-
-	// The endpoint where to find the nova external scheduler endpoint.
-	Endpoints EndpointsConfig `json:"endpoints"`
 
 	// Whether to disable dry-run for descheduler steps.
 	DisableDeschedulerDryRun bool `json:"disableDeschedulerDryRun"`
