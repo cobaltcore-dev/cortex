@@ -14,7 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/manila"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/placement"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 )
 
