@@ -5,7 +5,7 @@ package plugins
 
 import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
