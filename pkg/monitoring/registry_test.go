@@ -6,34 +6,33 @@ package monitoring
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestNewRegistry(t *testing.T) {
-	config := conf.MonitoringConfig{
+	config := RegistryConfig{
 		Labels: map[string]string{
 			"env": "test",
 		},
 	}
-	registry := NewRegistry(config)
+	registry := NewRegistry(Config{Monitoring: config})
 
 	if registry == nil {
 		t.Fatalf("expected registry to be non-nil")
 		return
 	}
-	if registry.config.Labels["env"] != "test" {
-		t.Fatalf("expected registry config label 'env' to be 'test', got %v", registry.config.Labels["env"])
+	if registry.config.Monitoring.Labels["env"] != "test" {
+		t.Fatalf("expected registry config label 'env' to be 'test', got %v", registry.config.Monitoring.Labels["env"])
 	}
 }
 
 func TestRegistry_Gather(t *testing.T) {
-	config := conf.MonitoringConfig{
+	config := RegistryConfig{
 		Labels: map[string]string{
 			"env": "test",
 		},
 	}
-	registry := NewRegistry(config)
+	registry := NewRegistry(Config{Monitoring: config})
 
 	// Register a custom metric
 	counter := prometheus.NewCounter(prometheus.CounterOpts{

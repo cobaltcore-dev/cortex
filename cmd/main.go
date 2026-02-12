@@ -265,7 +265,8 @@ func main() {
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
-	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, config.Monitoring)
+	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
+	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
