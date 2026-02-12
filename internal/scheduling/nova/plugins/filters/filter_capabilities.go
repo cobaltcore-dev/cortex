@@ -30,7 +30,8 @@ func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
 	switch hv.Status.DomainCapabilities.HypervisorType {
 	case "ch":
 		caps["capabilities:hypervisor_type"] = "CH"
-	case "qemu":
+	// QEMU exposes domain capability "kvm"
+	case "kvm":
 		caps["capabilities:hypervisor_type"] = "QEMU"
 	default:
 		return nil, fmt.Errorf("unknown autodiscovered hypervisor type: %s", hv.Status.DomainCapabilities.HypervisorType)
