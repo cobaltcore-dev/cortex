@@ -8,6 +8,73 @@ import (
 	"testing"
 )
 
+func TestNovaSpec_IsEvacuation(t *testing.T) {
+	tests := []struct {
+		name           string
+		schedulerHints map[string]any
+		expected       bool
+	}{
+		{
+			name: "evacuation request with list hint",
+			schedulerHints: map[string]any{
+				"_nova_check_type": []any{"evacuate"},
+			},
+			expected: true,
+		},
+		{
+			name: "evacuation request with string hint",
+			schedulerHints: map[string]any{
+				"_nova_check_type": "evacuate",
+			},
+			expected: true,
+		},
+		{
+			name: "non-evacuation request with different check type",
+			schedulerHints: map[string]any{
+				"_nova_check_type": []any{"rebuild"},
+			},
+			expected: false,
+		},
+		{
+			name: "non-evacuation request without check type hint",
+			schedulerHints: map[string]any{
+				"domain_name": []any{"monsoon3"},
+			},
+			expected: false,
+		},
+		{
+			name:           "nil scheduler hints",
+			schedulerHints: nil,
+			expected:       false,
+		},
+		{
+			name:           "empty scheduler hints",
+			schedulerHints: map[string]any{},
+			expected:       false,
+		},
+		{
+			name: "evacuation with additional hints",
+			schedulerHints: map[string]any{
+				"domain_name":      []any{"monsoon3"},
+				"_nova_check_type": []any{"evacuate"},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := NovaSpec{
+				SchedulerHints: tt.schedulerHints,
+			}
+			result := spec.IsEvacuation()
+			if result != tt.expected {
+				t.Errorf("IsEvacuation() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestGetIntent(t *testing.T) {
 	tests := []struct {
 		name           string

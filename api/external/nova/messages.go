@@ -217,6 +217,17 @@ func (s NovaSpec) GetSchedulerHintStr(key string) (string, error) {
 	return "", errors.New("unknown scheduler hint type")
 }
 
+// IsEvacuation checks if this Nova spec represents an evacuation request.
+// Nova sets the scheduler hint "_nova_check_type" to "evacuate" for evacuation requests.
+// ref https://github.com/sapcc/nova/pull/594/changes
+func (s NovaSpec) IsEvacuation() bool {
+	checkType, err := s.GetSchedulerHintStr("_nova_check_type")
+	if err != nil {
+		return false
+	}
+	return checkType == "evacuate"
+}
+
 type NovaInstanceGroup struct {
 	UserID    string         `json:"user_id"`
 	ProjectID string         `json:"project_id"`
