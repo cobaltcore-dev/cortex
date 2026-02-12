@@ -10,9 +10,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +28,7 @@ type mockExecutorNovaClient struct {
 	migrationDelay time.Duration
 }
 
-func (m *mockExecutorNovaClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockExecutorNovaClient) Init(ctx context.Context, client client.Client, conf NovaClientConfig) error {
 	return nil
 }
 
@@ -75,11 +72,6 @@ func (m *mockExecutorNovaClient) GetServerMigrations(ctx context.Context, id str
 	return []migration{}, nil
 }
 
-// Create a zero-value Monitor for testing
-func newMockMonitor() lib.DetectorMonitor[plugins.VMDetection] {
-	return lib.DetectorMonitor[plugins.VMDetection]{}
-}
-
 func TestExecutor_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := v1alpha1.AddToScheme(scheme)
@@ -91,7 +83,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 		name               string
 		descheduling       *v1alpha1.Descheduling
 		novaAPI            *mockExecutorNovaClient
-		config             conf.Config
+		config             DeschedulingsExecutorConfig
 		expectedReady      bool
 		expectedInProgress bool
 		expectedError      string
@@ -117,7 +109,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 					"vm-123": {ID: "vm-123", Status: "ACTIVE", ComputeHost: "old-host"},
 				},
 			},
-			config: conf.Config{
+			config: DeschedulingsExecutorConfig{
 				DisableDeschedulerDryRun: true,
 			},
 			expectedReady:      true,
@@ -142,7 +134,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 					"vm-123": {ID: "vm-123", Status: "ACTIVE", ComputeHost: "old-host"},
 				},
 			},
-			config: conf.Config{
+			config: DeschedulingsExecutorConfig{
 				DisableDeschedulerDryRun: false,
 			},
 			expectedReady:      false,
@@ -288,7 +280,7 @@ func TestExecutor_Reconcile(t *testing.T) {
 				},
 				migrateError: errors.New("migration failed"),
 			},
-			config: conf.Config{
+			config: DeschedulingsExecutorConfig{
 				DisableDeschedulerDryRun: true,
 			},
 			expectedReady:      false,
@@ -338,7 +330,6 @@ func TestExecutor_Reconcile(t *testing.T) {
 				Scheme:     scheme,
 				NovaClient: tt.novaAPI,
 				Conf:       tt.config,
-				Monitor:    newMockMonitor(),
 			}
 
 			req := ctrl.Request{
@@ -417,7 +408,6 @@ func TestDeschedulingsExecutor_ReconcileNotFound(t *testing.T) {
 		Client:     client,
 		Scheme:     scheme,
 		NovaClient: &mockExecutorNovaClient{},
-		Monitor:    newMockMonitor(),
 	}
 
 	req := ctrl.Request{

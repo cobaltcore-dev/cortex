@@ -39,7 +39,7 @@ type DetectorPipelineController struct {
 	// Config for the scheduling operator.
 	Conf conf.Config
 	// Cycle detector to avoid descheduling loops.
-	DetectorCycleBreaker lib.DetectorCycleBreaker[plugins.VMDetection]
+	Breaker lib.DetectorCycleBreaker[plugins.VMDetection]
 }
 
 // The type of pipeline this controller manages.
@@ -54,9 +54,9 @@ func (c *DetectorPipelineController) InitPipeline(
 ) lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]] {
 
 	pipeline := &lib.DetectorPipeline[plugins.VMDetection]{
-		Client:               c.Client,
-		DetectorCycleBreaker: c.DetectorCycleBreaker,
-		Monitor:              c.Monitor.SubPipeline(p.Name),
+		Client:  c.Client,
+		Breaker: c.Breaker,
+		Monitor: c.Monitor.SubPipeline(p.Name),
 	}
 	errs := pipeline.Init(ctx, p.Spec.Detectors, detectors.Index)
 	return lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]]{
@@ -88,7 +88,7 @@ func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context
 			slog.Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
 			decisions := p.Combine(decisionsByStep)
 			var err error
-			decisions, err = p.DetectorCycleBreaker.Filter(ctx, decisions)
+			decisions, err = p.Breaker.Filter(ctx, decisions)
 			if err != nil {
 				slog.Error("descheduler: failed to filter decisions for cycles", "error", err)
 				time.Sleep(jobloop.DefaultJitter(time.Minute))
@@ -134,12 +134,6 @@ func (c *DetectorPipelineController) Reconcile(ctx context.Context, req ctrl.Req
 func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
-	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		// Initialize the cycle detector.
-		return c.DetectorCycleBreaker.Init(ctx, mgr.GetClient(), c.Conf)
-	})); err != nil {
-		return err
-	}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
