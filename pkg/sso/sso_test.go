@@ -6,20 +6,18 @@ package sso
 import (
 	"net/http"
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 func TestNewHTTPClient(t *testing.T) {
 	tests := []struct {
 		name       string
-		conf       conf.SSOConfig
+		conf       SSOConfig
 		wantError  bool
 		selfSigned bool
 	}{
 		{
 			name: "NoCertProvided",
-			conf: conf.SSOConfig{
+			conf: SSOConfig{
 				Cert:       "",
 				CertKey:    "",
 				SelfSigned: false,
@@ -28,7 +26,7 @@ func TestNewHTTPClient(t *testing.T) {
 		},
 		{
 			name: "CertProvidedNoKey",
-			conf: conf.SSOConfig{
+			conf: SSOConfig{
 				Cert:       "dummy-cert",
 				CertKey:    "",
 				SelfSigned: false,
@@ -37,7 +35,7 @@ func TestNewHTTPClient(t *testing.T) {
 		},
 		{
 			name: "CertAndKeyProvided",
-			conf: conf.SSOConfig{
+			conf: SSOConfig{
 				Cert:       "dummy-cert",
 				CertKey:    "dummy-key",
 				SelfSigned: false,
@@ -145,7 +143,7 @@ nyCru8FaKdd+A5MBMSTb8MX0LcnWvdQ=
 -----END PRIVATE KEY-----
 	`
 
-	conf := conf.SSOConfig{
+	conf := SSOConfig{
 		Cert:       dummyCert,
 		CertKey:    dummyKey,
 		SelfSigned: true,

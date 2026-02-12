@@ -12,15 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Configuration for single-sign-on (SSO).
-type SSOConfig struct {
-	Cert    string `json:"cert,omitempty"`
-	CertKey string `json:"certKey,omitempty"`
-
-	// If the certificate is self-signed, we need to skip verification.
-	SelfSigned bool `json:"selfSigned,omitempty"`
-}
-
 // Config which maps a kubernetes resource URI to a remote kubernetes apiserver.
 // This override config can be used to manage CRDs in a different kubernetes cluster.
 // It is assumed that the remote apiserver accepts the serviceaccount tokens
