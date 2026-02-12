@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
-	"github.com/cobaltcore-dev/cortex/pkg/tools"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -66,7 +66,7 @@ func extractHistogramBuckets(lifeSpansRaw []VMLifeSpanRaw, deleted bool) []VMLif
 	valueFunc := func(lifeSpan VMLifeSpanRaw) float64 {
 		return float64(lifeSpan.Duration)
 	}
-	hists, counts, sums := tools.Histogram(lifeSpans, buckets, keysFunc, valueFunc)
+	hists, counts, sums := math.Histogram(lifeSpans, buckets, keysFunc, valueFunc)
 	var features []VMLifeSpanHistogramBucket
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")

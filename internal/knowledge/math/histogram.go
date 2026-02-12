@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package tools
+package math
 
 // Create a histogram from features.
 func Histogram[O any](
