@@ -23,8 +23,8 @@ import (
 
 var (
 	syncLog = ctrl.Log.WithName("sync")
-	// Identifier for the creator of reservations.
-	Creator = "commitments syncer"
+	// CreatorValue identifies reservations created by this syncer.
+	CreatorValue = "commitments-syncer"
 )
 
 type SyncerConfig struct {
@@ -191,19 +191,17 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		}
 		commitmentUUIDShort := commitment.UUID[:5]
 		spec := v1alpha1.ReservationSpec{
-			Creator: Creator,
-			Scheduler: v1alpha1.ReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-					ProjectID:        commitment.ProjectID,
-					DomainID:         commitment.DomainID,
-					FlavorName:       commitment.Flavor.Name,
-					FlavorExtraSpecs: commitment.Flavor.ExtraSpecs,
-				},
-			},
-			Requests: map[string]resource.Quantity{
+			Type: v1alpha1.ReservationTypeCommittedResource,
+			Resources: map[string]resource.Quantity{
 				"memory": *resource.NewQuantity(int64(commitment.Flavor.RAM)*1024*1024, resource.BinarySI),
 				"cpu":    *resource.NewQuantity(int64(commitment.Flavor.VCPUs), resource.DecimalSI),
 				// Disk is currently not considered.
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:    commitment.ProjectID,
+				DomainID:     commitment.DomainID,
+				ResourceName: commitment.Flavor.Name,
+				Creator:      CreatorValue,
 			},
 		}
 		for n := range commitment.Amount { // N instances
@@ -260,8 +258,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		return err
 	}
 	for _, existing := range existingReservations.Items {
-		// Only manage reservations created by this syncer.
-		if existing.Spec.Creator != Creator {
+		// Only manage reservations created by this syncer (identified by Creator field).
+		if existing.Spec.CommittedResourceReservation == nil ||
+			existing.Spec.CommittedResourceReservation.Creator != CreatorValue {
 			continue
 		}
 		if _, found := reservationsByName[existing.Name]; !found {

@@ -32,14 +32,14 @@ type Monitor struct {
 func NewControllerMonitor(k8sClient client.Client) Monitor {
 	return Monitor{
 		Client: k8sClient,
-		numberOfReservations: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_reservations_number",
-			Help: "Number of reservations.",
-		}, []string{"status_phase", "status_error"}),
-		reservedResources: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_reservations_resources",
-			Help: "Resources reserved by reservations.",
-		}, []string{"status_phase", "status_error", "host", "resource"}),
+	numberOfReservations: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "cortex_reservations_number",
+		Help: "Number of reservations.",
+	}, []string{"status_ready", "status_error"}),
+	reservedResources: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "cortex_reservations_resources",
+		Help: "Resources reserved by reservations.",
+	}, []string{"status_ready", "status_error", "host", "resource"}),
 	}
 }
 
@@ -63,12 +63,16 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 
 	countByLabels := map[string]uint64{}
 	for _, reservation := range reservations.Items {
-		errorCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionError)
+		readyCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionReady)
+		readyStatus := "Unknown"
 		errorMsg := ""
-		if errorCondition != nil && errorCondition.Status == metav1.ConditionTrue {
-			errorMsg = errorCondition.Message
+		if readyCondition != nil {
+			readyStatus = string(readyCondition.Status)
+			if readyCondition.Status == metav1.ConditionFalse {
+				errorMsg = readyCondition.Message
+			}
 		}
-		key := string(reservation.Status.Phase) +
+		key := readyStatus +
 			"," + strings.ReplaceAll(errorMsg, ",", ";")
 		countByLabels[key]++
 	}
@@ -80,19 +84,23 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 
 	resourcesByLabels := map[string]map[string]uint64{}
 	for _, reservation := range reservations.Items {
-		host := ""
-		errorCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionError)
+		host := reservation.Status.ObservedHost
+		readyCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionReady)
+		readyStatus := "Unknown"
 		errorMsg := ""
-		if errorCondition != nil && errorCondition.Status == metav1.ConditionTrue {
-			errorMsg = errorCondition.Message
+		if readyCondition != nil {
+			readyStatus = string(readyCondition.Status)
+			if readyCondition.Status == metav1.ConditionFalse {
+				errorMsg = readyCondition.Message
+			}
 		}
-		key := string(reservation.Status.Phase) +
+		key := readyStatus +
 			"," + strings.ReplaceAll(errorMsg, ",", ";") +
 			"," + host
 		if _, ok := resourcesByLabels[key]; !ok {
 			resourcesByLabels[key] = map[string]uint64{}
 		}
-		for resourceName, resourceQuantity := range reservation.Spec.Requests {
+		for resourceName, resourceQuantity := range reservation.Spec.Resources {
 			resourcesByLabels[key][resourceName] += resourceQuantity.AsDec().UnscaledBig().Uint64()
 		}
 	}

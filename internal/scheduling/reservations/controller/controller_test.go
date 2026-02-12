@@ -12,6 +12,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -30,7 +31,7 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 	tests := []struct {
 		name          string
 		reservation   *v1alpha1.Reservation
-		expectedPhase v1alpha1.ReservationStatusPhase
+		expectedReady bool
 		expectedError string
 		shouldRequeue bool
 	}{
@@ -41,32 +42,35 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ReservationSpec{
-					Scheduler: v1alpha1.ReservationSchedulerSpec{
-						CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-							ProjectID:  "test-project",
-							FlavorName: "test-flavor",
-						},
+					Type: v1alpha1.ReservationTypeCommittedResource,
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+						ProjectID:    "test-project",
+						ResourceName: "test-flavor",
 					},
 				},
 				Status: v1alpha1.ReservationStatus{
-					Phase: v1alpha1.ReservationStatusPhaseActive,
+					Conditions: []metav1.Condition{
+						{
+							Type:   v1alpha1.ReservationConditionReady,
+							Status: metav1.ConditionTrue,
+							Reason: "ReservationActive",
+						},
+					},
 				},
 			},
-			expectedPhase: v1alpha1.ReservationStatusPhaseActive,
+			expectedReady: true,
 			shouldRequeue: false,
 		},
 		{
-			name: "skip unsupported reservation scheduler",
+			name: "skip reservation without resource name",
 			reservation: &v1alpha1.Reservation{
 				ObjectMeta: ctrl.ObjectMeta{
 					Name: "test-reservation",
 				},
-				Spec: v1alpha1.ReservationSpec{
-					Scheduler: v1alpha1.ReservationSchedulerSpec{},
-				},
+				Spec: v1alpha1.ReservationSpec{},
 			},
-			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
-			expectedError: "reservation is not a cortex-nova reservation",
+			expectedReady: false,
+			expectedError: "reservation has no resource name",
 			shouldRequeue: false,
 		},
 	}
@@ -105,21 +109,23 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 				t.Errorf("Expected no requeue but got %v", result.RequeueAfter)
 			}
 
-			// Verify the reservation status if expected
-			if tt.expectedPhase != "" {
-				var updated v1alpha1.Reservation
-				err := client.Get(context.Background(), req.NamespacedName, &updated)
-				if err != nil {
-					t.Errorf("Failed to get updated reservation: %v", err)
-					return
-				}
+			// Verify the reservation status
+			var updated v1alpha1.Reservation
+			err = client.Get(context.Background(), req.NamespacedName, &updated)
+			if err != nil {
+				t.Errorf("Failed to get updated reservation: %v", err)
+				return
+			}
 
-				if updated.Status.Phase != tt.expectedPhase {
-					t.Errorf("Expected phase %v, got %v", tt.expectedPhase, updated.Status.Phase)
-				}
+			isReady := meta.IsStatusConditionTrue(updated.Status.Conditions, v1alpha1.ReservationConditionReady)
+			if isReady != tt.expectedReady {
+				t.Errorf("Expected ready=%v, got ready=%v", tt.expectedReady, isReady)
+			}
 
-				if tt.expectedError != "" && meta.IsStatusConditionFalse(updated.Status.Conditions, v1alpha1.ReservationConditionError) {
-					t.Errorf("Expected error %v, got %v", tt.expectedError, updated.Status.Conditions)
+			if tt.expectedError != "" {
+				cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionReady)
+				if cond == nil || cond.Status != metav1.ConditionFalse {
+					t.Errorf("Expected Ready=False with error, got %v", updated.Status.Conditions)
 				}
 			}
 		})
@@ -137,16 +143,12 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Scheduler: v1alpha1.ReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-					ProjectID:  "test-project",
-					FlavorName: "test-flavor",
-					FlavorExtraSpecs: map[string]string{
-						"capabilities:hypervisor_type": "qemu",
-					},
-				},
+			Type: v1alpha1.ReservationTypeCommittedResource,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:    "test-project",
+				ResourceName: "test-flavor",
 			},
-			Requests: map[string]resource.Quantity{
+			Resources: map[string]resource.Quantity{
 				"memory": resource.MustParse("1Gi"),
 				"cpu":    resource.MustParse("2"),
 			},
@@ -243,15 +245,11 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		return
 	}
 
-	if updated.Status.Phase != v1alpha1.ReservationStatusPhaseActive {
-		t.Errorf("Expected phase %v, got %v", v1alpha1.ReservationStatusPhaseActive, updated.Status.Phase)
+	if !meta.IsStatusConditionTrue(updated.Status.Conditions, v1alpha1.ReservationConditionReady) {
+		t.Errorf("Expected Ready=True, got %v", updated.Status.Conditions)
 	}
 
-	if updated.Status.Host != "test-host-1" {
-		t.Errorf("Expected host %v, got %v", "test-host-1", updated.Status.Host)
-	}
-
-	if meta.IsStatusConditionTrue(updated.Status.Conditions, v1alpha1.ReservationConditionError) {
-		t.Errorf("Expected no error, got %v", updated.Status.Conditions)
+	if updated.Status.ObservedHost != "test-host-1" {
+		t.Errorf("Expected host %v, got %v", "test-host-1", updated.Status.ObservedHost)
 	}
 }
