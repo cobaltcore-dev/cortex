@@ -17,6 +17,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+type ControllerConfig struct {
+	// The controller will scope to objects using this scheduling domain name.
+	// This allows multiple controllers to coexist in the same cluster without
+	// interfering with each other's decisions.
+	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
+}
+
 // The explanation controller populates two fields of the decision status.
 //
 // First, it reconstructs the history of each decision. It will look for
@@ -30,10 +37,8 @@ import (
 type Controller struct {
 	// The kubernetes client to use for processing decisions.
 	client.Client
-	// The controller will scope to objects using this scheduling domain name.
-	// This allows multiple controllers to coexist in the same cluster without
-	// interfering with each other's decisions.
-	SchedulingDomain v1alpha1.SchedulingDomain
+	// Config for the controller.
+	Config ControllerConfig
 	// If the field indexing should be skipped (useful for testing).
 	SkipIndexFields bool
 }
@@ -41,7 +46,7 @@ type Controller struct {
 // Check if a decision should be processed by this controller.
 func (c *Controller) shouldReconcileDecision(decision *v1alpha1.Decision) bool {
 	// Ignore decisions not created by this operator.
-	if decision.Spec.SchedulingDomain != c.SchedulingDomain {
+	if decision.Spec.SchedulingDomain != c.Config.SchedulingDomain {
 		return false
 	}
 	// Ignore decisions that already have an explanation.

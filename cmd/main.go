@@ -75,22 +75,11 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
-type Config struct {
-	// The controller will only touch resources with this scheduling domain.
-	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
-
+type MainConfig struct {
 	// ID used to identify leader election participants.
 	LeaderElectionID string `json:"leaderElectionID,omitempty"`
-
-	// Secret ref to keystone credentials stored in a k8s secret.
-	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
-
-	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
-	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
-
 	// List of enabled controllers.
 	EnabledControllers []string `json:"enabledControllers"`
-
 	// List of enabled tasks.
 	EnabledTasks []string `json:"enabledTasks"`
 }
@@ -98,7 +87,7 @@ type Config struct {
 //nolint:gocyclo
 func main() {
 	ctx := context.Background()
-	config := conf.GetConfigOrDie[Config]()
+	mainConfig := conf.GetConfigOrDie[MainConfig]()
 	restConfig := ctrl.GetConfigOrDie()
 
 	// Custom entrypoint for scheduler e2e tests.
@@ -248,7 +237,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       config.LeaderElectionID,
+		LeaderElectionID:       mainConfig.LeaderElectionID,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -303,7 +292,7 @@ func main() {
 	pipelineMonitor := schedulinglib.NewPipelineMonitor()
 	metrics.Registry.MustRegister(&pipelineMonitor)
 
-	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "nova-decisions-pipeline-controller") {
 		decisionController := &nova.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 		}
@@ -316,7 +305,7 @@ func main() {
 		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		nova.NewAPI(httpAPIConf, decisionController).Init(mux)
 	}
-	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
 		monitor := schedulinglib.NewDetectorPipelineMonitor()
 		metrics.Registry.MustRegister(&monitor)
@@ -349,7 +338,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "nova-deschedulings-executor") {
+	if slices.Contains(mainConfig.EnabledControllers, "nova-deschedulings-executor") {
 		executorConfig := conf.GetConfigOrDie[nova.DeschedulingsExecutorConfig]()
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
@@ -369,7 +358,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "manila-decisions-pipeline-controller") {
 		controller := &manila.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 		}
@@ -381,7 +370,7 @@ func main() {
 		}
 		manila.NewAPI(controller).Init(mux)
 	}
-	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &cinder.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 		}
@@ -393,7 +382,7 @@ func main() {
 		}
 		cinder.NewAPI(controller).Init(mux)
 	}
-	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &machines.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 		}
@@ -404,7 +393,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "pods-decisions-pipeline-controller") {
 		controller := &pods.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 		}
@@ -415,21 +404,20 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "explanation-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "explanation-controller") {
 		// Setup a controller which will reconcile the history and explanation for
 		// decision resources.
+		explanationControllerConfig := conf.GetConfigOrDie[explanation.ControllerConfig]()
 		explanationController := &explanation.Controller{
 			Client: multiclusterClient,
-			// The explanation controller is compatible with multiple scheduling
-			// domains.
-			SchedulingDomain: config.SchedulingDomain,
+			Config: explanationControllerConfig,
 		}
 		if err := explanationController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "reservations-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "reservations-controller") {
 		monitor := reservationscontroller.NewControllerMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		reservationsControllerConfig := conf.GetConfigOrDie[reservationscontroller.Config]()
@@ -443,7 +431,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "datasource-controllers") {
+	if slices.Contains(mainConfig.EnabledControllers, "datasource-controllers") {
 		monitor := datasources.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&openstack.OpenStackDatasourceReconciler{
@@ -465,7 +453,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "knowledge-controllers") {
+	if slices.Contains(mainConfig.EnabledControllers, "knowledge-controllers") {
 		monitor := extractor.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&extractor.KnowledgeReconciler{
@@ -486,12 +474,11 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "kpis-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "kpis-controller") {
+		kpisControllerConfig := conf.GetConfigOrDie[kpis.ControllerConfig]()
 		if err := (&kpis.Controller{
 			Client: multiclusterClient,
-			// The kpis controller is compatible with multiple scheduling
-			// domains.
-			SchedulingDomain: config.SchedulingDomain,
+			Config: kpisControllerConfig,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KPIController")
 			os.Exit(1)
@@ -525,7 +512,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if slices.Contains(config.EnabledTasks, "commitments-sync-task") {
+	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
 		syncer := commitments.NewSyncer(multiclusterClient)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
@@ -540,7 +527,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledTasks, "nova-decisions-cleanup-task") {
+	if slices.Contains(mainConfig.EnabledTasks, "nova-decisions-cleanup-task") {
 		setupLog.Info("starting nova decisions cleanup task")
 		decisionsCleanupConfig := conf.GetConfigOrDie[nova.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
@@ -555,7 +542,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledTasks, "manila-decisions-cleanup-task") {
+	if slices.Contains(mainConfig.EnabledTasks, "manila-decisions-cleanup-task") {
 		setupLog.Info("starting manila decisions cleanup task")
 		decisionsCleanupConfig := conf.GetConfigOrDie[manila.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
@@ -570,7 +557,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledTasks, "cinder-decisions-cleanup-task") {
+	if slices.Contains(mainConfig.EnabledTasks, "cinder-decisions-cleanup-task") {
 		setupLog.Info("starting cinder decisions cleanup task")
 		decisionsCleanupConfig := conf.GetConfigOrDie[cinder.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
