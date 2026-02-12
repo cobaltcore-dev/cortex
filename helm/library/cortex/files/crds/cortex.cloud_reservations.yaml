@@ -15,7 +15,7 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.host
+    - jsonPath: .status.observedHost
       name: Host
       type: string
     - jsonPath: .status.phase
@@ -46,52 +46,97 @@ spec:
           spec:
             description: spec defines the desired state of Reservation
             properties:
+              connectTo:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ConnectTo the instances that lossy use this reservation
+                  The key is the instance, e.g., VM UUID, the value is usecase specific and can be empty
+                  E.g., for failover reservations, this maps VM/instance UUIDs to the host the VM is currently running on.
+                type: object
               creator:
                 description: |-
                   A remark that can be used to identify the creator of the reservation.
                   This can be used to clean up reservations synced from external systems
                   without touching reservations created manually or by other systems.
                 type: string
-              requests:
+              domainID:
+                description: DomainID is the domain ID to reserve for.
+                type: string
+              endTime:
+                description: EndTime is the time when the reservation expires.
+                format: date-time
+                type: string
+              host:
+                description: |-
+                  Host is the desired compute host where the reservation should be placed.
+                  This is a generic name that represents different concepts depending on the scheduling domain:
+                  - For Nova: the hypervisor hostname
+                  - For Pods: the node name
+                  The scheduler will attempt to place the reservation on this host.
+                type: string
+              projectID:
+                description: ProjectID is the UUID of the project this reservation
+                  belongs to.
+                type: string
+              resourceExtraSpecs:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ResourceExtraSpecs contains extra specifications relevant for initial placement
+                  of the instance (e.g., FlavorExtraSpecs for Nova).
+                type: object
+              resourceName:
+                description: ResourceName is the name of the resource to reserve (e.g.,
+                  FlavorName for Nova).
+                type: string
+              resources:
                 additionalProperties:
                   anyOf:
                   - type: integer
                   - type: string
                   pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                   x-kubernetes-int-or-string: true
-                description: Resources requested to reserve for this instance.
+                description: Resources to reserve for this instance.
                 type: object
-              scheduler:
-                description: Specification of the scheduler that will handle the reservation.
+              schedulingDomain:
+                description: SchedulingDomain specifies the scheduling domain for
+                  this reservation (e.g., "nova", "ironcore").
+                type: string
+              selector:
+                description: Selector specifies criteria for selecting appropriate
+                  hosts.
                 properties:
-                  cortexNova:
-                    description: |-
-                      If the type of scheduler is cortex-nova, this field will contain additional
-                      information used by cortex-nova to place the instance.
-                    properties:
-                      domainID:
-                        description: The domain ID to reserve for.
-                        type: string
-                      flavorExtraSpecs:
-                        additionalProperties:
-                          type: string
-                        description: Extra specifications relevant for initial placement
-                          of the instance.
-                        type: object
-                      flavorName:
-                        description: The flavor name of the instance to reserve.
-                        type: string
-                      projectID:
-                        description: The project ID to reserve for.
-                        type: string
-                    type: object
+                  isNUMAAlignedHost:
+                    description: IsNUMAAlignedHost specifies whether the host should
+                      be NUMA-aligned.
+                    type: boolean
                 type: object
+              startTime:
+                description: StartTime is the time when the reservation becomes active.
+                format: date-time
+                type: string
+              type:
+                default: CommittedResourceReservation
+                description: Type of reservation. Defaults to CommittedResourceReservation
+                  if not specified.
+                enum:
+                - CommittedResourceReservation
+                - FailoverReservation
+                type: string
             type: object
           status:
             description: status defines the observed state of Reservation
             properties:
               conditions:
-                description: The current status conditions of the reservation.
+                description: |-
+                  The current status conditions of the reservation.
+                  Conditions include:
+                  - type: Ready
+                    status: True|False|Unknown
+                    reason: ReservationReady
+                    message: Reservation is successfully scheduled
+                    lastTransitionTime: <timestamp>
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -147,14 +192,28 @@ spec:
                   - type
                   type: object
                 type: array
-              host:
-                description: The name of the compute host that was allocated.
+              observedConnectTo:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ObservedConnectTo maps VM/instance UUIDs to the host they are currently allocated on.
+                  This tracks which VMs are actually using this failover reservation and their current placement.
+                  Key: VM/instance UUID, Value: Host name where the VM is currently running.
+                  Only used when Type is FailoverReservation.
+                  This should reflect the actual state and may differ from Spec.ConnectTo during transitions.
+                type: object
+              observedHost:
+                description: |-
+                  ObservedHost is the actual host where the reservation is on
+                  This is set by the scheduler after successful placement and reflects the current state.
+                  It should match Spec.Host when the reservation is successfully placed.
+                  This is a generic name that represents different concepts depending on the scheduling domain:
+                  - For Nova: the hypervisor hostname
+                  - For Pods: the node name
                 type: string
               phase:
                 description: The current phase of the reservation.
                 type: string
-            required:
-            - host
             type: object
         required:
         - spec

@@ -41,12 +41,8 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ReservationSpec{
-					Scheduler: v1alpha1.ReservationSchedulerSpec{
-						CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-							ProjectID:  "test-project",
-							FlavorName: "test-flavor",
-						},
-					},
+					ProjectID:    "test-project",
+					ResourceName: "test-flavor",
 				},
 				Status: v1alpha1.ReservationStatus{
 					Phase: v1alpha1.ReservationStatusPhaseActive,
@@ -56,17 +52,15 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 			shouldRequeue: false,
 		},
 		{
-			name: "skip unsupported reservation scheduler",
+			name: "skip reservation without resource name",
 			reservation: &v1alpha1.Reservation{
 				ObjectMeta: ctrl.ObjectMeta{
 					Name: "test-reservation",
 				},
-				Spec: v1alpha1.ReservationSpec{
-					Scheduler: v1alpha1.ReservationSchedulerSpec{},
-				},
+				Spec: v1alpha1.ReservationSpec{},
 			},
 			expectedPhase: v1alpha1.ReservationStatusPhaseFailed,
-			expectedError: "reservation is not a cortex-nova reservation",
+			expectedError: "reservation has no resource name",
 			shouldRequeue: false,
 		},
 	}
@@ -137,16 +131,12 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Scheduler: v1alpha1.ReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-					ProjectID:  "test-project",
-					FlavorName: "test-flavor",
-					FlavorExtraSpecs: map[string]string{
-						"capabilities:hypervisor_type": "qemu",
-					},
-				},
+			ProjectID:    "test-project",
+			ResourceName: "test-flavor",
+			ResourceExtraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "qemu",
 			},
-			Requests: map[string]resource.Quantity{
+			Resources: map[string]resource.Quantity{
 				"memory": resource.MustParse("1Gi"),
 				"cpu":    resource.MustParse("2"),
 			},
@@ -247,8 +237,8 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		t.Errorf("Expected phase %v, got %v", v1alpha1.ReservationStatusPhaseActive, updated.Status.Phase)
 	}
 
-	if updated.Status.Host != "test-host-1" {
-		t.Errorf("Expected host %v, got %v", "test-host-1", updated.Status.Host)
+	if updated.Status.ObservedHost != "test-host-1" {
+		t.Errorf("Expected host %v, got %v", "test-host-1", updated.Status.ObservedHost)
 	}
 
 	if meta.IsStatusConditionTrue(updated.Status.Conditions, v1alpha1.ReservationConditionError) {

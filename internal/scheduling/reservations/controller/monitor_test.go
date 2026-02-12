@@ -94,17 +94,15 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-1",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Scheduler: v1alpha1.ReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
-				},
-				Requests: map[string]resource.Quantity{
+				ResourceName: "test-flavor",
+				Resources: map[string]resource.Quantity{
 					"memory": resource.MustParse("1Gi"),
 					"cpu":    resource.MustParse("2"),
 				},
 			},
 			Status: v1alpha1.ReservationStatus{
-				Phase: v1alpha1.ReservationStatusPhaseActive,
-				Host:  "test-host-1",
+				Phase:        v1alpha1.ReservationStatusPhaseActive,
+				ObservedHost: "test-host-1",
 			},
 		},
 		{
@@ -112,10 +110,8 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-2",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Scheduler: v1alpha1.ReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
-				},
-				Requests: map[string]resource.Quantity{
+				ResourceName: "test-flavor",
+				Resources: map[string]resource.Quantity{
 					"memory": resource.MustParse("2Gi"),
 					"cpu":    resource.MustParse("4"),
 				},
@@ -137,10 +133,8 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-3",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Scheduler: v1alpha1.ReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
-				},
-				Requests: map[string]resource.Quantity{
+				ResourceName: "test-flavor",
+				Resources: map[string]resource.Quantity{
 					"memory": resource.MustParse("4Gi"),
 					"cpu":    resource.MustParse("4"),
 				},
@@ -226,10 +220,8 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Scheduler: v1alpha1.ReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
-			},
-			Requests: map[string]resource.Quantity{
+			ResourceName: "test-flavor",
+			Resources: map[string]resource.Quantity{
 				"memory": resource.MustParse("1000Mi"),
 				"cpu":    resource.MustParse("2"),
 			},
@@ -342,10 +334,8 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Scheduler: v1alpha1.ReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
-			},
-			Requests: map[string]resource.Quantity{
+			ResourceName: "test-flavor",
+			Resources: map[string]resource.Quantity{
 				"memory": resource.MustParse("1Gi"),
 				"cpu":    resource.MustParse("2"),
 			},

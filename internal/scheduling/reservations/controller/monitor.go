@@ -92,7 +92,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 		if _, ok := resourcesByLabels[key]; !ok {
 			resourcesByLabels[key] = map[string]uint64{}
 		}
-		for resourceName, resourceQuantity := range reservation.Spec.Requests {
+		for resourceName, resourceQuantity := range reservation.Spec.Resources {
 			resourcesByLabels[key][resourceName] += resourceQuantity.AsDec().UnscaledBig().Uint64()
 		}
 	}

@@ -82,26 +82,65 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		if reservation.Status.Phase != v1alpha1.ReservationStatusPhaseActive {
 			continue // Only consider active reservations.
 		}
-		if reservation.Spec.Scheduler.CortexNova == nil {
-			continue // Not handled by us.
+		if reservation.Spec.ResourceName == "" {
+			continue // Not handled by us (no resource name set).
 		}
-		// If the requested vm matches this reservation, free the resources.
-		if !s.Options.LockReserved &&
-			reservation.Spec.Scheduler.CortexNova.ProjectID == request.Spec.Data.ProjectID &&
-			reservation.Spec.Scheduler.CortexNova.FlavorName == request.Spec.Data.Flavor.Data.Name {
-			traceLog.Info("unlocking resources reserved by matching reservation", "reservation", reservation.Name)
+
+		// Handle reservation based on its type.
+		switch reservation.Spec.Type {
+		case v1alpha1.ReservationTypeCommittedResource, "": // Empty string for backward compatibility (defaults to CommittedResource)
+			// For committed resource reservations: if the requested VM matches this reservation, free the resources (slotting).
+			if !s.Options.LockReserved &&
+				reservation.Spec.ProjectID == request.Spec.Data.ProjectID &&
+				reservation.Spec.ResourceName == request.Spec.Data.Flavor.Data.Name {
+				traceLog.Info("unlocking resources reserved by matching committed resource reservation", "reservation", reservation.Name)
+				continue
+			}
+		case v1alpha1.ReservationTypeFailover:
+			// For failover reservations: if the requested VM is contained in the ConnectTo map
+			// AND this is an evacuation request, unlock the resources.
+			// We only unlock during evacuations because:
+			// 1. Failover reservations are specifically for HA/evacuation scenarios.
+			// 2. During live migrations or other operations, we don't want to use failover capacity.
+			// Note: we cannot use failover reservations from other VMs, as that can invalidate our HA guarantees.
+			if request.Spec.Data.IsEvacuation() {
+				if _, contained := reservation.Status.ObservedConnectTo[request.Spec.Data.InstanceUUID]; contained {
+					traceLog.Info("unlocking resources reserved by failover reservation for VM in ConnectTo (evacuation)",
+						"reservation", reservation.Name,
+						"instanceUUID", request.Spec.Data.InstanceUUID)
+					continue
+				}
+			}
+			traceLog.Debug("processing failover reservation", "reservation", reservation.Name)
+		}
+
+		// Block resources on BOTH Spec.Host (desired) AND Status.ObservedHost (actual).
+		// This ensures capacity is blocked during the transition period when a reservation
+		// is being placed (Spec.Host set) and after it's placed (ObservedHost set).
+		// If both are the same, we only subtract once.
+		hostsToBlock := make(map[string]struct{})
+		if reservation.Spec.Host != "" {
+			hostsToBlock[reservation.Spec.Host] = struct{}{}
+		}
+		if reservation.Status.ObservedHost != "" {
+			hostsToBlock[reservation.Status.ObservedHost] = struct{}{}
+		}
+		if len(hostsToBlock) == 0 {
+			traceLog.Debug("skipping reservation with no host", "reservation", reservation.Name)
 			continue
 		}
-		host := reservation.Status.Host
-		if cpu, ok := reservation.Spec.Requests["cpu"]; ok {
-			freeCPU := freeResourcesByHost[host]["cpu"]
-			freeCPU.Sub(cpu)
-			freeResourcesByHost[host]["cpu"] = freeCPU
-		}
-		if memory, ok := reservation.Spec.Requests["memory"]; ok {
-			freeMemory := freeResourcesByHost[host]["memory"]
-			freeMemory.Sub(memory)
-			freeResourcesByHost[host]["memory"] = freeMemory
+
+		for host := range hostsToBlock {
+			if cpu, ok := reservation.Spec.Resources["cpu"]; ok {
+				freeCPU := freeResourcesByHost[host]["cpu"]
+				freeCPU.Sub(cpu)
+				freeResourcesByHost[host]["cpu"] = freeCPU
+			}
+			if memory, ok := reservation.Spec.Resources["memory"]; ok {
+				freeMemory := freeResourcesByHost[host]["memory"]
+				freeMemory.Sub(memory)
+				freeResourcesByHost[host]["memory"] = freeMemory
+			}
 		}
 	}
 

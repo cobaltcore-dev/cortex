@@ -184,16 +184,12 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		}
 		commitmentUUIDShort := commitment.UUID[:5]
 		spec := v1alpha1.ReservationSpec{
-			Creator: Creator,
-			Scheduler: v1alpha1.ReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{
-					ProjectID:        commitment.ProjectID,
-					DomainID:         commitment.DomainID,
-					FlavorName:       commitment.Flavor.Name,
-					FlavorExtraSpecs: commitment.Flavor.ExtraSpecs,
-				},
-			},
-			Requests: map[string]resource.Quantity{
+			Creator:            Creator,
+			ProjectID:          commitment.ProjectID,
+			DomainID:           commitment.DomainID,
+			ResourceName:       commitment.Flavor.Name,
+			ResourceExtraSpecs: commitment.Flavor.ExtraSpecs,
+			Resources: map[string]resource.Quantity{
 				"memory": *resource.NewQuantity(int64(commitment.Flavor.RAM)*1024*1024, resource.BinarySI),
 				"cpu":    *resource.NewQuantity(int64(commitment.Flavor.VCPUs), resource.DecimalSI),
 				// Disk is currently not considered.

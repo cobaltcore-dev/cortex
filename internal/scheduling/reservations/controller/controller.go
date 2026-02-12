@@ -72,15 +72,43 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
 
-	// Currently we can only reconcile cortex-nova reservations.
-	if res.Spec.Scheduler.CortexNova == nil {
-		log.Info("reservation is not a cortex-nova reservation, skipping", "reservation", req.Name)
+	// Sync Spec values to Status.Observed* fields
+	// This ensures the observed state reflects the desired state from Spec
+	needsStatusUpdate := false
+	if res.Spec.Host != "" && res.Status.ObservedHost != res.Spec.Host {
+		res.Status.ObservedHost = res.Spec.Host
+		needsStatusUpdate = true
+	}
+	if len(res.Spec.ConnectTo) > 0 {
+		if res.Status.ObservedConnectTo == nil {
+			res.Status.ObservedConnectTo = make(map[string]string)
+		}
+		for k, v := range res.Spec.ConnectTo {
+			if res.Status.ObservedConnectTo[k] != v {
+				res.Status.ObservedConnectTo[k] = v
+				needsStatusUpdate = true
+			}
+		}
+	}
+	if needsStatusUpdate {
+		old := res.DeepCopy()
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, &res, patch); err != nil {
+			log.Error(err, "failed to sync spec to status")
+			return ctrl.Result{}, err
+		}
+		log.Info("synced spec to status", "reservation", req.Name, "host", res.Status.ObservedHost, "connectTo", res.Status.ObservedConnectTo)
+	}
+
+	// Currently we can only reconcile nova reservations (those with ResourceName set).
+	if res.Spec.ResourceName == "" {
+		log.Info("reservation has no resource name, skipping", "reservation", req.Name)
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionError,
 			Status:  metav1.ConditionTrue,
-			Reason:  "UnsupportedScheduler",
-			Message: "reservation is not a cortex-nova reservation",
+			Reason:  "MissingResourceName",
+			Message: "reservation has no resource name",
 		})
 		res.Status.Phase = v1alpha1.ReservationStatusPhaseFailed
 		patch := client.MergeFrom(old)
@@ -93,7 +121,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Convert resource.Quantity to integers for the API
 	var memoryMB uint64
-	if memory, ok := res.Spec.Requests["memory"]; ok {
+	if memory, ok := res.Spec.Resources["memory"]; ok {
 		memoryValue := memory.ScaledValue(resource.Mega)
 		if memoryValue < 0 {
 			return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
@@ -102,7 +130,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	var cpu uint64
-	if cpuQuantity, ok := res.Spec.Requests["cpu"]; ok {
+	if cpuQuantity, ok := res.Spec.Resources["cpu"]; ok {
 		cpuValue := cpuQuantity.ScaledValue(resource.Milli)
 		if cpuValue < 0 {
 			return ctrl.Result{}, fmt.Errorf("invalid cpu value: %d", cpuValue)
@@ -140,11 +168,11 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			Data: schedulerdelegationapi.NovaSpec{
 				InstanceUUID: res.Name,
 				NumInstances: 1, // One for each reservation.
-				ProjectID:    res.Spec.Scheduler.CortexNova.ProjectID,
+				ProjectID:    res.Spec.ProjectID,
 				Flavor: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaFlavor]{
 					Data: schedulerdelegationapi.NovaFlavor{
-						Name:       res.Spec.Scheduler.CortexNova.FlavorName,
-						ExtraSpecs: res.Spec.Scheduler.CortexNova.FlavorExtraSpecs,
+						Name:       res.Spec.ResourceName,
+						ExtraSpecs: res.Spec.ResourceExtraSpecs,
 						MemoryMB:   memoryMB,
 						VCPUs:      cpu,
 						// Disk is currently not considered.
@@ -188,13 +216,14 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, nil // No need to requeue, we didn't find a host.
 	}
+
 	// Update the reservation with the found host (idx 0)
 	host := externalSchedulerResponse.Hosts[0]
 	log.Info("found host for reservation", "reservation", req.Name, "host", host)
 	old := res.DeepCopy()
 	meta.RemoveStatusCondition(&res.Status.Conditions, v1alpha1.ReservationConditionError)
 	res.Status.Phase = v1alpha1.ReservationStatusPhaseActive
-	res.Status.Host = host
+	res.Status.ObservedHost = host
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, &res, patch); err != nil {
 		log.Error(err, "failed to patch reservation status")
@@ -206,7 +235,10 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // SetupWithManager sets up the controller with the Manager.
 func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		return r.Init(ctx, mgr.GetClient(), r.Conf)
+		if err := r.Init(ctx, mgr.GetClient(), r.Conf); err != nil {
+			return err
+		}
+		return nil
 	})); err != nil {
 		return err
 	}
