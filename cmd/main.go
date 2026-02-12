@@ -298,10 +298,17 @@ func main() {
 		// Deschedulings controller
 		monitor := schedulinglib.NewDetectorPipelineMonitor()
 		metrics.Registry.MustRegister(&monitor)
+		novaClient := nova.NewNovaClient()
+		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
+		if err := novaClient.Init(ctx, multiclusterClient, novaClientConfig); err != nil {
+			setupLog.Error(err, "unable to initialize nova client")
+			os.Exit(1)
+		}
+		cycleBreaker := &nova.DetectorCycleBreaker{NovaClient: novaClient}
 		deschedulingsController := &nova.DetectorPipelineController{
-			Monitor:              monitor,
-			Conf:                 config,
-			DetectorCycleBreaker: nova.NewDetectorCycleBreaker(),
+			Monitor: monitor,
+			Conf:    config,
+			Breaker: cycleBreaker,
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = multiclusterClient
@@ -316,6 +323,24 @@ func main() {
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(config.EnabledControllers, "nova-deschedulings-executor") {
+		executorConfig := conf.GetConfigOrDie[nova.DeschedulingsExecutorConfig]()
+		novaClient := nova.NewNovaClient()
+		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
+		if err := novaClient.Init(ctx, multiclusterClient, novaClientConfig); err != nil {
+			setupLog.Error(err, "unable to initialize nova client")
+			os.Exit(1)
+		}
+		if err := (&nova.DeschedulingsExecutor{
+			Client:     multiclusterClient,
+			Scheme:     mgr.GetScheme(),
+			Conf:       executorConfig,
+			NovaClient: novaClient,
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsExecutor")
 			os.Exit(1)
 		}
 	}

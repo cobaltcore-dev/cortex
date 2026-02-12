@@ -6,31 +6,19 @@ package nova
 import (
 	"context"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type detectorCycleBreaker struct {
+type DetectorCycleBreaker struct {
 	// Nova API to get needed information for cycle detection.
-	novaClient NovaClient
+	NovaClient NovaClient
 }
 
-func NewDetectorCycleBreaker() lib.DetectorCycleBreaker[plugins.VMDetection] {
-	return &detectorCycleBreaker{novaClient: NewNovaClient()}
-}
-
-// Initialize the cycle detector.
-func (c *detectorCycleBreaker) Init(ctx context.Context, client client.Client, conf conf.Config) error {
-	return c.novaClient.Init(ctx, client, conf)
-}
-
-func (c *detectorCycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
+func (c *DetectorCycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	keep := make(map[string]struct{}, len(decisions))
 	for _, decision := range decisions {
 		// Get the migrations for the VM.
-		migrations, err := c.novaClient.GetServerMigrations(ctx, decision.VMID)
+		migrations, err := c.NovaClient.GetServerMigrations(ctx, decision.VMID)
 		if err != nil {
 			return nil, err
 		}

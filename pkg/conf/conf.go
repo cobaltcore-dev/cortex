@@ -19,9 +19,6 @@ type Config struct {
 	// ID used to identify leader election participants.
 	LeaderElectionID string `json:"leaderElectionID,omitempty"`
 
-	// Whether to disable dry-run for descheduler steps.
-	DisableDeschedulerDryRun bool `json:"disableDeschedulerDryRun"`
-
 	// Secret ref to keystone credentials stored in a k8s secret.
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 

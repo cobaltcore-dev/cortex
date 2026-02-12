@@ -10,13 +10,21 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type NovaClientConfig struct {
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef,omitempty"`
+}
 
 type server struct {
 	ID          string `json:"id"`
@@ -32,7 +40,7 @@ type migration struct {
 
 type NovaClient interface {
 	// Initialize the Nova API with the Keystone authentication.
-	Init(ctx context.Context, client client.Client, conf conf.Config) error
+	Init(ctx context.Context, client client.Client, conf NovaClientConfig) error
 	// Get a server by ID.
 	Get(ctx context.Context, id string) (server, error)
 	// Live migrate a server to a new host (doesnt wait for it to complete).
@@ -50,7 +58,7 @@ func NewNovaClient() NovaClient {
 	return &novaClient{}
 }
 
-func (api *novaClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (api *novaClient) Init(ctx context.Context, client client.Client, conf NovaClientConfig) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error
