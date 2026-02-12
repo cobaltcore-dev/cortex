@@ -19,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 func TestCleanupCinder(t *testing.T) {
@@ -282,8 +281,7 @@ func TestCleanupCinder(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(objects...).
 				Build()
-			config := conf.Config{
-				SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+			config := DecisionsCleanupConfig{
 				KeystoneSecretRef: corev1.SecretReference{
 					Name:      "keystone-secret",
 					Namespace: "default",
@@ -365,8 +363,7 @@ func TestCleanupCinderDecisionsCancel(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	config := conf.Config{
-		SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+	config := DecisionsCleanupConfig{
 		KeystoneSecretRef: corev1.SecretReference{
 			Name:      "keystone-secret",
 			Namespace: "default",

@@ -17,7 +17,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
@@ -28,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/sapcc/go-bits/must"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,6 +35,13 @@ const (
 	// The number of requests to send.
 	nRandomRequestsToSend = 50
 )
+
+type ChecksConfig struct {
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+}
 
 // Data necessary to generate a somewhat valid nova scheduler request.
 type datacenter struct {
@@ -94,7 +101,7 @@ func getHypervisors(ctx context.Context, sc *gophercloud.ServiceClient) ([]nova.
 }
 
 // Prepare the test by fetching the necessary data from OpenStack.
-func prepare(ctx context.Context, client client.Client, config conf.Config) datacenter {
+func prepare(ctx context.Context, client client.Client, config ChecksConfig) datacenter {
 	var authenticatedHTTP = http.DefaultClient
 	if config.SSOSecretRef != nil {
 		authenticatedHTTP = must.Return(sso.Connector{Client: client}.
@@ -350,7 +357,7 @@ func checkNovaSchedulerReturnsValidHosts(
 }
 
 // Run all checks.
-func RunChecks(ctx context.Context, client client.Client, config conf.Config) {
+func RunChecks(ctx context.Context, client client.Client, config ChecksConfig) {
 	datacenter := prepare(ctx, client, config)
 	requestsWithHostsReturned := 0
 	requestsWithNoHostsReturned := 0

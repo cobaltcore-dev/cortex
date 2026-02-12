@@ -11,7 +11,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -122,9 +121,6 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					Pipelines: map[string]lib.FilterWeigherPipeline[pods.PodPipelineRequest]{
 						"pods-scheduler": createMockPodPipeline(),
 					},
-				},
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -408,9 +404,6 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[pods.PodPipelineRequest]]{
 					Pipelines:       map[string]lib.FilterWeigherPipeline[pods.PodPipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
-				},
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}

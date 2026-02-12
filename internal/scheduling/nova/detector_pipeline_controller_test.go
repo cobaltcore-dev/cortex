@@ -11,7 +11,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,10 +18,6 @@ import (
 )
 
 type mockDetectorCycleBreaker struct{}
-
-func (m *mockDetectorCycleBreaker) Init(ctx context.Context, client client.Client, conf conf.Config) error {
-	return nil
-}
 
 func (m *mockDetectorCycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	return decisions, nil

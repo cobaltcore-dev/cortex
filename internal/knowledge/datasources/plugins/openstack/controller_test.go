@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +31,7 @@ func TestOpenStackDatasourceReconciler_Creation(t *testing.T) {
 		Client:  client,
 		Scheme:  scheme,
 		Monitor: datasources.Monitor{},
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    OpenStackDatasourceReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	if reconciler.Client == nil {

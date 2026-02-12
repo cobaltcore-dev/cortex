@@ -28,13 +28,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+type ControllerConfig struct {
+	// The controller will scope to objects using this scheduling domain name.
+	// This allows multiple controllers to coexist in the same cluster without
+	// interfering with each other's decisions.
+	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
+}
+
 // The kpi controller checks the status of kpi dependencies and populates
 // the kpi status accordingly.
 type Controller struct {
 	// Kubernetes client to manage/fetch resources.
 	client.Client
-	// The scheduling domain to scope resources to.
-	SchedulingDomain v1alpha1.SchedulingDomain
+	// Configuration for the controller.
+	Config ControllerConfig
 
 	// The supported kpis to manage.
 	supportedKPIs map[string]plugins.KPI
@@ -108,7 +115,7 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 		return fmt.Errorf("failed to list existing kpis: %w", err)
 	}
 	for _, kpi := range kpis.Items {
-		if kpi.Spec.SchedulingDomain != c.SchedulingDomain {
+		if kpi.Spec.SchedulingDomain != c.Config.SchedulingDomain {
 			continue
 		}
 		old := kpi.DeepCopy()
@@ -448,7 +455,7 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only react to datasources matching the scheduling domain.
 				ds := obj.(*v1alpha1.Datasource)
-				return ds.Spec.SchedulingDomain == c.SchedulingDomain
+				return ds.Spec.SchedulingDomain == c.Config.SchedulingDomain
 			}),
 		).
 		// Watch knowledge changes so that we can reconfigure kpis as needed.
@@ -462,7 +469,7 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only react to knowledges matching the scheduling domain.
 				kn := obj.(*v1alpha1.Knowledge)
-				return kn.Spec.SchedulingDomain == c.SchedulingDomain
+				return kn.Spec.SchedulingDomain == c.Config.SchedulingDomain
 			}),
 		).
 		Named("cortex-kpis").
@@ -471,7 +478,7 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only react to datasources matching the scheduling domain.
 				ds := obj.(*v1alpha1.KPI)
-				return ds.Spec.SchedulingDomain == c.SchedulingDomain
+				return ds.Spec.SchedulingDomain == c.Config.SchedulingDomain
 			})),
 		).
 		Complete(c)

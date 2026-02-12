@@ -18,7 +18,7 @@ import (
 
 func TestController_shouldReconcileDecision(t *testing.T) {
 	controller := &Controller{
-		SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		Config: ControllerConfig{SchedulingDomain: v1alpha1.SchedulingDomainNova},
 	}
 
 	tests := []struct {
@@ -183,9 +183,9 @@ func TestController_Reconcile(t *testing.T) {
 				Build()
 
 			controller := &Controller{
-				Client:           client,
-				SchedulingDomain: v1alpha1.SchedulingDomainNova,
-				SkipIndexFields:  true, // Skip field indexing for testing
+				Client:          client,
+				Config:          ControllerConfig{SchedulingDomain: v1alpha1.SchedulingDomainNova},
+				SkipIndexFields: true, // Skip field indexing for testing
 			}
 
 			req := ctrl.Request{
@@ -411,9 +411,9 @@ func TestController_reconcileHistory(t *testing.T) {
 				Build()
 
 			controller := &Controller{
-				Client:           client,
-				SchedulingDomain: v1alpha1.SchedulingDomainNova,
-				SkipIndexFields:  true, // Skip field indexing for testing
+				Client:          client,
+				Config:          ControllerConfig{SchedulingDomain: v1alpha1.SchedulingDomainNova},
+				SkipIndexFields: true, // Skip field indexing for testing
 			}
 
 			err := controller.reconcileHistory(context.Background(), tt.decision)
@@ -465,8 +465,8 @@ func TestController_reconcileExplanation(t *testing.T) {
 		Build()
 
 	controller := &Controller{
-		Client:           client,
-		SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		Client: client,
+		Config: ControllerConfig{SchedulingDomain: v1alpha1.SchedulingDomainNova},
 	}
 
 	err := controller.reconcileExplanation(context.Background(), decision)
@@ -544,9 +544,9 @@ func TestController_StartupCallback(t *testing.T) {
 		Build()
 
 	controller := &Controller{
-		Client:           client,
-		SchedulingDomain: v1alpha1.SchedulingDomainNova,
-		SkipIndexFields:  true, // Skip field indexing for testing
+		Client:          client,
+		Config:          ControllerConfig{SchedulingDomain: v1alpha1.SchedulingDomainNova},
+		SkipIndexFields: true, // Skip field indexing for testing
 	}
 
 	err := controller.StartupCallback(context.Background())

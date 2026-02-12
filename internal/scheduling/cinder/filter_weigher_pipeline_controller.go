@@ -19,7 +19,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -44,8 +43,6 @@ type FilterWeigherPipelineController struct {
 
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
-	// Config for the scheduling operator.
-	Conf conf.Config
 }
 
 // The type of pipeline this controller manages.

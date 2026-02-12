@@ -463,8 +463,8 @@ func TestController_Reconcile(t *testing.T) {
 
 			mockKPIInstance := &mockKPI{name: "test_kpi"}
 			baseController := Controller{
-				Client:           fakeClient,
-				SchedulingDomain: "test-operator",
+				Client: fakeClient,
+				Config: ControllerConfig{SchedulingDomain: "test-operator"},
 				supportedKPIs: map[string]plugins.KPI{
 					"test_kpi": mockKPIInstance,
 				},
@@ -543,8 +543,8 @@ func TestController_Reconcile_KPIDeleted(t *testing.T) {
 
 	mockKPIInstance := &mockKPI{name: "test_kpi"}
 	controller := &Controller{
-		Client:           fakeClient,
-		SchedulingDomain: "test-operator",
+		Client: fakeClient,
+		Config: ControllerConfig{SchedulingDomain: "test-operator"},
 		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},
@@ -968,8 +968,8 @@ func TestController_InitAllKPIs(t *testing.T) {
 
 	mockKPIInstance := &mockKPI{name: "test_kpi"}
 	baseController := Controller{
-		Client:           fakeClient,
-		SchedulingDomain: "test-operator",
+		Client: fakeClient,
+		Config: ControllerConfig{SchedulingDomain: "test-operator"},
 		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},
