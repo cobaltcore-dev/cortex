@@ -21,15 +21,6 @@ type SSOConfig struct {
 	SelfSigned bool `json:"selfSigned,omitempty"`
 }
 
-// Database configuration.
-type DBConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-}
-
 // Config which maps a kubernetes resource URI to a remote kubernetes apiserver.
 // This override config can be used to manage CRDs in a different kubernetes cluster.
 // It is assumed that the remote apiserver accepts the serviceaccount tokens
