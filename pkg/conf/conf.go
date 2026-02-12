@@ -12,15 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Configuration for the monitoring module.
-type MonitoringConfig struct {
-	// The labels to add to all metrics.
-	Labels map[string]string `json:"labels"`
-
-	// The port to expose the metrics on.
-	Port int `json:"port"`
-}
-
 // Endpoints for the reservations operator.
 type EndpointsConfig struct {
 	// The nova external scheduler endpoint.
@@ -51,9 +42,6 @@ type Config struct {
 
 	// List of enabled tasks.
 	EnabledTasks []string `json:"enabledTasks"`
-
-	// Monitoring configuration
-	Monitoring MonitoringConfig `json:"monitoring"`
 }
 
 // Create a new configuration from the default config json file.
