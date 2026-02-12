@@ -21,11 +21,16 @@ vendor/**
 go.work
 go.work.sum
 
-# env file
-.env
 
 # Just in case someone decides to put the secrets into the project dir.
 cortex.secrets.yaml
 
-# macOS specific files
-.DS_Store
+# exclude dot files
+.*
+# except
+!.dockerignore
+!.editorconfig
+!.gitignore
+!.golangci.yaml
+!.license-scan-overrides.jsonl
+!.license-scan-rules.json

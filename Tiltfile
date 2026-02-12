@@ -23,6 +23,27 @@ tilt_overrides = os.getenv('TILT_OVERRIDES_PATH')
 if tilt_overrides and os.path.exists(tilt_overrides):
     tilt_values.append(tilt_overrides)
 
+# Build a list of --set overrides from environment variables
+# Check for environment variables with CORTEX_ prefix and convert them to Helm set overrides
+# CORTEX_AAA_BBB_CCC will be converted to AAA.BBB.CCC=value
+env_set_overrides = []
+
+print("=== Scanning for CORTEX_ environment variables ===")
+for env_key in os.environ:
+    if env_key.startswith('CORTEX_'):
+        # Remove CORTEX_ prefix and convert underscores to dots
+        # CORTEX_AAA_BBB_CCC -> AAA_BBB_CCC -> AAA.BBB.CCC
+        value_key = env_key[7:].replace('_', '.').lower()
+        env_value = os.getenv(env_key)
+        override = value_key + '=' + env_value
+        env_set_overrides.append(override)
+        print("  Found: " + env_key)
+
+if len(env_set_overrides) > 0:
+    print("=== Total environment overrides: " + str(len(env_set_overrides)) + " ===")
+else:
+    print("=== No CORTEX_ environment variables found ===")
+
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo(
     'Prometheus Community Helm Repo',
@@ -131,7 +152,7 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=crd_extra_va
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=tilt_values))
+    k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=tilt_values, set=env_set_overrides))
     k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8000, 5432),
     ])
@@ -149,7 +170,7 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
 
 if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=tilt_values))
+    k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=tilt_values, set=env_set_overrides))
     k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
         port_forward(8002, 5432),
     ])
@@ -166,7 +187,7 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     )
 
 if 'cinder' in ACTIVE_DEPLOYMENTS:
-    k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=tilt_values))
+    k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=tilt_values, set=env_set_overrides))
     k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8004, 5432),
     ])
@@ -189,7 +210,7 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
     k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machinepools.yaml')
     k8s_yaml('samples/ironcore/crds/compute.ironcore.dev_machineclasses.yaml')
     # Deploy IronCore controller
-    k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=tilt_values))
+    k8s_yaml(helm('./helm/bundles/cortex-ironcore', name='cortex-ironcore', values=tilt_values, set=env_set_overrides))
     k8s_resource('cortex-ironcore-controller-manager', labels=['Cortex-IronCore'])
     # Deploy resources in machines/samples
     k8s_yaml('samples/ironcore/machinepool.yaml')
@@ -198,7 +219,7 @@ if 'ironcore' in ACTIVE_DEPLOYMENTS:
 
 if 'pods' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Pods bundle")
-    k8s_yaml(helm('./helm/bundles/cortex-pods', name='cortex-pods', values=tilt_values),)
+    k8s_yaml(helm('./helm/bundles/cortex-pods', name='cortex-pods', values=tilt_values, set=env_set_overrides))
     k8s_resource('cortex-pods-controller-manager', labels=['Cortex-Pods'])
     # Deploy example resources
     k8s_yaml('samples/pods/node.yaml')
