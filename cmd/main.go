@@ -18,7 +18,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -258,37 +257,10 @@ func main() {
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
 	}
-	// Map the formatted gvk from the config to the actual gvk object so that we
-	// can look up the right cluster for a given API server override.
-	var gvksByConfStr = make(map[string]schema.GroupVersionKind)
-	for gvk := range scheme.AllKnownTypes() {
-		// This produces something like: "cortex.cloud/v1alpha1/Decision" which can
-		// be used to look up the right cluster for a given API server override.
-		formatted := gvk.GroupVersion().String() + "/" + gvk.Kind
-		gvksByConfStr[formatted] = gvk
-	}
-	for gvkStr := range gvksByConfStr {
-		setupLog.Info("scheme gvk registered", "gvk", gvkStr)
-	}
-	for _, override := range config.APIServerOverrides {
-		// Check if we have any registered gvk for this API server override.
-		gvk, ok := gvksByConfStr[override.GVK]
-		if !ok {
-			setupLog.Error(nil, "no registered objects for apiserver override resource",
-				"apiserver", override.Host, "gvk", override.GVK)
-			os.Exit(1)
-		}
-		cluster, err := multiclusterClient.AddRemote(ctx, override.Host, override.CACert, gvk)
-		if err != nil {
-			setupLog.Error(err, "unable to create cluster for apiserver override", "apiserver", override.Host)
-			os.Exit(1)
-		}
-		// Also tell the manager about this cluster so that controllers can use it.
-		// This will execute the cluster.Start function when the manager starts.
-		if err := mgr.Add(cluster); err != nil {
-			setupLog.Error(err, "unable to add cluster for apiserver override", "apiserver", override.Host)
-			os.Exit(1)
-		}
+	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
+	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
+		setupLog.Error(err, "unable to initialize multicluster client")
+		os.Exit(1)
 	}
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
