@@ -190,3 +190,21 @@ spec:
     datasources:
       - name: placement-resource-provider-traits
       - name: nova-hypervisors
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Knowledge
+metadata:
+  name: vm-details
+spec:
+  schedulingDomain: nova
+  extractor:
+    name: vm_details_extractor
+  description: |
+    This knowledge extracts VM details including server UUID and flavor name
+    from openstack_servers, enriched with RAM and VCPU information from
+    openstack_flavors_v2.
+  recency: "60s"
+  dependencies:
+    datasources:
+      - name: nova-servers
+      - name: nova-flavors
