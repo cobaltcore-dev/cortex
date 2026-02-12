@@ -52,24 +52,6 @@ type MonitoringConfig struct {
 	Port int `json:"port"`
 }
 
-// Configuration for the keystone authentication.
-type KeystoneConfig struct {
-	// The URL of the keystone service.
-	URL string `json:"url"`
-	// Availability of the keystone service, such as "public", "internal", or "admin".
-	Availability string `json:"availability"`
-	// The OpenStack username (OS_USERNAME in openstack cli).
-	OSUsername string `json:"username"`
-	// The OpenStack password (OS_PASSWORD in openstack cli).
-	OSPassword string `json:"password"`
-	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
-	OSProjectName string `json:"projectName"`
-	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
-	OSUserDomainName string `json:"userDomainName"`
-	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
-	OSProjectDomainName string `json:"projectDomainName"`
-}
-
 // Endpoints for the reservations operator.
 type EndpointsConfig struct {
 	// The nova external scheduler endpoint.
