@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -300,7 +301,9 @@ func main() {
 		metrics.Registry.MustRegister(&monitor)
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
-		if err := novaClient.Init(ctx, multiclusterClient, novaClientConfig); err != nil {
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return novaClient.Init(ctx, multiclusterClient, novaClientConfig)
+		})); err != nil {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
@@ -330,7 +333,9 @@ func main() {
 		executorConfig := conf.GetConfigOrDie[nova.DeschedulingsExecutorConfig]()
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
-		if err := novaClient.Init(ctx, multiclusterClient, novaClientConfig); err != nil {
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return novaClient.Init(ctx, multiclusterClient, novaClientConfig)
+		})); err != nil {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
