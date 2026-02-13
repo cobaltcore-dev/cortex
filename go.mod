@@ -9,7 +9,7 @@ require (
 	github.com/ironcore-dev/ironcore v0.2.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260205162534-c193fd73ad83
+	github.com/sapcc/go-bits v0.0.0-20260212180203-791f29d90b4b
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
@@ -55,7 +55,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lib/pq v1.11.1
+	github.com/lib/pq v1.11.2
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/moby/sys/user v0.4.0 // indirect
