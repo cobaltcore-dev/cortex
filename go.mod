@@ -10,9 +10,9 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-bits v0.0.0-20260212180203-791f29d90b4b
-	k8s.io/api v0.35.0
-	k8s.io/apimachinery v0.35.0
-	k8s.io/client-go v0.35.0
+	k8s.io/api v0.35.1
+	k8s.io/apimachinery v0.35.1
+	k8s.io/client-go v0.35.1
 	sigs.k8s.io/controller-runtime v0.23.1
 )
 
@@ -57,7 +57,7 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lib/pq v1.11.2
 	github.com/mailru/easyjson v0.9.0 // indirect
-	github.com/mattn/go-sqlite3 v1.14.33
+	github.com/mattn/go-sqlite3 v1.14.34
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect

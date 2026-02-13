@@ -10,4 +10,4 @@ dependencies:
   # CRDs of the prometheus operator, such as PrometheusRule, ServiceMonitor, etc.
   - name: kube-prometheus-stack
     repository: oci://ghcr.io/prometheus-community/charts
-    version: 81.5.0
+    version: 81.6.5
