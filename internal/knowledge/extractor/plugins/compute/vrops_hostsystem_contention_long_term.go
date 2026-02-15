@@ -4,14 +4,14 @@
 package compute
 
 import (
-	"context"
 	_ "embed"
 	"errors"
+	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Feature that maps CPU contention of vROps hostsystems.
@@ -36,7 +36,7 @@ var vropsHostsystemContentionLongTermSQL string
 
 // Extract long term CPU contention of hostsystems.
 // Depends on resolved vROps hostsystems (feature_vrops_resolved_hostsystem).
-func (e *VROpsHostsystemContentionLongTermExtractor) Extract() ([]plugins.Feature, error) {
+func (e *VROpsHostsystemContentionLongTermExtractor) Extract(_ []*v1alpha1.Datasource, k []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	if e.DB == nil {
 		return nil, errors.New("database connection is not initialized")
 	}
@@ -50,16 +50,15 @@ func (e *VROpsHostsystemContentionLongTermExtractor) Extract() ([]plugins.Featur
 		return nil, err
 	}
 
-	resolvedHostsystemsKnowledge := &v1alpha1.Knowledge{}
-	if err := e.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "vmware-resolved-hostsystems"},
-		resolvedHostsystemsKnowledge,
-	); err != nil {
-		return nil, err
+	name := "vmware-resolved-hostsystems"
+	idx := slices.IndexFunc(k, func(k *v1alpha1.Knowledge) bool {
+		return k.Name == name
+	})
+	if idx < 0 {
+		return nil, fmt.Errorf("knowledge '%s' not found", name)
 	}
 	resolvedHostsystems, err := v1alpha1.
-		UnboxFeatureList[ResolvedVROpsHostsystem](resolvedHostsystemsKnowledge.Status.Raw)
+		UnboxFeatureList[ResolvedVROpsHostsystem](k[idx].Status.Raw)
 	if err != nil {
 		return nil, err
 	}
