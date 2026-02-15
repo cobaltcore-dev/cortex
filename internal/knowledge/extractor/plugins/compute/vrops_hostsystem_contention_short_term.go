@@ -26,7 +26,7 @@ type VROpsHostsystemContentionShortTerm struct {
 type VROpsHostsystemContentionShortTermExtractor struct {
 	// Common base for all extractors that provides standard functionality.
 	plugins.BaseExtractor[
-		struct{},                           // No options passed through yaml config
+		struct{}, // No options passed through yaml config
 		VROpsHostsystemContentionShortTerm, // Feature model
 	]
 }
