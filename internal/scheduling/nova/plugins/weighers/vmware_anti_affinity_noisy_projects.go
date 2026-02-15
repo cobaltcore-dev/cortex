@@ -12,7 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -45,7 +45,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Init(ctx context.Context, client c
 	if err := s.BaseWeigher.Init(ctx, client, weigher); err != nil {
 		return err
 	}
-	if err := s.CheckKnowledges(ctx, corev1.ObjectReference{Name: "vmware-project-noisiness"}); err != nil {
+	if err := s.CheckKnowledges(ctx, types.NamespacedName{Name: "vmware-project-noisiness"}); err != nil {
 		return err
 	}
 	return nil

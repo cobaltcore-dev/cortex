@@ -13,7 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -45,8 +45,8 @@ func (s *VMwareHanaBinpackingStep) Init(ctx context.Context, client client.Clien
 		return err
 	}
 	if err := s.CheckKnowledges(ctx,
-		corev1.ObjectReference{Name: "host-utilization"},
-		corev1.ObjectReference{Name: "host-capabilities"},
+		types.NamespacedName{Name: "host-utilization"},
+		types.NamespacedName{Name: "host-capabilities"},
 	); err != nil {
 		return err
 	}
