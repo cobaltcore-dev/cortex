@@ -16,6 +16,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -77,7 +78,7 @@ func (s *VMwareBinpackStep) Init(ctx context.Context, client client.Client, weig
 		return err
 	}
 	if err := s.CheckKnowledges(ctx,
-		corev1.ObjectReference{Name: "host-utilization"},
+		types.NamespacedName{Name: "host-utilization"},
 	); err != nil {
 		return err
 	}
