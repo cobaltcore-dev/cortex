@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,7 +51,7 @@ var vmHostResidencyQuery string
 
 // Extract the time elapsed until the first migration of a virtual machine.
 // Depends on the OpenStack servers and migrations to be synced.
-func (e *VMHostResidencyExtractor) Extract() ([]plugins.Feature, error) {
+func (e *VMHostResidencyExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	// This can happen when no datasource is provided that connects to a database.
 	if e.DB == nil {
 		return nil, errors.New("database connection is not initialized")

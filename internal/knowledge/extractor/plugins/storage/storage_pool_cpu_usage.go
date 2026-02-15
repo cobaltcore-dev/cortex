@@ -6,6 +6,7 @@ package storage
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 )
 
@@ -32,6 +33,6 @@ type StoragePoolCPUUsageExtractor struct {
 var storagePoolCPUUsageQuery string
 
 // Extract the CPU usage of a storage pool.
-func (e *StoragePoolCPUUsageExtractor) Extract() ([]plugins.Feature, error) {
+func (e *StoragePoolCPUUsageExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	return e.ExtractSQL(storagePoolCPUUsageQuery)
 }

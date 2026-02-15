@@ -6,6 +6,7 @@ package compute
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 )
 
@@ -44,6 +45,6 @@ var hostUtilizationQuery string
 
 // Extract the utilization on a compute host.
 // Depends on the OpenStack hypervisors to be synced.
-func (e *HostUtilizationExtractor) Extract() ([]plugins.Feature, error) {
+func (e *HostUtilizationExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	return e.ExtractSQL(hostUtilizationQuery)
 }

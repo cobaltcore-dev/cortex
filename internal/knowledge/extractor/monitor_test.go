@@ -26,7 +26,7 @@ func (m *mockFeatureExtractor) Init(datasourceDB *db.DB, client client.Client, s
 	return m.initError
 }
 
-func (m *mockFeatureExtractor) Extract() ([]plugins.Feature, error) {
+func (m *mockFeatureExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	if m.extractError != nil {
 		return nil, m.extractError
 	}
@@ -118,7 +118,7 @@ func TestMonitorFeatureExtractor_Extract_Success(t *testing.T) {
 
 	wrappedExtractor := monitorFeatureExtractor("test-extractor", mockExtractor, monitor)
 
-	features, err := wrappedExtractor.Extract()
+	features, err := wrappedExtractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -154,7 +154,7 @@ func TestMonitorFeatureExtractor_Extract_Error(t *testing.T) {
 
 	wrappedExtractor := monitorFeatureExtractor("test-extractor", mockExtractor, monitor)
 
-	features, err := wrappedExtractor.Extract()
+	features, err := wrappedExtractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if !errors.Is(err, expectedError) {
 		t.Errorf("Expected error %v, got %v", expectedError, err)
 	}
@@ -171,7 +171,7 @@ func TestMonitorFeatureExtractor_Extract_EmptyFeatures(t *testing.T) {
 
 	wrappedExtractor := monitorFeatureExtractor("test-extractor", mockExtractor, monitor)
 
-	features, err := wrappedExtractor.Extract()
+	features, err := wrappedExtractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -202,7 +202,7 @@ func TestMonitorFeatureExtractor_NilMonitor(t *testing.T) {
 	wrappedExtractor := monitorFeatureExtractor("test-extractor", mockExtractor, monitor)
 
 	// Should not panic even with nil metrics
-	features, err := wrappedExtractor.Extract()
+	features, err := wrappedExtractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -235,7 +235,7 @@ func TestMonitorFeatureExtractor_MultipleExtractions(t *testing.T) {
 	wrappedExtractor := monitorFeatureExtractor("test-extractor", mockExtractor, monitor)
 
 	// First extraction
-	features1, err := wrappedExtractor.Extract()
+	features1, err := wrappedExtractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err != nil {
 		t.Errorf("First extraction failed: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestMonitorFeatureExtractor_MultipleExtractions(t *testing.T) {
 	}
 
 	// Second extraction
-	features2, err := wrappedExtractor.Extract()
+	features2, err := wrappedExtractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err != nil {
 		t.Errorf("Second extraction failed: %v", err)
 	}
@@ -286,12 +286,12 @@ func TestMonitorFeatureExtractor_DifferentExtractorNames(t *testing.T) {
 	wrappedExtractor2 := monitorFeatureExtractor("extractor-2", mockExtractor2, monitor)
 
 	// Extract from both
-	_, err1 := wrappedExtractor1.Extract()
+	_, err1 := wrappedExtractor1.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err1 != nil {
 		t.Errorf("Extractor 1 failed: %v", err1)
 	}
 
-	_, err2 := wrappedExtractor2.Extract()
+	_, err2 := wrappedExtractor2.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err2 != nil {
 		t.Errorf("Extractor 2 failed: %v", err2)
 	}

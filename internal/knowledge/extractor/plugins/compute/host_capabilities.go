@@ -6,6 +6,7 @@ package compute
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 )
 
@@ -32,6 +33,6 @@ type HostCapabilitiesExtractor struct {
 var hostCapabilitiesQuery string
 
 // Extract the traits of a compute host from the database.
-func (e *HostCapabilitiesExtractor) Extract() ([]plugins.Feature, error) {
+func (e *HostCapabilitiesExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	return e.ExtractSQL(hostCapabilitiesQuery)
 }
