@@ -336,7 +336,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 			step := &FilterAggregateMetadata{}
 			step.Client = fakeClient
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -388,7 +388,7 @@ func TestFilterAggregateMetadata_Run_ClientError(t *testing.T) {
 	step := &FilterAggregateMetadata{}
 	step.Client = fakeClient
 
-	_, err := step.Run(slog.Default(), request)
+	_, err := step.Run(t.Context(), slog.Default(), request)
 	if err == nil {
 		t.Errorf("expected error when client fails, got none")
 	}

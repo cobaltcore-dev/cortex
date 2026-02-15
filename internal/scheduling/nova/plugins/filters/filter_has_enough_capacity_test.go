@@ -503,7 +503,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -792,7 +792,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 				IgnoredReservationTypes: tt.ignoredReservationTypes,
 			}
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -966,7 +966,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -1050,7 +1050,7 @@ func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

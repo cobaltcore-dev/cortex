@@ -295,7 +295,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(hvs...).
 				Build()
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

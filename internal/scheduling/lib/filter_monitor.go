@@ -43,6 +43,6 @@ func (fm *FilterMonitor[RequestType]) Validate(ctx context.Context, params v1alp
 }
 
 // Run the filter and observe its execution.
-func (fm *FilterMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
-	return fm.monitor.RunWrapped(traceLog, request, fm.filter)
+func (fm *FilterMonitor[RequestType]) Run(ctx context.Context, traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+	return fm.monitor.RunWrapped(ctx, traceLog, request, fm.filter)
 }

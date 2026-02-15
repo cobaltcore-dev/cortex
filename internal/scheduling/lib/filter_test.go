@@ -16,7 +16,7 @@ import (
 type mockFilter[RequestType FilterWeigherPipelineRequest] struct {
 	InitFunc     func(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error
 	ValidateFunc func(ctx context.Context, params v1alpha1.Parameters) error
-	RunFunc      func(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
+	RunFunc      func(ctx context.Context, traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
 }
 
 func (m *mockFilter[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
@@ -31,11 +31,11 @@ func (m *mockFilter[RequestType]) Validate(ctx context.Context, params v1alpha1.
 	}
 	return m.ValidateFunc(ctx, params)
 }
-func (m *mockFilter[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+func (m *mockFilter[RequestType]) Run(ctx context.Context, traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	if m.RunFunc == nil {
 		return &FilterWeigherPipelineStepResult{}, nil
 	}
-	return m.RunFunc(traceLog, request)
+	return m.RunFunc(ctx, traceLog, request)
 }
 
 // filterTestOptions implements FilterWeigherPipelineStepOpts for testing.

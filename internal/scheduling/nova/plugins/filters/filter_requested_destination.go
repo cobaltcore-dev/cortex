@@ -100,7 +100,7 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // The requested destination can include a specific host, aggregates, or both.
 // When both are specified, aggregate filtering is applied first, followed by
 // host filtering.
-func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterRequestedDestinationStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {
@@ -112,7 +112,7 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 		return result, nil
 	}
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}
