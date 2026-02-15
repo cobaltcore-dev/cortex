@@ -49,6 +49,7 @@ func (s *FilterLiveMigratableStep) checkHasSufficientFeatures(
 
 // Ensure the target host of a live migration can accept the migrating VM.
 func (s *FilterLiveMigratableStep) Run(
+	ctx context.Context,
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
@@ -73,7 +74,7 @@ func (s *FilterLiveMigratableStep) Run(
 	}
 
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}

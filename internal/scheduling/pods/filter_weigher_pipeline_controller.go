@@ -165,7 +165,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 
 	// Execute the scheduling pipeline.
 	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
-	result, err := pipeline.Run(request)
+	result, err := pipeline.Run(ctx, request)
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return errors.New("failed to run scheduler pipeline")

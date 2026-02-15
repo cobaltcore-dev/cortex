@@ -22,7 +22,7 @@ func (f *NodeAvailableFilter) Init(ctx context.Context, client client.Client, st
 	return nil
 }
 
-func (NodeAvailableFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (NodeAvailableFilter) Run(_ context.Context, traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
 	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 

@@ -33,7 +33,7 @@ type FilterExternalCustomerStep struct {
 
 // Prefix-match the domain name for external customer domains and filter out hosts
 // that are not intended for external customers.
-func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterExternalCustomerStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
 	if err != nil {
@@ -57,7 +57,7 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 	}
 
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}

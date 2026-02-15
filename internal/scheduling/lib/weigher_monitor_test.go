@@ -23,7 +23,7 @@ func TestMonitorWeigher(t *testing.T) {
 		InitFunc: func(ctx context.Context, cl client.Client, step v1alpha1.WeigherSpec) error {
 			return nil
 		},
-		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+		RunFunc: func(_ context.Context, traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{"host1": 0.5, "host2": 1.0},
 			}, nil
@@ -79,7 +79,7 @@ func TestWeigherMonitor_Init(t *testing.T) {
 func TestWeigherMonitor_Run(t *testing.T) {
 	runCalled := false
 	mockWeigher := &mockWeigher[mockFilterWeigherPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+		RunFunc: func(_ context.Context, traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			runCalled = true
 			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{"host1": 0.5, "host2": 1.0},
@@ -102,7 +102,7 @@ func TestWeigherMonitor_Run(t *testing.T) {
 		Weights: map[string]float64{"host1": 0.1, "host2": 0.2, "host3": 0.3},
 	}
 
-	result, err := wm.Run(slog.Default(), request)
+	result, err := wm.Run(t.Context(), slog.Default(), request)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}

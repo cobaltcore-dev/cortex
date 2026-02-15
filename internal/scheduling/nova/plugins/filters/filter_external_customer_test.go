@@ -354,7 +354,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				Build()
 			step.Options = tt.opts
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")

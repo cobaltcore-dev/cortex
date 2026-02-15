@@ -151,7 +151,7 @@ func TestFilterValidator_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &mockFilter[mockFilterWeigherPipelineRequest]{
-				RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+				RunFunc: func(_ context.Context, traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 					return tt.runResult, tt.runError
 				},
 			}
@@ -161,7 +161,7 @@ func TestFilterValidator_Run(t *testing.T) {
 			}
 			traceLog := slog.Default()
 
-			result, err := validator.Run(traceLog, request)
+			result, err := validator.Run(t.Context(), traceLog, request)
 
 			if tt.expectError && err == nil {
 				t.Error("expected error but got nil")

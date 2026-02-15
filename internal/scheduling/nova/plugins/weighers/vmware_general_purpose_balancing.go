@@ -54,7 +54,7 @@ func (s *VMwareGeneralPurposeBalancingStep) Init(ctx context.Context, client cli
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareGeneralPurposeBalancingStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Don't execute the step for non-hana flavors.
 	if strings.Contains(request.Spec.Data.Flavor.Data.Name, "hana") {
@@ -66,7 +66,7 @@ func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request a
 
 	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
 	if err := s.Client.Get(
-		context.Background(),
+		ctx,
 		client.ObjectKey{Name: "host-utilization"},
 		hostUtilizationKnowledge,
 	); err != nil {
@@ -99,7 +99,7 @@ func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request a
 	// this step is only executed for VMware hosts.
 	hostCapabilitiesKnowledge := &v1alpha1.Knowledge{}
 	if err := s.Client.Get(
-		context.Background(),
+		ctx,
 		client.ObjectKey{Name: "host-capabilities"},
 		hostCapabilitiesKnowledge,
 	); err != nil {

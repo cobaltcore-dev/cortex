@@ -45,7 +45,7 @@ func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
 
 // Check the capabilities of each host and if they match the extra spec provided
 // in the request spec flavor.
-func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterCapabilitiesStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	requestedCapabilities := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if len(requestedCapabilities) == 0 {
@@ -76,7 +76,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 	}
 
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}

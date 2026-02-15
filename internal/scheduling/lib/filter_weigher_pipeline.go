@@ -19,7 +19,7 @@ import (
 
 type FilterWeigherPipeline[RequestType FilterWeigherPipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
-	Run(request RequestType) (v1alpha1.DecisionResult, error)
+	Run(ctx context.Context, request RequestType) (v1alpha1.DecisionResult, error)
 }
 
 // Pipeline of scheduler steps.
@@ -132,6 +132,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 // During this process, the request is mutated to only include the
 // remaining hosts.
 func (p *filterWeigherPipeline[RequestType]) runFilters(
+	ctx context.Context,
 	log *slog.Logger,
 	request RequestType,
 ) (filteredRequest RequestType) {
@@ -141,7 +142,7 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 		filter := p.filters[filterName]
 		stepLog := log.With("filter", filterName)
 		stepLog.Info("scheduler: running filter")
-		result, err := filter.Run(stepLog, filteredRequest)
+		result, err := filter.Run(ctx, stepLog, filteredRequest)
 		if errors.Is(err, ErrStepSkipped) {
 			stepLog.Info("scheduler: filter skipped")
 			continue
@@ -160,6 +161,7 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 
 // Execute weighers and collect their activations by step name.
 func (p *filterWeigherPipeline[RequestType]) runWeighers(
+	ctx context.Context,
 	log *slog.Logger,
 	filteredRequest RequestType,
 ) map[string]map[string]float64 {
@@ -173,7 +175,7 @@ func (p *filterWeigherPipeline[RequestType]) runWeighers(
 		wg.Go(func() {
 			stepLog := log.With("weigher", weigherName)
 			stepLog.Info("scheduler: running weigher")
-			result, err := weigher.Run(stepLog, filteredRequest)
+			result, err := weigher.Run(ctx, stepLog, filteredRequest)
 			if errors.Is(err, ErrStepSkipped) {
 				stepLog.Info("scheduler: weigher skipped")
 				return
@@ -243,7 +245,7 @@ func (s *filterWeigherPipeline[RequestType]) sortHostsByWeights(weights map[stri
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
-func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResult, error) {
+func (p *filterWeigherPipeline[RequestType]) Run(ctx context.Context, request RequestType) (v1alpha1.DecisionResult, error) {
 	slogArgs := request.GetTraceLogArgs()
 	slogArgsAny := make([]any, 0, len(slogArgs))
 	for _, arg := range slogArgs {
@@ -260,7 +262,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 
 	// Run filters first to reduce the number of hosts.
 	// Any weights assigned to filtered out hosts are ignored.
-	filteredRequest := p.runFilters(traceLog, request)
+	filteredRequest := p.runFilters(ctx, traceLog, request)
 	traceLog.Info(
 		"scheduler: finished filters",
 		"remainingHosts", filteredRequest.GetHosts(),
@@ -271,7 +273,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	for _, host := range filteredRequest.GetHosts() {
 		remainingWeights[host] = inWeights[host]
 	}
-	stepWeights := p.runWeighers(traceLog, filteredRequest)
+	stepWeights := p.runWeighers(ctx, traceLog, filteredRequest)
 	outWeights := p.applyWeights(stepWeights, remainingWeights)
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
 

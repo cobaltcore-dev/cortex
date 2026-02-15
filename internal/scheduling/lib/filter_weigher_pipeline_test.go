@@ -25,7 +25,7 @@ func TestPipeline_Run(t *testing.T) {
 	pipeline := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{
 		filters: map[string]Filter[mockFilterWeigherPipelineRequest]{
 			"mock_filter": &mockFilter[mockFilterWeigherPipelineRequest]{
-				RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+				RunFunc: func(_ context.Context, traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 					// Filter out host3
 					return &FilterWeigherPipelineStepResult{
 						Activations: map[string]float64{
@@ -39,7 +39,7 @@ func TestPipeline_Run(t *testing.T) {
 		filtersOrder: []string{"mock_filter"},
 		weighers: map[string]Weigher[mockFilterWeigherPipelineRequest]{
 			"mock_weigher": &mockWeigher[mockFilterWeigherPipelineRequest]{
-				RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+				RunFunc: func(_ context.Context, traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 					// Assign weights to hosts
 					activations := map[string]float64{
 						"host1": 0.5,
@@ -72,7 +72,7 @@ func TestPipeline_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := pipeline.Run(tt.request)
+			result, err := pipeline.Run(t.Context(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -197,7 +197,7 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 
 func TestPipeline_RunFilters(t *testing.T) {
 	mockStep := &mockFilter[mockFilterWeigherPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+		RunFunc: func(_ context.Context, traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			// Filter out host3
 			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
@@ -221,7 +221,7 @@ func TestPipeline_RunFilters(t *testing.T) {
 		Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 	}
 
-	req := p.runFilters(slog.Default(), request)
+	req := p.runFilters(t.Context(), slog.Default(), request)
 	if len(req.Hosts) != 2 {
 		t.Fatalf("expected 2 step results, got %d", len(req.Hosts))
 	}

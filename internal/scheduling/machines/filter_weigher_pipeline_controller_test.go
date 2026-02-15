@@ -547,7 +547,7 @@ func createMockPipeline() lib.FilterWeigherPipeline[ironcore.MachinePipelineRequ
 
 type mockMachinePipeline struct{}
 
-func (m *mockMachinePipeline) Run(request ironcore.MachinePipelineRequest) (v1alpha1.DecisionResult, error) {
+func (m *mockMachinePipeline) Run(_ context.Context, request ironcore.MachinePipelineRequest) (v1alpha1.DecisionResult, error) {
 	if len(request.Pools) == 0 {
 		return v1alpha1.DecisionResult{}, nil
 	}

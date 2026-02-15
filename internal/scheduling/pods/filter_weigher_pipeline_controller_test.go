@@ -523,7 +523,7 @@ func createMockPodPipeline() lib.FilterWeigherPipeline[pods.PodPipelineRequest] 
 
 type mockPodPipeline struct{}
 
-func (m *mockPodPipeline) Run(request pods.PodPipelineRequest) (v1alpha1.DecisionResult, error) {
+func (m *mockPodPipeline) Run(_ context.Context, request pods.PodPipelineRequest) (v1alpha1.DecisionResult, error) {
 	if len(request.Nodes) == 0 {
 		return v1alpha1.DecisionResult{}, nil
 	}

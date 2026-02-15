@@ -21,6 +21,7 @@ type FilterRequestedDestinationStep struct {
 // accordingly. The requested destination can be a specific host, or
 // an aggregate.
 func (s *FilterRequestedDestinationStep) Run(
+	ctx context.Context,
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
@@ -38,7 +39,7 @@ func (s *FilterRequestedDestinationStep) Run(
 	}
 
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}

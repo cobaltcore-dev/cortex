@@ -61,14 +61,14 @@ func (s *NetappCPUUsageBalancingStep) Init(ctx context.Context, client client.Cl
 }
 
 // Downvote hosts that are highly contended.
-func (s *NetappCPUUsageBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *NetappCPUUsageBalancingStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")
 
 	knowledge := &v1alpha1.Knowledge{}
 	if err := s.Client.Get(
-		context.Background(),
+		ctx,
 		client.ObjectKey{Name: "netapp-storage-pool-cpu-usage-manila"},
 		knowledge,
 	); err != nil {

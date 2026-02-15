@@ -87,7 +87,7 @@ func TestNoopFilter_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &NoopFilter{}
-			result, err := filter.Run(slog.Default(), tt.request)
+			result, err := filter.Run(t.Context(), slog.Default(), tt.request)
 
 			if err != nil {
 				t.Errorf("expected Run() to succeed, got error: %v", err)
