@@ -5,7 +5,7 @@ apiVersion: v2
 name: cortex-cinder
 description: A Helm chart deploying Cortex for Cinder.
 type: application
-version: 0.0.34
+version: 0.0.35
 appVersion: 0.1.0
 dependencies:
   # from: file://../../library/cortex-postgres
@@ -16,12 +16,12 @@ dependencies:
   # from: file://../../library/cortex
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.21
+    version: 0.0.22
     alias: cortex-knowledge-controllers
   # from: file://../../library/cortex
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.21
+    version: 0.0.22
     alias: cortex-scheduling-controllers
 
   # Owner info adds a configmap to the kubernetes cluster with information on
